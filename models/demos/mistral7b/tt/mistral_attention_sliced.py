@@ -40,7 +40,6 @@ class TtMistralAttention(nn.Module):
 
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
-        self.n_local_q_heads_per_kv_head = self.n_local_heads // self.n_local_kv_heads
 
         self.dtype = dtype
 
@@ -99,6 +98,50 @@ class TtMistralAttention(nn.Module):
                 layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 cache_file_name=cache_name("wqkv"),
             )
+
+            # That's interleaving the Q, K and V weights according to their groups; we can use this in combination with the sharded nlp_create_qkv_heads (attention: needs as many num cores as we have groups!)
+            #
+            # for group_i in range(self.n_kv_heads):
+            #     ### Fused QKV Weights
+            #     # Chunk weights
+            #     wq_chunks = torch.chunk(self.state_dict[wq_str], self.n_heads, dim=0)
+            #     wk_chunks = torch.chunk(self.state_dict[wk_str], self.n_kv_heads, dim=0)
+            #     wv_chunks = torch.chunk(self.state_dict[wv_str], self.n_kv_heads, dim=0)
+
+            #     # Select chunks for the current device
+            #     wq_selected = torch.cat(wq_chunks[group_i * self.n_local_heads : (group_i + 1) * self.n_local_heads], dim=0)
+            #     wk_selected = torch.cat(wk_chunks[group_i * self.n_local_kv_heads : (group_i + 1) * self.n_local_kv_heads], dim=0)
+            #     wv_selected = torch.cat(wv_chunks[group_i * self.n_local_kv_heads : (group_i + 1) * self.n_local_kv_heads], dim=0)
+
+            #     # Transpose the selected chunks
+            #     wq = torch.transpose(wq_selected, -2, -1)
+            #     wk = torch.transpose(wk_selected, -2, -1)
+            #     wv = torch.transpose(wv_selected, -2, -1)
+
+            #     # Create interleaved qkv list
+            #     n_repeat = self.n_heads // self.n_kv_heads
+            #     qkv_interleaved = [
+            #         [
+            #             wq[..., j * n_repeat * self.head_dim : (j + 1) * n_repeat * self.head_dim],
+            #             wk[..., j * self.head_dim : (j + 1) * self.head_dim],
+            #             wv[..., j * self.head_dim : (j + 1) * self.head_dim],
+            #         ]
+            #         for j in range(self.n_local_kv_heads)
+            #     ]
+            #     qkv_interleaved = [item for sublist in qkv_interleaved for item in sublist]
+
+            #     # Concatenate Q, K, V for the current group
+            #     qkv = torch.cat(qkv_interleaved, dim=-1)
+
+            #     wqkv = ttnn.as_tensor(
+            #         qkv,
+            #         device=self.devices[i],
+            #         memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+            #         dtype=self.dtype,
+            #         layout=self.model_config["ATTN_W_LAYOUT_TILE"],
+            #         cache_file_name=cache_name("wqkv_interleaved"),
+            #     )
+            #     self.wqkv_list.append(wqkv)
 
             wo = ttnn.as_tensor(
                 torch.transpose(
@@ -307,7 +350,7 @@ class TtMistralAttention(nn.Module):
     ):
         queries = queries * softmax_scale_factor  # Scale queries instead of QK before softmax
 
-        print(f"queries.shape: {queries.shape}, keys.shape: {keys.shape}")
+        print(f"queries.shape: {queries.shape}, values.shape: {values.shape}")
 
         # To use a normal matmul we need to separate both the users (batch dim) and the groups (kv_heads dim)
         # We're going to use height sharding in the batch rows to place each user on one core
@@ -320,152 +363,153 @@ class TtMistralAttention(nn.Module):
         # head dim: 128
         # hidden dim: 4096
 
-        # Batched attention no slicing
+        # Batched attention with slicing
         # Q: [seqlen, n_heads, batch, head_dim]
-        queries = ttnn.permute(queries, (2, 0, 1, 3))  # [1, n_heads, batch, head_dim] -> [batch, 1, n_heads, head_dim]
+        # K: [seqlen, n_kv_heads, batch, head_dim]
+        # V: [seqlen, n_kv_heads, batch, head_dim]
+        queries_to_slice_in_num_heads = ttnn.permute(
+            queries, (1, 2, 0, 3)
+        )  # [1, n_heads, batch, head_dim] -> [n_heads, batch, 1, head_dim]
 
-        # values: [batch, num_kv_heads, cache_len + seqlen, dhead]
+        keys_transposed_to_slice_in_num_heads = ttnn.permute(
+            keys, (1, 2, 3, 0)
+        )  #  [seqlen, n_kv_heads, batch, head_dim] -> [num_kv_heads, batch, dhead, seqlen]
 
-        keys_transposed = ttnn.permute(
-            keys, (0, 1, 3, 2)
-        )  #  [batch, num_kv_heads, cache_len + seqlen, dhead] -> [batch, n_kv_heads, head_dim, seqlen]
+        values_to_slice_in_num_heads = ttnn.permute(
+            keys, (1, 2, 0, 3)
+        )  #  [seqlen, n_kv_heads, batch, head_dim] -> [num_kv_heads, batch, seqlen, dhead]
 
-        # KˆT: [batch, num_kv_heads, head_dim, cache_len + seqlen]; is this assuming 1 kv_head? maybe need to broadcast this?
-        shard_spec_32_cores_grid = ttnn.experimental.tensor.CoreRangeSet(
-            {
-                ttnn.experimental.tensor.CoreRange(
-                    ttnn.experimental.tensor.CoreCoord(0, 0),
-                    ttnn.experimental.tensor.CoreCoord(7, 3),
-                ),
-            }
-        )
-        # Interleaved to sharded keys_transposed
-        k_memconfig = ttnn.experimental.tensor.MemoryConfig(
-            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.experimental.tensor.BufferType.L1,
-            ttnn.experimental.tensor.ShardSpec(
-                shard_spec_32_cores_grid,  # Sharded on batch dim
+        for slice_i in range(self.n_local_kv_heads):
+            # each slice is [1, BS, head_dim, padded_layer_past_len]
+            # then we shard it on 32 cores along the users, each shard is [1, 1, head_dim, padded_layer_past_len]
+            key_transposed_per_group = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                keys_transposed_to_slice_in_num_heads,
+                (8, 4),
                 [
-                    self.n_local_kv_heads * self.head_dim,
+                    self.head_dim,
                     padded_layer_past_len,
-                ],
+                ],  # shard size per core
+                self.n_local_kv_heads,  # num_slices
+                slice_i,  # slice_index
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
-        keys_transposed = ttnn.experimental.tensor.interleaved_to_sharded(
-            keys_transposed, sharded_mem_config=k_memconfig
-        )
+            )
 
-        # interleaved to sharded queries
-        q_memconfig = ttnn.experimental.tensor.MemoryConfig(
-            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.experimental.tensor.BufferType.L1,
-            ttnn.experimental.tensor.ShardSpec(
-                shard_spec_32_cores_grid,  # Sharded on batch dim
+            value_per_group = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                values_to_slice_in_num_heads,
+                (8, 4),
                 [
-                    self.n_local_heads,  # Each core has all the q heads
+                    padded_layer_past_len,
                     self.head_dim,
-                ],
+                ],  # shard size per core
+                self.n_local_kv_heads,  # num_slices
+                slice_i,  # slice_index
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
-        queries = ttnn.experimental.tensor.interleaved_to_sharded(queries, sharded_mem_config=q_memconfig)
-        # Q*KˆT
-        qkt_out_memcfg = ttnn.experimental.tensor.MemoryConfig(
-            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.experimental.tensor.BufferType.L1,
-            ttnn.experimental.tensor.ShardSpec(
-                shard_spec_32_cores_grid,  # Sharded on batch dim
+            )
+
+            query_per_group = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                queries_to_slice_in_num_heads,
+                (8, 4),
                 [
-                    self.n_local_heads,  # Each core has all the heads
-                    padded_layer_past_len,  # Dynamic (padded seqlen)
-                ],
-                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
-        qkt_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
-            compute_with_storage_grid_size=[8, 4],
-            in0_block_w=self.head_dim // 32,  # HEAD_DIM // TILE_SIZE
-            out_subblock_h=1,  # TODO: Maximize
-            out_subblock_w=1,  # TODO: Maximize
-            per_core_M=self.n_local_heads // 32,  # N_HEADS_PADDED // TILE_SIZE,
-            per_core_N=padded_layer_past_len // 32,  # kv cache length // TILE_SIZE
-        )
-
-        # TODO: matmul can't do the broadcast
-        # This works when we have 1 kv_head, but when we have multiple kv heads in one matmul, we
-        # need to broadcast k/v first! Format is: 32 Q heads | 8 k heads | 8 v heads; need to broadcast each head x4
-
-        attn = ttnn.experimental.operations.primary.matmul(
-            queries,
-            keys_transposed,
-            program_config=qkt_program_config,
-            output_mem_config=qkt_out_memcfg,
-            compute_kernel_config=self.compute_kernel_config,
-            output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
-        )  # batch, n_heads, batch, cache_len + seqlen
-        # Softmax
-        attn = attn[:, :, :, :layer_slice]
-        # TODO: do we need to do something for softmax to work with sharded inputs? what about tt_lib.operations.primary.transformers.scale_mask_softmax_in_place - is that the better choice?
-        attn = ttnn.softmax(
-            attn, dim=-1
-        )  # No need to scale since we've done this above already (attn * (self.head_dim**-0.5))
-
-        # Interleaved to sharded values
-        v_memconfig = ttnn.experimental.tensor.MemoryConfig(
-            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.experimental.tensor.BufferType.L1,
-            ttnn.experimental.tensor.ShardSpec(
-                shard_spec_32_cores_grid,  # Sharded on batch dim
-                [
-                    self.n_local_kv_heads,  # Each core has all the kv heads
+                    1,
                     self.head_dim,
-                ],
+                ],  # shard size per core
+                self.n_local_kv_heads,  # num_slices
+                slice_i,  # slice_index
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
-        # Interleaved to sharded values
-        values = ttnn.experimental.tensor.interleaved_to_sharded(values, sharded_mem_config=v_memconfig)
+            )
 
-        # Scores * V MM
-        scores_v_memcfg = ttnn.experimental.tensor.MemoryConfig(
-            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.experimental.tensor.BufferType.L1,
-            ttnn.experimental.tensor.ShardSpec(
-                shard_spec_32_cores_grid,
-                [
-                    self.n_local_heads,
-                    self.head_dim,  # head dim
-                ],
-                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
-        scores_v_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
-            compute_with_storage_grid_size=[8, 4],
-            in0_block_w=padded_layer_past_len // 32,  # SEQ_LEN // TILE_SIZE (dynamic)
-            out_subblock_h=1,  # TODO: Maximize
-            out_subblock_w=1,  # TODO: Maximize
-            per_core_M=self.n_local_heads // 32,  # N_HEADS_PADDED // TILE_SIZE,
-            per_core_N=self.head_dim // 32,  # HEAD_DIM // TILE_SIZE
-        )
-        attn_output = ttnn.experimental.operations.primary.matmul(
-            attn,
-            values,
-            program_config=scores_v_program_config,
-            output_mem_config=scores_v_memcfg,
-            compute_kernel_config=self.compute_kernel_config,
-            output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
-        )  # batch, seqlen (=1), n_heads, dhead
+            # Q*KˆT
+            shard_spec_32_cores_grid = ttnn.experimental.tensor.CoreRangeSet(
+                {
+                    ttnn.experimental.tensor.CoreRange(
+                        ttnn.experimental.tensor.CoreCoord(0, 0),
+                        ttnn.experimental.tensor.CoreCoord(7, 3),
+                    ),
+                }
+            )
+            qkt_out_memcfg = ttnn.experimental.tensor.MemoryConfig(
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.experimental.tensor.BufferType.L1,
+                ttnn.experimental.tensor.ShardSpec(
+                    shard_spec_32_cores_grid,  # Sharded on batch dim
+                    [
+                        self.n_local_heads,  # Each core has all the heads
+                        padded_layer_past_len,  # Dynamic (padded seqlen)
+                    ],
+                    ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            qkt_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
+                compute_with_storage_grid_size=[8, 4],
+                in0_block_w=self.head_dim // 32,  # HEAD_DIM // TILE_SIZE
+                out_subblock_h=1,  # (TODO: Maximize)
+                out_subblock_w=1,  # (TODO: Maximize)
+                per_core_M=self.n_local_heads // 32,  # N_HEADS_PADDED // TILE_SIZE,
+                per_core_N=padded_layer_past_len // 32,  # kv cache length // TILE_SIZE
+            )
+            attn = ttnn.experimental.operations.primary.matmul(
+                query_per_group,
+                key_transposed_per_group,
+                program_config=qkt_program_config,
+                output_mem_config=qkt_out_memcfg,
+                compute_kernel_config=self.compute_kernel_config,
+                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
+            )  # batch, n_heads, batch, cache_len + seqlen
 
-        # Convert attn output back to interleaved
-        attn_output = ttnn.experimental.tensor.sharded_to_interleaved(
-            attn_output,
-            output_mem_config=self.model_config["L1_MEMCFG"],
-        )
+            # Softmax
+            attn = attn[:, :, :, :layer_slice]
+            # TODO: do we need to do something for softmax to work with sharded inputs? what about tt_lib.operations.primary.transformers.scale_mask_softmax_in_place - is that the better choice?
+            attn = ttnn.softmax(
+                attn, dim=-1
+            )  # No need to scale since we've done this above already (attn * (self.head_dim**-0.5))
+
+            # Scores * V MM
+            scores_v_memcfg = ttnn.experimental.tensor.MemoryConfig(
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.experimental.tensor.BufferType.L1,
+                ttnn.experimental.tensor.ShardSpec(
+                    shard_spec_32_cores_grid,
+                    [
+                        self.n_local_heads,
+                        self.head_dim,  # head dim
+                    ],
+                    ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            scores_v_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
+                compute_with_storage_grid_size=[8, 4],
+                in0_block_w=padded_layer_past_len // 32,  # SEQ_LEN // TILE_SIZE (dynamic)
+                out_subblock_h=1,  # (TODO: Maximize)
+                out_subblock_w=1,  # (TODO: Maximize)
+                per_core_M=4
+                // 32,  # N_HEADS_PADDED // TILE_SIZE, # TODO <-------- we can't do 4 qeuery heads, would need to pad this!! That wouldn't make any sense.
+                per_core_N=self.head_dim // 32,  # HEAD_DIM // TILE_SIZE
+            )
+            attn_output = ttnn.experimental.operations.primary.matmul(
+                attn,
+                value_per_group,
+                program_config=scores_v_program_config,
+                output_mem_config=scores_v_memcfg,
+                compute_kernel_config=self.compute_kernel_config,
+                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
+            )  # batch, seqlen (=1), n_heads, dhead
+
+            # Convert attn output back to interleaved
+            attn_output_per_group = ttnn.experimental.tensor.sharded_to_interleaved(
+                attn_output,
+                output_mem_config=self.model_config["L1_MEMCFG"],
+            )
+            ttnn.experimental.tensor.sharded_to_interleaved_partial(
+                attn_output_per_group,
+                attn_output,  # TODO: pre-allocate this in dram!
+                self.n_local_kv_heads,  # num_slices
+                slice_i,  # slice_index
+                self.model_config["DRAM_MEMCFG"],
+            )
 
         return attn_output
