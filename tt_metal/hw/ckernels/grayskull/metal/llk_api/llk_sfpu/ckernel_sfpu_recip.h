@@ -77,7 +77,7 @@ inline void calculate_reciprocal()
             while (i<30){
                 val = val - 1.0f;
                 v_if(val==60.0f){
-                    i=11;
+                    i=100;
                 }
                 v_endif;
                 i++;
