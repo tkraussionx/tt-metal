@@ -72,11 +72,12 @@ inline void calculate_reciprocal()
     for (int d = 0; d < ITERATIONS; d++)
     {
         vFloat val = dst_reg[0];
+        vFloat end = 60.0f;
         int i=0;
         v_if (dst_reg[0]>0.0f){
             while (i<30){
                 val = val - 1.0f;
-                v_if(val==60.0f){
+                v_if(val-end==0){
                     i=100;
                 }
                 v_endif;
