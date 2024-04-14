@@ -126,9 +126,10 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
     Tensor value = x;
     Tensor orig = x;
     for (int i=0;i<100;i++){
-        value = where(gt(value, ones_like(value)), sub_unary(value, 1), value);
+        value = where(gt(abs(value), ones_like(value)), sub_unary(abs(value), 1), value);
     }
-    value = sub(orig, value);
+    value = sub(torch.abs(orig), value);
+    value = where(ltz(orig), sub_unary(neg(value), 1), value);
     value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
     return value;
 }
