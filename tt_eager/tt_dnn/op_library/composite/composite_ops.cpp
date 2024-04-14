@@ -123,9 +123,14 @@ Tensor softplus(const Tensor& a, float beta, float threshold, const MemoryConfig
 
 // tanhshrink(x) = x - tanh(x)
 Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
-    Tensor tan_x = tanh(x, output_mem_config);
-    Tensor result = sub(x, tan_x, std::nullopt, output_mem_config);
-    return result;
+    Tensor value = x;
+    Tensor orig = x;
+    for (int i=0;i<100;i++){
+        value = where(gt(value, ones_like(value)), sub_unary(value, 1), value);
+    }
+    value = sub(orig, value);
+    value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
+    return value;
 }
 Tensor tanhshrink(const Tensor& a, const MemoryConfig& output_mem_config) {
     return operation::decorate_as_composite(__func__, _tanhshrink)(a, output_mem_config);
