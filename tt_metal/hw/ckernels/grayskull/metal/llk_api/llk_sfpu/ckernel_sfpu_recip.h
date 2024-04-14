@@ -78,7 +78,7 @@ inline void calculate_reciprocal()
         v_if (dst_reg[0]>0.0f){
             while (i<30){
                 val = val - 1.0f;
-                v_if(val-end==zero){
+                v_if(_sfpu_is_fp16_zero_(val-end)){
                     i=100;
                 }
                 v_endif;
