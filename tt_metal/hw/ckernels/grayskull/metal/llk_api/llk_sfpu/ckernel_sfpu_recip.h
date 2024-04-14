@@ -76,9 +76,10 @@ inline void calculate_reciprocal()
         v_if (dst_reg[0]>0.0f){
             while (i<10){
                 val = val - 1.0f;
-                if(i==5){
+                v_if(val==60.0f){
                     i=11;
                 }
+                v_endif;
                 i++;
             }
         }
