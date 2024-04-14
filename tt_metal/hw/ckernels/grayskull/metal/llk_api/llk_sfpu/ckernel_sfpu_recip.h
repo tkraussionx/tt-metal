@@ -74,7 +74,7 @@ inline void calculate_reciprocal()
         vFloat val = dst_reg[0];
         int i=0;
         v_if (dst_reg[0]>0.0f){
-            while (i<10){
+            while (i<30){
                 val = val - 1.0f;
                 v_if(val==60.0f){
                     i=11;
