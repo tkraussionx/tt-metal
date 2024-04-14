@@ -41,5 +41,5 @@ def test_bw_abs(input_shapes, device):
     print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
-    comp_pass = compare_pcc(tt_output_tensor_on_device, golden_tensor)
+
     assert comp_pass
