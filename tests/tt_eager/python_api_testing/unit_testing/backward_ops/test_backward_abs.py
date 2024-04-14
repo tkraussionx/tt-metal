@@ -36,9 +36,9 @@ def test_bw_abs(input_shapes, device):
 
     comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
     comp_all, _ = comparison_funcs.comp_allclose(golden_tensor, tt_out_tensor, atol=4, rtol=1e-1)
-    logger.debug(comp_pass)
-    logger.debug(comp_all)
-    logger.debug(comp_out)
+    print(comp_pass)
+    print(comp_all)
+    print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
     comp_pass = compare_pcc(tt_output_tensor_on_device, golden_tensor)

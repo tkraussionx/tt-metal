@@ -128,8 +128,8 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
     for (int i=0;i<100;i++){
         value = where(gt(value, ones_like(value)), sub_unary(value, 1), value);
     }
-    //value = sub(orig, value);
-    //value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
+    value = sub(orig, value);
+    value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
     return value;
 }
 Tensor tanhshrink(const Tensor& a, const MemoryConfig& output_mem_config) {
