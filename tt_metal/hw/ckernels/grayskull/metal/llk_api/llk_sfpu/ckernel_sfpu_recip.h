@@ -72,13 +72,11 @@ inline void calculate_reciprocal()
     for (int d = 0; d < ITERATIONS; d++)
     {
         vFloat val = dst_reg[0];
-        vFloat end = 60.5f;
-        vFloat zero = 0.0f;
         int i=0;
         v_if (dst_reg[0]>0.0f){
             while (i<30){
                 val = val - 1.0f;
-                v_if(_sfpu_is_fp16_zero_(val-end)){
+                v_if(_sfpu_is_fp16_zero_(val<60)){
                     i=100;
                 }
                 v_endif;
