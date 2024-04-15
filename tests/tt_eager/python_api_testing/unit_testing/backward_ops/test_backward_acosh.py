@@ -29,7 +29,7 @@ def test_bw_remainder(input_shapes, device):
     grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 30, device)
     print(input_tensor)
 
-    golden_tensor = torch.div(in_data, grad_data)
+    golden_tensor = torch.floor(torch.div(in_data, grad_data))
 
     tt_output_tensor_on_device = tt_lib.tensor.atan2(input_tensor, grad_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
