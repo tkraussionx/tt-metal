@@ -574,11 +574,9 @@ Tensor lerp(const Tensor& input_a, const Tensor& input_b, float value, const Mem
 }
 
 Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
-    Tensor recip_res = recip(input_b);
-    Tensor div_result = mul(input_a, recip_res);
+    Tensor div_result = mul(input_a, recip(input_b));
     Tensor floor_div = tanhshrink(div_result);
-    Tensor mul_res = mul(floor_div, input_b);
-    Tensor result = add(input_a, neg(mul_res));
+    Tensor result = sub(input_a, mul(floor_div, input_b));
 
     return div_result;
 }

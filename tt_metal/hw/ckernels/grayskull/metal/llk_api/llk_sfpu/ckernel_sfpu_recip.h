@@ -71,23 +71,18 @@ inline void calculate_reciprocal()
     #pragma GCC unroll 8
     for (int d = 0; d < ITERATIONS; d++)
     {
-        vFloat val = dst_reg[0];
-        vFloat orig = dst_reg[0];
-        bool check = true;
-        v_if (dst_reg[0]>0.0f){
-            while (check){
-                val = val - 1.0f;
-                v_if(val > 1.0f){
-                    check = true;
-                }
-                v_elseif(val < 1.0f){
-                    check = false;
-                }
-                v_endif;
-            }
+        vFloat in = dst_reg[0];
+        vFloat out = sfpu_reciprocal<true, APPROXIMATION_MODE ? 2 : 3>(in);
+
+        // Reload to reduce register pressure
+        v_if (dst_reg[0] < 0.0F) {
+            // Invert sign on calculated value if CC=1 (number is negative)
+            out = -out;
         }
         v_endif;
-        dst_reg[0] = orig - val;
+
+        dst_reg[0] = out;
+
         dst_reg++;
     }
 }
