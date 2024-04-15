@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // READER
@@ -151,7 +151,7 @@ void kernel_main() {
     #endif
     #endif
 
-    // DPRINT << "writer " <<ENDL();
+
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -180,8 +180,8 @@ void kernel_main() {
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            noc_async_read_barrier_with_trid();
-            // noc_async_read_barrier();
+            // noc_async_read_barrier_with_trid();
+            noc_async_read_barrier();
             #endif
 
             #ifndef SKIP_MCAST
@@ -202,6 +202,8 @@ void kernel_main() {
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+
+
 
             #endif
 

@@ -969,6 +969,7 @@ struct InterleavedAddrGenFast {
         uint32_t src_addr;
         uint32_t src_noc_xy;
         uint32_t noc_id;
+        volatile uint32_t cnt;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -982,6 +983,8 @@ struct InterleavedAddrGenFast {
 #endif
             src_addr += bank_to_dram_offset[bank_id];
             noc_id = noc_index_to_dram_bank_map[bank_id];
+            noc_id = noc_index;
+
             src_noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
@@ -1001,13 +1004,13 @@ struct InterleavedAddrGenFast {
         DEBUG_STATUS('N', 'R', 'T', 'W');
         DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
         while (!noc_cmd_buf_ready(noc_id, read_cmd_buf));
-        while (NOC_STATUS_READ_REG(noc_id, NIU_MST_REQS_OUTSTANDING_ID(read_transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
+        // while (NOC_STATUS_READ_REG(noc_id, NIU_MST_REQS_OUTSTANDING_ID(read_transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(read_transaction_id));
+        // NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(read_transaction_id));
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_AT_LEN_BE, this->page_size);  // len_bytes
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
         noc_reads_num_issued[noc_id] += 1;

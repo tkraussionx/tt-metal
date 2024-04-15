@@ -100,21 +100,48 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t start_core_y = 0;
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
-    CoreRange all_cores(
+    CoreRange all_cores_range(
         {(std::size_t) start_core_x, (std::size_t) start_core_y},
         {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1});
+    std::set<CoreRange> all_cores_range_set; all_cores_range_set.insert(all_cores_range);
+    CoreRangeSet all_cores(all_cores_range_set);
 
     CoreRange top_left_corner(
         {(std::size_t) start_core_x, (std::size_t) start_core_y},
         {(std::size_t) start_core_x, (std::size_t) start_core_y});
 
-    CoreRange left_column(
+    CoreRange left_column_range(
         {(std::size_t) start_core_x, (std::size_t) start_core_y},
         {(std::size_t) start_core_x, (std::size_t) start_core_y + num_cores_r - 1});
+    std::set<CoreRange> left_column_range_set; left_column_range_set.insert(left_column_range);
+    CoreRangeSet left_column(left_column_range_set);
 
-    CoreRange top_row(
-        {(std::size_t) start_core_x, (std::size_t) start_core_y},
-        {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y});
+    // CoreRange top_row(
+    //     {(std::size_t) start_core_x, (std::size_t) start_core_y},
+    //     {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y});
+
+    std::set<CoreRange> diagonal_core_ranges;
+    std::set<CoreRange> diagonal_except_corner_core_ranges;
+    for (uint32_t i=0; i < num_cores_c; ++i) {
+        uint32_t x = start_core_x + i;
+        uint32_t y = start_core_y + i;
+
+        if (y >=  num_cores_r) {
+            y = num_cores_r - 1;
+        }
+
+        CoreRange core(
+            {(std::size_t) x, (std::size_t) y},
+            {(std::size_t) x, (std::size_t) y});
+
+        diagonal_core_ranges.insert(core);
+
+        if (i > 0) {
+            diagonal_except_corner_core_ranges.insert(core);
+        }
+    }
+    CoreRangeSet diagonal(diagonal_core_ranges);
+    CoreRangeSet diagonal_except_corner(diagonal_except_corner_core_ranges);
 
     CoreRange all_except_left_column(
         {(std::size_t) start_core_x + 1, (std::size_t) start_core_y},
@@ -124,18 +151,24 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         {(std::size_t) start_core_x, (std::size_t) start_core_y + 1},
         {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1});
 
-    CoreRange left_column_except_corner(
+    CoreRange left_column_except_corner_range(
         {(std::size_t) start_core_x, (std::size_t) start_core_y + 1},
         {(std::size_t) start_core_x, (std::size_t) start_core_y + num_cores_r - 1});
+    std::set<CoreRange> left_column_except_corner_range_set; left_column_except_corner_range_set.insert(left_column_except_corner_range);
+    CoreRangeSet left_column_except_corner(left_column_except_corner_range_set);
 
     CoreRange top_row_except_corner(
         {(std::size_t) start_core_x + 1, (std::size_t) start_core_y},
         {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y});
 
-    CoreRange in0_sender = left_column;
-    CoreRange in0_sender_in1_receiver = left_column_except_corner;
-    CoreRange in1_sender = top_row;
-    CoreRange in0_receiver_in1_sender = top_row_except_corner;
+    // CoreRange in0_sender = left_column;
+    // CoreRange in0_sender_in1_receiver = left_column_except_corner;
+    // CoreRange in1_sender = top_row;
+    CoreRangeSet in0_sender = left_column;
+    CoreRangeSet in0_sender_in1_receiver = left_column_except_corner;
+    CoreRangeSet in1_sender = diagonal;
+    // CoreRange in0_receiver_in1_sender = top_row_except_corner;
+    CoreRangeSet in0_receiver_in1_sender = diagonal_except_corner;
 
     uint32_t in0_end = num_cores_r - 1;
     uint32_t in1_end = num_cores_c - 1;
@@ -160,19 +193,68 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     bool split_half = num_cores_c > 2 && !in0_is_sharded;
     uint32_t half_core = split_half ? (num_cores_c) / 2 : num_cores_c - 1;
 
-    CoreRange in0_receiver_in1_receiver_left_half(
-        {(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1},
-        {(std::size_t) start_core_x + half_core, (std::size_t) start_core_y + num_cores_r - 1});
+    // CoreRange in0_receiver_in1_receiver_left_half(
+    //     {(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1},
+    //     {(std::size_t) start_core_x + half_core, (std::size_t) start_core_y + num_cores_r - 1});
 
-    CoreRange in0_receiver_in1_receiver_right_half(
-        {0, 0},
-        {0, 0});
+    std::set<CoreRange> in0_receiver_in1_receiver_left_half_ranges;
+    for (uint32_t i=1; i < half_core + 1; ++i) {
+        uint32_t x = start_core_x + i;
+
+        for (uint32_t j=0; j < num_cores_r; ++j) {
+            uint32_t y = start_core_y + j;
+
+            CoreRange core(
+                {(std::size_t) x, (std::size_t) y},
+                {(std::size_t) x, (std::size_t) y});
+
+            if (diagonal_core_ranges.find(core) == diagonal_core_ranges.end()) { // core not in the diagonal range
+                in0_receiver_in1_receiver_left_half_ranges.insert(core);
+            }
+        }
+    }
+    CoreRangeSet in0_receiver_in1_receiver_left_half(in0_receiver_in1_receiver_left_half_ranges);
+
+    std::set<CoreRange> in0_receiver_in1_receiver_right_half_ranges;
+
+    // CoreRange in0_receiver_in1_receiver_right_half(
+    //     {0, 0},
+    //     {0, 0});
 
     if (split_half) {
-         in0_receiver_in1_receiver_right_half = {
-             {(std::size_t) start_core_x + half_core + 1, (std::size_t) start_core_y + 1},
-             {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1}};
+        //  in0_receiver_in1_receiver_right_half = {
+        //      {(std::size_t) start_core_x + half_core + 1, (std::size_t) start_core_y + 1},
+        //      {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1}};
+        for (uint32_t i=half_core + 1; i < num_cores_c; ++i) {
+            uint32_t x = start_core_x + i;
+
+            for (uint32_t j=0; j < num_cores_r; ++j) {
+                uint32_t y = start_core_y + j;
+
+                CoreRange core(
+                    {(std::size_t) x, (std::size_t) y},
+                    {(std::size_t) x, (std::size_t) y});
+
+                if (diagonal_core_ranges.find(core) == diagonal_core_ranges.end()) { // core not in the diagonal range
+                    in0_receiver_in1_receiver_right_half_ranges.insert(core);
+                }
+            }
+        }
     }
+    CoreRangeSet in0_receiver_in1_receiver_right_half(in0_receiver_in1_receiver_right_half_ranges);
+
+    // in0 receiver
+    std::set<CoreRange> in0_receiver_set;
+    in0_receiver_set.insert(in0_receiver_in1_sender.ranges().begin(), in0_receiver_in1_sender.ranges().end());
+    in0_receiver_set.insert(in0_receiver_in1_receiver_left_half.ranges().begin(), in0_receiver_in1_receiver_left_half.ranges().end());
+    CoreRangeSet in0_receiver(in0_receiver_set);
+
+    // in1 receiver
+    std::set<CoreRange> in1_receiver_set;
+    in1_receiver_set.insert(in0_sender_in1_receiver.ranges().begin(), in0_sender_in1_receiver.ranges().end());
+    in1_receiver_set.insert(in0_receiver_in1_receiver_left_half.ranges().begin(), in0_receiver_in1_receiver_left_half.ranges().end());
+    CoreRangeSet in1_receiver(in1_receiver_set);
+
 
     // Mcast args
     auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
@@ -372,6 +454,28 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_in1_receiver_writer_other_noc_setup_defines["OUT_SHARDED"] = "1";
     }
 
+    {
+        const std::set<CoreRange>& core_ranges1 = in0_sender.ranges();
+        for (const CoreRange& range : core_ranges1) {
+            std::cout << "in0_sender Core Range starts from (" << range.start.x << ", " << range.start.y << ")"
+                    << " to (" << range.end.x << ", " << range.end.y << ")" << std::endl;
+        }
+
+        const std::set<CoreRange>& core_ranges2 = in1_sender.ranges();
+        for (const CoreRange& range : core_ranges2) {
+            std::cout << "in1_sender Core Range starts from (" << range.start.x << ", " << range.start.y << ")"
+                    << " to (" << range.end.x << ", " << range.end.y << ")" << std::endl;
+        }
+
+        const std::set<CoreRange>& core_ranges3 = in1_receiver.ranges();
+        for (const CoreRange& range : core_ranges3) {
+            std::cout << "in1_receiver Core Range starts from (" << range.start.x << ", " << range.start.y << ")"
+                    << " to (" << range.end.x << ", " << range.end.y << ")" << std::endl;
+        }
+    }
+
+
+
     auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
         program,
         in0_block_sharded ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp" : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
@@ -388,7 +492,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         program,
         "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
         /* in0_sender_in1_receiver, // If not using half-half noc setup */
-        (CoreRangeSet) (std::set<CoreRange>) {in0_sender_in1_receiver, in0_receiver_in1_receiver_left_half},
+        // (CoreRangeSet) (std::set<CoreRange>) {in0_sender_in1_receiver, in0_receiver_in1_receiver_left_half},
+        in1_receiver,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_receiver_writer_compile_time_args, .defines = mm_kernel_in1_receiver_writer_defines});
 
     KernelHandle mm_kernel_in0_receiver_id = 0;
@@ -397,7 +502,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             program,
             "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
             /* in0_receiver_in1_sender, // If not using half-half noc setup */
-            (CoreRangeSet) (std::set<CoreRange>) {in0_receiver_in1_sender, in0_receiver_in1_receiver_left_half},
+            // (CoreRangeSet) (std::set<CoreRange>) {in0_receiver_in1_sender, in0_receiver_in1_receiver_left_half},
+            in0_receiver,
             tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_receiver_compile_time_args});
     }
 
@@ -587,6 +693,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             CoreCoord left_core_plus_one    = {(std::size_t) start_core_x + 1, (std::size_t) core.y};
             CoreCoord right_core   = {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) core.y};
             CoreCoord top_core     = {(std::size_t) core.x, (std::size_t) start_core_y};
+            CoreCoord diag_core     = {(std::size_t) core.x, (std::size_t) core.x};
             CoreCoord top_core_plus_one     = {(std::size_t) core.x, (std::size_t) start_core_y + 1};
             CoreCoord bottom_core  = {(std::size_t) core.x, (std::size_t) start_core_y + num_cores_r - 1};
 
@@ -594,13 +701,15 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             auto left_core_plus_one_physical = device->worker_core_from_logical_core(left_core_plus_one);
             auto right_core_physical = device->worker_core_from_logical_core(right_core);
             auto top_core_physical = device->worker_core_from_logical_core(top_core);
+            auto diag_core_physical = device->worker_core_from_logical_core(diag_core);
             auto top_core_plus_one_physical = device->worker_core_from_logical_core(top_core_plus_one);
             auto bottom_core_physical = device->worker_core_from_logical_core(bottom_core);
             uint32_t in0_idx = core_idx_y;
             uint32_t in1_idx = core_idx_x;
 
             auto in0_mcast_sender = left_core_physical;
-            auto in1_mcast_sender = top_core_physical;
+            // auto in1_mcast_sender = top_core_physical;
+            auto in1_mcast_sender = diag_core_physical;
 
             // Assuming in0 is NOC0
             auto in0_mcast_start = left_core_plus_one_physical;
@@ -611,7 +720,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
             // Assuming in1 is NOC1
             auto in1_mcast_start = bottom_core_physical;
-            auto in1_mcast_end = top_core_plus_one_physical;
+            // auto in1_mcast_end = top_core_plus_one_physical;
+            auto in1_mcast_end = top_core_physical;
             if (in1_noc == NOC::NOC_0) {
                 std::swap(in1_mcast_start, in1_mcast_end);
             }
@@ -689,7 +799,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             }
 
             // in1 sender
-            if(in0_idx == 0) {
+            // if(in0_idx == 0) {
+            if(core_idx_x == core_idx_y) {
+                std::cout << "in1 sender start x y: " << in1_mcast_start.x << " " << in1_mcast_start.y <<std::endl;
+                std::cout << "in1 sender end x y: " << in1_mcast_end.x << " " << in1_mcast_end.y <<std::endl;
+
                 std::vector<uint32_t> mm_in1_sender_writer_args = {
                     // READER
                     // in1 tensor args
@@ -742,6 +856,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
             // in1 receiver
             } else {
+                std::cout << "in1 receiver x y: " << in1_mcast_sender.x << " " << in1_mcast_sender.y <<std::endl;
                 std::vector<uint32_t> mm_in1_receiver_writer_args = {
                     // READER
                     // in1 mcast args
