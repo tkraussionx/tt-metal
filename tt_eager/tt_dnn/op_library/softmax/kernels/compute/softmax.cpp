@@ -131,11 +131,13 @@ void MAIN {
             pack_reconfig_data_format(cb_exps);
             copy_tile_to_dst_init_short(); // need to copy from CB to DST to be able to run sfpu math
             exp_tile_init(EXP_APPROX);
+            SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(0 + 1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
             for (uint32_t wt = 0; wt < Wt; wt+=ndst) {
 
                 ACQ();
                 cb_wait_front(cb_in0, ndst);
                 for (uint32_t wt8 = 0; wt8 < ndst; ++wt8) {
+                    DPRINT << "Interleaved softmax input: wt=" << wt << " wt8="<< wt8 << " Input: " << TileSlice(cb_in0, wt8, sr, true, true) << ENDL();
                     copy_tile(cb_in0, wt8, wt8); // copy from c_in[0] to DST[0]
                 }
                 cb_pop_front(cb_in0, ndst);
@@ -144,6 +146,7 @@ void MAIN {
                 for (uint32_t wt8 = 0; wt8 < ndst; ++wt8) {
                     exp_tile(wt8, EXP_APPROX); // exp on DST[0]
                     pack_tile(wt8, cb_exps); // DST[0]->cb_id[wt]
+                    DPRINT << "Interleaved softmax exp output: wt=" << wt << " wt8="<< wt8 << " Output: " << TileSlice(cb_exps, wt8, sr, true, true) << ENDL();
                 }
                 cb_push_back(cb_exps, ndst);
                 REL();

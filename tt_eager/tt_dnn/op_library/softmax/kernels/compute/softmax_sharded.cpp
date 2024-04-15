@@ -8,12 +8,14 @@
 #define REDUCE_OP PoolType::SUM
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
+// #define USE_STABLE_SOFTMAX 1
+
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/bcast.h"
 #include "compute_kernel_api/softmax.h"
 #include "compute_kernel_api/reduce.h"
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 ALWI void ACQ() { acquire_dst(tt::DstMode::Half); }
 ALWI void REL() { release_dst(tt::DstMode::Half); }
@@ -43,7 +45,7 @@ void MAIN {
     int index_subblock_w_offset = 0;
     int index = 0;
 
-    DPRINT << "Block H = " << block_h << ", Block W = " << block_w << ", SubBlockW = " << subblock_w << ", num_subblocks_w = " << num_subblocks_w << ENDL();
+    // DPRINT << "Block H = " << block_h << ", Block W = " << block_w << ", SubBlockW = " << subblock_w << ", num_subblocks_w = " << num_subblocks_w << ENDL();
 
     for (uint32_t i = 0; i < block_h; i++) {
         #if FUSED_SCALE_MASK
@@ -84,6 +86,16 @@ void MAIN {
                 add_bcast_rows_init_short();
             #endif
 
+            // Do the adds in cb_exps()
+            cb_reserve_back(cb_exps, block_w);
+            pack_reconfig_data_format(cb_exps);
+            for (uint32_t j = 0; j < num_subblocks_w; j++) {
+                ACQ();
+                #ifdef
+                #else
+                #endif
+            }
+
             exp_tile_init(EXP_APPROX);
             for (uint32_t j = 0; j < num_subblocks_w; j++) {
                 ACQ();
@@ -115,52 +127,70 @@ void MAIN {
             unpack_reconfig_data_format(cb_exps, cb_bcast_scaler);
 
         #else
-
+            // SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(0 + 1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+            // FROM HERE
+            #ifdef USE_STABLE_SOFTMAX
             unpack_reconfig_data_format(cb_in0, cb_reduce_constant_one);
             pack_reconfig_data_format(cb_max);
 
+            reduce_init_delta<false, PoolType::MAX, ReduceDim::REDUCE_SCALAR>(cb_max, cb_in0, cb_reduce_constant_one);
             ACQ();
-            reduce_init_delta<false>(PoolType::MAX, ReduceDim::REDUCE_SCALAR, cb_max, cb_in0, cb_reduce_constant_one);
             cb_wait_front(cb_reduce_constant_one, 1);
 
-            SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(0 + 1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
-//            DPRINT << "cb_max contents before: " << TileSlice(cb_max, 0, sr, true, true) << ENDL();
             cb_reserve_back(cb_max, 1);
 
             for(uint32_t j = 0; j < block_w; j++) {
                 constexpr uint32_t reduce_scaler = 0;
-                reduce_tile(PoolType::MAX, ReduceDim::REDUCE_SCALAR, cb_in0, cb_reduce_constant_one, j, reduce_scaler, dst0);
+                reduce_tile<PoolType::MAX, ReduceDim::REDUCE_SCALAR>(cb_in0, cb_reduce_constant_one, j, reduce_scaler, dst0);
             }
 
             pack_tile(dst0, cb_max);
-            reduce_revert_delta();
-
+            reduce_revert_delta<PoolType::MAX, ReduceDim::REDUCE_SCALAR>(cb_max);
             cb_push_back(cb_max, 1);
             REL();
 
+            // Reduce output
+            // SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(0 + 1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+            // DPRINT << "Reduce max output: " << TileSlice(cb_max, 0, sr, true, true) << ENDL();
             cb_wait_front(cb_max, 1);
             unpack_reconfig_data_format(cb_in0, cb_max);
+
+            // UNTIL HERE
+            #else
+            unpack_reconfig_data_format(cb_in0, cb_in0);
+            #endif
             pack_reconfig_data_format(cb_exps);
             // exp(x)
             index_subblock_w_offset = 0;
-            // copy_tile_to_dst_init_short();
+            #ifdef USE_STABLE_SOFTMAX
             sub_tiles_bcast_scalar_init_short(cb_in0, cb_max);
+            #else
+            copy_tile_to_dst_init_short();
+            #endif
             exp_tile_init(EXP_APPROX);
             for (uint32_t j = 0; j < num_subblocks_w; j++) {
                 ACQ();
                 for (uint32_t w = 0; w < subblock_w; w++) {
                     index = w + index_subblock_w_offset;
                     // copy_tile(cb_in0, index, w);
-                    DPRINT << "I="<< w << "In0 before: " << TileSlice(cb_in0, 0, sr, true, true) << ENDL();
-                    DPRINT << "I="<< w << "Max: " << TileSlice(cb_max, 0, sr, true, true) << ENDL();
-                    sub_tiles_bcast(cb_in0, cb_max, index, 0, w);
+                    // DPRINT << "J=" << j << " I="<< w << " In0 before: " << TileSlice(cb_in0, 0, sr, true, true) << ENDL();
+                    // DPRINT << "J=" << j << " I="<< w << " Max: " << TileSlice(cb_max, 0, sr, true, true) << ENDL();
+                    #ifdef USE_STABLE_SOFTMAX
+                    sub_tiles_bcast<BroadcastType::SCALAR>(cb_in0, cb_max, index, 0, w);
+                    #else
+                    copy_tile(cb_in0, index, w);
+                    #endif
                 }
 
                 cb_reserve_back(cb_exps, subblock_w);
                 for (uint32_t w = 0; w < subblock_w; w++) {
-                    //exp_tile(w, EXP_APPROX);
+                    #ifdef USE_STABLE_SOFTMAX
+                    exp_tile<true>(w, EXP_APPROX);
+                    #else
+                    exp_tile(w, EXP_APPROX);
+                    #endif
                     pack_tile(w, cb_exps);
-                    DPRINT << "I=" << w << "Result=" << TileSlice(cb_exps, 0, sr, true, true) << ENDL();
+                    // DPRINT << "J= " << j << " I=" << w << " Result=" << TileSlice(cb_exps, 0, sr, true, true) << ENDL();
                 }
                 cb_push_back(cb_exps, subblock_w);
                 REL();
@@ -207,7 +237,9 @@ void MAIN {
         }
         cb_pop_front(cb_recipsumexps, 1);
         cb_pop_front(cb_exps, block_w);
+        #ifdef USE_STABLE_SOFTMAX
         cb_pop_front(cb_max, 1);
+        #endif
     }
 
 }

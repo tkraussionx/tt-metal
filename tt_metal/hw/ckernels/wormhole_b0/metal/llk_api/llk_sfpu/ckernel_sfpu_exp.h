@@ -49,7 +49,7 @@ sfpi_inline vFloat sfpu_exp(vFloat val)
 }
 
 
-template <bool APPROXIMATION_MODE, bool ZERO_NEGATIVE, bool SCALE_EN=false, int ITERATIONS=8>
+template <bool APPROXIMATION_MODE, bool ZERO_NEGATIVE, bool SCALE_EN=false, int ITERATIONS=8, bool STABLE_EXPONENT = false>
 void calculate_exponential(uint exp_base_scale_factor = 0)
 {
     // Unroll 8 best for approx, unroll 0 for precise, compiler figures this out
@@ -63,26 +63,48 @@ void calculate_exponential(uint exp_base_scale_factor = 0)
 
         if constexpr (APPROXIMATION_MODE)
         {
-            v_if (val >= 89) {
-                vFloat val_inf = std::numeric_limits<float>::infinity();
-                dst_reg[0] = val_inf;
-            } v_elseif(val < -42) {
-                dst_reg[0] = 0.0f;
-            } v_else {
-                // * by 1/ln2 and add convert to 7.3 FxP format
-                vFloat vConstLn2Recip = vConstFloatPrgm0;
-                vFloat c23_73 = vConstFloatPrgm1;
-                vInt adj_exp = vConstIntPrgm2;
-                val = val * vConstLn2Recip + c23_73;
+            if constexpr (!STABLE_EXPONENT)
+            {
+                v_if (val >= 89) {
+                    vFloat val_inf = std::numeric_limits<float>::infinity();
+                    dst_reg[0] = val_inf;
+                } v_elseif(val < -42) {
+                    dst_reg[0] = 0.0f;
+                } v_else {
+                    // * by 1/ln2 and add convert to 7.3 FxP format
+                    vFloat vConstLn2Recip = vConstFloatPrgm0;
+                    vFloat c23_73 = vConstFloatPrgm1;
+                    vInt adj_exp = vConstIntPrgm2;
+                    val = val * vConstLn2Recip + c23_73;
 
-                // Remove Exponent of 7 and bias the Mantissa to 127.
-                vInt val_short = adj_exp + reinterpret<vInt>(val);
+                    // Remove Exponent of 7 and bias the Mantissa to 127.
+                    vInt val_short = adj_exp + reinterpret<vInt>(val);
 
-                // SHL to move integer bits to exponent
-                val_short <<= 10 - p_exp::FRAC_BITS;
-                dst_reg[0] = reinterpret<vFloat>(val_short);
+                    // SHL to move integer bits to exponent
+                    val_short <<= 10 - p_exp::FRAC_BITS;
+                    dst_reg[0] = reinterpret<vFloat>(val_short);
+                }
+                v_endif;
+            } else
+            {
+                 v_if(val < -42) {
+                    dst_reg[0] = 0.0f;
+                } v_else {
+                    // * by 1/ln2 and add convert to 7.3 FxP format
+                    vFloat vConstLn2Recip = vConstFloatPrgm0;
+                    vFloat c23_73 = vConstFloatPrgm1;
+                    vInt adj_exp = vConstIntPrgm2;
+                    val = val * vConstLn2Recip + c23_73;
+
+                    // Remove Exponent of 7 and bias the Mantissa to 127.
+                    vInt val_short = adj_exp + reinterpret<vInt>(val);
+
+                    // SHL to move integer bits to exponent
+                    val_short <<= 10 - p_exp::FRAC_BITS;
+                    dst_reg[0] = reinterpret<vFloat>(val_short);
+                }
+                v_endif;
             }
-            v_endif;
         }
         else
         {
