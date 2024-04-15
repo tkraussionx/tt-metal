@@ -209,6 +209,7 @@ def test_resnet_block_2d_512x512(
     temb = ttnn.to_layout(temb, ttnn.TILE_LAYOUT)
     temb = ttnn.to_device(temb, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
+    # ttnn.CONFIG.enable_logging = True
     ttnn_output = resnet_block(
         input,
         temb=temb,

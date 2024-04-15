@@ -155,6 +155,7 @@ def test_gs_silu_relu(
     "batch_size, input_channels, input_height, input_width, ncores, shard_grid, shard_strategy, shard_orientation",
     (
         (2, 320, 64, 64, 40, (8, 5), ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COL_MAJOR),
+        (2, 1920, 32, 32, 64, (8, 8), ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COL_MAJOR),
         (8, 256, 56, 56, 32, (8, 4), ttnn.ShardStrategy.HEIGHT, ttnn.ShardOrientation.ROW_MAJOR),
         (8, 512, 28, 28, 32, (4, 8), ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COL_MAJOR),
         (8, 1024, 14, 14, 56, (7, 8), ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COL_MAJOR),
