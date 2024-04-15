@@ -149,17 +149,21 @@ OutputTensors run_device_operation(
         const OptionalConstTensors&,
         OutputTensors&)>
         get_or_create_program;
-    auto& program_cache = input_tensors[0].device()->program_cache;
-    if (program_cache.is_enabled()) {
-        get_or_create_program = [&program_cache](const DeviceOperation<OutputTensors>& operation,
-                                   const Tensors& input_tensors,
-                                   const OptionalConstTensors& optional_input_tensors,
-                                   OutputTensors& output_tensors) -> std::reference_wrapper<Program> {
 
-            auto program_hash = operation.compute_program_hash(input_tensors, optional_input_tensors);
+    auto& program_cache = input_tensors[0].device()->program_cache;
+
+    tt::stl::hash::hash_t program_hash = 0;
+    if (program_cache.is_enabled()) {
+        get_or_create_program = [&program_cache, &program_hash](
+                                    const DeviceOperation<OutputTensors>& operation,
+                                    const Tensors& input_tensors,
+                                    const OptionalConstTensors& optional_input_tensors,
+                                    OutputTensors& output_tensors) -> std::reference_wrapper<Program> {
+            program_hash = operation.compute_program_hash(input_tensors, optional_input_tensors);
             auto program_ptr = program_cache.find(program_hash);
 
             bool cache_hit = program_ptr.has_value();
+            log_debug(tt::LogOp, "Program Hash: {} ({})", program_hash, cache_hit ? "HIT" : "MISS");
             if (not cache_hit) {
                 program_ptr = std::make_shared<operation::CacheableProgram<OutputTensors>>(operation.create_program(input_tensors, optional_input_tensors, output_tensors));
                 program_cache.insert(program_hash, program_ptr.value());
@@ -234,7 +238,7 @@ OutputTensors run_device_operation(
         },
         program);
 
-    TracyOpTTNNDevice(op_id, device_id, operation, program, input_tensors, optional_input_tensors, output_tensors);
+    TracyOpTTNNDevice(op_id, program_hash, program_cache.is_enabled(), device_id, operation, program, input_tensors, optional_input_tensors, output_tensors);
 
     return output_tensors;
 }
@@ -309,7 +313,7 @@ OutputTensors run_multi_device_operation(
         if constexpr(std::is_same_v<Tensors, std::remove_const_t<OutputTensors>>){
             multi_device_output_tensors.push_back(
                 Tensor{
-                    MultiDeviceStorage{buffers, shapes},
+                    MultiDeviceStorage{get_distributed_tensor_config_from_tensor(input_tensors[0]), buffers, shapes},
                     per_device_output_tensors[devices[0]][i].get_legacy_shape(),
                     per_device_output_tensors[devices[0]][i].get_dtype(),
                     per_device_output_tensors[devices[0]][i].get_layout()
@@ -319,7 +323,7 @@ OutputTensors run_multi_device_operation(
         else if constexpr(std::is_same_v<OptionalTensors, std::remove_const_t<OutputTensors>>){
             multi_device_output_tensors.push_back(
                 Tensor{
-                    MultiDeviceStorage{buffers, shapes},
+                    MultiDeviceStorage{get_distributed_tensor_config_from_tensor(input_tensors[0]), buffers, shapes},
                     per_device_output_tensors[devices[0]][i].value().get_legacy_shape(),
                     per_device_output_tensors[devices[0]][i].value().get_dtype(),
                     per_device_output_tensors[devices[0]][i].value().get_layout()

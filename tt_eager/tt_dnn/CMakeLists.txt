@@ -104,11 +104,11 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_softmax_backward/softmax_backward_w_large/softmax_backward_w_large.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_softmax_backward/softmax_backward_h_large/softmax_backward_h_large.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_softmax_backward/softmax_backward_c_large/softmax_backward_c_large.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_h/moreh_sum_h.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_w/moreh_sum_w.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_nc/moreh_sum_nc.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_h_impl/moreh_sum_h_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_w_impl/moreh_sum_w_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_nc_impl/moreh_sum_nc_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum/moreh_sum_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum_backward/moreh_sum_backward.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum_backward/moreh_sum_backward_impl/moreh_sum_backward_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_sum_backward/moreh_sum_backward_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_mean/moreh_mean_h/moreh_mean_h.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_mean/moreh_mean_w/moreh_mean_w.cpp
@@ -177,6 +177,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_qkv_heads_falcon7b.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_qkv_heads.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_concat_heads.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/multi_core_create_qkv_heads/multi_core_create_qkv_heads.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/rotate_half/single_core/rotate_half_op_single_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/rotate_half/rotate_half_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/rotary_embedding/multi_core/rotary_embedding_op_multi_core.cpp
@@ -195,6 +196,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_getitem/moreh_getitem_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_getitem/moreh_getitem_rm/moreh_getitem_rm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/moreh_getitem/moreh_getitem_tilized/moreh_getitem_tilized.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/scan/scan_op.cpp
 )
 
 add_library(tt_dnn OBJECT ${TT_DNN_SRCS})

@@ -54,14 +54,24 @@ def pad_heads(tensor, num_heads=8, dim=-1):
         unpadded_len = tensor.shape[-1] // num_heads
         padding_needed = round_up_to_tile_dim(unpadded_len) - unpadded_len
         unpadded_tensors = torch.split(tensor, tensor.shape[dim] // num_heads, dim=dim)
-        padding = (
-            torch.zeros((tensor.shape[-4], tensor.shape[-3], tensor.shape[-2], padding_needed))
-            if dim == -1
-            else torch.zeros((tensor.shape[-4], tensor.shape[-3], padding_needed, tensor.shape[-1]))
-        )
+        if len(tensor.shape) == 2:
+            padding = (
+                torch.zeros((tensor.shape[-2], padding_needed))
+                if dim == -1
+                else torch.zeros((padding_needed, tensor.shape[-1]))
+            )
+        else:
+            padding = (
+                torch.zeros((1, 1, tensor.shape[-2], padding_needed))
+                if dim == -1
+                else torch.zeros((1, 1, padding_needed, tensor.shape[-1]))
+            )
         padded_tensor = torch.Tensor()
         for unpadded_tensor in unpadded_tensors:
             padded_tensor = torch.cat([padded_tensor, unpadded_tensor, padding], dim=dim)
+
+        while len(padded_tensor.shape) < 4:
+            padded_tensor = padded_tensor.unsqueeze(0)
 
         padded_tensor = ttnn.from_torch(padded_tensor, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
         padded_tensor = ttnn.to_device(padded_tensor, device, memory_config=memory_config)
@@ -117,11 +127,16 @@ class cross_attention:
             parameters.qkv["weight"] = concatenate_qkv(
                 parameters.to_q.weight, parameters.to_k.weight, parameters.to_v.weight
             )
+            parameters.qkv.weight = ttnn.unsqueeze_to_4D(parameters.qkv.weight)
         else:
             parameters["kv"] = ttnn.model_preprocessing.ParameterDict()
             parameters.kv["weight"] = concatenate_qkv(None, parameters.to_k.weight, parameters.to_v.weight)
             parameters.to_q.weight = weight_to_bfp8(parameters.to_q.weight)
 
+            parameters.kv.weight = ttnn.unsqueeze_to_4D(parameters.kv.weight)
+            parameters.to_q.weight = ttnn.unsqueeze_to_4D(parameters.to_q.weight)
+
+        parameters.to_out[0].weight = ttnn.unsqueeze_to_4D(parameters.to_out[0].weight)
         parameters.to_out[0].bias = ttnn.unsqueeze_to_4D(parameters.to_out[0].bias)
         self.parameters = parameters
         self.device = device
@@ -137,40 +152,40 @@ class cross_attention:
 
         self.scales = {40: self.scale_40, 80: self.scale_80, 160: self.scale_160}
 
-        attention_mask_4096_96 = torch.ones((2, 1, 4096, 96)) * -1e9
+        attention_mask_4096_96 = torch.ones((1, 1, 4096, 96)) * -1e9
         attention_mask_4096_96[:, :, :, :77] = 0
         attention_mask_4096_96 = ttnn.from_torch(
             attention_mask_4096_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_1024_96 = torch.ones((2, 1, 1024, 96)) * -1e9
+        attention_mask_1024_96 = torch.ones((1, 1, 1024, 96)) * -1e9
         attention_mask_1024_96[:, :, :, :77] = 0
         attention_mask_1024_96 = ttnn.from_torch(
             attention_mask_1024_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_256_96 = torch.ones((2, 1, 256, 96)) * -1e9
+        attention_mask_256_96 = torch.ones((1, 1, 256, 96)) * -1e9
         attention_mask_256_96[:, :, :, :77] = 0
         attention_mask_256_96 = ttnn.from_torch(
             attention_mask_256_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_96_96 = torch.ones((2, 1, 96, 96)) * -1e9
+        attention_mask_96_96 = torch.ones((1, 1, 96, 96)) * -1e9
         attention_mask_96_96[:, :, :, :77] = 0
         attention_mask_96_96 = ttnn.from_torch(
             attention_mask_96_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
 
-        attention_mask_4096_4096 = torch.zeros((2, 1, 4096, 4096))
+        attention_mask_4096_4096 = torch.zeros((1, 1, 4096, 4096))
         attention_mask_4096_4096 = ttnn.from_torch(
             attention_mask_4096_4096, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_1024_1024 = torch.zeros((2, 1, 1024, 1024))
+        attention_mask_1024_1024 = torch.zeros((1, 1, 1024, 1024))
         attention_mask_1024_1024 = ttnn.from_torch(
             attention_mask_1024_1024, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_256_256 = torch.zeros((2, 1, 256, 256))
+        attention_mask_256_256 = torch.zeros((1, 1, 256, 256))
         attention_mask_256_256 = ttnn.from_torch(
             attention_mask_256_256, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_64_64 = torch.zeros((2, 1, 64, 64))
+        attention_mask_64_64 = torch.zeros((1, 1, 64, 64))
         attention_mask_64_64 = ttnn.from_torch(
             attention_mask_64_64, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
@@ -246,6 +261,7 @@ class cross_attention:
                     ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                     ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 )
+                print(slice.memory_config())
                 program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
                     compute_with_storage_grid_size=grid_size,
                     in0_block_w=2,
@@ -469,10 +485,20 @@ class cross_attention:
         )
         ttnn.deallocate(query)
         ttnn.deallocate(t_key)
+        orig_shape = attention_scores.shape
+        attention_scores = ttnn.reshape(
+            attention_scores,
+            (
+                1,
+                attention_scores.shape[-4] * attention_scores.shape[-3],
+                attention_scores.shape[-2],
+                attention_scores.shape[-1],
+            ),
+        )
         attention_scores = ttnn.transformer.attention_softmax_(
             attention_scores, attention_mask=attention_mask, head_size=head_size
         )
-
+        attention_scores = ttnn.reshape(attention_scores, orig_shape)
         if attention_scores.shape[-2] > original_seq_len:
             attention_scores = attention_scores[:, :, :original_seq_len, :]
         attention_scores = ttnn.matmul(
