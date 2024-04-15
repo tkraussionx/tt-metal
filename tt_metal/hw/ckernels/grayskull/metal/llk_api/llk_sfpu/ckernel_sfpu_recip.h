@@ -72,6 +72,7 @@ inline void calculate_reciprocal()
     for (int d = 0; d < ITERATIONS; d++)
     {
         vFloat val = dst_reg[0];
+        vFloat orig = dst_reg[0];
         bool check = true;
         v_if (dst_reg[0]>0.0f){
             while (check){
@@ -86,7 +87,7 @@ inline void calculate_reciprocal()
             }
         }
         v_endif;
-        dst_reg[0] = val;
+        dst_reg[0] = orig - val;
         dst_reg++;
     }
 }
