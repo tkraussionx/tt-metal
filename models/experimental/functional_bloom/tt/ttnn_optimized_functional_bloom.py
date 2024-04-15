@@ -87,14 +87,18 @@ def split_query_key_value_and_split_heads(
 
 
 def create_query_key_value(config: BloomConfig, hidden_states, *, parameters: ParameterDict):
-    query_key_value = ttnn.linear(
-        hidden_states,
-        input_tensor_b=parameters.query_key_value.weight,
-        bias=parameters.query_key_value.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        memory_config=BLOOM_MEMORY_CONFIG,
-        dtype=BLOOM_DTYPE,
-    )
+    # query_key_value = ttnn.linear(
+    #     hidden_states,
+    #     input_tensor_b=parameters.query_key_value.weight,
+    #     bias=parameters.query_key_value.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    #     dtype=BLOOM_DTYPE,
+    # )
+
+    query_key_value = ttnn.matmul(hidden_states, parameters.query_key_value.weight)
+    query_key_value = ttnn.add(query_key_value, parameters.query_key_value.bias)
+
     ttnn.deallocate(hidden_states)
     query, key, value = split_query_key_value_and_split_heads(query_key_value, num_heads=config.n_head)
     ttnn.deallocate(query_key_value)
@@ -160,14 +164,18 @@ def compute_context_layer(attention_probs, value_layer):
 
 
 def finalize_output(context_layer, *, parameters: ParameterDict):
-    output_tensor = ttnn.linear(
-        context_layer,
-        parameters.dense.weight,
-        bias=parameters.dense.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        memory_config=BLOOM_MEMORY_CONFIG,
-        dtype=ttnn.bfloat16,
-    )
+    # output_tensor = ttnn.linear(
+    #     context_layer,
+    #     parameters.dense.weight,
+    #     bias=parameters.dense.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    #     dtype=ttnn.bfloat16,
+    # )
+
+    output_tensor = ttnn.matmul(context_layer, parameters.dense.weight)
+    output_tensor = ttnn.add(output_tensor, parameters.dense.bias)
+
     ttnn.deallocate(context_layer)
     return output_tensor
 
@@ -197,25 +205,34 @@ def bloom_mlp(
     *,
     parameters: ParameterDict,
 ):
-    ff1_output = ttnn.linear(
-        hidden_states,
-        parameters.dense_h_to_4h.weight,
-        bias=parameters.dense_h_to_4h.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        activation="gelu",
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        dtype=BLOOM_DTYPE,
-    )
+    # ff1_output = ttnn.linear(
+    #     hidden_states,
+    #     parameters.dense_h_to_4h.weight,
+    #     bias=parameters.dense_h_to_4h.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     activation="gelu",
+    #     memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    #     dtype=BLOOM_DTYPE,
+    # )
+
+    ff1_output = ttnn.matmul(hidden_states, parameters.dense_h_to_4h.weight)
+    ff1_output = ttnn.add(ff1_output, parameters.dense_h_to_4h.bias)
+    ff1_output = ttnn.gelu(ff1_output)
+
     ttnn.deallocate(hidden_states)
 
-    ff2_output = ttnn.linear(
-        ff1_output,
-        parameters.dense_4h_to_h.weight,
-        bias=parameters.dense_4h_to_h.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        memory_config=BLOOM_MEMORY_CONFIG,
-        dtype=ttnn.bfloat16,
-    )
+    # ff2_output = ttnn.linear(
+    #     ff1_output,
+    #     parameters.dense_4h_to_h.weight,
+    #     bias=parameters.dense_4h_to_h.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    #     dtype=ttnn.bfloat16,
+    # )
+
+    ff2_output = ttnn.matmul(ff1_output, parameters.dense_4h_to_h.weight)
+    ff2_output = ttnn.add(ff2_output, parameters.dense_4h_to_h.bias)
+
     ttnn.deallocate(ff1_output)
     mlp_output = ttnn.add(ff2_output, residual, memory_config=BLOOM_MEMORY_CONFIG)
     return mlp_output
@@ -318,12 +335,16 @@ def bloom_for_causal_lm(config, input_ids, alibi, causal_mask, *, parameters):
 
 def bloom_for_question_answering(config, input_ids, alibi, casual_mask, *, parameters):
     hidden_states = bloom(config, input_ids, alibi, casual_mask, parameters=parameters.transformer)
-    hidden_states = ttnn.linear(
-        hidden_states,
-        parameters.qa_outputs.weight,
-        bias=parameters.qa_outputs.bias,
-        memory_config=BLOOM_MEMORY_CONFIG,
-    )
+    # hidden_states = ttnn.linear(
+    #     hidden_states,
+    #     parameters.qa_outputs.weight,
+    #     bias=parameters.qa_outputs.bias,
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    # )
+
+    hidden_states = ttnn.matmul(hidden_states, parameters.qa_outputs.weight)
+    hidden_states = ttnn.add(hidden_states, parameters.qa_outputs.bias)
+
     return hidden_states
 
 
