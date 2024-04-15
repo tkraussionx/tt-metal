@@ -24,14 +24,14 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
         (torch.Size([1, 3, 320, 384])),
     ),
 )
-def test_bw_ckernal(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 1, 100, device, True)
+def test_bw_abs(input_shapes, device):
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=0.5)
     grad_data, grad_tensor = data_gen_with_range(input_shapes, 1, 100, device)
     print(input_tensor)
 
     golden_tensor = torch.floor(in_data)
 
-    tt_output_tensor_on_device = tt_lib.tensor.recip(input_tensor)
+    tt_output_tensor_on_device = tt_lib.tensor.tanhshrink(input_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
 
     comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
