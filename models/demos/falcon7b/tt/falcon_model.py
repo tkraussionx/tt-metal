@@ -98,6 +98,8 @@ class TtFalconModelShared(torch.nn.Module):
 
         embeddings = self.embeddings(input_ids)
 
+        max_num_input_tokens = max(num_input_tokens)
+
         # Generate input and attention_mask ---------------------------------------------
         if llm_mode == "prefill":
             assert batch_size == 1, "For prefill, batch_size must be 1!"
@@ -115,13 +117,13 @@ class TtFalconModelShared(torch.nn.Module):
                     )
                 )
 
-                attention_mask_bool = torch.ones(batch_size, 1, sequence_size, num_input_tokens, dtype=bool)
+                attention_mask_bool = torch.ones(batch_size, 1, sequence_size, max_num_input_tokens, dtype=bool)
                 attention_mask_bool = attention_mask_bool.triu(diagonal=1)
 
                 attention_mask_bool_padded = torch.cat(
                     (
                         attention_mask_bool,
-                        torch.ones(batch_size, 1, sequence_size, sequence_size - num_input_tokens, dtype=bool),
+                        torch.ones(batch_size, 1, sequence_size, sequence_size - max_num_input_tokens, dtype=bool),
                     ),
                     dim=-1,
                 )

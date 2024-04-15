@@ -55,24 +55,47 @@ def post_process(logits, index):
 
 def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len, perf_mode=False):
     tokenizer.pad_token = tokenizer.eos_token
+
+    num_users = len(input_prompts)
+    num_input_tokens = []
+    for input_prompt in input_prompts:
+        tokenized_input = tokenizer(input_prompt, add_special_tokens=False, return_tensors="pt")
+        num_input_tokens.append(tokenized_input["input_ids"].shape[1])
+        print(f"num_input_tokens: {num_input_tokens}")
+
+    if max(num_input_tokens) > max_seq_len:
+        raise ValueError(f"Input prompts are longer than max sequence length: {max_num_input_tokens} > {max_seq_len}")
+
+    max_num_input_tokens = nearest_32(max(num_input_tokens))
+    print(f"max_num_input_tokens: {max_num_input_tokens}")
+
     tokenized_inputs = tokenizer(
-        input_prompts, padding="max_length", max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
+        # input_prompts, padding="max_length", max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
+        input_prompts,
+        padding="max_length",
+        max_length=max_num_input_tokens,
+        add_special_tokens=False,
+        return_tensors="pt",
+        truncation=True,
     )
     prefill_ids = tokenized_inputs["input_ids"]
 
-    tokenized_inputs_nopad = tokenizer(
-        input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
-    )
+    # tokenized_inputs_nopad = tokenizer(
+    #     input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
+    # )
 
-    num_users = len(tokenized_inputs_nopad["input_ids"])
-    num_input_tokens = len(tokenized_inputs_nopad["input_ids"][0])
-    for input_prompt in tokenized_inputs_nopad["input_ids"]:
-        assert len(input_prompt) == num_input_tokens
+    # num_users = len(tokenized_inputs_nopad["input_ids"])
+    # num_input_tokens = len(tokenized_inputs_nopad["input_ids"][0])
+
+    # for input_prompt in tokenized_inputs_nopad["input_ids"]:
+    # for input_prompt in tokenized_inputs["input_ids"]:
+    #     assert len(input_prompt) == num_input_tokens
 
     if not perf_mode:
-        prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
+        # prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
+        pass
     else:
-        num_input_tokens = max_seq_len - 1
+        num_input_tokens = [max_seq_len - 1] * num_users  # TODO: test this
 
     logger.info(f"# of users: {num_users}")
     logger.info(f"# of input tokens per user: {num_input_tokens}")
@@ -223,7 +246,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens[user_id]
         )
         assert tt_prefill_attention_mask is not None
 
@@ -260,7 +283,7 @@ def run_falcon_demo_kv(
     prompt_is_done = [False for _ in range(num_users)]
 
     time_decode_compile = 0
-    for kv_cache_len in tqdm(range(num_input_tokens, max_seq_len, 32)):
+    for kv_cache_len in tqdm(range(nearest_32(max(num_input_tokens)), max_seq_len, 32)):
         time_decode_compile_start = time.time()
         (
             tt_decode_embeddings,
@@ -295,6 +318,8 @@ def run_falcon_demo_kv(
     del tt_prefill_embeddings
     del tt_prefill_attention_mask
     del decode_ids
+    # TODO
+    # if num_input_tokens != max_seq_len:
     del tt_decode_embeddings
     del tt_FalconCausalLM_singlelayer
     del kv_cache_singlelayer
@@ -332,7 +357,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens[user_id]
         )
         assert tt_prefill_attention_mask is not None
 
@@ -357,13 +382,16 @@ def run_falcon_demo_kv(
         logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
         tt_logits[0].deallocate()
 
-        user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
+        user_output_ids = post_processor(logits=logits, index=num_input_tokens[user_id] - 1)
         output_ids[user_id] = user_output_ids
 
     logger.info("Finished inference prefill stage!")
     num_users_generated_prefill = num_users if not perf_mode else (N - N_warmup)
 
-    generated_ids = torch.concat((prefill_ids[..., :num_input_tokens], output_ids), dim=1)
+    # generated_ids = torch.concat((prefill_ids[..., :num_input_tokens], output_ids), dim=1)
+    generated_ids = prefill_ids.copy()
+    for user_id, output_id in enumerate(output_ids):
+        generated_ids[user_id, num_input_tokens[user_id]] = output_id
 
     profiler.disable()
 
@@ -377,12 +405,12 @@ def run_falcon_demo_kv(
     for user_id, output_id in enumerate(output_ids):
         decode_ids[user_id] = output_id
 
-    kv_cache_len = num_input_tokens  # This will increment by one after each decode
+    kv_cache_len = max(num_input_tokens)  # This will increment by one after each decode
     prompt_is_done = [False for _ in range(num_users)]
 
     time_decode_inference = 0
     if not perf_mode:
-        N = max_seq_len - num_input_tokens
+        N = max_seq_len - max(num_input_tokens)
         N_warmup = 0
     else:
         N = 15
@@ -500,6 +528,8 @@ def test_demo(
 ):
     disable_persistent_kernel_cache()
     disable_compilation_reports()
+
+    print(f"device: {device}")
 
     if perf_mode:
         logger.info("Running in performance measurement mode (invalid outputs)!")
