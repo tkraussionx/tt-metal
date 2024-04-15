@@ -579,7 +579,7 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor mul_res = mul(floor_div, input_b);
     Tensor result = add(input_a, neg(mul_res));
 
-    return floor_div;
+    return mul_res;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
     return operation::decorate_as_composite(__func__, _atan2)(input_a, input_b, output_mem_config);
