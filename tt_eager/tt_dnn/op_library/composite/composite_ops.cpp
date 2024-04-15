@@ -126,7 +126,7 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
     Tensor value = x;
     Tensor orig = x;
     value = where(logical_and(gte(value, zeros_like(value)), lt(value, ones_like(value))), zeros_like(value), value);
-    value = where(logical_and(gte(value, neg(ones_like(value))), lt(value, zeros_like(value))), ones_like(value), value);
+    value = where(logical_and(gte(value, neg(ones_like(value))), lt(value, zeros_like(value))), neg(ones_like(value)), value);
     for (int i=0;i<100;i++){
         value = where(gte(abs(value), ones_like(value)), sub_unary(abs(value), 1), value);
     }
