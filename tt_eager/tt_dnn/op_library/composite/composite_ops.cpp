@@ -573,37 +573,10 @@ Tensor lerp(const Tensor& input_a, const Tensor& input_b, float value, const Mem
 }
 
 Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
-    Tensor result(input_a);
-    {
-        Tensor atan_input =
-            mul(abs(input_b, output_mem_config),
-                recip(abs(input_a, output_mem_config), output_mem_config),
-                std::nullopt,
-                output_mem_config);
-        result = atan(atan_input, output_mem_config);
-    }
-    Tensor res(result);
-    {
-        Tensor ib_gtz = gtz(input_b, output_mem_config);
-        Tensor ib_gt = gtz(input_b, output_mem_config);
-        Tensor ib_lt = ltz(input_b, output_mem_config);
-        float pi_2 = M_PI_2;
-        Tensor neg_result = neg(result, output_mem_config);
+    Tensor div_result = mul(input_a, recip(input_b));
+    Tensor result = sub(input_a, mul(tanhshrink(div_result), input_b));
 
-        res = where(
-            gtz(input_a, output_mem_config),
-            where(ib_gtz, result, neg_result, output_mem_config),
-            where(
-                ltz(input_a, output_mem_config),
-                where(
-                    ib_gt,
-                    add_unary(neg_result, M_PI, output_mem_config),
-                    where(ib_lt, sub_unary(result, M_PI, output_mem_config), M_PI, output_mem_config),
-                    output_mem_config),
-                where(ib_gt, pi_2, where(ib_lt, -pi_2, 0.0f, output_mem_config), output_mem_config),
-                output_mem_config));
-    }
-    return res;
+    return result;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
     return operation::decorate_as_composite(__func__, _atan2)(input_a, input_b, output_mem_config);
