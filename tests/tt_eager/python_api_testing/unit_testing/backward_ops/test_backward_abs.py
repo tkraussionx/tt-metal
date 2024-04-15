@@ -25,7 +25,7 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     ),
 )
 def test_bw_abs(input_shapes, device):
-    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-0.5)
+    in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device)
     grad_data, grad_tensor = data_gen_with_range(input_shapes, 1, 100, device)
     print(input_tensor)
 
