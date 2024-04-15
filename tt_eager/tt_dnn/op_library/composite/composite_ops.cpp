@@ -131,7 +131,7 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
         value = where(gt(abs(value), ones_like(value)), sub_unary(abs(value), 1), value);
     }
     //value = where(logical_and(nez(value), logical_and(ne(value, ones_like(value)), ne(value, neg(ones_like(value))))), sub(abs(orig), value), value);
-    value = sub(abs(orig), value);
+    value = where(gt(abs(orig), ones_like(value)),sub(abs(orig), value), value);
     value = where(lt(orig, neg(ones_like(value))), sub_unary(neg(value), 1), value);
     value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
     return value;
