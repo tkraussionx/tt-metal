@@ -26,7 +26,7 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
 )
 def test_bw_remainder(input_shapes, device):
     in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=5)
+    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 30, device)
     print(input_tensor)
 
     golden_tensor = torch.remainder(in_data, grad_data)
