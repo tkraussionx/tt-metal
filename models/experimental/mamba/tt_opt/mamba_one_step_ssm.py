@@ -110,7 +110,7 @@ class TtMambaSSM(torch.nn.Module):
             math_approx_mode=False,
             fp32_dest_acc_en=True,
         )
-        self.core_grid_row = 5
+        self.core_grid_row = 8
         self.core_grid_col = 8
 
     def forward(self, x):

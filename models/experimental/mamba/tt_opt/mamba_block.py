@@ -85,7 +85,7 @@ class TtMambaBlock(torch.nn.Module):
             math_approx_mode=False,
             fp32_dest_acc_en=True,
         )
-        self.core_grid_row = 4
+        self.core_grid_row = 8
         self.core_grid_col = 8
 
     def forward(self, x):
@@ -99,7 +99,7 @@ class TtMambaBlock(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config,
             use_1d_systolic_array=True,
-            core_grid=ttnn.CoreGrid(y=4, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )
 
         # shift the states leftward
@@ -140,7 +140,7 @@ class TtMambaBlock(torch.nn.Module):
             residual_connection,
             self.mlp_proj_weights,
             memory_config=ttnn.L1_MEMORY_CONFIG,
-            core_grid=ttnn.CoreGrid(y=4, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
             compute_kernel_config=self.compute_kernel_config,
             use_1d_systolic_array=True,
         )
@@ -159,7 +159,7 @@ class TtMambaBlock(torch.nn.Module):
             out,
             self.out_proj_weights,
             memory_config=ttnn.L1_MEMORY_CONFIG,
-            core_grid=ttnn.CoreGrid(y=4, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
             compute_kernel_config=self.compute_kernel_config,
             use_1d_systolic_array=True,
         )
