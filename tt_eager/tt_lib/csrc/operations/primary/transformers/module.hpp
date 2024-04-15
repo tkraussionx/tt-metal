@@ -6,6 +6,7 @@
 
 #include "tt_dnn/op_library/transformer_tms/transformer_tms.hpp"
 #include "tt_dnn/op_library/softmax/softmax_op.hpp"
+#include "tt_dnn/op_library/sdpa/sdpa_op.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -91,6 +92,29 @@ void py_module(py::module& m_transformers) {
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a fused scale->attention_mask->softmax operation. Returns a reference to the input tensor modified "
         "in place. Input must be sharded, and attention mask interleaved and of shape [1, 1, H, W]"
+        );
+
+    py::class_<SDPADefaultProgramConfig>(m_transformers, "SDPADefaultProgramConfig")
+        .def(py::init<>());
+
+    py::class_<SDPAMultiCoreProgramConfig>(m_transformers, "SDPAMultiCoreProgramConfig")
+        .def(py::init<CoreCoord, std::size_t>(), py::kw_only(), py::arg("compute_with_storage_grid_size"), py::arg("chunk_size").noconvert())
+        .def_readwrite("compute_with_storage_grid_size", &SDPAMultiCoreProgramConfig::compute_with_storage_grid_size)
+        .def_readwrite("chunk_size", &SDPAMultiCoreProgramConfig::chunk_size);
+
+    m_transformers.def(
+        "scaled_dot_product_attention",
+        &scaled_dot_product_attention,
+        py::arg("input_tensor_q").noconvert(),
+        py::arg("input_tensor_k").noconvert(),
+        py::arg("input_tensor_v").noconvert(),
+        py::arg("attn_mask").noconvert(),
+        py::arg("is_causal").noconvert() = false,
+        py::arg("scale").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("program_config").noconvert() = SDPADefaultProgramConfig{},
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        "Scaled dot product attention operation"
         );
 
 }

@@ -24,7 +24,7 @@ struct SDPADefaultProgramConfig{
     tt::stl::reflection::Attributes attributes() const { return {}; };
 };
 
-struct SDPAProgramConfig {
+struct SDPAMultiCoreProgramConfig {
     CoreCoord compute_with_storage_grid_size;
     std::size_t chunk_size;
 
@@ -38,7 +38,7 @@ struct SDPAProgramConfig {
 
 using SDPAProgramConfig = std::variant<
     SDPADefaultProgramConfig,
-    SDPAProgramConfig
+    SDPAMultiCoreProgramConfig
 >;
 
 }  // namespace transformers
@@ -67,12 +67,13 @@ struct ScaledDotProductAttention {
 
 operation::ProgramWithCallbacks sdpa_multi_core(
     const Tensor &input_tensor_q,
-    const Tensor &input_tensor_kt,
+    const Tensor &input_tensor_k,
     const Tensor &input_tensor_v,
     const Tensor &output_tensor,
     const std::optional<const Tensor> attn_mask,
     std::optional<float> scale,
     bool is_causal,
+    std::size_t chunk_size,
     DeviceComputeKernelConfig compute_kernel_config
 );
 
