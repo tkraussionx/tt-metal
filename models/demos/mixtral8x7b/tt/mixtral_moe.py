@@ -6,27 +6,31 @@ import torch
 import ttnn
 
 
-def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1):
+def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1, compute_kernel):
     # get the highest value and position
     weights_ex0_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
-    cond0 = ttnn.eq(gate_logits_1SB8, ttnn.matmul(weights_ex0_1SB1, ones_1118))
+    exp_0_repeated = ttnn.matmul(weights_ex0_1SB1, ones_1118, compute_kernel_config=compute_kernel)
+    cond0 = ttnn.eq(gate_logits_1SB8, exp_0_repeated)
 
     # mask out the maximum value
-    gate_logits_1SB8 = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
+    gate_logits_1SB8_masked = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
 
     # get the second highest value and position
-    weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
-    cond1 = ttnn.eq(gate_logits_1SB8, ttnn.matmul(weights_ex1_1SB1, ones_1118))
+    weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8_masked, dim=3)
+    exp_1_repeated = ttnn.matmul(weights_ex1_1SB1, ones_1118, compute_kernel_config=compute_kernel)
+    cond1 = ttnn.eq(gate_logits_1SB8, exp_1_repeated)
 
     # calculate the softmax
-    weights_1SB1_pre_softmax = ttnn.reciprocal(ones_11B1 + ttnn.exp(weights_ex1_1SB1 - weights_ex0_1SB1))
+    weights_exp = ttnn.exp(weights_ex1_1SB1 - weights_ex0_1SB1)
+    weights_1SB1_pre_softmax = ttnn.reciprocal(ones_11B1 + weights_exp)
 
     # select whether a batch for was selected first or second for the i-th head
-    cond0 = ttnn.matmul(cond0, expert_mask)
-    cond1 = ttnn.matmul(cond1, expert_mask)
+    cond0 = ttnn.matmul(cond0, expert_mask, compute_kernel_config=compute_kernel)
+    cond1 = ttnn.matmul(cond1, expert_mask, compute_kernel_config=compute_kernel)
 
     # calculate the weight
     weights_1SB1 = cond0 * weights_1SB1_pre_softmax - cond1 * (weights_1SB1_pre_softmax - ones_11B1)
+
     return weights_1SB1
 
 
@@ -126,7 +130,12 @@ class TtMoeLayer(torch.nn.Module):
 
             # get weights for top-2 experts
             weights_1SB1 = top_2(
-                gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.ones_1118[i], self.ones_11B1[i]
+                gate_logits_1SB8,
+                self.top_2_mask[i],
+                self.expert_mask[i],
+                self.ones_1118[i],
+                self.ones_11B1[i],
+                self.compute_kernel,
             )
 
             # MLP and masking
