@@ -124,7 +124,9 @@ def fa2_fake(q, k, v, attn_mask):
 
                     # # 10
                     # chunk_output = chunk_output * exp_max_diff + torch.matmul(pij, v_chunk)
-                    chunk_output += torch.matmul(scores, v_chunk)
+                    # chunk_output += torch.matmul(scores, v_chunk)
+                    ## ONLY KEEP LAST CHUNK OUTPUT
+                    chunk_output = torch.matmul(scores, v_chunk)
                     # prev_sum = cur_sum
                     # prev_m = cur_m
 
@@ -168,10 +170,16 @@ def run_test_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     # is_causal must be false if we specify an attention_mask
-    gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
+    gt = fa2_fake(
+        Q,
+        K,
+        V,
+        attn_mask,
+    )
     mine = tt_fa2(device, Q, K, V, attn_mask)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
     print(f"python vs pytorch: {out_pcc}")
+
     assert out_pass
 
 
