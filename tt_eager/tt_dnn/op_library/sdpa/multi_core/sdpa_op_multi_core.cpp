@@ -134,6 +134,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t v_tiles  = S_chunk_t * DHt * 2; // double buffer
     uint32_t mask_tiles = S_chunk_t * S_chunk_t * 2; // double buffer
     uint32_t qk_tiles = S_chunk_t * S_chunk_t;
+    uint32_t out_im_tiles = S_chunk_t * DHt;
     uint32_t out0_t = S_chunk_t * DHt;
 
     // log all values
@@ -211,6 +212,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // QK intermediate
     auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_cb_data_format}}).set_page_size(CB::c_intermed0, im_tile_size);
     auto cb_intermed0_id = CreateCircularBuffer(program, single_core, c_intermed0_config);
+
+    // (QK)V intermediate
+    auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
+    auto cb_intermed1_id = CreateCircularBuffer(program, single_core, c_intermed1_config);
+
+    // output accumulation intermediate
+    auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_cb_data_format}}).set_page_size(CB::c_intermed2, im_tile_size);
+    auto cb_intermed2_id = CreateCircularBuffer(program, single_core, c_intermed2_config);
 
     // Output
     auto c_out0_config = CircularBufferConfig(out0_t * out0_tile_size, {{CB::c_out0, out0_cb_data_format}}).set_page_size(CB::c_out0, out0_tile_size);

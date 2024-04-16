@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "debug/dprint.h"
@@ -11,7 +12,88 @@
 namespace NAMESPACE {
 
 
-// void matmul_blocks()
+void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M, uint32_t N, uint32_t K, uint32_t num_blocks, uint32_t in0_num_subblocks, uint32_t in1_num_subblocks,
+                    uint32_t in0_block_w, uint32_t subblock_h, uint32_t subblock_w) {
+    bool spill = num_blocks > 1;
+    bool enable_reload = false;
+    mm_init_short();
+
+    uint32_t output_num_tiles = M * N;
+    // PACK(DPRINT << "COMPUTE: "  << "output_num_tiles=" << output_num_tiles << ENDL());
+    uint32_t out_subblock_num_tiles = subblock_h * subblock_w;
+
+    for (uint32_t block = 0; block < num_blocks; ++block) {
+        PACK(DPRINT << "COMPUTE: "  << "block=" << block << ENDL());
+        // bool last_out = block == (num_blocks - 1);
+        // cb_reserve_back(out_cb, output_num_tiles);
+
+        for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; ++in0_subblock) {
+            PACK(DPRINT << "COMPUTE: "  << "in0_subblock=" << in0_subblock << ENDL());
+            for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; ++in1_subblock) {
+                PACK(DPRINT << "COMPUTE: "  << "in1_subblock=" << in1_subblock << ENDL());
+                acquire_dst(tt::DstMode::Half);
+                // Reload partial
+                if (enable_reload) {
+                    copy_tile_to_dst_init_short();
+                    // PACK(DPRINT << "mm_out cb read pointer: " << cb_interface[out_cb].fifo_rd_ptr / cb_interface[out_cb].fifo_page_size << ENDL());
+                    cb_wait_front(out_cb, out_subblock_num_tiles);
+                    // PACK(DPRINT << "wait_front: " << out_subblock_num_tiles << ENDL());
+                    // for (uint32_t i = 0; i < subblock_h; i++) {
+                    //     for (uint32_t j = 0; j < subblock_w; j++) {
+                    //         uint32_t im_i = in0_subblock * subblock_h + i;
+                    //         uint32_t im_j = in1_subblock * subblock_w + j;
+                    //         uint32_t im_index = im_i * M + im_j;
+                    //         copy_tile(out_cb, im_index, i);
+                    //     }
+                    // }
+                    for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
+                        copy_tile(out_cb, i, i);
+                    }
+                    cb_pop_front(out_cb, out_subblock_num_tiles);
+                    mm_init_short();
+                }
+                // Loop over in0_subblock, in1_subblock, and in0_block_w
+                int dst_index = 0;
+                for (uint32_t h = 0; h < subblock_h; h++) {
+                    for (uint32_t w = 0; w < subblock_w; w++) {
+                        // int in1_index_inner_dim_offset = 0;
+                        for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
+                            uint32_t i_idx = in0_subblock * subblock_h + h;
+                            uint32_t j_idx = in1_subblock * subblock_w + w;
+                            uint32_t k_idx = block * in0_block_w + inner_dim;
+                            uint32_t in0_index = i_idx * K + k_idx;
+                            uint32_t in1_index = k_idx * N + j_idx;
+                            // int in0_index = in0_subblock * subblock_h + in0_index_h_offset + inner_dim;
+
+                            // int in1_index = in1_subblock * subblock_w + in1_index_inner_dim_offset + w;
+                            matmul_tiles(in0_cb, in1_cb, in0_index, in1_index, dst_index, false /* transpose */);
+                        }
+                        dst_index++;
+                    }
+                }
+
+                // Move partial result to interm buffer (and output will show up here in last iteration)
+                // PACK(DPRINT << "mm_out cb write pointer: " << cb_interface[out_cb].fifo_wr_ptr / cb_interface[out_cb].fifo_page_size << ENDL());
+                cb_reserve_back(out_cb, out_subblock_num_tiles);
+                // PACK(DPRINT << "reserve_back: " << out_subblock_num_tiles << ENDL());
+                for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                    // BUG: We need to reserve_back and push_back on this out_cb since pack_tile can't write more than wr_ptr + 8
+                    pack_tile(i, out_cb);
+                }
+                cb_push_back(out_cb, out_subblock_num_tiles);
+                release_dst(tt::DstMode::Half);
+            }
+        }
+        if (spill) {
+            enable_reload = true;
+        }
+    }
+
+    // Free up out_cb. Inner loop writes `output_num_tiles` times more than it reads.
+    // PACK(DPRINT << "end of mm, mm_out cb read pointer: " << cb_interface[out_cb].fifo_rd_ptr / cb_interface[out_cb].fifo_page_size<< ENDL());
+    cb_wait_front(out_cb, output_num_tiles);
+    cb_pop_front(out_cb, output_num_tiles);
+}
 
 void MAIN {
 
@@ -36,11 +118,14 @@ void MAIN {
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
     const uint32_t qk_chunk_tiles = S_chunk_t * S_chunk_t;
+    const uint32_t out_chunk_tiles = S_chunk_t * DHt;
 
     constexpr uint32_t in0_block_w = 1;
     constexpr uint32_t subblock_w = 1;
     constexpr uint32_t subblock_h = 1;
     constexpr uint32_t out_subblock_num_tiles = 1;
+
+    constexpr uint32_t DST_SIZE = 8;
 
 
     // PACK(DPRINT << "COMPUTE: q_chunk_tiles=" << q_chunk_tiles << ENDL());
@@ -52,7 +137,10 @@ void MAIN {
     constexpr uint32_t cb_v_in = tt::CB::c_in2;
 
     constexpr uint32_t cb_qk_im = tt::CB::c_intermed0;
+    constexpr uint32_t cb_out_im = tt::CB::c_intermed1;
+    constexpr uint32_t cb_out_accumulate_im = tt::CB::c_intermed2;
     constexpr uint32_t cb_out = tt::CB::c_out0;
+
 
     mm_init();
 
@@ -64,7 +152,7 @@ void MAIN {
                 PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);
-                cb_reserve_back(cb_out, q_chunk_tiles);
+                // cb_reserve_back(cb_out, q_chunk_tiles);
 
                 for (uint32_t k_chunk = 0; k_chunk < num_chunks; ++k_chunk) {
                     PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
@@ -75,87 +163,99 @@ void MAIN {
                     cb_q: [S_chunk_t * DHt]
                     cb_K: [DHt * S_chunk_t]
                     */
-                    const uint32_t in0_num_subblocks = S_chunk_t / subblock_h;
-                    const uint32_t in1_num_subblocks = S_chunk_t / subblock_w;
-                    const uint32_t num_blocks = DHt / in0_block_w;
-                    bool spill = num_blocks > 1;
-                    bool enable_reload = false;
+                    uint32_t in0_num_subblocks = S_chunk_t / subblock_h;
+                    uint32_t in1_num_subblocks = S_chunk_t / subblock_w;
+                    uint32_t num_blocks = DHt / in0_block_w;
 
-                    for (uint32_t block = 0; block < num_blocks; ++block) {
-                        PACK(DPRINT << "COMPUTE: "  << "block=" << block << ENDL());
-                        // bool last_out = block == (num_blocks - 1);
-                        cb_reserve_back(cb_qk_im, qk_chunk_tiles);
+                    // Result ends up in cb_qk_im, row-major layout
+                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, S_chunk_t, S_chunk_t, DHt, num_blocks, in0_num_subblocks, in1_num_subblocks, in0_block_w, subblock_h, subblock_w);
 
-                        for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; ++in0_subblock) {
-                            PACK(DPRINT << "COMPUTE: "  << "in0_subblock=" << in0_subblock << ENDL());
-                            for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; ++in1_subblock) {
-                                PACK(DPRINT << "COMPUTE: "  << "in1_subblock=" << in1_subblock << ENDL());
-                                acquire_dst(tt::DstMode::Half);
-                                // Reload partial
-                                if (enable_reload) {
-                                    copy_tile_to_dst_init_short();
-                                    // cb_wait_front(cb_qk_im, out_subblock_num_tiles);
-                                    for (uint32_t i = 0; i < subblock_h; i++) {
-                                        for (uint32_t j = 0; j < subblock_w; j++) {
-                                            uint32_t im_i = in0_subblock * subblock_h + i;
-                                            uint32_t im_j = in1_subblock * subblock_w + j;
-                                            uint32_t im_index = im_i * S_chunk_t + im_j;
-                                            copy_tile(cb_qk_im, im_index, i);
-                                        }
-                                    }
-                                    // cb_pop_front(cb_qk_im, out_subblock_num_tiles);
-                                    mm_init_short();
-                                }
-                                // Loop over in0_subblock, in1_subblock, and in0_block_w
-                                int dst_index = 0;
-                                for (uint32_t h = 0; h < subblock_h; h++) {
-                                    for (uint32_t w = 0; w < subblock_w; w++) {
-                                        // int in1_index_inner_dim_offset = 0;
-                                        for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
-                                            uint32_t i_idx = in0_subblock * subblock_h + h;
-                                            uint32_t j_idx = in1_subblock * subblock_w + w;
-                                            uint32_t k_idx = block * in0_block_w + inner_dim;
-                                            uint32_t in0_index = i_idx * DHt + k_idx;
-                                            uint32_t in1_index = k_idx * S_chunk_t + j_idx;
-                                            // int in0_index = in0_subblock * subblock_h + in0_index_h_offset + inner_dim;
-
-                                            // int in1_index = in1_subblock * subblock_w + in1_index_inner_dim_offset + w;
-                                            matmul_tiles(cb_q_in, cb_k_in, in0_index, in1_index, dst_index, false /* transpose */);
-                                        }
-                                        dst_index++;
-                                    }
-                                }
-
-                                // Move partial result to interm buffer (and output will show up here in last iteration)
-                                // cb_reserve_back(cb_qk_im, out_subblock_num_tiles);
-                                for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                    pack_tile(i, cb_qk_im);
-                                }
-                                // cb_push_back(cb_qk_im, out_subblock_num_tiles);
-                                release_dst(tt::DstMode::Half);
-                            }
-                        }
-                        if (spill) {
-                            enable_reload = true;
-                        }
-                        // Free up space in intermediate CB
-                        cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        cb_wait_front(cb_qk_im, qk_chunk_tiles);
-                        cb_pop_front(cb_qk_im, qk_chunk_tiles);
-                    }
-
-                    // cb_qk_im contains row-major output of Q @ Kt
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
                     // V chunk
                     cb_wait_front(cb_v_in, k_chunk_tiles);
                     // Multiply Q @ Kt with V
 
+                    in0_num_subblocks = S_chunk_t / subblock_h;
+                    in1_num_subblocks = DHt / subblock_w;
+                    num_blocks = S_chunk_t / in0_block_w;
+
+                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, S_chunk_t, DHt, S_chunk_t, num_chunks, in0_num_subblocks, in1_num_subblocks, in0_block_w, subblock_h, subblock_w);
+                    // cb_out_im points to end of CB
+
                     cb_pop_front(cb_v_in, k_chunk_tiles);
+
+                    PACK(DPRINT << "COMPUTE: Got here before accumulate" << ENDL());
+
+                    // // Accumulate output
+                    // if (k_chunk == 0) {
+                    //     copy_tile_to_dst_init_short();
+                    //     // reset read_ptr for cb_out_im
+                    //     cb_reserve_back(cb_out_im, out_chunk_tiles);
+                    //     cb_push_back(cb_out_im, out_chunk_tiles);
+                    //     cb_wait_front(cb_out_im, out_chunk_tiles);
+
+                    //     cb_reserve_back(cb_out_accumulate_im, out_chunk_tiles);
+                    //     for (uint32_t i = 0; i < out_chunk_tiles; i++) {
+                    //         acquire_dst(tt::DstMode::Half);
+                    //         copy_tile(cb_out_im, i, 0/*dst*/);
+                    //         // cb_reserve_back(cb_out_accumulate_im, 1);
+                    //         pack_tile(0, cb_out_accumulate_im);
+                    //         cb_push_back(cb_out_accumulate_im, 1);
+                    //         release_dst(tt::DstMode::Half);
+                    //     }
+                    //     cb_pop_front(cb_out_im, out_chunk_tiles);
+
+                    // } else {
+                    //     add_tiles_init();
+                    //     // reset read_ptr for cb_out_im
+                    //     cb_reserve_back(cb_out_im, out_chunk_tiles);
+                    //     cb_push_back(cb_out_im, out_chunk_tiles);
+                    //     cb_wait_front(cb_out_im, out_chunk_tiles);
+                    //     for (uint32_t i = 0; i < out_chunk_tiles; i++) {
+                    //         acquire_dst(tt::DstMode::Half);
+                    //         cb_wait_front(cb_out_accumulate_im, 1);
+                    //         add_tiles(cb_out_accumulate_im, cb_out_im, 0, i, 0);
+                    //         cb_pop_front(cb_out_accumulate_im, 1);
+                    //         cb_reserve_back(cb_out_accumulate_im, 1);
+                    //         pack_tile(0, cb_out_accumulate_im);
+                    //         cb_push_back(cb_out_accumulate_im, 1);
+                    //         release_dst(tt::DstMode::Half);
+                    //     }
+
+                    //     cb_pop_front(cb_out_im, out_chunk_tiles);
+                    // }
                 }
 
-                // Commit Q chunk output)
-                cb_push_back(cb_out, q_chunk_tiles);
+                // DEBUG
+                // cb_reserve_back(cb_out, q_chunk_tiles);
+                // cb_push_back(cb_out, q_chunk_tiles);
+
+                // Create valid data in cb_out_im
+                // PACK(DPRINT << "got here 1" << ENDL());
+                cb_reserve_back(cb_out_im, out_chunk_tiles);
+                cb_push_back(cb_out_im, out_chunk_tiles);
+
+                //  PACK(DPRINT << "got here 2" << ENDL());
+                cb_wait_front(cb_out_im, out_chunk_tiles);
+                // Write out to output buffer
+                //  PACK(DPRINT << "got here 3" << ENDL());
+                cb_reserve_back(cb_out, out_chunk_tiles);
+                copy_tile_to_dst_init_short();
+                for (uint32_t i = 0; i < out_chunk_tiles; ++i) {
+                    acquire_dst(tt::DstMode::Half);
+                    PACK(DPRINT << "got here 4" << ENDL());
+                    copy_tile(cb_out_im, i, 0);
+                    pack_tile(0, cb_out);
+                    cb_push_back(cb_out, 1);
+                    release_dst(tt::DstMode::Half);
+                }
+                PACK(DPRINT << "got here 5" << ENDL());
+                cb_pop_front(cb_out_im, out_chunk_tiles);
+
+                // Commit Q chunk output
+                // cb_push_back(cb_out, q_chunk_tiles);
+                PACK(DPRINT << "got here 6" << ENDL());
                 cb_pop_front(cb_q_in, q_chunk_tiles);
 
             }
