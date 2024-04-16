@@ -137,6 +137,27 @@ class TtModelArgs:
             use_height_and_width_as_shard_shape=True,
         )
 
+        shard_height = 32
+        hidden_size = 4096
+        shard_width_hidden_dim_across_32_cores = hidden_size // 32
+        self.model_config["SHARDED_NORM_INPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
+            shape=(shard_height, shard_width_hidden_dim_across_32_cores),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
+            strategy=ttnn.ShardStrategy.WIDTH,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            use_height_and_width_as_shard_shape=True,
+        )
+        self.model_config["SHARDED_NORM_OUTPUT_MEMCFG"] = self.model_config["SHARDED_NORM_INPUT_MEMCFG"]
+        self.model_config[
+            "SHARDED_NORM_PRGM_CFG"
+        ] = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[8, 4],
+            subblock_w=4,
+            block_h=shard_height // 32,
+            block_w=shard_width_hidden_dim_across_32_cores // 32,
+            inplace=False,
+        )
+
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
             # TODO Lower max grid size (used by MLP) to avoid hangs

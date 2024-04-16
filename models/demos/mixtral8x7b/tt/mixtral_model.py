@@ -5,7 +5,7 @@
 import ttnn
 import torch
 from models.demos.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
+from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
 
 
 class TtTransformer(torch.nn.Module):
@@ -38,11 +38,11 @@ class TtTransformer(torch.nn.Module):
             ]
         )
         self.norm = [
-            TtRMSNorm(
+            TtRMSNormSharded(
                 device=dev,
                 state_dict=state_dict,
                 args=args,
-                dtype=dtype,
+                dtype=ttnn.bfloat16,
                 layer_num=None,
                 weight_key="norm",
             )
