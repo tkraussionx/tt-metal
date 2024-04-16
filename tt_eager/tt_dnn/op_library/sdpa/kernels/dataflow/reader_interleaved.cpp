@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
 
 #include "debug/dprint.h"
 
@@ -18,6 +19,9 @@ void kernel_main() {
     uint32_t DHt      = get_arg_val<uint32_t>(7);
     uint32_t S_chunk_t    = get_arg_val<uint32_t>(8);
     uint32_t num_chunks    = get_arg_val<uint32_t>(9);
+    uint32_t scale_val    = get_arg_val<uint32_t>(10);
+
+    DPRINT << "READER: scale_val: " << scale_val << ENDL();
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
@@ -27,6 +31,10 @@ void kernel_main() {
     constexpr uint32_t cb_q_in = tt::CB::c_in0;
     constexpr uint32_t cb_k_in = tt::CB::c_in1;
     constexpr uint32_t cb_v_in = tt::CB::c_in2;
+    constexpr uint32_t cb_mask_in = tt::CB::c_in3;
+    constexpr uint32_t cb_scale_in = tt::CB::c_in4;
+
+    generate_bcast_unary_scalar(cb_scale_in, scale_val);
 
     constexpr uint32_t onetile = 1;
     const uint32_t q_tile_bytes = get_tile_size(cb_q_in);
