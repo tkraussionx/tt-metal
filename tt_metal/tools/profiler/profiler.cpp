@@ -353,9 +353,15 @@ void DeviceProfiler::generateZoneSourceLocationsHashes()
 
 void DeviceProfiler::dumpResults (
         Device *device,
-        const vector<CoreCoord> &worker_cores){
+        const vector<CoreCoord> &worker_cores_arg){
 #if defined(PROFILER)
     ZoneScoped;
+    std::vector<CoreCoord> worker_cores {{1,1},{1,11},{7,11}};
+    //CoreCoord worker_core = {1, 1};
+    //worker_cores.push_back(worker_core);
+    //worker_core = {1, 11};
+    //worker_cores.push_back(worker_core);
+    //worker_core = {1, 11};
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
 
