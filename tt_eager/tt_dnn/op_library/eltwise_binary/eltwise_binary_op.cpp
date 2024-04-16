@@ -19,6 +19,7 @@ namespace eltwise_binary_op_utils {
 using namespace tt::tt_metal;
 
 std::map<string, string> get_defines(BinaryOpType op_type, const std::optional<std::vector<UnaryWithParam>> fused_activations) {
+    log_debug(tt::LogOp, "in get defines");
     std::map<string, string> defines;
     string op_name = "sub_tiles";
     string op_code = "1";
@@ -108,6 +109,7 @@ namespace tt_metal {
 
 
 void EltwiseBinary::validate(const std::vector<Tensor>& input_tensors) const {
+    log_debug(tt::LogOp, "validate tensors");
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     TT_FATAL(input_tensor_a.get_legacy_shape() == input_tensor_b.get_legacy_shape(), "Input shapes must be the same!");
@@ -161,15 +163,18 @@ void EltwiseBinary::validate(const std::vector<Tensor>& input_tensors) const {
 
 std::vector<Shape> EltwiseBinary::compute_output_shapes(
     const std::vector<Tensor>& input_tensors) const {
+    log_debug(tt::LogOp, "compute_output_shapes ");
     const auto& input_tensor = input_tensors.at(0);
     return {input_tensor.get_legacy_shape()};
 }
 
 std::vector<Tensor> EltwiseBinary::create_output_tensors(
     const std::vector<Tensor>& input_tensors) const {
+    log_debug(tt::LogOp, "create_output_tensors ");
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     if (this->in_place) {
+        log_debug(tt::LogOp, "compute_output_shapes - in_place");
         return {};
     }
     if (this->output_mem_config.is_sharded()) {
@@ -195,6 +200,7 @@ std::vector<Tensor> EltwiseBinary::create_output_tensors(
 }
 
 operation::ProgramWithCallbacks EltwiseBinary::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    log_debug(tt::LogOp, "create_program ");
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     const auto& output_tensor = this->in_place ? input_tensor_a : output_tensors.at(0);
@@ -210,6 +216,7 @@ operation::ProgramWithCallbacks EltwiseBinary::create_program(const std::vector<
 
 
 BinaryOpParallelizationStrategy EltwiseBinary::get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const {
+    log_debug(tt::LogOp, "get_parallelization_strategy ");
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(0);
     uint32_t num_tiles = input_tensor_a.volume() / TILE_HW;
@@ -223,6 +230,8 @@ BinaryOpParallelizationStrategy EltwiseBinary::get_parallelization_strategy(cons
 
 const operation::Hash EltwiseBinary::compute_program_hash(
     const std::vector<Tensor> &input_tensors) const {
+    log_debug(tt::LogOp, "compute_program_hash ");
+
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
 
     const auto& input_tensor_a = input_tensors.at(0);

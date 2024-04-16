@@ -31,12 +31,12 @@ supported_tt_layouts = [
 
 supported_tt_buffer_types = [
     ttl.tensor.BufferType.DRAM,
-    ttl.tensor.BufferType.L1,
+    # ttl.tensor.BufferType.L1,
 ]
 
 supported_mem_configs = [
     ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-    ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+    # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
 ]
 
 

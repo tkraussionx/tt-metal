@@ -53,6 +53,7 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(
     const std::optional<std::vector<UnaryWithParam>> fused_activations);
 
 struct EltwiseBinary {
+    // tt::log_debug(tt::LogOp, "EltwiseBinary struct ");
     const BinaryOpType op_type;
     const std::optional<std::vector<UnaryWithParam>> fused_activations;
     const MemoryConfig output_mem_config;
@@ -105,6 +106,7 @@ struct EltwiseBinary {
 
 template <BinaryOpType binary_op_type>
 struct make_eltwise_binary {
+    // log_debug(tt::LogOp, "make_eltwise_binary ");
     Tensor operator()(
         const Tensor &input_tensor_a,
         const Tensor &input_tensor_b,
@@ -112,6 +114,7 @@ struct make_eltwise_binary {
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+        // log_debug(tt::LogOp, "output_tensors bin op.hpp workers {}, {}", output_tensors.size(), output_tensors.at(0));
         operation::launch_with_autoformat(
             [fused_activations, output_mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
@@ -143,6 +146,7 @@ struct make_eltwise_binary {
                         {in_a, in_b});
             },
         {input_tensor_a, input_tensor_b}, output_tensors);
+        log_debug(tt::LogOp, "return output_tensors.at(0) ");
         return output_tensors.at(0);
     }
 };

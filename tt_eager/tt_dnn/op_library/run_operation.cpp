@@ -140,6 +140,7 @@ OutputTensors run_device_operation(
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
+    log_debug(tt::LogOp, "run_device_operation run_op.cpp - A");
     ZoneScopedN("TT_DNN_DEVICE_OP");
     uint32_t op_id = assign_id();
 
@@ -154,7 +155,9 @@ OutputTensors run_device_operation(
 
     tt::stl::hash::hash_t program_hash = 0;
     if (program_cache.is_enabled()) {
+        log_debug(tt::LogOp, "run_device_operation pgm cache enabled  run_op.cpp - A");
         get_or_create_program = [&program_cache, &program_hash](
+        // get_or_create_program = [&program_cache, &program_hash, &optional_output_tensors](
                                     const DeviceOperation<OutputTensors>& operation,
                                     const Tensors& input_tensors,
                                     const OptionalConstTensors& optional_input_tensors,
@@ -165,6 +168,7 @@ OutputTensors run_device_operation(
             bool cache_hit = program_ptr.has_value();
             log_debug(tt::LogOp, "Program Hash: {} ({})", program_hash, cache_hit ? "HIT" : "MISS");
             if (not cache_hit) {
+                // operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
                 program_ptr = std::make_shared<operation::CacheableProgram<OutputTensors>>(operation.create_program(input_tensors, optional_input_tensors, output_tensors));
                 program_cache.insert(program_hash, program_ptr.value());
             }
@@ -194,16 +198,21 @@ OutputTensors run_device_operation(
             return program_with_callbacks.program;
         };
     } else {
-        get_or_create_program = [](const DeviceOperation<OutputTensors>& operation,
+        log_debug(tt::LogOp, "run_device_operation pgm cache not enabled  run_op.cpp - A");
+        // get_or_create_program = [](const DeviceOperation<OutputTensors>& operation,
+        get_or_create_program = [&optional_output_tensors](const DeviceOperation<OutputTensors>& operation,
                                    const Tensors& input_tensors,
                                    const OptionalConstTensors& optional_input_tensors,
                                    OutputTensors& output_tensors) -> std::shared_ptr<Program> {
+            log_debug(tt::LogOp, "run_device_operation pgm cache not enabled - creat_pgm lambda fn run_op.cpp - A");
+            operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
             auto program_with_callbacks =
                 operation.create_program(input_tensors, optional_input_tensors, output_tensors);
+            log_debug(tt::LogOp, "run_device_operation pgm cache not enabled - creat_pgm lambda fn run_op.cpp - Z");
             return std::make_shared<Program>(std::move(program_with_callbacks.program));
         };
     }
-    operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
+    // operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
     auto output_tensors = operation.create_output_tensors(input_tensors, optional_output_tensors);
     auto program = get_or_create_program(operation, input_tensors, optional_input_tensors, output_tensors);
     uint32_t device_id = detail::get_device(input_tensors, optional_input_tensors)->id();
@@ -219,6 +228,7 @@ OutputTensors run_device_operation(
                     // tensor can preemptively be deallocted on device, unless program maintains explicit ownership.
                     // This invocation of the program will give up ownership once its enqueued.
                     for (const auto& input_tensor: input_tensors) {
+                     log_debug(tt::LogOp, "run_device_operation run_op.cpp - launch pgm FAST- Z");
                         if (input_tensor.storage_type() == StorageType::DEVICE) {
                             AssignGlobalBufferToProgram(input_tensor.device_buffer(), program);
                         }
@@ -232,6 +242,7 @@ OutputTensors run_device_operation(
                     CommandQueue& cq = queue.value().get();
                     EnqueueProgram(cq, program, false);
                 } else {
+                    log_debug(tt::LogOp, "run_device_operation run_op.cpp - launch pgm !FAST- Z");
                     ::detail::LaunchProgram(device, program);
                 }
             }
@@ -239,7 +250,7 @@ OutputTensors run_device_operation(
         program);
 
     TracyOpTTNNDevice(op_id, program_hash, program_cache.is_enabled(), device_id, operation, program, input_tensors, optional_input_tensors, output_tensors);
-
+    log_debug(tt::LogOp, "run_device_operation run_op.cpp - Z");
     return output_tensors;
 }
 template Tensors run_device_operation(
@@ -414,12 +425,16 @@ OutputTensors run(
     //         TT_ASSERT(tensor.value().metadata_populated(), "Input tensors must be populated before running op.");
     //     }
     // }
+    log_debug(tt::LogOp, "in run = run<Tensors>(operation, , ); run_op.cpp - A");
     if (detail::any_tensor_on_multi_device(input_tensors)) {
+        log_debug(tt::LogOp, "in run = multi dev run_op.cpp - A");
         return detail::decorate_device_operation(detail::run_multi_device_operation<OutputTensors>)(
             std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
     }
     auto device = detail::get_device(input_tensors, optional_input_tensors);
+    log_debug(tt::LogOp, "in run = validate op_launch run_op.cpp - A");
     detail::validate_op_launch(device);
+    log_debug(tt::LogOp, "in run = validate op_launch run_op.cpp - Z");
     return detail::decorate_device_operation(detail::run_device_operation<OutputTensors>)(
         detail::USE_FAST_DISPATCH ? std::make_optional(std::ref(device->command_queue())) : std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
 }
@@ -531,6 +546,7 @@ Tensors run_with_autoformat(
     const float pad_value,
     const bool pad_c
 ) {
+    log_debug(tt::LogOp, "run_with_autoformat run_op.cpp 1 - A");
     ZoneScoped;
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return run<Tensors>(operation, input_tensors, optional_input_tensors);
@@ -567,7 +583,7 @@ Tensors run_with_autoformat(
             formatted_optional_input_tensors.push_back(optional_input_tensor);
         }
     }
-
+    log_debug(tt::LogOp, "run_with_autoformat run_op.cpp 1 - run");
     auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors);
 
     TT_ASSERT(output_tensors.size() == output_shapes.size());
@@ -578,6 +594,7 @@ Tensors run_with_autoformat(
     for (auto i = 0; i < output_tensors.size(); ++i) {
         output_tensors[i] = AutoFormat::format_output_tensor(output_tensors[i], output_shapes[i], device, Layout::TILE);
     }
+    log_debug(tt::LogOp, "run_with_autoformat run_op.cpp 1 - Z");
     return output_tensors;
 }
 
@@ -589,6 +606,7 @@ Tensors run_with_autoformat(
     const OptionalConstTensors& optional_input_tensors,
     const std::vector<std::optional<FormatParams>>& optional_input_formatting
 ) {
+    log_debug(tt::LogOp, "run_with_autoformat run_op.cpp 2");
     ZoneScoped;
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return run<Tensors>(operation, input_tensors, optional_input_tensors);
@@ -640,6 +658,7 @@ void launch_with_autoformat(
     std::vector<Tensor>& output_tensors,
     const std::vector<std::optional<const Tensor>> optional_input_tensors
 ) {
+    log_debug(tt::LogOp, "launch_with_autoformat - run_op.cpp");
     // Mark each output tensor as having dynamic storage (can be on host or device, depending
     // on autoformat behaviour). Multi device tensors do not support dynamic storage.
     for (auto& output_tensor : output_tensors) {
@@ -656,6 +675,8 @@ void launch_op(
 ) {
     // Send host side op compile and run to the worker queue
     // Assert to ensure that worker threads are specified.
+    log_debug(tt::LogOp, "launch_op - run_op.cpp - A");
+    log_debug(tt::LogOp, "launch_op - run_op.cpp - A - output_tensors {} , {}", output_tensors.size(), output_tensors.at(0).workers );
     auto& workers = output_tensors.at(0).workers;
     for (auto& output_tensor : output_tensors) {
         TT_FATAL(output_tensor.workers.size(), "Worker threads must be specified for outputs populated by launch_op. This API can only be used for creating output tensors on device.");
@@ -726,6 +747,8 @@ void launch_op(
                 }
             }
         });
+        log_debug(tt::LogOp, "launch_op - run_op.cpp - Z");
+
     }
 
     // Update ref counts of all tensors after push was performed (done only in main thread).
@@ -772,6 +795,7 @@ void validate_workers_and_storage(const std::vector<Tensor>& inputs, const std::
 }
 
 std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& inputs, const std::vector<std::optional<const Tensor>>&& optional_inputs) {
+    log_debug(tt::LogOp, "get_workers_for_op_output run_op.cpp A");
     std::vector<Device*> workers_for_op = {};
     // Infer output workers from inputs. For multi-device tensors the number
     // of workers used for the op (and assigned to the ouput) is the minimum
@@ -804,6 +828,7 @@ std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& input
         TT_FATAL(AutoFormat::GetDefaultDevice(), "Default device must be specified using AutoFormat::SetDefaultDevice, if workers are not specified for inputs to op.");
         workers_for_op = {AutoFormat::GetDefaultDevice()};
     }
+    log_debug(tt::LogOp, "get_workers_for_op_output run_op.cpp Z {}", workers_for_op.size());
     return workers_for_op;
 }
 
