@@ -43,8 +43,14 @@ extern CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
+// valid write VC range is 0-3
+#define NOC_UNICAST_WRITE_VC_RANGE_MASK 0x3
 #define NOC_MULTICAST_WRITE_VC 4
 #define NOC_DISPATCH_MULTICAST_WRITE_VC 5 // Only to be used by the dispatch cores
+// TODO: change the read req default to 0 (ie different from write req)
+#define NOC_UNICAST_READ_REQ_VC 0
+// valid read req VC range is 0-3
+#define NOC_UNICAST_READ_REQ_VC_RANGE_MASK 0x3
 
 inline uint32_t align(uint32_t addr, uint32_t alignment) { return ((addr - 1) | (alignment - 1)) + 1; }
 
@@ -371,6 +377,20 @@ std::uint64_t get_noc_multicast_addr(
         read from/write to via the noc
     */
     return NOC_MULTICAST_ADDR(NOC_X(noc_x_start), NOC_Y(noc_y_start), NOC_X(noc_x_end), NOC_Y(noc_y_end), addr);
+}
+
+FORCE_INLINE
+std::uint64_t get_noc_multicast_addr_inv(
+    std::uint32_t noc_x_start,
+    std::uint32_t noc_y_start,
+    std::uint32_t noc_x_end,
+    std::uint32_t noc_y_end,
+    std::uint32_t addr) {
+    /*
+        Get an encoding which contains tensix core and address you want to
+        read from/write to via the noc
+    */
+    return NOC_MULTICAST_ADDR(NOC_X_INV(noc_x_start), NOC_Y_INV(noc_y_start), NOC_X_INV(noc_x_end), NOC_Y_INV(noc_y_end), addr);
 }
 
 FORCE_INLINE
@@ -828,7 +848,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, std::uint32_t vc=0) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
@@ -864,6 +884,9 @@ struct InterleavedAddrGenFast {
         while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
+        // uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+
+        // NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
@@ -964,11 +987,13 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile_with_trid(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+    void noc_async_read_tile_with_trid(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, std::uint32_t vc=0) const {
+    // void noc_async_read_tile_with_trid(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
         uint32_t noc_id;
+        volatile uint32_t cnt;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -982,6 +1007,7 @@ struct InterleavedAddrGenFast {
 #endif
             src_addr += bank_to_dram_offset[bank_id];
             noc_id = noc_index_to_dram_bank_map[bank_id];
+            // noc_id = noc_index;
             src_noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
@@ -1004,6 +1030,9 @@ struct InterleavedAddrGenFast {
         while (NOC_STATUS_READ_REG(noc_id, NIU_MST_REQS_OUTSTANDING_ID(read_transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
+        uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+
+        NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_CTRL, noc_rd_cmd_field);
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
         NOC_CMD_BUF_WRITE_REG(noc_id, read_cmd_buf, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
@@ -1269,22 +1298,22 @@ FORCE_INLINE void noc_async_read_page(
 
 template <bool DRAM>
 FORCE_INLINE void noc_async_read_tile(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, std::uint32_t vc = 0) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
-    s.noc_async_read_tile(id, dst_local_l1_addr, offset);
+    s.noc_async_read_tile(id, dst_local_l1_addr, offset, vc);
 }
 
 template <bool DRAM>
 FORCE_INLINE void noc_async_read_tile_with_trid(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, std::uint32_t vc = 0) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
-    s.noc_async_read_tile_with_trid(id, dst_local_l1_addr, offset);
+    s.noc_async_read_tile_with_trid(id, dst_local_l1_addr, offset, vc);
 }
 
 /**
@@ -1394,7 +1423,7 @@ void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst
  * | size                   | Size of data transfer in bytes | uint32_t | 0..1MB | True     |
  * | num_dests              | Number of destinations that the multicast source is targetting           | uint32_t | 0..119                                                        | True     |
  */
-inline
+FORCE_INLINE
 void noc_async_write_multicast(
     std::uint32_t src_local_l1_addr,
     std::uint64_t dst_noc_addr_multicast,
@@ -1406,6 +1435,30 @@ void noc_async_write_multicast(
     DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr,size);
     ncrisc_noc_fast_write_any_len(
         noc_index,
+        write_cmd_buf,
+        src_local_l1_addr,
+        dst_noc_addr_multicast,
+        size,
+        NOC_MULTICAST_WRITE_VC,
+        true,
+        linked,
+        num_dests,
+        multicast_path_reserve);
+    DEBUG_STATUS('N', 'M', 'W', 'D');
+}
+
+FORCE_INLINE
+void noc_async_write_multicast_inv(
+    std::uint32_t src_local_l1_addr,
+    std::uint64_t dst_noc_addr_multicast,
+    std::uint32_t size,
+    std::uint32_t num_dests,
+    bool linked = false,
+    bool multicast_path_reserve = true) {
+    DEBUG_STATUS('N', 'M', 'W', 'W');
+    DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr,size);
+    ncrisc_noc_fast_write_any_len(
+        1,
         write_cmd_buf,
         src_local_l1_addr,
         dst_noc_addr_multicast,
@@ -1436,7 +1489,7 @@ void noc_async_write_multicast(
  * | dst_noc_addr_multicast | Encoding of the destinations nodes (x_start,y_start,x_end,y_end)+address | uint64_t | DOX-TODO(insert a reference to what constitutes valid coords) | True     |
  * | num_dests              | Number of destinations that the multicast source is targetting | uint32_t | 0..119                                                    | True     |
  */
-inline
+FORCE_INLINE
 void noc_semaphore_set_multicast(
     std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests, bool linked = false, bool multicast_path_reserve = true) {
     DEBUG_STATUS('N', 'S', 'M', 'W');
@@ -1455,7 +1508,26 @@ void noc_semaphore_set_multicast(
     DEBUG_STATUS('N', 'S', 'M', 'D');
 }
 
-inline
+FORCE_INLINE
+void noc_semaphore_set_multicast_inv(
+    std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests, bool linked = false, bool multicast_path_reserve = true) {
+    DEBUG_STATUS('N', 'S', 'M', 'W');
+    DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr, 4);
+    ncrisc_noc_fast_write_any_len(
+        1,
+        write_cmd_buf,
+        src_local_l1_addr,
+        dst_noc_addr_multicast,
+        4 /*size in bytes*/,
+        NOC_MULTICAST_WRITE_VC,
+        true,
+        linked,
+        num_dests,
+        multicast_path_reserve);
+    DEBUG_STATUS('N', 'S', 'M', 'D');
+}
+
+FORCE_INLINE
 void noc_semaphore_set_multicast_loopback_src(
     std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests, bool linked = false, bool multicast_path_reserve = true) {
     DEBUG_STATUS('N', 'S', 'M', 'W');
@@ -1474,7 +1546,7 @@ void noc_semaphore_set_multicast_loopback_src(
     DEBUG_STATUS('N', 'S', 'M', 'D');
 }
 
-inline
+FORCE_INLINE
 void noc_async_write_multicast_loopback_src(
     std::uint32_t src_local_l1_addr,
     std::uint64_t dst_noc_addr_multicast,
