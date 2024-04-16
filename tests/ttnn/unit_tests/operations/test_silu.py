@@ -220,3 +220,23 @@ def test_silu_llm(
         shard_orientation,
         op,
     )
+
+
+def test_sd_silu(device):
+    torch_in = torch.rand((2, 1, 4096, 320))
+    torch_out = torch.nn.functional.silu(torch_in)
+    ttnn_in = ttnn.from_torch(torch_in, ttnn.bfloat16)
+    ttnn_in = ttnn.to_layout(ttnn_in, ttnn.ROW_MAJOR_LAYOUT)
+    ttnn_in = ttnn.to_device(ttnn_in, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    ttnn_in = ttnn.experimental.tensor.interleaved_to_sharded(
+        ttnn_in,
+        (8, 8),
+        [1024, 40],
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+    )
+    ttnn_out = ttnn.silu(ttnn_in, memory_config=ttnn.get_memory_config(ttnn_in))
+    ttnn_out = ttnn.to_torch(ttnn_out)
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_out, ttnn_out, 0.999)
+    logger.info(pcc_msg)
+    assert passing
