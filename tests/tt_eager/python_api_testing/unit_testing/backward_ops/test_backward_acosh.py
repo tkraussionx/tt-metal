@@ -45,7 +45,7 @@ def test_bw_remainder(input_shapes, device):
     diff = torch.abs(golden_tensor - tt_out_tensor)
     max_diff = torch.max(diff)
 
-    if max_diff > 5:
+    if max_diff > 0:
         print("Inputs for which the outputs differ by more than 0:")
         indices = torch.nonzero(diff > 0)
         for idx in indices:
