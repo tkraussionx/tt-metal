@@ -267,12 +267,14 @@ std::map<chip_id_t, Device *> CreateDevices(
                     false,
                     core_assigned_to_device);
                 active_devices.insert({mmio_controlled_device_id, dev});
-                detail::InitDeviceProfiler(dev);
             }
         }
     }
     // TODO: need to only enable routing for used mmio chips
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
+    for (auto &active_device: active_devices){
+        detail::InitDeviceProfiler(active_device.second);
+    }
     return active_devices;
 }
 
