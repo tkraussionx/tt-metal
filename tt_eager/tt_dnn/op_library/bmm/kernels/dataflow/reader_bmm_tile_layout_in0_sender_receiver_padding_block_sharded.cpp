@@ -112,60 +112,60 @@ void kernel_main() {
         for (uint32_t block = 0; block < num_blocks; ++block) {
             const uint32_t block_id = block / num_blocks_per_shard;
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-            // // Set in0 semaphore value to INVALID
-            // noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
+            // Set in0 semaphore value to INVALID
+            noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-            // if (block_id == sender_id) {
-            //     // Operand 0
-            //     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+            if (block_id == sender_id) {
+                // Operand 0
+                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
 
-            //     if constexpr (extract_shard_sub_blocks) {
-            //         local_read_addr = l1_write_addr_in0;
+                if constexpr (extract_shard_sub_blocks) {
+                    local_read_addr = l1_write_addr_in0;
 
-            //         uint32_t l1_write_extract_shard_in0 = l1_write_addr_in0;
-            //         uint64_t noc_shard_read_addr = noc_shard_read_start_addr;
-            //         noc_shard_read_start_addr += shard_read_width;
+                    uint32_t l1_write_extract_shard_in0 = l1_write_addr_in0;
+                    uint64_t noc_shard_read_addr = noc_shard_read_start_addr;
+                    noc_shard_read_start_addr += shard_read_width;
 
-            //         for (uint32_t i = 0; i < shard_height_in_tiles; i++) {
-            //             noc_async_read(noc_shard_read_addr, l1_write_extract_shard_in0, shard_read_width);
+                    for (uint32_t i = 0; i < shard_height_in_tiles; i++) {
+                        noc_async_read(noc_shard_read_addr, l1_write_extract_shard_in0, shard_read_width);
 
-            //             l1_write_extract_shard_in0 += shard_read_width;
-            //             noc_shard_read_addr += shard_read_stride;
-            //         }
+                        l1_write_extract_shard_in0 += shard_read_width;
+                        noc_shard_read_addr += shard_read_stride;
+                    }
 
-            //         noc_async_read_barrier();
-            //     }
+                    noc_async_read_barrier();
+                }
 
-            //     // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
-            //     // the semaphore_addr value back to zero for the next block
-            //     noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
-            //     noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
+                // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
+                // the semaphore_addr value back to zero for the next block
+                noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
+                noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
 
-            //     // Now we have the block in the CB address, we can mcast to dests!
-            //     uint64_t in0_multicast_data_addr = in0_multicast_data_noc | l1_write_addr_in0;
+                // Now we have the block in the CB address, we can mcast to dests!
+                uint64_t in0_multicast_data_addr = in0_multicast_data_noc | l1_write_addr_in0;
 
-            //     if constexpr (extract_shard_sub_blocks) {
-            //         // no need to mcast to self, since we are not really doing a local copy
-            //         noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
-            //     } else {
-            //         // num_dests must not include source, since we are NOT really doing a local copy!
-            //         noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
-            //     }
-            //     // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-            //     // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+                if constexpr (extract_shard_sub_blocks) {
+                    // no need to mcast to self, since we are not really doing a local copy
+                    noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
+                } else {
+                    // num_dests must not include source, since we are NOT really doing a local copy!
+                    noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
+                }
+                // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
+                // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
-            //     // We should also multicast the flag to destinations
-            //     noc_semaphore_set_multicast_loopback_src(in0_mcast_sender_semaphore_valid_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores+1, false, false);
+                // We should also multicast the flag to destinations
+                noc_semaphore_set_multicast_loopback_src(in0_mcast_sender_semaphore_valid_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores+1, false, false);
 
-            //     local_read_addr += in0_block_size_bytes;
-            // } else {
-            //     uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
+                local_read_addr += in0_block_size_bytes;
+            } else {
+                uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
 
-            //     // Atomic increment source core counter
-            //     noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
-            // }
-            // // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            // noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+                // Atomic increment source core counter
+                noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
+            }
+            // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
+            noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             cb_push_back(cb_id_in0, in0_block_num_tiles);
         }
     }
