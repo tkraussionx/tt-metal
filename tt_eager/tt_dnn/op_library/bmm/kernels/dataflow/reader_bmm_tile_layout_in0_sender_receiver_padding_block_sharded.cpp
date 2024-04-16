@@ -149,7 +149,12 @@ void kernel_main() {
                     noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
                 } else {
                     // num_dests must not include source, since we are NOT really doing a local copy!
-                    noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
+                    for (int a=0; a<16; ++a) {
+                        noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, 2048, in0_mcast_num_cores+1, false, false);
+                        local_read_addr+= 2048;
+                        in0_multicast_data_addr+= 2048;
+                    }
+                    // noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
                 }
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
                 // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).

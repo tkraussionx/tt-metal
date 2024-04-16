@@ -2879,7 +2879,8 @@ def run_bert_linear_batch8(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation",
     [
         # in1-L1-fusedQKV
-        (False, True, True, 2048, 2048, 4096, None),  # both sharded
+        (False, True, True, 256, 4096, 4096, None),  # both sharded
+        # (False, True, True, 2048, 2048, 4096, None),  # both sharded
         # # in1-dram-fusedQKV
         # (True, True, True, 1536, 1024, 3072, None),
         # # in1-L1-selfout
