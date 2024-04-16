@@ -35,10 +35,15 @@ RunTimeOptions::RunTimeOptions() {
     test_mode_enabled = false;
 
     profiler_enabled = false;
+    profiler_sync_enabled = false;
 #if defined(PROFILER)
     const char *profiler_enabled_str = std::getenv("TT_METAL_DEVICE_PROFILER");
     if (profiler_enabled_str != nullptr && profiler_enabled_str[0] == '1') {
         profiler_enabled = true;
+    }
+    const char *profiler_sync_enabled_str = std::getenv("TT_METAL_PROFILER_SYNC");
+    if (profiler_enabled && profiler_sync_enabled_str != nullptr && profiler_sync_enabled_str[0] == '1') {
+        profiler_sync_enabled = true;
     }
 #endif
     TT_FATAL(!(get_dprint_enabled() && get_profiler_enabled()), "Cannot enable both debug printing and profiling");
