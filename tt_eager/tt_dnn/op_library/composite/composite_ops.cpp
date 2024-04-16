@@ -578,12 +578,22 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     //Tensor result = sub(input_a, mul(floor_div, input_b));
     Tensor dividend = input_a;
     Tensor divisor = input_b;
+    Tensor orig = divisor;
+    for (int i=0; i<100; i++){
+        dividend = where(logical_and(ltz(dividend), gtz(divisor)), dividend + divisor, dividend);
+    }
+    for (int i=0; i<100; i++){
+        divisor = where(logical_and(gtz(dividend), ltz(divisor)), dividend + divisor, divisor);
+    }
+    dividend = where(ltz(dividend), abs(dividend), dividend);
+    divisor = where(ltz(divisor), abs(divisor), divisor);
+
     for (int i=0; i<100; i++){
         Tensor condition = logical_and(gte(dividend, mul_unary(divisor, 2)), ne(sub(dividend, mul_unary(divisor, 2)), sub(sub(dividend, divisor), divisor)));
         dividend = where(condition, sub(dividend, mul_unary(divisor, 2)), dividend);
         dividend = where(logical_and(gte(dividend, divisor), eq(sub(dividend, mul_unary(divisor, 2)), sub(sub(dividend, divisor), divisor))), sub(dividend, divisor), dividend);
     }
-
+    dividend = where(ltz(orig), neg(dividend), dividend);
     return dividend;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
