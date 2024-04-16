@@ -159,3 +159,52 @@ def test_rmsnorm(device):
         memory_config=ttnn.L1_MEMORY_CONFIG,
     )
     x = ttnn.rms_norm(x, weight=weight, epsilon=1e-05)
+
+
+# This method can use 32 cores to compute the layer norm
+# kernel duration [ns] = 22581.0 (layernorm) + 3370.0 (interleave to sharded)
+def test_rmsnorm_sharded(device):
+    x = ttnn.from_torch(
+        torch.randn(1, 1, 32, 4096),
+        device=device,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    weight = ttnn.from_torch(
+        # reshape the norm and use row major layout (this requires bf16 weight)
+        torch.randn(1, 1, 1, 4096).reshape([1, 1, -1, 32]),
+        device=device,
+        dtype=ttnn.bfloat16,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    shard_height = 32
+    hidden_size = 4096
+    shard_width_hidden_dim_across_32_cores = hidden_size // 32
+    in_mem_config = ttnn.create_sharded_memory_config(
+        shape=(shard_height, shard_width_hidden_dim_across_32_cores),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    out_mem_config = in_mem_config
+    comp_mem_config = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 4],
+        subblock_w=4,
+        block_h=shard_height // 32,
+        block_w=4,
+        inplace=True,
+    )
+
+    x = ttnn.experimental.tensor.interleaved_to_sharded(x, sharded_mem_config=in_mem_config)
+
+    x = ttnn.experimental.operations.primary.rmsnorm(
+        x,
+        1e-05,
+        weight,
+        program_config=comp_mem_config,
+        output_mem_config=out_mem_config,
+    )
