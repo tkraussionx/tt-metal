@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 
+from torchview import draw_graph
 from ttnn.model_preprocessing import preprocess_model, preprocess_conv2d, fold_batch_norm2d_into_conv2d
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
@@ -185,6 +186,19 @@ def test_downsample1(reset_seeds, device):
 
     torch_input_tensor = torch.randn(1, 3, 320, 320)  # Batch size of 1, 128 input channels, 160x160 height and width
     torch_output_tensor = torch_model(torch_input_tensor)
+
+    ############ draw the graph #############
+    model_graph = draw_graph(
+        torch_model,
+        input_size=(1, 3, 320, 320),
+        dtypes=[torch.float32],
+        expand_nested=True,
+        graph_name="DownSample1_yolov4",
+        depth=100,
+        directory=".",
+    )
+    model_graph.visual_graph.render(format="pdf")
+    ############ end of drawing #############
 
     reader_patterns_cache = {}
     parameters = preprocess_model(
