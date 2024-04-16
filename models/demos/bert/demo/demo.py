@@ -306,17 +306,25 @@ def test_demo(
 ):
     disable_persistent_kernel_cache()
     disable_compilation_reports()
+    # from tracy import Profiler
+    # profiler = Profiler()
 
-    return run_bert_question_and_answering_inference(
-        device=device,
-        use_program_cache=use_program_cache,
-        model_name=model_name,
-        batch_size=8,
-        sequence_size=384,
-        bert=bert,
-        model_location_generator=model_location_generator,
-        input_path=input_path,
-    )
+    # profiler.enable()
+    with ttnn.manage_config_attribute("enable_comparison_mode", True), ttnn.manage_config_attribute(
+        "comparison_mode_pcc", 0.995
+    ):
+        r = run_bert_question_and_answering_inference(
+            device=device,
+            use_program_cache=use_program_cache,
+            model_name=model_name,
+            batch_size=8,
+            sequence_size=384,
+            bert=bert,
+            model_location_generator=model_location_generator,
+            input_path=input_path,
+        )
+    # profiler.disable()
+    return r
 
 
 @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])
