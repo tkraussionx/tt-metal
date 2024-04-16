@@ -275,7 +275,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
     return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
 }
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_sharded(const Tensor &input_tensor, std::optional<const Tensor> input_tensor_kv, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
+operation::ProgramWithCallbacks multi_core_nlp_create_kv_heads_sharded(const Tensor &input_tensor, std::optional<const Tensor> input_tensor_kv, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
 
     tt_metal::Program program = tt_metal::CreateProgram();
 

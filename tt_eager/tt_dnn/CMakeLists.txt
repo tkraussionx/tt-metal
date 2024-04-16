@@ -176,6 +176,8 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_tms.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_qkv_heads_falcon7b.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_qkv_heads.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_kv_heads.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_create_q_heads.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/nlp_tms/nlp_concat_heads.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/rotate_half/single_core/rotate_half_op_single_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/rotate_half/rotate_half_op.cpp

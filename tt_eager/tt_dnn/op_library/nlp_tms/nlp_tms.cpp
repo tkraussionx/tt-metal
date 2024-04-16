@@ -192,6 +192,149 @@ tt::stl::reflection::Attributes NlpCreateHeads::attributes() const {
     };
 }
 
+// Generic NLP CreateKVHeads op
+void NlpCreateKVHeads::validate(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    // NOTE: Checks for head_dim and shape[3] is done in nlp_create_qkv_heads because it's needed to infer head_dim
+    TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
+    TT_FATAL(input_tensor.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor.get_dtype() == tt::tt_metal::DataType::FLOAT32 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+
+    TT_FATAL(input_shape[2] % TILE_HEIGHT == 0, "Unsupported input shape");
+    TT_FATAL(input_shape[1] == 1, "Unsupported input shape");
+    TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Creating Q and KV heads separately is only supported for INTERLEAVED inputs for now");
+}
+
+std::vector<Shape> NlpCreateKVHeads::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+    std::vector<Shape> output_shape_vec;
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    auto sequence_length = input_shape[2];
+    auto head_dim = this->head_dim;
+    if (sequence_length % TILE_HEIGHT != 0) {
+        sequence_length = (sequence_length / TILE_HEIGHT + 1) * TILE_HEIGHT;
+    }
+    if (head_dim % TILE_WIDTH != 0) {
+        head_dim = (head_dim / TILE_WIDTH + 1) * TILE_WIDTH;
+    }
+
+    const Shape v_output_shape = {input_shape[0], this->num_kv_heads, sequence_length, head_dim};
+    const Shape k_output_shape = this->transpose_k_heads
+                                     ? (Shape){input_shape[0], this->num_kv_heads, head_dim, sequence_length}
+                                     : v_output_shape;
+    output_shape_vec = {k_output_shape, v_output_shape};
+
+    return output_shape_vec;
+}
+
+std::vector<Tensor> NlpCreateKVHeads::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    if (this->output_mem_config.is_sharded()) {
+        auto core_grid = input_tensor.device()->compute_with_storage_grid_size();
+        auto kv_shard_grid = num_cores_to_corerange_set(this->num_kv_heads, core_grid, true);
+        ShardSpec kv_shard_spec{kv_shard_grid, {TILE_HEIGHT, this->head_dim}};
+        auto kv_mem_config = this->output_mem_config;
+        kv_mem_config.shard_spec = kv_shard_spec;
+        auto output_shapes = this->compute_output_shapes(input_tensors);
+        return {
+            create_sharded_device_tensor(output_shapes[1], input_tensor.get_dtype(), input_tensor.get_layout(), input_tensor.device(), kv_mem_config),
+            create_sharded_device_tensor(output_shapes[2], input_tensor.get_dtype(), input_tensor.get_layout(), input_tensor.device(), kv_mem_config)
+        };
+
+    } else {
+        return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+    }
+}
+
+operation::ProgramWithCallbacks NlpCreateKVHeads::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    //auto& output_tensor = output_tensors.at(0);
+    TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Creating Q and KV heads separately is only supported for INTERLEAVED inputs for now");
+
+    CoreCoord compute_with_storage_grid_size = input_tensor.device()->compute_with_storage_grid_size();
+    return multi_core_nlp_create_kv_heads(input_tensor, this->num_kv_heads, this->head_dim, this->transpose_k_heads, output_tensors, compute_with_storage_grid_size);
+}
+
+tt::stl::reflection::Attributes NlpCreateKVHeads::attributes() const {
+    return {
+        {"num_kv_heads", this->num_kv_heads},
+        {"transpose_k_heads", this->transpose_k_heads},
+        {"output_mem_config", this->output_mem_config},
+    };
+}
+
+// Generic NLP CreateQHeads op
+void NlpCreateQHeads::validate(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    // NOTE: Checks for head_dim and shape[3] is done in nlp_create_qkv_heads because it's needed to infer head_dim
+    TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
+    TT_FATAL(input_tensor.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor.get_dtype() == tt::tt_metal::DataType::FLOAT32 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+
+    TT_FATAL(input_shape[2] % TILE_HEIGHT == 0, "Unsupported input shape");
+    TT_FATAL(input_shape[1] == 1, "Unsupported input shape");
+    TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Creating Q and KV heads separately is only supported for INTERLEAVED inputs for now");
+}
+
+std::vector<Shape> NlpCreateQHeads::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+    std::vector<Shape> output_shape_vec;
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    auto sequence_length = input_shape[2];
+    auto head_dim = this->head_dim;
+    if (sequence_length % TILE_HEIGHT != 0) {
+        sequence_length = (sequence_length / TILE_HEIGHT + 1) * TILE_HEIGHT;
+    }
+    if (head_dim % TILE_WIDTH != 0) {
+        head_dim = (head_dim / TILE_WIDTH + 1) * TILE_WIDTH;
+    }
+
+    const Shape q_output_shape = {input_shape[0], this->num_q_heads, sequence_length, head_dim};
+    output_shape_vec = {q_output_shape};
+
+    return output_shape_vec;
+}
+
+std::vector<Tensor> NlpCreateQHeads::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    if (this->output_mem_config.is_sharded()) {
+        auto core_grid = input_tensor.device()->compute_with_storage_grid_size();
+        auto q_shard_grid = num_cores_to_corerange_set(this->num_q_heads, core_grid, true);
+        ShardSpec q_shard_spec{q_shard_grid, {TILE_HEIGHT, this->head_dim}};
+        auto q_mem_config = this->output_mem_config;
+        q_mem_config.shard_spec = q_shard_spec;
+        auto output_shapes = this->compute_output_shapes(input_tensors);
+        return {
+            create_sharded_device_tensor(output_shapes[0], input_tensor.get_dtype(), input_tensor.get_layout(), input_tensor.device(), q_mem_config),
+        };
+    } else {
+        return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+    }
+}
+
+operation::ProgramWithCallbacks NlpCreateQHeads::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    auto& output_tensor = output_tensors.at(0);
+    TT_FATAL(!input_tensor.is_sharded(), "NlpCreateQHeads only supported INTERLEAVED input for now");
+
+    CoreCoord compute_with_storage_grid_size = input_tensor.device()->compute_with_storage_grid_size();
+    return multi_core_nlp_create_q_heads(input_tensor, this->num_q_heads, this->head_dim, output_tensor, compute_with_storage_grid_size);
+}
+
+tt::stl::reflection::Attributes NlpCreateQHeads::attributes() const {
+    return {
+        {"num_q_heads", this->num_q_heads},
+        {"output_mem_config", this->output_mem_config},
+    };
+}
 
 // Generic NLP ConcatHeads op
 void NlpConcatHeads::validate(const std::vector<Tensor>& input_tensors) const {

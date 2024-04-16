@@ -15,7 +15,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &input_tensor, const uint32_t num_q_heads, const uint32_t head_dim, Tensor& output, CoreCoord compute_with_storage_grid_size) {
+operation::ProgramWithCallbacks multi_core_nlp_create_q_heads(const Tensor &input_tensor, const uint32_t num_q_heads, const uint32_t head_dim, Tensor& output, CoreCoord compute_with_storage_grid_size) {
 
     const auto& input_shape = input_tensor.get_legacy_shape();
 
@@ -23,22 +23,11 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
 
     tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
 
-    const bool read_from_input_tensor_kv = input_tensor_kv.has_value();
+    // const bool read_from_input_tensor_kv = input_tensor_kv.has_value();
 
     uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
     tt_metal::Buffer *in0_buffer = input_tensor.buffer();
     TT_ASSERT(in0_buffer->size() % single_tile_size == 0);
-
-    tt_metal::Buffer *in1_buffer;
-    uint32_t in1_buffer_addr = 0;
-    tt_metal::BufferType in1_buffer_type = tt_metal::BufferType::DRAM;
-    if (read_from_input_tensor_kv) {
-        in1_buffer = input_tensor_kv.value().buffer();
-        TT_ASSERT(in1_buffer->size() % single_tile_size == 0);
-        in1_buffer_addr = in1_buffer->address();
-        in1_buffer_type = in1_buffer->buffer_type();
-    }
-
 
     ////////////////////////////////////////////////////////////////////////////
     //                      TM Parameters Setup
@@ -156,8 +145,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
             reader_kernel_id,
             writer_kernel_id,
             num_cores,
-            num_cores_y,
-            read_from_input_tensor_kv=read_from_input_tensor_kv
+            num_cores_y
+            // read_from_input_tensor_kv=read_from_input_tensor_kv
         ]
     (
         const void* operation,

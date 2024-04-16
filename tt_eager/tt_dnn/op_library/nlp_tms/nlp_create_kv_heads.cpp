@@ -15,7 +15,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &input_tensor, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
+operation::ProgramWithCallbacks multi_core_nlp_create_kv_heads(const Tensor &input_tensor, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
 
     const auto& input_shape = input_tensor.get_legacy_shape();
 
@@ -39,8 +39,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
     uint32_t kv_out_h_tiles = input_shape[2] / TILE_HEIGHT;
     uint32_t kv_out_w_tiles = head_dim / TILE_WIDTH; // tiles along head_dim
     uint32_t kv_out_HtWt = kv_out_h_tiles * kv_out_w_tiles;
-    uint32_t kv_out_CHtWt = num_heads * kv_out_HtWt;
-    uint32_t kv_num_tiles = num_heads * kv_out_w_tiles;
+    uint32_t kv_out_CHtWt = num_kv_heads * kv_out_HtWt;
+    uint32_t kv_num_tiles = num_kv_heads * kv_out_w_tiles;
 
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
@@ -71,7 +71,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
     bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
 
     // TODO: Q, K, V doesn't necessarily need to be the same output mem config
-    bool out_is_dram = q_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool out_is_dram = v_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> reader_compile_time_args = {
             // interleaved accessor args
             (std::uint32_t) in0_is_dram,
@@ -83,7 +83,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
             (std::uint32_t) kv_out_h_tiles,
             (std::uint32_t) kv_out_w_tiles,
             (std::uint32_t) kv_out_HtWt,
-            (std::uint32_t) num_heads, // kv_out_c
+            (std::uint32_t) num_kv_heads, // kv_out_c
     };
 
     std::map<string, string> reader_defines;
@@ -191,8 +191,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
             reader_kernel_id,
             writer_kernel_id,
             num_cores,
-            num_cores_y,
-            read_from_input_tensor_kv=read_from_input_tensor_kv
+            num_cores_y
+            //read_from_input_tensor_kv=read_from_input_tensor_kv
         ]
     (
         const void* operation,
@@ -214,9 +214,9 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &in
                 auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                 runtime_args[0] = src_buffer->address();
 
-                if (read_from_input_tensor_kv) {
-                    runtime_args[1] = src_kv_buffer_addr;
-                }
+                //if (read_from_input_tensor_kv) {
+                //    runtime_args[1] = src_kv_buffer_addr;
+                //}
             }
 
             {

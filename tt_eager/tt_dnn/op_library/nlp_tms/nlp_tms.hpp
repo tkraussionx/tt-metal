@@ -15,6 +15,8 @@ namespace tt_metal {
 operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_falcon7b(const Tensor &input_tensor_a, std::vector<Tensor> &output, CoreCoord compute_with_storage_grid_size);
 operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_sharded(const Tensor &input_tensor, std::optional<const Tensor> input_tensor_kv, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size);
 operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads(const Tensor &input_tensor, std::optional<const Tensor> input_tensor_kv, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor> &output, CoreCoord compute_with_storage_grid_size);
+operation::ProgramWithCallbacks multi_core_nlp_create_q_heads(const Tensor &input_tensor, const uint32_t num_q_heads, const uint32_t head_dim, Tensor& output, CoreCoord compute_with_storage_grid_size);
+operation::ProgramWithCallbacks multi_core_nlp_create_kv_heads(const Tensor &input_tensor, const uint32_t num_kv_heads, const uint32_t head_dim, const bool transpose_k_heads, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size);
 operation::ProgramWithCallbacks multi_core_nlp_concat_heads(const Tensor &input_tensor_a, Tensor &output, CoreCoord compute_with_storage_grid_size);
 
 struct NlpCreateHeadsFalcon7B {
@@ -38,6 +40,31 @@ struct NlpCreateHeads {
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
     operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, std::vector<Tensor> &output_tensors) const;
+    tt::stl::reflection::Attributes attributes() const;
+};
+
+struct NlpCreateKVHeads {
+    const uint32_t num_kv_heads;
+    const uint32_t head_dim;
+    const bool transpose_k_heads;
+    MemoryConfig output_mem_config;
+
+    void validate(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    tt::stl::reflection::Attributes attributes() const;
+};
+
+struct NlpCreateQHeads {
+    const uint32_t num_q_heads;
+    const uint32_t head_dim;
+    MemoryConfig output_mem_config;
+
+    void validate(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
     tt::stl::reflection::Attributes attributes() const;
 };
 
@@ -77,6 +104,38 @@ inline std::vector<Tensor> nlp_create_qkv_heads(
 
     return operation::run(NlpCreateHeads{num_heads, num_kv_heads_val, head_dim, transpose_k_heads, mem_config}, {input_tensor}, {input_tensor_kv});
 }
+
+inline std::vector<Tensor> nlp_create_q_heads(
+    const Tensor &input_tensor,
+    const uint32_t num_heads, std::optional<const uint32_t> num_kv_heads,
+    const MemoryConfig& mem_config
+) {
+    const uint32_t num_kv_heads_val = num_kv_heads.value_or(num_heads);
+
+    // Infer head_dim
+    uint32_t head_dim;
+    TT_FATAL(input_tensor.get_legacy_shape()[3] % (num_heads + 2 * num_kv_heads_val) == 0, "Unsupported input shape");
+    head_dim = input_tensor.get_legacy_shape()[3] / (num_heads + 2 * num_kv_heads_val);
+
+    return operation::run(NlpCreateQHeads{num_heads, head_dim, mem_config}, {input_tensor});
+}
+
+inline std::vector<Tensor> nlp_create_kv_heads(
+    const Tensor &input_tensor,
+    const uint32_t num_heads, std::optional<const uint32_t> num_kv_heads,
+    const bool transpose_k_heads,
+    const MemoryConfig& mem_config
+) {
+    const uint32_t num_kv_heads_val = num_kv_heads.value_or(num_heads);
+
+    // Infer head_dim
+    uint32_t head_dim;
+    TT_FATAL(input_tensor.get_legacy_shape()[3] % (num_heads + 2 * num_kv_heads_val) == 0, "Unsupported input shape");
+    head_dim = input_tensor.get_legacy_shape()[3] / (num_heads + 2 * num_kv_heads_val);
+
+    return operation::run(NlpCreateKVHeads{num_kv_heads_val, head_dim, transpose_k_heads, mem_config}, {input_tensor});
+}
+
 inline Tensor nlp_concat_heads(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
     return operation::run(NlpConcatHeads{mem_config}, {input_tensor_a}).at(0);
 }
