@@ -14,8 +14,8 @@
 
 constexpr uint32_t NUM_WR_CMD_BUFS = 4;
 
-constexpr uint32_t DEFAULT_MAX_NOC_SEND_WORDS = (NUM_WR_CMD_BUFS-1)*(NOC_MAX_BURST_WORDS*NOC_WORD_BYTES)/PACKET_WORD_SIZE_BYTES;
-constexpr uint32_t DEFAULT_MAX_ETH_SEND_WORDS = 2*1024;
+constexpr uint32_t MAX_NOC_SEND_WORDS = (NUM_WR_CMD_BUFS-1)*(NOC_MAX_BURST_WORDS*NOC_WORD_BYTES)/PACKET_WORD_SIZE_BYTES;
+constexpr uint32_t MAX_ETH_SEND_WORDS = 2*1024;
 
 constexpr uint32_t NUM_PTR_REGS_PER_QUEUE = 3;
 
@@ -641,9 +641,6 @@ class packet_output_queue_state_t : public packet_queue_state_t {
 
 protected:
 
-    uint32_t max_noc_send_words;
-    uint32_t max_eth_send_words;
-
     uint32_t unpacketizer_page_words_sent;
     bool unpacketizer_remove_header;
 
@@ -751,8 +748,6 @@ public:
         this->unpacketizer_page_words_sent = 0;
         this->ptr_offset_mask = queue_size_words - 1;
         this->queue_size_mask = (queue_size_words << 1) - 1;
-        this->max_noc_send_words = DEFAULT_MAX_NOC_SEND_WORDS;
-        this->max_eth_send_words = DEFAULT_MAX_ETH_SEND_WORDS;
         this->input_queue_status.init(input_queue_array, num_input_queues);
         this->reset_queue_local_rptr_sent();
         this->reset_queue_local_rptr_cleared();
@@ -764,17 +759,9 @@ public:
         return this->cb_mode;
     }
 
-    inline void set_max_noc_send_words(uint32_t max_noc_send_words) {
-        this->max_noc_send_words = max_noc_send_words;
-    }
-
-    inline void set_max_eth_send_words(uint32_t max_eth_send_words) {
-        this->max_eth_send_words = max_eth_send_words;
-    }
-
     inline uint32_t output_max_num_words_to_forward() const {
         return (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) ?
-            this->max_eth_send_words : this->max_noc_send_words;
+            MAX_NOC_SEND_WORDS : MAX_ETH_SEND_WORDS;
     }
 
     inline void send_data_to_remote(uint32_t src_addr, uint32_t dest_addr, uint32_t num_words) {
