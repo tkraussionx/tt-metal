@@ -105,7 +105,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
             // Extra cb for second reader if we split act reads across two RISCs
             // In this case, the regular reader only does first half of reads along output block h
             if (split_reader) {
-                num_cb0_tiles /= 2;
+                //num_cb0_tiles /= 2;
 
                 CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb_second_reader, act_df}})
                 .set_page_size(act_cb_second_reader, act_tile_size);

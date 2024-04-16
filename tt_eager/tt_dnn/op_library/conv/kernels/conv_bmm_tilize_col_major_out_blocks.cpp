@@ -35,13 +35,15 @@ inline void tilize_in(
 ) {
     tilize_init_short(in_cb_id, in_block_w);
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
+        cb_wait_front(in_cb_id, in_block_w*in_subblock_h);
+        cb_reserve_back(out_cb_id, in_block_w*in_subblock_h);
+        uint32_t block_tile_offset = 0;
         for (uint32_t h = 0; h < in_subblock_h; ++h) {
-            cb_wait_front(in_cb_id, in_block_w);
-            cb_reserve_back(out_cb_id, in_block_w);
-            tilize_block(in_cb_id, in_block_w, out_cb_id);
-            cb_push_back(out_cb_id, in_block_w);
-            cb_pop_front(in_cb_id, in_block_w);
+            tilize_block(in_cb_id, in_block_w, out_cb_id, block_tile_offset);
+            block_tile_offset+=in_block_w;
         }
+        cb_push_back(out_cb_id, in_block_w*in_subblock_h);
+        cb_pop_front(in_cb_id, in_block_w*in_subblock_h);
     }
     tilize_uninit(in_cb_id);
 } // tilize_in()

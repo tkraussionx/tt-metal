@@ -58,14 +58,16 @@ inline void llk_unpack_tilize_uninit(const std::uint32_t operand, const std::uin
 }
 
 
-inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, std::uint32_t block_ct_dim) {
+inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, std::uint32_t block_ct_dim, std::uint32_t tile_offset_index = 0) {
     std::uint32_t operand_id = get_operand_id(operand);
     std::uint32_t base_address = cb_interface[operand_id].fifo_rd_ptr - 1;  // Remove header size added by descriptor
+    std::uint32_t offset_address = MUL_TILE_SIZE_AND_INDEX<true>(unpack_src_format[operand_id], tile_offset_index);
+    std::uint32_t address = base_address + offset_address;
     std::uint32_t src_format = (uint)unpack_src_format[operand_id];
 
     DEBUG_STATUS('U', 'P', 'T', 'W');
     _llk_unpack_tilize_(
-        base_address,
+        address,
         tile_index,
         src_format,
         block_ct_dim
@@ -73,9 +75,9 @@ inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, s
     DEBUG_STATUS('U', 'P', 'T', 'D');
 }
 
-inline void llk_unpack_tilize_block(std::uint32_t operand, std::uint32_t block_c_tiles) {
-    for (std::uint32_t tile_index = 0; tile_index < block_c_tiles; tile_index++) {
-        llk_unpack_tilize(operand, tile_index, block_c_tiles);
+inline void llk_unpack_tilize_block(std::uint32_t operand, std::uint32_t block_c_tiles, std::uint32_t tile_offset_index = 0) {
+    for (std::uint32_t t = 0; t < block_c_tiles; t++) {
+        llk_unpack_tilize(operand, t, block_c_tiles, tile_offset_index);
     }
 }
 

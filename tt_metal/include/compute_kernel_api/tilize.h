@@ -90,9 +90,9 @@ ALWI void tilize_init_short_with_dt(uint32_t old_icb, uint32_t new_icb, uint32_t
 /**
  * Perform tilize operation on a block. This simply loops over the provided blocks.
  */
-ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb)
+ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb, uint32_t tile_idx = 0)
 {
-    UNPACK(( llk_unpack_tilize_block(icb, block) ));
+    UNPACK(( llk_unpack_tilize_block(icb, block, tile_idx) ));
 
     for (uint32_t t = 0; t < block; t++) {
         // Acquire dst
@@ -101,7 +101,7 @@ ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb)
 
         // Datacopy
         MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE>(0 /*dst index*/) ));
-        PACK(( llk_pack<false, false >(0 /*tile index*/, ocb)  ));
+        PACK(( llk_pack<true, false >(0 /*tile index*/, ocb, tile_idx + t)  ));
 
         // Release dest
         MATH(( llk_math_dest_section_done<DST_ACCUM_MODE>() ));

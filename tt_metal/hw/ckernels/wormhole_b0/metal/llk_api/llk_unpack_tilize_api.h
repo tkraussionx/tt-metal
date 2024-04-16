@@ -77,7 +77,7 @@ inline void llk_unpack_tilize_uninit(const std::uint32_t operand, const std::uin
     TTI_REG2FLOP(1,0,0,0,THCON_SEC0_REG5_Tile_x_dim_cntx0_ADDR32-THCON_CFGREG_BASE_ADDR32, p_gpr_unpack::FACE_DIM_16x16); //GPR preloaded with  16 | (16 << 16)}
 }
 
-inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, std::uint32_t block_ct_dim) {
+inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, std::uint32_t block_ct_dim, std::uint32_t tile_offset_index = 0) {
 
     std::uint32_t operand_id = get_operand_id(operand);
     const std::uint32_t face_r_dim = get_operand_face_r_dim(operand_id);
@@ -85,10 +85,12 @@ inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, s
     const bool narrow_tile = get_operand_narrow_tile(operand_id);
 
     std::uint32_t base_address = cb_interface[operand_id].fifo_rd_ptr - 1;  // Remove header size added by descriptor
+    std::uint32_t offset_address = tile_offset_index*cb_interface[operand_id].fifo_page_size;
+    std::uint32_t address = base_address + offset_address;
 
     DEBUG_STATUS('U', 'P', 'T', 'W');
     _llk_unpack_tilize_(
-        base_address,
+        address,
         tile_index,
         unpack_src_format[operand_id],
         block_ct_dim,
@@ -99,9 +101,9 @@ inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, s
     DEBUG_STATUS('U', 'P', 'T', 'D');
 }
 
-inline void llk_unpack_tilize_block(std::uint32_t operand, std::uint32_t block_c_tiles) {
-    for (std::uint32_t tile_index = 0; tile_index < block_c_tiles; tile_index++) {
-        llk_unpack_tilize(operand, tile_index, block_c_tiles);
+inline void llk_unpack_tilize_block(std::uint32_t operand, std::uint32_t block_c_tiles, std::uint32_t tile_offset_index = 0) {
+    for (std::uint32_t t = 0; t < block_c_tiles; t++) {
+        llk_unpack_tilize(operand, t, block_c_tiles, tile_offset_index);
     }
 }
 
