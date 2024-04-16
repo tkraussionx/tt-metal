@@ -42,17 +42,19 @@ def test_bw_remainder(input_shapes, device):
     print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
-    diff_mask = golden_tensor != tt_out_tensor
-    if diff_mask.any():
-        print("Values are not equal:")
-        diff_indices = torch.nonzero(diff_mask)
-        print("Indices where tensors differ:")
-        print(diff_indices)
-        print("Tensor 1 values at differing indices:")
-        print(golden_tensor[diff_indices[:, 0], diff_indices[:, 1], diff_indices[:, 2], diff_indices[:, 3]])
-        print("Tensor 2 values at differing indices:")
-        print(tt_out_tensor[diff_indices[:, 0], diff_indices[:, 1], diff_indices[:, 2], diff_indices[:, 3]])
-    else:
-        print("Tensors are equal.")
+    diff = torch.abs(golden_tensor - tt_out_tensor)
+    max_diff = torch.max(diff)
+
+    if max_diff > 5:
+        print("Inputs for which the outputs differ by more than 5:")
+        indices = torch.nonzero(diff > 5)
+        for idx in indices:
+            input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
+            input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
+            expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
+            actual_output_val = tt_out_tensor[idx[0], idx[1], idx[2], idx[3]]
+            print(
+                f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
+            )
 
     assert comp_pass
