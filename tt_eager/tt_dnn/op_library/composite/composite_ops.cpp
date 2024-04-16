@@ -580,10 +580,10 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor divisor = input_b;
     Tensor orig = divisor;
     for (int i=0; i<100; i++){
-        dividend = where(logical_and(ltz(dividend), gtz(divisor)), dividend + divisor, dividend);
+        dividend = where(logical_and(ltz(dividend), gtz(divisor)), add(dividend, divisor), dividend);
     }
     for (int i=0; i<100; i++){
-        divisor = where(logical_and(gtz(dividend), ltz(divisor)), dividend + divisor, divisor);
+        divisor = where(logical_and(gtz(dividend), ltz(divisor)), add(dividend, divisor), divisor);
     }
     dividend = where(ltz(dividend), abs(dividend), dividend);
     divisor = where(ltz(divisor), abs(divisor), divisor);
