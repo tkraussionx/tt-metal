@@ -136,6 +136,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t qk_tiles = S_chunk_t * S_chunk_t;
     uint32_t out_im_tiles = S_chunk_t * DHt;
     uint32_t out0_t = S_chunk_t * DHt;
+    uint32_t scale_tiles = 1;
 
     // log all values
     log_debug("q_tiles: {}", q_tiles);
@@ -209,6 +210,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto c_in2_config = CircularBufferConfig(v_tiles * input_tile_size, {{CB::c_in2, input_data_format}}).set_page_size(CB::c_in2, input_tile_size);
     auto cb_in2_id = CreateCircularBuffer(program, single_core, c_in2_config);
 
+    // attn_mask input
+    auto c_in3_config = CircularBufferConfig(mask_tiles * input_tile_size, {{CB::c_in3, input_data_format}}).set_page_size(CB::c_in3, input_tile_size);
+    auto cb_in3_id = CreateCircularBuffer(program, single_core, c_in3_config);
+
+    // scale input
+    auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, input_data_format}}).set_page_size(CB::c_in4, input_tile_size);
+    auto cb_in4_id = CreateCircularBuffer(program, single_core, c_in4_config);
+
     // QK intermediate
     auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_cb_data_format}}).set_page_size(CB::c_intermed0, im_tile_size);
     auto cb_intermed0_id = CreateCircularBuffer(program, single_core, c_intermed0_config);
@@ -247,9 +256,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t v_addr = v_buffer->address();
     // uint32_t mask_addr = mask.has_value() ? mask.value().buffer()->address() : 0;
     uint32_t out_addr = out0_buffer->address();
+    union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
 
     // Set reader rt args
-    SetRuntimeArgs(program, reader_kernels_id, single_core, { q_addr, k_addr, v_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks });
+    SetRuntimeArgs(program, reader_kernels_id, single_core, { q_addr, k_addr, v_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u });
     SetRuntimeArgs(program, writer_kernels_id, single_core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks });
     SetRuntimeArgs(program, compute_kernels_id, single_core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks });
 

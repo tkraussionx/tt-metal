@@ -94,6 +94,7 @@ def fa2_fake(q, k, v, attn_mask):
                 q_chunk = q[b, h, q_c * chunk_size : (q_c + 1) * chunk_size]
 
                 # Setup variables for the Q chunk
+                """Initialize with good values for the first row"""
                 cur_m, prev_m = torch.full((chunk_size, 1), -1000), torch.full((chunk_size, 1), -1000)
                 cur_sum, prev_sum = torch.full((chunk_size, 1), 0), torch.full((chunk_size, 1), 0)
                 chunk_output = torch.zeros_like(q_chunk)
@@ -104,34 +105,52 @@ def fa2_fake(q, k, v, attn_mask):
                     # Fetch K, V, attn_mask chunks
                     k_chunk = k[b, 0, k_c * chunk_size : (k_c + 1) * chunk_size]
                     v_chunk = v[b, 0, k_c * chunk_size : (k_c + 1) * chunk_size]
+                    # attn_mask_chunk: cb_mask
                     attn_mask_chunk = attn_mask[
                         b, h, q_c * chunk_size : (q_c + 1) * chunk_size, k_c * chunk_size : (k_c + 1) * chunk_size
                     ]
 
                     scores = torch.matmul(q_chunk, k_chunk.transpose(-1, -2))
-                    # scores = scores * scale
+
+                    """broadcast_mult"""
+                    scores = scores * scale  # scale: cb_scale (single tile column vector)
+                    """eltwise add inplace"""
                     # scores = scores + attn_mask_chunk
 
                     # 9
-                    # rowmax = torch.max(scores, dim=-1, keepdim=True)[0]
+                    """reduce max (c)"""
+                    # rowmax = torch.max(scores, dim=-1, keepdim=True)[0] # cb_cur_max (S_chunk_t tiles)
+                    """reduce max (c)"""
                     # cur_m = torch.maximum(prev_m, rowmax)
+                    """broadcast sub"""
+                    """eltwise_unary exp"""
                     # pij = torch.exp(scores - cur_m)
+                    """reduce sum (c)"""
                     # row_sum = torch.sum(pij, dim=-1, keepdim=True)
-
+                    """col-vector sub"""
+                    """eltwise_unary exp"""
                     # exp_max_diff = torch.exp(prev_m - cur_m)
-
+                    """eltwise mult"""
+                    """eltwise add"""
                     # cur_sum = exp_max_diff * prev_sum + row_sum
 
                     # # 10
+                    """broadcast_mult inplace"""
+                    """matmul"""
+                    """eltwise add inplace"""
                     # chunk_output = chunk_output * exp_max_diff + torch.matmul(pij, v_chunk)
-                    # chunk_output += torch.matmul(scores, v_chunk)
+                    chunk_output += torch.matmul(scores, v_chunk)
                     ## ONLY KEEP LAST CHUNK OUTPUT
-                    chunk_output = torch.matmul(scores, v_chunk)
+                    # chunk_output = torch.matmul(scores, v_chunk)
+                    """copy tiles"""
                     # prev_sum = cur_sum
                     # prev_m = cur_m
 
                 # 12
+                """reciprocal"""
+                """broadcast mult"""
                 # chunk_output = chunk_output / cur_sum
+                """copy tiles"""
                 out[b, h, q_c * chunk_size : (q_c + 1) * chunk_size] = chunk_output
 
     return out
@@ -179,6 +198,22 @@ def run_test_sdpa_tt(device):
     mine = tt_fa2(device, Q, K, V, attn_mask)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
     print(f"python vs pytorch: {out_pcc}")
+
+    row_tiles = s // 32
+    col_tiles = d // 32
+    for batch in range(b):
+        for head in range(nh):
+            for row_tile in range(row_tiles):
+                for col_tile in range(col_tiles):
+                    gt_tile = gt[batch, head, row_tile * 32 : (row_tile + 1) * 32, col_tile * 32 : (col_tile + 1) * 32]
+                    mine_tile = mine[
+                        batch, head, row_tile * 32 : (row_tile + 1) * 32, col_tile * 32 : (col_tile + 1) * 32
+                    ]
+                    # Print MSE if these tiles
+                    mse = torch.nn.functional.mse_loss(gt_tile, mine_tile)
+                    if mse > 0.6:
+                        print(f"Tile {row_tile}, {col_tile}")
+                        print(f"MSE: {mse}")
 
     assert out_pass
 
