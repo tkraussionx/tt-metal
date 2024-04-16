@@ -42,5 +42,17 @@ def test_bw_remainder(input_shapes, device):
     print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
+    diff_mask = golden_tensor != tt_out_tensor
+    if diff_mask.any():
+        print("Values are not equal:")
+        diff_indices = torch.nonzero(diff_mask)
+        print("Indices where tensors differ:")
+        print(diff_indices)
+        print("Tensor 1 values at differing indices:")
+        print(golden_tensor[diff_indices[:, 0], diff_indices[:, 1], diff_indices[:, 2], diff_indices[:, 3]])
+        print("Tensor 2 values at differing indices:")
+        print(tt_out_tensor[diff_indices[:, 0], diff_indices[:, 1], diff_indices[:, 2], diff_indices[:, 3]])
+    else:
+        print("Tensors are equal.")
 
     assert comp_pass
