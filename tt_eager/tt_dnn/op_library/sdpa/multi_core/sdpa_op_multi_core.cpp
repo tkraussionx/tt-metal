@@ -134,7 +134,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t v_tiles  = S_chunk_t * DHt * 2; // double buffer
     uint32_t mask_tiles = S_chunk_t * S_chunk_t * 2; // double buffer
     uint32_t qk_tiles = S_chunk_t * S_chunk_t;
-    uint32_t out0_t = S_chunk_t * DHt * 2;
+    uint32_t out0_t = S_chunk_t * DHt;
 
     // log all values
     log_debug("q_tiles: {}", q_tiles);

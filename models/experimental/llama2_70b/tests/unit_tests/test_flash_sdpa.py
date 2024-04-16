@@ -76,6 +76,65 @@ def fa2(q, k, v, attn_mask):
     return out
 
 
+def fa2_fake(q, k, v, attn_mask):
+    chunk_size = 256
+    num_batches = q.size(0)
+    num_heads = q.size(1)
+    seq_len = q.size(2)
+    num_chunks = seq_len // chunk_size
+
+    scale = 1.0 / (q.size(-1) ** 0.5)
+
+    out = torch.zeros_like(q)
+
+    for b in range(num_batches):
+        for h in range(num_heads):
+            for q_c in range(num_chunks):
+                # Fetch Q chunk
+                q_chunk = q[b, h, q_c * chunk_size : (q_c + 1) * chunk_size]
+
+                # Setup variables for the Q chunk
+                cur_m, prev_m = torch.full((chunk_size, 1), -1000), torch.full((chunk_size, 1), -1000)
+                cur_sum, prev_sum = torch.full((chunk_size, 1), 0), torch.full((chunk_size, 1), 0)
+                chunk_output = torch.zeros_like(q_chunk)
+
+                for k_c in range(num_chunks):
+                    # MQA: only 1 kv head
+
+                    # Fetch K, V, attn_mask chunks
+                    k_chunk = k[b, 0, k_c * chunk_size : (k_c + 1) * chunk_size]
+                    v_chunk = v[b, 0, k_c * chunk_size : (k_c + 1) * chunk_size]
+                    attn_mask_chunk = attn_mask[
+                        b, h, q_c * chunk_size : (q_c + 1) * chunk_size, k_c * chunk_size : (k_c + 1) * chunk_size
+                    ]
+
+                    scores = torch.matmul(q_chunk, k_chunk.transpose(-1, -2))
+                    # scores = scores * scale
+                    # scores = scores + attn_mask_chunk
+
+                    # 9
+                    # rowmax = torch.max(scores, dim=-1, keepdim=True)[0]
+                    # cur_m = torch.maximum(prev_m, rowmax)
+                    # pij = torch.exp(scores - cur_m)
+                    # row_sum = torch.sum(pij, dim=-1, keepdim=True)
+
+                    # exp_max_diff = torch.exp(prev_m - cur_m)
+
+                    # cur_sum = exp_max_diff * prev_sum + row_sum
+
+                    # # 10
+                    # chunk_output = chunk_output * exp_max_diff + torch.matmul(pij, v_chunk)
+                    chunk_output += torch.matmul(scores, v_chunk)
+                    # prev_sum = cur_sum
+                    # prev_m = cur_m
+
+                # 12
+                # chunk_output = chunk_output / cur_sum
+                out[b, h, q_c * chunk_size : (q_c + 1) * chunk_size] = chunk_output
+
+    return out
+
+
 def tt_fa2(device, q, k, v, attn_mask):
     tt_q = torch2tt_tensor(q, device)
     tt_k = torch2tt_tensor(k.transpose(-1, -2), device)
