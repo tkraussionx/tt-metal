@@ -581,7 +581,7 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     for (int i=0; i<100; i++){
         Tensor condition = logical_and(gte(dividend, mul_unary(divisor, 2)), ne(sub(dividend, mul_unary(divisor, 2)), sub(sub(dividend, divisor), divisor)));
         dividend = where(condition, sub(dividend, mul_unary(divisor, 2)), dividend);
-        dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
+        dividend = where(logical_and(gte(dividend, divisor), eq(sub(dividend, mul_unary(divisor, 2)), sub(sub(dividend, divisor), divisor))), sub(dividend, divisor), dividend);
     }
 
     return dividend;
