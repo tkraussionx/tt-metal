@@ -46,8 +46,8 @@ def test_bw_remainder(input_shapes, device):
     max_diff = torch.max(diff)
 
     if max_diff > 5:
-        print("Inputs for which the outputs differ by more than 5:")
-        indices = torch.nonzero(diff > 5)
+        print("Inputs for which the outputs differ by more than 0:")
+        indices = torch.nonzero(diff > 0)
         for idx in indices:
             input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
             input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
