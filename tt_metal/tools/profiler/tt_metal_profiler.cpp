@@ -74,10 +74,17 @@ void InitDeviceProfiler(Device *device){
             int64_t startTime = tracy::get_cpu_time();
             constexpr uint16_t sampleCount = 250;
             int64_t writeSum = 0;
+
+            const auto FREQ = std::getenv("TT_METAL_PROFILER_FREQ");
+            int millisecond_wait = 4;
+            if (FREQ != nullptr)
+            {
+                millisecond_wait = std::stoi(FREQ);
+            }
             for (int i = 0; i < sampleCount; i++)
             {
                 ZoneScopedN("4MS_LOOP");
-                std::this_thread::sleep_for(std::chrono::milliseconds(4));
+                std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
                 int64_t writeStart = tracy::get_cpu_time();
                 uint32_t sinceStart = writeStart - startTime;
                 time_sync_buffer[0] = sinceStart;
@@ -102,12 +109,14 @@ void InitDeviceProfiler(Device *device){
             double tracyToSecRatio = CalibrateTimer();
             double frequencySum = 0;
             double frequencyMin = 5000;
+            double frequencyMax = 0;
 
             uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[2];
 
             for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
             {
                 double deviceDelta = sync_times[i] - preDeviceTime;
+                if (preDeviceTime > sync_times[i]) deviceDelta += (1LL << 32);
 
                 double hostTime = sync_times[i + 1] + writeOverhead;
                 double hostDelta = (hostTime - preHostTime) * tracyToSecRatio;
@@ -118,6 +127,8 @@ void InitDeviceProfiler(Device *device){
                 {
                     frequency = deviceDelta / hostDelta;
                     if (frequency < frequencyMin ) frequencyMin = frequency;
+                    if (frequency > frequencyMax) frequencyMax = frequency;
+                    frequencySum += frequency;
                 }
                 else
                 {
@@ -134,12 +145,13 @@ void InitDeviceProfiler(Device *device){
                     << std::endl;
             }
 
-            double longestFreq = (double)(sync_times[249] - sync_times[3]) * tracyToSecRatio/(double)(sync_times[248] - sync_times[2]);
-            tracy::set_sync_info(startTime + sync_times[3] + writeOverhead, deviceStartTime, longestFreq);
+            double frequencyFirstLast = (double)(sync_times[248] - sync_times[2]) / ((double)(sync_times[249] - sync_times[3]) * tracyToSecRatio);
+            tracy::set_sync_info(startTime + sync_times[3] + writeOverhead, deviceStartTime, frequencyFirstLast);
 
-            std::cout << fmt::format("Average freq = {}", longestFreq) << std::endl;
-            std::cout << fmt::format("High = {}", sync_times[0]) << std::endl;
-            std::cout << fmt::format("Low = {}", sync_times[1]) << std::endl;
+            std::cout << fmt::format("Average freq = {}", frequencySum / (double)(sampleCount - 1.0) ) << std::endl;
+            std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
+            std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
+            std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
 
         }
 

@@ -303,22 +303,27 @@ int main() {
     volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
     volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
-    uint32_t syncStartTime = p_reg[0];
-    uint32_t deviceTime = syncStartTime;
+    uint32_t syncStartTime_H = p_reg[1];
+    uint32_t deviceTime = p_reg[0];;
+    uint32_t deviceTime_H = syncStartTime_H;
 
     uint32_t syncTimeBufferIndex = kernel_profiler::ID_HH;
 
     briscBuffer[syncTimeBufferIndex++] = p_reg[1];
     briscBuffer[syncTimeBufferIndex++] = p_reg[0];
 
-    while ((deviceTime - syncStartTime) < 2200000000) {
+    while ((deviceTime_H - syncStartTime_H) < 3) {
+        deviceTime_H = p_reg[1];
         deviceTime = p_reg[0];
+
         uint32_t hostTime = profiler_control_buffer[kernel_profiler::FW_RESET_L];
         if (hostTime > 0)
         {
             briscBuffer[syncTimeBufferIndex++] = deviceTime;
             briscBuffer[syncTimeBufferIndex++] = hostTime;
             profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
+
+            if (syncTimeBufferIndex > 500) break;
         }
     }
 
