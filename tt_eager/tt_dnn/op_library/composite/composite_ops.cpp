@@ -584,6 +584,7 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
         dividend = where(condition2, sub(dividend, mul_unary(divisor, 3)), dividend);
         dividend = where(condition1, sub(dividend, mul_unary(divisor, 2)), dividend);
+        dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
 
     return dividend;
