@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
+import os
 from pathlib import Path
 
 
@@ -56,7 +57,12 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
+    def __init__(
+        self,
+        device=None,
+        model_base_path=os.getenv("MISTRAL_DATA_DIR", "/proj_sw/user_dev/hf_data/mistral"),
+        instruct=False,
+    ):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         self.instruct = instruct
