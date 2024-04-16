@@ -45,6 +45,7 @@ class RunTimeOptions {
     bool test_mode_enabled = false;
 
     bool profiler_enabled = false;
+    bool profiler_sync_enabled = false;
 
     bool null_kernels = false;
 
@@ -140,6 +141,7 @@ class RunTimeOptions {
     inline void set_test_mode_enabled(bool enable) { test_mode_enabled = enable; }
 
     inline bool get_profiler_enabled() { return profiler_enabled; }
+    inline bool get_profiler_sync_enabled() { return profiler_sync_enabled; }
 
     inline void set_kernels_nullified(bool v) { null_kernels = v; }
     inline bool get_kernels_nullified() { return null_kernels; }
