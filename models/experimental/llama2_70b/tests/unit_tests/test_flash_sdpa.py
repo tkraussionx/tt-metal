@@ -198,7 +198,7 @@ def fa2_fake(q, k, v, attn_mask):
                     if k_c == 0:
                         cb_out_accumulate_im = cb_out_im
                     else:
-                        # cb_out_accumulate_im *= cb_exp_max_diff
+                        cb_out_accumulate_im *= cb_exp_max_diff
                         cb_out_accumulate_im += cb_out_im
 
                     # cb_prev_sum = cb_cur_sum
