@@ -15,7 +15,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 
 
@@ -52,10 +52,6 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     // Precondition: scale_cb has 1 produced
     // Postcondition: out_cb has rows produced
 
-    // Check out_cb pointers
-    // UNPACK( DPRINT << "COMPUTE: out_cb rd ptr=" << cb_interface[out_cb].fifo_rd_ptr << ENDL() );
-    // PACK( DPRINT << "COMPUTE: out_cb wr ptr=" << cb_interface[out_cb].fifo_wr_ptr << ENDL() );
-
     reduce_init_delta<false, PoolType::MAX, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
 
     // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
@@ -73,8 +69,6 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
             cb_pop_front(in0_cb, 1);
         }
 
-        // copy_tile();
-        // max_tile();
         cb_reserve_back(out_cb, 1);
         pack_tile(reduce_dst_idx, out_cb);
         cb_push_back(out_cb, 1);
@@ -82,12 +76,40 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     }
 
    reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
-
-    // #undef REDUCE_OP
 }
 
 void reduce_sum_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
-    // TODO! Needs templatized reduce_op API
+    // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
+    // Precondition: scale_cb has 1 produced
+    // Precondition: out_cb has rows free
+    // Postcondition: in0_cb has rows*cols consumed
+    // Precondition: scale_cb has 1 produced
+    // Postcondition: out_cb has rows produced
+
+    reduce_init_delta<false, PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
+
+    // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
+
+    cb_wait_front(scale_cb, 1);
+    cb_wait_front(in0_cb, rows * cols);
+
+    constexpr uint32_t reduce_dst_idx = 0;
+
+    for (uint32_t i = 0; i < rows; i++) {
+        acquire_dst(tt::DstMode::Half);
+        for (uint32_t j = 0; j < cols; j++) {
+            cb_wait_front(in0_cb, 1);
+            reduce_tile<PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, 0, 0, reduce_dst_idx);
+            cb_pop_front(in0_cb, 1);
+        }
+
+        cb_reserve_back(out_cb, 1);
+        pack_tile(reduce_dst_idx, out_cb);
+        cb_push_back(out_cb, 1);
+        release_dst(tt::DstMode::Half);
+    }
+
+   reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
 }
 
 void exp_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
@@ -371,7 +393,7 @@ void MAIN {
     uint32_t num_chunks    = get_arg_val<uint32_t>(6);
 
     // PACK(DPRINT all the above variables
-    PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
+    // PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
     // PACK(DPRINT << "COMPUTE: NQH=" << NQH << ENDL());
     // PACK(DPRINT << "COMPUTE: NKH=" << NKH << ENDL());
     // PACK(DPRINT << "COMPUTE: St=" << St << ENDL());
@@ -428,16 +450,16 @@ void MAIN {
     mm_init();
 
     for (uint32_t nb = 0; nb < B; ++nb) {
-        PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
+        // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
+            // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
-                PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
+                // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);
 
                 for (uint32_t k_chunk = 0; k_chunk < num_chunks; ++k_chunk) {
-                    PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
+                    // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
 
                     /* QK = Q_CHUNK @ K_CHUNK */
                     cb_wait_front(cb_k_in, k_chunk_tiles);
@@ -478,7 +500,11 @@ void MAIN {
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
 
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
-                    // TODO, needs reduce_sum!
+                    cb_push_back(cb_qk_im, qk_chunk_tiles);
+                    reduce_sum_c(cb_qk_im, cb_identity_scale_in, cb_cur_sum, S_chunk_t, S_chunk_t);
+                    // cb_cur_sum full, cb_qk_im empty
+                    // DEBUG: free cb_cur_sum
+                    // cb_pop_front(cb_cur_sum, S_chunk_t);
 
                     if (k_chunk > 0) {
                         /* cb_exp_max_diff = cb_prev_max - cb_cur_max */
@@ -491,8 +517,14 @@ void MAIN {
                         exp_block_inplace(cb_exp_max_diff, S_chunk_t);
 
                         /* cb_prev_sum *= cb_exp_max_diff */
+                        mul_block_inplace(cb_prev_sum, cb_exp_max_diff, S_chunk_t);
+                        // cb_prev_sum full, cb_exp_max_diff empty
+                        cb_push_back(cb_exp_max_diff, S_chunk_t);
+                        // cb_exp_max_diff full
 
                         /* cb_cur_sum += cb_prev_sum */
+                        add_block_inplace(cb_cur_sum, cb_prev_sum, S_chunk_t);
+                        // cb_cur_sum full, cb_prev_sum empty
                     }
 
 
@@ -511,10 +543,10 @@ void MAIN {
                         copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
                     } else {
                         /* cb_out_accumulate_im *= cb_exp_max_diff */
-
-                        /* cb_out_accumulate_im += cb_out_im */
                         mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, S_chunk_t, DHt);
                         // cb_exp_max_diff is now empty
+
+                        /* cb_out_accumulate_im += cb_out_im */
                         add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
                     }
 
@@ -525,14 +557,29 @@ void MAIN {
                     if (k_chunk > 0) {
                         // Free up prev_max
                         cb_pop_front(cb_prev_max, S_chunk_t);
+
                     }
                     // cb_cur_max is full, cb_prev_max is empty
                     copy_block(cb_cur_max, cb_prev_max, S_chunk_t);
                     // cb_cur_max is empty, cb_prev_max is full
 
+                    // cb_cur_sum is full, cb_prev_sum is empty
+                    copy_block(cb_cur_sum, cb_prev_sum, S_chunk_t);
+                    // cb_cur_sum is empty, cb_prev_sum is full
+
                 }
                 // free up cb_prev_max after K chunks
                 cb_pop_front(cb_prev_max, S_chunk_t);
+                cb_pop_front(cb_prev_sum, S_chunk_t);
+
+                /* cb_cur_sum = 1.0 / cb_cur_sum */
+                cb_push_back(cb_cur_sum, S_chunk_t);
+                recip_block_inplace(cb_cur_sum, S_chunk_t);
+                // cb_cur_sum is full
+
+                /* cb_out_accumulate_im *= cb_cur_sum */
+                mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_cur_sum, S_chunk_t, DHt);
+                // cb_cur_sum is empty, cb_out_accumulate_im is full
 
                 copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
 
