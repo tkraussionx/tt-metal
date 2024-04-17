@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 void kernel_main() {
     constexpr uint32_t in0_block_num_tiles                = get_compile_time_arg_val(0);
@@ -106,7 +106,7 @@ void kernel_main() {
     }
 
     // DPRINT << "is_ncrisc " <<is_ncrisc<<ENDL();
-    DPRINT << "in0_block_size_bytes " <<(uint)in0_block_size_bytes<<ENDL();
+    // DPRINT << "in0_block_size_bytes " <<(uint)in0_block_size_bytes<<ENDL();
 
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
