@@ -176,6 +176,7 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
             release_dst(tt::DstMode::Half);
         }
     }
+    cb_pop_front(in1_cb, rows);
 }
 
 void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
@@ -488,9 +489,6 @@ void MAIN {
 
                         /* cb_exp_max_diff = torch.exp(cb_exp_max_diff) */
                         exp_block_inplace(cb_exp_max_diff, S_chunk_t);
-                        // DEBUG: free up cb_exp_max_diff since nobody else uses it.
-                        cb_pop_front(cb_exp_max_diff, S_chunk_t);
-
 
                         /* cb_prev_sum *= cb_exp_max_diff */
 
@@ -515,9 +513,10 @@ void MAIN {
                         /* cb_out_accumulate_im *= cb_exp_max_diff */
 
                         /* cb_out_accumulate_im += cb_out_im */
+                        mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, S_chunk_t, DHt);
+                        // cb_exp_max_diff is now empty
                         add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
                     }
-
 
 
 
