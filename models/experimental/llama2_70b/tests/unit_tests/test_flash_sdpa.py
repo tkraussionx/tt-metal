@@ -181,13 +181,13 @@ def fa2_fake(q, k, v, attn_mask):
 
                     # # 9
                     cb_cur_max = torch.max(cb_qk_im, dim=-1, keepdim=True)[0]
-                    # cb_cur_max = torch.maximum(cb_prev_max, cb_cur_max)
+                    cb_cur_max = torch.maximum(cb_prev_max, cb_cur_max)
                     cb_qk_im -= cb_cur_max
                     cb_qk_im = torch.exp(cb_qk_im)
                     # cb_cur_sum = torch.sum(cb_qk_im, dim=-1, keepdim=True)
 
-                    # cb_exp_max_diff = cb_prev_max - cb_cur_max
-                    # cb_exp_max_diff = torch.exp(cb_exp_max_diff)
+                    cb_exp_max_diff = cb_prev_max - cb_cur_max
+                    cb_exp_max_diff = torch.exp(cb_exp_max_diff)
 
                     # cb_prev_sum *= cb_exp_max_diff
                     # cb_cur_sum += cb_prev_sum
@@ -367,7 +367,11 @@ def run_stress_sdpa_tt(device):
 
     for i in range(1000):
         print(f"Iteration {i}")
+        gt = fa2_fake(Q, K, V, attn_mask)
         mine = tt_fa2(device, Q, K, V, attn_mask)
+        out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
+        print(f"python vs pytorch: {out_pcc}")
+        assert out_pass
 
 
 def test_sdpa_stress_tt(device):
