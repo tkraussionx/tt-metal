@@ -114,7 +114,7 @@ def fa2_cb(q, k, v, attn_mask):
                     # 9
                     cb_cur_max = torch.max(cb_qk_im, dim=-1, keepdim=True)[0]
                     cb_cur_max = torch.maximum(cb_prev_max, cb_cur_max)
-                    cb_qk_im -= cb_cur_max
+                    cb_qk_im -= cb_cur_max  # eltwise sub bcast cols
                     cb_qk_im = torch.exp(cb_qk_im)
                     cb_cur_sum = torch.sum(cb_qk_im, dim=-1, keepdim=True)
 
@@ -180,10 +180,10 @@ def fa2_fake(q, k, v, attn_mask):
                     cb_qk_im += cb_mask_in
 
                     # # 9
-                    # cb_cur_max = torch.max(cb_qk_im, dim=-1, keepdim=True)[0]
+                    cb_cur_max = torch.max(cb_qk_im, dim=-1, keepdim=True)[0]
                     # cb_cur_max = torch.maximum(cb_prev_max, cb_cur_max)
-                    # cb_qk_im -= cb_cur_max
-                    # cb_qk_im = torch.exp(cb_qk_im)
+                    cb_qk_im -= cb_cur_max
+                    cb_qk_im = torch.exp(cb_qk_im)
                     # cb_cur_sum = torch.sum(cb_qk_im, dim=-1, keepdim=True)
 
                     # cb_exp_max_diff = cb_prev_max - cb_cur_max
@@ -202,7 +202,7 @@ def fa2_fake(q, k, v, attn_mask):
                         cb_out_accumulate_im += cb_out_im
 
                     # cb_prev_sum = cb_cur_sum
-                    # cb_prev_max = cb_cur_max
+                    cb_prev_max = cb_cur_max
 
                 # 12
                 # cb_cur_sum = 1.0 / cb_cur_sum
