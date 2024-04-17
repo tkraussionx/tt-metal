@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     constexpr uint32_t in0_block_num_tiles                = get_compile_time_arg_val(0);
@@ -106,7 +106,7 @@ void kernel_main() {
     }
 
     // DPRINT << "is_ncrisc " <<is_ncrisc<<ENDL();
-    // DPRINT << "noc_index " <<(uint)noc_index<<ENDL();
+    DPRINT << "in0_block_size_bytes " <<(uint)in0_block_size_bytes<<ENDL();
 
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -149,7 +149,7 @@ void kernel_main() {
                     noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
                 } else {
                     // num_dests must not include source, since we are NOT really doing a local copy!
-                    for (int a=0; a<16; ++a) {
+                    for (int a=0; a<8; ++a) {
                         noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, 2048, in0_mcast_num_cores+1, false, false);
                         local_read_addr+= 2048;
                         in0_multicast_data_addr+= 2048;
@@ -162,7 +162,7 @@ void kernel_main() {
                 // We should also multicast the flag to destinations
                 noc_semaphore_set_multicast_loopback_src(in0_mcast_sender_semaphore_valid_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores+1, false, false);
 
-                local_read_addr += in0_block_size_bytes;
+                // local_read_addr += in0_block_size_bytes;
             } else {
                 uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
 

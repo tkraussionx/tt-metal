@@ -2796,7 +2796,7 @@ def run_bert_linear_batch8(
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=in0_block_w,
+        in0_block_w=in0_block_w // 2,
         out_subblock_h=out_subblock_h,
         out_subblock_w=out_subblock_w,
         per_core_M=out_block_h,

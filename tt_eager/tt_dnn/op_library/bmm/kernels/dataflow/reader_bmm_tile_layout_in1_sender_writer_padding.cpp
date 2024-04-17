@@ -168,7 +168,16 @@ void kernel_main() {
     #endif
     #endif
 
-    // DPRINT << num_blocks <<ENDL();
+
+    // DPRINT << "in1_block_h " <<in1_block_h <<ENDL();
+    // DPRINT << "in1_block_w " <<in1_block_w <<ENDL();
+    // DPRINT << "last_block_w " <<last_block_w <<ENDL();
+
+    // DPRINT << "in1_tensor_stride_h " <<in1_tensor_stride_h <<ENDL();
+    // DPRINT << "in1_tensor_stride_w " <<in1_tensor_stride_w <<ENDL();
+    // DPRINT << "in1_tensor_next_block_stride " <<in1_tensor_next_block_stride <<ENDL();
+
+
 
     uint32_t in1_block_h_temp = in1_block_h;
 
@@ -188,6 +197,10 @@ void kernel_main() {
                 uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
+
+                        // uint32_t bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(in1_tensor_tile_id + my_x[noc_index]);
+                        // DPRINT << "bank_id " <<bank_id <<ENDL();
+
 
                         noc_async_read_tile_with_trid(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
 
@@ -221,7 +234,7 @@ void kernel_main() {
 
             // // num_dests must not include source, since we are NOT really doing a local copy!
             // noc_async_write_multicast_inv(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
-            for (int a=0; a<256; ++a) {
+            for (int a=0; a<128; ++a) {
                 noc_async_write_multicast_inv(in1_start_address, in1_multicast_data_addr, 2048, in1_mcast_num_cores, false, false);
                 in1_start_address += 2048;
                 in1_multicast_data_addr += 2048;
