@@ -71,7 +71,7 @@ void InitDeviceProfiler(Device *device){
         {
             std::vector<uint32_t> time_sync_buffer(8, 0);
 
-            int64_t startTime = tracy::get_cpu_time();
+            int64_t hostStartTime = tracy::get_cpu_time();
             constexpr uint16_t sampleCount = 250;
             int64_t writeSum = 0;
 
@@ -86,7 +86,7 @@ void InitDeviceProfiler(Device *device){
                 ZoneScopedN("4MS_LOOP");
                 std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
                 int64_t writeStart = tracy::get_cpu_time();
-                uint32_t sinceStart = writeStart - startTime;
+                uint32_t sinceStart = writeStart - hostStartTime;
                 time_sync_buffer[0] = sinceStart;
                 tt::llrt::write_hex_vec_to_core(
                         device_id,
@@ -111,47 +111,69 @@ void InitDeviceProfiler(Device *device){
             double frequencyMin = 5000;
             double frequencyMax = 0;
 
-            uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[2];
+            uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[1];
+            uint32_t deviceStartTime_H = sync_times[0] & 0xFFF;
+            uint32_t deviceStartTime_L = sync_times[1];
+            preDeviceTime = deviceStartTime_L;
 
+            uint32_t hostStartTime_H = 0;
+
+            uint64_t preDeviceTimeLarge = 0;
+            uint64_t preHostTimeLarge = 0;
+            uint64_t firstDeviceTimeLarge = 0;
+            uint64_t firstHostTimeLarge = 0;
             for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
             {
-                double deviceDelta = sync_times[i] - preDeviceTime;
-                if (preDeviceTime > sync_times[i]) deviceDelta += (1LL << 32);
 
-                double hostTime = sync_times[i + 1] + writeOverhead;
-                double hostDelta = (hostTime - preHostTime) * tracyToSecRatio;
+                uint32_t deviceTime = sync_times[i];
+                if (deviceTime < preDeviceTime) deviceStartTime_H ++;
+                preDeviceTime = deviceTime;
+                uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
 
-                preDeviceTime = sync_times[i];
+                uint32_t hostTime = sync_times[i + 1];
+                if (hostTime < preHostTime) hostStartTime_H ++;
                 preHostTime = hostTime;
+                uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
+
                 if (frequency)
                 {
-                    frequency = deviceDelta / hostDelta;
+                    frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
                     if (frequency < frequencyMin ) frequencyMin = frequency;
                     if (frequency > frequencyMax) frequencyMax = frequency;
                     frequencySum += frequency;
                 }
                 else
                 {
-                    frequency = deviceDelta / hostDelta;
+                    frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
+                    firstDeviceTimeLarge = deviceTimeLarge;
+                    firstHostTimeLarge = hostTimeLarge;
                 }
+
+                preDeviceTimeLarge = deviceTimeLarge;
+                preHostTimeLarge = hostTimeLarge;
+
                 std::cout << fmt::format(
-                        "{},{},{},{},{},{}",
+                        "{},{},{},{},{}",
                         i/2,
-                        sync_times[i],
-                        sync_times[i + 1] * tracyToSecRatio,
-                        hostDelta,
-                        writeOverhead * tracyToSecRatio,
+                        deviceTimeLarge,
+                        hostTimeLarge,
+                        hostTimeLarge * tracyToSecRatio,
                         frequency)
                     << std::endl;
             }
 
-            double frequencyFirstLast = (double)(sync_times[248] - sync_times[2]) / ((double)(sync_times[249] - sync_times[3]) * tracyToSecRatio);
-            tracy::set_sync_info(startTime + sync_times[3] + writeOverhead, deviceStartTime, frequencyFirstLast);
 
-            std::cout << fmt::format("Average freq = {}", frequencySum / (double)(sampleCount - 1.0) ) << std::endl;
+            double frequencyFirstLast = (double)(preDeviceTimeLarge - firstDeviceTimeLarge) / ((double)(preHostTimeLarge - firstHostTimeLarge) * tracyToSecRatio);
+            double frequencyAvg = frequencySum / (double)(sampleCount - 1.0);
+
+            tracy::set_sync_info(hostStartTime + firstHostTimeLarge + writeOverhead, firstDeviceTimeLarge, (double)(sampleCount - 1.0)/ frequencySum);
+
+            std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
             std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
             std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
             std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
+            std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, firstHostTimeLarge, writeOverhead) << std::endl;
+            std::cout << fmt::format("Device time = {}", firstDeviceTimeLarge) << std::endl;
 
         }
 
