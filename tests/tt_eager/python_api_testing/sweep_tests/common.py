@@ -637,13 +637,15 @@ def shapes_and_datagen(shape_dict, datagen_dict, test_args_gen, test_tt_dtypes, 
             ):
                 yield shapes, datagen_funcs, test_args
         elif method == "ttnn-layernorm":
-            assert len(start_shape) == 2
-            assert len(end_shape) == 2
 
             def _gen_ttnn_layernorm_shapes(shape):
-                input_shape = [shape[0], shape[1]]
-                weights_shape = [shape[1]]
-                bias_shape = [shape[1]]
+                dims = len(shape)
+                input_shape = shape
+                weights_shape = []
+                bias_shape = []
+
+                weights_shape.append(shape[dims - 1])
+                bias_shape = weights_shape
 
                 return [input_shape, weights_shape, bias_shape]
 

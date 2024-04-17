@@ -25,4 +25,4 @@ test-list:
         data-type: ["BFLOAT16"]
         buffer-type: ["DRAM", "L1"]
         out-buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
-      output-file: gorupnorm_noweights_sweep.csv
+      output-file: groupnorm_noweights_sweep.csv
