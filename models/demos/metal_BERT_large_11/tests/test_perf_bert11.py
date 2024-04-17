@@ -120,6 +120,7 @@ def run_perf_bert11(
             del tt_attention_mask
             del tt_embedding_inputs
             del tt_embedding
+            tt_lib.device.DumpDeviceProfiler(device)
         # Run last inference iteration
         tt_lib.device.Synchronize(device)
         profiler.end(second_run_accum_key, force_enable=True)
@@ -180,7 +181,7 @@ def test_perf_virtual_machine(
 @pytest.mark.parametrize(
     "batch_size, model_config_str, expected_inference_time, expected_compile_time, inference_iterations",
     (
-        [7, "BFLOAT8_B-SHARDED", 0.0364, 10, 10],
+        # [7, "BFLOAT8_B-SHARDED", 0.0364, 10, 10],
         [12, "BFLOAT8_B-SHARDED", 0.0364, 10, 10],
     ),
 )

@@ -89,11 +89,13 @@ void InitDeviceProfiler(Device *device){
                 int64_t writeStart = tracy::get_cpu_time();
                 uint32_t sinceStart = writeStart - hostStartTime;
                 time_sync_buffer[0] = sinceStart;
-                tt::llrt::write_hex_vec_to_core(
-                        device_id,
-                        {1,1},
-                        time_sync_buffer,
-                        PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
+                tt::Cluster::instance().write_reg(&sinceStart, tt_cxy_pair(device_id, {1,1}) , PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
+
+                //tt::llrt::write_hex_vec_to_core(
+                        //device_id,
+                        //{1,1},
+                        //time_sync_buffer,
+                        //PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
                 writeSum += (tracy::get_cpu_time() - writeStart);
             }
 

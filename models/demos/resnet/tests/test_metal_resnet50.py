@@ -185,7 +185,9 @@ def test_run_resnet50_inference(
 
         torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
         tt_image = tt_resnet50.preprocessing(image)
-        tt_output = tt_resnet50(tt_image)
+        for _ in range(15):
+            tt_output = tt_resnet50(tt_image)
+            tt_lib.device.DumpDeviceProfiler(device)
         tt_output = tt_output.cpu().to_torch().to(torch.float)
 
         # # run again to measure end to end perf
