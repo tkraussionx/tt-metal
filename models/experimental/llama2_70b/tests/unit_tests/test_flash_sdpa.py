@@ -184,13 +184,13 @@ def fa2_fake(q, k, v, attn_mask):
                     cb_cur_max = torch.maximum(cb_prev_max, cb_cur_max)
                     cb_qk_im -= cb_cur_max
                     cb_qk_im = torch.exp(cb_qk_im)
-                    # cb_cur_sum = torch.sum(cb_qk_im, dim=-1, keepdim=True)
+                    cb_cur_sum = torch.sum(cb_qk_im, dim=-1, keepdim=True)
 
                     cb_exp_max_diff = cb_prev_max - cb_cur_max
                     cb_exp_max_diff = torch.exp(cb_exp_max_diff)
 
-                    # cb_prev_sum *= cb_exp_max_diff
-                    # cb_cur_sum += cb_prev_sum
+                    cb_prev_sum *= cb_exp_max_diff
+                    cb_cur_sum += cb_prev_sum
 
                     cb_out_im = torch.matmul(cb_qk_im, cb_v_in)
 
@@ -201,12 +201,12 @@ def fa2_fake(q, k, v, attn_mask):
                         cb_out_accumulate_im *= cb_exp_max_diff
                         cb_out_accumulate_im += cb_out_im
 
-                    # cb_prev_sum = cb_cur_sum
+                    cb_prev_sum = cb_cur_sum
                     cb_prev_max = cb_cur_max
 
                 # 12
-                # cb_cur_sum = 1.0 / cb_cur_sum
-                # cb_out_accumulate_im *= cb_cur_sum
+                cb_cur_sum = 1.0 / cb_cur_sum
+                cb_out_accumulate_im *= cb_cur_sum
                 out[b, h, q_c * chunk_size : (q_c + 1) * chunk_size] = cb_out_accumulate_im
 
     return out
@@ -235,10 +235,10 @@ def run_test_sdpa_tt(device):
     Q = torch.randn(b, nh, s, d)
     K = torch.randn(b, nkv, s, d)
     V = torch.randn(b, nkv, s, d)
-    # attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
-    # attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
+    attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
+    attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
     # FOR DEBUG, don't use neginf
-    attn_mask = torch.randn((b, nh, s, s))
+    # attn_mask = torch.randn((b, nh, s, s))
 
     # Print shapes of all inputs along with input names
     print(f"Q: {Q.shape}")
@@ -247,12 +247,13 @@ def run_test_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     # is_causal must be false if we specify an attention_mask
-    gt = fa2_fake(
-        Q,
-        K,
-        V,
-        attn_mask,
-    )
+    # gt = fa2_fake(
+    #     Q,
+    #     K,
+    #     V,
+    #     attn_mask,
+    # )
+    gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
     mine = tt_fa2(device, Q, K, V, attn_mask)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
     print(f"python vs pytorch: {out_pcc}")
@@ -365,9 +366,10 @@ def run_stress_sdpa_tt(device):
     print(f"V: {V.shape}")
     print(f"attn_mask: {attn_mask.shape}")
 
+    gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask)
+
     for i in range(1000):
         print(f"Iteration {i}")
-        gt = fa2_fake(Q, K, V, attn_mask)
         mine = tt_fa2(device, Q, K, V, attn_mask)
         out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
         print(f"python vs pytorch: {out_pcc}")

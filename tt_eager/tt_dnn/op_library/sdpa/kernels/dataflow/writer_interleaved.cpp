@@ -4,7 +4,7 @@
 
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t out_addr  = get_arg_val<uint32_t>(0);

@@ -7,7 +7,7 @@
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t q_addr  = get_arg_val<uint32_t>(0);
@@ -25,7 +25,7 @@ void kernel_main() {
 
     constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
 
-    DPRINT << "READER: scale_val: " << scale_val << ENDL();
+    // DPRINT << "READER: scale_val: " << scale_val << ENDL();
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
