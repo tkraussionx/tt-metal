@@ -4,8 +4,8 @@
 
 #include <cstdint>
 
-#define REDUCE_OP (PoolType::MAX)
-#define REDUCE_DIM (ReduceDim::REDUCE_ROW)
+// #define REDUCE_OP (PoolType::MAX)
+// #define REDUCE_DIM (ReduceDim::REDUCE_ROW)
 
 #include "compute_kernel_api.h"
 #include "compute_kernel_api/eltwise_binary.h"
@@ -56,7 +56,7 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     // UNPACK( DPRINT << "COMPUTE: out_cb rd ptr=" << cb_interface[out_cb].fifo_rd_ptr << ENDL() );
     // PACK( DPRINT << "COMPUTE: out_cb wr ptr=" << cb_interface[out_cb].fifo_wr_ptr << ENDL() );
 
-    reduce_init_delta<false>(REDUCE_OP, REDUCE_DIM, in0_cb, scale_cb, out_cb);
+    reduce_init_delta<false, PoolType::MAX, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
 
     // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
 
@@ -69,7 +69,7 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
         acquire_dst(tt::DstMode::Half);
         for (uint32_t j = 0; j < cols; j++) {
             cb_wait_front(in0_cb, 1);
-            reduce_tile(REDUCE_OP, REDUCE_DIM, in0_cb, scale_cb, 0, 0, reduce_dst_idx);
+            reduce_tile<PoolType::MAX, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, 0, 0, reduce_dst_idx);
             cb_pop_front(in0_cb, 1);
         }
 
@@ -81,7 +81,7 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
         release_dst(tt::DstMode::Half);
     }
 
-   reduce_revert_delta(out_cb);
+   reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
 
     // #undef REDUCE_OP
 }
