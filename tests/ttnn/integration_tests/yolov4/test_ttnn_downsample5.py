@@ -104,8 +104,7 @@ def create_custom_preprocessor(device):
 
 
 @skip_for_wormhole_b0()
-def test_downsample5(reset_seeds):
-    device = ttnn.open_device(device_id=2)
+def test_downsample5(device, reset_seeds):
     state_dict = torch.load("tests/ttnn/integration_tests/yolov4/yolov4.pth")
     ds_state_dict = {k: v for k, v in state_dict.items() if (k.startswith("down5."))}
 
@@ -155,5 +154,4 @@ def test_downsample5(reset_seeds):
     output_tensor = output_tensor.reshape(1, 10, 10, 1024)
     output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))
     output_tensor = output_tensor.to(torch_input_tensor.dtype)
-    ttnn.close_device(device)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.99)
