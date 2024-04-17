@@ -100,7 +100,7 @@ class TtMoeLayer(torch.nn.Module):
                 :, :, i, range(i, self.args.max_batch_size * len(self.devices), self.args.max_batch_size)
             ] = 1
         self.reduce_mask = [
-            ttnn.from_torch(reduce_mask_torch, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+            ttnn.from_torch(reduce_mask_torch, device=device, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
             for device in self.devices
         ]
 
@@ -140,6 +140,9 @@ class TtMoeLayer(torch.nn.Module):
 
             # MLP and masking
             results_11BH = expert_i_HH(input_i_1SBH) * weights_1SB1
+
+            # convert to bfp8
+            results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
 
             output_11BH.append(results_11BH)
 
