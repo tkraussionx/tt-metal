@@ -8,6 +8,7 @@ import tt_lib
 from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import (
     data_gen_with_range,
     compare_pcc,
+    data_gen_with_range_float,
     data_gen_with_val,
 )
 from loguru import logger
@@ -24,9 +25,9 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
         (torch.Size([1, 3, 320, 384])),
     ),
 )
-def test_bw_remainder(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 100, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, -80, 80, device)
+def test_bw_remainder_float(input_shapes, device):
+    in_data, input_tensor = data_gen_with_range_float(input_shapes, 50, 100, device, True)
+    grad_data, grad_tensor = data_gen_with_range_float(input_shapes, 10, 30, device)
     print(in_data)
     print(grad_data)
 

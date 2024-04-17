@@ -24,14 +24,15 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
         (torch.Size([1, 3, 320, 384])),
     ),
 )
-def test_bw_abs(input_shapes, device):
-    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=0.5)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, 1, 100, device)
-    print(input_tensor)
+def test_bw_remainder(input_shapes, device):
+    in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
+    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 30, device)
+    print(in_data)
+    print(grad_data)
 
-    golden_tensor = torch.floor(in_data)
+    golden_tensor = torch.remainder(in_data, grad_data)
 
-    tt_output_tensor_on_device = tt_lib.tensor.tanhshrink(input_tensor)
+    tt_output_tensor_on_device = tt_lib.tensor.atan2(input_tensor, grad_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
 
     comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
@@ -41,5 +42,19 @@ def test_bw_abs(input_shapes, device):
     print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
+    diff = torch.abs(golden_tensor - tt_out_tensor)
+    max_diff = torch.max(diff)
+
+    if max_diff > 0:
+        print("Inputs for which the outputs differ by more than 0:")
+        indices = torch.nonzero(diff > 0)
+        for idx in indices:
+            input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
+            input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
+            expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
+            actual_output_val = tt_out_tensor[idx[0], idx[1], idx[2], idx[3]]
+            print(
+                f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
+            )
 
     assert comp_pass
