@@ -4,13 +4,58 @@
 
 #include <cstdint>
 
+#define REDUCE_OP (PoolType::MAX)
+#define REDUCE_DIM (ReduceDim::REDUCE_ROW)
+
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/bcast.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include "compute_kernel_api/reduce.h"
 #include "debug/dprint.h"
 
+
+
 namespace NAMESPACE {
+
+void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
+
+    // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
+    // Precondition: scale_cb has 1 produced
+    // Postcondition: in0_cb has rows produced
+    // Postcondition: in0_cb has rows*cols consumed
+
+    // Check out_cb pointers
+    // UNPACK( DPRINT << "COMPUTE: out_cb rd ptr=" << cb_interface[out_cb].fifo_rd_ptr << ENDL() );
+    // PACK( DPRINT << "COMPUTE: out_cb wr ptr=" << cb_interface[out_cb].fifo_wr_ptr << ENDL() );
+
+    reduce_init<true>(REDUCE_OP, REDUCE_DIM, in0_cb, scale_cb, out_cb);
+    cb_wait_front(scale_cb, 1);
+    cb_wait_front(in0_cb, rows * cols);
+
+    constexpr uint32_t reduce_dst_idx = 0;
+
+    for (uint32_t i = 0; i < rows; i++) {
+        acquire_dst(tt::DstMode::Half);
+        for (uint32_t j = 0; j < cols; j++) {
+            PACK(DPRINT << "COMPUTE: REDUCE_MAX_C i: " << i << " j: " << j << ENDL());
+            cb_wait_front(in0_cb, 1);
+            reduce_tile(REDUCE_OP, REDUCE_DIM, in0_cb, scale_cb, 0, 0, reduce_dst_idx);
+            cb_pop_front(in0_cb, 1);
+        }
+        // PACK(DPRINT << "COMPUTE: REDUCE_MAX_C reserve_back i: " << i << " j: " << cols << ENDL());
+        PACK(DPRINT << "COMPUTE: got here 0: " << ENDL());
+        // PACK( DPRINT << "COMPUTE: out_cb wr ptr=" << cb_interface[out_cb].fifo_wr_ptr << ENDL() );
+        cb_reserve_back(out_cb, 1);
+        // PACK(DPRINT << "COMPUTE: got here 1: " << ENDL());
+        pack_tile(reduce_dst_idx, out_cb);
+        cb_push_back(out_cb, 1);
+        // PACK(DPRINT << "COMPUTE: got here 2: " << ENDL());
+        release_dst(tt::DstMode::Half);
+    }
+
+    // #undef REDUCE_OP
+}
 
 void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
     // Precondition: in0_cb has num_tiles produced
@@ -22,14 +67,14 @@ void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uin
     cb_wait_front(in1_scalar_cb, 1);
     mul_tiles_bcast_scalar_init_short();
     for (uint32_t i = 0; i < num_tiles; ++i) {
-        PACK(DPRINT << "COMPUTE: MUL_BCAST i: " << i << ENDL());
+        // PACK(DPRINT << "COMPUTE: MUL_BCAST i: " << i << ENDL());
         acquire_dst(tt::DstMode::Half);
         // cb_wait_front(in0_cb, 1);
-        PACK(DPRINT << "COMPUTE: MUL_BCAST wait_front i: " << i << ENDL());
+        // PACK(DPRINT << "COMPUTE: MUL_BCAST wait_front i: " << i << ENDL());
         mul_tiles_bcast_scalar(in0_cb, in1_scalar_cb, 0, 0, 0);
         cb_pop_front(in0_cb, 1);
         // cb_reserve_back(in0_cb, 1);
-        PACK(DPRINT << "COMPUTE: MUL_BCAST reserve_back i: " << i << ENDL());
+        // PACK(DPRINT << "COMPUTE: MUL_BCAST reserve_back i: " << i << ENDL());
         pack_tile(0, in0_cb);
         cb_push_back(in0_cb, 1);
         release_dst(tt::DstMode::Half);
@@ -89,7 +134,7 @@ void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M
     uint32_t out_subblock_num_tiles = subblock_h * subblock_w;
 
     for (uint32_t block = 0; block < num_blocks; ++block) {
-        PACK(DPRINT << "COMPUTE: "  << "block=" << block << ENDL());
+        // PACK(DPRINT << "COMPUTE: "  << "block=" << block << ENDL());
 
         for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; ++in0_subblock) {
             // PACK(DPRINT << "COMPUTE: "  << "in0_subblock=" << in0_subblock << ENDL());
@@ -154,7 +199,7 @@ void MAIN {
     uint32_t num_chunks    = get_arg_val<uint32_t>(6);
 
     // PACK(DPRINT all the above variables
-    // PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
+    PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
     // PACK(DPRINT << "COMPUTE: NQH=" << NQH << ENDL());
     // PACK(DPRINT << "COMPUTE: NKH=" << NKH << ENDL());
     // PACK(DPRINT << "COMPUTE: St=" << St << ENDL());
@@ -165,6 +210,7 @@ void MAIN {
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
+    // mask_chunk_tiles = qk_chunk_tiles
     const uint32_t qk_chunk_tiles = S_chunk_t * S_chunk_t;
     const uint32_t out_chunk_tiles = S_chunk_t * DHt;
 
@@ -193,26 +239,33 @@ void MAIN {
     constexpr uint32_t cb_v_in = tt::CB::c_in2;
     constexpr uint32_t cb_mask_in = tt::CB::c_in3;
     constexpr uint32_t cb_scale_in = tt::CB::c_in4;
+    constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
 
     constexpr uint32_t cb_qk_im = tt::CB::c_intermed0;
     constexpr uint32_t cb_out_im = tt::CB::c_intermed1;
     constexpr uint32_t cb_out_accumulate_im = tt::CB::c_intermed2;
+    constexpr uint32_t cb_cur_max = tt::CB::c_intermed3;
+    constexpr uint32_t cb_prev_max = tt::CB::c_intermed4;
+    constexpr uint32_t cb_cur_sum = tt::CB::c_intermed5;
+    constexpr uint32_t cb_prev_sum = tt::CB::c_intermed6;
+    constexpr uint32_t cb_exp_max_diff = tt::CB::c_intermed7;
+
     constexpr uint32_t cb_out = tt::CB::c_out0;
 
 
     mm_init();
 
     for (uint32_t nb = 0; nb < B; ++nb) {
-        PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
+        // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
+            // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
-                PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
+                // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);
 
                 for (uint32_t k_chunk = 0; k_chunk < num_chunks; ++k_chunk) {
-                    PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
+                    // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
 
                     /* QK = Q_CHUNK @ K_CHUNK */
                     cb_wait_front(cb_k_in, k_chunk_tiles);
@@ -222,7 +275,18 @@ void MAIN {
                     /* QK *= SCALE */
                     cb_push_back(cb_qk_im, qk_chunk_tiles);
                     mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
+                    cb_pop_front(cb_qk_im, qk_chunk_tiles); // TODO: Fold into following push_back
+
+                    /* QK += MASK */
+                    cb_push_back(cb_qk_im, qk_chunk_tiles);
+                    add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
+
+                    // PACK(DPRINT << "COMPUTE: got to reduce_max_c" << ENDL());
+                    // /* cb_cur_max = max(QK, dim=-1)*/
+                    // reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, S_chunk_t, S_chunk_t);
+                    // // clear cur_max
+                    // cb_pop_front(cb_cur_max, S_chunk_t);
 
                     /* OUT_IM = QK @ V_CHUNK */
                     cb_wait_front(cb_v_in, k_chunk_tiles);
