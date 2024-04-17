@@ -54,17 +54,17 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const auto k_shape = input_tensor_k.get_legacy_shape();
     uint32_t NKH = k_shape[1];
 
-    // log_debug all of the above
-    log_debug("B: {}", B);
-    log_debug("NQH: {}", NQH);
+    // log_info all of the above
+    log_info("B: {}", B);
+    log_info("NQH: {}", NQH);
 
-    log_debug("S: {}", S);
-    log_debug("DH: {}", DH);
-    log_debug("St: {}", St);
-    log_debug("DHt: {}", DHt);
-    log_debug("S_chunk_t: {}", S_chunk_t);
-    log_debug("num_chunks: {}", num_chunks);
-    log_debug("NKH: {}", NKH);
+    log_info("S: {}", S);
+    log_info("DH: {}", DH);
+    log_info("St: {}", St);
+    log_info("DHt: {}", DHt);
+    log_info("S_chunk_t: {}", S_chunk_t);
+    log_info("num_chunks: {}", num_chunks);
+    log_info("NKH: {}", NKH);
 
 
     Program program = CreateProgram();
@@ -111,13 +111,13 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     tt::DataFormat im_cb_data_format = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
     uint32_t im_tile_size = tt_metal::detail::TileSize(im_cb_data_format);
 
-    log_debug("in0_cb_data_format: {}", input_data_format);
-    log_debug("out0_cb_data_format: {}", out0_cb_data_format);
-    log_debug("mask_cb_data_format: {}", mask_cb_data_format);
-    log_debug("im_cb_data_format: {}", im_cb_data_format);
-    log_debug("math_fidelity: {}", math_fidelity);
-    log_debug("math_approx_mode: {}", math_approx_mode);
-    log_debug("fp32_dest_acc_en: {}", fp32_dest_acc_en);
+    log_info("in0_cb_data_format: {}", input_data_format);
+    log_info("out0_cb_data_format: {}", out0_cb_data_format);
+    log_info("mask_cb_data_format: {}", mask_cb_data_format);
+    log_info("im_cb_data_format: {}", im_cb_data_format);
+    log_info("math_fidelity: {}", math_fidelity);
+    log_info("math_approx_mode: {}", math_approx_mode);
+    log_info("fp32_dest_acc_en: {}", fp32_dest_acc_en);
 
     auto q_buffer = input_tensor_q.buffer();
     auto k_buffer = input_tensor_k.buffer();
@@ -140,12 +140,12 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t statistics_tiles = S_chunk_t; // Single column of values in each iteration
 
     // log all values
-    log_debug("q_tiles: {}", q_tiles);
-    log_debug("k_tiles: {}", k_tiles);
-    log_debug("v_tiles: {}", v_tiles);
-    log_debug("mask_tiles: {}", mask_tiles);
-    log_debug("qk_tiles: {}", qk_tiles);
-    log_debug("out0_t: {}", out0_t);
+    log_info("q_tiles: {}", q_tiles);
+    log_info("k_tiles: {}", k_tiles);
+    log_info("v_tiles: {}", v_tiles);
+    log_info("mask_tiles: {}", mask_tiles);
+    log_info("qk_tiles: {}", qk_tiles);
+    log_info("out0_t: {}", out0_t);
 
 
     const uint32_t qk_in0_block_w = 1;
