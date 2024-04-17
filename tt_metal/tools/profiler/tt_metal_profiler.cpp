@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <thread>
+#include <cmath>
 
 #include "tt_metal/host_api.hpp"
 #include "impl/debug/dprint_server.hpp"
@@ -71,7 +72,6 @@ void InitDeviceProfiler(Device *device){
         {
             std::vector<uint32_t> time_sync_buffer(8, 0);
 
-            int64_t hostStartTime = tracy::get_cpu_time();
             constexpr uint16_t sampleCount = 250;
             int64_t writeSum = 0;
 
@@ -81,6 +81,7 @@ void InitDeviceProfiler(Device *device){
             {
                 millisecond_wait = std::stoi(FREQ);
             }
+            int64_t hostStartTime = tracy::get_cpu_time();
             for (int i = 0; i < sampleCount; i++)
             {
                 ZoneScopedN("4MS_LOOP");
@@ -122,6 +123,8 @@ void InitDeviceProfiler(Device *device){
             uint64_t preHostTimeLarge = 0;
             uint64_t firstDeviceTimeLarge = 0;
             uint64_t firstHostTimeLarge = 0;
+
+            std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
             for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
             {
 
@@ -134,6 +137,8 @@ void InitDeviceProfiler(Device *device){
                 if (hostTime < preHostTime) hostStartTime_H ++;
                 preHostTime = hostTime;
                 uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
+
+                deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
 
                 if (frequency)
                 {
@@ -151,29 +156,67 @@ void InitDeviceProfiler(Device *device){
 
                 preDeviceTimeLarge = deviceTimeLarge;
                 preHostTimeLarge = hostTimeLarge;
-
-                std::cout << fmt::format(
-                        "{},{},{},{},{}",
-                        i/2,
-                        deviceTimeLarge,
-                        hostTimeLarge,
-                        hostTimeLarge * tracyToSecRatio,
-                        frequency)
-                    << std::endl;
             }
-
 
             double frequencyFirstLast = (double)(preDeviceTimeLarge - firstDeviceTimeLarge) / ((double)(preHostTimeLarge - firstHostTimeLarge) * tracyToSecRatio);
             double frequencyAvg = frequencySum / (double)(sampleCount - 1.0);
 
-            tracy::set_sync_info(hostStartTime + firstHostTimeLarge + writeOverhead, firstDeviceTimeLarge, (double)(sampleCount - 1.0)/ frequencySum);
+            double hostSum = 0.0;
+            double deviceSum = 0.0;
+            double hostSquaredSum = 0.0;
+            double hostDeviceProductSum = 0.0;
+
+            for (auto& deviceHostTime : deviceHostTimePair)
+            {
+                double deviceTime = deviceHostTime.first;
+                double hostTime = ((double) deviceHostTime.second + writeOverhead) * tracyToSecRatio;
+
+                deviceSum += deviceTime;
+                hostSum += hostTime;
+                hostSquaredSum += (hostTime * hostTime);
+                hostDeviceProductSum += (hostTime * deviceTime);
+
+            }
+            double deviceTimeMean = deviceSum / sampleCount;
+            double hostTimeMean = hostSum / sampleCount;
+
+            double frequencyFit = (hostDeviceProductSum - hostSum * deviceTimeMean) / (hostSquaredSum - hostSum * hostTimeMean);
+
+            double delay = deviceTimeMean - frequencyFit * hostTimeMean;
+
+
+            for (auto& deviceHostTime : deviceHostTimePair)
+            {
+                double scaledDeviceTime1 = (double)deviceHostTime.first / frequencyAvg;
+                double scaledDeviceTime2 = (double)deviceHostTime.first / frequencyFirstLast;
+                double scaledDeviceTime3 = (double)deviceHostTime.first / frequencyMin;
+                double scaledDeviceTime4 = (double)deviceHostTime.first / frequencyMax;
+                double scaledDeviceTime5 = (double)deviceHostTime.first / frequencyFit;
+                double diff1 = scaledDeviceTime1 - deviceHostTime.second * tracyToSecRatio;
+                double diff2 = scaledDeviceTime2 - deviceHostTime.second * tracyToSecRatio;
+                double diff3 = scaledDeviceTime3 - deviceHostTime.second * tracyToSecRatio;
+                double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
+                double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
+                std::cout << fmt::format(
+                        "{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
+                        deviceHostTime.first,
+                        deviceHostTime.second,
+                        diff1,
+                        diff2,
+                        diff3,
+                        diff4,
+                        diff5)
+                    << std::endl;
+            }
+
+            tracy::set_sync_info(hostStartTime, round(delay), 1/frequencyFit);
 
             std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
             std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
             std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
             std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
-            std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, firstHostTimeLarge, writeOverhead) << std::endl;
-            std::cout << fmt::format("Device time = {}", firstDeviceTimeLarge) << std::endl;
+            std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
+            std::cout << fmt::format("Device time = {}", delay) << std::endl;
 
         }
 
