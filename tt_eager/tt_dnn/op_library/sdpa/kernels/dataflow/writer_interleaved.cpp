@@ -14,6 +14,8 @@ void kernel_main() {
     uint32_t DHt      = get_arg_val<uint32_t>(4);
     uint32_t S_chunk_t    = get_arg_val<uint32_t>(5);
     uint32_t num_chunks    = get_arg_val<uint32_t>(6);
+    uint32_t core_id    = get_arg_val<uint32_t>(7);
+    uint32_t num_cores    = get_arg_val<uint32_t>(8);
 
     const uint32_t out_chunk_tiles = S_chunk_t * DHt;
 
@@ -34,6 +36,10 @@ void kernel_main() {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = 0; nq < NQH; ++nq) {
+            if (nq != core_id) {
+                continue;
+            }
+            out_tile_id = nq * St * DHt;
             // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
                 // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();

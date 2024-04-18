@@ -167,7 +167,11 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     auto grid_size = device->compute_with_storage_grid_size();
     // auto all_device_cores = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
-    auto single_core = CoreCoord({0, 0});
+    // auto single_core = CoreCoord({0, 0});
+
+    // start with 8 cores for Q heads
+    auto core_grid = CoreRange({0, 0}, {7, 0});
+    uint32_t num_cores = 8;
 
 
     // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
@@ -186,20 +190,20 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     std::map<string, string> defines;
 
     auto reader_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", single_core,
+        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
         tt_metal::ReaderDataMovementConfig(
             reader_compile_time_args,
             defines
     ));
 
     auto writer_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp", single_core,
+        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp", core_grid,
         tt_metal::WriterDataMovementConfig(
             writer_compile_time_args
     ));
 
     auto compute_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp", single_core,
+        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp", core_grid,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
             .compile_args = {},
@@ -209,61 +213,61 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // Create circular buffers
     // Q input
     auto c_in0_config = CircularBufferConfig(q_tiles * input_tile_size, {{CB::c_in0, input_data_format}}).set_page_size(CB::c_in0, input_tile_size);
-    auto cb_in0_id = CreateCircularBuffer(program, single_core, c_in0_config);
+    auto cb_in0_id = CreateCircularBuffer(program, core_grid, c_in0_config);
     // K input
     auto c_in1_config = CircularBufferConfig(k_tiles * input_tile_size, {{CB::c_in1, input_data_format}}).set_page_size(CB::c_in1, input_tile_size);
-    auto cb_in1_id = CreateCircularBuffer(program, single_core, c_in1_config);
+    auto cb_in1_id = CreateCircularBuffer(program, core_grid, c_in1_config);
     // V input
     auto c_in2_config = CircularBufferConfig(v_tiles * input_tile_size, {{CB::c_in2, input_data_format}}).set_page_size(CB::c_in2, input_tile_size);
-    auto cb_in2_id = CreateCircularBuffer(program, single_core, c_in2_config);
+    auto cb_in2_id = CreateCircularBuffer(program, core_grid, c_in2_config);
 
     // attn_mask input
     auto c_in3_config = CircularBufferConfig(mask_tiles * input_tile_size, {{CB::c_in3, input_data_format}}).set_page_size(CB::c_in3, input_tile_size);
-    auto cb_in3_id = CreateCircularBuffer(program, single_core, c_in3_config);
+    auto cb_in3_id = CreateCircularBuffer(program, core_grid, c_in3_config);
 
     // scale input
     auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, input_data_format}}).set_page_size(CB::c_in4, input_tile_size);
-    auto cb_in4_id = CreateCircularBuffer(program, single_core, c_in4_config);
+    auto cb_in4_id = CreateCircularBuffer(program, core_grid, c_in4_config);
 
     // identity scale input
     auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, input_data_format}}).set_page_size(CB::c_in5, input_tile_size);
-    auto cb_in5_id = CreateCircularBuffer(program, single_core, c_in5_config);
+    auto cb_in5_id = CreateCircularBuffer(program, core_grid, c_in5_config);
 
     // cb_qk_im
     auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_cb_data_format}}).set_page_size(CB::c_intermed0, im_tile_size);
-    auto cb_intermed0_id = CreateCircularBuffer(program, single_core, c_intermed0_config);
+    auto cb_intermed0_id = CreateCircularBuffer(program, core_grid, c_intermed0_config);
 
     // cb_out_im
     auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
-    auto cb_intermed1_id = CreateCircularBuffer(program, single_core, c_intermed1_config);
+    auto cb_intermed1_id = CreateCircularBuffer(program, core_grid, c_intermed1_config);
 
     // cb_out_accumulate_im
     auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_cb_data_format}}).set_page_size(CB::c_intermed2, im_tile_size);
-    auto cb_intermed2_id = CreateCircularBuffer(program, single_core, c_intermed2_config);
+    auto cb_intermed2_id = CreateCircularBuffer(program, core_grid, c_intermed2_config);
 
     // cb_cur_max
     auto c_intermed3_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed3, input_data_format}}).set_page_size(CB::c_intermed3, input_tile_size);
-    auto cb_intermed3_id = CreateCircularBuffer(program, single_core, c_intermed3_config);
+    auto cb_intermed3_id = CreateCircularBuffer(program, core_grid, c_intermed3_config);
 
     // cb_prev_max
     auto c_intermed4_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed4, input_data_format}}).set_page_size(CB::c_intermed4, input_tile_size);
-    auto cb_intermed4_id = CreateCircularBuffer(program, single_core, c_intermed4_config);
+    auto cb_intermed4_id = CreateCircularBuffer(program, core_grid, c_intermed4_config);
 
     // cb_cur_sum
     auto c_intermed5_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed5, input_data_format}}).set_page_size(CB::c_intermed5, input_tile_size);
-    auto cb_intermed5_id = CreateCircularBuffer(program, single_core, c_intermed5_config);
+    auto cb_intermed5_id = CreateCircularBuffer(program, core_grid, c_intermed5_config);
 
     // cb_prev_sum
     auto c_intermed6_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed6, input_data_format}}).set_page_size(CB::c_intermed6, input_tile_size);
-    auto cb_intermed6_id = CreateCircularBuffer(program, single_core, c_intermed6_config);
+    auto cb_intermed6_id = CreateCircularBuffer(program, core_grid, c_intermed6_config);
 
     // cb_exp_max_diff
     auto c_intermed7_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed7, input_data_format}}).set_page_size(CB::c_intermed7, input_tile_size);
-    auto cb_intermed7_id = CreateCircularBuffer(program, single_core, c_intermed7_config);
+    auto cb_intermed7_id = CreateCircularBuffer(program, core_grid, c_intermed7_config);
 
     // Output
     auto c_out0_config = CircularBufferConfig(out0_t * out0_tile_size, {{CB::c_out0, out0_cb_data_format}}).set_page_size(CB::c_out0, out0_tile_size);
-    auto cb_out0_id = CreateCircularBuffer( program, single_core, c_out0_config );
+    auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
 
     // auto c_intermed1_config = CircularBufferConfig(im1_t * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
     // auto cb_intermed1_id = CreateCircularBuffer( program, all_device_cores, c_intermed1_config );
@@ -290,9 +294,13 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
 
     // Set reader rt args
-    SetRuntimeArgs(program, reader_kernels_id, single_core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u });
-    SetRuntimeArgs(program, writer_kernels_id, single_core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks });
-    SetRuntimeArgs(program, compute_kernels_id, single_core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks });
+    for (uint32_t i = 0; i < num_cores; ++i) {
+        CoreCoord core = {i % grid_size.x, i / grid_size.x};
+
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u, i, num_cores });
+        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
+        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
+    }
 
     // uint32_t curr_row = 0;
     // union { float f; uint32_t u; } s; s.f = scale.value_or(1.0f); // scale for fused scale-mask-softmax

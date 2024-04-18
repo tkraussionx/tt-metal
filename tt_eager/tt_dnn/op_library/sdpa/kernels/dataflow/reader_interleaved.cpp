@@ -22,6 +22,8 @@ void kernel_main() {
     uint32_t S_chunk_t    = get_arg_val<uint32_t>(9);
     uint32_t num_chunks    = get_arg_val<uint32_t>(10);
     uint32_t scale_val    = get_arg_val<uint32_t>(11);
+    uint32_t core_id    = get_arg_val<uint32_t>(12);
+    uint32_t num_cores    = get_arg_val<uint32_t>(13);
 
     constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
 
@@ -87,6 +89,10 @@ void kernel_main() {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // DPRINT << "READER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = 0; nq < NQH; ++nq) {
+            if (nq != core_id) {
+                continue;
+            }
+            q_tile_id = nq * St * DHt;
             // DPRINT << "READER: "  << "nq=" << nq << ENDL();
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
                 // DPRINT << "READER: "  << "q_chunk=" << q_chunk << ENDL();

@@ -391,6 +391,8 @@ void MAIN {
     uint32_t DHt      = get_arg_val<uint32_t>(4);
     uint32_t S_chunk_t    = get_arg_val<uint32_t>(5);
     uint32_t num_chunks    = get_arg_val<uint32_t>(6);
+    uint32_t core_id    = get_arg_val<uint32_t>(7);
+    uint32_t num_cores    = get_arg_val<uint32_t>(8);
 
     // PACK(DPRINT all the above variables
     // PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
@@ -457,6 +459,9 @@ void MAIN {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
         for (uint32_t nq = 0; nq < NQH; ++nq) {
+            if (nq != core_id) {
+                continue;
+            }
             // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
                 // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
