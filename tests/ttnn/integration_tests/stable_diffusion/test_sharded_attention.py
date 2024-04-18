@@ -627,11 +627,11 @@ def test_attention(
     reshard_for_softmax,
     function_level_defaults,
 ):
-    pytest.skip()
+    # pytest.skip()
     if seq_len == 64 and reshard_for_softmax:
         pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
-    grid_size = (8, 2)
+    grid_size = (2, 8)
     num_cores = grid_size[0] * grid_size[1]
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -694,16 +694,18 @@ def test_attention(
         grid_size,
         [num_heads * seq_len // num_cores, 64],
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.ShardOrientation.COL_MAJOR,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
-
+    M = num_heads * seq_len
+    K = 64
+    N = seq_len
     program_config = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=2,
+        in0_block_w=K // 32,
         out_subblock_h=1,
         out_subblock_w=1,
-        per_core_M=num_heads * seq_len // num_cores // 32,
-        per_core_N=seq_len // 32,
+        per_core_M=M // num_cores // 32,
+        per_core_N=N // 32,
     )
     print(program_config)
 
@@ -734,7 +736,7 @@ def test_attention(
                 (8, 8),
                 [height_per_core, seq_len],
                 ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                ttl.tensor.ShardOrientation.COL_MAJOR,
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
             )
             softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
                 compute_with_storage_grid_size=(8, 8),
@@ -789,7 +791,7 @@ def test_attention(
         grid_size,
         [num_heads * seq_len // num_cores, 64],
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.ShardOrientation.COL_MAJOR,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
