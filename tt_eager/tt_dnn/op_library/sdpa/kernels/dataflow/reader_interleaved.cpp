@@ -27,6 +27,9 @@ void kernel_main() {
 
     constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
 
+    const uint32_t my_q_head = core_id / num_chunks;
+    const uint32_t my_q_chunk = core_id % num_chunks;
+
     // DPRINT << "READER: scale_val: " << scale_val << ENDL();
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
@@ -89,12 +92,19 @@ void kernel_main() {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // DPRINT << "READER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != core_id) {
+            if (nq != my_q_head) {
                 continue;
             }
-            q_tile_id = nq * St * DHt;
             // DPRINT << "READER: "  << "nq=" << nq << ENDL();
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
+                if (q_chunk != my_q_chunk) {
+                    continue;
+                }
+
+                uint32_t q_head_offset = nq * St * DHt;
+                uint32_t q_chunk_offset = q_chunk * S_chunk_t * DHt;
+                q_tile_id = q_head_offset + q_chunk_offset;
+
                 // DPRINT << "READER: "  << "q_chunk=" << q_chunk << ENDL();
                 // Read Q chunk
                 cb_reserve_back(cb_q_in, q_chunk_tiles);

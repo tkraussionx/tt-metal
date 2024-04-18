@@ -403,6 +403,8 @@ void MAIN {
     // PACK(DPRINT << "COMPUTE: S_chunk_t=" << S_chunk_t << ENDL());
     // PACK(DPRINT << "COMPUTE: num_chunks=" << num_chunks << ENDL());
 
+    const uint32_t my_q_head = core_id / num_chunks;
+    const uint32_t my_q_chunk = core_id % num_chunks;
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
@@ -459,11 +461,14 @@ void MAIN {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != core_id) {
+            if (nq != my_q_head) {
                 continue;
             }
             // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
+                if (q_chunk != my_q_chunk) {
+                    continue;
+                }
                 // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);

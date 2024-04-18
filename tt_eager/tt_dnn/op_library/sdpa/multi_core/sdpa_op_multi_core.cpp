@@ -169,9 +169,11 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // auto all_device_cores = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
     // auto single_core = CoreCoord({0, 0});
 
+    // log_info("grid_size: {}", grid_size);
+
     // start with 8 cores for Q heads
-    auto core_grid = CoreRange({0, 0}, {7, 0});
-    uint32_t num_cores = 8;
+    auto core_grid = CoreRange({0, 0}, {7, 7});
+    uint32_t num_cores = 64;
 
 
     // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
@@ -297,10 +299,13 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     for (uint32_t i = 0; i < num_cores; ++i) {
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
+        // log_info("core: {} getting runtime args for idx {i}", core, i);
+
         SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u, i, num_cores });
         SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
         SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
     }
+
 
     // uint32_t curr_row = 0;
     // union { float f; uint32_t u; } s; s.f = scale.value_or(1.0f); // scale for fused scale-mask-softmax
