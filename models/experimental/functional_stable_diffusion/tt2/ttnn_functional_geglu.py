@@ -7,7 +7,6 @@ import torch
 import math
 import tt_lib as ttl
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
-    find_max_subblock,
     determine_largest_subblock_size,
 )
 
@@ -65,7 +64,7 @@ class geglu:
         self.device = device
         parameters = split_linear_params(parameters)
         self.parameters = parameters
-        self.grid_sizes = {8192: (8, 5), 2048: (8, 5), 512: (8, 8), 128: (4, 8)}
+        self.grid_sizes = {8192: (5, 8), 2048: (5, 8), 512: (8, 8), 128: (8, 4)}
         self.out_subblock_hs = {8192: 8, 2048: 8, 512: 2, 128: 1}
 
         self.l1_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
@@ -93,14 +92,14 @@ class geglu:
             hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
                 hidden_states,
                 grid_size,
-                [M // grid_size[0], K // grid_size[1]],
+                [M // grid_size[1], K // grid_size[0]],
                 ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
             )
-        in0_block_h = M // grid_size[0] // 32
-        in0_block_w = K // grid_size[1] // 32
-        out_block_h = math.ceil(M / grid_size[0] / 32)
-        out_block_w = math.ceil(N / grid_size[1] / 32)
+        in0_block_h = M // grid_size[1] // 32
+        in0_block_w = K // grid_size[0] // 32
+        out_block_h = math.ceil(M / grid_size[1] / 32)
+        out_block_w = math.ceil(N / grid_size[0] / 32)
         out_subblock_h, out_subblock_w = determine_largest_subblock_size(out_block_h, out_block_w)
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
@@ -109,7 +108,7 @@ class geglu:
             out_subblock_w=out_subblock_w,
             per_core_M=out_block_h,
             per_core_N=out_block_w,
-            transpose_mcast=True,
+            transpose_mcast=False,
             fused_activation=None,
         )
         proj = ttnn.experimental.operations.primary.matmul(
@@ -127,9 +126,9 @@ class geglu:
             proj = ttnn.experimental.tensor.interleaved_to_sharded(
                 proj,
                 grid_size,
-                [proj.shape[-2] // grid_size[0], proj.shape[-1] // grid_size[1]],
+                [proj.shape[-2] // grid_size[1], proj.shape[-1] // grid_size[0]],
                 ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
             )
         if hidden_states.shape[-2] == 8192:
             proj = ttnn.reallocate(proj)
@@ -141,7 +140,7 @@ class geglu:
             out_subblock_w=out_subblock_w,
             per_core_M=out_block_h,
             per_core_N=out_block_w,
-            transpose_mcast=True,
+            transpose_mcast=False,
             fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
         )
         gate = ttnn.experimental.operations.primary.matmul(
@@ -159,9 +158,9 @@ class geglu:
             gate = ttnn.experimental.tensor.interleaved_to_sharded(
                 gate,
                 grid_size,
-                [gate.shape[-2] // grid_size[0], gate.shape[-1] // grid_size[1]],
+                [gate.shape[-2] // grid_size[1], gate.shape[-1] // grid_size[0]],
                 ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
             )
         if hidden_states.shape[-2] == 8192:
             gate = ttnn.reallocate(gate)

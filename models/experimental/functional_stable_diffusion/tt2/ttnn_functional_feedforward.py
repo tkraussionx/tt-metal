@@ -4,7 +4,9 @@
 
 import ttnn
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_geglu import geglu
-from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import find_max_subblock
+from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
+    determine_largest_subblock_size,
+)
 import tt_lib as ttl
 import torch
 import math
@@ -51,7 +53,7 @@ class feedforward:
             fp32_dest_acc_en=False,
             packer_l1_acc=False,
         )
-        self.grid_sizes = {8192: (8, 5), 2048: (8, 5), 512: (8, 8), 128: (4, 8)}
+        self.grid_sizes = {8192: (5, 8), 2048: (5, 8), 512: (8, 8), 128: (8, 4)}
         self.out_subblock_hs = {8192: 8, 2048: 8, 512: 2, 128: 1}
 
     def __call__(self, config, hidden_states):
@@ -62,11 +64,11 @@ class feedforward:
         size = hidden_states.shape[-2]
         grid_size = self.grid_sizes[size]
         M, K, N = hidden_states.shape[-2], hidden_states.shape[-1], self.parameters.net[2].weight.shape[-1]
-        in0_block_h = M // grid_size[0] // 32
-        in0_block_w = K // grid_size[1] // 32
-        out_block_h = math.ceil(M / grid_size[0] / 32)
-        out_block_w = math.ceil(N / grid_size[1] / 32)
-        out_subblock_h, out_subblock_w, _ = find_max_subblock(out_block_h, out_block_w)
+        in0_block_h = M // grid_size[1] // 32
+        in0_block_w = K // grid_size[0] // 32
+        out_block_h = math.ceil(M / grid_size[1] / 32)
+        out_block_w = math.ceil(N / grid_size[0] / 32)
+        out_subblock_h, out_subblock_w = determine_largest_subblock_size(out_block_h, out_block_w)
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
             in0_block_w=in0_block_w,
@@ -74,7 +76,7 @@ class feedforward:
             out_subblock_w=out_subblock_w,
             per_core_M=out_block_h,
             per_core_N=out_block_w,
-            transpose_mcast=True,
+            transpose_mcast=False,
             fused_activation=None,
         )
         if hidden_states.shape[-2] == 8192:
@@ -94,8 +96,8 @@ class feedforward:
             hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
                 hidden_states,
                 grid_size,
-                [hidden_states.shape[-2] // grid_size[0], hidden_states.shape[-1] // grid_size[1]],
+                [hidden_states.shape[-2] // grid_size[1], hidden_states.shape[-1] // grid_size[0]],
                 ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
             )
         return hidden_states
