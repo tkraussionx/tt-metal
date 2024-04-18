@@ -157,8 +157,8 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
         model = pipe.unet
         model.eval()
         config = model.config
-        torch.save(model, "unet.pt")
-        torch.save(config, "unet_config.pt")
+        # torch.save(model, "unet.pt")
+        # torch.save(config, "unet_config.pt")
     else:
         model = torch.load("unet.pt")
         config = torch.load("unet_config.pt")
