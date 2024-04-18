@@ -105,9 +105,6 @@ void kernel_main() {
         local_read_addr = get_read_ptr(cb_id_in2);
     }
 
-    // DPRINT << "is_ncrisc " <<is_ncrisc<<ENDL();
-    // DPRINT << "in0_block_size_bytes " <<(uint)in0_block_size_bytes<<ENDL();
-
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
             const uint32_t block_id = block / num_blocks_per_shard;
@@ -146,23 +143,34 @@ void kernel_main() {
 
                 if constexpr (extract_shard_sub_blocks) {
                     // no need to mcast to self, since we are not really doing a local copy
+                    #ifdef SPLIT_MCAST_TRANSACTIONS
+                    for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
+                        noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores, false, false);
+                        local_read_addr += in0_single_tile_size_bytes;
+                        in0_multicast_data_addr += in0_single_tile_size_bytes;
+                    }
+                    #else
                     noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
+                    local_read_addr += in0_block_size_bytes;
+                    #endif
                 } else {
                     // num_dests must not include source, since we are NOT really doing a local copy!
-                    for (int a=0; a<8; ++a) {
-                        noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, 2048, in0_mcast_num_cores+1, false, false);
-                        local_read_addr+= 2048;
-                        in0_multicast_data_addr+= 2048;
+                    #ifdef SPLIT_MCAST_TRANSACTIONS
+                    for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
+                        noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores+1, false, false);
+                        local_read_addr += in0_single_tile_size_bytes;
+                        in0_multicast_data_addr += in0_single_tile_size_bytes;
                     }
-                    // noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
+                    #else
+                    noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
+                    local_read_addr += in0_block_size_bytes;
+                    #endif
                 }
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
                 // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
                 // We should also multicast the flag to destinations
                 noc_semaphore_set_multicast_loopback_src(in0_mcast_sender_semaphore_valid_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores+1, false, false);
-
-                // local_read_addr += in0_block_size_bytes;
             } else {
                 uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
 

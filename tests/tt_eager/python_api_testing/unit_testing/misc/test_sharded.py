@@ -15,6 +15,14 @@ from models.utility_functions import is_wormhole_b0, skip_for_wormhole_b0
 from loguru import logger
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_zero, roundup32
 
+import itertools
+
+from tt_metal.tools.profiler.common import PROFILER_LOGS_DIR, PROFILER_DEVICE_SIDE_LOG
+
+profiler_log_path = PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG
+
+from tt_metal.tools.profiler.process_device_log import import_log_run_stats
+import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_config
 
 # @pytest.mark.parametrize(
 #     "input_shape, shard_scheme, shard_size",
@@ -2702,6 +2710,37 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
 #     assert passing
 
 
+def profile_results_kernel_duration():
+    setup = device_post_proc_config.default_setup()
+    setup.deviceInputLog = profiler_log_path
+    devices_data = import_log_run_stats(setup)
+    deviceID = list(devices_data["devices"].keys())[0]
+    total_cycle = devices_data["devices"][deviceID]["cores"]["DEVICE"]["analysis"]["device_kernel_duration"]["stats"][
+        "Average"
+    ]
+    print("total_cycle")
+    print(total_cycle)
+    return total_cycle
+
+
+def find_max_subblock(out_block_h, out_block_w):
+    max_product = 0
+    best_h = 1
+    best_w = 1
+
+    for h in range(1, out_block_h + 1):
+        if out_block_h % h == 0:  # h is a divisor of out_block_h
+            for w in range(1, out_block_w + 1):
+                if out_block_w % w == 0 and h * w <= 8:  # w is a divisor and product condition met
+                    if h * w > max_product:
+                        max_product = h * w
+                        best_h = h
+                        best_w = w
+    if out_block_w > best_w:
+        best_h = 1
+    return best_h, best_w, max_product
+
+
 def run_bert_linear_batch8(
     device,
     in0_sharded,
@@ -2715,6 +2754,7 @@ def run_bert_linear_batch8(
     activation,
     packer_l1_acc,
     fp32_acc_mode,
+    enable_opt,
     function_level_defaults,
 ):
     in0_shape = [1, 1, M, K]
@@ -2727,26 +2767,12 @@ def run_bert_linear_batch8(
     out_block_h = M // grid_size[1] // 32
     out_block_w = N // grid_size[0] // 32
 
-    if fp32_acc_mode == True:
-        out_subblock_w = 4
-        out_subblock_h = 1
-    else:
-        if out_block_w <= 8:
-            out_subblock_w = out_block_w
-            out_subblock_h = 8 // out_subblock_w
-        else:
-            out_subblock_h = 1
-            out_subblock_w = 8 // out_subblock_h
-            while out_block_w % out_subblock_w != 0:
-                out_subblock_w = out_block_w // 2
+    out_subblock_h, out_subblock_w, _ = find_max_subblock(out_block_h, out_block_w)
 
-    # out_subblock_w = 1
-    out_subblock_h = 1
-
-    logger.debug("in0 block w h " + str(in0_block_w * 32) + " " + str(in0_block_h * 32))
-    logger.debug("in1 block w h " + str(out_block_w * 32) + " " + str(in0_block_w * 32))
-    logger.debug("out block w h " + str(out_block_w * 32) + " " + str(out_block_h * 32))
-    logger.debug("out subblock w h " + str(out_subblock_w * 32) + " " + str(out_subblock_h * 32))
+    logger.debug("in0 block w h " + str(in0_block_w) + " " + str(in0_block_h))
+    logger.debug("in1 block w h " + str(out_block_w) + " " + str(in0_block_w))
+    logger.debug("out block w h " + str(out_block_w) + " " + str(out_block_h))
+    logger.debug("out subblock w h " + str(out_subblock_w) + " " + str(out_subblock_h))
 
     interleaved_mem_config_L1 = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
@@ -2765,88 +2791,111 @@ def run_bert_linear_batch8(
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
 
-    in0_t = torch2tt_tensor(
-        # in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-        in0,
-        device,
-        tt_memory_config=interleaved_mem_config_DRAM,
-        tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    )
-    in1_t = torch2tt_tensor(
-        # in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-        in1,
-        device,
-        tt_memory_config=interleaved_mem_config_DRAM,
-        tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    )
-
-    output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config_L1
-    bias_t = pad_by_zero(
-        bias, device, tt_memory_config=interleaved_mem_config_L1, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-    )[0]
-
-    if in0_sharded:
-        in0_t = ttl.tensor.interleaved_to_sharded(
-            in0_t,
-            grid_size,
-            [M // grid_size[1], K // grid_size[0]],
-            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
+    options = [True, False]
+    # Generate all combinations of parameter values
+    for split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc in itertools.product(
+        options, repeat=4
+    ):
+        print(
+            f"split_mcast_transactions={split_mcast_transactions}, "
+            f"mcast_use_same_noc={mcast_use_same_noc}, "
+            f"use_noc_transaction_id={use_noc_transaction_id}, "
+            f"use_noc_vc={use_noc_vc}"
         )
 
-    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-        compute_with_storage_grid_size=grid_size,
-        in0_block_w=in0_block_w // 2,
-        out_subblock_h=out_subblock_h,
-        out_subblock_w=out_subblock_w,
-        per_core_M=out_block_h,
-        per_core_N=out_block_w,
-        transpose_mcast=False,
-        fused_activation=activation,
-    )
-
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
-        math_fidelity=fidelity,
-        math_approx_mode=True,
-        fp32_dest_acc_en=fp32_acc_mode,
-        packer_l1_acc=packer_l1_acc,
-    )
-
-    if has_bias:
-        output_t = ttl.operations.primary.matmul(
-            in0_t,
-            in1_t,
-            bias=bias_t,
-            program_config=program_config,
-            output_mem_config=output_mem_config,
-            compute_kernel_config=compute_kernel_config,
+        in0_t = torch2tt_tensor(
+            # in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+            in0,
+            device,
+            tt_memory_config=interleaved_mem_config_DRAM,
+            tt_dtype=ttl.tensor.DataType.BFLOAT16,
         )
-    else:
-        output_t = ttl.operations.primary.matmul(
-            in0_t,
-            in1_t,
-            program_config=program_config,
-            output_mem_config=output_mem_config,
-            compute_kernel_config=compute_kernel_config,
+        in1_t = torch2tt_tensor(
+            # in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+            in1,
+            device,
+            tt_memory_config=interleaved_mem_config_DRAM,
+            tt_dtype=ttl.tensor.DataType.BFLOAT16,
         )
 
-    if out_sharded:
-        output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
+        output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config_L1
+        bias_t = pad_by_zero(
+            bias, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+        )[0]
 
-    pt_out = in0 @ in1
+        if in0_sharded:
+            in0_t = ttl.tensor.interleaved_to_sharded(
+                in0_t,
+                grid_size,
+                [M // grid_size[1], K // grid_size[0]],
+                ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+            )
 
-    if has_bias:
-        pt_out = pt_out + bias
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            in0_block_w=in0_block_w // 2,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
+            transpose_mcast=False,
+            fused_activation=activation,
+            split_mcast_transactions=split_mcast_transactions,
+            mcast_use_same_noc=mcast_use_same_noc,
+            use_noc_transaction_id=use_noc_transaction_id,
+            use_noc_vc=use_noc_vc,
+        )
 
-    if activation != None:
-        pt_out = torch.nn.functional.gelu(pt_out)
-    tt_out = tt2torch_tensor(output_t)
+        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=fidelity,
+            math_approx_mode=True,
+            fp32_dest_acc_en=fp32_acc_mode,
+            packer_l1_acc=packer_l1_acc,
+        )
 
-    passing, output = comp_pcc(pt_out, tt_out)
-    logger.info(output)
-    assert passing
+        if has_bias:
+            output_t = ttl.operations.primary.matmul(
+                in0_t,
+                in1_t,
+                bias=bias_t,
+                program_config=program_config,
+                output_mem_config=output_mem_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            output_t = ttl.operations.primary.matmul(
+                in0_t,
+                in1_t,
+                program_config=program_config,
+                output_mem_config=output_mem_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+
+        if out_sharded:
+            output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
+
+        pt_out = in0 @ in1
+
+        if has_bias:
+            pt_out = pt_out + bias
+
+        if activation != None:
+            pt_out = torch.nn.functional.gelu(pt_out)
+        tt_out = tt2torch_tensor(output_t)
+
+        passing, output = comp_pcc(pt_out, tt_out)
+        logger.info(output)
+        assert passing
 
 
+@pytest.mark.parametrize(
+    "enable_opt",
+    [
+        True,
+    ],
+    ids=["enable_opt"],
+)
 @pytest.mark.parametrize(
     "packer_l1_acc",
     [
@@ -2878,27 +2927,12 @@ def run_bert_linear_batch8(
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation",
     [
-        # in1-L1-fusedQKV
-        (False, True, True, 256, 4096, 4096, None),  # both sharded
-        # (False, True, True, 2048, 2048, 4096, None),  # both sharded
-        # # in1-dram-fusedQKV
-        # (True, True, True, 1536, 1024, 3072, None),
-        # # in1-L1-selfout
-        # (False, True, True, 1536, 1024, 1024, None),
-        # # in1-dram-selfout
-        # (True, True, True, 1536, 1024, 1024, None),
-        # # in1-L1-ff1
-        # (False, True, True, 1536, 1024, 4096, (ttl.tensor.FusibleActivation.GELU, True)),
-        # # in1-dram-ff1
-        # (True, True, True, 1536, 1024, 4096, (ttl.tensor.FusibleActivation.GELU, True)),
-        # # in1-L1-ff1 - no Gelu
-        # (False, True, True, 1536, 1024, 4096, None),
-        # # in1-dram-ff1 - no Gelu
-        # (True, True, True, 1536, 1024, 4096, None),
-        # # in1-L1-ff2
-        # (False, True, True, 1536, 4096, 1024, None),
-        # # in1-dram-ff2
-        # (True, True, True, 1536, 4096, 1024, None),
+        (False, True, True, 256, 4096, 4096, None),
+        # (False, True, True, 512, 1280, 5120, None),
+        # (False, True, True, 512, 5120, 1280, None),
+        # (False, True, True, 512, 1280, 1280, None),
+        # (False, True, True, 512, 1280, 3840, None),
+        # (False, True, True, 512, 2560, 1280, None),
     ],
 )
 def test_bert_linear_batch8(
@@ -2914,6 +2948,7 @@ def test_bert_linear_batch8(
     activation,
     packer_l1_acc,
     fp32_acc_mode,
+    enable_opt,
     function_level_defaults,
 ):
     for i in range(1):
@@ -2931,5 +2966,6 @@ def test_bert_linear_batch8(
             activation,
             packer_l1_acc,
             fp32_acc_mode,
+            enable_opt,
             function_level_defaults,
         )

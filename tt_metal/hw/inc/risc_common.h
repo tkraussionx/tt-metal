@@ -20,8 +20,8 @@
 #define NOC_X(x) (noc_index == 0 ? (x) : (noc_size_x-1-(x)))
 #define NOC_Y(y) (noc_index == 0 ? (y) : (noc_size_y-1-(y)))
 
-#define NOC_X_INV(x) (noc_size_x-1-(x))
-#define NOC_Y_INV(y) (noc_size_y-1-(y))
+#define OTHER_NOC_X(x) (noc_index == 1 ? (x) : (noc_size_x-1-(x)))
+#define OTHER_NOC_Y(y) (noc_index == 1 ? (y) : (noc_size_y-1-(y)))
 
 #define TILE_WORD_2_BIT ((256 + 64 + 32) >> 4)
 #define TILE_WORD_4_BIT ((512 + 64 + 32) >> 4)

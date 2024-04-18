@@ -75,6 +75,20 @@ void kernel_main() {
     constexpr uint32_t MtNt                               = get_compile_time_arg_val(23); // if 0
     // Don't need batch; same as batch from READER args
 
+    constexpr bool use_vc =
+    #ifdef USE_VC
+    true;
+    #else
+    false;
+    #endif
+
+    constexpr bool use_trid =
+    #ifdef USE_TRANSACTION_ID
+    true;
+    #else
+    false;
+    #endif
+
     #ifdef FUSE_BIAS
     // in3 mcast args
     const uint32_t in3_tensor_addr                    = get_arg_val<uint32_t>(16);
@@ -108,7 +122,7 @@ void kernel_main() {
     uint32_t l1_write_addr_in1;
 
     constexpr DataFormat in1_data_format = get_dataformat(cb_id_in1);
-    const InterleavedAddrGenFast<in1_is_dram> s1 = {
+    const InterleavedAddrGenFast<in1_is_dram, use_vc, use_trid> s1 = {
         .bank_base_address = in1_tensor_addr,
         .page_size = in1_single_tile_size_bytes,
         .data_format = in1_data_format
@@ -133,15 +147,8 @@ void kernel_main() {
     // to receive the mcast
     volatile tt_l1_ptr uint32_t* in1_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_mcast_sender_semaphore_addr);
 
-    // const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
-    //     in1_mcast_dest_noc_start_x,
-    //     in1_mcast_dest_noc_start_y,
-    //     in1_mcast_dest_noc_end_x,
-    //     in1_mcast_dest_noc_end_y,
-
-    //     in1_mcast_receiver_semaphore_addr);
-
-    const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr_inv(
+    #ifdef MCAST_USE_SAME_NOC
+    const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr<true>(
         in1_mcast_dest_noc_end_x,
         in1_mcast_dest_noc_end_y,
         in1_mcast_dest_noc_start_x,
@@ -149,35 +156,33 @@ void kernel_main() {
 
         in1_mcast_receiver_semaphore_addr);
 
-    const uint64_t in1_multicast_data_noc = get_noc_multicast_addr_inv(
-
+    const uint64_t in1_multicast_data_noc = get_noc_multicast_addr<true>(
         in1_mcast_dest_noc_end_x,
         in1_mcast_dest_noc_end_y,
         in1_mcast_dest_noc_start_x,
         in1_mcast_dest_noc_start_y,
-
         0);
-    // const uint64_t in1_multicast_data_noc = get_noc_multicast_addr(
-    //     in1_mcast_dest_noc_start_x,
-    //     in1_mcast_dest_noc_start_y,
-    //     in1_mcast_dest_noc_end_x,
-    //     in1_mcast_dest_noc_end_y,
-    //     0);
+    #else
+    const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr<false>(
+        in1_mcast_dest_noc_start_x,
+        in1_mcast_dest_noc_start_y,
+        in1_mcast_dest_noc_end_x,
+        in1_mcast_dest_noc_end_y,
+
+        in1_mcast_receiver_semaphore_addr);
+
+    const uint64_t in1_multicast_data_noc = get_noc_multicast_addr<false>(
+        in1_mcast_dest_noc_start_x,
+        in1_mcast_dest_noc_start_y,
+        in1_mcast_dest_noc_end_x,
+        in1_mcast_dest_noc_end_y,
+        0);
+    #endif
+
     #ifdef IN1_SHARDED
     uint64_t in1_start_address = get_write_ptr(cb_id_in1);
     #endif
     #endif
-
-
-    // DPRINT << "in1_block_h " <<in1_block_h <<ENDL();
-    // DPRINT << "in1_block_w " <<in1_block_w <<ENDL();
-    // DPRINT << "last_block_w " <<last_block_w <<ENDL();
-
-    // DPRINT << "in1_tensor_stride_h " <<in1_tensor_stride_h <<ENDL();
-    // DPRINT << "in1_tensor_stride_w " <<in1_tensor_stride_w <<ENDL();
-    // DPRINT << "in1_tensor_next_block_stride " <<in1_tensor_next_block_stride <<ENDL();
-
-
 
     uint32_t in1_block_h_temp = in1_block_h;
 
@@ -198,57 +203,76 @@ void kernel_main() {
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
 
-                        // uint32_t bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(in1_tensor_tile_id + my_x[noc_index]);
-                        // DPRINT << "bank_id " <<bank_id <<ENDL();
-
-
-                        noc_async_read_tile_with_trid(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
-
-                        // noc_async_read_tile_with_trid(in1_tensor_tile_id, s1, l1_write_addr_in1);
-                        // noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
-                        // noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                        #ifdef USE_TRANSACTION_ID
+                            #ifdef USE_VC
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
+                            #else
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                            #endif
+                        #else
+                            #ifdef USE_VC
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
+                            #else
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                            #endif
+                        #endif
                     }
                     l1_write_addr_in1 += in1_single_tile_size_bytes;
                     in1_tensor_tile_id += in1_tensor_stride_w;
                 }
                 in1_tensor_row_start_tile_id += in1_tensor_stride_h;
-
-                // noc_reads_num_issued[noc_index] += in1_block_w;
             }
 
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
+            #ifdef USE_TRANSACTION_ID
             noc_async_read_barrier_with_trid();
-            // noc_async_read_barrier();
+            #else
+            noc_async_read_barrier();
+            #endif // barrier
             #endif
 
             #ifndef SKIP_MCAST
-            // // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
-            // // the semaphore_addr value back to zero for the next block
+            // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
+            // the semaphore_addr value back to zero for the next block
             noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
             noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
-            // // Now we have the block in the CB address, we can mcast to dests!
+            // Now we have the block in the CB address, we can mcast to dests!
             uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
-            // // num_dests must not include source, since we are NOT really doing a local copy!
+            // num_dests must not include source, since we are NOT really doing a local copy!
+
             // noc_async_write_multicast_inv(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
-            for (int a=0; a<128; ++a) {
-                noc_async_write_multicast_inv(in1_start_address, in1_multicast_data_addr, 2048, in1_mcast_num_cores, false, false);
-                in1_start_address += 2048;
-                in1_multicast_data_addr += 2048;
-
+            #ifdef SPLIT_MCAST_TRANSACTIONS
+            for (uint32_t i = 0; i < in1_block_num_tiles; ++i) {
+                #ifdef MCAST_USE_SAME_NOC
+                noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+                #else
+                noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+                #endif
+                in1_start_address += in1_single_tile_size_bytes;
+                in1_multicast_data_addr += in1_single_tile_size_bytes;
             }
-            // noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+            #else
+                #ifdef MCAST_USE_SAME_NOC
+                noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+                #else
+                noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+                #endif
+            #endif
 
-            // // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-            // // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+            // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
+            // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
-            // // We should also multicast the flag to destinations
-            // // num_dests must not include source, since we are NOT really doing a local copy!
-            // noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
-            noc_semaphore_set_multicast_inv(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            // We should also multicast the flag to destinations
+            // num_dests must not include source, since we are NOT really doing a local copy!
+            #ifdef MCAST_USE_SAME_NOC
+            noc_semaphore_set_multicast<true>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            #else
+            noc_semaphore_set_multicast<false>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            #endif
 
             #endif
             // noc_async_write_barrier();
@@ -271,14 +295,30 @@ void kernel_main() {
                 uint32_t in3_tensor_tile_id = in3_tensor_start_tile_id;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
-                        noc_async_read_tile_with_trid(in3_tensor_tile_id, s3, l1_write_addr_in3);
+                        #ifdef USE_TRANSACTION_ID
+                            #ifdef USE_VC
+                            noc_async_read_tile_with<>(in3_tensor_tile_id, s3, l1_write_addr_in3, 0, (in3_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
+                            #else
+                            noc_async_read_tile_with_trid(in3_tensor_tile_id, s3, l1_write_addr_in3);
+                            #endif
+                        #else
+                            #ifdef USE_VC
+                            noc_async_read_tile(in3_tensor_tile_id, s3, l1_write_addr_in3, 0, (in3_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
+                            #else
+                            noc_async_read_tile(in3_tensor_tile_id, s3, l1_write_addr_in3);
+                            #endif
+                        #endif
                     }
                     l1_write_addr_in3 += bias_single_tile_size_bytes;
                     in3_tensor_tile_id += in3_tensor_stride_w;
                     in3_block_size_bytes += bias_single_tile_size_bytes;
                 }
                 // Barrier! make sure the reads are done
+                #ifdef USE_TRANSACTION_ID
                 noc_async_write_barrier_with_trid();
+                #else
+                noc_async_write_barrier();
+                #endif
 
                 #ifndef SKIP_MCAST
 
@@ -291,13 +331,21 @@ void kernel_main() {
                 uint64_t in3_multicast_data_addr = in1_multicast_data_noc | in3_start_address;
 
                 // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_async_write_multicast(in3_start_address, in3_multicast_data_addr, in3_block_size_bytes, in1_mcast_num_cores, false, false);
+                #ifdef MCAST_USE_SAME_NOC
+                noc_async_write_multicast<true>(in3_start_address, in3_multicast_data_addr, in3_block_size_bytes, in1_mcast_num_cores, false, false);
+                #else
+                noc_async_write_multicast<false>(in3_start_address, in3_multicast_data_addr, in3_block_size_bytes, in1_mcast_num_cores, false, false);
+                #endif
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
                 // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
                 // We should also multicast the flag to destinations
                 // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+                #ifdef MCAST_USE_SAME_NOC
+                noc_semaphore_set_multicast<true>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+                #else
+                noc_semaphore_set_multicast<false>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+                #endif
 
                 #endif
 
