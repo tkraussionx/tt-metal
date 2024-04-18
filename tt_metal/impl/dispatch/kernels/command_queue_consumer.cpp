@@ -90,7 +90,6 @@ void kernel_main() {
         completion_queue_push_back(completion_data_size, completion_queue_start_addr, host_completion_queue_write_ptr_addr);
         record_last_completed_event(header->event);
         {
-            DeviceZoneScopedN("CQ-NOTIFY_PROC");
             // notify producer that it has completed a command
             noc_semaphore_inc(producer_noc_encoding | get_semaphore(0), 1);
             db_buf_switch = not db_buf_switch;

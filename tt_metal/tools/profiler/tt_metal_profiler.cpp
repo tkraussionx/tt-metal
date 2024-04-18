@@ -211,7 +211,7 @@ void InitDeviceProfiler(Device *device){
                     << std::endl;
             }
 
-            tracy::set_sync_info(hostStartTime, round(delay), 1/frequencyFit);
+            tracy::set_sync_info(hostStartTime, delay, frequencyFit);
 
             std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
             std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
