@@ -31,6 +31,11 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
 )
 
 
+@pytest.fixture(scope="session")
+def option(pytestconfig):
+    return pytestconfig.getoption("option")
+
+
 def ttnn_to_torch(input):
     input = ttnn.to_layout(input, ttnn.ROW_MAJOR_LAYOUT)
     input = ttnn.from_device(input)
@@ -211,6 +216,7 @@ def test_cross_attn_up_block_2d_512x512(
     prev_output_channel,
     in_channels,
     out_channels,
+    option,
 ):
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)

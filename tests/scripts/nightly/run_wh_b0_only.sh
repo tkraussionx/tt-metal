@@ -10,6 +10,8 @@ fi
 echo "Running nightly tests for WH B0 only"
 
 env pytest tests/ttnn/integration_tests/unet                # -> failing: issue #7556
+env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest -svv tests/ttnn/integration_tests/stable_diffusion/test_cross_attention.py  -k 512
+env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest -svv tests/ttnn/integration_tests/stable_diffusion/test_cross_attn_up_block_2d.py  -k 512
 # env pytest tests/ttnn/integration_tests/stable_diffusion    # -> failing/hanging: issue #7560
 
 env pytest models/demos/mamba/tests/test_mamba_ssm.py
