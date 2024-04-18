@@ -958,7 +958,12 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
 
                     tt_tensor = tt_tensor.cpu_sharded()
             )doc")
-            .def("to", py::overload_cast<Layout>(&Tensor::to, py::const_), R"doc(
+            .def(
+                "to",
+                py::overload_cast<Layout, Device*>(&Tensor::to, py::const_),
+                py::arg("target_layout").noconvert(),
+                py::arg("worker") = nullptr,
+                R"doc(
                 Convert TT Tensor to provided memory layout. Available layouts conversions are:
 
                 * ROW_MAJOR to TILE
