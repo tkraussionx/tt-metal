@@ -352,10 +352,9 @@ def run_stress_sdpa_tt(device):
     Q = torch.randn(b, nh, s, d)
     K = torch.randn(b, nkv, s, d)
     V = torch.randn(b, nkv, s, d)
-    # attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
-    # attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
+    attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
+    attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
     # FOR DEBUG, don't use neginf
-    attn_mask = torch.randn((b, nh, s, s))
 
     # Print shapes of all inputs along with input names
     print(f"Q: {Q.shape}")
