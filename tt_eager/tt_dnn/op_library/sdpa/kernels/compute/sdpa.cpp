@@ -393,6 +393,13 @@ void MAIN {
     uint32_t num_chunks    = get_arg_val<uint32_t>(6);
     uint32_t core_id    = get_arg_val<uint32_t>(7);
     uint32_t num_cores    = get_arg_val<uint32_t>(8);
+    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(9);
+
+    const uint32_t num_local_q_chunks = num_chunks / q_parallel_factor;
+    const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
+    const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
+    const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
+    const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
 
     // PACK(DPRINT all the above variables
     // PACK(DPRINT << "COMPUTE: B=" << B << ENDL());
@@ -403,8 +410,8 @@ void MAIN {
     // PACK(DPRINT << "COMPUTE: S_chunk_t=" << S_chunk_t << ENDL());
     // PACK(DPRINT << "COMPUTE: num_chunks=" << num_chunks << ENDL());
 
-    const uint32_t my_q_head = core_id / num_chunks;
-    const uint32_t my_q_chunk = core_id % num_chunks;
+    // const uint32_t my_q_head = core_id / num_chunks;
+    // const uint32_t my_q_chunk = core_id % num_chunks;
 
     const uint32_t q_chunk_tiles = S_chunk_t * DHt;
     const uint32_t k_chunk_tiles = S_chunk_t * DHt;
@@ -459,21 +466,21 @@ void MAIN {
     mm_init();
 
     for (uint32_t nb = 0; nb < B; ++nb) {
+        if (nb != local_batch) {
+            continue;
+        }
         // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != my_q_head) {
+            if (nq != local_q_head) {
                 continue;
             }
             // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
-            for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
-                if (q_chunk != my_q_chunk) {
-                    continue;
-                }
+            for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_end; ++q_chunk) {
                 // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);
 
-                for (uint32_t k_chunk = 0; k_chunk < num_chunks; ++k_chunk) {
+                for (uint32_t k_chunk = 0; k_chunk < local_q_chunk_end; ++k_chunk) {
                     // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
 
                     /* QK = Q_CHUNK @ K_CHUNK */
@@ -486,10 +493,13 @@ void MAIN {
                     mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles); // TODO: Fold into following push_back
 
+                    if (q_chunk == k_chunk) {
                     /* QK += MASK */
                     cb_push_back(cb_qk_im, qk_chunk_tiles);
                     add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
+                    }
+
 
                     /* cb_cur_max = max(QK, dim=-1)*/
                     cb_push_back(cb_qk_im, qk_chunk_tiles);

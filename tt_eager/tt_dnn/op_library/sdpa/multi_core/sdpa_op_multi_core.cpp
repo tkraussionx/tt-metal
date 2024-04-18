@@ -32,8 +32,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const std::optional<const Tensor> attn_mask,
     std::optional<float> scale,
     bool is_causal,
-    std::size_t chunk_size,
-    DeviceComputeKernelConfig compute_kernel_config
+    std::size_t q_chunk_size,
+    std::size_t k_chunk_size,
+    DeviceComputeKernelConfig compute_kernel_config,
+    transformers::SDPAProgramConfig program_config
 ) {
 
     /*
@@ -43,13 +45,15 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     attn_mask: B x NQH x S x S
     */
 
+    TT_FATAL(q_chunk_size == k_chunk_size);
+
     const auto q_shape = input_tensor_q.get_legacy_shape();
     uint32_t B = q_shape[0], NQH = q_shape[1], S = q_shape[2], DH = q_shape[3];
     uint32_t St = S/TILE_HEIGHT;
     uint32_t DHt = DH/TILE_WIDTH;
 
-    uint32_t S_chunk_t = chunk_size / TILE_HEIGHT;
-    uint32_t num_chunks = S / chunk_size;
+    uint32_t S_chunk_t = q_chunk_size / TILE_HEIGHT;
+    uint32_t num_chunks = S / q_chunk_size;
 
     const auto k_shape = input_tensor_k.get_legacy_shape();
     uint32_t NKH = k_shape[1];
@@ -165,15 +169,23 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const uint32_t out0_in1_num_subblocks = DHt / out0_out_subblock_w;
     const uint32_t out0_num_blocks = S_chunk_t / out0_in0_block_w;
 
-    auto grid_size = device->compute_with_storage_grid_size();
-    // auto all_device_cores = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
-    // auto single_core = CoreCoord({0, 0});
+    CoreCoord grid_size;
 
-    // log_info("grid_size: {}", grid_size);
+    std::visit([&](auto&& program_config) {
+        using T = std::decay_t<decltype(program_config)>;
+        if constexpr (std::is_same_v<T, transformers::SDPAMultiCoreProgramConfig>) {
+            grid_size = program_config.compute_with_storage_grid_size;
+        } else {
+            log_info("Using default grid size");
+            grid_size = device->compute_with_storage_grid_size();
 
-    // start with 8 cores for Q heads
-    auto core_grid = CoreRange({0, 0}, {7, 7});
-    uint32_t num_cores = 64;
+        }
+    }, program_config);
+
+    auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
+    uint32_t num_cores = grid_size.x * grid_size.y;
+
+    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
 
 
     // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
@@ -295,15 +307,29 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t out_addr = out0_buffer->address();
     union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
 
+
+    // Parallelization scheme
+    // We parallelize over batch, q_heads, and q_seq_len. We always run one batch and one head per core,
+    // so the question is how much of the q_seq_len does each core handle.
+    uint32_t q_parallel_factor = num_cores / (B * NQH);
+    TT_FATAL(q_parallel_factor * B * NQH == num_cores);
+
+    log_info("Parallelization scheme: \n");
+    log_info("num_cores: {}", num_cores);
+    log_info("batch size: {}", B);
+    log_info("num q_heads: {}", NQH);
+    log_info("q_parallel_factor: {}", q_parallel_factor);
+
+
     // Set reader rt args
     for (uint32_t i = 0; i < num_cores; ++i) {
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
         // log_info("core: {} getting runtime args for idx {i}", core, i);
 
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u, i, num_cores });
-        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
-        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, i, num_cores });
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, i, num_cores, q_parallel_factor });
     }
 
 

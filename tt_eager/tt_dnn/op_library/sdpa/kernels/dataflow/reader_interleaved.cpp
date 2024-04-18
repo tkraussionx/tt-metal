@@ -24,11 +24,18 @@ void kernel_main() {
     uint32_t scale_val    = get_arg_val<uint32_t>(11);
     uint32_t core_id    = get_arg_val<uint32_t>(12);
     uint32_t num_cores    = get_arg_val<uint32_t>(13);
+    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(14);
+
+    const uint32_t num_local_q_chunks = num_chunks / q_parallel_factor;
+    const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
+    const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
+    const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
+    const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
 
     constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
 
-    const uint32_t my_q_head = core_id / num_chunks;
-    const uint32_t my_q_chunk = core_id % num_chunks;
+    // const uint32_t my_q_head = core_id / num_chunks;
+    // const uint32_t my_q_chunk = core_id % num_chunks;
 
     // DPRINT << "READER: scale_val: " << scale_val << ENDL();
 
@@ -90,16 +97,16 @@ void kernel_main() {
     uint32_t mask_tile_id = 0;
 
     for (uint32_t nb = 0; nb < B; ++nb) {
+        if (nb != local_batch) {
+            continue;
+        }
         // DPRINT << "READER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != my_q_head) {
+            if (nq != local_q_head) {
                 continue;
             }
             // DPRINT << "READER: "  << "nq=" << nq << ENDL();
-            for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
-                if (q_chunk != my_q_chunk) {
-                    continue;
-                }
+            for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_end; ++q_chunk) {
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * S_chunk_t * DHt;
@@ -120,7 +127,7 @@ void kernel_main() {
                 cb_push_back(cb_q_in, q_chunk_tiles);
 
 
-                for (uint32_t k_chunk = 0; k_chunk < num_chunks; ++k_chunk) {
+                for (uint32_t k_chunk = 0; k_chunk < local_q_chunk_end; ++k_chunk) {
                     // DPRINT << "READER: "  << "k_chunk=" << k_chunk << ENDL();
                     // TODO: index based off of BATCH as well
                     k_tile_id = k_chunk * S_chunk_t;
@@ -145,22 +152,25 @@ void kernel_main() {
 
 
                     // Read mask chunk
-                    cb_reserve_back(cb_mask_in, mask_chunk_tiles);
-                    uint32_t mask_write_ptr = get_write_ptr(cb_mask_in);
-                    mask_tile_id = nq * St * St /*head_offset*/ + q_chunk * S_chunk_t * St /*row_offset*/ + k_chunk * S_chunk_t /*col_offset*/;
-                    for (uint32_t row = 0; row < S_chunk_t; ++row) {
-                        for (uint32_t col = 0; col < S_chunk_t; ++col) {
-                            // DPRINT << "READER: "  << "mask_tile_id=" << mask_tile_id << ENDL();
-                            noc_async_read_tile(mask_tile_id, mask_reader, mask_write_ptr);
-                            mask_tile_id += 1;
-                            mask_write_ptr += mask_tile_bytes;
+                    if (q_chunk == k_chunk) {
+                        cb_reserve_back(cb_mask_in, mask_chunk_tiles);
+                        uint32_t mask_write_ptr = get_write_ptr(cb_mask_in);
+                        mask_tile_id = nq * St * St /*head_offset*/ + q_chunk * S_chunk_t * St /*row_offset*/ + k_chunk * S_chunk_t /*col_offset*/;
+                        for (uint32_t row = 0; row < S_chunk_t; ++row) {
+                            for (uint32_t col = 0; col < S_chunk_t; ++col) {
+                                // DPRINT << "READER: "  << "mask_tile_id=" << mask_tile_id << ENDL();
+                                noc_async_read_tile(mask_tile_id, mask_reader, mask_write_ptr);
+                                mask_tile_id += 1;
+                                mask_write_ptr += mask_tile_bytes;
+                            }
+                            // Strid along columns to get to next row
+                            mask_tile_id -= S_chunk_t;
+                            mask_tile_id += St;
                         }
-                        // Strid along columns to get to next row
-                        mask_tile_id -= S_chunk_t;
-                        mask_tile_id += St;
+                        noc_async_read_barrier();
+                        cb_push_back(cb_mask_in, mask_chunk_tiles);
                     }
-                    noc_async_read_barrier();
-                    cb_push_back(cb_mask_in, mask_chunk_tiles);
+
 
 
 
