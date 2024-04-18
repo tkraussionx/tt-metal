@@ -1235,3 +1235,100 @@ def test_conv_core_nondivis(
         use_1d_systolic_array,
         config_override,
     )
+
+
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (2, 32, 3, 480, 640, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1  - 1
+        (2, 32, 32, 480, 640, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1_2  - 2
+        (2, 64, 32, 240, 320, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c2  - 3
+        (2, 64, 64, 240, 320, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c2_2 - 4
+        (2, 128, 64, 120, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),
+        (2, 128, 128, 120, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),  # c3_2
+        (2, 256, 128, 60, 80, 3, 3, 1, 1, 1, 1, True, None, False),  # c4 - 7
+        (2, 256, 256, 60, 80, 3, 3, 1, 1, 1, 1, True, None, False),  # c4_2 - 8
+        (2, 512, 256, 30, 40, 3, 3, 1, 1, 1, 1, True, None, False),  # bnc - 9
+        (2, 512, 512, 30, 40, 3, 3, 1, 1, 1, 1, False, None, False),  # bnc_2 - 10
+        (2, 256, 512, 60, 80, 3, 3, 1, 1, 1, 1, False, None, False),
+        (2, 128, 256, 120, 160, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 64, 128, 240, 320, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),
+        (2, 32, 64, 256, 256, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 8 * 32}, False),
+        (2, 1, 32, 480, 640, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 32, 3, 480, 640, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1  - 1
+        (1, 32, 32, 480, 640, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1_2  - 2
+        (1, 64, 32, 240, 320, 3, 3, 1, 1, 1, 1, True, None, True),  # c2  - 3
+        (1, 64, 64, 240, 320, 3, 3, 1, 1, 1, 1, True, None, True),  # c2_2 - 4
+        (1, 128, 64, 120, 160, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 128, 128, 120, 160, 3, 3, 1, 1, 1, 1, True, None, False),  # c3_2
+        (1, 256, 128, 60, 80, 3, 3, 1, 1, 1, 1, True, None, False),  # c4 - 7
+        (1, 256, 256, 60, 80, 3, 3, 1, 1, 1, 1, True, None, False),  # c4_2 - 8
+        (1, 512, 256, 30, 40, 3, 3, 1, 1, 1, 1, True, None, False),  # bnc - 9
+        (1, 512, 512, 30, 40, 3, 3, 1, 1, 1, 1, False, None, False),  # bnc_2 - 10
+        (1, 256, 512, 60, 80, 3, 3, 1, 1, 1, 1, False, None, False),
+        (1, 128, 256, 120, 160, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 64, 128, 240, 320, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),
+        (1, 32, 64, 256, 256, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 8 * 32}, False),
+        (1, 1, 32, 480, 640, 1, 1, 1, 1, 0, 0, True, None, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    # [ttnn.bfloat8_b, ttnn.bfloat16],
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+# @pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_unet_brain_conv(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
+        pytest.skip("OOM")
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        padded_input_channels=16 if input_channels == 3 else None,
+        output_layout=output_layout,
+    )
