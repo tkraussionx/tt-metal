@@ -56,7 +56,11 @@ class TtTransformerBlock(torch.nn.Module):
                     args=args,
                     layer_num=layer_num,
                     expert_num=i,
-                    dtype=dtype,
+                    dtypes={
+                        "w1": ttnn.bfloat4_b,
+                        "w2": ttnn.bfloat8_b,
+                        "w3": ttnn.bfloat4_b,
+                    },
                 )
                 for i in range(args.num_experts)
             ],

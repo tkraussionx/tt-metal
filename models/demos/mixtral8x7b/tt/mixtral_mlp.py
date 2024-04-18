@@ -7,21 +7,21 @@ import ttnn
 
 
 class TtMixtralMLP(torch.nn.Module):
-    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype):
+    def __init__(self, device, state_dict, args, layer_num, expert_num, dtypes):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
-        self.dtype = dtype
+        self.dtypes = dtypes
         self.model_args = args
         self.model_config = args.get_model_config()
 
         base_name = f"layers.{layer_num}.feed_forward.experts.{expert_num}"
         torch_weight = lambda name: self.state_dict[f"{base_name}.{name}.weight"].permute(1, 0)
-        cache_name = lambda name: args.weight_cache_path(dtype) / (f"{base_name}.{expert_num}.{name}")
+        cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (f"{base_name}.{expert_num}.{name}")
         as_tensor = lambda name: ttnn.as_tensor(
             torch_weight(name),
-            dtype=dtype,
+            dtype=dtypes[name],
             device=self.device,
             layout=self.model_config["MLP_W_LAYOUT_TILE"],
             memory_config=self.model_config["MLP_WEIGHTS_MEMCFG"],

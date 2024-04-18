@@ -181,12 +181,17 @@ class TtModelArgs:
                 / {
                     ttnn.bfloat16: "mixtral_tensor_cache_instruct_bf16",
                     ttnn.bfloat8_b: "mixtral_tensor_cache_instruct_bfp8",
+                    ttnn.bfloat4_b: "mixtral_tensor_cache_instruct_bfp4",
                 }[dtype]
             )
         else:
             return (
                 self.model_base_path
-                / {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
+                / {
+                    ttnn.bfloat16: "mixtral_tensor_cache_bf16",
+                    ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8",
+                    ttnn.bfloat4_b: "mixtral_tensor_cache_bfp4",
+                }[dtype]
             )
 
     def get_model_config(self):
