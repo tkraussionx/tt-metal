@@ -17,6 +17,9 @@ void kernel_main() {
     uint32_t core_id    = get_arg_val<uint32_t>(7);
     uint32_t num_cores    = get_arg_val<uint32_t>(8);
 
+    const uint32_t my_q_head = core_id / num_chunks;
+    const uint32_t my_q_chunk = core_id % num_chunks;
+
     const uint32_t out_chunk_tiles = S_chunk_t * DHt;
 
     constexpr bool is_dram = true;
@@ -36,12 +39,19 @@ void kernel_main() {
     for (uint32_t nb = 0; nb < B; ++nb) {
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != core_id) {
+            if (nq != my_q_head) {
                 continue;
             }
-            out_tile_id = nq * St * DHt;
             // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
             for (uint32_t q_chunk = 0; q_chunk < num_chunks; ++q_chunk) {
+                if (q_chunk != my_q_chunk) {
+                    continue;
+                }
+
+                uint32_t q_head_offset = nq * St * DHt;
+                uint32_t q_chunk_offset = q_chunk * S_chunk_t * DHt;
+                out_tile_id = q_head_offset + q_chunk_offset;
+
                 // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();
                 // Wait for compute to deliver output chunk
                 cb_wait_front(cb_out, out_chunk_tiles);
