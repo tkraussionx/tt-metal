@@ -32,6 +32,8 @@ void kernel_main() {
     const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
     const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
 
+    // DPRINT << "READER core=" << core_id  << " local_batch=" << local_batch << " local_q_head=" << local_q_head << " local_q_chunk_start=" << local_q_chunk_start << " local_q_chunk_end=" << local_q_chunk_end << ENDL();
+
     constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
 
     // const uint32_t my_q_head = core_id / num_chunks;
@@ -127,7 +129,7 @@ void kernel_main() {
                 cb_push_back(cb_q_in, q_chunk_tiles);
 
 
-                for (uint32_t k_chunk = 0; k_chunk < local_q_chunk_end; ++k_chunk) {
+                for (uint32_t k_chunk = 0; k_chunk <= q_chunk; ++k_chunk) {
                     // DPRINT << "READER: "  << "k_chunk=" << k_chunk << ENDL();
                     // TODO: index based off of BATCH as well
                     k_tile_id = k_chunk * S_chunk_t;

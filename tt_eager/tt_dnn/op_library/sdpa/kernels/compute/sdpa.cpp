@@ -118,13 +118,13 @@ void exp_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     cb_wait_front(in_cb, num_tiles);
     for (uint32_t i = 0; i < num_tiles; ++i) {
         acquire_dst(tt::DstMode::Half);
-        // cb_wait_front(in_cb, 1);
+        cb_wait_front(in_cb, 1);
         copy_tile_to_dst_init_short(in_cb); // TODO: might move out of loop
         copy_tile(in_cb, 0, 0);
         cb_pop_front(in_cb, 1);
         exp_tile_init(true); // TODO: might move out of loop
         exp_tile(0, true);
-        // cb_reserve_back(in_cb, 1);
+        cb_reserve_back(in_cb, 1);
         pack_tile(0, in_cb);
         cb_push_back(in_cb, 1);
         release_dst(tt::DstMode::Half);
@@ -137,13 +137,13 @@ void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     cb_wait_front(in_cb, num_tiles);
     for (uint32_t i = 0; i < num_tiles; ++i) {
         acquire_dst(tt::DstMode::Half);
-        // cb_wait_front(in_cb, 1);
+        cb_wait_front(in_cb, 1);
         copy_tile_to_dst_init_short(in_cb); // TODO: might move out of loop
         copy_tile(in_cb, 0, 0);
         cb_pop_front(in_cb, 1);
         recip_tile_init(); // TODO: might move out of loop
         recip_tile(0);
-        // cb_reserve_back(in_cb, 1);
+        cb_reserve_back(in_cb, 1);
         pack_tile(0, in_cb);
         cb_push_back(in_cb, 1);
         release_dst(tt::DstMode::Half);
@@ -164,10 +164,10 @@ void sub_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
     for (uint32_t i = 0; i < rows; ++i) {
         for (uint32_t j = 0; j < cols; ++j) {
             acquire_dst(tt::DstMode::Half);
-            // cb_wait_front(in0_cb, 1);
+            cb_wait_front(in0_cb, 1);
             sub_tiles_bcast_cols(in0_cb, in1_cb, 0, i, 0);
             cb_pop_front(in0_cb, 1);
-            // cb_reserve_back(in0_cb, 1);
+            cb_reserve_back(in0_cb, 1);
             pack_tile(0, in0_cb);
             cb_push_back(in0_cb, 1);
             release_dst(tt::DstMode::Half);
@@ -189,10 +189,10 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
     for (uint32_t i = 0; i < rows; ++i) {
         for (uint32_t j = 0; j < cols; ++j) {
             acquire_dst(tt::DstMode::Half);
-            // cb_wait_front(in0_cb, 1);
+            cb_wait_front(in0_cb, 1);
             mul_tiles_bcast_cols(in0_cb, in1_cb, 0, i, 0);
             cb_pop_front(in0_cb, 1);
-            // cb_reserve_back(in0_cb, 1);
+            cb_reserve_back(in0_cb, 1);
             pack_tile(0, in0_cb);
             cb_push_back(in0_cb, 1);
             release_dst(tt::DstMode::Half);
@@ -215,12 +215,12 @@ void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uin
         acquire_dst(tt::DstMode::Half);
         // ISSUE: unpacker is not blocking
         // Might be correct because of timing
-        // cb_wait_front(in0_cb, 1);
+        cb_wait_front(in0_cb, 1);
         // PACK(DPRINT << "COMPUTE: MUL_BCAST wait_front i: " << i << ENDL());
         mul_tiles_bcast_scalar(in0_cb, in1_scalar_cb, 0, 0, 0);
         cb_pop_front(in0_cb, 1);
         // ISSUE: packer doesn't block
-        // cb_reserve_back(in0_cb, 1);
+        cb_reserve_back(in0_cb, 1);
         // PACK(DPRINT << "COMPUTE: MUL_BCAST reserve_back i: " << i << ENDL());
         pack_tile(0, in0_cb);
         cb_push_back(in0_cb, 1);
@@ -480,7 +480,7 @@ void MAIN {
                 // Get Q chunk
                 cb_wait_front(cb_q_in, q_chunk_tiles);
 
-                for (uint32_t k_chunk = 0; k_chunk < local_q_chunk_end; ++k_chunk) {
+                for (uint32_t k_chunk = 0; k_chunk <= q_chunk; ++k_chunk) {
                     // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
 
                     /* QK = Q_CHUNK @ K_CHUNK */
