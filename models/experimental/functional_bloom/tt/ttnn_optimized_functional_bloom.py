@@ -18,7 +18,7 @@ from ttnn.model_preprocessing import (
 )
 
 BLOOM_MEMORY_CONFIG = ttnn.L1_MEMORY_CONFIG
-BLOOM_DTYPE = ttnn.bfloat8_b
+BLOOM_DTYPE = ttnn.bfloat16
 ASSUME_FUSED_SOFTMAX = False
 
 
@@ -108,7 +108,7 @@ def compute_attention_scores(query_layer, key_layer, alibi):
         query_layer,
         key_layer,
         core_grid=ttnn.CoreGrid(y=9, x=12),
-        memory_config=BLOOM_MEMORY_CONFIG,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
         dtype=ttnn.bfloat16,
     )
     ttnn.deallocate(query_layer)
@@ -121,22 +121,34 @@ def compute_attention_scores(query_layer, key_layer, alibi):
     scaled_attention_scores = ttnn.mul(attention_scores, inv_norm_factor, memory_config=BLOOM_MEMORY_CONFIG)
     ttnn.deallocate(attention_scores)
 
-    scaled_attention_scores_plus_alibi = ttnn.add(scaled_attention_scores, alibi, memory_config=BLOOM_MEMORY_CONFIG)
+    scaled_attention_scores_plus_alibi = ttnn.add(scaled_attention_scores, alibi, memory_config=ttnn.DRAM_MEMORY_CONFIG)
     ttnn.deallocate(scaled_attention_scores)
 
     return scaled_attention_scores_plus_alibi
 
 
 def compute_attention_probs(attention_scores, causal_mask):
-    if ASSUME_FUSED_SOFTMAX:
-        attention_weights = attention_scores
-    else:
-        attention_weights = ttnn.add(attention_scores, causal_mask, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        ttnn.deallocate(attention_scores)
+    # #  uncomment the below code (131-140) to have compute_attention_probs in ttnn
+    # if ASSUME_FUSED_SOFTMAX:
+    #     attention_weights = attention_scores
+    # else:
+    #     attention_weights = ttnn.add(attention_scores, causal_mask, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    #     ttnn.deallocate(attention_scores)
 
-    attention_probs = ttnn.softmax(attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    if not ASSUME_FUSED_SOFTMAX:
-        ttnn.deallocate(attention_weights)
+    # attention_probs = ttnn.softmax(attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    # if not ASSUME_FUSED_SOFTMAX:
+    #     ttnn.deallocate(attention_weights)
+
+    # # uncomment the below code (142-151) to have compute_attention_probs in PyTorch
+    device = attention_scores.device()
+    attention_scores_1 = ttnn.to_torch(attention_scores).to(dtype=torch.float)
+    causal_mask_1 = ttnn.to_torch(causal_mask).to(dtype=torch.bool)
+    attn_weights = torch.masked_fill(attention_scores_1, causal_mask_1, torch.finfo(attention_scores_1.dtype).min)
+    attention_weights = ttnn.from_torch(attn_weights, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, device=device)
+
+    attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32)
+    attention_probs = ttnn.from_torch(attention_probs, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, device=device)
+    ttnn.deallocate(attention_weights)
 
     return attention_probs
 
@@ -197,15 +209,22 @@ def bloom_mlp(
     *,
     parameters: ParameterDict,
 ):
-    ff1_output = ttnn.linear(
-        hidden_states,
-        parameters.dense_h_to_4h.weight,
-        bias=parameters.dense_h_to_4h.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        activation="gelu",
-        memory_config=BLOOM_MEMORY_CONFIG,
-        dtype=BLOOM_DTYPE,
-    )
+    # # uncomment this to have fused linear op
+    # ff1_output = ttnn.linear(
+    #     hidden_states,
+    #     parameters.dense_h_to_4h.weight,
+    #     bias=parameters.dense_h_to_4h.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     activation="gelu",
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    #     dtype=BLOOM_DTYPE,
+    # )
+
+    # # uncomment this to have split fused linear op
+    hidden_states = hidden_states @ parameters.dense_h_to_4h.weight
+    ff1_output = hidden_states + parameters.dense_h_to_4h.bias
+    ff1_output = ttnn.gelu(ff1_output)
+
     ttnn.deallocate(hidden_states)
 
     ff2_output = ttnn.linear(
