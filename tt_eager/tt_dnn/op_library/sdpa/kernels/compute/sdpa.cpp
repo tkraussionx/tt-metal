@@ -273,24 +273,35 @@ void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
 }
 
 
-void sub_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
+void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
     // Precondition: in0_cb and in1_cb have num_tiles produced
     // Postcondition: out_cb has num_tiles produced
     // Postcondition: in0_cb and in1_cb has num_tiles consumed
 
     sub_tiles_init();
     cb_wait_front(in0_cb, num_tiles);
-    // PACK(DPRINT << "COMPUTE: got here 0" << ENDL());
     cb_wait_front(in1_cb, num_tiles);
-    // PACK(DPRINT << "COMPUTE: got here 1" << ENDL());
     cb_reserve_back(out_cb, num_tiles);
-    // PACK(DPRINT << "COMPUTE: got here 2" << ENDL());
-    for (uint32_t i = 0; i < num_tiles; i++) {
+
+    const uint dst_tiles = 8;
+    const uint granularity = num_tiles >> 3; //division by 8
+    for (uint32_t u = 0; u < granularity; u++) {
         acquire_dst(tt::DstMode::Half);
-        sub_tiles(in0_cb, in1_cb, i, i, 0);
-        pack_tile(0, out_cb);
-        cb_push_back(out_cb, 1);
+        sub_tiles_init();
+        for (uint32_t i = 0; i < dst_tiles; i++) {
+            sub_tiles(in0_cb, in1_cb, (u*dst_tiles) + i, (u*dst_tiles) + i, i);
+        }
+
+        exp_tile_init(true);
+        for (uint32_t i = 0; i < dst_tiles; i++) {
+            exp_tile(i, true);
+        }
+
+        for (uint32_t i = 0; i < dst_tiles; i++) {
+            pack_tile(i, out_cb);
+        }
         release_dst(tt::DstMode::Half);
+        cb_push_back(out_cb, dst_tiles);
     }
 
     cb_pop_front(in0_cb, num_tiles);
@@ -532,14 +543,11 @@ void MAIN {
                     // cb_pop_front(cb_cur_sum, S_chunk_t);
 
                     if (k_chunk > 0) {
-                        /* cb_exp_max_diff = cb_prev_max - cb_cur_max */
-                        sub_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, S_chunk_t);
+                        /* cb_exp_max_diff = torch.exp(cb_prev_max - cb_cur_max) */
+                        sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, S_chunk_t);
                         // make cb_prev_max and cb_cur_max full again
                         cb_push_back(cb_prev_max, S_chunk_t);
                         cb_push_back(cb_cur_max, S_chunk_t);
-
-                        /* cb_exp_max_diff = torch.exp(cb_exp_max_diff) */
-                        exp_block_inplace(cb_exp_max_diff, S_chunk_t);
 
                         /* cb_prev_sum *= cb_exp_max_diff */
                         mul_block_inplace(cb_prev_sum, cb_exp_max_diff, S_chunk_t);
