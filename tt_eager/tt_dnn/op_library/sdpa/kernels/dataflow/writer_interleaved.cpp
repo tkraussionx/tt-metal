@@ -53,7 +53,7 @@ void kernel_main() {
                 continue;
             }
             // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
-            for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_start + num_local_q_chunks; ++q_chunk) {
+            for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_end; ++q_chunk) {
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * S_chunk_t * DHt;
