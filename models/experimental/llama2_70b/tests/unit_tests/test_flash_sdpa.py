@@ -363,11 +363,16 @@ def run_stress_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask)
-
+    first_pcc = 0.0
     for i in range(1000):
         print(f"Iteration {i}")
         mine = tt_fa2(device, Q, K, V, attn_mask)
         out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
+        if i == 0:
+            first_pcc = out_pcc
+        else:
+            assert out_pcc == first_pcc, "ND PCC found"
+
         print(f"python vs pytorch: {out_pcc}")
         assert out_pass
 
