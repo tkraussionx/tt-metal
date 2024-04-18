@@ -4,8 +4,10 @@
 
 import ttnn
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_geglu import geglu
+from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import find_max_subblock
 import tt_lib as ttl
 import torch
+import math
 
 
 def compare(tensor, name, reshape=False):
@@ -56,22 +58,24 @@ class feedforward:
         hidden_states = self.geglu(config, hidden_states)
 
         # TODO: Output sharded once https://github.com/tenstorrent/tt-metal/issues/6775 is fixed
-        interleaved_output = True
+        interleaved_output = False
         size = hidden_states.shape[-2]
         grid_size = self.grid_sizes[size]
         M, K, N = hidden_states.shape[-2], hidden_states.shape[-1], self.parameters.net[2].weight.shape[-1]
-        Nt = N // 32
-        G = grid_size[1]
-        per_core_N = (Nt - 1) // (G - 1) if Nt != 16 else 4
+        in0_block_h = M // grid_size[0] // 32
+        in0_block_w = K // grid_size[1] // 32
+        out_block_h = math.ceil(M / grid_size[0] / 32)
+        out_block_w = math.ceil(N / grid_size[1] / 32)
+        out_subblock_h, out_subblock_w, _ = find_max_subblock(out_block_h, out_block_w)
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
-            in0_block_w=K // grid_size[1] // 32,
-            out_subblock_h=1,
-            out_subblock_w=per_core_N,
-            per_core_M=M // grid_size[0] // 32,
-            per_core_N=per_core_N,
-            fused_activation=None,
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
             transpose_mcast=True,
+            fused_activation=None,
         )
         if hidden_states.shape[-2] == 8192:
             hidden_states = ttnn.reallocate(hidden_states)

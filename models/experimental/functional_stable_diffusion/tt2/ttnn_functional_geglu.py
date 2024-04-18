@@ -4,7 +4,12 @@
 
 import ttnn
 import torch
+import math
 import tt_lib as ttl
+from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
+    find_max_subblock,
+    determine_largest_subblock_size,
+)
 
 
 def ttnn_to_torch(input):
@@ -80,22 +85,32 @@ class geglu:
 
     def __call__(self, config, hidden_states):
         # TODO: Output sharded once https://github.com/tenstorrent/tt-metal/issues/6775 is fixed
-        interleaved_output = True
+        interleaved_output = False
         size = hidden_states.shape[-2]
         grid_size = self.grid_sizes[size]
         M, K, N = hidden_states.shape[-2], hidden_states.shape[-1], self.parameters.proj.proj_weight.shape[-1]
-        Nt = N // 32
-        G = grid_size[1]
-        per_core_N = (Nt - 1) // (G - 1) if Nt != 16 else 4
+        if not hidden_states.is_sharded():
+            hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
+                hidden_states,
+                grid_size,
+                [M // grid_size[0], K // grid_size[1]],
+                ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
+            )
+        in0_block_h = M // grid_size[0] // 32
+        in0_block_w = K // grid_size[1] // 32
+        out_block_h = math.ceil(M / grid_size[0] / 32)
+        out_block_w = math.ceil(N / grid_size[1] / 32)
+        out_subblock_h, out_subblock_w = determine_largest_subblock_size(out_block_h, out_block_w)
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
-            in0_block_w=K // grid_size[1] // 32,
-            out_subblock_h=self.out_subblock_hs[size] if interleaved_output else 1,
-            out_subblock_w=1,
-            per_core_M=M // grid_size[0] // 32,
-            per_core_N=per_core_N,
-            fused_activation=None,
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
             transpose_mcast=True,
+            fused_activation=None,
         )
         proj = ttnn.experimental.operations.primary.matmul(
             hidden_states,
@@ -121,13 +136,13 @@ class geglu:
 
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
-            in0_block_w=K // grid_size[1] // 32,
-            out_subblock_h=self.out_subblock_hs[size] if interleaved_output else 1,
-            out_subblock_w=1,
-            per_core_M=M // grid_size[0] // 32,
-            per_core_N=per_core_N,
-            fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
             transpose_mcast=True,
+            fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
         )
         gate = ttnn.experimental.operations.primary.matmul(
             hidden_states,
