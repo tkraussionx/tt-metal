@@ -86,14 +86,6 @@ void Tensor::deallocate(bool force) {
     if (this->tensor_attributes.use_count()) {
         // Check if the attributes didn't get moved to another tensor.
         // If not, we can deallocate this tensor.
-        if (this->tensor_attributes->dynamic_storage) {
-            // Tensor was populated with autoformat. Storage type can change
-            // based on op behaviour. Wait for tensor metadata populated.
-            // This is a special case, where storage type cannot change for multi
-            // device tensors (see assert in launch_op). Hence, this only applies
-            // to the single device case, where metadata populated == tensor populated.
-            this->wait_for_tensor_metadata_populated();
-        }
         std::visit(
                 [force, this](auto& storage) {
                     using T = std::decay_t<decltype(storage)>;
@@ -120,6 +112,11 @@ void Tensor::deallocate(bool force) {
                                             // If any other tensor handles hold this buffer, it will not be deleted, until the last handle goes out of scope
                                             // or is deallocated.
                                             s.buffer.reset();
+                                        } else if  constexpr(std::is_same_v<type, OwnedStorage>) {
+                                            // Manage Dynamic Storage (due to autoformat in async mode): Main thread sees this tensor as a device tensor, since worker has not updated
+                                            // storage time. When the worker executes the dealloc request, the storage type has been appropriately updated to Owned.
+                                            TT_ASSERT(this->tensor_attributes->dynamic_storage, "Tensor storage type changed during runtime (device -> host), but dynamic storage was not marked.");
+                                            std::visit([] (auto&& buffer) { buffer.reset(); }, s.buffer);
                                         }
                                     }, this->tensor_attributes->storage);
                                 });

@@ -714,7 +714,9 @@ void launch_op(
                     if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
                         TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
                         TT_ASSERT(std::holds_alternative<DeviceStorage>(outputs.at(i).tensor_attributes->storage), "All inputs and outputs to an op must be on device for multi-device tensors.");
+                        // Make this a host side tensor - Set storage = Owned and clear workers
                         outputs.at(i).tensor_attributes->storage = OwnedStorage();
+                        outputs.at(i).workers = {};
                     }
                     else {
                         outputs.at(i).tensor_attributes->dynamic_storage = false;
