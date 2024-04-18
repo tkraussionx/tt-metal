@@ -2,77 +2,59 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from pathlib import Path
-import sys
-from loguru import logger
-import random
-import pytest
 import torch
-import tt_lib as ttl
-
-from tests.tt_eager.python_api_testing.sweep_tests import pytorch_ops
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal
-from tests.tt_eager.python_api_testing.sweep_tests.tt_lib_ops import permute as tt_permute
-from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_rand
-
-
-def run_permute_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, permute_dims, device):
-    torch.manual_seed(data_seed)
-
-    if in_mem_config == "SYSTEM_MEMORY":
-        in_mem_config = None
-
-    x = gen_rand(size=input_shape, low=-100, high=100).to(torch.bfloat16)
-    # compute ref value
-    x_ref = x.detach().clone()
-    ref_value = pytorch_ops.permute(x_ref, permute_dims=permute_dims)
-
-    tt_result = tt_permute(
-        x=x,
-        permute_dims=permute_dims,
-        device=device,
-        dtype=[dtype],
-        layout=[dlayout],
-        input_mem_config=[in_mem_config],
-        output_mem_config=out_mem_config,
-    )
-
-    # compare tt and golden outputs
-    print(ref_value)
-    print(tt_result)
-    success, pcc_value = comp_equal(ref_value, tt_result)
-    logger.debug(pcc_value)
-    logger.debug(success)
-
-    assert success
-
-
-test_sweep_args = [
-    (
-        (2, 4, 32, 64),
-        ttl.tensor.DataType.BFLOAT8_B,
-        ttl.tensor.Layout.TILE,
-        "SYSTEM_MEMORY",
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-        16305027,
-        (3, 1, 2, 0),
-    ),
-    (
-        (3, 6, 32, 64),
-        ttl.tensor.DataType.BFLOAT8_B,
-        ttl.tensor.Layout.TILE,
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-        11271489,
-        (0, 2, 3, 1),
-    ),
-]
+import pytest
+import tt_lib
+from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import (
+    data_gen_with_range,
+    compare_pcc,
+    data_gen_with_val,
+)
+from loguru import logger
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+)
 
 
 @pytest.mark.parametrize(
-    "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, permute_dims",
-    (test_sweep_args),
+    "input_shapes",
+    (
+        (torch.Size([1, 1, 32, 32])),
+        (torch.Size([1, 1, 320, 384])),
+        (torch.Size([1, 3, 320, 384])),
+    ),
 )
-def test_permute_test(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, permute_dims, device):
-    random.seed(0)
-    run_permute_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, permute_dims, device)
+def test_bw_remainder_floor(input_shapes, device):
+    in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
+    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 50, device)
+    print(in_data)
+    print(grad_data)
+
+    golden_tensor = torch.remainder(in_data, grad_data)
+
+    tt_output_tensor_on_device = tt_lib.tensor.xlogy(input_tensor, grad_tensor)
+    tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
+
+    comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
+    comp_all, _ = comparison_funcs.comp_allclose(golden_tensor, tt_out_tensor, atol=4, rtol=1e-1)
+    print(comp_pass)
+    print(comp_all)
+    print(comp_out)
+    print(tt_out_tensor)
+    print(golden_tensor)
+    diff = torch.abs(golden_tensor - tt_out_tensor)
+    max_diff = torch.max(diff)
+
+    if max_diff > 0:
+        print("Inputs for which the outputs differ by more than 0:")
+        indices = torch.nonzero(diff > 0)
+        for idx in indices:
+            input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
+            input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
+            expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
+            actual_output_val = tt_out_tensor[idx[0], idx[1], idx[2], idx[3]]
+            print(
+                f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
+            )
+
+    assert comp_pass

@@ -915,10 +915,13 @@ Tensor logical_xori(const Tensor& input_a, float value, const MemoryConfig& outp
 
 // xlogy(x,y))=x*log(y)
 Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
-    Tensor t_nan = full_like(input_b, std::nanf(" "), output_mem_config);
-    Tensor result = mul(input_a, log(input_b, output_mem_config), std::nullopt, output_mem_config);
-    result = where(logical_or(ltz(input_b, output_mem_config), eq(input_b, t_nan, std::nullopt, output_mem_config), std::nullopt, output_mem_config), t_nan, result, output_mem_config);
-    return result;
+    Tensor dividend = mul_unary(input_a, 10000);
+    Tensor divisor = mul_unary(input_b, 10000);
+    Tensor div_result = mul(dividend, recip(divisor));
+    Tensor quotient = tanhshrink(div_result);
+    Tensor remainder = sub(dividend, mul(quotient, divisor));
+    remainder = div_unary(remainder, 10000);
+    return remainder;
 }
 Tensor xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
     return operation::decorate_as_composite(__func__, _xlogy)(input_a, input_b, output_mem_config);
