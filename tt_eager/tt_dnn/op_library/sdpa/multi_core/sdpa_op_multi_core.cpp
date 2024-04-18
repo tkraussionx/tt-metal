@@ -72,7 +72,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // This should allocate input_tensor DRAM buffer on the device
     Device *device = input_tensor_q.device();
 
-    MathFidelity math_fidelity;
+    MathFidelity math_fidelity = MathFidelity::HiFi2;
     bool math_approx_mode;
     bool fp32_dest_acc_en;
 
@@ -83,12 +83,12 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         using T = std::decay_t<decltype(compute_kernel_config)>;
         if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
-            math_fidelity = compute_kernel_config.math_fidelity;
+            // math_fidelity = compute_kernel_config.math_fidelity;
             math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = false;
         } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
-            math_fidelity = compute_kernel_config.math_fidelity;
+            // math_fidelity = compute_kernel_config.math_fidelity;
             math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = input_data_format == tt::DataFormat::Float32 ? true : compute_kernel_config.fp32_dest_acc_en;
         } else {

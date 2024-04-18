@@ -246,13 +246,6 @@ def run_test_sdpa_tt(device):
     print(f"V: {V.shape}")
     print(f"attn_mask: {attn_mask.shape}")
 
-    # is_causal must be false if we specify an attention_mask
-    # gt = fa2_fake(
-    #     Q,
-    #     K,
-    #     V,
-    #     attn_mask,
-    # )
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
     mine = tt_fa2(device, Q, K, V, attn_mask)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)

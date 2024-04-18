@@ -408,18 +408,23 @@ void MAIN {
     const uint32_t qk_chunk_tiles = S_chunk_t * S_chunk_t;
     const uint32_t out_chunk_tiles = S_chunk_t * DHt;
 
-    constexpr uint32_t in0_block_w = 1;
-    constexpr uint32_t subblock_w = 1;
-    constexpr uint32_t subblock_h = 1;
-    constexpr uint32_t out_subblock_num_tiles = 1;
+    // constexpr uint32_t in0_block_w = 1;
+    // constexpr uint32_t subblock_w = 1;
+    // constexpr uint32_t subblock_h = 1;
 
-    const uint32_t qk_in0_num_subblocks = S_chunk_t / subblock_h;
-    const uint32_t qk_in1_num_subblocks = S_chunk_t / subblock_w;
-    const uint32_t qk_num_blocks = DHt / in0_block_w;
+    const uint32_t qk_in0_block_w = DHt;
+    const uint32_t qk_subblock_w = S_chunk_t;
+    const uint32_t qk_subblock_h = 1;
+    const uint32_t qk_in0_num_subblocks = S_chunk_t / qk_subblock_h;
+    const uint32_t qk_in1_num_subblocks = S_chunk_t / qk_subblock_w;
+    const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
 
-    const uint32_t out_in0_num_subblocks = S_chunk_t / subblock_h;
-    const uint32_t out_in1_num_subblocks = DHt / subblock_w;
-    const uint32_t out_num_blocks = S_chunk_t / in0_block_w;
+    const uint32_t out_in0_block_w = S_chunk_t;
+    const uint32_t out_subblock_w = DHt;
+    const uint32_t out_subblock_h = 1;
+    const uint32_t out_in0_num_subblocks = S_chunk_t / out_subblock_h;
+    const uint32_t out_in1_num_subblocks = DHt / out_subblock_w;
+    const uint32_t out_num_blocks = S_chunk_t / out_in0_block_w;
 
     constexpr uint32_t DST_SIZE = 8;
 
@@ -463,7 +468,7 @@ void MAIN {
 
                     /* QK = Q_CHUNK @ K_CHUNK */
                     cb_wait_front(cb_k_in, k_chunk_tiles);
-                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, S_chunk_t, S_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, in0_block_w, subblock_h, subblock_w);
+                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, S_chunk_t, S_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w);
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
                     /* QK *= SCALE */
@@ -491,7 +496,6 @@ void MAIN {
                     cb_push_back(cb_qk_im, qk_chunk_tiles);
                     sub_block_bcast_cols_inplace(cb_qk_im, cb_cur_max, S_chunk_t, S_chunk_t);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
-                    // cb_pop_front(cb_cur_max, S_chunk_t);
 
 
                     /* QK = exp(QK)*/
@@ -502,6 +506,7 @@ void MAIN {
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
                     cb_push_back(cb_qk_im, qk_chunk_tiles);
                     reduce_sum_c(cb_qk_im, cb_identity_scale_in, cb_cur_sum, S_chunk_t, S_chunk_t);
+
                     // cb_cur_sum full, cb_qk_im empty
                     // DEBUG: free cb_cur_sum
                     // cb_pop_front(cb_cur_sum, S_chunk_t);
@@ -530,7 +535,7 @@ void MAIN {
 
                     /* OUT_IM = QK @ V_CHUNK */
                     cb_wait_front(cb_v_in, k_chunk_tiles);
-                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, S_chunk_t, DHt, S_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, in0_block_w, subblock_h, subblock_w);
+                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, S_chunk_t, DHt, S_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w);
                     cb_pop_front(cb_v_in, k_chunk_tiles);
                     // cb_out_im points to end of CB
                     // reset read_ptr for cb_out_im
