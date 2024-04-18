@@ -213,11 +213,12 @@ void TensorModule(py::module &m_tensor) {
     pyMemoryConfig
         .def(
             py::init<>(
-                [](TensorMemoryLayout memory_layout, BufferType buffer_type, std::optional<ShardSpec> shard_spec) {
-                    return MemoryConfig{.memory_layout=memory_layout, .buffer_type=buffer_type, .shard_spec=shard_spec};
+                [](TensorMemoryLayout memory_layout, BufferType buffer_type, uint32_t num_tiles_per_page, std::optional<ShardSpec> shard_spec) {
+                    return MemoryConfig{.memory_layout=memory_layout, .buffer_type=buffer_type, .num_tiles_per_page=num_tiles_per_page, .shard_spec=shard_spec};
                 }),
             py::arg("memory_layout") = TensorMemoryLayout::INTERLEAVED,
             py::arg("buffer_type") = BufferType::DRAM,
+            py::arg("num_tiles_per_page") = 1,
             py::arg("shard_spec") = std::nullopt,
             R"doc(
                 Create MemoryConfig class.

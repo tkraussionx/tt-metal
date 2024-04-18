@@ -106,10 +106,10 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
 
 
 Buffer::Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferType buffer_type,
-                const TensorMemoryLayout buffer_layout,
+                const TensorMemoryLayout buffer_layout, uint32_t num_tiles_per_page,
                 std::optional< ShardSpecBuffer> shard_parameters
                 )
-    : device_(device), size_(size), page_size_(page_size), buffer_type_(buffer_type), buffer_layout_(buffer_layout), shard_parameters_(shard_parameters) {
+    : device_(device), size_(size), page_size_(page_size), num_tiles_per_page_(num_tiles_per_page), buffer_type_(buffer_type), buffer_layout_(buffer_layout), shard_parameters_(shard_parameters) {
     TT_FATAL(this->device_ != nullptr and this->device_->allocator_ != nullptr);
     validate_buffer_size_and_page_size(size, page_size, buffer_type, buffer_layout, shard_parameters);
 

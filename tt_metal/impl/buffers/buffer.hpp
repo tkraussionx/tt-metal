@@ -118,6 +118,7 @@ struct BufferConfig {
     uint64_t page_size;            // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type;
     TensorMemoryLayout buffer_layout = TensorMemoryLayout::INTERLEAVED;
+    uint32_t num_tiles_per_page = 1;
 };
 
 typedef BufferConfig InterleavedBufferConfig;
@@ -130,6 +131,7 @@ struct ShardedBufferConfig {
     uint64_t page_size;            // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type = BufferType::L1;
     TensorMemoryLayout buffer_layout = TensorMemoryLayout::HEIGHT_SHARDED;
+    uint32_t num_tiles_per_page = 1;
     ShardSpecBuffer shard_parameters;
 };
 
@@ -155,7 +157,7 @@ class Buffer {
         shard_parameters_(std::nullopt) {}
 
     Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferType buffer_type,
-        const TensorMemoryLayout buffer_layout=TensorMemoryLayout::INTERLEAVED,
+        const TensorMemoryLayout buffer_layout=TensorMemoryLayout::INTERLEAVED, uint32_t num_tiles_per_page=1,
         std::optional<ShardSpecBuffer> shard_parameter = std::nullopt);
 
     Buffer(const Buffer &other);
@@ -175,6 +177,8 @@ class Buffer {
     void set_address(uint64_t addr) { address_ = addr; }
 
     uint32_t page_size() const { return page_size_; }
+
+    uint32_t num_tiles_per_page() const { return num_tiles_per_page_; }
 
     uint32_t num_pages() const { return this->size() / this->page_size(); }
 
@@ -224,6 +228,7 @@ class Buffer {
     uint64_t size_;                 // Size in bytes
     uint64_t address_;              // Address of buffer
     uint64_t page_size_;            // Size of unit being interleaved. For non-interleaved buffers: size == page_size
+    uint32_t num_tiles_per_page_;   // For interleaved buffers, number of tiles per page
     BufferType buffer_type_;
     TensorMemoryLayout buffer_layout_;
     std::optional<ShardSpecBuffer> shard_parameters_;

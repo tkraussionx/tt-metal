@@ -767,6 +767,7 @@ std::shared_ptr<Buffer> CreateBuffer(const ShardedBufferConfig &config) {
         config.page_size,
         config.buffer_type,
         config.buffer_layout,
+        config.num_tiles_per_page,
         config.shard_parameters);
 }
 

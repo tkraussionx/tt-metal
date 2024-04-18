@@ -2455,7 +2455,7 @@ def test_sharded_to_from_l1(device, input_shape, shard_scheme, shard_orientation
     )
     shard_halo = False
     shard_spec = ttl.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, shard_halo)
-    mem_config = ttl.tensor.MemoryConfig(shard_scheme, ttl.tensor.BufferType.L1, shard_spec)
+    mem_config = ttl.tensor.MemoryConfig(shard_scheme, ttl.tensor.BufferType.L1, 1, shard_spec)
 
     volume = input_shape[0] * input_shape[1] * input_shape[2] * input_shape[3]
     golden = torch.arange(volume).reshape(input_shape).bfloat16()

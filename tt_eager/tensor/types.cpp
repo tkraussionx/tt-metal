@@ -197,6 +197,7 @@ void dump_memory_config(std::ofstream& output_stream, const MemoryConfig& memory
     output_stream.write(reinterpret_cast<const char*>(&VERSION_ID), sizeof(std::uint8_t));
     output_stream.write(reinterpret_cast<const char*>(&memory_config.memory_layout), sizeof(TensorMemoryLayout));
     output_stream.write(reinterpret_cast<const char*>(&memory_config.buffer_type), sizeof(BufferType));
+    output_stream.write(reinterpret_cast<const char*>(&memory_config.num_tiles_per_page), sizeof(uint32_t));
 
     bool has_shard_spec = memory_config.shard_spec.has_value();
     output_stream.write(reinterpret_cast<const char*>(&has_shard_spec), sizeof(bool));
@@ -226,6 +227,7 @@ MemoryConfig load_memory_config(std::ifstream& input_stream) {
     std::uint8_t version_id;
     TensorMemoryLayout memory_layout;
     BufferType buffer_type;
+    uint32_t num_tiles_per_page;
     bool has_shard_spec;
     input_stream.read(reinterpret_cast<char*>(&version_id), sizeof(std::uint8_t));
     if (version_id != VERSION_ID) {
@@ -233,6 +235,7 @@ MemoryConfig load_memory_config(std::ifstream& input_stream) {
     }
     input_stream.read(reinterpret_cast<char*>(&memory_layout), sizeof(TensorMemoryLayout));
     input_stream.read(reinterpret_cast<char*>(&buffer_type), sizeof(BufferType));
+    input_stream.read(reinterpret_cast<char*>(&num_tiles_per_page), sizeof(uint32_t));
     input_stream.read(reinterpret_cast<char*>(&has_shard_spec), sizeof(bool));
 
     std::optional<ShardSpec> shard_spec = std::nullopt;
@@ -254,7 +257,7 @@ MemoryConfig load_memory_config(std::ifstream& input_stream) {
         input_stream.read(reinterpret_cast<char*>(&halo), sizeof(bool));
         shard_spec = {CoreRangeSet{core_ranges}, shape, orientation, halo};
     }
-    return MemoryConfig{memory_layout, buffer_type, shard_spec};
+    return MemoryConfig{memory_layout, buffer_type, num_tiles_per_page, shard_spec};
 }
 
 MemoryConfig load_memory_config(const std::string& file_name) {

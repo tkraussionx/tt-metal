@@ -170,7 +170,7 @@ def create_sharded_memory_config(
             raise RuntimeError("Invalid sharding scheme")
 
     shard_spec = ttnn.experimental.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, halo)
-    memory_config = MemoryConfig(tensor_memory_layout, BufferType.L1, shard_spec)
+    memory_config = MemoryConfig(tensor_memory_layout, BufferType.L1, 1, shard_spec)
     return memory_config
 
 

@@ -104,12 +104,12 @@ std::array<uint32_t, 2> get_sharded_page_shape(Layout layout,  DataType dtype, s
 namespace detail {
 
 DeviceBuffer allocate_interleaved_buffer_on_device(uint32_t buffer_size_bytes, Device *device, const Shape& shape, DataType data_type, Layout layout, const MemoryConfig& memory_config) {
-    uint32_t page_size = get_page_size(data_type, layout, buffer_size_bytes, shape);
-    return std::make_shared<Buffer>(device, buffer_size_bytes, page_size, memory_config.buffer_type);
+    uint32_t page_size = get_page_size(data_type, layout, buffer_size_bytes, shape) * memory_config.num_tiles_per_page;
+    return std::make_shared<Buffer>(device, buffer_size_bytes, page_size, memory_config.buffer_type, TensorMemoryLayout::INTERLEAVED, memory_config.num_tiles_per_page);
 }
 
 DeviceBuffer allocate_contiguous_buffer_on_device(uint32_t buffer_size_bytes, Device *device, const MemoryConfig& memory_config) {
-    return std::make_shared<Buffer>(device, buffer_size_bytes, buffer_size_bytes, memory_config.buffer_type);
+    return std::make_shared<Buffer>(device, buffer_size_bytes, buffer_size_bytes, memory_config.buffer_type, TensorMemoryLayout::INTERLEAVED, memory_config.num_tiles_per_page);
 }
 
 
@@ -169,6 +169,7 @@ DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Devic
     return std::make_shared<Buffer>(device, buffer_size_bytes, page_size,
                                  memory_config.buffer_type,
                                  memory_config.memory_layout,
+                                 memory_config.num_tiles_per_page,
                                  shard_params);
 }
 
