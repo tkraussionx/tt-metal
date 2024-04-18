@@ -49,38 +49,48 @@ void ScaledDotProductAttention::validate(const std::vector<Tensor> &input_tensor
         }
     }
 
+    const auto q_shape = input_tensors.at(0).get_legacy_shape();
+    const auto k_shape = input_tensors.at(1).get_legacy_shape();
+    const auto v_shape = input_tensors.at(2).get_legacy_shape();
+
+    // assert all dataformats are the same
+    TT_FATAL(input_tensors.at(0).get_dtype() == input_tensors.at(1).get_dtype() && input_tensors.at(0).get_dtype() == input_tensors.at(2).get_dtype());
+
+    // Check sequence lengths
+    TT_FATAL(q_shape[-2] == k_shape[-1] && q_shape[-2] == v_shape[-2]);
+
+    // Check batch size
+    TT_FATAL(q_shape[-4] == k_shape[-4] && q_shape[-4] == v_shape[-4]);
+
+    // Check hidden size
+    TT_FATAL(q_shape[-1] == k_shape[-2] && q_shape[-1] == v_shape[-1]);
+
+    // Check kv heads
+    TT_FATAL(k_shape[-3] == v_shape[-3]);
+
+    // Check qkv heads
+    TT_FATAL(q_shape[-3] >= k_shape[-3]);
+
     std::visit(
         [&](const auto& program_config) {
             using ProgramConfigType = std::decay_t<decltype(program_config)>;
             if constexpr (
                 std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SDPAMultiCoreProgramConfig>
             ) {
-                const auto q_shape = input_tensors.at(0).get_legacy_shape();
-                const auto k_shape = input_tensors.at(1).get_legacy_shape();
-                const auto v_shape = input_tensors.at(2).get_legacy_shape();
+                auto q_chunk_size = program_config.q_chunk_size;
+                auto k_chunk_size = program_config.k_chunk_size;
 
-                // assert all dataformats are the same
-                TT_FATAL(input_tensors.at(0).get_dtype() == input_tensors.at(1).get_dtype() && input_tensors.at(0).get_dtype() == input_tensors.at(2).get_dtype());
+                TT_FATAL(q_shape[-2] % q_chunk_size == 0);
+                TT_FATAL(k_shape[-1] % k_chunk_size == 0);
 
-                // Check sequence lengths
-                TT_FATAL(q_shape[-2] == k_shape[-1] && q_shape[-2] == v_shape[-2]);
+                // For now, assert that chunk sizes are the same
+                TT_FATAL(q_chunk_size == k_chunk_size);
 
-                // Check batch size
-                TT_FATAL(q_shape[-3] == k_shape[-3] && q_shape[-3] == v_shape[-3]);
+                // Ensure that batch * num_heads divides the number of cores
+                auto b_nh = q_shape[-4] * q_shape[-3];
+                auto num_cores = program_config.compute_with_storage_grid_size.x * program_config.compute_with_storage_grid_size.y;
+                TT_FATAL((num_cores / b_nh) * b_nh == num_cores);
 
-                // Check hidden size
-                TT_FATAL(q_shape[-1] == k_shape[-2] && q_shape[-1] == v_shape[-1]);
-
-                // Check kv heads
-                TT_FATAL(k_shape[-3] == v_shape[-3]);
-
-                // Check qkv heads
-                TT_FATAL(q_shape[-3] >= k_shape[-3]);
-
-                // Check chunks ize
-                // TT_FATAL(q_shape[-2] % program_config.chunk_size == 0);
-
-                // TT_FATAL(this->program_config.chunk_size % TILE_HEIGHT == 0);
             }
         },
         this->program_config
@@ -112,9 +122,25 @@ operation::ProgramWithCallbacks ScaledDotProductAttention::create_program(
     }
 
     // TODO: get this from program_config
-    std::size_t chunk_size = 256;
+    std::size_t q_chunk_size;
+    std::size_t k_chunk_size;
 
-    return sdpa_multi_core(input_tensor_q, input_tensor_k, input_tensor_v, output_tensor, attn_mask, scale, this->is_causal, chunk_size, this->compute_kernel_config);
+    std::visit(
+        [&](const auto& program_config) {
+            using ProgramConfigType = std::decay_t<decltype(program_config)>;
+            if constexpr (
+                std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SDPAMultiCoreProgramConfig>
+            ) {
+                q_chunk_size = program_config.q_chunk_size;
+                k_chunk_size = program_config.k_chunk_size;
+            } else {
+                q_chunk_size = k_chunk_size = 256;
+            }
+        },
+        this->program_config
+    );
+
+    return sdpa_multi_core(input_tensor_q, input_tensor_k, input_tensor_v, output_tensor, attn_mask, scale, this->is_causal, q_chunk_size, k_chunk_size, this->compute_kernel_config, this->program_config);
 }
 
 // What is this?

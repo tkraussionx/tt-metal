@@ -93,9 +93,10 @@ void py_module(py::module& m_transformers) {
         .def(py::init<>());
 
     py::class_<SDPAMultiCoreProgramConfig>(m_transformers, "SDPAMultiCoreProgramConfig")
-        .def(py::init<CoreCoord, std::size_t>(), py::kw_only(), py::arg("compute_with_storage_grid_size"), py::arg("chunk_size").noconvert())
+        .def(py::init<CoreCoord, std::size_t, std::size_t>(), py::kw_only(), py::arg("compute_with_storage_grid_size"), py::arg("q_chunk_size").noconvert(), py::arg("k_chunk_size").noconvert())
         .def_readwrite("compute_with_storage_grid_size", &SDPAMultiCoreProgramConfig::compute_with_storage_grid_size)
-        .def_readwrite("chunk_size", &SDPAMultiCoreProgramConfig::chunk_size);
+        .def_readwrite("q_chunk_size", &SDPAMultiCoreProgramConfig::q_chunk_size)
+        .def_readwrite("k_chunk_size", &SDPAMultiCoreProgramConfig::k_chunk_size);
 
     m_transformers.def(
         "scaled_dot_product_attention",

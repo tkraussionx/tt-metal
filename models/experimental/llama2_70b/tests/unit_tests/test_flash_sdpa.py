@@ -218,8 +218,12 @@ def tt_fa2(device, q, k, v, attn_mask):
     tt_v = torch2tt_tensor(v, device)
     tt_attn_mask = torch2tt_tensor(attn_mask, device)
 
+    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 8], q_chunk_size=256, k_chunk_size=256
+    )
+
     tt_out = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
-        tt_q, tt_k, tt_v, tt_attn_mask, is_causal=True
+        tt_q, tt_k, tt_v, tt_attn_mask, is_causal=True, program_config=program_config
     )
 
     return tt2torch_tensor(tt_out)

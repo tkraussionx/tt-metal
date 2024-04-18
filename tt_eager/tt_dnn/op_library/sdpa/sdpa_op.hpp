@@ -26,12 +26,14 @@ struct SDPADefaultProgramConfig{
 
 struct SDPAMultiCoreProgramConfig {
     CoreCoord compute_with_storage_grid_size;
-    std::size_t chunk_size;
+    std::size_t q_chunk_size;
+    std::size_t k_chunk_size;
 
     tt::stl::reflection::Attributes attributes() const {
         return {
             {"compute_with_storage_grid_size", compute_with_storage_grid_size},
-            {"chunk_size", chunk_size}
+            {"q_chunk_size", q_chunk_size},
+            {"k_chunk_size", k_chunk_size}
         };
     };
 };
@@ -73,13 +75,15 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const std::optional<const Tensor> attn_mask,
     std::optional<float> scale,
     bool is_causal,
-    std::size_t chunk_size,
-    DeviceComputeKernelConfig compute_kernel_config
+    std::size_t q_chunk_size,
+    std::size_t k_chunk_size,
+    DeviceComputeKernelConfig compute_kernel_config,
+    tt::operations::primary::transformers::SDPAProgramConfig program_config
 );
 
 namespace transformers {
 
-Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> attn_mask = std::nullopt, const bool is_causal = false, std::optional<float> scale = std::nullopt, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, const SDPAProgramConfig& program_config = SDPADefaultProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
+Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> attn_mask = std::nullopt, const bool is_causal = true, std::optional<float> scale = std::nullopt, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, const SDPAProgramConfig& program_config = SDPADefaultProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
 
 }   // namespace transformers
 
