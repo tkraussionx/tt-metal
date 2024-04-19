@@ -576,8 +576,8 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     //Tensor div_result = mul(input_a, recip(input_b));
     //Tensor floor_div = tanhshrink(div_result);
     //Tensor result = sub(input_a, mul(floor_div, input_b));
-    Tensor dividend = mul_unary(input_a, 1000000);
-    Tensor divisor = mul_unary(input_b, 1000000);
+    Tensor dividend = mul_unary(input_a, 10000);
+    Tensor divisor = mul_unary(input_b, 10000);
     Tensor orig = divisor;
     for (int i=0; i<100; i++){
         dividend = where(logical_and(ltz(dividend), gtz(divisor)), add(dividend, divisor), dividend);
@@ -592,8 +592,11 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
     dividend = where(ltz(orig), neg(dividend), dividend);
-    //dividend = div_unary(dividend, 1000000);
-    return dividend;
+    dividend = div_unary(dividend, 10000);
+    Tensor temp = mul(input_a, input_b);
+    Tensor remainder = add(dividend, temp);
+    remainder = sub(remainder, temp);
+    return remainder;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
     return operation::decorate_as_composite(__func__, _atan2)(input_a, input_b, output_mem_config);
@@ -920,7 +923,10 @@ Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor div_result = mul(dividend, recip(divisor));
     Tensor quotient = tanhshrink(div_result);
     Tensor remainder = sub(dividend, mul(quotient, divisor));
-    //remainder = div_unary(remainder, 10000);
+    remainder = div_unary(remainder, 10000);
+    Tensor temp = mul(quotient, input_b);
+    remainder = add(remainder, temp);
+    remainder = sub(remainder, temp);
     return remainder;
 }
 Tensor xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
