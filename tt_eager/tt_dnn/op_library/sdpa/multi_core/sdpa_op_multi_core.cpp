@@ -180,6 +180,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // We parallelize over batch, q_heads, and q_seq_len. We always run one batch and one head per core,
     // so the question is how much of the q_seq_len does each core handle.
     uint32_t q_parallel_factor = num_cores / (B * NQH);
+    // q_parallel_factor should max out at q_num_chunks
+    q_parallel_factor = std::min(q_parallel_factor, q_num_chunks);
     TT_FATAL(q_parallel_factor * B * NQH == num_cores);
 
 

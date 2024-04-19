@@ -146,8 +146,8 @@ void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t
     cb_wait_front(in0_cb, rows*cols);
     cb_wait_front(in1_cb, rows);
 
-    uint32_t dst_tiles = 1;
-    uint32_t granularity = cols >> 0; //division by 8
+    uint32_t dst_tiles = 8;
+    uint32_t granularity = cols >> 3; //division by 8
     for (uint32_t i = 0; i < rows; ++i) {
         for(uint u = 0; u < granularity; u++) {
             cb_wait_front(in0_cb, dst_tiles);
@@ -284,8 +284,8 @@ void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t n
     cb_wait_front(in1_cb, num_tiles);
     cb_reserve_back(out_cb, num_tiles);
 
-    const uint dst_tiles = 1;
-    const uint granularity = num_tiles >> 0; //division by 8
+    const uint dst_tiles = 8;
+    const uint granularity = num_tiles >> 3; //division by 8
     for (uint32_t u = 0; u < granularity; u++) {
         sub_tiles_init();
         tile_regs_acquire();
