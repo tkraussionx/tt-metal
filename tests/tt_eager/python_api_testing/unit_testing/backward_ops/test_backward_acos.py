@@ -48,13 +48,16 @@ def test_bw_remainder(input_shapes, device):
     if max_diff > 0:
         print("Inputs for which the outputs differ by more than 0:")
         indices = torch.nonzero(diff > 0)
+        iter = 0
         for idx in indices:
-            input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
-            input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
-            expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
-            actual_output_val = tt_out_tensor[idx[0], idx[1], idx[2], idx[3]]
-            print(
-                f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
-            )
+            if iter < 30:
+                input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
+                input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
+                expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
+                actual_output_val = tt_out_tensor[idx[0], idx[1], idx[2], idx[3]]
+                print(
+                    f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
+                )
+                iter += 1
 
     assert comp_pass
