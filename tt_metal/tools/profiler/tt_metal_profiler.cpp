@@ -42,12 +42,12 @@ double CalibrateTimer()
 {
     std::atomic_signal_fence( std::memory_order_acq_rel );
     const auto t0 = std::chrono::high_resolution_clock::now();
-    const auto r0 = tracy::get_cpu_time();
+    const auto r0 = TracyGetCpuTime();
     std::atomic_signal_fence( std::memory_order_acq_rel );
     std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
     std::atomic_signal_fence( std::memory_order_acq_rel );
     const auto t1 = std::chrono::high_resolution_clock::now();
-    const auto r1 = tracy::get_cpu_time();
+    const auto r1 = TracyGetCpuTime();
     std::atomic_signal_fence( std::memory_order_acq_rel );
 
     const auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>( t1 - t0 ).count();
@@ -56,171 +56,173 @@ double CalibrateTimer()
     return double( dt ) / double( dr );
 }
 
+void InitTimeSync(int device_id, CoreCoord core)
+{
+    std::vector<uint32_t> time_sync_buffer(8, 0);
+
+    constexpr uint16_t sampleCount = 250;
+    int64_t writeSum = 0;
+
+    const auto FREQ = std::getenv("TT_METAL_PROFILER_FREQ");
+    int millisecond_wait = 4;
+    if (FREQ != nullptr)
+    {
+        millisecond_wait = std::stoi(FREQ);
+    }
+    int64_t hostStartTime = TracyGetCpuTime();
+    for (int i = 0; i < sampleCount; i++)
+    {
+        ZoneScopedN("4MS_LOOP");
+        std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
+        int64_t writeStart = TracyGetCpuTime();
+        uint32_t sinceStart = writeStart - hostStartTime;
+        time_sync_buffer[0] = sinceStart;
+        tt::Cluster::instance().write_reg(&sinceStart, tt_cxy_pair(device_id, core) , PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
+
+        //tt::llrt::write_hex_vec_to_core(
+        //device_id,
+        //core,
+        //time_sync_buffer,
+        //PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
+        writeSum += (TracyGetCpuTime() - writeStart);
+    }
+
+    double writeOverhead = (double)writeSum / sampleCount;
+    vector<std::uint32_t> sync_times = tt::llrt::read_hex_vec_from_core(
+            device_id,
+            core,
+            PROFILER_L1_BUFFER_BR,
+            (sampleCount + 1) * 2 * sizeof(uint32_t));
+
+    uint32_t preDeviceTime = 0;
+    uint32_t preHostTime = 0;
+    double frequency = 0;
+    double tracyToSecRatio = CalibrateTimer();
+    double frequencySum = 0;
+    double frequencyMin = 5000;
+    double frequencyMax = 0;
+
+    uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[1];
+    uint32_t deviceStartTime_H = sync_times[0] & 0xFFF;
+    uint32_t deviceStartTime_L = sync_times[1];
+    preDeviceTime = deviceStartTime_L;
+
+    uint32_t hostStartTime_H = 0;
+
+    uint64_t preDeviceTimeLarge = 0;
+    uint64_t preHostTimeLarge = 0;
+    uint64_t firstDeviceTimeLarge = 0;
+    uint64_t firstHostTimeLarge = 0;
+
+    std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
+    for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
+    {
+
+        uint32_t deviceTime = sync_times[i];
+        if (deviceTime < preDeviceTime) deviceStartTime_H ++;
+        preDeviceTime = deviceTime;
+        uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
+
+        uint32_t hostTime = sync_times[i + 1];
+        if (hostTime < preHostTime) hostStartTime_H ++;
+        preHostTime = hostTime;
+        uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
+
+        deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
+
+        if (frequency)
+        {
+            frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
+            if (frequency < frequencyMin ) frequencyMin = frequency;
+            if (frequency > frequencyMax) frequencyMax = frequency;
+            frequencySum += frequency;
+        }
+        else
+        {
+            frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
+            firstDeviceTimeLarge = deviceTimeLarge;
+            firstHostTimeLarge = hostTimeLarge;
+        }
+
+        preDeviceTimeLarge = deviceTimeLarge;
+        preHostTimeLarge = hostTimeLarge;
+    }
+
+    double frequencyFirstLast = (double)(preDeviceTimeLarge - firstDeviceTimeLarge) / ((double)(preHostTimeLarge - firstHostTimeLarge) * tracyToSecRatio);
+    double frequencyAvg = frequencySum / (double)(sampleCount - 1.0);
+
+    double hostSum = 0.0;
+    double deviceSum = 0.0;
+    double hostSquaredSum = 0.0;
+    double hostDeviceProductSum = 0.0;
+
+    for (auto& deviceHostTime : deviceHostTimePair)
+    {
+        double deviceTime = deviceHostTime.first;
+        double hostTime = ((double) deviceHostTime.second + writeOverhead) * tracyToSecRatio;
+
+        deviceSum += deviceTime;
+        hostSum += hostTime;
+        hostSquaredSum += (hostTime * hostTime);
+        hostDeviceProductSum += (hostTime * deviceTime);
+
+    }
+    double deviceTimeMean = deviceSum / sampleCount;
+    double hostTimeMean = hostSum / sampleCount;
+
+    double frequencyFit = (hostDeviceProductSum - hostSum * deviceTimeMean) / (hostSquaredSum - hostSum * hostTimeMean);
+
+    double delay = deviceTimeMean - frequencyFit * hostTimeMean;
+
+
+    for (auto& deviceHostTime : deviceHostTimePair)
+    {
+        double scaledDeviceTime1 = (double)deviceHostTime.first / frequencyAvg;
+        double scaledDeviceTime2 = (double)deviceHostTime.first / frequencyFirstLast;
+        double scaledDeviceTime3 = (double)deviceHostTime.first / frequencyMin;
+        double scaledDeviceTime4 = (double)deviceHostTime.first / frequencyMax;
+        double scaledDeviceTime5 = (double)deviceHostTime.first / frequencyFit;
+        double diff1 = scaledDeviceTime1 - deviceHostTime.second * tracyToSecRatio;
+        double diff2 = scaledDeviceTime2 - deviceHostTime.second * tracyToSecRatio;
+        double diff3 = scaledDeviceTime3 - deviceHostTime.second * tracyToSecRatio;
+        double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
+        double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
+        std::cout << fmt::format(
+                "{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
+                deviceHostTime.first,
+                deviceHostTime.second,
+                diff1,
+                diff2,
+                diff3,
+                diff4,
+                diff5)
+            << std::endl;
+    }
+
+    TracySetCpuTime(hostStartTime);
+
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, (std::pair<double,double>){delay, frequencyFit});
+
+    std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
+    std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
+    std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
+    std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
+    std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
+    std::cout << fmt::format("Device time = {}", delay) << std::endl;
+
+}
+
 
 void InitDeviceProfiler(Device *device){
 #if defined(PROFILER)
     ZoneScoped;
 
-    TracySetCpuTime();
     auto device_id = device->id();
     if (getDeviceProfilerState())
     {
         static std::atomic<bool> firstInit = true;
 
         auto device_id = device->id();
-        if (firstInit)
-        {
-            std::vector<uint32_t> time_sync_buffer(8, 0);
-
-            constexpr uint16_t sampleCount = 250;
-            int64_t writeSum = 0;
-
-            const auto FREQ = std::getenv("TT_METAL_PROFILER_FREQ");
-            int millisecond_wait = 4;
-            if (FREQ != nullptr)
-            {
-                millisecond_wait = std::stoi(FREQ);
-            }
-            int64_t hostStartTime = tracy::get_cpu_time();
-            for (int i = 0; i < sampleCount; i++)
-            {
-                ZoneScopedN("4MS_LOOP");
-                std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
-                int64_t writeStart = tracy::get_cpu_time();
-                uint32_t sinceStart = writeStart - hostStartTime;
-                time_sync_buffer[0] = sinceStart;
-                tt::Cluster::instance().write_reg(&sinceStart, tt_cxy_pair(device_id, {1,1}) , PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
-
-                //tt::llrt::write_hex_vec_to_core(
-                        //device_id,
-                        //{1,1},
-                        //time_sync_buffer,
-                        //PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
-                writeSum += (tracy::get_cpu_time() - writeStart);
-            }
-
-            double writeOverhead = (double)writeSum / sampleCount;
-            vector<std::uint32_t> sync_times = tt::llrt::read_hex_vec_from_core(
-                device_id,
-                {1,1},
-                PROFILER_L1_BUFFER_BR,
-                (sampleCount + 1) * 2 * sizeof(uint32_t));
-
-            uint32_t preDeviceTime = 0;
-            uint32_t preHostTime = 0;
-            double frequency = 0;
-            double tracyToSecRatio = CalibrateTimer();
-            double frequencySum = 0;
-            double frequencyMin = 5000;
-            double frequencyMax = 0;
-
-            uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[1];
-            uint32_t deviceStartTime_H = sync_times[0] & 0xFFF;
-            uint32_t deviceStartTime_L = sync_times[1];
-            preDeviceTime = deviceStartTime_L;
-
-            uint32_t hostStartTime_H = 0;
-
-            uint64_t preDeviceTimeLarge = 0;
-            uint64_t preHostTimeLarge = 0;
-            uint64_t firstDeviceTimeLarge = 0;
-            uint64_t firstHostTimeLarge = 0;
-
-            std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
-            for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
-            {
-
-                uint32_t deviceTime = sync_times[i];
-                if (deviceTime < preDeviceTime) deviceStartTime_H ++;
-                preDeviceTime = deviceTime;
-                uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
-
-                uint32_t hostTime = sync_times[i + 1];
-                if (hostTime < preHostTime) hostStartTime_H ++;
-                preHostTime = hostTime;
-                uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
-
-                deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
-
-                if (frequency)
-                {
-                    frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
-                    if (frequency < frequencyMin ) frequencyMin = frequency;
-                    if (frequency > frequencyMax) frequencyMax = frequency;
-                    frequencySum += frequency;
-                }
-                else
-                {
-                    frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
-                    firstDeviceTimeLarge = deviceTimeLarge;
-                    firstHostTimeLarge = hostTimeLarge;
-                }
-
-                preDeviceTimeLarge = deviceTimeLarge;
-                preHostTimeLarge = hostTimeLarge;
-            }
-
-            double frequencyFirstLast = (double)(preDeviceTimeLarge - firstDeviceTimeLarge) / ((double)(preHostTimeLarge - firstHostTimeLarge) * tracyToSecRatio);
-            double frequencyAvg = frequencySum / (double)(sampleCount - 1.0);
-
-            double hostSum = 0.0;
-            double deviceSum = 0.0;
-            double hostSquaredSum = 0.0;
-            double hostDeviceProductSum = 0.0;
-
-            for (auto& deviceHostTime : deviceHostTimePair)
-            {
-                double deviceTime = deviceHostTime.first;
-                double hostTime = ((double) deviceHostTime.second + writeOverhead) * tracyToSecRatio;
-
-                deviceSum += deviceTime;
-                hostSum += hostTime;
-                hostSquaredSum += (hostTime * hostTime);
-                hostDeviceProductSum += (hostTime * deviceTime);
-
-            }
-            double deviceTimeMean = deviceSum / sampleCount;
-            double hostTimeMean = hostSum / sampleCount;
-
-            double frequencyFit = (hostDeviceProductSum - hostSum * deviceTimeMean) / (hostSquaredSum - hostSum * hostTimeMean);
-
-            double delay = deviceTimeMean - frequencyFit * hostTimeMean;
-
-
-            for (auto& deviceHostTime : deviceHostTimePair)
-            {
-                double scaledDeviceTime1 = (double)deviceHostTime.first / frequencyAvg;
-                double scaledDeviceTime2 = (double)deviceHostTime.first / frequencyFirstLast;
-                double scaledDeviceTime3 = (double)deviceHostTime.first / frequencyMin;
-                double scaledDeviceTime4 = (double)deviceHostTime.first / frequencyMax;
-                double scaledDeviceTime5 = (double)deviceHostTime.first / frequencyFit;
-                double diff1 = scaledDeviceTime1 - deviceHostTime.second * tracyToSecRatio;
-                double diff2 = scaledDeviceTime2 - deviceHostTime.second * tracyToSecRatio;
-                double diff3 = scaledDeviceTime3 - deviceHostTime.second * tracyToSecRatio;
-                double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
-                double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
-                std::cout << fmt::format(
-                        "{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
-                        deviceHostTime.first,
-                        deviceHostTime.second,
-                        diff1,
-                        diff2,
-                        diff3,
-                        diff4,
-                        diff5)
-                    << std::endl;
-            }
-
-            tracy::set_sync_info(hostStartTime, delay, frequencyFit);
-
-            std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
-            std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
-            std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
-            std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
-            std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
-            std::cout << fmt::format("Device time = {}", delay) << std::endl;
-
-        }
 
         if (tt_metal_device_profiler_map.find(device_id) == tt_metal_device_profiler_map.end())
         {
@@ -232,6 +234,11 @@ void InitDeviceProfiler(Device *device){
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(false));
             }
+        }
+
+        if (firstInit)
+        {
+            InitTimeSync (device_id, {1,1});
         }
         uint32_t dramBankCount = tt::Cluster::instance().get_soc_desc(device_id).get_num_dram_channels();
         uint32_t coreCountPerDram = tt::Cluster::instance().get_soc_desc(device_id).profiler_ceiled_core_count_perf_dram_bank;

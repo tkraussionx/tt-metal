@@ -387,7 +387,13 @@ void DeviceProfiler::dumpResults (
             {
                 auto tracyCtx = TracyTTContext();
                 std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
-                TracyTTContextPopulate(tracyCtx, smallest_timestamp, 1000.f / (float)device_core_frequency);
+                if (device_core_sync_info.find(worker_core) != device_core_sync_info.end())
+                {
+                    TracyTTContextPopulate(tracyCtx,
+                            device_core_sync_info.at(worker_core).first,
+                            device_core_sync_info.at(worker_core).second);
+                }
+
                 TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
 
                 device_tracy_contexts.emplace(
