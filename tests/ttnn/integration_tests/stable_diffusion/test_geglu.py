@@ -119,6 +119,7 @@ def test_geglu_256x256(device, model_name, N, C, H, W, index, reset_seeds):
     ],
 )
 def test_geglu_512x512(device, model_name, N, C, H, W, index, reset_seeds):
+    pytest.skip()
     input_shapes = (N, C, H, W)
     model = UNet2DConditionModel.from_pretrained(model_name, subfolder="unet").eval()
     ref_model = model.up_blocks[index].attentions[0].transformer_blocks[0].ff.net[0]

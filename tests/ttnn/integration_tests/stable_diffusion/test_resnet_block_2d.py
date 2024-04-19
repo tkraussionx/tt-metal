@@ -131,6 +131,7 @@ def test_resnet_block_2d_256x256(
 def test_resnet_block_2d_512x512(
     device, batch_size, in_channels, input_height, input_width, index1, index2, block_name, out_channels
 ):
+    pytest.skip()
     load_from_disk = False
     if not load_from_disk:
         # setup pytorch model

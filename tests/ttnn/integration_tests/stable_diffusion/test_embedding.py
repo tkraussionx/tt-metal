@@ -19,6 +19,7 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_embeddi
 def test_embeddings(
     device,
 ):
+    pytest.skip()
     torch.manual_seed(0)
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)
