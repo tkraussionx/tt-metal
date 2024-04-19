@@ -169,7 +169,7 @@ def torch2tt_tensor(
         size.insert(0, 1)
 
     tt_tensor = tt_lib.tensor.Tensor(py_tensor.reshape(size), tt_dtype)
-    tt_tensor = tt_tensor.to(tt_layout, tt_device)
+    tt_tensor = tt_tensor.to(tt_layout)
 
     if tt_device is not None:
         tt_tensor = tt_tensor.to(tt_device, tt_memory_config)
