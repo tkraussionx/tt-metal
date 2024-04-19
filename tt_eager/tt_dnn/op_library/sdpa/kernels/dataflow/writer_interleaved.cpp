@@ -12,13 +12,15 @@ void kernel_main() {
     uint32_t NQH         = get_arg_val<uint32_t>(2);
     uint32_t St       = get_arg_val<uint32_t>(3);
     uint32_t DHt      = get_arg_val<uint32_t>(4);
-    uint32_t S_chunk_t    = get_arg_val<uint32_t>(5);
-    uint32_t num_chunks    = get_arg_val<uint32_t>(6);
-    uint32_t core_id    = get_arg_val<uint32_t>(7);
-    uint32_t num_cores    = get_arg_val<uint32_t>(8);
-    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(9);
+    uint32_t Sq_chunk_t    = get_arg_val<uint32_t>(5);
+    uint32_t q_num_chunks    = get_arg_val<uint32_t>(6);
+    uint32_t Sk_chunk_t    = get_arg_val<uint32_t>(7);
+    uint32_t k_num_chunks    = get_arg_val<uint32_t>(8);
+    uint32_t core_id    = get_arg_val<uint32_t>(9);
+    uint32_t num_cores    = get_arg_val<uint32_t>(10);
+    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(11);
 
-    const uint32_t num_local_q_chunks = num_chunks / q_parallel_factor;
+    const uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
     const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
     const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
     const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
@@ -27,7 +29,7 @@ void kernel_main() {
     // const uint32_t my_q_head = core_id / num_chunks;
     // const uint32_t my_q_chunk = core_id % num_chunks;
 
-    const uint32_t out_chunk_tiles = S_chunk_t * DHt;
+    const uint32_t out_chunk_tiles = Sq_chunk_t * DHt;
 
     constexpr bool is_dram = true;
     constexpr uint32_t cb_out = tt::CB::c_out0;
@@ -56,7 +58,7 @@ void kernel_main() {
             for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_end; ++q_chunk) {
 
                 uint32_t q_head_offset = nq * St * DHt;
-                uint32_t q_chunk_offset = q_chunk * S_chunk_t * DHt;
+                uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
                 out_tile_id = q_head_offset + q_chunk_offset;
 
                 // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();
