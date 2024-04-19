@@ -77,7 +77,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     Device *device = input_tensor_q.device();
 
     MathFidelity math_fidelity = MathFidelity::HiFi2;
-    bool math_approx_mode;
+    bool math_approx_mode = true;
     bool fp32_dest_acc_en;
 
     tt::DataFormat input_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor_q.get_dtype());
@@ -88,12 +88,12 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
             // math_fidelity = compute_kernel_config.math_fidelity;
-            math_approx_mode = compute_kernel_config.math_approx_mode;
+            // math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = false;
         } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
             // math_fidelity = compute_kernel_config.math_fidelity;
-            math_approx_mode = compute_kernel_config.math_approx_mode;
+            // math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = input_data_format == tt::DataFormat::Float32 ? true : compute_kernel_config.fp32_dest_acc_en;
         } else {
             TT_FATAL("arch not supported");
