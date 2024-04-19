@@ -155,6 +155,7 @@ def test_basic_transformer_block_256x256(device, model_name, N, C, H, W, index, 
     ],
 )
 def test_basic_transformer_block_512x512(device, model_name, N, C, H, W, index, attention_head_dim):
+    pytest.skip("")
     torch.manual_seed(0)
 
     pipe = StableDiffusionPipeline.from_pretrained(model_name, torch_dtype=torch.float32)

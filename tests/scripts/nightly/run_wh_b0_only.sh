@@ -9,9 +9,8 @@ fi
 
 echo "Running nightly tests for WH B0 only"
 
-env TT_METAL_WATCHER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/ttnn/integration_tests/stable_diffusion
-
 env pytest tests/ttnn/integration_tests/unet                # -> failing: issue #7556
+env TT_METAL_WATCHER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/ttnn/integration_tests/stable_diffusion
 # env pytest tests/ttnn/integration_tests/stable_diffusion    # -> failing/hanging: issue #7560
 
 env pytest models/demos/mamba/tests/test_mamba_ssm.py
