@@ -366,8 +366,19 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
+        logits_on_host = [tt_logits[i].cpu(False) for i in range(num_devices)]
+        for logit in logits_on_host:
+            logit.sync()
+        synchronize_devices(devices)
+        logits_list = [
+            logits_on_host[i].to(tt_lib.tensor.Layout.ROW_MAJOR, tt_logits[i].device()) for i in range(num_devices)
+        ]
+        logits = torch.concat([logits_list[i].to_torch().squeeze(1) for i in range(num_devices)], dim=-2)
+        # logits_on_host = [tt_logit.cpu(False) for tt_logit in tt_logits]
+        # logits_list = [logits_on_host[i].to(tt_lib.tensor.Layout.ROW_MAJOR, tt_logits[i].device()) for i in range(num_devices)]
+        # logits = torch.concat([logits_list[i].to_torch().squeeze(1) for i in range(num_devices)], dim=-2)
 
-        logits = torch.concat([tt2torch_tensor(tt_logits[j]).squeeze(1) for j in range(num_devices)], dim=-2)
+        # logits = torch.concat([tt2torch_tensor(tt_logits[j]).squeeze(1) for j in range(num_devices)], dim=-2)
 
         for j in range(num_devices):
             tt_prefill_input_ids[j].deallocate()
@@ -425,8 +436,14 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
-
-        logits = torch.concat([tt2torch_tensor(tt_logits[i]).squeeze(1) for i in range(num_devices)], dim=-2)
+        logits_on_host = [tt_logits[i].cpu(False) for i in range(num_devices)]
+        for logit in logits_on_host:
+            logit.sync()
+        synchronize_devices(devices)
+        logits_list = [
+            logits_on_host[i].to(tt_lib.tensor.Layout.ROW_MAJOR, tt_logits[i].device()) for i in range(num_devices)
+        ]
+        logits = torch.concat([logits_list[i].to_torch().squeeze(1) for i in range(num_devices)], dim=-2)
 
         for i in range(num_devices):
             tt_decode_input_ids[i].deallocate()

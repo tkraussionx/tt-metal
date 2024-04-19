@@ -370,12 +370,15 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
     }
 
     py::object convert_tt_tensor_to_torch_tensor(const Tensor& tt_tensor) {
+        // std::cout << "Getting storage type" << std::endl;
         TT_ASSERT(tt_tensor.storage_type() == StorageType::OWNED or tt_tensor.storage_type() == StorageType::BORROWED);
-
+        // std::cout << "Have Storage Type" << std::endl;
+        auto& storage = tt_tensor.get_storage();
+        // std::cout << "Have storage" << std::endl;
         using namespace pybind11::literals;
         py::object torch = py::module_::import("torch");
         auto frombuffer = torch.attr("frombuffer");
-
+        // // std::cout << "getting buffer" << std::endl;
         auto buffer = std::visit(
             [](auto &&storage) -> std::variant<OwnedBuffer, BorrowedBuffer> {
                 using T = std::decay_t<decltype(storage)>;
@@ -894,6 +897,10 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
 
                     tt_tensor = tt_tensor.to(tt_device)
             )doc")
+            .def(
+                "sync",
+                [](Tensor &self) { return self.wait_for_tensor_data_populated(); }
+            )
             .def(
                 "extract_shard",
                 [](const Tensor &self, CoreCoord core) { return self.extract_shard(core); },
