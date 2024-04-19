@@ -45,15 +45,17 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     attn_mask: B x NQH x S x S
     */
 
-    TT_FATAL(q_chunk_size == k_chunk_size);
+    // TT_FATAL(q_chunk_size == k_chunk_size);
 
     const auto q_shape = input_tensor_q.get_legacy_shape();
     uint32_t B = q_shape[0], NQH = q_shape[1], S = q_shape[2], DH = q_shape[3];
     uint32_t St = S/TILE_HEIGHT;
     uint32_t DHt = DH/TILE_WIDTH;
 
-    uint32_t S_chunk_t = q_chunk_size / TILE_HEIGHT;
-    uint32_t num_chunks = S / q_chunk_size;
+    uint32_t Sq_chunk_t = q_chunk_size / TILE_HEIGHT;
+    uint32_t Sk_chunk_t = k_chunk_size / TILE_HEIGHT;
+    uint32_t q_num_chunks = S / q_chunk_size;
+    uint32_t k_num_chunks = S / k_chunk_size;
 
     const auto k_shape = input_tensor_k.get_legacy_shape();
     uint32_t NKH = k_shape[1];
@@ -66,8 +68,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_info("DH: {}", DH);
     log_info("St: {}", St);
     log_info("DHt: {}", DHt);
-    log_info("S_chunk_t: {}", S_chunk_t);
-    log_info("num_chunks: {}", num_chunks);
+    log_info("Sq_chunk_t: {}", Sq_chunk_t);
+    log_info("Sk_chunk_t: {}", Sk_chunk_t);
+    log_info("q_num_chunks: {}", q_num_chunks);
+    log_info("k_num_chunks: {}", k_num_chunks);
     log_info("NKH: {}", NKH);
 
 
@@ -133,15 +137,15 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
-    uint32_t q_tiles  = S_chunk_t * DHt;
-    uint32_t k_tiles  = S_chunk_t * DHt * 2; // double buffer
-    uint32_t v_tiles  = S_chunk_t * DHt * 2; // double buffer
-    uint32_t mask_tiles = S_chunk_t * S_chunk_t * 2; // double buffer
-    uint32_t qk_tiles = S_chunk_t * S_chunk_t;
-    uint32_t out_im_tiles = S_chunk_t * DHt;
-    uint32_t out0_t = S_chunk_t * DHt;
+    uint32_t q_tiles  = Sq_chunk_t * DHt;
+    uint32_t k_tiles  = Sk_chunk_t * DHt * 2; // double buffer
+    uint32_t v_tiles  = Sk_chunk_t * DHt * 2; // double buffer
+    uint32_t mask_tiles = Sq_chunk_t * Sk_chunk_t * 2; // double buffer
+    uint32_t qk_tiles = Sq_chunk_t * Sk_chunk_t;
+    uint32_t out_im_tiles = Sq_chunk_t * DHt;
+    uint32_t out0_t = Sq_chunk_t * DHt;
     uint32_t scale_tiles = 1;
-    uint32_t statistics_tiles = S_chunk_t; // Single column of values in each iteration
+    uint32_t statistics_tiles = Sq_chunk_t; // Single column of values in each iteration
 
     // log all values
     log_info("q_tiles: {}", q_tiles);
@@ -150,24 +154,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_info("mask_tiles: {}", mask_tiles);
     log_info("qk_tiles: {}", qk_tiles);
     log_info("out0_t: {}", out0_t);
+    log_info("scale_tiles: {}", scale_tiles);
+    log_info("statistics_tiles: {}", statistics_tiles);
 
-
-    const uint32_t qk_in0_block_w = 1;
-    const uint32_t qk_out_subblock_h = 1;
-    const uint32_t qk_out_subblock_w = 1;
-
-    const uint32_t qk_in0_num_subblocks = S_chunk_t / qk_out_subblock_h;
-    const uint32_t qk_in1_num_subblocks = S_chunk_t / qk_out_subblock_w;
-    const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
-
-    // now for out0
-    const uint32_t out0_in0_block_w = 1;
-    const uint32_t out0_out_subblock_h = 1;
-    const uint32_t out0_out_subblock_w = 1;
-
-    const uint32_t out0_in0_num_subblocks = S_chunk_t / out0_out_subblock_h;
-    const uint32_t out0_in1_num_subblocks = DHt / out0_out_subblock_w;
-    const uint32_t out0_num_blocks = S_chunk_t / out0_in0_block_w;
 
     CoreCoord grid_size;
 
@@ -186,6 +175,34 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t num_cores = grid_size.x * grid_size.y;
 
     // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
+
+    // Parallelization scheme
+    // We parallelize over batch, q_heads, and q_seq_len. We always run one batch and one head per core,
+    // so the question is how much of the q_seq_len does each core handle.
+    uint32_t q_parallel_factor = num_cores / (B * NQH);
+    TT_FATAL(q_parallel_factor * B * NQH == num_cores);
+
+
+    // Host code is responsible for determining matmul configuration
+    // const uint32_t dst_size = fp32_dest_acc_en ? 4: 8;
+    // const uint32_t qk_in0_block_w = 1;
+    // const uint32_t qk_out_subblock_h = 1;
+    // const uint32_t qk_out_subblock_w = 1;
+
+    // const uint32_t qk_in0_num_subblocks = S_chunk_t / qk_out_subblock_h;
+    // const uint32_t qk_in1_num_subblocks = S_chunk_t / qk_out_subblock_w;
+    // const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
+
+    // // now for out0
+    // const uint32_t out0_in0_block_w = 1;
+    // const uint32_t out0_out_subblock_h = 1;
+    // const uint32_t out0_out_subblock_w = 1;
+
+    // const uint32_t out0_in0_num_subblocks = S_chunk_t / out0_out_subblock_h;
+    // const uint32_t out0_in1_num_subblocks = DHt / out0_out_subblock_w;
+    // const uint32_t out0_num_blocks = S_chunk_t / out0_in0_block_w;
+
+
 
 
     // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
@@ -308,13 +325,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
 
 
-    // Parallelization scheme
-    // We parallelize over batch, q_heads, and q_seq_len. We always run one batch and one head per core,
-    // so the question is how much of the q_seq_len does each core handle.
-    uint32_t q_parallel_factor = num_cores / (B * NQH);
-    TT_FATAL(q_parallel_factor * B * NQH == num_cores);
 
-    log_info("Parallelization scheme: \n");
+
+    log_info("Parallelization scheme:");
     log_info("num_cores: {}", num_cores);
     log_info("batch size: {}", B);
     log_info("num q_heads: {}", NQH);
@@ -327,9 +340,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
         // log_info("core: {} getting runtime args for idx {i}", core, i);
 
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, scale_union.u, i, num_cores, q_parallel_factor });
-        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, S_chunk_t, num_chunks, i, num_cores, q_parallel_factor });
-        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, S_chunk_t, num_chunks, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, scale_union.u, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
     }
 
 

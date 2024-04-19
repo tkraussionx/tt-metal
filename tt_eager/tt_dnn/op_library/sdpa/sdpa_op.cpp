@@ -84,7 +84,7 @@ void ScaledDotProductAttention::validate(const std::vector<Tensor> &input_tensor
                 TT_FATAL(k_shape[-1] % k_chunk_size == 0);
 
                 // For now, assert that chunk sizes are the same
-                TT_FATAL(q_chunk_size == k_chunk_size);
+                // TT_FATAL(q_chunk_size == k_chunk_size);
 
                 // Ensure that batch * num_heads divides the number of cores
                 auto b_nh = q_shape[-4] * q_shape[-3];
