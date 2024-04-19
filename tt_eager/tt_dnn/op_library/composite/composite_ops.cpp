@@ -127,7 +127,7 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
     Tensor orig = x;
     value = where(logical_and(gte(value, zeros_like(value)), lt(value, ones_like(value))), zeros_like(value), value);
     value = where(logical_and(gte(value, neg(ones_like(value))), lt(value, zeros_like(value))), neg(ones_like(value)), value);
-    for (int i=0;i<10000;i++){
+    for (int i=0;i<100;i++){
         value = where(gt(abs(value), ones_like(value)), sub_unary(abs(value), 1), value);
     }
     value = where(gt(abs(orig), ones_like(value)),sub(abs(orig), value), value);
@@ -576,8 +576,8 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     //Tensor div_result = mul(input_a, recip(input_b));
     //Tensor floor_div = tanhshrink(div_result);
     //Tensor result = sub(input_a, mul(floor_div, input_b));
-    Tensor dividend = mul_unary(input_a, 10000);
-    Tensor divisor = mul_unary(input_b, 10000);
+    Tensor dividend = input_a;
+    Tensor divisor = input_b;
     Tensor orig = divisor;
     for (int i=0; i<100; i++){
         dividend = where(logical_and(ltz(dividend), gtz(divisor)), add(dividend, divisor), dividend);
@@ -588,11 +588,10 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     dividend = where(ltz(dividend), abs(dividend), dividend);
     divisor = where(ltz(divisor), abs(divisor), divisor);
 
-    for (int i=0; i<1000; i++){
+    for (int i=0; i<100; i++){
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
     dividend = where(ltz(orig), neg(dividend), dividend);
-    dividend = div_unary(dividend, 10000);
     Tensor temp = mul(input_a, input_b);
     Tensor remainder = add(dividend, temp);
     remainder = sub(remainder, temp);
@@ -918,13 +917,12 @@ Tensor logical_xori(const Tensor& input_a, float value, const MemoryConfig& outp
 
 // xlogy(x,y))=x*log(y)
 Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
-    Tensor dividend = mul_unary(input_a, 10000);
-    Tensor divisor = mul_unary(input_b, 10000);
+    Tensor dividend = input_a;
+    Tensor divisor = input_b;
     Tensor div_result = mul(dividend, recip(divisor));
     Tensor quotient = tanhshrink(div_result);
     Tensor remainder = sub(dividend, mul(quotient, divisor));
-    remainder = div_unary(remainder, 10000);
-    Tensor temp = mul(quotient, input_b);
+    Tensor temp = mul(quotient, divisor);
     remainder = add(remainder, temp);
     remainder = sub(remainder, temp);
     return remainder;
