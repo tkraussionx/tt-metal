@@ -466,7 +466,7 @@ Tensor Tensor::to(Layout target_layout, Device* worker) const {
         Tensor async_safe_tensor = copy_borrowed_tensor_in_async_mode(worker, *this);
         Tensor tensor_modified_layout = Tensor({}, 1);
         worker->push_work([async_safe_tensor, tensor_modified_layout, target_layout] () mutable {
-            TT_ASSERT(async_safe_tensor.storage_type() == StorageType::OWNED, "Asynchronous calls to layout converter are only supported for owned storage.");
+            TT_ASSERT(async_safe_tensor.storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
             auto local_tensor = tensor_impl::to_layout_wrapper(async_safe_tensor, target_layout);
             // Populate modified layout tensor
             tensor_modified_layout.populate_buffers_and_metadata(local_tensor);

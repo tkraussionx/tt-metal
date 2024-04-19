@@ -13,6 +13,7 @@ import ttnn
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.utility_functions import (
     torch2tt_tensor,
+    torch_tensors_to_tt_tensors,
     pad_by_zero,
     nearest_32,
 )
@@ -108,8 +109,8 @@ class TtFalconModelShared(torch.nn.Module):
             assert sequence_size % 32 == 0, "For prefill, sequence_size must be multiple of 32!"
             assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
-            tt_input_ids, tt_attention_mask = [], []
-            tt_attention_mask_host = []
+            tt_input_ids, attention_masks = [], []
+            # Create attn masks on host
             for i, device in enumerate(self.devices):
                 attention_mask_bool = torch.ones(batch_size, 1, sequence_size, num_input_tokens, dtype=bool)
                 attention_mask_bool = attention_mask_bool.triu(diagonal=1)
@@ -121,22 +122,20 @@ class TtFalconModelShared(torch.nn.Module):
                     ),
                     dim=-1,
                 )
-                attention_mask_bool_padded = (attention_mask_bool_padded * -1e3).expand(
-                    -1, self.config.num_attention_heads, -1, -1
+                attention_masks.append(
+                    (attention_mask_bool_padded * -1e3).expand(-1, self.config.num_attention_heads, -1, -1)
                 )
-                size = list(attention_mask_bool_padded.size())
-                while len(size) < 4:
-                    size.insert(0, 1)
-                tt_attention_mask_host.append(
-                    tt_lib.tensor.Tensor(
-                        attention_mask_bool_padded.reshape(size), self.model_config["ATTN_MASK_DTYPE"]
-                    ).to(tt_lib.tensor.Layout.TILE, device)
-                )
+            # Send attn masks to device
+            tt_attention_mask = torch_tensors_to_tt_tensors(
+                attention_masks,
+                tt_lib.tensor.Layout.TILE,
+                self.model_config["ATTN_MASK_DTYPE"],
+                self.model_config["ATTN_MASK_MEMCFG"],
+                self.devices,
+            )
 
             for i, device in enumerate(self.devices):
-                tt_attention_mask.append(tt_attention_mask_host[i].to(device, self.model_config["ATTN_MASK_MEMCFG"]))
-
-            for i, device in enumerate(self.devices):
+                # Sharding attn masks in L1
                 tt_input_ids.append(
                     ttnn.as_tensor(
                         input_ids[i : i + 1],
@@ -148,8 +147,7 @@ class TtFalconModelShared(torch.nn.Module):
                 )
 
         elif llm_mode == "decode":
-            tt_input_ids, tt_attention_mask = [], []
-            tt_attention_mask_host = []
+            tt_input_ids, attention_masks = [], []
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
             assert sequence_size == 1, "For decode, q_len must be 1!"
             for i, device in enumerate(self.devices):
@@ -165,29 +163,36 @@ class TtFalconModelShared(torch.nn.Module):
                     ),
                     dim=-1,
                 )
+                if self.model_config["l1_sharded"] == False:
+                    attention_masks.append(
+                        (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(
+                            -1, self.config.num_attention_heads, -1, -1
+                        )
+                    )
+                else:
+                    # keep attention_heads in dim[2]
+                    attention_masks.append(
+                        (attention_mask_bool_padded * -1e3).expand(
+                            -1, -1, nearest_32(self.config.num_attention_heads), -1
+                        )
+                    )
 
-                attention_mask_bool_padded = (attention_mask_bool_padded * -1e3).expand(
-                    -1, -1, nearest_32(self.config.num_attention_heads), -1
-                )
-                size = list(attention_mask_bool_padded.size())
-                while len(size) < 4:
-                    size.insert(0, 1)
+            tt_attention_mask = torch_tensors_to_tt_tensors(
+                attention_masks,
+                tt_lib.tensor.Layout.TILE,
+                self.model_config["ATTN_MASK_DTYPE"],
+                self.model_config["ATTN_MASK_MEMCFG"],
+                self.devices,
+            )
 
-                tt_attention_mask_host.append(
-                    tt_lib.tensor.Tensor(
-                        attention_mask_bool_padded.reshape(size), self.model_config["ATTN_MASK_DTYPE"]
-                    ).to(tt_lib.tensor.Layout.TILE, device)
-                )
-            for i, device in enumerate(self.devices):
-                tt_attention_mask.append(tt_attention_mask_host[i].to(device, self.model_config["ATTN_MASK_MEMCFG"]))
-
-            for i, device in enumerate(self.devices):
-                tt_attention_mask[i] = tt_lib.tensor.interleaved_to_sharded(
-                    tt_attention_mask[i],
-                    sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
-                        nearest_32(self.config.num_attention_heads), num_max_tokens
-                    ),
-                )
+            if self.model_config["l1_sharded"]:
+                for i, device in enumerate(self.devices):
+                    tt_attention_mask[i] = tt_lib.tensor.interleaved_to_sharded(
+                        tt_attention_mask[i],
+                        sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
+                            nearest_32(self.config.num_attention_heads), num_max_tokens
+                        ),
+                    )
 
             for i, device in enumerate(self.devices):
                 tt_input_ids.append(
@@ -199,50 +204,6 @@ class TtFalconModelShared(torch.nn.Module):
                         memory_config=self.model_config["INPUT_MEMCFG"],
                     )
                 )
-
-                # attention_mask_bool = torch.zeros(batch_size, 1, sequence_size, num_input_tokens, dtype=bool)
-
-                # num_max_tokens = nearest_32(
-                #     kv_cache_len + 1
-                # )  # Potentially, num_max_tokens must be provided as a separate argument
-                # attention_mask_bool_padded = torch.cat(
-                #     (
-                #         attention_mask_bool,
-                #         torch.ones(batch_size, 1, sequence_size, num_max_tokens - num_input_tokens, dtype=bool),
-                #     ),
-                #     dim=-1,
-                # )
-
-                # if self.model_config["l1_sharded"] == False:
-                #     tt_attention_mask.append(
-                #         torch2tt_tensor(
-                #             (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(
-                #                 -1, self.config.num_attention_heads, -1, -1
-                #             ),
-                #             device,
-                #             tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
-                #             tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
-                #         )
-                #     )
-                # else:
-                #     # keep attention_heads in dim[2]
-                #     tt_attention_mask.append(
-                #         torch2tt_tensor(
-                #             (attention_mask_bool_padded * -1e3).expand(
-                #                 -1, -1, nearest_32(self.config.num_attention_heads), -1
-                #             ),
-                #             device,
-                #             tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
-                #             tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
-                #         )
-                #     )
-
-                #     tt_attention_mask[i] = tt_lib.tensor.interleaved_to_sharded(
-                #         tt_attention_mask[i],
-                #         sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
-                #             nearest_32(self.config.num_attention_heads), num_max_tokens
-                #         ),
-                #     )
 
         else:
             raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
