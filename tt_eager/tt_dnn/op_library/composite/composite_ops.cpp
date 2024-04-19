@@ -592,7 +592,7 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
     dividend = where(ltz(orig), neg(dividend), dividend);
-    dividend = div_unary(dividend, 1000000);
+    //dividend = div_unary(dividend, 1000000);
     return dividend;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
@@ -920,7 +920,7 @@ Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor div_result = mul(dividend, recip(divisor));
     Tensor quotient = tanhshrink(div_result);
     Tensor remainder = sub(dividend, mul(quotient, divisor));
-    remainder = div_unary(remainder, 10000);
+    //remainder = div_unary(remainder, 10000);
     return remainder;
 }
 Tensor xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
