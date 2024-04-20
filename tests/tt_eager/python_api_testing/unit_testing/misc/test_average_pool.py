@@ -11,6 +11,7 @@ import tt_lib as ttl
 
 from tt_lib.utils import _nearest_32
 from models.utility_functions import comp_pcc
+from loguru import logger
 
 TILE_HEIGHT = TILE_WIDTH = 32
 
@@ -35,15 +36,45 @@ def test_run_average_pool(act_shape, dtype, device):
     batch_size, _, _, channels = act_shape
 
     torch.manual_seed(0)
+    # device.enable_program_cache()
+
+    enable_trace = True
 
     act = torch.randn(act_shape, dtype=torch.bfloat16).float()
     ttact = ttl.tensor.Tensor(act, ttl.tensor.DataType.BFLOAT16)
     act_shape_padded = shape_padded(act_shape)
     if act_shape != act_shape_padded:
         ttact = ttact.pad_to_tile(0.0)
+
+    logger.info(f"TMZ -- input to device")
+
     ttact = ttact.to(device)
 
+    logger.info(f"TMZ -- running average pool")
+
+    if enable_trace:
+        ttl.device.BeginTraceCapture(device)
+        # ttl.device.Tag(device, "trace")
+        logger.info(f"TMZ -- trace capture begin")
+
     out = ttl.tensor.average_pool_2d(ttact)
+
+    if enable_trace:
+        ttl.device.EndTraceCapture(device)
+        # ttl.device.Untag(device)
+        logger.info(f"TMZ -- trace capture end")
+        trace_captured = True
+
+    # logger.info(f"TMZ -- eager start")
+    # ttl.device.Tag(device, "eager")
+    # out = ttl.tensor.average_pool_2d(ttact)
+    # ttl.device.Untag(device)
+    # logger.info(f"TMZ -- eager end")
+
+    if enable_trace:
+        logger.info(f"TMZ -- trace enqueued")
+        ttl.device.ExecuteLastTrace(device, True)
+        logger.info(f"TMZ -- trace executed")
 
     out = out.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     out_shape = [batch_size, 1, 1, channels]
