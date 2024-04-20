@@ -13,6 +13,9 @@ from models.utility_functions import (
     skip_for_grayskull,
 )
 from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor, skip_for_wormhole_b0
+from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
+    determine_largest_subblock_size,
+)
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
@@ -959,28 +962,21 @@ def test_qkv(
 
 @skip_for_grayskull()
 @pytest.mark.parametrize("size", [4096, 1024, 256, 64])
-@pytest.mark.parametrize("is_kv", [True, False])
-@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
-@pytest.mark.parametrize("interleaved_output", [True, False])
+@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
 def test_q_and_kv(
     device,
     size,
-    is_kv,
     data_format,
-    interleaved_output,
     function_level_defaults,
 ):
-    pytest.skip()
+    # pytest.skip()
     sizes = {4096: [1, 8192, 320, 512], 1024: [1, 2048, 640, 768], 256: [1, 512, 1280, 1280], 64: [1, 128, 1280, 1280]}
-    grid_sizes = {4096: (8, 5), 1024: (8, 5), 256: (8, 8), 64: (4, 8)}
-    out_subblock_hs = {4096: 8, 1024: 8, 256: 2, 64: 1}
+    grid_sizes = {4096: (2, 8), 1024: (2, 8), 256: (8, 8), 64: (8, 4)}
 
     # if size == 4096 and not is_kv:
     #     pytest.skip()
 
     B, M, K, N = sizes[size]
-    if is_kv:
-        N *= 2
     grid_size = grid_sizes[size]
     compute_grid_size = device.compute_with_storage_grid_size()
     num_cores = grid_size[0] * grid_size[1]
@@ -989,9 +985,13 @@ def test_q_and_kv(
 
     in_0_shape = [1, B, M, K]
     in_1_shape = [1, B, K, N]
+    in_2_shape = [1, B, 192, K]
+    in_3_shape = [1, B, K, 2 * N]
 
     in_0_torch = torch.randn(in_0_shape).bfloat16().float()
     in_1_torch = torch.randn(in_1_shape).bfloat16().float()
+    in_2_torch = torch.randn(in_2_shape).bfloat16().float()
+    in_3_torch = torch.randn(in_3_shape).bfloat16().float()
 
     dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
@@ -1014,13 +1014,25 @@ def test_q_and_kv(
     in_0 = torch2tt_tensor(
         in_0_torch,
         device,
-        tt_memory_config=l1_interleaved_memory_config,
+        tt_memory_config=dram_interleaved_memory_config,
         tt_dtype=data_format,
     )
     in_1 = torch2tt_tensor(
         in_1_torch,
         device,
-        tt_memory_config=l1_interleaved_memory_config,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    in_2 = torch2tt_tensor(
+        in_2_torch,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    in_3 = torch2tt_tensor(
+        in_3_torch,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
         tt_dtype=data_format,
     )
 
@@ -1037,50 +1049,127 @@ def test_q_and_kv(
     in_0_sharded = ttl.tensor.interleaved_to_sharded(
         in_0,
         grid_size,
-        [M // grid_size[0], K // grid_size[1]],
+        [M // grid_size[1], K // grid_size[0]],
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-        ttl.tensor.ShardOrientation.COL_MAJOR,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
-
-    Nt = N // 32
-    G = grid_size[1]
-    per_core_N = (Nt - 1) // (G - 1) if Nt != 16 else 4
-    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+    M, K = in_0.shape[-2], in_0.shape[-1]
+    N = in_1.shape[-1]
+    in0_block_h = M // grid_size[1] // 32
+    in0_block_w = K // grid_size[0] // 32
+    out_block_h = math.ceil(M / grid_size[1] / 32)
+    out_block_w = math.ceil(N / grid_size[0] / 32)
+    out_subblock_h, out_subblock_w = determine_largest_subblock_size(out_block_h, out_block_w)
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=K // grid_size[1] // 32,
-        out_subblock_h=out_subblock_hs[size] if interleaved_output else 1,
-        out_subblock_w=1,
-        per_core_M=M // grid_size[0] // 32,
-        per_core_N=per_core_N,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
         fused_activation=None,
-        transpose_mcast=True,
     )
-    print(program_config)
-    # print(f"Nt: {Nt}, G: {grid_size[1]}, Nt-1: {(Nt-1)}, G-1: {(grid_size[1]-1)} pcn: {(Nt-1)/(grid_size[1]-1)}")
-    # print(f"Nt/G: {Nt/grid_size[1]}, Nt/(G-1) = {Nt/(grid_size[1]-1)}")
-
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=False,
     )
-    mm = ttl.operations.primary.matmul(
-        in_0 if size == 4096 and not is_kv else in_0_sharded,
+    mm_q = ttnn.experimental.operations.primary.matmul(
+        in_0,
         in_1,
         program_config=program_config,
-        output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
-        output_dtype=data_format,
+        output_mem_config=block_sharded_memory_config,
+        output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
         compute_kernel_config=compute_kernel_config,
     )
-    # mm = ttl.tensor.bmm(
-    #     in_0,
-    #     in_1,
-    #     l1_interleaved_memory_config,
-    #     compute_kernel_config,
-    # )
+    in_0_sharded.deallocate()
 
-    mm_out_torch = tt2torch_tensor(mm)
+    M, K, N = in_2.shape[-2], in_2.shape[-1], in_3.shape[-1]
+    in0_block_h = M // grid_size[1] // 32
+    in0_block_w = K // grid_size[0] // 32
+    out_block_h = math.ceil(M / grid_size[1] / 32)
+    out_block_w = math.ceil(N / grid_size[0] / 32)
+    out_subblock_h, out_subblock_w = determine_largest_subblock_size(out_block_h, out_block_w)
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+    mm_kv = ttnn.experimental.operations.primary.matmul(
+        in_2,
+        in_3,
+        program_config=program_config,
+        output_mem_config=block_sharded_memory_config,
+        output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+        compute_kernel_config=compute_kernel_config,
+    )
+    mm_q = ttnn.reshape(mm_q, [2, 1, -1, mm_q.shape[-1]])
+    mm_kv = ttnn.reshape(mm_kv, [2, 1, -1, mm_kv.shape[-1]])
+
+    end_core = ttnn.experimental.tensor.CoreCoord(7, 1) if size != 64 else ttnn.experimental.tensor.CoreCoord(3, 1)
+    grid_size = (8, 2) if size != 64 else (4, 2)
+    output_shard_grid = ttnn.experimental.tensor.CoreRangeSet(
+        {ttnn.experimental.tensor.CoreRange(ttnn.experimental.tensor.CoreCoord(0, 0), end_core)}
+    )
+    output_shard_spec = ttnn.experimental.tensor.ShardSpec(
+        output_shard_grid,
+        [size, mm_q.shape[-1] // grid_size[0]],
+        ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    output_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.BufferType.L1,
+        output_shard_spec,
+    )
+    mm_q = ttnn.experimental.tensor.reshard(
+        mm_q,
+        output_mem_config,
+    )
+
+    output_shard_grid = ttnn.experimental.tensor.CoreRangeSet(
+        {ttnn.experimental.tensor.CoreRange(ttnn.experimental.tensor.CoreCoord(0, 0), end_core)}
+    )
+    output_shard_spec = ttnn.experimental.tensor.ShardSpec(
+        output_shard_grid,
+        [96, mm_kv.shape[-1] // grid_size[0]],
+        ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    output_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.BufferType.L1,
+        output_shard_spec,
+    )
+    mm_kv = ttnn.experimental.tensor.reshard(
+        mm_kv,
+        output_mem_config,
+    )
+
+    out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1)
+    q, k, v = ttl.tensor.create_qkv_heads_from_separate_tensors(
+        mm_q,
+        mm_kv,
+        num_q_heads=8,
+        num_kv_heads=8,
+        transpose_k_heads=True,
+        output_mem_config=out_mem_config,
+    )
+
+    mm_out_torch = tt2torch_tensor(mm_q)
 
     out_torch = in_0_torch @ in_1_torch
 
