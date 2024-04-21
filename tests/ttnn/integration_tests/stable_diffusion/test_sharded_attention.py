@@ -433,7 +433,7 @@ def test_cross_attnention(
     reshard_for_softmax,
     function_level_defaults,
 ):
-    pytest.skip()
+    # pytest.skip()
     if seq_len == 64 and reshard_for_softmax:
         pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
@@ -511,6 +511,7 @@ def test_cross_attnention(
         per_core_M=num_heads * seq_len // num_cores // 32,
         per_core_N=kv_len // 32,
     )
+    print(program_config)
 
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
