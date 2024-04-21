@@ -874,16 +874,21 @@ void Program::update_runtime_args_transfer_info(Device* device) {
             }
         }
     } else {
+        map<uint32_t, uint32_t> unicast_index = {
+            {BRISC_L1_ARG_BASE, 0},
+            {NCRISC_L1_ARG_BASE, 0},
+            {TRISC_L1_ARG_BASE, 0},
+            {eth_l1_mem::address_map::ERISC_L1_ARG_BASE, 0},
+        };
         for (size_t kernel_id = 0; kernel_id < this->num_kernels(); kernel_id++) {
             auto kernel = detail::GetKernel(*this, kernel_id);
 
             uint32_t dst = processor_to_l1_arg_base_addr.at(kernel->processor());
 
-            uint32_t unicast_index = 0;
             for (const auto& core_coord : kernel->cores_with_runtime_args()) {
                 const auto& runtime_args_data = kernel->runtime_args(core_coord);
-                this->program_transfer_info.unicast_runtime_args[dst][unicast_index].data = runtime_args_data;
-                unicast_index++;
+                this->program_transfer_info.unicast_runtime_args[dst][unicast_index[dst]].data = runtime_args_data;
+                unicast_index[dst]++;
             }
 
             // Common Runtime Args (Multicast)
