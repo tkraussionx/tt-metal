@@ -121,6 +121,8 @@ void kernel_main() {
     #else
     uint32_t l1_write_addr_in1;
 
+    constexpr uint32_t page_size = in1_single_tile_size_bytes << 1;
+
     constexpr DataFormat in1_data_format = get_dataformat(cb_id_in1);
     const InterleavedAddrGenFast<in1_is_dram, use_vc, use_trid> s1 = {
         .bank_base_address = in1_tensor_addr,

@@ -113,6 +113,10 @@ void py_module(py::module& m_primary) {
                 std::size_t,
                 bool,
                 std::optional<UnaryWithParam>,
+                bool,
+                bool,
+                bool,
+                bool,
                 bool>(),
             py::kw_only(),
             py::arg("compute_with_storage_grid_size"),
@@ -123,7 +127,11 @@ void py_module(py::module& m_primary) {
             py::arg("per_core_N").noconvert(),
             py::arg("fuse_batch").noconvert(),
             py::arg("fused_activation"),
-            py::arg("mcast_in0").noconvert())
+            py::arg("mcast_in0").noconvert(),
+            py::arg("split_mcast_transactions") = false,
+            py::arg("mcast_use_same_noc") = false,
+            py::arg("use_noc_transaction_id") = false,
+            py::arg("use_noc_vc") = false)
         .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCast1DProgramConfig::fused_activation)
         .def("__repr__", [](const MatmulMultiCoreReuseMultiCast1DProgramConfig& config) {
             return fmt::format("{}", config);

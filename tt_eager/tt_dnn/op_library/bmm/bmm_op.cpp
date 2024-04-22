@@ -593,7 +593,8 @@ operation::ProgramWithCallbacks Matmul::create_program(const std::vector<Tensor>
                 this->compute_kernel_config,
                 config.in0_block_w, config.out_subblock_h, config.out_subblock_w,
                 config.per_core_M, config.per_core_N, false, std::nullopt, true,
-                this->untilize_out
+                this->untilize_out,
+                false, false, false, false
             );
         case MatmulParallelizationStrategy::MULTI_CORE_REUSE_MCAST_1D_IN1_OPTIMIZED:
             config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, false, std::nullopt, false, false);
@@ -605,7 +606,8 @@ operation::ProgramWithCallbacks Matmul::create_program(const std::vector<Tensor>
                 this->compute_kernel_config,
                 config.in0_block_w, config.out_subblock_h, config.out_subblock_w,
                 config.per_core_M, config.per_core_N, false, std::nullopt, false,
-                this->untilize_out
+                this->untilize_out,
+                false, false, false, false
             );
         case MatmulParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
             return matmul_multi_core_reuse_padding(input_tensor_a, input_tensor_b, output_tensor, this->bcast_batch);
@@ -1232,7 +1234,8 @@ operation::ProgramWithCallbacks Matmul::create_program(
                             this->compute_kernel_config,
                             2, 4, 2,
                             16, 16, false, std::nullopt, true,
-                            this->untilize_out
+                            this->untilize_out,
+                            false, false, false, false
                         );
                     case MatmulParallelizationStrategy::MULTI_CORE_REUSE_MCAST_1D_IN1_OPTIMIZED:
                         return matmul_multi_core_reuse_mcast_1d_optimized(
@@ -1242,7 +1245,8 @@ operation::ProgramWithCallbacks Matmul::create_program(
                             this->compute_kernel_config,
                             2, 4, 2,
                             16, 16, false, std::nullopt, false,
-                            this->untilize_out
+                            this->untilize_out,
+                            false, false, false, false
                         );
                     case MatmulParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
                         return matmul_multi_core_reuse_padding(input_tensor_a, input_tensor_b, output_tensor, broadcast_batch);
@@ -1285,7 +1289,8 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     program_config.in0_block_w, program_config.out_subblock_h, program_config.out_subblock_w,
                     program_config.per_core_M, program_config.per_core_N, program_config.fuse_batch, program_config.fused_activation,
                     program_config.mcast_in0,
-                    this->untilize_out
+                    this->untilize_out,
+                    program_config.split_mcast_transactions, program_config.mcast_use_same_noc, program_config.use_noc_transaction_id, program_config.use_noc_vc
                 );
             } else {
                 TT_THROW("Unrecognized Config");
