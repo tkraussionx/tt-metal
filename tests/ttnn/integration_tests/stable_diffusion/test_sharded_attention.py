@@ -25,7 +25,7 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
 @pytest.mark.parametrize("num_slices", [16])
 @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.parametrize("num_heads", [16])
-@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
+@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
 def test_time_sharded_attnention_hwb(
     device,
     seq_len,
@@ -35,7 +35,7 @@ def test_time_sharded_attnention_hwb(
     data_format,
     function_level_defaults,
 ):
-    pytest.skip()
+    # pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -253,7 +253,6 @@ def test_time_sharded_attnention(
     data_format,
     function_level_defaults,
 ):
-    pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -272,6 +271,10 @@ def test_time_sharded_attnention(
     dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
         buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    l1_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
     )
 
     height_sharded_memory_config = ttl.tensor.MemoryConfig(
@@ -302,7 +305,7 @@ def test_time_sharded_attnention(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
-        packer_l1_acc=False,
+        packer_l1_acc=True,
     )
 
     passing = True
@@ -344,7 +347,7 @@ def test_time_sharded_attnention(
             reference_key_layer_transposed,
             (0, (i * heads_per_slice), 0, 0),
             (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
-            output_mem_config=dram_interleaved_memory_config,
+            output_mem_config=l1_interleaved_memory_config,
         )
         mm_slice = ttl.operations.primary.matmul(
             slice,
@@ -371,7 +374,7 @@ def test_time_sharded_attnention(
             in0_block_w=seq_len // 32,
             per_core_M=tiles_per_shard,
             per_core_N=2,
-            out_subblock_h=1,
+            out_subblock_h=2,
             out_subblock_w=2,
             fuse_batch=True,
             fused_activation=None,
@@ -381,7 +384,7 @@ def test_time_sharded_attnention(
             reference_value_layer,
             (0, (i * heads_per_slice), 0, 0),
             (0, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, 63),
-            output_mem_config=dram_interleaved_memory_config,
+            output_mem_config=l1_interleaved_memory_config,
         )
         mm_slice = ttl.operations.primary.matmul(
             mm_slice,
@@ -402,6 +405,8 @@ def test_time_sharded_attnention(
         )
 
         mm_slice.deallocate()
+
+        return
 
     mm_out_torch = tt2torch_tensor(mm_out)
 

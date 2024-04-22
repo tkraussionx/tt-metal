@@ -396,7 +396,18 @@ class cross_attention:
                     j * num_slices // 2 + i,
                     self.dram_interleaved_memory_config,
                 )
-        return self.output_tensors[seq_len]
+        num_cores = 16
+        output = ttnn.experimental.tensor.interleaved_to_sharded(
+            self.output_tensors[seq_len],
+            (2, 8),
+            [
+                self.output_tensors[seq_len].volume() // self.output_tensors[seq_len].shape[-1] // num_cores,
+                self.output_tensors[seq_len].shape[-1],
+            ],
+            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        )
+        return output
 
     def sharded_attention(self, query, key, value, original_seq_len, head_size, index):
         grid_size = (2, 8)
@@ -529,7 +540,7 @@ class cross_attention:
             attention_scores,
             v_sharded,
             program_config=program_config,
-            output_mem_config=self.l1_interleaved_memory_config,
+            output_mem_config=self.height_sharded_memory_config,
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
             compute_kernel_config=self.compute_kernel_config,
         )
@@ -541,7 +552,7 @@ class cross_attention:
             query.shape[-2] == 1024 and t_key.shape[-1] == 1024
         ):
             return self.time_sharded_attention(query, t_key, value, head_size)
-        else:  # if not (query.shape[-2] == 64 and t_key.shape[-1] == 96):
+        else:
             return self.sharded_attention(query, t_key, value, original_seq_len, head_size, index)
 
         print("Legacy path")
@@ -581,9 +592,9 @@ class cross_attention:
     def out(self, hidden_states):
         size = hidden_states.shape[-2] // 2  # 2 is the batch size
 
-        grid_sizes = {4096: (8, 8), 1024: (4, 8), 256: (5, 8), 64: (8, 4)}
+        grid_sizes = {4096: (4, 8), 1024: (4, 8), 256: (5, 8), 64: (8, 4)}
         shard_directions = {
-            4096: ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            4096: ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
             1024: ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
             256: ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
             64: ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
@@ -596,12 +607,8 @@ class cross_attention:
 
         hs = shard_directions[size] == ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED
         if hs:
-            hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
-                hidden_states,
-                grid_size,
-                [B * M // num_cores, K],
-                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            hidden_states = self.reshard_to(
+                hidden_states, grid_size, ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED
             )
             output_mem_config = self.height_sharded_memory_config
             program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -616,12 +623,8 @@ class cross_attention:
                 mcast_in0=False if hs else True,
             )
         else:
-            hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
-                hidden_states,
-                grid_size,
-                [B * M // grid_size[1], K // grid_size[0]],
-                ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            hidden_states = self.reshard_to(
+                hidden_states, grid_size, ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED
             )
             output_mem_config = self.block_sharded_memory_config
             in0_block_h, in0_block_w, out_subblock_h, out_subblock_w, out_block_h, out_block_w = determine_blocking(
@@ -639,6 +642,8 @@ class cross_attention:
             )
 
         # TODO: bug in MM means these sizes need to be interleaved for now
+        if size == 4096:
+            output_mem_config = self.l1_interleaved_memory_config
         hidden_states = ttnn.experimental.operations.primary.matmul(
             hidden_states,
             self.parameters.to_out[0].weight,
@@ -648,6 +653,10 @@ class cross_attention:
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
             compute_kernel_config=self.compute_kernel_config,
         )
+        if size == 4096:
+            hidden_states = self.reshard_to(
+                hidden_states, (5, 8), ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED
+            )
         return hidden_states
 
     def reshard_to(self, tensor, grid_size, layout):
@@ -675,10 +684,19 @@ class cross_attention:
             ttnn.experimental.tensor.BufferType.L1,
             output_shard_spec,
         )
-        tensor = ttnn.experimental.tensor.reshard(
-            tensor,
-            output_mem_config,
-        )
+        if tensor.is_sharded():
+            tensor = ttnn.experimental.tensor.reshard(
+                tensor,
+                output_mem_config,
+            )
+        else:
+            tensor = ttnn.experimental.tensor.interleaved_to_sharded(
+                tensor,
+                grid_size,
+                shard_spec,
+                layout,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            )
         return tensor
 
     def __call__(
@@ -890,9 +908,10 @@ class cross_attention:
         )
 
         hidden_states = ttnn.transformer.concatenate_heads(
-            hidden_states, memory_config=self.l1_interleaved_memory_config
+            hidden_states, memory_config=self.block_sharded_memory_config
         )
         if hidden_states.shape.with_tile_padding()[-1] != hidden_states.shape[-1]:
+            assert False
             hidden_states = hidden_states[:, :, : hidden_states.shape[-1]]
 
         B, M, K, N = 1, hidden_states.shape[-2], hidden_states.shape[-1], self.parameters.to_out[0].weight.shape[-1]
