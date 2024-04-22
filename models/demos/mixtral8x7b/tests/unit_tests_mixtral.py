@@ -162,7 +162,7 @@ def test_rmsnorm(device):
 
 
 # This method can use 32 cores to compute the layer norm
-# kernel duration [ns] = 22581.0 (layernorm) + 3370.0 (interleave to sharded)
+# kernel duration [ns] = 22581.0 (layernorm) + 3370.0 (interleave to sharded) + 5500.0 (optional sharded to interleave)
 def test_rmsnorm_sharded(device):
     x = ttnn.from_torch(
         torch.randn(1, 1, 32, 4096),
@@ -195,7 +195,7 @@ def test_rmsnorm_sharded(device):
         compute_with_storage_grid_size=[8, 4],
         subblock_w=4,
         block_h=shard_height // 32,
-        block_w=4,
+        block_w=shard_width_hidden_dim_across_32_cores // 32,
         inplace=True,
     )
 
@@ -208,3 +208,5 @@ def test_rmsnorm_sharded(device):
         program_config=comp_mem_config,
         output_mem_config=out_mem_config,
     )
+
+    x = ttnn.experimental.tensor.sharded_to_interleaved(x)

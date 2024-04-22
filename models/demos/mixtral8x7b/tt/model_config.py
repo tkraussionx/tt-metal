@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
-import os
 from pathlib import Path
 
 
@@ -57,12 +56,7 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(
-        self,
-        device=None,
-        model_base_path=os.getenv("MISTRAL_DATA_DIR", "/proj_sw/user_dev/hf_data/mistral"),
-        instruct=False,
-    ):
+    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         self.instruct = instruct
@@ -137,6 +131,27 @@ class TtModelArgs:
             use_height_and_width_as_shard_shape=True,
         )
 
+        shard_height = 32
+        hidden_size = 4096
+        shard_width_hidden_dim_across_32_cores = hidden_size // 32
+        self.model_config["SHARDED_NORM_INPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
+            shape=(shard_height, shard_width_hidden_dim_across_32_cores),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
+            strategy=ttnn.ShardStrategy.WIDTH,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            use_height_and_width_as_shard_shape=True,
+        )
+        self.model_config["SHARDED_NORM_OUTPUT_MEMCFG"] = self.model_config["SHARDED_NORM_INPUT_MEMCFG"]
+        self.model_config[
+            "SHARDED_NORM_PRGM_CFG"
+        ] = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[8, 4],
+            subblock_w=4,
+            block_h=shard_height // 32,
+            block_w=shard_width_hidden_dim_across_32_cores // 32,
+            inplace=False,
+        )
+
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
             # TODO Lower max grid size (used by MLP) to avoid hangs
@@ -166,12 +181,17 @@ class TtModelArgs:
                 / {
                     ttnn.bfloat16: "mixtral_tensor_cache_instruct_bf16",
                     ttnn.bfloat8_b: "mixtral_tensor_cache_instruct_bfp8",
+                    ttnn.bfloat4_b: "mixtral_tensor_cache_instruct_bfp4",
                 }[dtype]
             )
         else:
             return (
                 self.model_base_path
-                / {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
+                / {
+                    ttnn.bfloat16: "mixtral_tensor_cache_bf16",
+                    ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8",
+                    ttnn.bfloat4_b: "mixtral_tensor_cache_bfp4",
+                }[dtype]
             )
 
     def get_model_config(self):

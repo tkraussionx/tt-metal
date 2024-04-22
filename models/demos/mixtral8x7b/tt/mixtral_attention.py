@@ -90,16 +90,16 @@ class TtMixtralAttention(torch.nn.Module):
 
             cache_k = torch.zeros(
                 (
-                    self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
+                    self.max_batch_size,
                     self.sliding_window,
                     self.head_dim,
                 )
             )
             cache_v = torch.zeros(
                 (
-                    self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
+                    self.max_batch_size,
                     self.sliding_window,
                     self.head_dim,
                 )
@@ -120,7 +120,7 @@ class TtMixtralAttention(torch.nn.Module):
         # Scale tensor for q_heads to avoid falling back to host.
         self.head_dims = [
             ttnn.from_torch(
-                torch.ones(self.max_batch_size, 1, self.n_local_heads, self.head_dim) * (self.head_dim**-0.5),
+                torch.ones(1, self.max_batch_size, self.n_local_heads, self.head_dim) * (self.head_dim**-0.5),
                 device=self.devices[i],
                 layout=ttnn.TILE_LAYOUT,
                 dtype=ttnn.bfloat16,
@@ -131,7 +131,7 @@ class TtMixtralAttention(torch.nn.Module):
         for i in range(self.max_batch_size):
             reduce_mask_torch[:, :, i, range(i, self.max_batch_size * len(self.devices), self.max_batch_size)] = 1
         self.reduce_mask = [
-            ttnn.from_torch(reduce_mask_torch, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+            ttnn.from_torch(reduce_mask_torch, device=device, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
             for device in self.devices
         ]
 
@@ -170,7 +170,7 @@ class TtMixtralAttention(torch.nn.Module):
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
             rot_mat = rot_mats[i][start_pos]
-            head_dim_B14D = self.head_dims[i]
+            head_dim_1B4D = self.head_dims[i]
             ###
             # QKV matmuls
             ###
@@ -213,56 +213,59 @@ class TtMixtralAttention(torch.nn.Module):
                 use_1d_systolic_array=True,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
             )
-
+            q_heads_14BD = ttnn.pad(
+                q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
+            )
+            q_heads_1B4D = ttnn.permute(q_heads_14BD, (0, 2, 1, 3)) * head_dim_1B4D
+            k_heads_11BD = ttnn.pad(k_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
+            k_heads_1B1D = ttnn.permute(k_heads_11BD, (0, 2, 1, 3))
+            v_heads_11BD = ttnn.pad(v_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
+            v_heads_1B1D = ttnn.permute(v_heads_11BD, (0, 2, 1, 3))
             ###
             # KV update
             ###
-            keys_B1PD = layer_past[0]
-            values_B1PD = layer_past[1]
-            ttnn.kv_cache.update_cache_for_token_(keys_B1PD, k_heads_11BD, current_pos)
-            ttnn.kv_cache.update_cache_for_token_(values_B1PD, v_heads_11BD, current_pos)
-            self.layer_past_list[i] = [keys_B1PD, values_B1PD]
-            keys_B1PD = keys_B1PD[:, :, :padded_layer_past_len, :]
-            values_B1PD = values_B1PD[:, :, :layer_slice, :]
+            keys_1BPD = layer_past[0]
+            values_1BPD = layer_past[1]
+            ttnn.kv_cache.update_cache_for_token_(keys_1BPD, k_heads_1B1D, current_pos)
+            ttnn.kv_cache.update_cache_for_token_(values_1BPD, v_heads_1B1D, current_pos)
+            self.layer_past_list[i] = [keys_1BPD, values_1BPD]
+            keys_1BPD = keys_1BPD[:, :, :padded_layer_past_len, :]
+            values_1BPD = values_1BPD[:, :, :layer_slice, :]
 
             ###
             # Attention
             ###
             # transpose keys
-            keys_B1DP = ttnn.permute(keys_B1PD, (0, 1, 3, 2))
+            keys_1BDP = ttnn.permute(keys_1BPD, (0, 1, 3, 2))
 
             # pad, transpose, scale, and shard q head
-            q_heads_14BD = ttnn.pad(
-                q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
-            )
-            q_heads_B14D = ttnn.permute(q_heads_14BD, (2, 0, 1, 3)) * head_dim_B14D  # Apply head scaling here instead of after Q.V to avoid fallback to host (multiplication by a tensor instead of a float)
-            q_heads_B14D = ttnn.to_memory_config(q_heads_B14D, self.model_config["Q_TRANSPOSE_MEMCFG"])
+            q_heads_1B4D = ttnn.to_memory_config(q_heads_1B4D, self.model_config["Q_TRANSPOSE_MEMCFG"])
 
             # shard keys
             k_cache_memcfg = self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
-            keys_B1DP = ttnn.to_memory_config(keys_B1DP, k_cache_memcfg)
+            keys_1BDP = ttnn.to_memory_config(keys_1BDP, k_cache_memcfg)
             # shard values
             v_cache_memcfg = self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
-            values_B1PD = ttnn.to_memory_config(values_B1PD, v_cache_memcfg)
+            values_1BPD = ttnn.to_memory_config(values_1BPD, v_cache_memcfg)
             # create out cfg
             attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"](padded_layer_past_len)
 
             # scores matmul
-            attn_B14P = ttnn.matmul(
-                q_heads_B14D,
-                keys_B1DP,
+            attn_1B4P = ttnn.matmul(
+                q_heads_1B4D,
+                keys_1BDP,
                 dtype=ttnn.bfloat16,
                 memory_config=attn_output_memcfg,
                 core_grid=self.core_grid_attention,
                 compute_kernel_config=self.compute_kernel_attn,
             )
             # scores slice and softmax
-            attn_B14P = attn_B14P[:, :, :, :layer_slice]
-            attn_B14P = ttnn.softmax(attn_B14P, dim=-1, memory_config=attn_output_memcfg)
+            attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
+            attn_1B4P = ttnn.softmax(attn_1B4P, dim=-1)  # , memory_config=attn_output_memcfg_post_sm)
             # values matmul
-            attn_output_B14D = ttnn.matmul(
-                attn_B14P,
-                values_B1PD,
+            attn_output_1B4D = ttnn.matmul(
+                attn_1B4P,
+                values_1BPD,
                 dtype=ttnn.bfloat16,
                 memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
                 core_grid=self.core_grid_attention,
@@ -270,7 +273,7 @@ class TtMixtralAttention(torch.nn.Module):
             )
 
             # transpose attn
-            attn_output_14BD = ttnn.permute(attn_output_B14D, (1, 2, 0, 3))
+            attn_output_14BD = ttnn.permute(attn_output_1B4D, (0, 2, 1, 3))
             # unpad attn
             attn_output_14BD = attn_output_14BD[:, : self.n_local_heads, :, :]
 
@@ -288,6 +291,7 @@ class TtMixtralAttention(torch.nn.Module):
                 memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
                 core_grid=self.core_grid,
                 compute_kernel_config=self.compute_kernel,
+                dtype=ttnn.bfloat8_b,
             )
             dense_outputs_11BH.append(dense_out_11BH)
 
@@ -297,4 +301,5 @@ class TtMixtralAttention(torch.nn.Module):
         # return the sum of the outputs
         for i in range(len(dense_outputs_11BH)):
             dense_outputs_11BH[i] = ttnn.matmul(self.reduce_mask[i], dense_outputs_11BH[i])
+
         return dense_outputs_11BH

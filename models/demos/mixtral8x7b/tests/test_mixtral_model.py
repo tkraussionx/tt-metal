@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 import torch
 import pytest
+import numpy as np
 from loguru import logger
+from sklearn.metrics import top_k_accuracy_score
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
@@ -26,11 +28,11 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "n_layers",
-    (1, 2, 3, 4, 6, 8, 32),
+    (1, 2, 3, 4, 6, 8, 16, 32),
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1,),
+    (1, 127, 511),
 )
 def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds):
     pcc = 0.99
@@ -104,10 +106,10 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1)
+        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1).detach().float()
 
         positions = torch.LongTensor([start_pos])
-        ref_output = reference_model(pt_decode_input, positions)
+        ref_output = reference_model(pt_decode_input, positions).detach().float()
 
         # Measure PCC
         passing, pcc_message = comp_pcc(
@@ -115,6 +117,17 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         )
         logger.info(comp_allclose(ref_output, tt_output_torch))
         logger.info(pcc_message)
+
+        reference_top1 = np.argmax(ref_output, axis=-1).squeeze()
+        top1_acc = top_k_accuracy_score(
+            reference_top1, tt_output_torch.squeeze(), k=1, labels=np.arange(tt_output_torch.shape[-1])
+        )
+        top5_acc = top_k_accuracy_score(
+            reference_top1, tt_output_torch.squeeze(), k=5, labels=np.arange(tt_output_torch.shape[-1])
+        )
+
+        logger.info(f"Mean Top-1: {top1_acc}")
+        logger.info(f"Mean Top-5: {top5_acc}")
 
         if passing:
             logger.info("Mistral Model Passed!")

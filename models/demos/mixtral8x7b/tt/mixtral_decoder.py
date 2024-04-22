@@ -5,7 +5,7 @@ import torch
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_attention import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
+from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
 from models.demos.mixtral8x7b.tt.mixtral_moe import TtMoeLayer
 
 
@@ -56,7 +56,11 @@ class TtTransformerBlock(torch.nn.Module):
                     args=args,
                     layer_num=layer_num,
                     expert_num=i,
-                    dtype=dtype,
+                    dtypes={
+                        "w1": ttnn.bfloat4_b,
+                        "w2": ttnn.bfloat8_b,
+                        "w3": ttnn.bfloat4_b,
+                    },
                 )
                 for i in range(args.num_experts)
             ],
@@ -65,22 +69,22 @@ class TtTransformerBlock(torch.nn.Module):
             dtype=dtype,
         )
         self.attention_norm = [
-            TtRMSNorm(
+            TtRMSNormSharded(
                 device=dev,
                 state_dict=state_dict,
                 args=args,
-                dtype=dtype,
+                dtype=ttnn.bfloat16,
                 layer_num=layer_num,
                 weight_key="attention_norm",
             )
             for dev in self.devices
         ]
         self.ffn_norm = [
-            TtRMSNorm(
+            TtRMSNormSharded(
                 device=dev,
                 state_dict=state_dict,
                 args=args,
-                dtype=dtype,
+                dtype=ttnn.bfloat16,
                 layer_num=layer_num,
                 weight_key="ffn_norm",
             )
