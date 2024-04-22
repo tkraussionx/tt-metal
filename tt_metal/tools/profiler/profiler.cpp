@@ -356,7 +356,7 @@ void DeviceProfiler::dumpResults (
         const vector<CoreCoord> &worker_cores_arg){
 #if defined(PROFILER)
     ZoneScoped;
-    std::vector<CoreCoord> worker_cores {{1,1},{1,11},{7,11}};
+    std::vector<CoreCoord> worker_cores {{1,1},{1,3},{1,11},{7,11}};
     //CoreCoord worker_core = {1, 1};
     //worker_cores.push_back(worker_core);
     //worker_core = {1, 11};
@@ -387,12 +387,17 @@ void DeviceProfiler::dumpResults (
             {
                 auto tracyCtx = TracyTTContext();
                 std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
+                double timeShift = smallest_timestamp;
+                double frequency = device_core_frequency/1000.0;
+                uint64_t cpuTime = 0;
                 if (device_core_sync_info.find(worker_core) != device_core_sync_info.end())
                 {
-                    TracyTTContextPopulate(tracyCtx,
-                            device_core_sync_info.at(worker_core).first,
-                            device_core_sync_info.at(worker_core).second);
+                    cpuTime = get<0>(device_core_sync_info.at(worker_core));
+                    timeShift = get<1>(device_core_sync_info.at(worker_core));
+                    frequency = get<2>(device_core_sync_info.at(worker_core));
                 }
+
+                TracyTTContextPopulate(tracyCtx, cpuTime, timeShift, frequency);
 
                 TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
 

@@ -103,7 +103,7 @@ class DeviceProfiler {
         std::shared_ptr<tt::tt_metal::Buffer> output_dram_buffer = nullptr;
 
         // Device-core Syncdata
-        std::map<CoreCoord, std::pair<double,double>> device_core_sync_info;
+        std::map<CoreCoord, std::tuple<double,double,double>> device_core_sync_info;
 
         //Set the device side file flag
         void setNewLogFlag(bool new_log_flag);

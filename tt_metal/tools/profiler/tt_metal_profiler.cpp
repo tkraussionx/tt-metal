@@ -38,24 +38,6 @@ namespace detail {
 
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
-double CalibrateTimer()
-{
-    std::atomic_signal_fence( std::memory_order_acq_rel );
-    const auto t0 = std::chrono::high_resolution_clock::now();
-    const auto r0 = TracyGetCpuTime();
-    std::atomic_signal_fence( std::memory_order_acq_rel );
-    std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
-    std::atomic_signal_fence( std::memory_order_acq_rel );
-    const auto t1 = std::chrono::high_resolution_clock::now();
-    const auto r1 = TracyGetCpuTime();
-    std::atomic_signal_fence( std::memory_order_acq_rel );
-
-    const auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>( t1 - t0 ).count();
-    const auto dr = r1 - r0;
-
-    return double( dt ) / double( dr );
-}
-
 void InitTimeSync(int device_id, CoreCoord core)
 {
     std::vector<uint32_t> time_sync_buffer(8, 0);
@@ -69,14 +51,13 @@ void InitTimeSync(int device_id, CoreCoord core)
     {
         millisecond_wait = std::stoi(FREQ);
     }
-    int64_t hostStartTime = TracyGetCpuTime();
+    const int64_t hostStartTime = TracyGetCpuTime();
     for (int i = 0; i < sampleCount; i++)
     {
         ZoneScopedN("4MS_LOOP");
         std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
         int64_t writeStart = TracyGetCpuTime();
         uint32_t sinceStart = writeStart - hostStartTime;
-        time_sync_buffer[0] = sinceStart;
         tt::Cluster::instance().write_reg(&sinceStart, tt_cxy_pair(device_id, core) , PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
 
         //tt::llrt::write_hex_vec_to_core(
@@ -97,7 +78,7 @@ void InitTimeSync(int device_id, CoreCoord core)
     uint32_t preDeviceTime = 0;
     uint32_t preHostTime = 0;
     double frequency = 0;
-    double tracyToSecRatio = CalibrateTimer();
+    double tracyToSecRatio = TracyGetTimerMul();
     double frequencySum = 0;
     double frequencyMin = 5000;
     double frequencyMax = 0;
@@ -199,9 +180,7 @@ void InitTimeSync(int device_id, CoreCoord core)
             << std::endl;
     }
 
-    TracySetCpuTime(hostStartTime);
-
-    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, (std::pair<double,double>){delay, frequencyFit});
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(hostStartTime, delay, frequencyFit));
 
     std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
     std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
@@ -217,6 +196,8 @@ void InitDeviceProfiler(Device *device){
 #if defined(PROFILER)
     ZoneScoped;
 
+    TracySetCpuTime (TracyGetCpuTime());
+
     auto device_id = device->id();
     if (getDeviceProfilerState())
     {
@@ -229,6 +210,8 @@ void InitDeviceProfiler(Device *device){
             if (firstInit.exchange(false))
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
+                InitTimeSync (device_id, {1,1});
+                InitTimeSync (device_id, {1,3});
             }
             else
             {
@@ -236,10 +219,6 @@ void InitDeviceProfiler(Device *device){
             }
         }
 
-        if (firstInit)
-        {
-            InitTimeSync (device_id, {1,1});
-        }
         uint32_t dramBankCount = tt::Cluster::instance().get_soc_desc(device_id).get_num_dram_channels();
         uint32_t coreCountPerDram = tt::Cluster::instance().get_soc_desc(device_id).profiler_ceiled_core_count_perf_dram_bank;
 
