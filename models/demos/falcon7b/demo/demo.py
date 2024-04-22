@@ -181,7 +181,7 @@ def run_falcon_demo_kv(
     # State dict is needed for embeddings
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
-    if len(os.listdir(tt_cache_path)) < 260:
+    if len(os.listdir(tt_cache_path)) < 261:
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
         hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
@@ -242,7 +242,7 @@ def run_falcon_demo_kv(
     for user_id in tqdm(range(N)):
         time_prefill_compile_start = time.time()
         (
-            tt_prefill_embeddings,
+            tt_prefill_input_ids,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
             "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=num_input_tokens
@@ -250,7 +250,7 @@ def run_falcon_demo_kv(
         assert tt_prefill_attention_mask is not None
 
         tt_logits, kv_cache_singlelayer = tt_FalconCausalLM_singlelayer(
-            input_embeddings=tt_prefill_embeddings,
+            input_ids=tt_prefill_input_ids,
             llm_mode="prefill",
             attention_mask=tt_prefill_attention_mask,
             user_id=user_id,
@@ -259,15 +259,14 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
-        time_prefill_compile_end = time.time()
-        time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
 
         for i in range(num_devices):
-            tt_prefill_embeddings[i].deallocate()
+            tt_prefill_input_ids[i].deallocate()
             if tt_prefill_attention_mask is not None:
                 tt_prefill_attention_mask[i].deallocate()
-
             tt_logits[i].deallocate()
+
+        time_prefill_compile += time.time() - time_prefill_compile_start
 
     synchronize_devices(devices)
     logger.info("Finished 1st run prefill stage with compile!")
@@ -284,7 +283,7 @@ def run_falcon_demo_kv(
     for kv_cache_len in tqdm(range(num_input_tokens, max_seq_len, 32)):
         time_decode_compile_start = time.time()
         (
-            tt_decode_embeddings,
+            tt_decode_input_ids,
             tt_decode_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
             "decode", decode_ids, kv_cache_len, num_input_tokens=kv_cache_len + 1
@@ -292,7 +291,7 @@ def run_falcon_demo_kv(
         assert tt_decode_attention_mask is not None
 
         tt_logits, kv_cache_singlelayer = tt_FalconCausalLM_singlelayer(
-            input_embeddings=tt_decode_embeddings,
+            input_ids=tt_decode_input_ids,
             llm_mode="decode",
             attention_mask=tt_decode_attention_mask,
             layer_past=kv_cache_singlelayer,
@@ -300,24 +299,23 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
-        time_decode_compile_end = time.time()
-        time_decode_compile += time_decode_compile_end - time_decode_compile_start
 
         for i in range(num_devices):
-            tt_decode_embeddings[i].deallocate()
+            tt_decode_input_ids[i].deallocate()
             if tt_decode_attention_mask is not None:
                 tt_decode_attention_mask[i].deallocate()
-
             tt_logits[i].deallocate()
+
+        time_decode_compile += time.time() - time_decode_compile_start
 
     logger.info("Finished 1st run decode stage with compile!")
     synchronize_devices(devices)
 
     del tt_logits
-    del tt_prefill_embeddings
+    del tt_prefill_input_ids
     del tt_prefill_attention_mask
     del decode_ids
-    del tt_decode_embeddings
+    del tt_decode_input_ids
     del tt_FalconCausalLM_singlelayer
     del kv_cache_singlelayer
 
@@ -351,7 +349,7 @@ def run_falcon_demo_kv(
         user_id = i if not perf_mode else 0
         time_prefill_inference_start = time.time()
         (
-            tt_prefill_embeddings,
+            tt_prefill_input_ids,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
             "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=num_input_tokens
@@ -359,7 +357,7 @@ def run_falcon_demo_kv(
         assert tt_prefill_attention_mask is not None
 
         tt_logits, kv_cache = tt_FalconCausalLM(
-            input_embeddings=tt_prefill_embeddings,
+            input_ids=tt_prefill_input_ids,
             llm_mode="prefill",
             attention_mask=tt_prefill_attention_mask,
             user_id=user_id,
@@ -368,20 +366,20 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
-        time_prefill_inference_end = time.time()
-        if i >= N_warmup:
-            time_prefill_inference += time_prefill_inference_end - time_prefill_inference_start
 
         logits = torch.concat([tt2torch_tensor(tt_logits[j]).squeeze(1) for j in range(num_devices)], dim=-2)
 
         for j in range(num_devices):
-            tt_prefill_embeddings[j].deallocate()
+            tt_prefill_input_ids[j].deallocate()
             if tt_prefill_attention_mask is not None:
                 tt_prefill_attention_mask[j].deallocate()
             tt_logits[j].deallocate()
 
         user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
         output_ids[user_id::batch_size] = user_output_ids
+
+        if i >= N_warmup:
+            time_prefill_inference += time.time() - time_prefill_inference_start
 
     logger.info("Finished inference prefill stage!")
     num_users_generated_prefill = num_users if not perf_mode else (N - N_warmup) * num_devices
@@ -413,13 +411,13 @@ def run_falcon_demo_kv(
     for output_token_index in range(N):
         time_decode_inference_start = time.time()
         (
-            tt_decode_embeddings,
+            tt_decode_input_ids,
             tt_decode_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing("decode", decode_ids, kv_cache_len, num_input_tokens=kv_cache_len + 1)
         assert tt_decode_attention_mask is not None
 
         tt_logits, kv_cache = tt_FalconCausalLM(
-            input_embeddings=tt_decode_embeddings,
+            input_ids=tt_decode_input_ids,
             llm_mode="decode",
             attention_mask=tt_decode_attention_mask,
             layer_past=kv_cache,
@@ -427,24 +425,24 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
-        time_decode_inference_end = time.time()
-        if output_token_index >= N_warmup:
-            time_decode_inference += time_decode_inference_end - time_decode_inference_start
 
         logits = torch.concat([tt2torch_tensor(tt_logits[i]).squeeze(1) for i in range(num_devices)], dim=-2)
 
         for i in range(num_devices):
-            tt_decode_embeddings[i].deallocate()
+            tt_decode_input_ids[i].deallocate()
             if tt_decode_attention_mask is not None:
                 tt_decode_attention_mask[i].deallocate()
             tt_logits[i].deallocate()
 
-        if not perf_mode:
-            if greedy_sampling:
-                decode_ids = post_processor(logits=logits, index=...).reshape(global_batch, 1)
-            else:
-                decode_ids = top_pk_logits_efficient(logits.reshape(global_batch, -1)).reshape(global_batch, 1)
+        if greedy_sampling:
+            decode_ids = post_processor(logits=logits, index=...).reshape(global_batch, 1)
+        else:
+            decode_ids = top_pk_logits_efficient(logits.reshape(global_batch, -1)).reshape(global_batch, 1)
 
+        if output_token_index >= N_warmup:
+            time_decode_inference += time.time() - time_decode_inference_start
+
+        if not perf_mode:
             for user_id, user_decode_id in enumerate(decode_ids[:num_users]):
                 if user_decode_id == END_OF_TEXT:
                     prompt_is_done[user_id] = True

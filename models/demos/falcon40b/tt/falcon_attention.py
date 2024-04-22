@@ -316,11 +316,6 @@ class TtFalconAttention:
         q_len = hidden_states[0].get_legacy_shape()[2]
         assert layer_past is not None
 
-        # Reshard
-        hidden_states = convert_to_layout(
-            hidden_states, self.model_config["ATTN_INPUT_MEMCFG"], self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
-        )
-
         #################
         ### FUSED QKV ###
         #################
@@ -335,21 +330,12 @@ class TtFalconAttention:
                     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
                     grid=ttnn.CoreGrid(x=8, y=4) if q_len >= 512 else ttnn.CoreGrid(x=8, y=1),
                     transpose_mcast=True,
-                    overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
-                    overwrite_subblock_h=1,
                 )
             )
 
         ###########
         ### TMs ###
         ###########
-        # TODO: Need to uplift nlp_create_qkv_heads to support HEIGHT > 32 for sharded; otherwise, need to spill to interleaved for prefill
-        fused_query_key_value = convert_to_layout(
-            fused_query_key_value,
-            self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            self.model_config["CREATE_QKV_HEADS_INPUT_MEMCFG"],
-        )
-
         query_layer = []
         key_layer = []
         value_layer = []
@@ -465,10 +451,6 @@ class TtFalconAttention:
                 output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )
 
-        attn_output = convert_to_layout(
-            attn_output, self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"], self.model_config["DEFAULT_MEMCFG"]
-        )
-
         attn_output = tt_lib.tensor.all_gather(
             attn_output,
             dim=3,
@@ -476,9 +458,6 @@ class TtFalconAttention:
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],
         )
 
-        attn_output = convert_to_layout(
-            attn_output, self.model_config["DEFAULT_MEMCFG"], self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"]
-        )
         for i in range(len(attn_output)):
             attn_output[i] = falcon_prefill_matmul(
                 attn_output[i],

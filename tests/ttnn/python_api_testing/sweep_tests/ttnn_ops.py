@@ -476,6 +476,23 @@ def eltwise_log_sigmoid(
     return ttnn_tensor_to_torch(t1)
 
 
+def eltwise_celu(
+    x,
+    *args,
+    alpha,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.celu(t0, alpha, memory_config=memory_config_to_ttnn(output_mem_config))
+
+    return ttnn_tensor_to_torch(t1)
+
+
 def eltwise_logit(
     x,
     *args,
@@ -2308,7 +2325,7 @@ def global_avg_pool2d(
     output_tensor = ttnn.to_torch(output_tensor)
     output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))
 
-    return output_tensor
+    return output_tensor.to(torch.float32)
 
 
 def upsample(
@@ -2948,14 +2965,12 @@ def preprocessing_model_bert_1(
 
     torch_hidden_states = x
 
-    torch_output = model(torch_hidden_states)
-
     parameters = preprocess_model_parameters(
         initialize_model=lambda: model,
         device=device,
     )
 
-    hidden_states = ttnn.from_torch(torch_hidden_states, layout=ttnn.TILE_LAYOUT, device=device)
+    hidden_states = ttnn.from_torch(torch_hidden_states, dtype[0], layout=layout[0], device=device)
     output = ttnn_bert.bert_feedforward(
         config,
         hidden_states,
@@ -2992,7 +3007,7 @@ def preprocessing_model_bert_2(
         device=device,
     )
 
-    hidden_states = ttnn.from_torch(torch_hidden_states, ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+    hidden_states = ttnn.from_torch(torch_hidden_states, dtype[0], layout=layout[0], device=device)
     if torch_attention_mask is not None:
         attention_mask = ttnn.from_torch(torch_attention_mask, layout=ttnn.TILE_LAYOUT, device=device)
     else:
@@ -3035,8 +3050,8 @@ def preprocessing_model_bert_3(
         device=device,
     )
 
-    hidden_states = ttnn.from_torch(torch_hidden_states, layout=ttnn.TILE_LAYOUT, device=device)
-    attention_mask = ttnn.from_torch(torch_attention_mask, layout=ttnn.TILE_LAYOUT, device=device)
+    hidden_states = ttnn.from_torch(torch_hidden_states, dtype[0], layout=layout[0], device=device)
+    attention_mask = ttnn.from_torch(torch_attention_mask, dtype[0], layout=layout[0], device=device)
     output = ttnn_bert.bert_attention(
         config,
         hidden_states,

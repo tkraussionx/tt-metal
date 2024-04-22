@@ -103,7 +103,7 @@ def test_transformer_attention_softmax_(
     )
 
     output_tensor = ttnn.transformer.attention_softmax_(
-        input_tensor, head_size=None, attention_mask=attention_mask, casual_mask=True
+        input_tensor, head_size=None, attention_mask=attention_mask, causal_mask=True
     )
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
@@ -332,7 +332,7 @@ def test_sharded_split_query_key_value_and_split_heads(
     )
 
     query_tensor, key_tensor, value_tensor = ttnn.transformer.split_query_key_value_and_split_heads(
-        input_tensor, num_heads=num_heads, memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG
+        input_tensor, num_heads=num_heads, memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG
     )
     query_tensor = ttnn.to_torch(query_tensor)
     key_tensor = ttnn.to_torch(key_tensor)

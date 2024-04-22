@@ -427,6 +427,8 @@ Tensor elementwise operations
 
 .. autofunction:: tt_lib.tensor.subalpha
 
+.. autofunction:: tt_lib.tensor.celu
+
 .. autofunction:: tt_lib.tensor.addalpha
 
 .. autofunction:: tt_lib.tensor.ldexp
@@ -892,6 +894,8 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.abs_bw
 
+.. autofunction:: tt_lib.tensor.complex_abs_bw
+
 .. autofunction:: tt_lib.tensor.rsqrt_bw
 
 .. autofunction:: tt_lib.tensor.neg_bw
@@ -1054,9 +1058,17 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.unary_remainder_bw
 
+.. autofunction:: tt_lib.tensor.complex_recip_bw
+
 .. autofunction:: tt_lib.tensor.imag_bw
 
 .. autofunction:: tt_lib.tensor.real_bw
+    
+.. autofunction:: tt_lib.tensor.complex_mul_bw
+
+.. autofunction:: tt_lib.tensor.complex_div_bw
+
+.. autofunction:: tt_lib.tensor.polar_bw
 
 .. autofunction:: tt_lib.tensor.multigammaln_bw
 

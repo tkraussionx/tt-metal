@@ -486,7 +486,7 @@ def mean_hw(x, *args, device, dtype, layout, input_mem_config, output_mem_config
     t1 = ttl.tensor.mean_hw(t0, output_mem_config=output_mem_config)
 
     output = tt2torch_tensor(t1)
-    output = output.max(2, True)[0].max(3, True)[0]
+    output = output[:, :, 0, 0]
 
     return output
 
@@ -931,6 +931,24 @@ def eltwise_subalpha(
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
     t2 = ttl.tensor.subalpha(t0, t1, alpha, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t2)
+
+
+@setup_host_and_device
+def eltwise_celu(
+    x,
+    *args,
+    alpha,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t2 = ttl.tensor.celu(t0, alpha, output_mem_config=output_mem_config)
 
     return tt2torch_tensor(t2)
 
