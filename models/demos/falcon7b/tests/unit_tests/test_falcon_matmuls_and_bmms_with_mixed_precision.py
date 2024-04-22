@@ -216,13 +216,14 @@ def test_falcon_matmul(
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
+# @skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
 def test_falcon7b_attnention_sliced(
     device,
     seq_len,
     num_cores,
+    use_program_cache,
     function_level_defaults,
 ):
     compute_grid_size = device.compute_with_storage_grid_size()
@@ -347,14 +348,14 @@ def test_falcon7b_attnention_sliced(
             compute_kernel_config=compute_kernel_config,
         )
 
-        mm_slice = ttl.operations.primary.bcast(
-            mm_slice,
-            reference_scalar,
-            ttl.tensor.BcastOpMath.MUL,
-            ttl.tensor.BcastOpDim.HW,
-            output_mem_config=height_sharded_memory_config,
-            in_place=True,
-        )
+        # mm_slice = ttl.operations.primary.bcast(
+        #     mm_slice,
+        #     reference_scalar,
+        #     ttl.tensor.BcastOpMath.MUL,
+        #     ttl.tensor.BcastOpDim.HW,
+        #     output_mem_config=height_sharded_memory_config,
+        #     in_place=True,
+        # )
 
         # Deallocating here causes pcc to drop - issue #6638
         # So we have to move it after the entire sequence is finished
@@ -436,13 +437,13 @@ def test_falcon7b_attnention_sliced(
         reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
     )
 
-    attn_weights = ttl.operations.primary.bcast(
-        attn_weights,
-        reference_scalar,
-        ttl.tensor.BcastOpMath.MUL,
-        ttl.tensor.BcastOpDim.HW,
-        output_mem_config=dram_interleaved_memory_config,
-    )
+    # attn_weights = ttl.operations.primary.bcast(
+    #     attn_weights,
+    #     reference_scalar,
+    #     ttl.tensor.BcastOpMath.MUL,
+    #     ttl.tensor.BcastOpDim.HW,
+    #     output_mem_config=dram_interleaved_memory_config,
+    # )
     attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
     attn_weights = ttl.operations.primary.softmax_in_place(attn_weights, compute_kernel_config=compute_kernel_config)
     attn_output = ttl.tensor.matmul(attn_weights, reference_value_layer)
@@ -474,11 +475,12 @@ def test_falcon7b_attnention_sliced(
 
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
+# @skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 def test_falcon7b_attention_softmax_sequence(
     device,
     seq_len,
     num_cores,
+    use_program_cache,
     function_level_defaults,
 ):
     compute_grid_size = device.compute_with_storage_grid_size()

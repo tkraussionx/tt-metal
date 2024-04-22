@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <cstdint>
 
+#include "common/logger.hpp"
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_dnn/op_library/sharded/sharded_op.hpp"
+#include "tt_dnn/op_library/sharded_partial/sharded_op_partial.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
@@ -158,9 +161,11 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
             tt_metal::ComputeConfig{});
     }
 
-    uint32_t curr_idx_h = calculate_starting_idx_h(input, num_slices, slice_index);
+    uint32_t starting_idx_h = calculate_starting_idx_h(input, num_slices, slice_index);
+    uint32_t curr_idx_h = starting_idx_h;
     uint32_t curr_idx_w = 0;
 
+    log_info("Calling from non-prog cache, for num_slices: {}, slice_index: {}", num_slices, slice_index);
     const auto cores = corerange_to_cores(shard_spec.grid, std::nullopt, rm_orientation);
     for (const auto& core : cores) {
         uint32_t curr_num_units_per_shard = num_units_per_shard;
@@ -269,23 +274,33 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
         }
     }
 
-    auto override_runtime_arguments_callback = [unary_reader_kernel_id, unary_writer_kernel_id, cb_output, cores](
+    auto override_runtime_arguments_callback = [unary_reader_kernel_id, unary_writer_kernel_id, cb_output, cores, starting_idx_h, slice_index, num_slices](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,
                                                    const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
+                                                   const std::vector<Tensor>& output_tensors
+                                                   ) {
 
+        auto src_buffer = input_tensors.at(0).buffer();
         auto dst_buffer = output_tensors.at(0).buffer();
 
-        auto shard_spec = output_tensors.at(0).shard_spec().value();
-        auto all_cores = shard_spec.grid;
+        bool patch_tile_starting_index = num_slices > 1;
+        int32_t patch_tile_starting_index_val = 0;
+        if (patch_tile_starting_index) {
+            uint32_t runtime_slice_index = static_cast<const ShardedPartial*>(operation)->slice_index;
+            // We need to deduce offset calculated by cached op value, and add runtime calculated offset.
+            if (runtime_slice_index != slice_index) {
+                uint32_t runtime_starting_idx_h = calculate_starting_idx_h(input_tensors.at(0), num_slices, runtime_slice_index);
+                patch_tile_starting_index_val = runtime_starting_idx_h - starting_idx_h;
+            }
+        }
 
         for (const auto& core : cores) {
-            {
-                auto& runtime_args = GetRuntimeArgs(program, unary_reader_kernel_id, core);
-                runtime_args[0] = src_buffer->address();
+            auto& runtime_args = GetRuntimeArgs(program, unary_reader_kernel_id, core);
+            runtime_args[0] = src_buffer->address();
+            if (patch_tile_starting_index != 0) {
+                runtime_args[5] = (uint32_t)((int32_t)runtime_args[5] + patch_tile_starting_index_val);
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
@@ -416,7 +431,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
 
     tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, all_cores, {num_units_per_shard});
 
-    uint32_t curr_idx_h = calculate_starting_idx_h(output, num_slices, slice_index);
+    uint32_t starting_idx_h = calculate_starting_idx_h(output, num_slices, slice_index);
+    uint32_t curr_idx_h = starting_idx_h;
     uint32_t curr_idx_w = 0;
 
     const auto cores = corerange_to_cores(all_cores, std::nullopt, rm_orientation);
@@ -507,7 +523,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
             }
         }
     }
-    auto override_runtime_arguments_callback = [unary_reader_kernel_id, unary_writer_kernel_id, cb_src0, cores, num_slices](
+    auto override_runtime_arguments_callback = [unary_reader_kernel_id, unary_writer_kernel_id, cb_src0, cores, num_slices, slice_index, starting_idx_h](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,
@@ -516,7 +532,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
         auto src_buffer = input_tensors.at(0).buffer();
 
         Buffer* dst_buffer = nullptr;
-        if (num_slices > 1 || (num_slices == 1 && output_tensors.size() == 0)) {
+        bool partial_op = num_slices > 1 || (num_slices == 1 && output_tensors.size() == 0);
+        if (partial_op) {
             // If we have num_slices > 1, it means that our op is S->I partial.
             // And currently we store output tensors there as input[1]
             // If we have num_slices == 1, and output_tensors.size() == 0,
@@ -529,10 +546,23 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
         auto shard_spec = input_tensors.at(0).shard_spec().value();
         auto all_cores = shard_spec.grid;
 
+        int32_t patch_tile_starting_index_val = 0;
+        if (partial_op) {
+            uint32_t runtime_slice_index = static_cast<const ShardedPartial*>(operation)->slice_index;
+            // We need to deduce offset calculated by cached op value, and add runtime calculated offset.
+            if (runtime_slice_index != slice_index) {
+                uint32_t runtime_starting_idx_h = calculate_starting_idx_h(input_tensors.at(1), num_slices, runtime_slice_index);
+                patch_tile_starting_index_val = runtime_starting_idx_h - starting_idx_h;
+            }
+        }
+
         for (const auto& core : cores) {
             {
                 auto& runtime_args = GetRuntimeArgs(program, unary_writer_kernel_id, core);
                 runtime_args[0] = dst_buffer->address();
+                if (patch_tile_starting_index_val != 0) {
+                    runtime_args[7] = (uint32_t)((int32_t)runtime_args[7] + patch_tile_starting_index_val);
+                }
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);

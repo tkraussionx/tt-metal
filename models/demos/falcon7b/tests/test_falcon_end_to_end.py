@@ -198,7 +198,7 @@ def run_test_FalconCausalLM_end_to_end(
 
     logger.info(f"Enable profiler and enable binary and compile cache")
     profiler.enable()
-    enable_persistent_kernel_cache()
+    # enable_persistent_kernel_cache()
 
     # Regenerate input ids and attention_mask on device
     tt_input_ids, tt_attention_mask = get_inputs_on_device(

@@ -182,6 +182,7 @@ OutputTensors run_device_operation(
                 if (program_with_callbacks.override_runtime_arguments_callback.has_value()) {
                     auto override_runtime_arguments_callback =
                         program_with_callbacks.override_runtime_arguments_callback.value();
+                        log_info("Calling runtime override!");
                     operation.override_runtime_arguments(
                         override_runtime_arguments_callback,
                         program_with_callbacks.program,

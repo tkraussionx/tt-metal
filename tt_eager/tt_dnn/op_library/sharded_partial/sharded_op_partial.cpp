@@ -16,6 +16,16 @@ namespace tt {
 
 namespace tt_metal {
 
+// const operation::Hash ShardedPartial::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
+//     return operation::hash_operation<ShardedPartial>(
+//         this->output_dtype,
+//         this->output_mem_config,
+//         this->num_slices,
+//         this->slice_index,
+//         this->shard_spec,
+//         this->grid_size);
+// }
+
 void ShardedPartial::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
 

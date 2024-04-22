@@ -41,6 +41,7 @@ struct ShardedPartial {
         const std::vector<Tensor> &input_tensors, std::vector<Tensor> &output_tensors) const;
     ShardedOpPartialParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
     std::string get_type_name() const;
+    //const operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
 
     static constexpr auto attribute_names =
         std::make_tuple("grid_size", "shard_spec", "sharded_op_type", "output_mem_config", "output_dtype");
