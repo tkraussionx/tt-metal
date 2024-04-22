@@ -59,7 +59,10 @@ if not ttnn.CONFIG.enable_fast_runtime_mode:
 
         batch_size, Z, sequence_size, hidden_size = kv_input_tensor.shape
         head_size = hidden_size // num_kv_heads // 2
-        key, value = kv_input_tensor.split(kv_input_tensor.shape[-1] // 2, dim=-1)
+        split_tensors = kv_input_tensor.split(kv_input_tensor.shape[-1] // (2 * num_kv_heads), dim=-1)
+        key = torch.concat(split_tensors[::2], dim=-1)
+        value = torch.concat(split_tensors[1::2], dim=-1)
+
         key = torch.reshape(key, (batch_size, sequence_size, num_kv_heads, head_size))
         value = torch.reshape(value, (batch_size, sequence_size, num_kv_heads, head_size))
 

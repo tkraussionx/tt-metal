@@ -15,6 +15,7 @@ from models.utility_functions import (
 from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor, skip_for_wormhole_b0
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
     determine_largest_subblock_size,
+    determine_blocking,
 )
 
 
@@ -836,7 +837,7 @@ def test_attention(
 
 @skip_for_grayskull()
 @pytest.mark.parametrize("size", [4096, 1024, 256, 64])
-@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
+@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
 @pytest.mark.parametrize("interleaved_output", [True, False])
 def test_qkv(
     device,
@@ -845,14 +846,13 @@ def test_qkv(
     interleaved_output,
     function_level_defaults,
 ):
-    pytest.skip()
     sizes = {
         4096: [1, 8192, 320, 1536],
         1024: [1, 2048, 640, 2304],
         256: [1, 512, 1280, 3840],
         64: [1, 128, 1280, 3840],
     }
-    grid_sizes = {4096: (8, 5), 1024: (8, 5), 256: (8, 8), 64: (4, 8)}
+    grid_sizes = {4096: (5, 8), 1024: (5, 8), 256: (8, 8), 64: (8, 4)}
     out_subblock_hs = {4096: 8, 1024: 8, 256: 2, 64: 1}
     B, M, K, N = sizes[size]
     grid_size = grid_sizes[size]
@@ -911,23 +911,23 @@ def test_qkv(
     in_0_sharded = ttl.tensor.interleaved_to_sharded(
         in_0,
         grid_size,
-        [M // grid_size[0], K // grid_size[1]],
+        [M // grid_size[1], K // grid_size[0]],
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-        ttl.tensor.ShardOrientation.COL_MAJOR,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
 
-    Nt = N // 32
-    G = grid_size[1]
-    per_core_N = (Nt - 1) // (G - 1) if Nt != 16 else 4
-    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+    in0_block_h, in0_block_w, out_subblock_h, out_subblock_w, out_block_h, out_block_w = determine_blocking(
+        M, K, N, grid_size
+    )
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=K // grid_size[1] // 32,
-        out_subblock_h=out_subblock_hs[size] if interleaved_output else 1,
-        out_subblock_w=1,
-        per_core_M=M // grid_size[0] // 32,
-        per_core_N=per_core_N,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
         fused_activation=None,
-        transpose_mcast=True,
     )
 
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(

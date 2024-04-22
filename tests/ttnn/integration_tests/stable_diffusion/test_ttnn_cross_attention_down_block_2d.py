@@ -207,6 +207,10 @@ def test_cross_attn_down_block_2d_512x512(device, model_name, N, C, H, W, index,
     temb = ttnn.to_device(temb, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
     hidden_states = pre_process_input(device, hidden_states)
+
+    # ttnn.CONFIG.enable_logging = True
+    # ttnn.CONFIG.enable_detailed_buffer_report = True,
+    # ttnn.CONFIG.enable_comparison_mode = False
     ttnn_output, _ = model(
         hidden_states,
         encoder_hidden_states,
