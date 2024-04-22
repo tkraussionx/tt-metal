@@ -417,21 +417,8 @@ class TtFalconAttention:
                         )
                     )
 
-                for i in range(len(query_layer)):
-                    attn_mask_slices.append(
-                        tt_lib.tensor.interleaved_to_sharded_partial(
-                            attention_mask[i],
-                            (8, 8),
-                            [slice_size * 16 // 64, q_len],  # each slice is [1,16,128,128], we use 64 cores
-                            num_slices,  # num_slices
-                            slice_i,  # slice_index
-                            tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                            tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-                        )
-                    )
-
                 attn_output_slice = self.scaled_product_attention(
-                    q_slices, key_layer_transposed, attn_mask_slices, value_layer, q_len
+                    q_slices, key_layer_transposed, attention_mask, value_layer, q_len
                 )
 
                 # write output slices to attn_output
@@ -447,9 +434,6 @@ class TtFalconAttention:
         else:
             query_layer = convert_to_layout(
                 query_layer, self.model_config["DRAM_MEMCFG"], self.model_config["QUERY_HEIGHT_SHARDED_MEMCFG"]
-            )
-            attention_mask = convert_to_layout(
-                attention_mask, self.model_config["DRAM_MEMCFG"], self.model_config["ATTN_MASK_HEIGHT_SHARDED_MEMCFG"]
             )
 
             attn_output = self.scaled_product_attention(
@@ -546,12 +530,11 @@ class TtFalconAttention:
 
         # Softmax
         for i in range(len(attn_weights)):
-            attn_weights[i] = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+            attn_weights[i] = tt_lib.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
                 attn_weights[i],
                 self.scalar,
                 attn_mask_slices[i],
                 program_config=self.model_config["SOFTMAX_PROGCFG"],
-                is_causal_mask=True,
             )
 
         # Attention score * V

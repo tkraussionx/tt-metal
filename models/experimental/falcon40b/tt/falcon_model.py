@@ -175,16 +175,16 @@ class TtFalconModelShared:
                 1,
             )
             tt_attention_mask = []
-            attention_mask_memconfig = self.model_config["ATTN_MASK_MEMCFG"]
-            if attention_mask_memconfig.is_sharded():
-                attn_mask_shard_shape = attention_mask_memconfig.shard_spec.shape
-                attn_mask_shard_shape[-1] = sequence_size
-                attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
+            dram_interleaved_memory_config = tt_lib.tensor.MemoryConfig(
+                memory_layout=tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
+                buffer_type=tt_lib.tensor.BufferType.DRAM,
+            )
+            attention_mask_memconfig = dram_interleaved_memory_config
             for i in range(len(self.devices)):
                 tt_attention_mask.append(
                     torch2tt_tensor(
-                        attention_mask_bool_chunks[i],
+                        attention_mask_bool_chunks[i][:, :1, :, :],
                         self.devices[i],
                         tt_memory_config=attention_mask_memconfig,
                         tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
