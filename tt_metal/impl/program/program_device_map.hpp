@@ -45,5 +45,5 @@ struct ProgramTransferInfo {
 
 struct ProgramCommandIndices {
     std::uint32_t cb_configs_payload_start;    // device_commands
-    std::uint32_t runtime_args_payload_start;  // runtime_args_commands
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> runtime_args_data_start_and_offset;     // runtime_args_commands, {start, offset}
 };
