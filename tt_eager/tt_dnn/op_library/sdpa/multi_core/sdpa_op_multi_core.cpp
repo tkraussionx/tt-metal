@@ -186,24 +186,64 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 
     // Host code is responsible for determining matmul configuration
-    // const uint32_t dst_size = fp32_dest_acc_en ? 4: 8;
-    // const uint32_t qk_in0_block_w = 1;
-    // const uint32_t qk_out_subblock_h = 1;
-    // const uint32_t qk_out_subblock_w = 1;
+    const uint32_t dst_size = fp32_dest_acc_en ? 4: 8;
+    const uint32_t qk_in0_block_w = DHt;
+    // max of Sk_chunk_t and dst_size
+    const uint32_t qk_out_subblock_w = std::min(Sk_chunk_t, dst_size);
+    // If qk_out_subblock_w is full row of output, scale subblock_h so volume = dst_size. Otherwise it's 1 to maintain row-major intermediate buffer.
+    const uint32_t qk_out_subblock_h = (qk_out_subblock_w == Sk_chunk_t) ? (std::min(Sq_chunk_t, dst_size / qk_out_subblock_w)) : 1;
 
-    // const uint32_t qk_in0_num_subblocks = S_chunk_t / qk_out_subblock_h;
-    // const uint32_t qk_in1_num_subblocks = S_chunk_t / qk_out_subblock_w;
-    // const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
+    const uint32_t qk_in0_num_subblocks = Sq_chunk_t / qk_out_subblock_h;
+    const uint32_t qk_in1_num_subblocks = Sk_chunk_t / qk_out_subblock_w;
+    const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
 
-    // // now for out0
-    // const uint32_t out0_in0_block_w = 1;
-    // const uint32_t out0_out_subblock_h = 1;
-    // const uint32_t out0_out_subblock_w = 1;
+    // now for out0
+    const uint32_t out_in0_block_w = Sk_chunk_t;
+    const uint32_t out_out_subblock_w = std::min(DHt, dst_size);
+    const uint32_t out_out_subblock_h = (out_out_subblock_w == DHt) ? (std::min(Sq_chunk_t, dst_size / out_out_subblock_w)) : 1;
 
-    // const uint32_t out0_in0_num_subblocks = S_chunk_t / out0_out_subblock_h;
-    // const uint32_t out0_in1_num_subblocks = DHt / out0_out_subblock_w;
-    // const uint32_t out0_num_blocks = S_chunk_t / out0_in0_block_w;
+    const uint32_t out_in0_num_subblocks = Sq_chunk_t / out_out_subblock_h;
+    const uint32_t out_in1_num_subblocks = DHt / out_out_subblock_w;
+    const uint32_t out_num_blocks = Sk_chunk_t / out_in0_block_w;
 
+    // log all values
+    log_info("dst_size: {}", dst_size);
+    log_info("qk_in0_block_w: {}", qk_in0_block_w);
+    log_info("qk_out_subblock_w: {}", qk_out_subblock_w);
+    log_info("qk_out_subblock_h: {}", qk_out_subblock_h);
+    log_info("qk_in0_num_subblocks: {}", qk_in0_num_subblocks);
+    log_info("qk_in1_num_subblocks: {}", qk_in1_num_subblocks);
+    log_info("qk_num_blocks: {}", qk_num_blocks);
+    log_info("out_in0_block_w: {}", out_in0_block_w);
+    log_info("out_out_subblock_w: {}", out_out_subblock_w);
+    log_info("out_out_subblock_h: {}", out_out_subblock_h);
+    log_info("out_in0_num_subblocks: {}", out_in0_num_subblocks);
+    log_info("out_in1_num_subblocks: {}", out_in1_num_subblocks);
+    log_info("out_num_blocks: {}", out_num_blocks);
+
+    // Determine granularity for statistics computation
+    const uint32_t half_dst = 8; // Always 8 since stats don't use fp32 dst
+    const uint32_t stats_granularity = std::min(Sq_chunk_t, half_dst);
+    // Find log2 of stats_granularity using std
+    const uint32_t log2_stats_granularity = std::log2(stats_granularity);
+    // Assert that this is a power of 2
+    TT_ASSERT(stats_granularity == (1 << log2_stats_granularity));
+
+    const uint32_t sub_exp_granularity = std::min(Sk_chunk_t, half_dst);
+    const uint32_t log2_sub_exp_granularity = std::log2(sub_exp_granularity);
+    TT_ASSERT(sub_exp_granularity == (1 << log2_sub_exp_granularity));
+
+    const uint32_t mul_bcast_granularity = std::min(Sq_chunk_t * Sk_chunk_t, half_dst);
+    const uint32_t log2_mul_bcast_granularity = std::log2(mul_bcast_granularity);
+    TT_ASSERT(mul_bcast_granularity == (1 << log2_mul_bcast_granularity));
+
+    // Log these
+    log_info("stats_granularity: {}", stats_granularity);
+    log_info("log2_stats_granularity: {}", log2_stats_granularity);
+    log_info("sub_exp_granularity: {}", sub_exp_granularity);
+    log_info("log2_sub_exp_granularity: {}", log2_sub_exp_granularity);
+    log_info("mul_bcast_granularity: {}", mul_bcast_granularity);
+    log_info("log2_mul_bcast_granularity: {}", log2_mul_bcast_granularity);
 
 
 
@@ -220,13 +260,24 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         // interleaved accessor args
     };
 
+    std::vector<uint32_t> compute_compile_time_args = {
+        // matmul args
+        qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
+        out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks
+    };
+
     std::map<string, string> defines;
+    defines["STATS_GRANULARITY"] = std::to_string(stats_granularity);
+    defines["LOG2_STATS_GRANULARITY"] = std::to_string(log2_stats_granularity);
+    defines["SUB_EXP_GRANULARITY"] = std::to_string(sub_exp_granularity);
+    defines["LOG2_SUB_EXP_GRANULARITY"] = std::to_string(log2_sub_exp_granularity);
+    defines["MUL_BCAST_GRANULARITY"] = std::to_string(mul_bcast_granularity);
+    defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
 
     auto reader_kernels_id = CreateKernel(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
         tt_metal::ReaderDataMovementConfig(
-            reader_compile_time_args,
-            defines
+            reader_compile_time_args
     ));
 
     auto writer_kernels_id = CreateKernel(
@@ -239,7 +290,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp", core_grid,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
-            .compile_args = {},
+            .compile_args = compute_compile_time_args,
             .defines = defines
     });
 

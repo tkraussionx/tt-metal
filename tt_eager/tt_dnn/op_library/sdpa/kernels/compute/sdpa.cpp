@@ -16,7 +16,7 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
 // #include "debug/dprint.h"
-
+#include "tools/profiler/kernel_profiler.hpp"
 
 
 namespace NAMESPACE {
@@ -45,6 +45,7 @@ void max_block_inplace(uint32_t in0, uint32_t in1, uint32_t num_tiles) {
 }
 
 void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
+    // DeviceZoneScopedN("reduce max");
     // TODO: Fold in maxmium(prev_max, cur_max) ? Might require a bunch of reconfigs...
 
     // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
@@ -146,11 +147,11 @@ void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t
     cb_wait_front(in0_cb, rows*cols);
     cb_wait_front(in1_cb, rows);
 
-    uint32_t dst_tiles = 8;
-    uint32_t granularity = cols >> 3; //division by 8
+    constexpr uint32_t dst_tiles = SUB_EXP_GRANULARITY;
+    const uint32_t granularity = cols >> LOG2_SUB_EXP_GRANULARITY;
     for (uint32_t i = 0; i < rows; ++i) {
         for(uint u = 0; u < granularity; u++) {
-            cb_wait_front(in0_cb, dst_tiles);
+            cb_wait_front(in0_cb, rows*cols);
             sub_bcast_cols_init_short(in0_cb, in1_cb);
             tile_regs_acquire();
             for (uint32_t j = 0; j < dst_tiles; ++j) {
@@ -274,6 +275,42 @@ void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
     cb_pop_front(in1_cb, num_tiles);
 }
 
+/*
+void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
+    // Precondition: in0_cb has num_tiles produced
+    // Precondition: in1_scalar_cb has 1 produced
+    // Postcondition: in0_cb has num_tiles produced
+    // Postcondition: in1_scalar_cb has 1 produced
+    // unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
+    // pack_reconfig_data_format(in0_cb);
+    constexpr uint32_t dst_tiles = MUL_BCAST_GRANULARITY;
+    const uint32_t granularity = num_tiles >> LOG2_MUL_BCAST_GRANULARITY;
+    cb_wait_front(in1_scalar_cb, 1);
+    cb_wait_front(in0_cb, num_tiles);
+    mul_tiles_bcast_scalar_init_short();
+    for (uint32_t i = 0; i < granularity; ++i) {
+        // PACK(DPRINT << "COMPUTE: MUL_BCAST i: " << i << ENDL());
+        // acquire_dst(tt::DstMode::Half);
+
+        cb_wait_front(in0_cb, num_tiles);
+        tile_regs_acquire();
+        for (uint32_t u = 0; u < dst_tiles; u++) {
+            mul_tiles_bcast_scalar(in0_cb, in1_scalar_cb, u, 0, u);
+        }
+        cb_pop_front(in0_cb, dst_tiles);
+        cb_reserve_back(in0_cb, dst_tiles);
+        tile_regs_commit();
+        tile_regs_wait();
+        for (uint32_t u = 0; u < dst_tiles; u++) {
+            pack_tile(u, in0_cb);
+        }
+        tile_regs_release();
+        cb_push_back(in0_cb, dst_tiles);
+        // pack_tile(0, in0_cb);
+        // cb_push_back(in0_cb, 1);
+        // release_dst(tt::DstMode::Half);
+    }
+*/
 
 void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
     // Precondition: in0_cb and in1_cb have num_tiles produced
@@ -333,6 +370,7 @@ void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
 
 void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M, uint32_t N, uint32_t K, uint32_t num_blocks, uint32_t in0_num_subblocks, uint32_t in1_num_subblocks,
                     uint32_t in0_block_w, uint32_t subblock_h, uint32_t subblock_w) {
+    DeviceZoneScopedN("matmul_blocks");
     bool spill = num_blocks > 1;
     bool enable_reload = false;
     mm_init_short();
@@ -425,32 +463,26 @@ void MAIN {
     // PACK(DPRINT << "COMPUTE: S_chunk_t=" << S_chunk_t << ENDL());
     // PACK(DPRINT << "COMPUTE: num_chunks=" << num_chunks << ENDL());
 
-    // const uint32_t my_q_head = core_id / num_chunks;
-    // const uint32_t my_q_chunk = core_id % num_chunks;
 
     const uint32_t q_chunk_tiles = Sq_chunk_t * DHt;
     const uint32_t k_chunk_tiles = Sk_chunk_t * DHt;
-    // mask_chunk_tiles = qk_chunk_tiles
     const uint32_t qk_chunk_tiles = Sq_chunk_t * Sk_chunk_t;
     const uint32_t out_chunk_tiles = Sq_chunk_t * DHt;
 
-    // constexpr uint32_t in0_block_w = 1;
-    // constexpr uint32_t subblock_w = 1;
-    // constexpr uint32_t subblock_h = 1;
 
-    const uint32_t qk_in0_block_w = DHt;
-    const uint32_t qk_subblock_w = Sk_chunk_t;
-    const uint32_t qk_subblock_h = 1;
-    const uint32_t qk_in0_num_subblocks = Sq_chunk_t / qk_subblock_h;
-    const uint32_t qk_in1_num_subblocks = Sk_chunk_t / qk_subblock_w;
-    const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
+    constexpr uint32_t qk_in0_block_w = get_compile_time_arg_val(0);
+    constexpr uint32_t qk_subblock_w = get_compile_time_arg_val(1);
+    constexpr uint32_t qk_subblock_h = get_compile_time_arg_val(2);
+    constexpr uint32_t qk_in0_num_subblocks = get_compile_time_arg_val(3);
+    constexpr uint32_t qk_in1_num_subblocks = get_compile_time_arg_val(4);
+    constexpr uint32_t qk_num_blocks = get_compile_time_arg_val(5);
+    constexpr uint32_t out_in0_block_w = get_compile_time_arg_val(6);
+    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(7);
+    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(8);
+    constexpr uint32_t out_in0_num_subblocks = get_compile_time_arg_val(9);
+    constexpr uint32_t out_in1_num_subblocks = get_compile_time_arg_val(10);
+    constexpr uint32_t out_num_blocks = get_compile_time_arg_val(11);
 
-    const uint32_t out_in0_block_w = Sk_chunk_t;
-    const uint32_t out_subblock_w = DHt;
-    const uint32_t out_subblock_h = 1;
-    const uint32_t out_in0_num_subblocks = Sq_chunk_t / out_subblock_h;
-    const uint32_t out_in1_num_subblocks = DHt / out_subblock_w;
-    const uint32_t out_num_blocks = Sk_chunk_t / out_in0_block_w;
 
     constexpr uint32_t DST_SIZE = 8;
 
@@ -499,6 +531,7 @@ void MAIN {
 
                 // loop while k_low < q_high
                 for (uint32_t k_chunk = 0; (k_chunk * Sk_chunk_t) < q_high_idx; ++k_chunk) {
+                    DeviceZoneScopedN("K inner loop");
                     // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
                     const uint32_t k_low_idx = k_chunk * Sk_chunk_t;
                     const uint32_t k_high_idx = k_low_idx + Sk_chunk_t;
@@ -508,66 +541,78 @@ void MAIN {
                     matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w);
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
-                    /* QK *= SCALE */
-                    cb_push_back(cb_qk_im, qk_chunk_tiles);
-                    mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
-                    cb_pop_front(cb_qk_im, qk_chunk_tiles); // TODO: Fold into following push_back
-
-                    // Finding the diagonal is harder now that q_chunk_size and k_chunk_size can differ
-                    // Q-range = [q_low, q_high)
-                    // K-range = [k_low, k_high)
-                    // does_overlap = not (q_low >= k_high or k_low >= q_high)
-                    // TODO: Due to loop bounds, we should never have k_low >= q_high. Can simplify this conditional check
-                    if (!(q_low_idx >= k_high_idx || k_low_idx >= q_high_idx)) {
-                        /* QK += MASK */
+                    {
+                        DeviceZoneScopedN("stats 1");
+                        /* QK *= SCALE */
                         cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
+                        mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
+                        cb_pop_front(cb_qk_im, qk_chunk_tiles); // TODO: Fold into following push_back
+
+                        // Finding the diagonal is harder now that q_chunk_size and k_chunk_size can differ
+                        // Q-range = [q_low, q_high)
+                        // K-range = [k_low, k_high)
+                        // does_overlap = not (q_low >= k_high or k_low >= q_high)
+                        // TODO: Due to loop bounds, we should never have k_low >= q_high. Can simplify this conditional check
+                        if (!(q_low_idx >= k_high_idx || k_low_idx >= q_high_idx)) {
+                            /* QK += MASK */
+                            cb_push_back(cb_qk_im, qk_chunk_tiles);
+                            add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
+                            cb_pop_front(cb_qk_im, qk_chunk_tiles);
+                        }
+
+
+                        /* cb_cur_max = max(QK, dim=-1)*/
+                        cb_push_back(cb_qk_im, qk_chunk_tiles);
+                        reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
+
+                        if (k_chunk > 0) {
+                            /* cb_cur_max = maximum(cb_prev_max, cb_cur_max) */
+                            // cb_prev_max and cb_cur_max are full
+                            max_block_inplace(cb_cur_max, cb_prev_max, Sq_chunk_t);
+                            // cb_prev_max and cb_cur_max are full
+                        }
+
+                    }
+
+                    {
+                        DeviceZoneScopedN("exp");
+                        /* QK -= cb_cur_max */
+                        /* QK = exp(QK)*/
+                        cb_push_back(cb_qk_im, qk_chunk_tiles);
+                        sub_exp_block_bcast_cols_inplace(cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
                         cb_pop_front(cb_qk_im, qk_chunk_tiles);
                     }
 
+                    {
+                        DeviceZoneScopedN("stats 2");
+                        /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
+                        cb_push_back(cb_qk_im, qk_chunk_tiles);
+                        reduce_sum_c(cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t);
 
-                    /* cb_cur_max = max(QK, dim=-1)*/
-                    cb_push_back(cb_qk_im, qk_chunk_tiles);
-                    reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
+                        // cb_cur_sum full, cb_qk_im empty
+                        // DEBUG: free cb_cur_sum
+                        // cb_pop_front(cb_cur_sum, S_chunk_t);
 
-                    if (k_chunk > 0) {
-                        /* cb_cur_max = maximum(cb_prev_max, cb_cur_max) */
-                        // cb_prev_max and cb_cur_max are full
-                        max_block_inplace(cb_cur_max, cb_prev_max, Sq_chunk_t);
-                        // cb_prev_max and cb_cur_max are full
+                        if (k_chunk > 0) {
+                            /* cb_exp_max_diff = torch.exp(cb_prev_max - cb_cur_max) */
+                            sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, Sq_chunk_t);
+                            // make cb_prev_max and cb_cur_max full again
+                            cb_push_back(cb_prev_max, Sq_chunk_t);
+                            cb_push_back(cb_cur_max, Sq_chunk_t);
+
+                            /* cb_prev_sum *= cb_exp_max_diff */
+                            mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
+                            // cb_prev_sum full, cb_exp_max_diff empty
+                            cb_push_back(cb_exp_max_diff, Sq_chunk_t);
+                            // cb_exp_max_diff full
+
+                            /* cb_cur_sum += cb_prev_sum */
+                            add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
+                            // cb_cur_sum full, cb_prev_sum empty
+                        }
+
                     }
 
-                    /* QK -= cb_cur_max */
-                    /* QK = exp(QK)*/
-                    cb_push_back(cb_qk_im, qk_chunk_tiles);
-                    sub_exp_block_bcast_cols_inplace(cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
-                    cb_pop_front(cb_qk_im, qk_chunk_tiles);
-
-                    /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
-                    cb_push_back(cb_qk_im, qk_chunk_tiles);
-                    reduce_sum_c(cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t);
-
-                    // cb_cur_sum full, cb_qk_im empty
-                    // DEBUG: free cb_cur_sum
-                    // cb_pop_front(cb_cur_sum, S_chunk_t);
-
-                    if (k_chunk > 0) {
-                        /* cb_exp_max_diff = torch.exp(cb_prev_max - cb_cur_max) */
-                        sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, Sq_chunk_t);
-                        // make cb_prev_max and cb_cur_max full again
-                        cb_push_back(cb_prev_max, Sq_chunk_t);
-                        cb_push_back(cb_cur_max, Sq_chunk_t);
-
-                        /* cb_prev_sum *= cb_exp_max_diff */
-                        mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
-                        // cb_prev_sum full, cb_exp_max_diff empty
-                        cb_push_back(cb_exp_max_diff, Sq_chunk_t);
-                        // cb_exp_max_diff full
-
-                        /* cb_cur_sum += cb_prev_sum */
-                        add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-                        // cb_cur_sum full, cb_prev_sum empty
-                    }
 
 
                     /* OUT_IM = QK @ V_CHUNK */
@@ -580,52 +625,61 @@ void MAIN {
                     cb_push_back(cb_out_im, out_chunk_tiles);
 
 
-                    /* OUT_ACC += OUT_IM */
-                    if (k_chunk == 0) {
-                        copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
-                    } else {
-                        /* cb_out_accumulate_im *= cb_exp_max_diff */
-                        mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, Sq_chunk_t, DHt);
-                        // cb_exp_max_diff is now empty
+                    {
+                        DeviceZoneScopedN("Finalize loop");
+                        /* OUT_ACC += OUT_IM */
+                        if (k_chunk == 0) {
+                            copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
+                        } else {
+                            /* cb_out_accumulate_im *= cb_exp_max_diff */
+                            mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, Sq_chunk_t, DHt);
+                            // cb_exp_max_diff is now empty
 
-                        /* cb_out_accumulate_im += cb_out_im */
-                        add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
+                            /* cb_out_accumulate_im += cb_out_im */
+                            add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
+                        }
+
+
+
+                        // Set cb_prev_sum and cb_prev_max
+
+                        if (k_chunk > 0) {
+                            // Free up prev_max
+                            cb_pop_front(cb_prev_max, Sq_chunk_t);
+
+                        }
+                        // cb_cur_max is full, cb_prev_max is empty
+                        copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
+                        // cb_cur_max is empty, cb_prev_max is full
+
+                        // cb_cur_sum is full, cb_prev_sum is empty
+                        copy_block(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
+                        // cb_cur_sum is empty, cb_prev_sum is full
                     }
 
-
-
-                    // Set cb_prev_sum and cb_prev_max
-
-                    if (k_chunk > 0) {
-                        // Free up prev_max
-                        cb_pop_front(cb_prev_max, Sq_chunk_t);
-
-                    }
-                    // cb_cur_max is full, cb_prev_max is empty
-                    copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
-                    // cb_cur_max is empty, cb_prev_max is full
-
-                    // cb_cur_sum is full, cb_prev_sum is empty
-                    copy_block(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-                    // cb_cur_sum is empty, cb_prev_sum is full
 
                 }
-                // free up cb_prev_max after K chunks
-                cb_pop_front(cb_prev_max, Sq_chunk_t);
-                cb_pop_front(cb_prev_sum, Sq_chunk_t);
 
-                /* cb_cur_sum = 1.0 / cb_cur_sum */
-                cb_push_back(cb_cur_sum, Sq_chunk_t);
-                recip_block_inplace(cb_cur_sum, Sq_chunk_t);
-                // cb_cur_sum is full
+                {
+                    DeviceZoneScopedN("Finalize Q loop");
+                    // free up cb_prev_max after K chunks
+                    cb_pop_front(cb_prev_max, Sq_chunk_t);
+                    cb_pop_front(cb_prev_sum, Sq_chunk_t);
 
-                /* cb_out_accumulate_im *= cb_cur_sum */
-                mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_cur_sum, Sq_chunk_t, DHt);
-                // cb_cur_sum is empty, cb_out_accumulate_im is full
+                    /* cb_cur_sum = 1.0 / cb_cur_sum */
+                    cb_push_back(cb_cur_sum, Sq_chunk_t);
+                    recip_block_inplace(cb_cur_sum, Sq_chunk_t);
+                    // cb_cur_sum is full
 
-                copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
+                    /* cb_out_accumulate_im *= cb_cur_sum */
+                    mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_cur_sum, Sq_chunk_t, DHt);
+                    // cb_cur_sum is empty, cb_out_accumulate_im is full
 
-                cb_pop_front(cb_q_in, q_chunk_tiles);
+                    copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
+
+                    cb_pop_front(cb_q_in, q_chunk_tiles);
+                }
+
 
             }
         }
