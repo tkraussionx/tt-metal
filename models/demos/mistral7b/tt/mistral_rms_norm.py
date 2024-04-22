@@ -39,5 +39,5 @@ class TtRMSNorm(nn.Module):
         )
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        x = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
-        return x
+        h = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
+        return x, h

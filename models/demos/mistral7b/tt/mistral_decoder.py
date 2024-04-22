@@ -4,7 +4,7 @@
 import torch
 import ttnn
 from typing import Optional
-from models.demos.mistral7b.tt.mistral_attention import TtMistralAttention
+from models.demos.mistral7b.tt.mistral_attention_fast import TtMistralAttention
 from models.demos.mistral7b.tt.mistral_mlp import TtMistralMLP
 from models.demos.mistral7b.tt.mistral_rms_norm import TtRMSNorm
 
@@ -75,18 +75,21 @@ class TtTransformerBlock(torch.nn.Module):
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor] = None,
     ) -> ttnn.Tensor:
-        attn_norm = self.attention_norm(x)
+        x, attn_norm = self.attention_norm(x)
         # Attention module expects a list of inputs, attn masks (multi-device support)
         r = self.attention.forward(
             [attn_norm],
             current_pos,
             [attn_masks],
         )
-        # Attention also returns multiple outputs (multi-device support)
-        assert len(r) == 1, "Multiple devices not yet supported"
+        # # Attention also returns multiple outputs (multi-device support)
+        # assert len(r) == 1, "Multiple devices not yet supported"
+        ttnn.deallocate(attn_norm)
         r = r[0]
         r = ttnn.reshape(r, (1, 1, 32, 4096))
-        h = ttnn.experimental.tensor.add(x, r)
-        r = self.feed_forward.forward(self.ffn_norm(h))
-        out = ttnn.experimental.tensor.add(h, r)
+        h = ttnn.add(x, r, memory_config=ttnn.L1_MEMORY_CONFIG)
+        h, mlp_norm = self.ffn_norm(h)
+        r = self.feed_forward.forward(mlp_norm)
+        ttnn.deallocate(mlp_norm)
+        out = ttnn.add(h, r, memory_config=ttnn.L1_MEMORY_CONFIG)
         return out

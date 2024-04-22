@@ -80,9 +80,9 @@ class TtTransformer(nn.Module):
         for layer in self.layers:
             x = layer(x, current_pos, attn_masks)
 
-        x = self.norm(x)
+        x, h = self.norm(x)
         output = ttnn.linear(
-            x,
+            h,
             self.output_weight,
             program_config=self.output_program_config,
             compute_kernel_config=self.args.get_compute_kernel_config(),
