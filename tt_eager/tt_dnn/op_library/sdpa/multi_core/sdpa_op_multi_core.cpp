@@ -251,13 +251,17 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     bfloat16 bfloat_identity_scalar = bfloat16(1.0f);
     uint32_t packed_identity_scalar = pack_two_bfloat16_into_uint32({bfloat_identity_scalar, bfloat_identity_scalar});
 
+    union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
+
     std::vector<uint32_t> reader_compile_time_args = {
         // interleaved accessor args
-        packed_identity_scalar,
+
     };
 
     std::vector<uint32_t> writer_compile_time_args = {
         // interleaved accessor args
+        packed_identity_scalar,
+        scale_union.u
     };
 
     std::vector<uint32_t> compute_compile_time_args = {
@@ -375,7 +379,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t v_addr = v_buffer->address();
     uint32_t mask_addr = mask_buffer->address();
     uint32_t out_addr = out0_buffer->address();
-    union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
+
 
 
 
@@ -393,7 +397,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
         // log_info("core: {} getting runtime args for idx {i}", core, i);
 
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, scale_union.u, i, num_cores, q_parallel_factor });
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
         SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
         SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
     }

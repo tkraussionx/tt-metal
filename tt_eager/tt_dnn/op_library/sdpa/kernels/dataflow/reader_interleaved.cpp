@@ -4,10 +4,9 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-#include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
-#include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 
-// #include "debug/dprint.h"
+
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t q_addr  = get_arg_val<uint32_t>(0);
@@ -23,10 +22,9 @@ void kernel_main() {
     uint32_t q_num_chunks    = get_arg_val<uint32_t>(10);
     uint32_t Sk_chunk_t    = get_arg_val<uint32_t>(11);
     uint32_t k_num_chunks    = get_arg_val<uint32_t>(12);
-    uint32_t scale_val    = get_arg_val<uint32_t>(13);
-    uint32_t core_id    = get_arg_val<uint32_t>(14);
-    uint32_t num_cores    = get_arg_val<uint32_t>(15);
-    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(16);
+    uint32_t core_id    = get_arg_val<uint32_t>(13);
+    uint32_t num_cores    = get_arg_val<uint32_t>(14);
+    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(15);
 
     const uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
     const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
@@ -34,9 +32,8 @@ void kernel_main() {
     const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
     const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
 
-    // DPRINT << "READER core=" << core_id  << " local_batch=" << local_batch << " local_q_head=" << local_q_head << " local_q_chunk_start=" << local_q_chunk_start << " local_q_chunk_end=" << local_q_chunk_end << ENDL();
 
-    constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
+    // DPRINT << "READER core=" << core_id  << " local_batch=" << local_batch << " local_q_head=" << local_q_head << " local_q_chunk_start=" << local_q_chunk_start << " local_q_chunk_end=" << local_q_chunk_end << ENDL();
 
     // const uint32_t my_q_head = core_id / num_chunks;
     // const uint32_t my_q_chunk = core_id % num_chunks;
@@ -53,11 +50,7 @@ void kernel_main() {
     constexpr uint32_t cb_k_in = tt::CB::c_in1;
     constexpr uint32_t cb_v_in = tt::CB::c_in2;
     constexpr uint32_t cb_mask_in = tt::CB::c_in3;
-    constexpr uint32_t cb_scale_in = tt::CB::c_in4;
-    constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
 
-    generate_bcast_unary_scalar(cb_scale_in, scale_val);
-    generate_reduce_scaler(cb_identity_scale_in, identity_scalar_packed);
 
     constexpr uint32_t onetile = 1;
     const uint32_t q_tile_bytes = get_tile_size(cb_q_in);

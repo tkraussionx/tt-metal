@@ -15,7 +15,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
 
@@ -270,6 +270,7 @@ void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
         pack_tile(0, in0_cb);
         cb_push_back(in0_cb, 1);
         release_dst(tt::DstMode::Half);
+        PACK(DPRINT << "COMPUTE: MUL i: " << i << ENDL());
     }
 
     cb_pop_front(in1_cb, num_tiles);
@@ -321,8 +322,8 @@ void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t n
     cb_wait_front(in1_cb, num_tiles);
     cb_reserve_back(out_cb, num_tiles);
 
-    const uint dst_tiles = 8;
-    const uint granularity = num_tiles >> 3; //division by 8
+    const uint dst_tiles = STATS_GRANULARITY;
+    const uint granularity = num_tiles >> LOG2_STATS_GRANULARITY;
     for (uint32_t u = 0; u < granularity; u++) {
         sub_tiles_init();
         tile_regs_acquire();
@@ -599,20 +600,17 @@ void MAIN {
                             // make cb_prev_max and cb_cur_max full again
                             cb_push_back(cb_prev_max, Sq_chunk_t);
                             cb_push_back(cb_cur_max, Sq_chunk_t);
-
                             /* cb_prev_sum *= cb_exp_max_diff */
                             mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
                             // cb_prev_sum full, cb_exp_max_diff empty
                             cb_push_back(cb_exp_max_diff, Sq_chunk_t);
                             // cb_exp_max_diff full
-
                             /* cb_cur_sum += cb_prev_sum */
                             add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
                             // cb_cur_sum full, cb_prev_sum empty
                         }
 
                     }
-
 
 
                     /* OUT_IM = QK @ V_CHUNK */
