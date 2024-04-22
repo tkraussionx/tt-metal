@@ -309,7 +309,7 @@ def run_test_FalconCausalLM_end_to_end(
     ids=["falcon_7b"],
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
-@skip_for_wormhole_b0(reason_str="Hangs way too often, issue #4425")
+# @skip_for_wormhole_b0(reason_str="Hangs way too often, issue #4425")
 def test_FalconCausalLM_end_to_end_with_program_cache(
     device,
     use_program_cache,
@@ -325,33 +325,33 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
     model_location_generator,
     get_tt_cache_path,
 ):
-    if is_e75(device) and batch == 32:
-        pytest.skip("Falcon batch 32 is unsupported on E75")
+    # if is_e75(device) and batch == 32:
+    #     pytest.skip("Falcon batch 32 is unsupported on E75")
 
-    is_low_card_setup = tt_lib.device.GetNumPCIeDevices() <= 1 or device.arch() == tt_lib.device.Arch.GRAYSKULL
+    # is_low_card_setup = tt_lib.device.GetNumPCIeDevices() <= 1 or device.arch() == tt_lib.device.Arch.GRAYSKULL
 
-    current_low_card_gs_only_working_config = not (
-        model_config_str != "BFLOAT16-L1"
-        or llm_mode != "decode"
-        or batch != 32
-        or kv_cache_len != 128
-        or num_layers != 32
-    )
+    # current_low_card_gs_only_working_config = not (
+    #     model_config_str != "BFLOAT16-L1"
+    #     or llm_mode != "decode"
+    #     or batch != 32
+    #     or kv_cache_len != 128
+    #     or num_layers != 32
+    # )
 
-    if (
-        is_low_card_setup
-        and (model_config_str != "BFLOAT16-L1" or llm_mode != "prefill" or num_layers != 32)
-        and not current_low_card_gs_only_working_config
-    ):
-        pytest.skip(
-            "Single-card falcon for both archs must run with config: BFLOAT16-L1-falcon_7b-layers_32-prefill_seq128"
-        )
+    # if (
+    #     is_low_card_setup
+    #     and (model_config_str != "BFLOAT16-L1" or llm_mode != "prefill" or num_layers != 32)
+    #     and not current_low_card_gs_only_working_config
+    # ):
+    #     pytest.skip(
+    #         "Single-card falcon for both archs must run with config: BFLOAT16-L1-falcon_7b-layers_32-prefill_seq128"
+    #     )
 
-    # gs only
-    if is_low_card_setup and device.arch() != tt_lib.device.Arch.GRAYSKULL and current_low_card_gs_only_working_config:
-        pytest.skip(
-            "Single-card falcon cannot run this config on non-Grayskull: BFLOAT16-L1-falcon_7b-layers_32-decode_batch32"
-        )
+    # # gs only
+    # if is_low_card_setup and device.arch() != tt_lib.device.Arch.GRAYSKULL and current_low_card_gs_only_working_config:
+    #     pytest.skip(
+    #         "Single-card falcon cannot run this config on non-Grayskull: BFLOAT16-L1-falcon_7b-layers_32-decode_batch32"
+    #     )
 
     model_config = get_model_config(model_config_str, seq_len)
     tt_cache_path = get_tt_cache_path(
