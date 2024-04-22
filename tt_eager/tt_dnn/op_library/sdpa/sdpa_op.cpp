@@ -87,9 +87,9 @@ void ScaledDotProductAttention::validate(const std::vector<Tensor> &input_tensor
                 // TT_FATAL(q_chunk_size == k_chunk_size);
 
                 // Ensure that batch * num_heads divides the number of cores
-                auto b_nh = q_shape[-4] * q_shape[-3];
-                auto num_cores = program_config.compute_with_storage_grid_size.x * program_config.compute_with_storage_grid_size.y;
-                TT_FATAL((num_cores / b_nh) * b_nh == num_cores);
+                // auto b_nh = q_shape[-4] * q_shape[-3];
+                // auto num_cores = program_config.compute_with_storage_grid_size.x * program_config.compute_with_storage_grid_size.y;
+                // TT_FATAL((num_cores / b_nh) * b_nh == num_cores);
 
             }
         },

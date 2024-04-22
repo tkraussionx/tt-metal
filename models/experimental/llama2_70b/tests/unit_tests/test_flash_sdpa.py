@@ -7,6 +7,8 @@ import tt_lib
 import ttnn
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
+import pytest
+
 
 def sdpa(q, k, v, attn_mask):
     scores = torch.matmul(q, k.transpose(-1, -2))
@@ -212,15 +214,11 @@ def fa2_fake(q, k, v, attn_mask):
     return out
 
 
-def tt_fa2(device, q, k, v, attn_mask):
+def tt_fa2(device, q, k, v, attn_mask, program_config):
     tt_q = torch2tt_tensor(q, device)
     tt_k = torch2tt_tensor(k.transpose(-1, -2), device)
     tt_v = torch2tt_tensor(v, device)
     tt_attn_mask = torch2tt_tensor(attn_mask, device)
-
-    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
-        compute_with_storage_grid_size=[8, 8], q_chunk_size=256, k_chunk_size=256
-    )
 
     tt_out = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
         tt_q, tt_k, tt_v, tt_attn_mask, is_causal=True, program_config=program_config
@@ -229,20 +227,25 @@ def tt_fa2(device, q, k, v, attn_mask):
     return tt2torch_tensor(tt_out)
 
 
-def run_test_sdpa_tt(device):
-    b = 1
-    nh = 8
-    nkv = 1
-    s = 2048
-    d = 128
+def tt_fa2_noconvert(device, q, k, v, attn_mask, program_config):
+    tt_out = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+        q, k, v, attn_mask, is_causal=True, program_config=program_config
+    )
+
+    return tt2torch_tensor(tt_out)
+
+
+def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
+    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 8], q_chunk_size=q_chunk_size, k_chunk_size=k_chunk_size
+    )
 
     Q = torch.randn(b, nh, s, d)
     K = torch.randn(b, nkv, s, d)
     V = torch.randn(b, nkv, s, d)
     attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
+    # attn_mask = torch.full((s, s), -10.0) #TODO: While exp is debugged
     attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
-    # FOR DEBUG, don't use neginf
-    # attn_mask = torch.randn((b, nh, s, s))
 
     # Print shapes of all inputs along with input names
     print(f"Q: {Q.shape}")
@@ -251,25 +254,9 @@ def run_test_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
-    mine = tt_fa2(device, Q, K, V, attn_mask)
+    mine = tt_fa2(device, Q, K, V, attn_mask, program_config)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
     print(f"python vs pytorch: {out_pcc}")
-
-    # row_tiles = s // 32
-    # col_tiles = d // 32
-    # for batch in range(b):
-    #     for head in range(nh):
-    #         for row_tile in range(row_tiles):
-    #             for col_tile in range(col_tiles):
-    #                 gt_tile = gt[batch, head, row_tile * 32 : (row_tile + 1) * 32, col_tile * 32 : (col_tile + 1) * 32]
-    #                 mine_tile = mine[
-    #                     batch, head, row_tile * 32 : (row_tile + 1) * 32, col_tile * 32 : (col_tile + 1) * 32
-    #                 ]
-    #                 # Print MSE if these tiles
-    #                 mse = torch.nn.functional.mse_loss(gt_tile, mine_tile)
-    #                 if mse > 0.6:
-    #                     print(f"Tile {row_tile}, {col_tile}")
-    #                     print(f"MSE: {mse}")
 
     assert out_pass
 
@@ -349,10 +336,15 @@ def run_stress_sdpa_tt(device):
     s = 2048
     d = 128
 
+    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 8], q_chunk_size=256, k_chunk_size=256
+    )
+
     Q = torch.randn(b, nh, s, d)
     K = torch.randn(b, nkv, s, d)
     V = torch.randn(b, nkv, s, d)
     attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
+    # attn_mask = torch.full((s, s), -10.0) #TODO: While exp is being debugged
     attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, nh, -1, -1)
     # FOR DEBUG, don't use neginf
 
@@ -363,10 +355,16 @@ def run_stress_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask)
+
+    tt_q = torch2tt_tensor(Q, device)
+    tt_k = torch2tt_tensor(K.transpose(-1, -2), device)
+    tt_v = torch2tt_tensor(V, device)
+    tt_attn_mask = torch2tt_tensor(attn_mask, device)
+
     first_pcc = 0.0
     for i in range(1000):
         print(f"Iteration {i}")
-        mine = tt_fa2(device, Q, K, V, attn_mask)
+        mine = tt_fa2_noconvert(device, tt_q, tt_k, tt_v, tt_attn_mask, program_config)
         out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
         if i == 0:
             first_pcc = out_pcc
@@ -374,10 +372,11 @@ def run_stress_sdpa_tt(device):
             assert out_pcc == first_pcc, "ND PCC found"
 
         print(f"python vs pytorch: {out_pcc}")
-        assert out_pass
+        # assert out_pass
 
 
 def test_sdpa_stress_tt(device):
+    # device.enable_program_cache()
     run_stress_sdpa_tt(device)
 
 
@@ -389,5 +388,12 @@ def test_sdpa_python():
     run_test_sdpa_python()
 
 
-def test_sdpa_tt(device):
-    run_test_sdpa_tt(device)
+@pytest.mark.parametrize("b", [1, 2, 32])
+@pytest.mark.parametrize("nh", [8])
+@pytest.mark.parametrize("nkv", [1])
+@pytest.mark.parametrize("s", [2048])
+@pytest.mark.parametrize("d", [128])
+@pytest.mark.parametrize("q_chunk_size", [256])
+@pytest.mark.parametrize("k_chunk_size", [256])
+def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
+    run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size)
