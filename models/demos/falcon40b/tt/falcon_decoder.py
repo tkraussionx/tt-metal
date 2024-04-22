@@ -71,17 +71,17 @@ class TtFalconDecoderLayer:
         )
         if (ln_mlp_weights_path).exists():
             ln_mlp_gamma_host = tt_lib.tensor.load_tensor(str(ln_mlp_weights_path))
-            self.ln_mlp_gamma = [
-                ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_mlp_gamma = [
+            #     ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
         else:
             ln_mlp_gamma_host = tt_lib.tensor.Tensor(
                 self.state_dict[ln_mlp_weights_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_MLP_WEIGHTS_DTYPE"],
             )
-            self.ln_mlp_gamma = [
-                ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_mlp_gamma = [
+            #     ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(ln_mlp_weights_path),
                 ln_mlp_gamma_host,
@@ -90,17 +90,17 @@ class TtFalconDecoderLayer:
         ln_mlp_bias_path = tt_cache_path / f"{ln_mlp_bias_str}_rm_{self.model_config['LN_MLP_BIAS_DTYPE'].name}.bin"
         if (ln_mlp_bias_path).exists():
             ln_mlp_beta_host = tt_lib.tensor.load_tensor(str(ln_mlp_bias_path))
-            self.ln_mlp_beta = [
-                ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_mlp_beta = [
+            #     ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
+            # ]
         else:
             ln_mlp_beta_host = tt_lib.tensor.Tensor(
                 self.state_dict[ln_mlp_bias_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_MLP_BIAS_DTYPE"],
             )
-            self.ln_mlp_beta = [
-                ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_mlp_beta = [
+            #     ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(ln_mlp_bias_path),
                 ln_mlp_beta_host,
@@ -114,17 +114,17 @@ class TtFalconDecoderLayer:
         )
         if (ln_attn_weights_path).exists():
             ln_attn_gamma_host = tt_lib.tensor.load_tensor(str(ln_attn_weights_path))
-            self.ln_attn_gamma = [
-                ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_attn_gamma = [
+            #     ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
         else:
             ln_attn_gamma_host = tt_lib.tensor.Tensor(
                 self.state_dict[ln_attn_weights_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
             )
-            self.ln_attn_gamma = [
-                ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_attn_gamma = [
+            #     ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(ln_attn_weights_path),
                 ln_attn_gamma_host,
@@ -133,17 +133,17 @@ class TtFalconDecoderLayer:
         ln_attn_bias_path = tt_cache_path / f"{ln_attn_bias_str}_rm_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}.bin"
         if (ln_attn_bias_path).exists():
             ln_attn_beta_host = tt_lib.tensor.load_tensor(str(ln_attn_bias_path))
-            self.ln_attn_beta = [
-                ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_attn_beta = [
+            #     ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
+            # ]
         else:
             ln_attn_beta_host = tt_lib.tensor.Tensor(
                 self.state_dict[ln_attn_bias_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_ATTN_BIAS_DTYPE"],
             )
-            self.ln_attn_beta = [
-                ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.ln_attn_beta = [
+            #     ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(ln_attn_bias_path),
                 ln_attn_beta_host,

@@ -50,11 +50,12 @@ class TtFalconCausalLM(TtFalconModelShared):
                 / f"{lm_head_str}_{i}_{num_devices}_{self.model_config['LM_HEAD_MM_WEIGHTS_DTYPE'].name}.bin"
             )
             if (lm_head_path).exists():
-                self.lm_head_weights.append(
-                    tt_lib.tensor.load_tensor(str(lm_head_path)).to(
-                        devices[i], self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
+                pass
+                # self.lm_head_weights.append(
+                #     tt_lib.tensor.load_tensor(str(lm_head_path)).to(
+                #         devices[i], self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"]
+                #     )
+                # )
             else:
                 lm_head_weights_host = torch2tt_tensor(
                     torch.transpose(torch.chunk(self.state_dict[f"lm_head.weight"], num_devices)[i], -2, -1),
@@ -62,9 +63,9 @@ class TtFalconCausalLM(TtFalconModelShared):
                     tt_memory_config=self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
                     tt_dtype=self.model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
                 )
-                self.lm_head_weights.append(
-                    lm_head_weights_host.to(devices[i], self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"])
-                )
+                # self.lm_head_weights.append(
+                #     lm_head_weights_host.to(devices[i], self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"])
+                # )
                 tt_lib.tensor.dump_tensor(
                     str(lm_head_path),
                     lm_head_weights_host,

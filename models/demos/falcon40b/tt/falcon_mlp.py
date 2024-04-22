@@ -42,11 +42,12 @@ class TtFalconMLP:
                 / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.bin"
             )
             if (dense_h_to_4h_path).exists():
-                self.dense_h_to_4h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_h_to_4h_path)).to(
-                        devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
+                pass
+                # self.dense_h_to_4h_weights.append(
+                #     tt_lib.tensor.load_tensor(str(dense_h_to_4h_path)).to(
+                #         devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"]
+                #     )
+                # )
             else:
                 dense_h_to_4h_weights_host = torch2tt_tensor(
                     torch.transpose(
@@ -58,9 +59,9 @@ class TtFalconMLP:
                     tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
                     tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
                 )
-                self.dense_h_to_4h_weights.append(
-                    dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
-                )
+                # self.dense_h_to_4h_weights.append(
+                #     dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
+                # )
                 tt_lib.tensor.dump_tensor(
                     str(dense_h_to_4h_path),
                     dense_h_to_4h_weights_host,
@@ -70,11 +71,12 @@ class TtFalconMLP:
                 / f"{dense_4h_to_h_str}_{i}_{num_devices}_{self.model_config['DENSE_4H_TO_H_MM_WEIGHTS_DTYPE'].name}.bin"
             )
             if (dense_4h_to_h_path).exists():
-                self.dense_4h_to_h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_4h_to_h_path)).to(
-                        devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
+                # self.dense_4h_to_h_weights.append(
+                #     tt_lib.tensor.load_tensor(str(dense_4h_to_h_path)).to(
+                #         devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"]
+                #     )
+                # )
+                pass
             else:
                 dense_4h_to_h_weights_host = torch2tt_tensor(
                     torch.transpose(
@@ -86,9 +88,9 @@ class TtFalconMLP:
                     tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
                     tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
                 )
-                self.dense_4h_to_h_weights.append(
-                    dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
-                )
+                # self.dense_4h_to_h_weights.append(
+                #     dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
+                # )
                 tt_lib.tensor.dump_tensor(
                     str(dense_4h_to_h_path),
                     dense_4h_to_h_weights_host,

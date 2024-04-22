@@ -98,17 +98,17 @@ class TtFalconModelShared:
 
         if (layernorm_weights_path).exists():
             layernorm_gamma_host = tt_lib.tensor.load_tensor(str(layernorm_weights_path))
-            self.layernorm_gamma = [
-                layernorm_gamma_host.to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.layernorm_gamma = [
+            #     layernorm_gamma_host.to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
         else:
             layernorm_gamma_host = tt_lib.tensor.Tensor(
                 self.state_dict[layernorm_weights_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_F_WEIGHTS_DTYPE"],
             )
-            self.layernorm_gamma = [
-                layernorm_gamma_host.to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"]) for device in devices
-            ]
+            # self.layernorm_gamma = [
+            #     layernorm_gamma_host.to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(layernorm_weights_path),
                 layernorm_gamma_host,
@@ -116,17 +116,17 @@ class TtFalconModelShared:
 
         if (layernorm_bias_path).exists():
             layernorm_beta_host = tt_lib.tensor.load_tensor(str(layernorm_bias_path))
-            self.layernorm_beta = [
-                layernorm_beta_host.to(device, self.model_config["LN_F_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.layernorm_beta = [
+            #     layernorm_beta_host.to(device, self.model_config["LN_F_BIAS_MEMCFG"]) for device in devices
+            # ]
         else:
             layernorm_beta_host = tt_lib.tensor.Tensor(
                 self.state_dict[layernorm_bias_str].reshape([1, 1, -1, 32]),
                 self.model_config["LN_F_BIAS_DTYPE"],
             )
-            self.layernorm_beta = [
-                layernorm_beta_host.to(device, self.model_config["LN_F_BIAS_MEMCFG"]) for device in devices
-            ]
+            # self.layernorm_beta = [
+            #     layernorm_beta_host.to(device, self.model_config["LN_F_BIAS_MEMCFG"]) for device in devices
+            # ]
             tt_lib.tensor.dump_tensor(
                 str(layernorm_bias_path),
                 layernorm_beta_host,
