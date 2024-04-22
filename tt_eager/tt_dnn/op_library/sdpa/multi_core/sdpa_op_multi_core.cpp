@@ -174,15 +174,16 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
     uint32_t num_cores = grid_size.x * grid_size.y;
 
-    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
+    TT_FATAL(num_cores == 64); // For now, we only support 64 cores
+    TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
 
     // Parallelization scheme
-    // We parallelize over batch, q_heads, and q_seq_len. We always run one batch and one head per core,
-    // so the question is how much of the q_seq_len does each core handle.
-    uint32_t q_parallel_factor = num_cores / (B * NQH);
-    // q_parallel_factor should max out at q_num_chunks
-    q_parallel_factor = std::min(q_parallel_factor, q_num_chunks);
-    TT_FATAL(q_parallel_factor * B * NQH == num_cores);
+    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
+    uint32_t batch_parallel_factor = std::min(B, num_cores);
+    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
+    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
+
+    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
 
 
     // Host code is responsible for determining matmul configuration
@@ -255,17 +256,21 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     std::vector<uint32_t> reader_compile_time_args = {
         // interleaved accessor args
+        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
 
     };
 
     std::vector<uint32_t> writer_compile_time_args = {
         // interleaved accessor args
+        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
         packed_identity_scalar,
-        scale_union.u
+        scale_union.u,
+
     };
 
     std::vector<uint32_t> compute_compile_time_args = {
         // matmul args
+        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
         qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
         out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks
     };
@@ -385,10 +390,13 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 
     log_info("Parallelization scheme:");
-    log_info("num_cores: {}", num_cores);
-    log_info("batch size: {}", B);
-    log_info("num q_heads: {}", NQH);
+    log_info("batch_parallel_factor: {}", batch_parallel_factor);
+    log_info("nh_parallel_factor: {}", nh_parallel_factor);
     log_info("q_parallel_factor: {}", q_parallel_factor);
+
+    const uint32_t batch_per_core = B / batch_parallel_factor;
+    const uint32_t nh_per_core = NQH / nh_parallel_factor;
+    const uint32_t q_per_core = q_num_chunks / q_parallel_factor;
 
 
     // Set reader rt args
@@ -396,10 +404,26 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
         // log_info("core: {} getting runtime args for idx {i}", core, i);
+        const uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
+        const uint32_t local_batch_end = local_batch_start + batch_per_core;
+        const uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
+        const uint32_t local_nh_end = local_nh_start + nh_per_core;
+        const uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
+        const uint32_t local_q_end = local_q_start + q_per_core;
 
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
-        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, B, NQH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
-        SetRuntimeArgs(program, compute_kernels_id, core, { B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks, i, num_cores, q_parallel_factor });
+        // log the above
+        log_debug("core: {}", i);
+        log_debug("local_batch_start: {}", local_batch_start);
+        log_debug("local_batch_end: {}", local_batch_end);
+        log_debug("local_nh_start: {}", local_nh_start);
+        log_debug("local_nh_end: {}", local_nh_end);
+        log_debug("local_q_start: {}", local_q_start);
+        log_debug("local_q_end: {}", local_q_end);
+
+
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+        SetRuntimeArgs(program, compute_kernels_id, core, { i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
     }
 
 
@@ -439,26 +463,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     //     curr_row += num_tile_rows_per_core;
     // }
 
-    auto override_runtime_arguments_callback = [
-            // reader_kernels_id,
-            // writer_kernels_id,
-            // softmax_kernels_id,
-            // grid_size,
-            // scalar_tile_size,
-            // // in0_tile_size,
-            // im_tile_size,
-            // out0_tile_size,
-            // mask_tile_size,
-            // cb_in0_id,
-            // cb_out0_id,
-            // // cb_intermed1_id,
-            // cb_in2_id,
-            // cb_intermed0_id,
-            // cb_intermed3_id,
-            // cb_in3_id,
-            // cb_in4_id,
-            // causal_mask
-        ]
+    auto override_runtime_arguments_callback = [&]
     (
         const void* operation,
         Program& program,
@@ -467,99 +472,47 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         const std::vector<Tensor>& output_tensors
     ) {
 
-        // const auto scale = static_cast<const Softmax*>(operation)->scale;
+        auto q_buffer = input_tensors.at(0).buffer();
+        auto k_buffer = input_tensors.at(1).buffer();
+        auto v_buffer = input_tensors.at(2).buffer();
+        auto mask_buffer = optional_input_tensors.at(0).has_value() ? optional_input_tensors.at(0).value().buffer() : nullptr;
+        TT_ASSERT(mask_buffer != nullptr);
 
-        // auto src_buffer_address = input_tensors.at(0).buffer()->address();
-        // auto mask_buffer_address = optional_input_tensors.at(0).has_value() ? optional_input_tensors.at(0).value().buffer()->address() : 0;
-        // auto dst_buffer_address = output_tensors.size() == 1 ? output_tensors.at(0).buffer()->address() : src_buffer_address;
+        auto out0_buffer = output_tensor.buffer();
+        uint32_t q_addr = q_buffer->address();
+        uint32_t k_addr = k_buffer->address();
+        uint32_t v_addr = v_buffer->address();
+        uint32_t mask_addr = mask_buffer->address();
+        uint32_t out_addr = out0_buffer->address();
 
-        // const auto shape = input_tensors.at(0).get_legacy_shape();
-        // uint32_t W = shape[-1], H = (input_tensors.at(0).volume() / (shape[0] * shape[-1])), NC = shape[0];
-        // uint32_t HW = H*W;
+        // Set reader rt args
+        for (uint32_t i = 0; i < num_cores; ++i) {
+            CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
-        // uint32_t Wt = W/TILE_WIDTH;
-        // uint32_t Ht = H/TILE_HEIGHT;
+            // log_info("core: {} getting runtime args for idx {i}", core, i);
+            const uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
+            const uint32_t local_batch_end = local_batch_start + batch_per_core;
+            const uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
+            const uint32_t local_nh_end = local_nh_start + nh_per_core;
+            const uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
+            const uint32_t local_q_end = local_q_start + q_per_core;
 
-        // int32_t num_tiles = input_tensors.at(0).volume()/TILE_HW;
-        // uint32_t block_size = find_max_divisor(Wt, 8);
+            // log the above
+            log_debug("core: {}", i);
+            log_debug("local_batch_start: {}", local_batch_start);
+            log_debug("local_batch_end: {}", local_batch_end);
+            log_debug("local_nh_start: {}", local_nh_start);
+            log_debug("local_nh_end: {}", local_nh_end);
+            log_debug("local_q_start: {}", local_q_start);
+            log_debug("local_q_end: {}", local_q_end);
 
-        // // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
-        // uint32_t in0_t  = block_size*2;
-        // uint32_t out0_t = block_size*2;
-        // uint32_t im1_t  = 1; // 1/sum(exp(x))
-        // uint32_t in2_t  = 1; // scaler for reduce coming from reader
-        // uint32_t in3_t  = 1; // 1/sqrt() scaler tile cb for fused scale/mask/softmax variant
-        // uint32_t in4_t  = div_up(Wt, block_size)*block_size; // attention mask (N,C,32,W) - Wt is reused for each Ht, NC is cycled
 
-        // // cb_exps - keeps exps in CB in L1 to avoid recomputing
-        // uint32_t im0_t  = block_size*div_up(Wt, block_size);
-        // TT_ASSERT(im0_t == Wt);
+            SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            SetRuntimeArgs(program, compute_kernels_id, core, { i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+        }
 
-        // // used for buffering scale-mask
-        // // can't easily reuse im0_t because cumulative wait for Wt needs to have Wt tiles contiguous free
-        // uint32_t im3_t  = block_size*(div_up(Wt, block_size)+1);
-        // TT_ASSERT(im3_t == Wt+block_size);
 
-        // TT_ASSERT(Wt % block_size == 0);
-        // TT_ASSERT((block_size != -1) && "Wt must be divisible by one of the numbers in the range from 8 to 1.");
-        // TT_ASSERT(im0_t % block_size == 0 && "Size of cb must be divisible by the size of block used by the reader and compute kernel.");
-        // TT_ASSERT(out0_t % block_size == 0 && "Size of cb must be divisible by the size of block used by the reader and compute kernel.");
-        // TT_ASSERT(in4_t % block_size == 0);
-        // TT_ASSERT(W <= TILE_WIDTH*im0_t && "W exceeds the maximum supported size of tile buffer (kernel limitation right now).");
-
-        // uint32_t NCHt = NC*Ht;
-        // uint32_t num_tile_rows = NC * Ht;
-        // auto all_device_cores = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
-        // auto [num_cores, all_cores, core_group_1, core_group_2, num_tile_rows_per_core_group_1, num_tile_rows_per_core_group_2] = split_work_to_cores(grid_size, num_tile_rows, true);
-
-        // UpdateCircularBufferTotalSize(program, cb_in0_id, in0_t * in0_tile_size);
-        // UpdateCircularBufferTotalSize(program, cb_out0_id, out0_t * out0_tile_size);
-        // UpdateCircularBufferTotalSize(program, cb_intermed1_id, im1_t * im_tile_size);
-        // UpdateCircularBufferTotalSize(program, cb_in2_id, in2_t * scalar_tile_size);
-        // UpdateCircularBufferTotalSize(program, cb_intermed0_id, im0_t * im_tile_size);
-
-        // if (optional_input_tensors.at(0).has_value()) {
-        //     UpdateCircularBufferTotalSize(program, cb_intermed3_id.value(), im3_t * im_tile_size);
-        //     UpdateCircularBufferTotalSize(program, cb_in3_id.value(), in3_t * scalar_tile_size);
-        //     UpdateCircularBufferTotalSize(program, cb_in4_id.value(), in4_t * mask_tile_size);
-        // }
-
-        // uint32_t curr_row = 0;
-        // union { float f; uint32_t u; } s; s.f = scale.value_or(1.0f); // scale for fused scale-mask-softmax
-        // for (uint32_t i = 0; i < grid_size.x * grid_size.y; ++i) {
-        //     CoreCoord core = {i % grid_size.x, i / grid_size.x};
-        //     if (i >= num_cores) {
-        //         SetRuntimeArgs(program, reader_kernels_id, core, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // [8]=1.0f is scaler
-        //         SetRuntimeArgs(program, softmax_kernels_id, core, { 0, 0, 0, 0, 0 });
-        //         SetRuntimeArgs(program, writer_kernels_id, core, { 0, 0, 0, 0 });
-        //         continue;
-        //     }
-
-        //     uint32_t num_tile_rows_per_core = 0;
-        //     if (core_group_1.core_coord_in_core_ranges(core)) {
-        //         num_tile_rows_per_core = num_tile_rows_per_core_group_1;
-        //     } else if (core_group_2.core_coord_in_core_ranges(core)) {
-        //         num_tile_rows_per_core = num_tile_rows_per_core_group_2;
-        //     } else {
-        //         TT_ASSERT(false, "Core not in specified core ranges");
-        //     }
-
-        //     uint32_t tile_offset = curr_row * Wt;
-        //     uint32_t curr_ht = curr_row % Ht;
-        //     uint32_t mask_curr_ht = curr_ht % Wt;   // the start offset for causal mask
-        //     uint32_t mask_offset = curr_row / Ht * Wt * Wt; // causal mask batch offset
-        //     uint32_t mask_id = causal_mask ? (mask_curr_ht * Wt + mask_offset) : (curr_row / Ht * Wt); // causal mask start offset + causal mask batch offset
-
-        //     if (causal_mask) {
-        //         SetRuntimeArgs(program, reader_kernels_id, core, { src_buffer_address, block_size, s.u, num_tile_rows_per_core, tile_offset, Wt, Ht, mask_buffer_address, curr_ht, mask_id, 0x3f803f80, mask_curr_ht, mask_offset }); // [10]=1.0f is scaler
-        //     } else {
-        //         SetRuntimeArgs(program, reader_kernels_id, core, { src_buffer_address, block_size, s.u, num_tile_rows_per_core, tile_offset, Wt, Ht, mask_buffer_address, curr_ht, mask_id, 0x3f803f80 }); // [10]=1.0f is scaler
-        //     }
-
-        //     SetRuntimeArgs(program, softmax_kernels_id, core, { num_tile_rows_per_core, Ht, Wt, block_size, curr_ht });
-        //     SetRuntimeArgs(program, writer_kernels_id, core, { dst_buffer_address, num_tile_rows_per_core * Wt, tile_offset, block_size });
-        //     curr_row += num_tile_rows_per_core;
-        // }
     };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};

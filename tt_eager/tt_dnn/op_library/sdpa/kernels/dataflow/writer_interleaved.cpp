@@ -8,38 +8,46 @@
 #include "debug/dprint.h"
 
 void kernel_main() {
-    uint32_t out_addr  = get_arg_val<uint32_t>(0);
-    uint32_t B         = get_arg_val<uint32_t>(1);
-    uint32_t NQH         = get_arg_val<uint32_t>(2);
-    uint32_t St       = get_arg_val<uint32_t>(3);
-    uint32_t DHt      = get_arg_val<uint32_t>(4);
-    uint32_t Sq_chunk_t    = get_arg_val<uint32_t>(5);
-    uint32_t q_num_chunks    = get_arg_val<uint32_t>(6);
-    uint32_t Sk_chunk_t    = get_arg_val<uint32_t>(7);
-    uint32_t k_num_chunks    = get_arg_val<uint32_t>(8);
-    uint32_t core_id    = get_arg_val<uint32_t>(9);
-    uint32_t num_cores    = get_arg_val<uint32_t>(10);
-    uint32_t q_parallel_factor    = get_arg_val<uint32_t>(11);
+    constexpr uint32_t B = get_compile_time_arg_val(0);
+    constexpr uint32_t NQH = get_compile_time_arg_val(1);
+    constexpr uint32_t NKH = get_compile_time_arg_val(2);
+    constexpr uint32_t St = get_compile_time_arg_val(3);
+    constexpr uint32_t DHt = get_compile_time_arg_val(4);
+    constexpr uint32_t Sq_chunk_t = get_compile_time_arg_val(5);
+    constexpr uint32_t q_num_chunks = get_compile_time_arg_val(6);
+    constexpr uint32_t Sk_chunk_t = get_compile_time_arg_val(7);
+    constexpr uint32_t k_num_chunks = get_compile_time_arg_val(8);
+    constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(9);
+    constexpr uint32_t scale_val = get_compile_time_arg_val(10);
 
-    constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
-    constexpr uint32_t scale_val = get_compile_time_arg_val(1);
+    const uint32_t out_addr  = get_arg_val<uint32_t>(0);
+    const uint32_t core_id    = get_arg_val<uint32_t>(1);
+    const uint32_t num_cores    = get_arg_val<uint32_t>(2);
+    const uint32_t local_batch_start = get_arg_val<uint32_t>(3);
+    const uint32_t local_batch_end = get_arg_val<uint32_t>(4);
+    const uint32_t local_nh_start = get_arg_val<uint32_t>(5);
+    const uint32_t local_nh_end = get_arg_val<uint32_t>(6);
+    const uint32_t local_q_start = get_arg_val<uint32_t>(7);
+    const uint32_t local_q_end = get_arg_val<uint32_t>(8);
 
-    const uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
-    const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
-    const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
-    const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
-    const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
+
+
+    // constexpr uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
+    // const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
+    // const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
+    // const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
+    // const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
 
     // const uint32_t my_q_head = core_id / num_chunks;
     // const uint32_t my_q_chunk = core_id % num_chunks;
 
-    const uint32_t out_chunk_tiles = Sq_chunk_t * DHt;
+    constexpr uint32_t out_chunk_tiles = Sq_chunk_t * DHt;
 
     constexpr bool is_dram = true;
     constexpr uint32_t cb_out = tt::CB::c_out0;
 
-    const uint32_t tile_bytes = get_tile_size(cb_out);
-    const DataFormat data_format = get_dataformat(cb_out);
+    constexpr uint32_t tile_bytes = get_tile_size(cb_out);
+    constexpr DataFormat data_format = get_dataformat(cb_out);
 
     const InterleavedAddrGenFast<is_dram> out_writer = {
         .bank_base_address = out_addr,
@@ -55,21 +63,16 @@ void kernel_main() {
 
     uint32_t out_tile_id = 0;
 
-    for (uint32_t nb = 0; nb < B; ++nb) {
+    for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
+        const uint32_t q_batch_offset = nb * NQH * St * DHt;
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
-        if (nb != local_batch) {
-            continue;
-        }
-        for (uint32_t nq = 0; nq < NQH; ++nq) {
-            if (nq != local_q_head) {
-                continue;
-            }
+        for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
             // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
-            for (uint32_t q_chunk = local_q_chunk_start; q_chunk < local_q_chunk_end; ++q_chunk) {
+            for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
-                out_tile_id = q_head_offset + q_chunk_offset;
+                out_tile_id = q_batch_offset + q_head_offset + q_chunk_offset;
 
                 // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();
                 // Wait for compute to deliver output chunk
