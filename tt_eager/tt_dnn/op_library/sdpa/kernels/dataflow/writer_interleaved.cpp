@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
-
-// #include "debug/dprint.h"
+#include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
+#include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t out_addr  = get_arg_val<uint32_t>(0);
@@ -19,6 +20,9 @@ void kernel_main() {
     uint32_t core_id    = get_arg_val<uint32_t>(9);
     uint32_t num_cores    = get_arg_val<uint32_t>(10);
     uint32_t q_parallel_factor    = get_arg_val<uint32_t>(11);
+
+    constexpr uint32_t identity_scalar_packed = get_compile_time_arg_val(0);
+    constexpr uint32_t scale_val = get_compile_time_arg_val(1);
 
     const uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
     const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
@@ -42,6 +46,12 @@ void kernel_main() {
         .page_size = tile_bytes,
         .data_format = data_format
     };
+
+    constexpr uint32_t cb_scale_in = tt::CB::c_in4;
+    constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
+
+    generate_bcast_unary_scalar(cb_scale_in, scale_val);
+    generate_reduce_scaler(cb_identity_scale_in, identity_scalar_packed);
 
     uint32_t out_tile_id = 0;
 
