@@ -9,7 +9,6 @@ from models.utility_functions import (
     is_grayskull,
     is_wormhole_b0,
 )
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import calculate_shard_grid, roundup
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
@@ -31,6 +30,17 @@ class resnet50Bottleneck:
 
     def __init__(self, parameters, downsample, model_config) -> None:
         # init is just to pre-process pytorch weights and bias tensors
+        torch_identity_conv_weight_tensor = torch.zeros(
+            [parameters.conv1.weight.shape[1], parameters.conv1.weight.shape[1], 1, 1], dtype=torch.bfloat16
+        ).float()
+        for k in range(parameters.conv1.weight.shape[1]):
+            for c in range(parameters.conv1.weight.shape[1]):
+                if k == c:
+                    torch_identity_conv_weight_tensor[k][c][0][0] = 1
+        self.identity_conv_weight_tensor = ttnn.from_torch(
+            torch_identity_conv_weight_tensor,
+            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
+        )
         self.conv1_weight_tensor = ttnn.from_torch(
             parameters.conv1.weight,
             dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
@@ -88,52 +98,69 @@ class resnet50Bottleneck:
         self.model_config = model_config
         return
 
-    def __call__(self, x, device, batch_size, input_height, input_width, compute_kernel_config):
+    def __call__(self, x, device, batch_size, input_height, input_width):
         # logger.info("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
         # print("Running conv1")
-        out = ttnn.conv2d(
-            x,
-            self.conv1_weight_tensor,
-            self.conv1_input_channels,
-            self.conv1_output_channels,
-            batch_size,
-            input_height,
-            input_width,
+        x = ttnn.conv2d(
+            input_tensor=x,
+            weight_tensor=self.identity_conv_weight_tensor,
+            in_channels=self.conv1_input_channels,
+            out_channels=self.conv1_input_channels,
+            device=device,
             kernel_size=(1, 1),
             stride=(1, 1),
             padding=(0, 0),
-            dtype=self.model_config["ACTIVATIONS_DTYPE"],
+            batch_size=batch_size,
+            input_height=input_height,
+            input_width=input_width,
+            conv_config=ttnn.ConvConfig(
+                dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                weights_dtype=self.model_config["WEIGHTS_DTYPE"],
+                math_fidelity=self.model_config["MATH_FIDELITY"],
+            ),
+        )
+
+        out = ttnn.conv2d(
+            input_tensor=x,
+            weight_tensor=self.conv1_weight_tensor,
+            in_channels=self.conv1_input_channels,
+            out_channels=self.conv1_output_channels,
             device=device,
             bias_tensor=self.conv1_bias_tensor,
-            math_fidelity=self.model_config["MATH_FIDELITY"],
-            weights_dtype=self.model_config["WEIGHTS_DTYPE"],
-            conv_kernel_block_config_override=None,
-            parallel_config=None,
-            compute_kernel_config=compute_kernel_config,
-            activation="relu",
+            kernel_size=(1, 1),
+            stride=(1, 1),
+            padding=(0, 0),
+            batch_size=batch_size,
+            input_height=input_height,
+            input_width=input_width,
+            conv_config=ttnn.ConvConfig(
+                dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                weights_dtype=self.model_config["WEIGHTS_DTYPE"],
+                math_fidelity=self.model_config["MATH_FIDELITY"],
+                activation="relu",
+            ),
         )
 
         if self.downsample:
             ds_out = ttnn.conv2d(
-                out,
-                self.ds_conv_weight_tensor,
-                self.ds_conv_input_channels,
-                self.ds_conv_output_channels,
-                batch_size,
-                input_height,
-                input_width,
+                input_tensor=x,
+                weight_tensor=self.ds_conv_weight_tensor,
+                in_channels=self.ds_conv_input_channels,
+                out_channels=self.ds_conv_output_channels,
+                device=device,
+                bias_tensor=self.ds_conv_bias_tensor,
                 kernel_size=(1, 1),
                 stride=(2, 2),
                 padding=(0, 0),
-                dtype=self.model_config["ACTIVATIONS_DTYPE"],
-                device=device,
-                bias_tensor=self.ds_conv_bias_tensor,
-                math_fidelity=self.model_config["MATH_FIDELITY"],
-                weights_dtype=self.model_config["WEIGHTS_DTYPE"],
-                conv_kernel_block_config_override=None,
-                parallel_config=None,
-                compute_kernel_config=compute_kernel_config,
+                batch_size=batch_size,
+                input_height=input_height,
+                input_width=input_width,
+                conv_config=ttnn.ConvConfig(
+                    dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                    weights_dtype=self.model_config["WEIGHTS_DTYPE"],
+                    math_fidelity=self.model_config["MATH_FIDELITY"],
+                ),
             )
             ttnn.deallocate(x)
         else:
@@ -141,25 +168,24 @@ class resnet50Bottleneck:
 
         # print("Running conv2")
         out = ttnn.conv2d(
-            out,
-            self.conv2_weight_tensor,
-            self.conv2_input_channels,
-            self.conv2_output_channels,
-            batch_size,
-            input_height,
-            input_width,
+            input_tensor=out,
+            weight_tensor=self.conv2_weight_tensor,
+            in_channels=self.conv2_input_channels,
+            out_channels=self.conv2_output_channels,
+            device=device,
+            bias_tensor=self.conv2_bias_tensor,
             kernel_size=(3, 3),
             stride=(2, 2) if self.downsample else (1, 1),
             padding=(1, 1),
-            dtype=self.model_config["ACTIVATIONS_DTYPE"],
-            device=device,
-            bias_tensor=self.conv2_bias_tensor,
-            math_fidelity=self.model_config["MATH_FIDELITY"],
-            weights_dtype=self.model_config["WEIGHTS_DTYPE"],
-            conv_kernel_block_config_override=None,
-            parallel_config=None,
-            compute_kernel_config=compute_kernel_config,
-            activation="relu",
+            batch_size=batch_size,
+            input_height=input_height,
+            input_width=input_width,
+            conv_config=ttnn.ConvConfig(
+                dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                weights_dtype=self.model_config["WEIGHTS_DTYPE"],
+                math_fidelity=self.model_config["MATH_FIDELITY"],
+                activation="relu",
+            ),
         )
 
         input_height = input_height // (2 if self.downsample else 1)
@@ -167,25 +193,25 @@ class resnet50Bottleneck:
         # conv3 is 1x1 conv
         # print("Running conv3")
         out = ttnn.conv2d(
-            out,
-            self.conv3_weight_tensor,
-            self.conv3_input_channels,
-            self.conv3_output_channels,
-            batch_size,
-            input_height,
-            input_width,
+            input_tensor=out,
+            weight_tensor=self.conv3_weight_tensor,
+            in_channels=self.conv3_input_channels,
+            out_channels=self.conv3_output_channels,
+            device=device,
+            bias_tensor=self.conv3_bias_tensor,
             kernel_size=(1, 1),
             stride=(1, 1),
             padding=(0, 0),
-            dtype=self.model_config["ACTIVATIONS_DTYPE"],
-            device=device,
-            bias_tensor=self.conv3_bias_tensor,
-            math_fidelity=self.model_config["MATH_FIDELITY"],
-            weights_dtype=self.model_config["WEIGHTS_DTYPE"],
-            conv_kernel_block_config_override=None,
-            parallel_config=None,
-            compute_kernel_config=compute_kernel_config,
+            batch_size=batch_size,
+            input_height=input_height,
+            input_width=input_width,
+            conv_config=ttnn.ConvConfig(
+                dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                weights_dtype=self.model_config["WEIGHTS_DTYPE"],
+                math_fidelity=self.model_config["MATH_FIDELITY"],
+            ),
         )
+
         # underscore version is in_place = True
         out = ttnn.add_and_apply_activation_(out, ds_out, activation="relu", memory_config=ttnn.get_memory_config(out))
 
@@ -515,35 +541,6 @@ class resnet50BottleneckPytorch:
         return out
 
 
-# todo: there are different versions of this function. Commonize.
-def create_sharded_memory_config_from_parallel_config(tensor_shape, parallel_config, tile_size):
-    # tensor_shape is [N, H, W, C]
-    assert len(tensor_shape) == 4
-    assert tensor_shape[0] == 1 and tensor_shape[1] == 1  # todo: add support for generic non-2d shapes
-    channels = tensor_shape[3]
-    num_cores_nhw = parallel_config.num_cores_nhw
-    num_cores_x = parallel_config.grid_size.x
-    num_cores_y = parallel_config.grid_size.y
-    shard_strategy = parallel_config.shard_strategy
-    shard_orientation = parallel_config.shard_orientation
-    is_1d_systolic = shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-    if is_1d_systolic:
-        logical_grid_size = (num_cores_nhw, 1)
-    else:
-        logical_grid_size = (num_cores_x, num_cores_y)
-
-    shard_grid, shard_layout = calculate_shard_grid((num_cores_x, num_cores_y), num_cores_nhw)
-    assert shard_layout == shard_strategy
-    nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
-    nhw_padded = roundup(nhw_shape, num_cores_nhw * tile_size)
-    nhw_shard = nhw_padded // num_cores_nhw
-    assert channels % logical_grid_size[1] == 0
-    shard_shape = [nhw_shard, channels // logical_grid_size[1]]
-    shard_halo = False
-    shard_spec = ttnn.experimental.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, shard_halo)
-    return ttnn.MemoryConfig(shard_strategy, ttnn.BufferType.L1, shard_spec)
-
-
 def build_run_and_validate_ttnn_model_old(
     device,
     batch_size,
@@ -643,18 +640,6 @@ def build_run_and_validate_ttnn_model_new(
         "WEIGHTS_DTYPE": weight_dtype,
         "ACTIVATIONS_DTYPE": act_dtype,
     }
-    if is_grayskull():
-        compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
-            math_fidelity=model_config["MATH_FIDELITY"],
-            math_approx_mode=True,
-        )
-    else:
-        compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=model_config["MATH_FIDELITY"],
-            math_approx_mode=True,
-            fp32_dest_acc_en=False,
-            packer_l1_acc=False,
-        )
 
     # Test new API i.e. "JIT" conv
     ttnn_model = resnet50Bottleneck(parameters, downsample, model_config)
@@ -662,41 +647,14 @@ def build_run_and_validate_ttnn_model_new(
     output_height = input_height // (2 if downsample else 1)
     output_width = input_width // (2 if downsample else 1)
 
-    # determine parallel config of the first conv. No resharding in the middle of the block. So, the parallelization strategy is based on the block output
-
-    parallel_config = ttnn.determine_parallel_config(
-        is_1d_systolic, batch_size, input_channels, output_height, output_width, input_channels, device
-    )
-
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
     ## reshape to [1, 1, N*H*W, C]
     torch_input_tensor = torch.reshape(torch_input_tensor, (1, 1, -1, torch_input_tensor.shape[-1]))
-    input_num_cores_nhw = parallel_config.num_cores_nhw
-    input_tensor_sharded_memory_config = create_sharded_memory_config_from_parallel_config(
-        torch_input_tensor.shape, parallel_config, tile_size=32
-    )
-    input_tensor_height_snapped_to_tile = input_tensor_sharded_memory_config.shard_spec.shape[0] * input_num_cores_nhw
-    torch_input_tensor = torch.nn.functional.pad(
-        torch_input_tensor,
-        (
-            0,
-            0,
-            0,
-            input_tensor_height_snapped_to_tile - torch_input_tensor.shape[2],
-            0,
-            0,
-        ),
-    )
     ttnn_input_tensor = ttnn.from_torch(torch_input_tensor, dtype=ttnn.bfloat16)
-    ttnn_input_tensor = ttnn.to_layout(ttnn_input_tensor, ttnn.TILE_LAYOUT)
-    ttnn_input_tensor = ttnn.to_device(
-        ttnn_input_tensor, device=device, memory_config=input_tensor_sharded_memory_config
-    )
+    ttnn_input_tensor = ttnn.to_device(ttnn_input_tensor, device=device, memory_config=ttnn.L1_MEMORY_CONFIG)
 
     # Run ttnn model (1 resnet50 block)
-    ttnn_out_tensor = ttnn_model(
-        ttnn_input_tensor, device, batch_size, input_height, input_width, compute_kernel_config
-    )
+    ttnn_out_tensor = ttnn_model(ttnn_input_tensor, device, batch_size, input_height, input_width)
 
     # output post-processing
     ttnn_out_tensor = ttnn.to_memory_config(ttnn_out_tensor, ttnn.L1_MEMORY_CONFIG)
