@@ -21,6 +21,8 @@ inline std::tuple<Tensor, Tensor, Tensor> reshape_outputs_of_split_query_key_val
     std::tuple<Tensor, Tensor, Tensor> outputs,
     const uint32_t sequence_size,
     const uint32_t sequence_size_padded,
+    const uint32_t sequence_size_kv,
+    const uint32_t sequence_size_padded_kv,
     const bool transpose_key) {
     auto &&[query, key, value] = outputs;
 
@@ -41,21 +43,21 @@ inline std::tuple<Tensor, Tensor, Tensor> reshape_outputs_of_split_query_key_val
         key = ttnn::reshape(
             key,
             ttnn::Shape(tt::tt_metal::Shape(
-                std::array{batch_size, num_kv_heads, head_size, sequence_size},
-                std::array{batch_size, num_kv_heads, head_size_padded, sequence_size_padded})));
+                std::array{batch_size, num_kv_heads, head_size, sequence_size_kv},
+                std::array{batch_size, num_kv_heads, head_size_padded, sequence_size_padded_kv})));
     } else {
         key = ttnn::reshape(
             key,
             ttnn::Shape(tt::tt_metal::Shape(
-                std::array{batch_size, num_kv_heads, sequence_size, head_size},
-                std::array{batch_size, num_kv_heads, sequence_size_padded, head_size_padded})));
+                std::array{batch_size, num_kv_heads, sequence_size_kv, head_size},
+                std::array{batch_size, num_kv_heads, sequence_size_padded_kv, head_size_padded})));
     }
 
     value = ttnn::reshape(
         value,
         ttnn::Shape(tt::tt_metal::Shape(
-            std::array{batch_size, num_kv_heads, sequence_size, head_size},
-            std::array{batch_size, num_kv_heads, sequence_size_padded, head_size_padded})));
+            std::array{batch_size, num_kv_heads, sequence_size_kv, head_size},
+            std::array{batch_size, num_kv_heads, sequence_size_padded_kv, head_size_padded})));
     return {query, key, value};
 }
 }  // namespace detail
@@ -74,35 +76,18 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
 
     const uint32_t sequence_size = input_shape[1];
     const uint32_t sequence_size_padded = input_shape.with_tile_padding()[1];
-
-    if (num_kv_heads.has_value()) {
-        TT_FATAL(transpose_key == false, "Transpose = true and separate num_kv_heads is not supported");
-        uint32_t qkv_heads_times_head_dim = input_shape[2],
-                 qkv_heads_times_head_dim_padded = input_shape.with_tile_padding()[2];
-        auto head_size = qkv_heads_times_head_dim / (num_heads + (num_kv_heads.value() * 2));
-        auto padded_head_size = qkv_heads_times_head_dim_padded / (num_heads + (num_kv_heads.value() * 2));
-
-        TT_FATAL(head_size % TILE_SIZE == 0, fmt::format("Head size {} must be a multiple of tile size {}! Update the preceding matmul to have the padding in the weights!", head_size, TILE_WIDTH));
-        TT_FATAL(padded_head_size == head_size, fmt::format("Head size {} cannot have tile padding", head_size));
-
-        const auto input_4d = input_tensor.reshape(
-            input_shape.with_tile_padding()[0],
-            1,
-            input_shape.with_tile_padding()[1],
-            input_shape.with_tile_padding()[2]);
-        auto outputs = tt::tt_metal::nlp_create_qkv_heads_falcon7b(input_4d, memory_config.value_or(input_tensor.memory_config()));
-        return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
-            {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, transpose_key);
-    }
+    uint32_t sequence_size_kv = sequence_size;
+    uint32_t sequence_size_kv_padded = sequence_size_padded;
 
     uint32_t hidden_dim_padded = 0, hidden_dim = 0;
     if (input_tensor_kv.has_value()) {
         const auto input_shape_kv = input_tensor_kv.value().get_shape();
         TT_FATAL(input_shape_kv[0] == input_shape[0], "KV tensor batch dim must be same as Q tensor batch!");
-        TT_FATAL(input_shape_kv[1] == input_shape[1], "KV tensor seq_len dim must be same as Q tensor seq_len!");
-        TT_FATAL(input_shape_kv[2] == 2*input_shape[2], "KV tensor hidden size must be 2 times Q hidden size");
+        TT_FATAL(input_shape_kv[2]/(2*num_kv_heads.value_or(num_heads)) == input_shape[2]/num_heads, "KV tensor hidden size must match Q hidden size");
         hidden_dim = input_shape[2];
         hidden_dim_padded = input_shape.with_tile_padding()[2];
+        sequence_size_kv = input_shape_kv[1];
+        sequence_size_kv_padded = input_shape_kv.with_tile_padding()[1];
     }
     else {
         hidden_dim = input_shape[2];
@@ -111,17 +96,35 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
 
     uint32_t head_size = hidden_dim / num_heads;
     uint32_t padded_head_size = hidden_dim_padded / num_heads;
-    TT_FATAL(head_size % TILE_WIDTH == 0, fmt::format("Head size {} must be a multiple of tile width {}", head_size, TILE_WIDTH));
     TT_FATAL(padded_head_size == head_size, fmt::format("Head size {} cannot have tile padding", head_size));
 
     if (input_tensor.is_sharded()) {
-        TT_FATAL(not input_tensor_kv.has_value(), "KV tensor cannot be passed in when sharded");
         const auto input_tensor_4d = input_tensor.reshape(
             input_shape.with_tile_padding()[0],
             1,
             input_shape.with_tile_padding()[1],
             input_shape.with_tile_padding()[2]);
-        return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
+
+        if (num_kv_heads.value()) {
+            auto padded_input_shape_kv = input_tensor_kv.value().get_shape().with_tile_padding();
+            auto input_tensor_kv_4d = input_tensor_kv.value().reshape(
+                padded_input_shape_kv[0], 1, padded_input_shape_kv[1], padded_input_shape_kv[2]);
+            return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
+            tt::tt_metal::create_qkv_heads_from_separate_tensors(
+                input_tensor_4d,
+                input_tensor_kv_4d,
+                num_heads,
+                num_kv_heads.value_or(num_heads),
+                transpose_key,
+                memory_config.value_or(input_tensor.memory_config())),
+            sequence_size,
+            sequence_size_padded,
+            sequence_size_kv,
+            sequence_size_kv_padded,
+            transpose_key);
+        }
+        else {
+            return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
             tt::tt_metal::create_qkv_heads(
                 input_tensor_4d,
                 num_heads,
@@ -130,7 +133,10 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
                 memory_config.value_or(input_tensor.memory_config())),
             sequence_size,
             sequence_size_padded,
+            sequence_size_kv,
+            sequence_size_kv_padded,
             transpose_key);
+        }
     }
     else {
         const auto input_tensor_4d = input_tensor.reshape(
@@ -152,7 +158,7 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             transpose_key,
             memory_config.value_or(input_tensor.memory_config()));
         return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
-            {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, transpose_key);
+            {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, sequence_size_kv, sequence_size_kv_padded, transpose_key);
     }
 }
 }  // namespace transformer

@@ -75,6 +75,7 @@ void NlpCreateHeads::validate(const std::vector<Tensor>& input_tensors, const st
 
     TT_FATAL(input_shape[2] % TILE_HEIGHT == 0, "Unsupported input shape");
     TT_FATAL(input_shape[1] == 1, "Unsupported input shape");
+    TT_FATAL(head_dim % TILE_WIDTH == 0,"Head size must be a multiple of 32! Update the preceding matmul to have the padding in the weights!");
     if (input_tensor.is_sharded()) {
         TT_FATAL(input_tensor.shard_spec().value().shape[0] == input_tensor.volume() / input_tensor.get_legacy_shape()[-1]);
         TT_FATAL(this->output_mem_config.is_sharded() && this->output_mem_config.memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
@@ -131,9 +132,6 @@ std::vector<Shape> NlpCreateHeads::compute_output_shapes(const std::vector<Tenso
     auto head_dim = this->head_dim;
     if (sequence_length % TILE_HEIGHT != 0) {
         sequence_length = (sequence_length / TILE_HEIGHT + 1) * TILE_HEIGHT;
-    }
-    if (head_dim % TILE_WIDTH != 0) {
-        head_dim = (head_dim / TILE_WIDTH + 1) * TILE_WIDTH;
     }
 
     const Shape q_output_shape = {input_shape[0], this->num_q_heads, sequence_length, head_dim};
