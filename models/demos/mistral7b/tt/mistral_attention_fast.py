@@ -304,7 +304,7 @@ class TtMistralAttention(nn.Module):
                 dtype=self.dtype,
             )
 
-            ttnn.deallocate(x, force=False)
+            # ttnn.deallocate(x, force=False)
 
             ###
             # Reshape and rotary embeddings
@@ -360,9 +360,7 @@ class TtMistralAttention(nn.Module):
             ###
             # reshape and shard keys
             keys_BKPD = keys_BKCD[:, :, :padded_layer_past_len, :]
-            keys_1B_P_8D = ttnn.reshape(
-                ttnn.transformer.concatenate_heads(keys_BKPD), ttnn.Shape([1, 32, padded_layer_past_len, 8 * 128])
-            )
+            keys_1B_P_8D = ttnn.unsqueeze_to_4D(ttnn.transformer.concatenate_heads(keys_BKPD))
             keys_1B_8D_P_preshard = ttnn.permute(keys_1B_P_8D, (0, 1, 3, 2))
             keys_1B_8D_P = ttnn.to_memory_config(
                 keys_1B_8D_P_preshard, self.model_config["KEYS_BATCHED_CONFIG"](padded_layer_past_len)
@@ -370,12 +368,11 @@ class TtMistralAttention(nn.Module):
             ttnn.deallocate(keys_BKPD, force=False)
             ttnn.deallocate(keys_1B_P_8D, force=False)
             ttnn.deallocate(keys_1B_8D_P_preshard, force=False)
-            # reshape and shard values
+
+            # reshape values
             values_BKPD = values_BKCD[:, :, :padded_layer_past_len, :]
             values_B1_P_8D = ttnn.transformer.concatenate_heads(values_BKPD)
-            values_1B_P_8D_preshard = ttnn.reshape(values_B1_P_8D, ttnn.Shape([1, 32, padded_layer_past_len, 8 * 128]))[
-                :, :, :layer_slice, :
-            ]
+            values_1B_P_8D_preshard = ttnn.unsqueeze_to_4D(values_B1_P_8D)  # [:, :, :layer_slice, :]
             ttnn.deallocate(values_BKPD, force=False)
 
             # reshape and shard queries
@@ -396,31 +393,35 @@ class TtMistralAttention(nn.Module):
                 q_heads_1B_Q_8D_preshard, self.model_config["QUERIES_BATCHED_CONFIG"]
             )
             ttnn.deallocate(q_heads_1B_Q_8D_preshard, force=False)
+
+            # scores matmul
             attn_1BQP = ttnn.matmul(
                 q_heads_1B_Q_8D,
                 keys_1B_8D_P,
-                # core_grid = ttnn.CoreGrid(y=4, x=8),
-                program_config=self.scores_program_config(padded_layer_past_len // 32),
+                # program_config=self.scores_program_config(padded_layer_past_len // 32),
+                core_grid=ttnn.CoreGrid(y=4, x=8),
                 compute_kernel_config=self.compute_kernel_config_attn,
                 dtype=ttnn.bfloat16,
             )
             ttnn.deallocate(keys_1B_8D_P, force=False)
             ttnn.deallocate(q_heads_1B_Q_8D, force=False)
+
+            # scores softmax
             attn_1BQP_presoftmax = attn_1BQP[:, :, :, :layer_slice]
-            attn_1BQP = ttnn.softmax(
-                attn_1BQP_presoftmax, dim=-1
-            )  # , memory_config = self.model_config["ATTN_SOFTMAX_OUTPUT_MEMCFG"](padded_layer_past_len))
+            attn_1BQP = ttnn.softmax(attn_1BQP_presoftmax, dim=-1)
+            attn_1BQP = ttnn.pad(attn_1BQP, ((0, 0), (0, 0), (0, 0), (0, 0)), value=0.0)
+
+            # shard values
             values_1B_P_8D = ttnn.to_memory_config(
                 values_1B_P_8D_preshard, self.model_config["VALUES_BATCHED_CONFIG"](padded_layer_past_len)
             )
             ttnn.deallocate(values_1B_P_8D_preshard, force=False)
 
+            # attention matmul
             attn_output_1B_Q_8D = ttnn.matmul(
                 attn_1BQP,
                 values_1B_P_8D,
-                # core_grid = ttnn.CoreGrid(y=4, x=8),
                 program_config=self.attn_program_config,
-                # compute_with_storage_grid_size=(8, 4),
                 memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
                 dtype=ttnn.bfloat16,
                 compute_kernel_config=self.compute_kernel_config_attn,
@@ -428,6 +429,8 @@ class TtMistralAttention(nn.Module):
 
             ttnn.deallocate(attn_1BQP, force=False)
             ttnn.deallocate(values_1B_P_8D, force=False)
+
+            # reduce and reshape
             attn_output_1BQD = ttnn.matmul(
                 attn_output_1B_Q_8D * mask_Q_8D,
                 reduce_8D_D,
@@ -444,6 +447,7 @@ class TtMistralAttention(nn.Module):
             )
             ttnn.deallocate(attn_output_1QBD, force=False)
 
+            # dense output matmul
             dense_out = ttnn.linear(
                 attn_output_11BH,
                 wo,
@@ -455,8 +459,4 @@ class TtMistralAttention(nn.Module):
 
             dense_outputs.append(dense_out)
 
-        # return the sum of the outputs
-        if len(dense_outputs) > 1:
-            return None  # tt_all_reduce(dense_outputs)
-        else:
-            return dense_outputs
+        return dense_outputs

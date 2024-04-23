@@ -83,6 +83,48 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, embd, instruc
     return emb_inputs, pt_tokenized_inputs, input_mask, rot_emb_matrix_list
 
 
+def cache_attention(device, state_dict, model_args, rot_emb_matrix_list, dtype):
+    logger.info("Caching attention ops..")
+    from models.demos.mistral7b.tt.mistral_attention_fast import TtMistralAttention
+
+    attention_input = ttnn.from_torch(
+        torch.randn(1, 1, 32, 4096),
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+    tt_model = TtMistralAttention(
+        [device],
+        state_dict,
+        weight_cache_path=model_args.weight_cache_path(dtype),
+        layer_num=0,
+        dtype=dtype,
+        configuration=model_args,
+        rot_mat=rot_emb_matrix_list,
+        start_pos=0,
+    )
+    for iter in range(990):
+        pos = iter
+        tt_out = tt_model(
+            [attention_input],
+            pos,
+        )
+        ttnn.deallocate(tt_out[0])
+        print("Cached iter", iter)
+
+    ttnn.deallocate(tt_model.wqkv_list[0])
+    ttnn.deallocate(tt_model.wo_list[0])
+    ttnn.deallocate(tt_model.layer_past_list[0][0])
+    ttnn.deallocate(tt_model.layer_past_list[0][1])
+    ttnn.deallocate(tt_model.head_dims[0])
+    ttnn.deallocate(tt_model.expand_D_8D[0])
+    ttnn.deallocate(tt_model.reduce_8D_D[0])
+    ttnn.deallocate(tt_model.mask_Q_8D[0])
+    ttnn.deallocate(attention_input)
+    logger.info("Attention ops cached!")
+
+
 def run_mistral_demo(user_input, batch_size, device):
     assert batch_size == 32, "Batch size must be 32"
 
@@ -118,13 +160,14 @@ def run_mistral_demo(user_input, batch_size, device):
     embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
 
     generation_start_pos = 0
-    max_generated_tokens = 120
+    max_generated_tokens = 1
     users_decoding = True
 
     # Preprocess initial prompt inputs
     tt_decode_input, pt_encoded_input, input_mask, rot_emb_matrix_list = preprocess_inputs(
         input_prompts, tokenizer, model_args, dtype, embd, instruct_mode, device
     )
+    cache_attention(device, state_dict, model_args, rot_emb_matrix_list, dtype)
 
     if instruct_mode:
         tokenizer._model.pad_id = tokenizer._model.eos_id
