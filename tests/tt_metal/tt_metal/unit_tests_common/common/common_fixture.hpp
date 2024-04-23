@@ -68,7 +68,7 @@ protected:
             tt::log_debug(tt::LogTest, "Running test using Slow Dispatch");
             slow_dispatch_ = true;
         } else {
-            metal_trace_ = tt::parse_env("TT_METAL_TRACE_MODE", false);
+            metal_trace_ = tt::parse_env("TT_METAL_TRACE_MODE", true);
             tt::log_debug(tt::LogTest, "Running test using Fast Dispatch, Metal Trace = {}", metal_trace_ ? "ON" : "OFF");
             slow_dispatch_ = false;
         }
