@@ -25,12 +25,15 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     ),
 )
 def test_bw_remainder(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 50, device)
+    in_data, input_tensor = data_gen_with_range(input_shapes, 10, 100, device, True)
+    grad_data, grad_tensor = data_gen_with_range(input_shapes, -80, 80, device)
+    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=46.5)
+    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=15.5)#17-->11.5
     print(in_data)
     print(grad_data)
 
     golden_tensor = torch.remainder(in_data, grad_data)
+    golden_tensor = torch.where(torch.isnan(golden_tensor), torch.tensor(float("inf")), golden_tensor)
 
     tt_output_tensor_on_device = tt_lib.tensor.atan2(input_tensor, grad_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
@@ -43,14 +46,16 @@ def test_bw_remainder(input_shapes, device):
     print(tt_out_tensor)
     print(golden_tensor)
     diff = torch.abs(golden_tensor - tt_out_tensor)
+    print(diff)
     max_diff = torch.max(diff)
+    print(max_diff)
 
-    if max_diff > 0:
+    if True:
         print("Inputs for which the outputs differ by more than 0:")
-        indices = torch.nonzero(diff > 0)
+        indices = torch.nonzero(diff)
         iter = 0
         for idx in indices:
-            if iter < 30:
+            if iter < 100:
                 input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
                 input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
                 expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
@@ -58,6 +63,7 @@ def test_bw_remainder(input_shapes, device):
                 print(
                     f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
                 )
+                print("diff ", torch.abs(expected_output_val) - torch.abs(actual_output_val))
                 iter += 1
 
     assert comp_pass
