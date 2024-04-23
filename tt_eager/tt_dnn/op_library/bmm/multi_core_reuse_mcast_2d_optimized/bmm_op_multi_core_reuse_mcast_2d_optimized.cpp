@@ -35,7 +35,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt_metal::Buffer* in0_buffer, tt_metal::Buffer* in1_buffer, tt_metal::Buffer* bias_buffer, tt_metal::Buffer* out_buffer,
     tt::DataFormat in0_data_format, tt::DataFormat in1_data_format, tt::DataFormat bias_data_format, tt::DataFormat output_data_format,
     bool untilize_out,
-    bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc
+    bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc, bool use_partial_barrier
 
 ) {
     TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
@@ -386,6 +386,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     }
     if (use_noc_vc) {
         mm_kernel_in1_sender_writer_defines["USE_VC"] = "1";
+    }
+    if (use_partial_barrier) {
+        mm_kernel_in1_sender_writer_defines["USE_PARTIAL_BARRIER"] = "1";
     }
 
     auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
@@ -912,7 +915,7 @@ namespace tt {
 namespace tt_metal {
 
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(const Tensor &a, const Tensor &b, const std::optional<const Tensor> bias, Tensor& output, bool bcast_batch, CoreCoord compute_with_storage_grid_size, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool transpose_mcast, std::optional<UnaryWithParam> fused_activation, bool untilize_out, bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc) {
+operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(const Tensor &a, const Tensor &b, const std::optional<const Tensor> bias, Tensor& output, bool bcast_batch, CoreCoord compute_with_storage_grid_size, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool transpose_mcast, std::optional<UnaryWithParam> fused_activation, bool untilize_out, bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc, bool use_partial_barrier) {
     const auto& ashape = a.get_legacy_shape(), bshape = b.get_legacy_shape();
 
     // CB dataformats
@@ -1045,7 +1048,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
             in0_buffer, in1_buffer, bias_buffer, out_buffer,
             in0_data_format, in1_data_format, bias_data_format, output_data_format,
             untilize_out,
-            split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc
+            split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc, use_partial_barrier
         );
     } else if (core_range.x > 1 or core_range.y > 1) {
         // Refer to bmm_op_multi_core_reuse_mcast_padding_generalized.cpp
@@ -1057,8 +1060,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     return {};
 }
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(const Tensor& a, const Tensor& b, const std::optional<const Tensor> bias, Tensor& output_tensor, bool broadcast_batch, CoreCoord compute_with_storage_grid_size, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool transpose_mcast, std::optional<UnaryWithParam> fused_activation, bool untilize_out, bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc) {
-     return matmul_multi_core_reuse_mcast_2d_optimized_(a, b, bias, output_tensor, broadcast_batch, compute_with_storage_grid_size, compute_kernel_config, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, transpose_mcast, fused_activation, untilize_out, split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc);
+operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(const Tensor& a, const Tensor& b, const std::optional<const Tensor> bias, Tensor& output_tensor, bool broadcast_batch, CoreCoord compute_with_storage_grid_size, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool transpose_mcast, std::optional<UnaryWithParam> fused_activation, bool untilize_out, bool split_mcast_transactions, bool mcast_use_same_noc, bool use_noc_transaction_id, bool use_noc_vc, bool use_partial_barrier) {
+     return matmul_multi_core_reuse_mcast_2d_optimized_(a, b, bias, output_tensor, broadcast_batch, compute_with_storage_grid_size, compute_kernel_config, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, transpose_mcast, fused_activation, untilize_out, split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc, use_partial_barrier);
 }
 
 }  // namespace tt_metal

@@ -78,8 +78,15 @@ inline __attribute__((always_inline)) void ncrisc_noc_fast_read(uint32_t noc, ui
 inline __attribute__((always_inline)) bool ncrisc_noc_reads_flushed(uint32_t noc) {
   return (NOC_STATUS_READ_REG(noc, NIU_MST_RD_RESP_RECEIVED) == noc_reads_num_issued[noc]);
 }
+inline __attribute__((always_inline)) bool ncrisc_noc_reads_flushed_partial(uint32_t noc, uint32_t val) {
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_RD_RESP_RECEIVED) >= (noc_reads_num_issued[noc] - val));
+}
+
 inline __attribute__((always_inline)) bool ncrisc_noc_read_tiles_flushed(uint32_t noc, uint32_t transcation_id) {
   return (NOC_STATUS_READ_REG(noc, NIU_MST_REQS_OUTSTANDING_ID(transcation_id)) == 0);
+}
+inline __attribute__((always_inline)) bool ncrisc_noc_read_tiles_flushed_partial(uint32_t noc, uint32_t transcation_id, uint32_t val) {
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_REQS_OUTSTANDING_ID(transcation_id)) <= val);
 }
 
 inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, uint32_t cmd_buf, uint32_t src_addr, uint64_t dest_addr, uint32_t len_bytes, uint32_t vc, bool mcast, bool linked, uint32_t num_dests, bool multicast_path_reserve) {

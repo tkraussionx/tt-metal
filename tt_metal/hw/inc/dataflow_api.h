@@ -852,7 +852,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, std::uint32_t vc = 0) const {
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, std::uint32_t vc = 0, std::uint32_t trid = 0) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
@@ -887,7 +887,7 @@ struct InterleavedAddrGenFast {
         DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
         while (!noc_cmd_buf_ready(noc_index, read_cmd_buf));
         if constexpr(use_trid) {
-            while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(read_transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
+            while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
         }
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
@@ -899,7 +899,7 @@ struct InterleavedAddrGenFast {
         NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
         NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
         if constexpr(use_trid) {
-            NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(read_transaction_id));
+            NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(trid));
         }
         NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_AT_LEN_BE, this->page_size);  // len_bytes
         NOC_CMD_BUF_WRITE_REG(noc_index, read_cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
@@ -1307,12 +1307,12 @@ FORCE_INLINE void noc_async_read_page(
 
 template <bool DRAM, bool use_vc = false, bool use_trid = false>
 FORCE_INLINE void noc_async_read_tile(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM, use_vc, use_trid>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, std::uint32_t vc = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM, use_vc, use_trid>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, std::uint32_t vc = 0, std::uint32_t trid = 0) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
-    s.noc_async_read_tile(id, dst_local_l1_addr, offset, vc);
+    s.noc_async_read_tile(id, dst_local_l1_addr, offset, vc, trid);
 }
 
 template <bool DRAM>
@@ -1558,20 +1558,42 @@ void noc_async_read_barrier() {
 }
 
 FORCE_INLINE
-void noc_async_read_barrier_with_trid() {
+void noc_async_read_barrier_partial(uint32_t val) {
+    DEBUG_STATUS('N', 'R', 'B', 'W');
+    while (!ncrisc_noc_reads_flushed_partial(noc_index, val))
+        ;
+    DEBUG_STATUS('N', 'R', 'B', 'D');
+}
+
+FORCE_INLINE
+void noc_async_read_barrier_with_trid(uint32_t trid) {
     DEBUG_STATUS('N', 'R', 'B', 'W');
     if (use_multi_noc) {
-        while (!ncrisc_noc_read_tiles_flushed(0, read_transaction_id))
+        while (!ncrisc_noc_read_tiles_flushed(0, trid))
             ;
-        while (!ncrisc_noc_read_tiles_flushed(1, read_transaction_id))
+        while (!ncrisc_noc_read_tiles_flushed(1, trid))
             ;
     } else {
-        while (!ncrisc_noc_read_tiles_flushed(noc_index, read_transaction_id))
+        while (!ncrisc_noc_read_tiles_flushed(noc_index, trid))
             ;
     }
     DEBUG_STATUS('N', 'R', 'B', 'D');
 }
 
+FORCE_INLINE
+void noc_async_read_barrier_with_trid_partial(uint32_t val) {
+    DEBUG_STATUS('N', 'R', 'B', 'W');
+    if (use_multi_noc) {
+        while (!ncrisc_noc_read_tiles_flushed_partial(0, read_transaction_id, val))
+            ;
+        while (!ncrisc_noc_read_tiles_flushed_partial(1, read_transaction_id, val))
+            ;
+    } else {
+        while (!ncrisc_noc_read_tiles_flushed_partial(noc_index, read_transaction_id, val))
+            ;
+    }
+    DEBUG_STATUS('N', 'R', 'B', 'D');
+}
 /**
  * This blocking call waits for all the outstanding enqueued *noc_async_write*
  * calls issued on the current Tensix core to complete. After returning from
