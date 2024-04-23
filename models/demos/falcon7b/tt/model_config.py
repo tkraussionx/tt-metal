@@ -92,7 +92,7 @@ def pretty_print_model_config(model_config):
     return "\n".join(print_str)
 
 
-def get_model_config(model_config_str, seq_len):
+def get_model_config(model_config_str, seq_len, optimized=False):
     assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
@@ -193,7 +193,8 @@ def get_model_config(model_config_str, seq_len):
     return model_config
 
 
-def set_prefill_config(model_config, seq_len, dram_memcfg):
+def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
+    model_config["OPTIMIZED_MODE"] = optimized
     model_config["MLP_SEQ_LEN"] = seq_len
     model_config["MLP_PADDING_VALUE"] = 4608
     model_config["MLP_GRID_SIZE"] = (8, 8)

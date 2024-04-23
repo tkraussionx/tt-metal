@@ -193,7 +193,7 @@ class TtFalconModelShared(torch.nn.Module):
                 # Sharding attn masks in L1
                 tt_input_ids.append(
                     ttnn.as_tensor(
-                        input_ids[i : i + 1],
+                        input_ids[batch_size * i : batch_size * (i + 1)].transpose(0, 1),
                         dtype=self.model_config["INPUT_DTYPE"],
                         layout=ttnn.ROW_MAJOR_LAYOUT,
                         device=device,
