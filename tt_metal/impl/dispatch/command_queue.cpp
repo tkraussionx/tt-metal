@@ -373,7 +373,7 @@ const vector<DeviceCommand> EnqueueProgramCommand::assemble_runtime_args_command
                 unicast_sub_cmds[processor_idx],
                 rt_data_and_sizes[processor_idx]);
             runtime_args_command_sequences.emplace_back(command_sequence);
-            runtime_args_data_index.emplace_back(std::make_pair(get_runtime_args_data_index(num_packed_cmds_in_seq, max_runtime_args_len[processor_idx], true), align(max_runtime_args_len[processor_idx], L1_ALIGNMENT)));
+            runtime_args_data_index.emplace_back(std::make_pair(get_runtime_args_data_index(num_packed_cmds_in_seq, max_runtime_args_len[processor_idx], true), align(max_runtime_args_len[processor_idx] * sizeof(uint32_t), L1_ALIGNMENT) / sizeof(uint32_t)));
             program.cached_runtime_args_commands.emplace_back(command_sequence.cmd_vector());
         }
         program.command_indices.runtime_args_data_start_and_offset = runtime_args_data_index;
@@ -409,6 +409,7 @@ const vector<DeviceCommand> EnqueueProgramCommand::assemble_runtime_args_command
                 runtime_args_command_sequences[processors_to_cmd_sequence[processor_idx]].update_cmd_sequence(
                     data_start, runtime_args_data.data(), runtime_args_data.size() * sizeof(uint32_t));
                 sub_cmd_idx[processor_idx]++;
+                data_start += program.command_indices.runtime_args_data_start_and_offset[processors_to_cmd_sequence[processor_idx]].second;
             }
         }
         for (int i = 0; i< runtime_args_command_sequences[0].cmd_vector().size(); i++) {
