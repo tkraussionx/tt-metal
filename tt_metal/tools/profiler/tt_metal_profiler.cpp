@@ -40,7 +40,11 @@ std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
 void InitTimeSync(int device_id, CoreCoord core)
 {
-    std::vector<uint32_t> time_sync_buffer(8, 0);
+    //std::vector<uint32_t> time_sync_buffer(8, 0);
+
+    std::filesystem::path output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
+    std::filesystem::path log_path = output_dir / "sync_device_info.csv";
+    std::ofstream log_file;
 
     constexpr uint16_t sampleCount = 250;
     int64_t writeSum = 0;
@@ -51,10 +55,13 @@ void InitTimeSync(int device_id, CoreCoord core)
     {
         millisecond_wait = std::stoi(FREQ);
     }
+
     const int64_t hostStartTime = TracyGetCpuTime();
+    std::vector<int64_t> writeTimes(sampleCount);
+
     for (int i = 0; i < sampleCount; i++)
     {
-        ZoneScopedN("4MS_LOOP");
+        ZoneScopedN("sync_LOOP");
         std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
         int64_t writeStart = TracyGetCpuTime();
         uint32_t sinceStart = writeStart - hostStartTime;
@@ -65,9 +72,13 @@ void InitTimeSync(int device_id, CoreCoord core)
         //core,
         //time_sync_buffer,
         //PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
-        writeSum += (TracyGetCpuTime() - writeStart);
+        writeTimes[i] = (TracyGetCpuTime() - writeStart);
     }
 
+    for (auto writeTime : writeTimes)
+    {
+        writeSum += writeTime;
+    }
     double writeOverhead = (double)writeSum / sampleCount;
     vector<std::uint32_t> sync_times = tt::llrt::read_hex_vec_from_core(
             device_id,
@@ -104,7 +115,7 @@ void InitTimeSync(int device_id, CoreCoord core)
         preDeviceTime = deviceTime;
         uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
 
-        uint32_t hostTime = sync_times[i + 1];
+        uint32_t hostTime = sync_times[i + 1] - writeTimes[i/2 - 1];
         if (hostTime < preHostTime) hostStartTime_H ++;
         preHostTime = hostTime;
         uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
@@ -140,7 +151,7 @@ void InitTimeSync(int device_id, CoreCoord core)
     for (auto& deviceHostTime : deviceHostTimePair)
     {
         double deviceTime = deviceHostTime.first;
-        double hostTime = ((double) deviceHostTime.second + writeOverhead) * tracyToSecRatio;
+        double hostTime = (double) deviceHostTime.second  * tracyToSecRatio;
 
         deviceSum += deviceTime;
         hostSum += hostTime;
@@ -156,6 +167,9 @@ void InitTimeSync(int device_id, CoreCoord core)
     double delay = deviceTimeMean - frequencyFit * hostTimeMean;
 
 
+    log_file.open(log_path, std::ios_base::app);
+    log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency") << std::endl;
+    int i = 0;
     for (auto& deviceHostTime : deviceHostTimePair)
     {
         double scaledDeviceTime1 = (double)deviceHostTime.first / frequencyAvg;
@@ -168,26 +182,38 @@ void InitTimeSync(int device_id, CoreCoord core)
         double diff3 = scaledDeviceTime3 - deviceHostTime.second * tracyToSecRatio;
         double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
         double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
-        std::cout << fmt::format(
-                "{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
+        log_file << fmt::format(
+                "{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f}",
                 deviceHostTime.first,
                 deviceHostTime.second,
-                diff1,
-                diff2,
-                diff3,
-                diff4,
-                diff5)
+                (double) deviceHostTime.second  * tracyToSecRatio,
+                writeTimes[i],
+                hostStartTime,
+                delay,
+                frequencyFit
+                )
             << std::endl;
+        i++;
+        //std::cout << fmt::format(
+                //"{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
+                //deviceHostTime.first,
+                //deviceHostTime.second,
+                //diff1,
+                //diff2,
+                //diff3,
+                //diff4,
+                //diff5)
+            //<< std::endl;
     }
 
     tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(hostStartTime, delay, frequencyFit));
 
-    std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
-    std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
-    std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
-    std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
-    std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
-    std::cout << fmt::format("Device time = {}", delay) << std::endl;
+    //std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
+    //std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
+    //std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
+    //std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
+    //std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
+    //std::cout << fmt::format("Device time = {}", delay) << std::endl;
 
 }
 
@@ -211,7 +237,7 @@ void InitDeviceProfiler(Device *device){
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
                 InitTimeSync (device_id, {1,1});
-                InitTimeSync (device_id, {1,3});
+                InitTimeSync (device_id, {9,9});
             }
             else
             {

@@ -356,7 +356,7 @@ void DeviceProfiler::dumpResults (
         const vector<CoreCoord> &worker_cores_arg){
 #if defined(PROFILER)
     ZoneScoped;
-    std::vector<CoreCoord> worker_cores {{1,1},{1,3},{1,11},{7,11}};
+    std::vector<CoreCoord> worker_cores {{1,1},{9,9},{1,11},{7,11}};
     //CoreCoord worker_core = {1, 1};
     //worker_cores.push_back(worker_core);
     //worker_core = {1, 11};

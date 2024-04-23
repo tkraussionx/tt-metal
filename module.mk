@@ -134,8 +134,6 @@ LIBS_TO_BUILD =
 ifdef TT_METAL_ENV_IS_DEV
 LIBS_TO_BUILD += \
 	python_env/dev \
-	python_env/dev/editable \
-	python_env/dev/stubs \
 	git_hooks
 endif
 
