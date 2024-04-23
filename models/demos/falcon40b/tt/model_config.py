@@ -225,6 +225,7 @@ def get_decode_model_config(model_config_str, input_shape, num_devices):
     batch, seq_len = input_shape
     assert batch == 32
     row_height = batch
+    model_config["row_height"] = row_height
 
     if model_config_str in ("BFLOAT16-L1",):
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
@@ -843,15 +844,21 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     num_kv_heads = model_config_entries["num_kv_heads"]
 
     row_height = input_shape[1]
+    model_config["row_height"] = row_height
 
     # Layernorm is an exception that are sharded also here, because the interleaved OP does not fit in L1 for 40b hidden size
     layernorm_num_cores_x = 8
     layernorm_max_num_cores_y = 8
 
     layernorm_slice_size = 512
-    attetnion_slice_size = min(128, row_height)
-    attention_num_cores = attetnion_slice_size * 16 // 32
+    attention_max_slice_size = 128
+    attention_slice_size = min(attention_max_slice_size, row_height)
+    assert row_height % attention_slice_size == 0
+
+    attention_num_slices = row_height // attention_slice_size
+    attention_num_cores = attention_slice_size * 16 // 32
     assert attention_num_cores in (16, 32, 64)
+
     if attention_num_cores == 16:
         attention_mm_grid_size = (8, 2)
         attn_shard_spec = ttl.tensor.CoreRangeSet(
@@ -903,9 +910,15 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     model_config["layernorm_params"] = layernorm_params
 
+    model_config["attention_params"] = {
+        "attention_slice_size": attention_slice_size,
+        "attention_max_slice_size": attention_max_slice_size,
+        "attention_num_slices": attention_num_slices,
+    }
+
     # Specify program configs
     attetnion_mm_M = (
-        attetnion_slice_size * 16 // attention_num_cores // 32
+        attention_slice_size * 16 // attention_num_cores // 32
     )  # attetnion_slice_size * 16 qheads // attention_num_cores // TILE_SIZE
 
     # Attention
@@ -944,7 +957,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(
             attn_shard_spec,
-            [16 * attetnion_slice_size // attention_num_cores, head_dim],
+            [16 * attention_slice_size // attention_num_cores, head_dim],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
             False,
         ),
@@ -955,7 +968,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(
             attn_shard_spec,
-            [16 * attetnion_slice_size // attention_num_cores, row_height],
+            [16 * attention_slice_size // attention_num_cores, row_height],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
             False,
         ),
@@ -966,7 +979,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(
             attn_shard_spec,
-            [16 * attetnion_slice_size // attention_num_cores, head_dim],
+            [16 * attention_slice_size // attention_num_cores, head_dim],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
             False,
         ),

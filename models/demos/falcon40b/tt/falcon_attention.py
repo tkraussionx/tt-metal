@@ -252,6 +252,22 @@ class TtFalconAttention:
     def set_model_config(self, model_config):
         self.model_config = model_config
 
+    def preprocessing(self, llm_mode, batch_size, sequence_size):
+        if llm_mode == "prefill":
+            assert self.model_config["row_height"] == sequence_size
+            if self.model_config["attention_params"]["attention_num_slices"] > 1:
+                # Pre-allocate memory to partially slice and sharde attention
+                self.attn_output = []
+                for i in range(len(self.devices)):
+                    self.attn_output.append(
+                        torch2tt_tensor(
+                            torch.zeros([1, self.num_heads_per_device, sequence_size, self.head_dim]),
+                            self.devices[i],
+                            tt_memory_config=self.model_config["DRAM_MEMCFG"],
+                            tt_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],
+                        )
+                    )
+
     def __call__(
         self,
         hidden_states: tt_lib.tensor.Tensor,
@@ -380,22 +396,10 @@ class TtFalconAttention:
             )
             key_layer[i].deallocate(True)
 
-        slice_size = 128
-        num_slices = q_len // slice_size
+        slice_size = self.model_config["attention_params"]["attention_slice_size"]
+        num_slices = self.model_config["attention_params"]["attention_num_slices"]
 
         if num_slices > 1:
-            # Partially sliced and sharded attention
-            attn_output = []  # this is the output we write to. Initiate as empty tensors
-            for i in range(len(query_layer)):
-                attn_output.append(
-                    torch2tt_tensor(
-                        torch.zeros([1, self.num_heads_per_device, q_len, self.head_dim]),
-                        self.devices[i],
-                        tt_memory_config=self.model_config["DRAM_MEMCFG"],
-                        tt_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],
-                    )
-                )
-
             for slice_i in range(num_slices):
                 # Partially slice and convert activations to sharded
                 q_slices = []
@@ -420,12 +424,13 @@ class TtFalconAttention:
                 for i in range(len(attn_output_slice)):
                     tt_lib.tensor.sharded_to_interleaved_partial(
                         attn_output_slice[i],
-                        attn_output[i],
+                        self.attn_output[i],
                         num_slices,
                         slice_i,
                         self.model_config["DRAM_MEMCFG"],
                     )
                     attn_output_slice[i].deallocate(True)
+                attn_output = self.attn_output
         else:
             query_layer = convert_to_layout(
                 query_layer, self.model_config["DRAM_MEMCFG"], self.model_config["QUERY_HEIGHT_SHARDED_MEMCFG"]

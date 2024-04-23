@@ -222,6 +222,9 @@ class TtFalconModelShared:
         else:
             raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
+        for layer in self.layers:
+            layer.preprocessing(llm_mode, batch_size, sequence_size)
+
         return tt_embeddings, tt_attention_mask
 
     @abstractmethod
