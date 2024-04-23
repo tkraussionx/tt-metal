@@ -15,7 +15,12 @@ from models.utility_functions import (
 
 
 def test_mixtral_mlp_inference(device, reset_seeds):
-    dtype = ttnn.bfloat8_b
+    # Specify different dtypes for each feedForward weights
+    dtypes = {
+        "w1": ttnn.bfloat4_b,
+        "w2": ttnn.bfloat8_b,
+        "w3": ttnn.bfloat4_b,
+    }
 
     model_args = TtModelArgs(device)
     state_dict = torch.load(model_args.state_dict_path)
@@ -35,7 +40,7 @@ def test_mixtral_mlp_inference(device, reset_seeds):
         args=model_args,
         layer_num=0,
         expert_num=0,
-        dtype=dtype,
+        dtypes=dtypes,
     )
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
