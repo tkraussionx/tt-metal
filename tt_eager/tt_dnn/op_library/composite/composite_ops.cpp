@@ -132,7 +132,7 @@ Tensor _tanhshrink(const Tensor& x, const MemoryConfig& output_mem_config) {
     }
     value = where(gt(abs(orig), ones_like(value)),sub(abs(orig), value), value);
     value = where(lt(orig, neg(ones_like(value))), sub_unary(neg(value), 1), value);
-    value = where(eq(sub(orig, value), ones_like(value)), add_unary(value, 1), value);
+    value = where(eq(sub(orig, value), ones_like(value)), add1(value), value);
     return value;
 }
 Tensor tanhshrink(const Tensor& a, const MemoryConfig& output_mem_config) {
@@ -924,7 +924,7 @@ Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor quotient = tanhshrink(div_result);
     quotient = typecast(quotient,tt::tt_metal::DataType::FLOAT32);
     Tensor remainder = sub(dividend, mul(quotient, divisor));
-    remainder = typecast(remainder,tt::tt_metal::DataType::BFLOAT16);
+    remainder = typecast(quotient,tt::tt_metal::DataType::BFLOAT16);
     return remainder;
 }
 Tensor xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {

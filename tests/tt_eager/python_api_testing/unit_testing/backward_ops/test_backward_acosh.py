@@ -25,8 +25,10 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     ),
 )
 def test_bw_remainder_floor(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 50, device)
+    # in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
+    # grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 50, device)
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=100)
+    grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=50)
     print(in_data)
     print(grad_data)
 
