@@ -53,6 +53,7 @@ class TtTransformer(nn.Module):
             dtype=dtype,
             layer_num=None,
             weight_key="norm",
+            model_config=self.args.get_model_config(),
         )
         self.state_dict = state_dict
 
@@ -80,7 +81,7 @@ class TtTransformer(nn.Module):
         for layer in self.layers:
             x = layer(x, current_pos, attn_masks)
 
-        x, h = self.norm(x)
+        h = self.norm(x)
         output = ttnn.linear(
             h,
             self.output_weight,
