@@ -494,7 +494,6 @@ class TtFalconAttention:
                 self.scalar,
                 attn_mask_slices[i],
                 program_config=self.model_config["SOFTMAX_PROGCFG"],
-                # is_causal_mask=True,
             )
 
         # Attention score * V

@@ -836,13 +836,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     model_config["KV_CACHE_MEMCFG"] = DRAM_MEMCFG
     model_config["KV_CACHE_DTYPE"] = BFP8_DTYPE
 
-    # model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
-    # model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
-
-    # # TODO: use BFLOAT16 for the attention mask!
-    # # model_config["KV_CACHE_MEMCFG"] = DRAM_MEMCFG
-    # model_config["ATTN_MASK_DTYPE"] = BFLOAT16_DTYPE
-
     head_dim = 64
     hidden_size = model_config_entries["hidden_size"]
     vocab_size = model_config_entries["vocab_size"]
@@ -860,7 +853,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     attention_num_cores = attetnion_slice_size * 16 // 32
     assert attention_num_cores in (16, 32, 64)
     if attention_num_cores == 16:
-        attetnion_mm_grid_size = (8, 2)
+        attention_mm_grid_size = (8, 2)
         attn_shard_spec = ttl.tensor.CoreRangeSet(
             {
                 ttl.tensor.CoreRange(
@@ -870,7 +863,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
             }
         )
     elif attention_num_cores == 32:
-        attetnion_mm_grid_size = (8, 4)
+        attention_mm_grid_size = (8, 4)
         attn_shard_spec = ttl.tensor.CoreRangeSet(
             {
                 ttl.tensor.CoreRange(
@@ -880,7 +873,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
             }
         )
     else:
-        attetnion_mm_grid_size = (8, 8)
+        attention_mm_grid_size = (8, 8)
         attn_shard_spec = ttl.tensor.CoreRangeSet(
             {
                 ttl.tensor.CoreRange(
@@ -917,7 +910,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     # Attention
     model_config["ATTENTION_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=attetnion_mm_grid_size,
+        compute_with_storage_grid_size=attention_mm_grid_size,
         in0_block_w=head_dim // 32,
         out_subblock_h=1,
         out_subblock_w=1,
@@ -928,13 +921,13 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
         mcast_in0=False,
     )
     model_config["SOFTMAX_PROGCFG"] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-        compute_with_storage_grid_size=attetnion_mm_grid_size,
+        compute_with_storage_grid_size=attention_mm_grid_size,
         subblock_w=1,
         block_h=attetnion_mm_M,
         block_w=row_height // 32,
     )
     model_config["ATTENTION_MM_2_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=attetnion_mm_grid_size,
+        compute_with_storage_grid_size=attention_mm_grid_size,
         in0_block_w=row_height // 32,
         out_subblock_h=1,
         out_subblock_w=1,
