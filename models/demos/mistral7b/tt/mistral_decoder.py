@@ -59,6 +59,7 @@ class TtTransformerBlock(torch.nn.Module):
             dtype=dtype,
             layer_num=layer_num,
             weight_key="attention_norm",
+            model_config=self.args.get_model_config(),
         )
         self.ffn_norm = TtRMSNorm(
             device=device,
@@ -67,6 +68,7 @@ class TtTransformerBlock(torch.nn.Module):
             dtype=dtype,
             layer_num=layer_num,
             weight_key="ffn_norm",
+            model_config=self.args.get_model_config(),
         )
 
     def forward(
@@ -75,20 +77,18 @@ class TtTransformerBlock(torch.nn.Module):
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor] = None,
     ) -> ttnn.Tensor:
-        x, attn_norm = self.attention_norm(x)
+        attn_norm = self.attention_norm(x)
         # Attention module expects a list of inputs, attn masks (multi-device support)
         r = self.attention.forward(
             [attn_norm],
             current_pos,
             [attn_masks],
         )
-        # # Attention also returns multiple outputs (multi-device support)
-        # assert len(r) == 1, "Multiple devices not yet supported"
         ttnn.deallocate(attn_norm)
         r = r[0]
         r = ttnn.reshape(r, (1, 1, 32, 4096))
         h = ttnn.add(x, r, memory_config=ttnn.L1_MEMORY_CONFIG)
-        h, mlp_norm = self.ffn_norm(h)
+        mlp_norm = self.ffn_norm(h)
         r = self.feed_forward.forward(mlp_norm)
         ttnn.deallocate(mlp_norm)
         out = ttnn.add(h, r, memory_config=ttnn.L1_MEMORY_CONFIG)
