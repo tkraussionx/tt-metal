@@ -247,7 +247,7 @@ def run_falcon_demo_kv(
             tt_prefill_input_ids,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
+            "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
@@ -363,7 +363,7 @@ def run_falcon_demo_kv(
             tt_prefill_input_ids,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
+            "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
