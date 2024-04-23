@@ -115,7 +115,8 @@ void InitTimeSync(int device_id, CoreCoord core)
         preDeviceTime = deviceTime;
         uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
 
-        uint32_t hostTime = sync_times[i + 1] - writeTimes[i/2 - 1];
+        //uint32_t hostTime = sync_times[i + 1];
+        uint32_t hostTime = sync_times[i + 1] + writeTimes[i/2 - 1];
         if (hostTime < preHostTime) hostStartTime_H ++;
         preHostTime = hostTime;
         uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
@@ -183,14 +184,15 @@ void InitTimeSync(int device_id, CoreCoord core)
         double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
         double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
         log_file << fmt::format(
-                "{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f}",
+                "{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f}",
                 deviceHostTime.first,
                 deviceHostTime.second,
                 (double) deviceHostTime.second  * tracyToSecRatio,
                 writeTimes[i],
                 hostStartTime,
                 delay,
-                frequencyFit
+                frequencyFit,
+                tracyToSecRatio
                 )
             << std::endl;
         i++;
