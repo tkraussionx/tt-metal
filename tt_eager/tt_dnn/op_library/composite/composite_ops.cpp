@@ -917,14 +917,14 @@ Tensor logical_xori(const Tensor& input_a, float value, const MemoryConfig& outp
 
 // xlogy(x,y))=x*log(y)
 Tensor _xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
-    Tensor dividend = input_a;
-    Tensor divisor = input_b;
+    Tensor dividend = typecast(input_a,tt::tt_metal::DataType::FLOAT32);
+    Tensor divisor = typecast(input_b,tt::tt_metal::DataType::FLOAT32);
     Tensor div_result = mul(dividend, recip(divisor));
+    div_result = typecast(div_result,tt::tt_metal::DataType::BFLOAT16);
     Tensor quotient = tanhshrink(div_result);
+    quotient = typecast(quotient,tt::tt_metal::DataType::FLOAT32);
     Tensor remainder = sub(dividend, mul(quotient, divisor));
-    Tensor temp = mul(quotient, divisor);
-    remainder = add(remainder, temp);
-    remainder = sub(remainder, temp);
+    remainder = typecast(remainder,tt::tt_metal::DataType::BFLOAT16);
     return remainder;
 }
 Tensor xlogy(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {

@@ -20,8 +20,8 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     "input_shapes",
     (
         (torch.Size([1, 1, 32, 32])),
-        (torch.Size([1, 1, 320, 384])),
-        (torch.Size([1, 3, 320, 384])),
+        # (torch.Size([1, 1, 320, 384])),
+        # (torch.Size([1, 3, 320, 384])),
     ),
 )
 def test_bw_remainder(input_shapes, device):

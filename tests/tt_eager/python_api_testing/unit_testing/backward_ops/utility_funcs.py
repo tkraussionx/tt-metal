@@ -24,6 +24,7 @@ def data_gen_with_range(input_shapes, low, high, device, required_grad=False, is
     assert high > low, "Incorrect range provided"
     torch.manual_seed(213919)
     pt_tensor = torch.rand(input_shapes, requires_grad=required_grad).bfloat16() * (high - low) + low
+    # pt_tensor=torch.floor(pt_tensor)
     if is_row_major:
         tt_tensor = (
             tt_lib.tensor.Tensor(pt_tensor, tt_lib.tensor.DataType.BFLOAT16)
