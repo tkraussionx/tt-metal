@@ -25,7 +25,7 @@ public:
                 tt::tt_metal::detail::EndTraceCapture(device);
                 trace_caputured.insert(program_id);
             }
-            log_debug(tt::LogTest, "Executing trace for program {}", program_id);
+            log_info(tt::LogTest, "Executing trace for program {}", program_id);
             tt::tt_metal::detail::ExecuteLastTrace(device, false);
             Finish(device->command_queue());
         } else {
@@ -69,7 +69,7 @@ protected:
             slow_dispatch_ = true;
         } else {
             metal_trace_ = tt::parse_env("TT_METAL_TRACE_MODE", true);
-            tt::log_debug(tt::LogTest, "Running test using Fast Dispatch, Metal Trace = {}", metal_trace_ ? "ON" : "OFF");
+            tt::log_info(tt::LogTest, "Running test using Fast Dispatch, Metal Trace = {}", metal_trace_ ? "ON" : "OFF");
             slow_dispatch_ = false;
         }
 
