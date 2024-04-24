@@ -135,27 +135,45 @@ def generate_report(outFolder, nameAppend):
         time.sleep(1)
     with open(PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME, "w") as csvFile:
         subprocess.run(
-            f"{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -u -f TT_DNN {PROFILER_LOGS_DIR / TRACY_FILE_NAME}",
+            f"{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -u {PROFILER_LOGS_DIR / TRACY_FILE_NAME}",
             shell=True,
             check=True,
             stdout=csvFile,
             stderr=subprocess.DEVNULL,
         )
 
-    logger.info(f"Host side ops time report generated at {PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME}")
+    logger.info(f"Host and device side ops time report generated at {PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME}")
 
-    with open(PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME, "w") as csvFile:
-        subprocess.run(
-            f'{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -m -s ";" {PROFILER_LOGS_DIR / TRACY_FILE_NAME}',
-            shell=True,
-            check=True,
-            stdout=csvFile,
-            stderr=subprocess.DEVNULL,
-        )
+    deviceEndTime = 0
+    hostEndTime = 0
 
-    logger.info(f"Host side ops data report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
+    with open(PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME, "r") as csvFile:
+        for line in csvFile.readlines():
+            items = line.split(",")
+            name = items[0]
+            if "HWCommandQueue_finish" in name:
+                hostEndTime = int(items[-3]) + int(items[-2])
 
-    process_ops(outFolder, nameAppend, True)
+            if "CQ-CONSUMER-MAIN" in line:
+                endTime = int(items[-3]) + int(items[-2])
+                if endTime > deviceEndTime:
+                    deviceEndTime = endTime
+
+    with open(TT_METAL_HOME / "delay_time.csv", "a") as delayCsvFile:
+        print(f"{deviceEndTime}, {hostEndTime}, {(hostEndTime - deviceEndTime) / 1e3}", file=delayCsvFile)
+
+    # with open(PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME, "w") as csvFile:
+    # subprocess.run(
+    # f'{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -m -s ";" {PROFILER_LOGS_DIR / TRACY_FILE_NAME}',
+    # shell=True,
+    # check=True,
+    # stdout=csvFile,
+    # stderr=subprocess.DEVNULL,
+    # )
+
+    # logger.info(f"Host side ops data report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
+
+    # process_ops(outFolder, nameAppend, True)
 
 
 def get_available_port():
@@ -251,29 +269,38 @@ def main():
             else:
                 progname = args[0]
                 sys.path.insert(0, os.path.dirname(progname))
-                with io.open_code(progname) as fp:
-                    code = compile(fp.read(), progname, "exec")
-                spec = importlib.machinery.ModuleSpec(name="__main__", loader=None, origin=progname)
-                globs = {
-                    "__spec__": spec,
-                    "__file__": spec.origin,
-                    "__name__": spec.name,
-                    "__package__": None,
-                    "__cached__": None,
-                }
+                try:
+                    with io.open_code(progname) as fp:
+                        code = compile(fp.read(), progname, "exec")
+                    spec = importlib.machinery.ModuleSpec(name="__main__", loader=None, origin=progname)
+                    globs = {
+                        "__spec__": spec,
+                        "__file__": spec.origin,
+                        "__name__": spec.name,
+                        "__package__": None,
+                        "__cached__": None,
+                    }
+                except ValueError as e:
+                    subprocess.run(
+                        progname,
+                        shell=True,
+                        check=True,
+                    )
+                    code = ""
 
-            if options.partial:
-                tracy_state.doPartial = True
+            if code:
+                if options.partial:
+                    tracy_state.doPartial = True
 
-            if options.lines:
-                tracy_state.doLine = True
+                if options.lines:
+                    tracy_state.doLine = True
 
-            try:
-                runctx(code, globs, None, options.partial)
-            except BrokenPipeError as exc:
-                # Prevent "Exception ignored" during interpreter shutdown.
-                sys.stdout = None
-                sys.exit(exc.errno)
+                try:
+                    runctx(code, globs, None, options.partial)
+                except BrokenPipeError as exc:
+                    # Prevent "Exception ignored" during interpreter shutdown.
+                    sys.stdout = None
+                    sys.exit(exc.errno)
         else:
             originalArgs.remove("-r")
             osCmd = " ".join(originalArgs[1:])

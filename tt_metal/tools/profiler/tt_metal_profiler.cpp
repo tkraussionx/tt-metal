@@ -239,7 +239,7 @@ void InitDeviceProfiler(Device *device){
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
                 InitTimeSync (device_id, {1,1});
-                InitTimeSync (device_id, {9,9});
+                //InitTimeSync (device_id, {9,9});
             }
             else
             {

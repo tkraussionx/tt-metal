@@ -300,8 +300,9 @@ int main() {
 
     mailboxes->launch.run = RUN_MSG_DONE;
 
-    if (false)
+    //if (false)
     //if ((my_x[0] == 1 && my_y[0] == 1) || (my_x[0] == 9 && my_y[0] == 9))
+    if (my_x[0] == 1 && my_y[0] == 1)
     {
         volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
         volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
