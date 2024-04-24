@@ -68,6 +68,14 @@ class dispatch_core_manager {
         return assignment.prefetcher.value();
     }
 
+    bool is_prefetcher_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.prefetcher.has_value()) {
+            return true;
+        }
+        return false;
+    }
+
     /// @brief Gets the location of the kernel desginated to interface with prefetcher kernel running on mmio device.
     ///         Prefetcher kernel on mmio device relays commands to prefetcher_d running on remote device.
     /// @param device_id ID of the device that a fast dispatch command targets
@@ -83,6 +91,14 @@ class dispatch_core_manager {
         assignment.prefetcher_d = tt_cxy_pair(device_id, prefetch_d_coord.x, prefetch_d_coord.y);
         log_info(tt::LogMetal, "Allocated Prefetch D Core: {} for Device {}", assignment.prefetcher_d.value().str(), device_id);
         return assignment.prefetcher_d.value();
+    }
+
+    bool is_prefetcher_d_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.prefetcher_d.has_value()) {
+            return true;
+        }
+        return false;
     }
 
     /// @brief Gets the location of the kernel desginated for multiplexing issue queue traffic to tunneler.
@@ -101,6 +117,14 @@ class dispatch_core_manager {
         assignment.mux = tt_cxy_pair(mmio_device_id, mux_coord.x, mux_coord.y);
         log_info(tt::LogMetal, "Allocated Mux Core: {} for Device {}", assignment.mux.value().str(), device_id);
         return assignment.mux.value();
+    }
+
+    bool is_mux_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.mux.has_value()) {
+            return true;
+        }
+        return false;
     }
 
     /// @brief Gets the location of the kernel desginated for multiplexing traffic back towards mmio chip.
@@ -137,6 +161,14 @@ class dispatch_core_manager {
         assignment.demux = tt_cxy_pair(mmio_device_id, demux_coord.x, demux_coord.y);
         log_info(tt::LogMetal, "Allocated Demux Core: {} for Device {}", assignment.demux.value().str(), device_id);
         return assignment.demux.value();
+    }
+
+    bool is_demux_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.demux.has_value()) {
+            return true;
+        }
+        return false;
     }
 
     /// @brief Gets the location of the kernel desginated for demultiplexing traffic on remote chip.
@@ -200,6 +232,14 @@ class dispatch_core_manager {
         return assignment.completion_queue_writer.value();
     }
 
+    bool is_completion_queue_writer_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.completion_queue_writer.has_value()) {
+            return true;
+        }
+        return false;
+    }
+
     /// @brief Gets the location of the kernel designated to relay fast dispatch commands to worker cores from a particular command queue
     /// @param device_id ID of the device that should be running the command
     /// @param channel assigned to the command queue where commands are enqueued
@@ -217,6 +257,14 @@ class dispatch_core_manager {
         assignment.completion_queue_writer = assignment.dispatcher;
         log_info(tt::LogMetal, "Allocated Dispatcher Core: {} for Device {}", assignment.dispatcher.value().str(), device_id);
         return assignment.dispatcher.value();
+    }
+
+    bool is_dispatcher_core_allocated(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.dispatcher.has_value()) {
+            return true;
+        }
+        return false;
     }
 
     /// @brief Gets the location of the kernel designated to relay fast dispatch commands to worker cores from a particular command queue

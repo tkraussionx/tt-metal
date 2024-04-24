@@ -23,6 +23,13 @@ using std::mutex;
 
 namespace tt::tt_metal{
 
+    namespace device_pool {
+
+    // Definition of the global device vector
+        extern std::vector<Device*> devices;
+
+    } // device_pool
+
     namespace detail {
 
         inline static bool DispatchStateCheck( bool isFastDispatch){
@@ -37,6 +44,7 @@ namespace tt::tt_metal{
             const std::vector<uint32_t> &l1_bank_remap = {});
 
         void CloseDevices(std::map<chip_id_t, Device *> devices);
+        Device *GetDeviceHandle(chip_id_t device_id);
 
         void BeginTraceCapture(Device *device);
         void EndTraceCapture(Device *device);

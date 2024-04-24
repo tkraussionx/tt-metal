@@ -136,6 +136,12 @@ inline void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kerne
 }  // namespace
 
 //#define DEBUG_PRINT_SHARD
+namespace device_pool {
+
+// Definition of the global device vector
+    std::vector<Device*> devices;
+
+} // device_pool
 
 namespace detail {
 
@@ -706,6 +712,12 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         }
     }
 
+    Device *GetDeviceHandle(chip_id_t device_id) {
+        ZoneScoped;
+        TT_ASSERT(device_id < device_pool::devices.size());
+        TT_ASSERT(device_pool::devices[device_id] != nullptr);
+        return device_pool::devices[device_id];
+    }
 }   // namespace detail
 
 size_t GetNumAvailableDevices() {
@@ -735,6 +747,11 @@ Device *CreateDevice(chip_id_t device_id, const uint8_t num_hw_cqs, const std::v
 bool CloseDevice(Device *device) {
     ZoneScoped;
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+    auto device_id = device->id();
+    TT_ASSERT(device_id < device_pool::devices.size());
+    if (device_pool::devices[device_id] != nullptr) {
+        device_pool::devices[device_id] = nullptr;
+    }
     return device->close();
 }
 
