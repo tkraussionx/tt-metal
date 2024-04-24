@@ -580,19 +580,26 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     Tensor divisor = typecast(input_b,tt::tt_metal::DataType::FLOAT32);
 
     Tensor original_divisor = divisor;
+    divisor = abs(divisor);
     for (int i=0; i<100; i++){
         dividend = where(logical_and(ltz(dividend), gtz(divisor)), add(dividend, divisor), dividend);
     }
     dividend = abs(dividend);
-    divisor = abs(divisor);
 
     for (int i=0; i<100; i++){
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
     dividend = typecast(dividend, original_dtype);
-    dividend = where(logical_and(ltz(original_input), nez(dividend)), sub(dividend, abs(original_input)), dividend);
-    //Tensor remainder = typecast(dividend, original_dtype);
-    dividend = where(eqz(original_input), t_nan, dividend);
+    Tensor dividend1 = where(logical_and(ltz(original_divisor), nez(dividend)), sub(dividend, abs(original_input)), dividend);
+    //dividend1 = typecast(dividend1, original_dtype);
+
+    //Tensor dividend2 = typecast(dividend, original_dtype);
+    //dividend2 = where(logical_and(ltz(original_divisor), nez(dividend1)), sub(abs(original_input), dividend2), dividend2);
+
+    //Tensor dividend3 = add(dividend1, dividend2);
+    //dividend3 = mul_unary(dividend3,0.5);
+
+    dividend = where(eqz(original_input), t_nan, dividend1);
     return dividend;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {

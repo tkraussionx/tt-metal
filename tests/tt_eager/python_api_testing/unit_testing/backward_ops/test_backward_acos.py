@@ -25,10 +25,16 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     ),
 )
 def test_bw_remainder(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 10, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, -80, 80, device)
-    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=46.5)
-    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=15.5)#17-->11.5
+    # in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device, True)
+    # grad_data, grad_tensor = data_gen_with_range(input_shapes, -80, 80, device)
+    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=10.6875)
+    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=-79)#d1 = -68.0 , d2 = -68.5 if diff=0.5, ret -68.5
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=14.875)  # 71.5 = 14.8750
+    grad_data, grad_tensor = data_gen_with_val(
+        input_shapes, device, val=-71.5
+    )  # d1 = -56.5 , d2 = -56.75 if diff=0.25 ret -56.5
+    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=15.125)
+    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=-71.0)#d1 = -55.75 , d2 = -56.0 if diff=0.25 ret -56.0
     print(in_data)
     print(grad_data)
 
@@ -45,10 +51,12 @@ def test_bw_remainder(input_shapes, device):
     print(comp_out)
     print(tt_out_tensor)
     print(golden_tensor)
+
+    differing_elements = torch.ne(golden_tensor, tt_out_tensor)
+    total_differences = differing_elements.sum().item()
+    print("Total differing elements --> ", total_differences)
     diff = torch.abs(golden_tensor - tt_out_tensor)
-    print(diff)
     max_diff = torch.max(diff)
-    print(max_diff)
 
     if True:
         print("Inputs for which the outputs differ by more than 0:")
