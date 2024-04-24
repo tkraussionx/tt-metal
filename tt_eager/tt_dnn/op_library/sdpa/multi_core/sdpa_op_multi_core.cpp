@@ -84,8 +84,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     bool math_approx_mode = true;
     bool fp32_dest_acc_en;
 
-    tt::DataFormat input_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor_q.get_dtype());
-    uint32_t input_tile_size = tt_metal::detail::TileSize(input_data_format);
 
     std::visit([&](auto&& compute_kernel_config) {
         using T = std::decay_t<decltype(compute_kernel_config)>;
@@ -98,34 +96,12 @@ operation::ProgramWithCallbacks sdpa_multi_core(
             TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
             // math_fidelity = compute_kernel_config.math_fidelity;
             // math_approx_mode = compute_kernel_config.math_approx_mode;
-            fp32_dest_acc_en = input_data_format == tt::DataFormat::Float32 ? true : compute_kernel_config.fp32_dest_acc_en;
+            fp32_dest_acc_en = compute_kernel_config.fp32_dest_acc_en;
         } else {
             TT_FATAL("arch not supported");
         }
 
     }, compute_kernel_config);
-
-
-
-    tt::DataFormat scalar_cb_data_format = tt::DataFormat::Float16_b;
-    uint32_t scalar_tile_size = tt_metal::detail::TileSize(scalar_cb_data_format);
-
-    tt::DataFormat out0_cb_data_format = tt_metal::datatype_to_dataformat_converter(output_tensor.get_dtype());
-    uint32_t out0_tile_size = tt_metal::detail::TileSize(out0_cb_data_format);
-
-    tt::DataFormat mask_cb_data_format = attn_mask.has_value() ? tt_metal::datatype_to_dataformat_converter(attn_mask.value().get_dtype()) : tt::DataFormat::Float16_b;
-    uint32_t mask_tile_size = tt_metal::detail::TileSize(mask_cb_data_format);
-
-    tt::DataFormat im_cb_data_format = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
-    uint32_t im_tile_size = tt_metal::detail::TileSize(im_cb_data_format);
-
-    log_info("in0_cb_data_format: {}", input_data_format);
-    log_info("out0_cb_data_format: {}", out0_cb_data_format);
-    log_info("mask_cb_data_format: {}", mask_cb_data_format);
-    log_info("im_cb_data_format: {}", im_cb_data_format);
-    log_info("math_fidelity: {}", math_fidelity);
-    log_info("math_approx_mode: {}", math_approx_mode);
-    log_info("fp32_dest_acc_en: {}", fp32_dest_acc_en);
 
     auto q_buffer = input_tensor_q.buffer();
     auto k_buffer = input_tensor_k.buffer();
@@ -174,16 +150,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
     uint32_t num_cores = grid_size.x * grid_size.y;
 
-    TT_FATAL(num_cores == 64); // For now, we only support 64 cores
+    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
     TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
-
-    // Parallelization scheme
-    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
-    uint32_t batch_parallel_factor = std::min(B, num_cores);
-    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
-    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
-
-    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
 
 
     // Host code is responsible for determining matmul configuration
@@ -304,62 +272,91 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     });
 
     // Create circular buffers
+
+    tt::DataFormat q_df = tt_metal::datatype_to_dataformat_converter(input_tensor_q.get_dtype());
+    tt::DataFormat k_df = tt_metal::datatype_to_dataformat_converter(input_tensor_k.get_dtype());
+    tt::DataFormat v_df = tt_metal::datatype_to_dataformat_converter(input_tensor_v.get_dtype());
+    tt::DataFormat mask_df = attn_mask.has_value() ? tt_metal::datatype_to_dataformat_converter(attn_mask.value().get_dtype()) : tt::DataFormat::Float16_b;
+    tt::DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output_tensor.get_dtype());
+    tt::DataFormat scalar_df = tt::DataFormat::Float16_b;
+    tt::DataFormat im_df = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    tt::DataFormat stats_df = tt::DataFormat::Float16_b;
+
+    uint32_t q_tile_size = tt_metal::detail::TileSize(q_df);
+    uint32_t k_tile_size = tt_metal::detail::TileSize(k_df);
+    uint32_t v_tile_size = tt_metal::detail::TileSize(v_df);
+    uint32_t mask_tile_size = attn_mask.has_value() ? tt_metal::detail::TileSize(mask_df) : 0;
+    uint32_t out_tile_size = tt_metal::detail::TileSize(out_df);
+    uint32_t scalar_tile_size = tt_metal::detail::TileSize(scalar_df);
+    uint32_t im_tile_size = tt_metal::detail::TileSize(im_df);
+    uint32_t stats_tile_size = tt_metal::detail::TileSize(stats_df);
+
+    log_info("q_data_format: {}", q_df);
+    log_info("k_data_format: {}", k_df);
+    log_info("v_data_format: {}", v_df);
+    log_info("mask_data_format: {}", mask_df);
+    log_info("out_data_format: {}", out_df);
+    log_info("scalar_data_format: {}", scalar_df);
+    log_info("intermediate_data_format: {}", im_df);
+    log_info("statistics_data_format: {}", stats_df);
+
+
     // Q input
-    auto c_in0_config = CircularBufferConfig(q_tiles * input_tile_size, {{CB::c_in0, input_data_format}}).set_page_size(CB::c_in0, input_tile_size);
+    auto c_in0_config = CircularBufferConfig(q_tiles * q_tile_size, {{CB::c_in0, q_df}}).set_page_size(CB::c_in0, q_tile_size);
     auto cb_in0_id = CreateCircularBuffer(program, core_grid, c_in0_config);
     // K input
-    auto c_in1_config = CircularBufferConfig(k_tiles * input_tile_size, {{CB::c_in1, input_data_format}}).set_page_size(CB::c_in1, input_tile_size);
+    auto c_in1_config = CircularBufferConfig(k_tiles * k_tile_size, {{CB::c_in1, k_df}}).set_page_size(CB::c_in1, k_tile_size);
     auto cb_in1_id = CreateCircularBuffer(program, core_grid, c_in1_config);
     // V input
-    auto c_in2_config = CircularBufferConfig(v_tiles * input_tile_size, {{CB::c_in2, input_data_format}}).set_page_size(CB::c_in2, input_tile_size);
+    auto c_in2_config = CircularBufferConfig(v_tiles * v_tile_size, {{CB::c_in2, v_df}}).set_page_size(CB::c_in2, v_tile_size);
     auto cb_in2_id = CreateCircularBuffer(program, core_grid, c_in2_config);
 
     // attn_mask input
-    auto c_in3_config = CircularBufferConfig(mask_tiles * input_tile_size, {{CB::c_in3, input_data_format}}).set_page_size(CB::c_in3, input_tile_size);
+    auto c_in3_config = CircularBufferConfig(mask_tiles * mask_tile_size, {{CB::c_in3, mask_df}}).set_page_size(CB::c_in3, mask_tile_size);
     auto cb_in3_id = CreateCircularBuffer(program, core_grid, c_in3_config);
 
     // scale input
-    auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, input_data_format}}).set_page_size(CB::c_in4, input_tile_size);
+    auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, scalar_df}}).set_page_size(CB::c_in4, scalar_tile_size);
     auto cb_in4_id = CreateCircularBuffer(program, core_grid, c_in4_config);
 
     // identity scale input
-    auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, input_data_format}}).set_page_size(CB::c_in5, input_tile_size);
+    auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, scalar_df}}).set_page_size(CB::c_in5, scalar_tile_size);
     auto cb_in5_id = CreateCircularBuffer(program, core_grid, c_in5_config);
 
     // cb_qk_im
-    auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_cb_data_format}}).set_page_size(CB::c_intermed0, im_tile_size);
+    auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_df}}).set_page_size(CB::c_intermed0, im_tile_size);
     auto cb_intermed0_id = CreateCircularBuffer(program, core_grid, c_intermed0_config);
 
     // cb_out_im
-    auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
+    auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_df}}).set_page_size(CB::c_intermed1, im_tile_size);
     auto cb_intermed1_id = CreateCircularBuffer(program, core_grid, c_intermed1_config);
 
     // cb_out_accumulate_im
-    auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_cb_data_format}}).set_page_size(CB::c_intermed2, im_tile_size);
+    auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_df}}).set_page_size(CB::c_intermed2, im_tile_size);
     auto cb_intermed2_id = CreateCircularBuffer(program, core_grid, c_intermed2_config);
 
     // cb_cur_max
-    auto c_intermed3_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed3, input_data_format}}).set_page_size(CB::c_intermed3, input_tile_size);
+    auto c_intermed3_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed3, stats_df}}).set_page_size(CB::c_intermed3, stats_tile_size);
     auto cb_intermed3_id = CreateCircularBuffer(program, core_grid, c_intermed3_config);
 
     // cb_prev_max
-    auto c_intermed4_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed4, input_data_format}}).set_page_size(CB::c_intermed4, input_tile_size);
+    auto c_intermed4_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed4, stats_df}}).set_page_size(CB::c_intermed4, stats_tile_size);
     auto cb_intermed4_id = CreateCircularBuffer(program, core_grid, c_intermed4_config);
 
     // cb_cur_sum
-    auto c_intermed5_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed5, input_data_format}}).set_page_size(CB::c_intermed5, input_tile_size);
+    auto c_intermed5_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed5, stats_df}}).set_page_size(CB::c_intermed5, stats_tile_size);
     auto cb_intermed5_id = CreateCircularBuffer(program, core_grid, c_intermed5_config);
 
     // cb_prev_sum
-    auto c_intermed6_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed6, input_data_format}}).set_page_size(CB::c_intermed6, input_tile_size);
+    auto c_intermed6_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed6, stats_df}}).set_page_size(CB::c_intermed6, stats_tile_size);
     auto cb_intermed6_id = CreateCircularBuffer(program, core_grid, c_intermed6_config);
 
     // cb_exp_max_diff
-    auto c_intermed7_config = CircularBufferConfig(statistics_tiles * input_tile_size, {{CB::c_intermed7, input_data_format}}).set_page_size(CB::c_intermed7, input_tile_size);
+    auto c_intermed7_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed7, stats_df}}).set_page_size(CB::c_intermed7, stats_tile_size);
     auto cb_intermed7_id = CreateCircularBuffer(program, core_grid, c_intermed7_config);
 
     // Output
-    auto c_out0_config = CircularBufferConfig(out0_t * out0_tile_size, {{CB::c_out0, out0_cb_data_format}}).set_page_size(CB::c_out0, out0_tile_size);
+    auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
     auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
 
     // auto c_intermed1_config = CircularBufferConfig(im1_t * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
@@ -387,16 +384,23 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 
 
+    // Parallelization scheme
+    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
+    uint32_t batch_parallel_factor = std::min(B, num_cores);
+    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
+    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
 
+    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
 
     log_info("Parallelization scheme:");
     log_info("batch_parallel_factor: {}", batch_parallel_factor);
     log_info("nh_parallel_factor: {}", nh_parallel_factor);
     log_info("q_parallel_factor: {}", q_parallel_factor);
 
-    const uint32_t batch_per_core = B / batch_parallel_factor;
-    const uint32_t nh_per_core = NQH / nh_parallel_factor;
-    const uint32_t q_per_core = q_num_chunks / q_parallel_factor;
+    // Ceiling divide to allow for non-perfect divisions
+    const uint32_t batch_per_core = (B + batch_parallel_factor-1) / batch_parallel_factor;
+    const uint32_t nh_per_core = (NQH + nh_parallel_factor-1) / nh_parallel_factor;
+    const uint32_t q_per_core = (q_num_chunks + q_parallel_factor-1) / q_parallel_factor;
 
 
     // Set reader rt args
@@ -404,12 +408,21 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
         // log_info("core: {} getting runtime args for idx {i}", core, i);
-        const uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
-        const uint32_t local_batch_end = local_batch_start + batch_per_core;
-        const uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
-        const uint32_t local_nh_end = local_nh_start + nh_per_core;
-        const uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
-        const uint32_t local_q_end = local_q_start + q_per_core;
+        uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
+        uint32_t local_batch_end = local_batch_start + batch_per_core;
+        uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
+        uint32_t local_nh_end = local_nh_start + nh_per_core;
+        uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
+        uint32_t local_q_end = local_q_start + q_per_core;
+
+        // clamp all to max values for non-even partitioning
+        local_batch_start = std::min(local_batch_start, B);
+        local_batch_end = std::min(local_batch_end, B);
+        local_nh_start = std::min(local_nh_start, NQH);
+        local_nh_end = std::min(local_nh_end, NQH);
+        local_q_start = std::min(local_q_start, q_num_chunks);
+        local_q_end = std::min(local_q_end, q_num_chunks);
+
 
         // log the above
         log_debug("core: {}", i);
