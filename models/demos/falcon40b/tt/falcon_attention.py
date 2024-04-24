@@ -416,8 +416,22 @@ class TtFalconAttention:
                         )
                     )
 
+                attention_mask_slices = []
+                for i in range(len(query_layer)):
+                    attention_mask_slices.append(
+                        tt_lib.tensor.interleaved_to_sharded_partial(
+                            attention_mask[i],
+                            (8, 8),
+                            [slice_size * 16 // 64, q_len],  # each slice is [1,16,128,q_len], we use 64 cores
+                            num_slices,  # num_slices
+                            slice_i,  # slice_index
+                            tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                            tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                        )
+                    )
+
                 attn_output_slice = self.scaled_dot_product_attention(
-                    q_slices, key_layer_transposed, attention_mask, value_layer, q_len
+                    q_slices, key_layer_transposed, attention_mask_slices, value_layer, q_len
                 )
 
                 # write output slices to attn_output
@@ -492,14 +506,24 @@ class TtFalconAttention:
                 )
             )
 
-        # Softmax
+        # Less performant but non-hanging softmax
         for i in range(len(attn_weights)):
-            attn_weights[i] = tt_lib.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
+            attn_weights[i] = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
                 attn_weights[i],
                 self.scalar,
                 attn_mask_slices[i],
                 program_config=self.model_config["SOFTMAX_PROGCFG"],
+                is_causal_mask=True,
             )
+
+        # # Softmax
+        # for i in range(len(attn_weights)):
+        #     attn_weights[i] = tt_lib.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
+        #         attn_weights[i],
+        #         self.scalar,
+        #         attn_mask_slices[i],
+        #         program_config=self.model_config["SOFTMAX_PROGCFG"],
+        #     )
 
         # Attention score * V
         attn_output_slice = []
