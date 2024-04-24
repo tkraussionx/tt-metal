@@ -357,11 +357,8 @@ void DeviceProfiler::dumpResults (
 #if defined(PROFILER)
     ZoneScoped;
     std::vector<CoreCoord> worker_cores {{1,1},{9,9},{1,11},{7,11}};
-    //CoreCoord worker_core = {1, 1};
-    //worker_cores.push_back(worker_core);
-    //worker_core = {1, 11};
-    //worker_cores.push_back(worker_core);
-    //worker_core = {1, 11};
+    //auto const &worker_cores = worker_cores_arg;
+
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
 
@@ -412,10 +409,12 @@ void DeviceProfiler::dumpResults (
 
             }
         }
-        if (timeShift == 0 || frequency == 0)
+        if (timeShift == 0.0 || frequency == 0.0)
         {
             timeShift = smallest_timestamp;
             frequency = device_core_frequency/1000.0;
+            cpuTime = 0;
+            std::cout << timeShift << "," << frequency << "," << cpuTime << std::endl;
         }
         else
         {
