@@ -239,6 +239,7 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
     program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
         compute_with_storage_grid_size=[8, 8], q_chunk_size=q_chunk_size, k_chunk_size=k_chunk_size
     )
+    torch.manual_seed(0)
 
     Q = torch.randn(b, nh, s, d)
     K = torch.randn(b, nkv, s, d)
@@ -331,13 +332,28 @@ def run_test_sdpa_cb_python():
 
 def run_stress_sdpa_tt(device):
     b = 1
-    nh = 8
+    nh = 1
     nkv = 1
     s = 2048
     d = 128
+    # b = 1
+    # nh = 1
+    # nkv = 1
+    # s = 32
+    # d = 32
+    # b = 1
+    # nh = 1
+    # nkv = 1
+    # s = 32
+    # d = 32
+
+    # torch.set_printoptions(threshold=256*128)
+    # program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+    #     compute_with_storage_grid_size=[8, 8], q_chunk_size=256, k_chunk_size=256
+    # )
 
     program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
-        compute_with_storage_grid_size=[8, 8], q_chunk_size=256, k_chunk_size=256
+        compute_with_storage_grid_size=[1, 1], q_chunk_size=256, k_chunk_size=256
     )
 
     Q = torch.randn(b, nh, s, d)
@@ -355,6 +371,7 @@ def run_stress_sdpa_tt(device):
     print(f"attn_mask: {attn_mask.shape}")
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask)
+    # gt = fa2_fake(Q, K, V, attn_mask)
 
     tt_q = torch2tt_tensor(Q, device)
     tt_k = torch2tt_tensor(K.transpose(-1, -2), device)
@@ -362,14 +379,36 @@ def run_stress_sdpa_tt(device):
     tt_attn_mask = torch2tt_tensor(attn_mask, device)
 
     first_pcc = 0.0
+    first_out = None
     for i in range(1000):
         print(f"Iteration {i}")
         mine = tt_fa2_noconvert(device, tt_q, tt_k, tt_v, tt_attn_mask, program_config)
         out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
+        # Print gt and mine with good torch print options
+        # print(f"GT: {gt}")
+        # print(f"Mine: {mine}")
         if i == 0:
             first_pcc = out_pcc
+            first_out = mine
         else:
+            # print("Mine", mine)
+            # Print indices of mismatch
+            # mismatch =  torch.nonzero(~(first_out == mine))
+            # unique_bad_rows = torch.unique(mismatch[:,2])
+            # unique_bad_cols = torch.unique(mismatch[:,-1])
+            # print("Mismatch", mismatch)
+            # print("Unique bad rows", unique_bad_rows)
+            # print("Unique bad cols", unique_bad_cols)
+            # print("diff", first_out - mine)
+            # # breakpoint()
+            # # Print the values that differ
+            # # print("First out", first_out[mismatch].view(-1)[:10])
+            # # print("Mine", mine[mismatch].view(-1)[:10])
+            # # breakpoint()
+            # print("Mismatch", torch.nonzero(torch.logical_not(gt == mine)))
             assert out_pcc == first_pcc, "ND PCC found"
+            assert torch.allclose(mine, first_out), "ND output found"
+            # pass
 
         print(f"python vs pytorch: {out_pcc}")
         # assert out_pass
@@ -388,12 +427,21 @@ def test_sdpa_python():
     run_test_sdpa_python()
 
 
-@pytest.mark.parametrize("b", [1, 2, 32])
-@pytest.mark.parametrize("nh", [8])
-@pytest.mark.parametrize("nkv", [1])
-@pytest.mark.parametrize("s", [2048])
-@pytest.mark.parametrize("d", [128])
-@pytest.mark.parametrize("q_chunk_size", [256])
-@pytest.mark.parametrize("k_chunk_size", [256])
+b = [1, 2, 32]
+nh = [8, 72]
+nkv = [1]
+s = [2048]
+d = [64, 128]
+q_chunk_size = [128, 256]
+k_chunk_size = [256]
+
+
+@pytest.mark.parametrize("b", b, ids=[f"b={x}" for x in b])
+@pytest.mark.parametrize("nh", nh, ids=[f"nh={x}" for x in nh])
+@pytest.mark.parametrize("nkv", nkv, ids=[f"nkv={x}" for x in nkv])
+@pytest.mark.parametrize("s", s, ids=[f"s={x}" for x in s])
+@pytest.mark.parametrize("d", d, ids=[f"d={x}" for x in d])
+@pytest.mark.parametrize("q_chunk_size", q_chunk_size, ids=[f"q_chunk_size={x}" for x in q_chunk_size])
+@pytest.mark.parametrize("k_chunk_size", k_chunk_size, ids=[f"k_chunk_size={x}" for x in k_chunk_size])
 def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
     run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size)

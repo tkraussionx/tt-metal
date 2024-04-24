@@ -21,28 +21,6 @@
 
 namespace NAMESPACE {
 
-void max_block_inplace(uint32_t in0, uint32_t in1, uint32_t num_tiles) {
-    // inputs come in full, outputs go out full
-
-    constexpr uint32_t dst_reg_0 = 0;
-    constexpr uint32_t dst_reg_1 = 1;
-    cb_wait_front(in0, num_tiles);
-    cb_wait_front(in1, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; ++i) {
-        acquire_dst(tt::DstMode::Half);
-        cb_wait_front(in0, num_tiles);
-        copy_tile_to_dst_init_short(in0);
-        copy_tile(in0, 0, dst_reg_0);
-        copy_tile(in1, i, dst_reg_1);
-        cb_pop_front(in0, 1);
-        max_tile_init();
-        cb_reserve_back(in0, 1);
-        max_tile(dst_reg_0, dst_reg_1);
-        pack_tile(dst_reg_0, in0);
-        cb_push_back(in0, 1);
-        release_dst(tt::DstMode::Half);
-    }
-}
 
 void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
     // //DeviceZoneScopedN("reduce max");
@@ -81,393 +59,6 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     }
 
    reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
-}
-
-void reduce_sum_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
-    // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
-    // Precondition: scale_cb has 1 produced
-    // Precondition: out_cb has rows free
-    // Postcondition: in0_cb has rows*cols consumed
-    // Precondition: scale_cb has 1 produced
-    // Postcondition: out_cb has rows produced
-
-    reduce_init_delta<false, PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
-
-    // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
-
-    const uint32_t num_tiles = rows * cols;
-    cb_wait_front(scale_cb, 1);
-    cb_wait_front(in0_cb, num_tiles);
-
-    constexpr uint32_t reduce_dst_idx = 0;
-
-    for (uint32_t i = 0; i < rows; i++) {
-        acquire_dst(tt::DstMode::Half);
-        for (uint32_t j = 0; j < cols; j++) {
-            cb_wait_front(in0_cb, 1);
-            reduce_tile<PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, 0, 0, reduce_dst_idx);
-            cb_pop_front(in0_cb, 1);
-        }
-
-        cb_reserve_back(out_cb, 1);
-        pack_tile(reduce_dst_idx, out_cb);
-        cb_push_back(out_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
-
-   reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
-}
-
-void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
-    // Precondition: in_cb has num_tiles produced
-    // Postcondition: in_cb has num_tiles produced
-    cb_wait_front(in_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; ++i) {
-        acquire_dst(tt::DstMode::Half);
-        cb_wait_front(in_cb, num_tiles);
-        copy_tile_to_dst_init_short(in_cb); // TODO: might move out of loop
-        copy_tile(in_cb, 0, 0);
-        cb_pop_front(in_cb, 1);
-        recip_tile_init(); // TODO: might move out of loop
-        recip_tile(0);
-        cb_reserve_back(in_cb, 1);
-        pack_tile(0, in_cb);
-        cb_push_back(in_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
-}
-
-// void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
-//     // Precondition: in0_cb has rows*cols produced
-//     // Precondition: in1_cb has rows produced
-//     // Postcondition: in0_cb has rows*cols produced
-//     // Postcondition: in1_cb has rows produced
-
-//     // unpack_reconfig_data_format(in0_cb, in1_cb);
-//     // pack_reconfig_data_format(in0_cb);
-//     cb_wait_front(in0_cb, rows*cols);
-//     cb_wait_front(in1_cb, rows);
-
-//     constexpr uint32_t dst_tiles = SUB_EXP_GRANULARITY;
-//     const uint32_t granularity = cols >> LOG2_SUB_EXP_GRANULARITY;
-//     sub_bcast_cols_init_short(in0_cb, in1_cb);
-//     for (uint32_t i = 0; i < rows; ++i) {
-//         for(uint u = 0; u < granularity; u++) {
-//             cb_wait_front(in0_cb, rows*cols);
-//             tile_regs_acquire();
-//             for (uint32_t j = 0; j < dst_tiles; ++j) {
-//                 sub_tiles_bcast_cols(in0_cb, in1_cb, j, i, j);
-//             }
-//             cb_pop_front(in0_cb, dst_tiles);
-//             cb_reserve_back(in0_cb, dst_tiles);
-
-//             tile_regs_commit();
-//             tile_regs_wait();
-//             for (uint32_t j = 0; j < dst_tiles; ++j) {
-//                 pack_tile(j, in0_cb);
-//             }
-//             tile_regs_release();
-//             cb_push_back(in0_cb, dst_tiles);
-//         }
-//     }
-
-//     for (uint32_t i = 0; i < rows; ++i) {
-//         for(uint u = 0; u < granularity; u++) {
-
-//             cb_wait_front(in0_cb, rows*cols);
-//             tile_regs_acquire();
-//             copy_tile_to_dst_init_short();
-//             for (uint32_t i = 0; i < dst_tiles; i++) {
-//                 copy_tile(in0_cb, i, i);
-//             }
-
-//             exp_tile_init(true);
-//             for (uint32_t i = 0; i < dst_tiles; i++) {
-//                 exp_tile(i, true);
-//             }
-//             cb_pop_front(in0_cb, dst_tiles);
-//             cb_reserve_back(in0_cb, dst_tiles);
-//             tile_regs_commit();
-//             tile_regs_wait();
-//             for (uint32_t j = 0; j < dst_tiles; ++j) {
-//                 pack_tile(j, in0_cb);
-//             }
-//             tile_regs_release();
-//             cb_push_back(in0_cb, dst_tiles);
-//         }
-//     }
-// }
-
-void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
-    // Precondition: in0_cb has rows*cols produced
-    // Precondition: in1_cb has rows produced
-    // Postcondition: in0_cb has rows*cols produced
-    // Postcondition: in1_cb has rows produced
-
-    // unpack_reconfig_data_format(in0_cb, in1_cb);
-    // pack_reconfig_data_format(in0_cb);
-    cb_wait_front(in0_cb, rows*cols);
-    cb_wait_front(in1_cb, rows);
-
-    constexpr uint32_t dst_tiles = SUB_EXP_GRANULARITY;
-    const uint32_t granularity = cols >> LOG2_SUB_EXP_GRANULARITY;
-    for (uint32_t i = 0; i < rows; ++i) {
-        for(uint u = 0; u < granularity; u++) {
-            cb_wait_front(in0_cb, rows*cols);
-            sub_bcast_cols_init_short(in0_cb, in1_cb);
-            tile_regs_acquire();
-            for (uint32_t j = 0; j < dst_tiles; ++j) {
-                sub_tiles_bcast_cols(in0_cb, in1_cb, j, i, j);
-            }
-            cb_pop_front(in0_cb, dst_tiles);
-            cb_reserve_back(in0_cb, dst_tiles);
-
-            exp_tile_init(true);
-            for (uint32_t i = 0; i < dst_tiles; i++) {
-                exp_tile(i, true);
-            }
-            tile_regs_commit();
-
-            tile_regs_wait();
-            for (uint32_t j = 0; j < dst_tiles; ++j) {
-                pack_tile(j, in0_cb);
-            }
-            tile_regs_release();
-            cb_push_back(in0_cb, dst_tiles);
-        }
-    }
-}
-
-void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
-    // Precondition: in0_cb has rows*cols produced
-    // Precondition: in1_cb has rows produced
-    // Postcondition: in0_cb has rows*cols produced
-    // Postcondition: in1_cb has rows consumed
-
-    // unpack_reconfig_data_format(in0_cb, in1_cb);
-    // pack_reconfig_data_format(in0_cb);
-    uint32_t num_tiles = rows * cols;
-    cb_wait_front(in0_cb, num_tiles); /* COMMENT THIS TO GET NON-DETERMINISM :) */
-    cb_wait_front(in1_cb, rows);
-    mul_bcast_cols_init_short(in0_cb, in1_cb);
-    for (uint32_t i = 0; i < rows; ++i) {
-        for (uint32_t j = 0; j < cols; ++j) {
-            acquire_dst(tt::DstMode::Half);
-            cb_wait_front(in0_cb, num_tiles);
-            mul_tiles_bcast_cols(in0_cb, in1_cb, 0, i, 0);
-            cb_pop_front(in0_cb, 1);
-            cb_reserve_back(in0_cb, 1);
-            pack_tile(0, in0_cb);
-            cb_push_back(in0_cb, 1);
-            release_dst(tt::DstMode::Half);
-        }
-    }
-    cb_pop_front(in1_cb, rows);
-}
-
-/* USE THIS VERSION TO GET NON-DETERMINISM :) */
-// void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
-//     // Precondition: in0_cb has num_tiles produced
-//     // Precondition: in1_scalar_cb has 1 produced
-//     // Postcondition: in0_cb has num_tiles produced
-//     // Postcondition: in1_scalar_cb has 1 produced
-//     // unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
-//     // pack_reconfig_data_format(in0_cb);
-//     constexpr uint32_t dst_tiles = MUL_BCAST_GRANULARITY;
-//     const uint32_t granularity = num_tiles >> LOG2_MUL_BCAST_GRANULARITY;
-//     cb_wait_front(in1_scalar_cb, 1);
-//     cb_wait_front(in0_cb, num_tiles);
-//     mul_tiles_bcast_scalar_init_short();
-//     for (uint32_t i = 0; i < granularity; ++i) {
-//         // PACK(DPRINT << "COMPUTE: MUL_BCAST i: " << i << ENDL());
-//         // acquire_dst(tt::DstMode::Half);
-
-//         cb_wait_front(in0_cb, num_tiles);
-//         tile_regs_acquire();
-//         for (uint32_t u = 0; u < dst_tiles; u++) {
-//             mul_tiles_bcast_scalar(in0_cb, in1_scalar_cb, u, 0, u);
-//         }
-//         cb_pop_front(in0_cb, dst_tiles);
-//         cb_reserve_back(in0_cb, dst_tiles);
-//         tile_regs_commit();
-//         tile_regs_wait();
-//         for (uint32_t u = 0; u < dst_tiles; u++) {
-//             pack_tile(u, in0_cb);
-//         }
-//         tile_regs_release();
-//         cb_push_back(in0_cb, dst_tiles);
-//         // pack_tile(0, in0_cb);
-//         // cb_push_back(in0_cb, 1);
-//         // release_dst(tt::DstMode::Half);
-//     }
-// }
-
-
-void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb has num_tiles produced
-    // Precondition: in1_scalar_cb has 1 produced
-    // Postcondition: in0_cb has num_tiles produced
-    // Postcondition: in1_scalar_cb has 1 produced
-    // unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
-    // pack_reconfig_data_format(in0_cb);
-    cb_wait_front(in1_scalar_cb, 1);
-    cb_wait_front(in0_cb, num_tiles);
-    mul_tiles_bcast_scalar_init_short();
-    for (uint32_t i = 0; i < num_tiles; ++i) {
-        // PACK(DPRINT << "COMPUTE: MUL_BCAST i: " << i << ENDL());
-        acquire_dst(tt::DstMode::Half);
-        // ISSUE: unpacker is not blocking
-        // Might be correct because of timing
-        cb_wait_front(in0_cb, num_tiles);
-        // PACK(DPRINT << "COMPUTE: MUL_BCAST wait_front i: " << i << ENDL());
-        mul_tiles_bcast_scalar(in0_cb, in1_scalar_cb, 0, 0, 0);
-        cb_pop_front(in0_cb, 1);
-        // ISSUE: packer doesn't block
-        cb_reserve_back(in0_cb, 1);
-        // PACK(DPRINT << "COMPUTE: MUL_BCAST reserve_back i: " << i << ENDL());
-        pack_tile(0, in0_cb);
-        cb_push_back(in0_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
-}
-
-
-void add_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb and in1_cb have num_tiles produced
-    // Postcondition: in0_cb has num_tiles produced
-    // Postcondition: in1_cb has num_tiles consumed
-
-    add_tiles_init();
-    cb_wait_front(in0_cb, num_tiles);
-    cb_wait_front(in1_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; i++) {
-        acquire_dst(tt::DstMode::Half);
-        cb_wait_front(in0_cb, num_tiles);
-        add_tiles(in0_cb, in1_cb, 0, i, 0);
-        cb_pop_front(in0_cb, 1);
-        cb_reserve_back(in0_cb, 1);
-        pack_tile(0, in0_cb);
-        cb_push_back(in0_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
-
-    cb_pop_front(in1_cb, num_tiles);
-}
-
-void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb and in1_cb have num_tiles produced
-    // Postcondition: in0_cb has num_tiles produced
-    // Postcondition: in1_cb has num_tiles consumed
-
-    mul_tiles_init();
-    cb_wait_front(in0_cb, num_tiles);
-    cb_wait_front(in1_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; i++) {
-        acquire_dst(tt::DstMode::Half);
-        cb_wait_front(in0_cb, num_tiles);
-        mul_tiles(in0_cb, in1_cb, 0, i, 0);
-        cb_pop_front(in0_cb, 1);
-        cb_reserve_back(in0_cb, 1);
-        pack_tile(0, in0_cb);
-        cb_push_back(in0_cb, 1);
-        release_dst(tt::DstMode::Half);
-        // PACK(DPRINT << "COMPUTE: MUL i: " << i << ENDL());
-    }
-
-    cb_pop_front(in1_cb, num_tiles);
-}
-
-
-/* USE THIS VERSION TO GET NON-DETERMINISM :) */
-// void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
-//     // Precondition: in0_cb and in1_cb have num_tiles produced
-//     // Postcondition: out_cb has num_tiles produced
-//     // Postcondition: in0_cb and in1_cb has num_tiles consumed
-
-//     cb_wait_front(in0_cb, num_tiles);
-//     cb_wait_front(in1_cb, num_tiles);
-//     cb_reserve_back(out_cb, num_tiles);
-
-//     const uint dst_tiles = STATS_GRANULARITY;
-//     const uint granularity = num_tiles >> LOG2_STATS_GRANULARITY;
-//     sub_tiles_init();
-//     for (uint32_t u = 0; u < granularity; u++) {
-
-//         tile_regs_acquire();
-//         for (uint32_t i = 0; i < dst_tiles; i++) {
-//             sub_tiles(in0_cb, in1_cb, (u*dst_tiles) + i, (u*dst_tiles) + i, i);
-//         }
-//         tile_regs_commit();
-
-//         tile_regs_wait();
-//         for (uint32_t i = 0; i < dst_tiles; i++) {
-//             pack_tile(i, out_cb);
-//         }
-//         tile_regs_release();
-//         cb_push_back(out_cb, dst_tiles);
-//     }
-
-//     for (uint32_t u = 0; u < granularity; u++) {
-//         cb_wait_front(out_cb, num_tiles);
-//         copy_tile_to_dst_init_short();
-//         tile_regs_acquire();
-//         for (uint32_t i = 0; i < dst_tiles; i++) {
-//             copy_tile(out_cb, (u*dst_tiles) + i, i);
-//         }
-
-//         exp_tile_init(true);
-//         for (uint32_t i = 0; i < dst_tiles; i++) {
-//             exp_tile(i, true);
-//         }
-//         cb_pop_front(out_cb, dst_tiles);
-//         cb_reserve_back(out_cb, dst_tiles);
-//         tile_regs_commit();
-//         tile_regs_wait();
-//         for (uint32_t i = 0; i < dst_tiles; i++) {
-//             pack_tile(i, out_cb);
-//         }
-//         tile_regs_release();
-//         cb_push_back(out_cb, dst_tiles);
-//     }
-
-//     cb_pop_front(in0_cb, num_tiles);
-//     cb_pop_front(in1_cb, num_tiles);
-// }
-
-
-void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb and in1_cb have num_tiles produced
-    // Postcondition: out_cb has num_tiles produced
-    // Postcondition: in0_cb and in1_cb has num_tiles consumed
-
-    cb_wait_front(in0_cb, num_tiles);
-    cb_wait_front(in1_cb, num_tiles);
-    cb_reserve_back(out_cb, num_tiles);
-
-    const uint dst_tiles = STATS_GRANULARITY;
-    const uint granularity = num_tiles >> LOG2_STATS_GRANULARITY;
-    for (uint32_t u = 0; u < granularity; u++) {
-        sub_tiles_init();
-        tile_regs_acquire();
-        for (uint32_t i = 0; i < dst_tiles; i++) {
-            sub_tiles(in0_cb, in1_cb, (u*dst_tiles) + i, (u*dst_tiles) + i, i);
-        }
-
-        exp_tile_init(true);
-        for (uint32_t i = 0; i < dst_tiles; i++) {
-            exp_tile(i, true);
-        }
-        tile_regs_commit();
-        tile_regs_wait();
-        for (uint32_t i = 0; i < dst_tiles; i++) {
-            pack_tile(i, out_cb);
-        }
-        tile_regs_release();
-        cb_push_back(out_cb, dst_tiles);
-    }
-
-    cb_pop_front(in0_cb, num_tiles);
-    cb_pop_front(in1_cb, num_tiles);
 }
 
 
@@ -642,11 +233,11 @@ void MAIN {
     mm_init();
 
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
-        // PACK(DPRINT << "COMPUTE: "  << "nb=" << nb << ENDL());
+
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
-            // PACK(DPRINT << "COMPUTE: "  << "nq=" << nq << ENDL());
+
             for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
-                // PACK(DPRINT << "COMPUTE: "  << "q_chunk=" << q_chunk << ENDL());
+
                 // Get Q chunk
                 const uint32_t q_low_idx = q_chunk * Sq_chunk_t; // This is the sequence index of the first tile of this chunk
                 const uint32_t q_high_idx = q_low_idx + Sq_chunk_t;
@@ -654,8 +245,7 @@ void MAIN {
 
                 // loop while k_low < q_high
                 for (uint32_t k_chunk = 0; (k_chunk * Sk_chunk_t) < q_high_idx; ++k_chunk) {
-                    // DeviceZoneScopedN("K inner loop");
-                    // PACK(DPRINT << "COMPUTE: "  << "k_chunk=" << k_chunk << ENDL());
+
                     const uint32_t k_low_idx = k_chunk * Sk_chunk_t;
                     const uint32_t k_high_idx = k_low_idx + Sk_chunk_t;
 
@@ -664,75 +254,21 @@ void MAIN {
                     matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w);
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
-                    {
-                        // DeviceZoneScopedN("stats 1");
-                        /* QK *= SCALE */
-                        cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
-                        cb_pop_front(cb_qk_im, qk_chunk_tiles); // TODO: Fold into following push_back
-
-                        // Finding the diagonal is harder now that q_chunk_size and k_chunk_size can differ
-                        // Q-range = [q_low, q_high)
-                        // K-range = [k_low, k_high)
-                        // does_overlap = not (q_low >= k_high or k_low >= q_high)
-                        // TODO: Due to loop bounds, we should never have k_low >= q_high. Can simplify this conditional check
-                        if (!(q_low_idx >= k_high_idx || k_low_idx >= q_high_idx)) {
-                            /* QK += MASK */
-                            cb_push_back(cb_qk_im, qk_chunk_tiles);
-                            add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
-                            cb_pop_front(cb_qk_im, qk_chunk_tiles);
-                        }
 
 
-                        /* cb_cur_max = max(QK, dim=-1)*/
-                        cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
+                    if (!(q_low_idx >= k_high_idx || k_low_idx >= q_high_idx)) {
 
-                        if (k_chunk > 0) {
-                            /* cb_cur_max = maximum(cb_prev_max, cb_cur_max) */
-                            // cb_prev_max and cb_cur_max are full
-                            max_block_inplace(cb_cur_max, cb_prev_max, Sq_chunk_t);
-                            // cb_prev_max and cb_cur_max are full
-                        }
+                        cb_wait_front(cb_mask_in, qk_chunk_tiles);
+                        cb_pop_front(cb_mask_in, qk_chunk_tiles);
 
                     }
 
-                    {
-                        // DeviceZoneScopedN("exp");
-                        /* QK -= cb_cur_max */
-                        /* QK = exp(QK)*/
-                        cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        sub_exp_block_bcast_cols_inplace(cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
-                        cb_pop_front(cb_qk_im, qk_chunk_tiles);
-                    }
+                    // START @reem: comment out this following block to get determinism
+                    cb_push_back(cb_qk_im, qk_chunk_tiles);
+                    reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
+                    // END
 
-                    {
-                        // DeviceZoneScopedN("stats 2");
-                        /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
-                        cb_push_back(cb_qk_im, qk_chunk_tiles);
-                        reduce_sum_c(cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t);
-
-                        // cb_cur_sum full, cb_qk_im empty
-                        // DEBUG: free cb_cur_sum
-                        // cb_pop_front(cb_cur_sum, S_chunk_t);
-
-                        if (k_chunk > 0) {
-                            /* cb_exp_max_diff = torch.exp(cb_prev_max - cb_cur_max) */
-                            sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, Sq_chunk_t);
-                            // make cb_prev_max and cb_cur_max full again
-                            cb_push_back(cb_prev_max, Sq_chunk_t);
-                            cb_push_back(cb_cur_max, Sq_chunk_t);
-                            /* cb_prev_sum *= cb_exp_max_diff */
-                            mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
-                            // cb_prev_sum full, cb_exp_max_diff empty
-                            cb_push_back(cb_exp_max_diff, Sq_chunk_t);
-                            // cb_exp_max_diff full
-                            /* cb_cur_sum += cb_prev_sum */
-                            add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-                            // cb_cur_sum full, cb_prev_sum empty
-                        }
-
-                    }
+                    cb_pop_front(cb_cur_max, Sq_chunk_t);
 
 
                     /* OUT_IM = QK @ V_CHUNK */
@@ -744,64 +280,16 @@ void MAIN {
                     cb_reserve_back(cb_out_im, out_chunk_tiles);
                     cb_push_back(cb_out_im, out_chunk_tiles);
 
-
-                    {
-                        // DeviceZoneScopedN("Finalize loop");
-                        /* OUT_ACC += OUT_IM */
-                        if (k_chunk == 0) {
-                            copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
-                        } else {
-                            /* cb_out_accumulate_im *= cb_exp_max_diff */
-                            // cb_wait_front(cb_out_accumulate_im, out_chunk_tiles); // DEBUG ND!
-                            mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, Sq_chunk_t, DHt);
-                            // cb_exp_max_diff is now empty
-
-                            /* cb_out_accumulate_im += cb_out_im */
-                            add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
-                        }
-
-
-
-                        // Set cb_prev_sum and cb_prev_max
-
-                        if (k_chunk > 0) {
-                            // Free up prev_max
-                            cb_pop_front(cb_prev_max, Sq_chunk_t);
-
-                        }
-                        // cb_cur_max is full, cb_prev_max is empty
-                        copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
-                        // cb_cur_max is empty, cb_prev_max is full
-
-                        // cb_cur_sum is full, cb_prev_sum is empty
-                        copy_block(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-                        // cb_cur_sum is empty, cb_prev_sum is full
+                    if (k_chunk == 0) {
+                        copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
+                    } else {
+                        cb_pop_front(cb_out_im, out_chunk_tiles);
                     }
-
-
                 }
 
-                {
-                    //DeviceZoneScopedN("Finalize Q loop");
-                    // free up cb_prev_max after K chunks
-                    cb_pop_front(cb_prev_max, Sq_chunk_t);
-                    cb_pop_front(cb_prev_sum, Sq_chunk_t);
+                copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
 
-                    /* cb_cur_sum = 1.0 / cb_cur_sum */
-                    cb_push_back(cb_cur_sum, Sq_chunk_t);
-                    recip_block_inplace(cb_cur_sum, Sq_chunk_t);
-                    // cb_cur_sum is full
-
-                    /* cb_out_accumulate_im *= cb_cur_sum */
-                    mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_cur_sum, Sq_chunk_t, DHt);
-                    // cb_cur_sum is empty, cb_out_accumulate_im is full
-
-                    copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
-
-                    cb_pop_front(cb_q_in, q_chunk_tiles);
-                }
-
-
+                cb_pop_front(cb_q_in, q_chunk_tiles);
             }
         }
     }
