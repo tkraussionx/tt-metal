@@ -871,20 +871,15 @@ struct InterleavedAddrGenFast {
         uint32_t src_addr;
         uint32_t src_noc_xy;
         uint32_t src_addr2;
-        uint32_t src_noc_xy2;
         uint32_t dest_addr2;
 
         if constexpr (DRAM) {
             bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(id);
-            uint32_t tile_size = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id));
-            src_addr = tile_size + this->bank_base_address + offset;
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, 2 * udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) + this->bank_base_address + offset;
             src_addr += bank_to_dram_offset[bank_id];
             src_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
 
-            DEBUG_STATUS('N', 'R', 'T', 'W');
-            DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
             while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
-            DEBUG_STATUS('N', 'R', 'T', 'D');
 
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
@@ -893,15 +888,13 @@ struct InterleavedAddrGenFast {
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
             noc_reads_num_issued[noc_index] += 1;
 
-            src_addr2 = src_addr + tile_size;
-            src_addr2 += bank_to_dram_offset[bank_id];
-            src_noc_xy2 = dram_bank_to_noc_xy[noc_index][bank_id];
-            dest_addr2 = dest_addr + tile_size;
+            src_addr2 = src_addr + this->page_size;
+            dest_addr2 = dest_addr + this->page_size;
 
             while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr2);
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr2);      // (uint32_t)src_addr
-            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy2);   // src_addr >> 32
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
             NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
             noc_reads_num_issued[noc_index] += 1;

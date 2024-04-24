@@ -125,8 +125,8 @@ void kernel_main() {
     constexpr DataFormat in1_data_format = get_dataformat(cb_id_in1);
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr,
-        .page_size = in1_single_page_size_bytes,
-        // .page_size = in1_single_tile_size_bytes,
+        // .page_size = in1_single_page_size_bytes,
+        .page_size = in1_single_tile_size_bytes,
         .data_format = in1_data_format
     };
     #endif
@@ -176,6 +176,8 @@ void kernel_main() {
     // DPRINT << "IN1 in1_tensor_stride_h : " << in1_tensor_stride_h << ENDL();
     // DPRINT << "IN1 in1_tensor_next_block_stride : " << in1_tensor_next_block_stride << ENDL();
     // DPRINT << "IN1 in1_single_page_size_bytes : " << in1_single_page_size_bytes << ENDL();
+    // DPRINT << "IN1 in1_num_tiles_per_page : " << in1_num_tiles_per_page << ENDL();
+
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
         for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -193,8 +195,10 @@ void kernel_main() {
                 for(uint32_t w = 0; w < num_pages_in_in1_block_w; ++w) {
                     if (w < (last_block_w / in1_num_tiles_per_page)) {
                         // DPRINT << "Reading in1 tensor tile id: " << in1_tensor_tile_id << HEX() << " l1_write_addr_in1: 0x"<< l1_write_addr_in1 << DEC() << ENDL();
-                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, in1_num_tiles_per_page);
-                        // noc_async_read_tile_2page(in1_tensor_tile_id, s1, l1_write_addr_in1, 0);
+                        // noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, in1_num_tiles_per_page);
+                        noc_async_read_tile_2page(in1_tensor_tile_id, s1, l1_write_addr_in1, 0);
+
+
                     }
                     l1_write_addr_in1 += in1_single_page_size_bytes;
                     in1_tensor_tile_id += in1_tensor_stride_w;
