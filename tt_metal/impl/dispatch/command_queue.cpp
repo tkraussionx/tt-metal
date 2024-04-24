@@ -967,6 +967,8 @@ void EnqueueRecordEventCommand::process() {
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
+    log_info(tt::LogMetal, "EnqueueRecordEventCommand issued fetch_size={}, commands={}", cmd_sequence_sizeB, command_sequence.cmd_vector());
+
 }
 
 EnqueueWaitForEventCommand::EnqueueWaitForEventCommand(
@@ -1049,7 +1051,8 @@ void EnqueueTraceCommand::process() {
             }
         }
 
-        bool stall_flag = i == 1 ? true : false;
+        bool use_prefetcher_stall = tt::parse_env("USE_STALL", true);
+        bool stall_flag = use_prefetcher_stall && i == 1 ? true : false;
         this->manager.issue_queue_push_back(kCmdSeqSizes[i], this->command_queue_id);
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
         this->manager.fetch_queue_write(kCmdSeqSizes[i], this->command_queue_id, stall_flag);
@@ -1480,7 +1483,9 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     this->expected_num_workers_completed += trace_inst.desc->num_completion_worker_cores;
 
     if (blocking) {
+        log_info(tt::LogMetal, "Before Finish for {}", __FUNCTION__);
         this->finish();
+        log_info(tt::LogMetal, "After Finish for {}", __FUNCTION__);
     } else {
         std::shared_ptr<Event> event = std::make_shared<Event>();
         this->enqueue_record_event(event);
@@ -1667,6 +1672,8 @@ void HWCommandQueue::read_completion_queue() {
     tracy::SetThreadName("COMPLETION QUEUE");
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
+
+    log_info(tt::LogMetal, "KCM Inside {}", __FUNCTION__);
     while (true) {
         if (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             uint32_t num_events_to_read = this->num_entries_in_completion_q - this->num_completed_completion_q_reads;
@@ -1674,7 +1681,9 @@ void HWCommandQueue::read_completion_queue() {
 
                 std::variant<detail::ReadBufferDescriptor, detail::ReadEventDescriptor> read_descriptor = *(this->issued_completion_q_reads.pop());
 
+                log_info(tt::LogMetal, "KCM {} Before CQ Wait", __FUNCTION__);
                 this->manager.completion_queue_wait_front(this->id, this->exit_condition); // CQ DISPATCHER IS NOT HANDSHAKING WITH HOST RN
+                log_info(tt::LogMetal, "KCM {} After CQ Wait", __FUNCTION__);
 
                 if (this->exit_condition) {  // Early exit
                     return;
@@ -1708,6 +1717,7 @@ void HWCommandQueue::read_completion_queue() {
         }
         std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
+    log_info(tt::LogMetal, "KCM Finished {}", __FUNCTION__);
 }
 
 void HWCommandQueue::finish() {
@@ -1731,7 +1741,22 @@ void HWCommandQueue::finish() {
             }
         }
     } else {
-        while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads);
+
+        uint32_t attempts = 0;
+        while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads){
+
+            if (attempts++ == 1000) {
+                log_info(tt::LogMetal, "Waiting for Finish to complete. attempts: {} num_entries_in_completion_q: {} num_completed_completion_q_reads: {}", attempts, this->num_entries_in_completion_q, this->num_completed_completion_q_reads);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            // Hack to allow exit out of this loop in case of hang, for debug.
+            // attempts++;
+            // if (attempts > 2) {
+            //     log_info(tt::LogMetal, "Finish is taking too long. Exiting.");
+            //     break;
+            // }
+        };
     }
 }
 

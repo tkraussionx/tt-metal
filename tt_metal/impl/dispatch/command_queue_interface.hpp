@@ -525,6 +525,8 @@ class SystemMemoryManager {
         }
 
         tt::Cluster::instance().write_reg(&command_size_16B, this->prefetcher_cores[cq_id], this->prefetch_q_dev_ptrs[cq_id]);
+        log_info(tt::LogMetal, "Writing FetchQ entry {} Bytes to address 0x{:x} (Entry idx: {})",
+            command_size_B, this->prefetch_q_dev_ptrs[cq_id], (this->prefetch_q_dev_ptrs[cq_id] - dispatch_constants::PREFETCH_Q_BASE) / sizeof(dispatch_constants::prefetch_q_entry_type));
         this->prefetch_q_dev_ptrs[cq_id] += sizeof(dispatch_constants::prefetch_q_entry_type);
         tt_driver_atomics::sfence();
     }

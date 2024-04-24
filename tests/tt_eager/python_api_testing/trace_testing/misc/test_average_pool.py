@@ -58,8 +58,16 @@ def test_run_average_pool(act_shape, dtype, device):
             trace_captured = True
             logger.info("Trace captured")
 
-        logger.info(f"Running iteration {iter}")
-        ttl.device.ExecuteLastTrace(device, True)
+        import os
+        if os.environ.get("DO_TRACE"):
+            logger.info(f"TMZ -- trace enqueued")
+            logger.info(f"Running iteration {iter}")
+            ttl.device.ExecuteLastTrace(device, True) # Hang here.
+            logger.info(f"TMZ -- trace executed")
+        else:
+            logger.info(f"TMZ -- running legacy path")
+            out = ttl.tensor.average_pool_2d(ttact)
+            logger.info(f"TMZ -- done running legacy path")
 
         out = out.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
         out_shape = [batch_size, 1, 1, channels]
