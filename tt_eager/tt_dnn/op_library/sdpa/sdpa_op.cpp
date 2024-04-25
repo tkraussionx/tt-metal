@@ -36,40 +36,47 @@ void ScaledDotProductAttention::validate(const std::vector<Tensor> &input_tensor
         TT_FATAL((input_tensor.get_layout() == Layout::TILE), "Inputs to softmax must be tilized");
         TT_FATAL(input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::BFLOAT8_B);
         TT_FATAL(input_tensor.is_sharded() == false);
+
+        TT_FATAL(input_tensor.buffer()->buffer_type() == tt_metal::BufferType::DRAM);
     }
 
-    if (optional_input_tensors.size() == 1) {
-        if (optional_input_tensors.at(0).has_value()) {
-            auto& mask = optional_input_tensors.at(0).value();
-            TT_FATAL(mask.storage_type() == StorageType::DEVICE, "Operands to softmax need to be on device!");
-            TT_FATAL(input_tensors.at(0).device() == mask.device());
-            TT_FATAL(mask.get_layout() == Layout::TILE);
-            // TODO: Check mask shape
-            // TT_FATAL(mask.get_legacy_shape() == input_tensors.at(0).get_legacy_shape());
-        }
-    }
+
+    auto mask = optional_input_tensors.at(0).value();
+    TT_FATAL(mask.storage_type() == StorageType::DEVICE, "Operands to softmax need to be on device!");
+    TT_FATAL(input_tensors.at(0).device() == mask.device());
+    TT_FATAL(mask.get_layout() == Layout::TILE);
+    TT_FATAL(mask.get_dtype() == DataType::BFLOAT16 || mask.get_dtype() == DataType::BFLOAT8_B);
+
+    TT_FATAL(mask.buffer()->buffer_type() == tt_metal::BufferType::DRAM);
+
+    // TT_FATAL(mask.get_legacy_shape() == input_tensors.at(0).get_legacy_shape());
 
     const auto q_shape = input_tensors.at(0).get_legacy_shape();
     const auto k_shape = input_tensors.at(1).get_legacy_shape();
     const auto v_shape = input_tensors.at(2).get_legacy_shape();
+    const auto mask_shape = mask.get_legacy_shape();
 
     // assert all dataformats are the same
-    TT_FATAL(input_tensors.at(0).get_dtype() == input_tensors.at(1).get_dtype() && input_tensors.at(0).get_dtype() == input_tensors.at(2).get_dtype());
+    TT_FATAL(input_tensors.at(0).get_dtype() == input_tensors.at(1).get_dtype() && input_tensors.at(0).get_dtype() == input_tensors.at(2).get_dtype() && input_tensors.at(0).get_dtype() == mask.get_dtype());
 
     // Check sequence lengths
-    TT_FATAL(q_shape[-2] == k_shape[-1] && q_shape[-2] == v_shape[-2]);
+    TT_FATAL(q_shape[-2] == k_shape[-2] && q_shape[-2] == v_shape[-2]);
+    TT_FATAL(q_shape[-2] == mask_shape[-2] && q_shape[-2] == mask_shape[-1]);
 
     // Check batch size
     TT_FATAL(q_shape[-4] == k_shape[-4] && q_shape[-4] == v_shape[-4]);
+    TT_FATAL(q_shape[-4] == mask_shape[-4]);
 
     // Check hidden size
-    TT_FATAL(q_shape[-1] == k_shape[-2] && q_shape[-1] == v_shape[-1]);
+    TT_FATAL(q_shape[-1] == k_shape[-1] && q_shape[-1] == v_shape[-1]);
 
     // Check kv heads
     TT_FATAL(k_shape[-3] == v_shape[-3]);
 
     // Check qkv heads
     TT_FATAL(q_shape[-3] >= k_shape[-3]);
+
+    TT_FATAL(mask_shape[-3] == 1);
 
     std::visit(
         [&](const auto& program_config) {
@@ -81,7 +88,7 @@ void ScaledDotProductAttention::validate(const std::vector<Tensor> &input_tensor
                 auto k_chunk_size = program_config.k_chunk_size;
 
                 TT_FATAL(q_shape[-2] % q_chunk_size == 0);
-                TT_FATAL(k_shape[-1] % k_chunk_size == 0);
+                TT_FATAL(k_shape[-2] % k_chunk_size == 0);
 
                 // For now, assert that chunk sizes are the same
                 // TT_FATAL(q_chunk_size == k_chunk_size);
@@ -145,33 +152,25 @@ operation::ProgramWithCallbacks ScaledDotProductAttention::create_program(
 
 // What is this?
 tt::stl::reflection::Attributes ScaledDotProductAttention::attributes() const {
+    // fill out with everything in struct
     return {
         {"scale", this->scale},
         {"output_mem_config", this->output_mem_config},
+        {"program_config", this->program_config},
+        {"is_causal", this->is_causal},
+        {"compute_kernel_config", this->compute_kernel_config}
     };
-}
-
-
-const operation::Hash ScaledDotProductAttention::compute_program_hash(
-    const std::vector<Tensor> &input_tensors,
-    const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
-    return operation::hash_operation<ScaledDotProductAttention>(
-        input_tensors.at(0).memory_config(),
-        input_tensors.at(0).get_dtype(),
-        optional_input_tensors.at(0).has_value() ? std::optional{optional_input_tensors.at(0).value().memory_config()}
-                                                 : std::nullopt,
-        optional_input_tensors.at(0).has_value() ? std::optional{optional_input_tensors.at(0).value().get_dtype()}
-                                                 : std::nullopt,
-        this->output_mem_config);
 }
 
 
 namespace transformers {
 // Function which is bound to the Python API
-Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> attn_mask, const bool is_causal, std::optional<float> scale, const MemoryConfig& output_mem_config, const SDPAProgramConfig& program_config, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
-    // TODO: Determine if fp32 acc and L1 acc is necessary
-    auto kernel_config_val = init_device_compute_kernel_config(input_tensor_q.device()->arch(), compute_kernel_config, MathFidelity::HiFi4, false, false, false);
-    return operation::run(ScaledDotProductAttention{.scale=scale, .output_mem_config=output_mem_config, .program_config=program_config, .is_causal=is_causal, .compute_kernel_config=kernel_config_val}, {input_tensor_q, input_tensor_k, input_tensor_v}, {attn_mask}).at(0);
+Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> causal_mask, const bool is_causal, std::optional<float> scale, const MemoryConfig& output_mem_config, const SDPAProgramConfig& program_config, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+    // make sure output is dram
+    TT_FATAL(output_mem_config.buffer_type() == tt_metal::BufferType::DRAM);
+
+    auto kernel_config_val = init_device_compute_kernel_config(input_tensor_q.device()->arch(), compute_kernel_config, MathFidelity::HiFi2, true, false, false);
+    return operation::run(ScaledDotProductAttention{.scale=scale, .output_mem_config=output_mem_config, .program_config=program_config, .is_causal=is_causal, .compute_kernel_config=kernel_config_val}, {input_tensor_q, input_tensor_k, input_tensor_v}, {causal_mask}).at(0);
 }
 
 

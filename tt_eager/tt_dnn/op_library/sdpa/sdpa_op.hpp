@@ -61,10 +61,6 @@ struct ScaledDotProductAttention {
         std::vector<Tensor> &output_tensors
     ) const;
     tt::stl::reflection::Attributes attributes() const;
-
-    const operation::Hash compute_program_hash(
-        const std::vector<Tensor> &input_tensors,
-        const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
 };
 
 operation::ProgramWithCallbacks sdpa_multi_core(
@@ -72,7 +68,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const Tensor &input_tensor_k,
     const Tensor &input_tensor_v,
     const Tensor &output_tensor,
-    const std::optional<const Tensor> attn_mask,
+    const std::optional<const Tensor> causal_mask,
     std::optional<float> scale,
     bool is_causal,
     std::size_t q_chunk_size,
@@ -83,7 +79,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 namespace transformers {
 
-Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> attn_mask = std::nullopt, const bool is_causal = true, std::optional<float> scale = std::nullopt, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, const SDPAProgramConfig& program_config = SDPADefaultProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
+Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> causal_mask = std::nullopt, const bool is_causal = true, std::optional<float> scale = std::nullopt, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, const SDPAProgramConfig& program_config = SDPADefaultProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
 
 }   // namespace transformers
 
