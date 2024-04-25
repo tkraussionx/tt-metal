@@ -91,5 +91,5 @@ class TtTransformerBlock(torch.nn.Module):
         mlp_norm = self.ffn_norm(h)
         r = self.feed_forward.forward(mlp_norm)
         ttnn.deallocate(mlp_norm)
-        out = ttnn.add(h, r, memory_config=ttnn.L1_MEMORY_CONFIG)
+        out = ttnn.add(h, r, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         return out

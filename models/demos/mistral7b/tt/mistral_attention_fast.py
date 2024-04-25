@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from time import time
 from typing import List, Optional
 import torch
 from torch import nn
@@ -304,6 +305,7 @@ class TtMistralAttention(nn.Module):
                 dtype=self.dtype,
             )
 
+            # Work around an unsolved and unreported and non-deterministic hang
             # ttnn.deallocate(x, force=False)
 
             ###
@@ -320,7 +322,7 @@ class TtMistralAttention(nn.Module):
                 transpose_k_heads=False,
                 output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
             )
-            ttnn.deallocate(xqkv_fused, force=False)
+            # xqkv_fused.deallocate()
 
             # Update rotary matrix on device
             rotary_mat = self.rot_mat[current_pos]
@@ -340,7 +342,7 @@ class TtMistralAttention(nn.Module):
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )
-            ttnn.deallocate(k_heads_1KBD, force=False)
+            # k_heads_1KBD.deallocate()
 
             ###
             # KV update
@@ -352,8 +354,8 @@ class TtMistralAttention(nn.Module):
             ttnn.experimental.tensor.update_cache(values_BKCD, v_heads_1KBD, current_pos)
             self.layer_past_list[i] = [keys_BKCD, values_BKCD]
 
-            ttnn.deallocate(k_heads_1KBD_rot, force=False)
-            ttnn.deallocate(v_heads_1KBD, force=False)
+            # k_heads_1KBD_rot.deallocate()
+            # v_heads_1KBD.deallocate()
 
             ###
             # Attention
@@ -365,20 +367,20 @@ class TtMistralAttention(nn.Module):
             keys_1B_8D_P = ttnn.to_memory_config(
                 keys_1B_8D_P_preshard, self.model_config["KEYS_BATCHED_CONFIG"](padded_layer_past_len)
             )
-            ttnn.deallocate(keys_BKPD, force=False)
-            ttnn.deallocate(keys_1B_P_8D, force=False)
-            ttnn.deallocate(keys_1B_8D_P_preshard, force=False)
+            # keys_BKPD.deallocate()
+            # keys_1B_P_8D.deallocate()
+            # keys_1B_8D_P_preshard.deallocate()
 
             # reshape values
             values_BKPD = values_BKCD[:, :, :padded_layer_past_len, :]
             values_B1_P_8D = ttnn.transformer.concatenate_heads(values_BKPD)
             values_1B_P_8D_preshard = ttnn.unsqueeze_to_4D(values_B1_P_8D)  # [:, :, :layer_slice, :]
-            ttnn.deallocate(values_BKPD, force=False)
+            # values_BKPD.deallocate()
 
             # reshape and shard queries
             q_heads_1QBD = q_heads_1QBD * head_dim_1QBD  # Scale q_heads instead of QK before softmax
             q_heads_1BQD = ttnn.permute(q_heads_1QBD, (0, 2, 1, 3))
-            ttnn.deallocate(q_heads_1QBD, force=False)
+            # q_heads_1QBD.deallocate()
             q_heads_1B_Q_8D_preshard = (
                 ttnn.matmul(
                     q_heads_1BQD,
@@ -388,11 +390,11 @@ class TtMistralAttention(nn.Module):
                 )
                 * mask_Q_8D
             )
-            ttnn.deallocate(q_heads_1BQD, force=False)
+            # q_heads_1BQD.deallocate()
             q_heads_1B_Q_8D = ttnn.to_memory_config(
                 q_heads_1B_Q_8D_preshard, self.model_config["QUERIES_BATCHED_CONFIG"]
             )
-            ttnn.deallocate(q_heads_1B_Q_8D_preshard, force=False)
+            # q_heads_1B_Q_8D_preshard.deallocate()
 
             # scores matmul
             attn_1BQP = ttnn.matmul(
@@ -403,8 +405,8 @@ class TtMistralAttention(nn.Module):
                 compute_kernel_config=self.compute_kernel_config_attn,
                 dtype=ttnn.bfloat16,
             )
-            ttnn.deallocate(keys_1B_8D_P, force=False)
-            ttnn.deallocate(q_heads_1B_Q_8D, force=False)
+            # keys_1B_8D_P.deallocate()
+            # q_heads_1B_Q_8D.deallocate()
 
             # scores softmax
             attn_1BQP_presoftmax = attn_1BQP[:, :, :, :layer_slice]
@@ -415,7 +417,7 @@ class TtMistralAttention(nn.Module):
             values_1B_P_8D = ttnn.to_memory_config(
                 values_1B_P_8D_preshard, self.model_config["VALUES_BATCHED_CONFIG"](padded_layer_past_len)
             )
-            ttnn.deallocate(values_1B_P_8D_preshard, force=False)
+            # values_1B_P_8D_preshard.deallocate()
 
             # attention matmul
             attn_output_1B_Q_8D = ttnn.matmul(
@@ -427,8 +429,8 @@ class TtMistralAttention(nn.Module):
                 compute_kernel_config=self.compute_kernel_config_attn,
             )
 
-            ttnn.deallocate(attn_1BQP, force=False)
-            ttnn.deallocate(values_1B_P_8D, force=False)
+            # attn_1BQP.deallocate()
+            # values_1B_P_8D.deallocate()
 
             # reduce and reshape
             attn_output_1BQD = ttnn.matmul(
@@ -439,13 +441,13 @@ class TtMistralAttention(nn.Module):
             )
             attn_output_1QBD = ttnn.permute(attn_output_1BQD, (0, 2, 1, 3))
 
-            ttnn.deallocate(attn_output_1BQD, force=False)
-            ttnn.deallocate(attn_output_1B_Q_8D, force=False)
+            # attn_output_1BQD.deallocate()
+            # attn_output_1B_Q_8D.deallocate()
 
             attn_output_11BH = ttnn.transformer.concatenate_heads(
                 attn_output_1QBD, memory_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"]
             )
-            ttnn.deallocate(attn_output_1QBD, force=False)
+            # attn_output_1QBD.deallocate()
 
             # dense output matmul
             dense_out = ttnn.linear(
@@ -455,8 +457,34 @@ class TtMistralAttention(nn.Module):
                 memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )
-            ttnn.deallocate(attn_output_11BH, force=False)
+            # attn_output_11BH.deallocate()
 
             dense_outputs.append(dense_out)
+
+            start = time()
+            xqkv_fused.deallocate()
+            k_heads_1KBD.deallocate()
+            k_heads_1KBD_rot.deallocate()
+            v_heads_1KBD.deallocate()
+            keys_BKPD.deallocate()
+            keys_1B_P_8D.deallocate()
+            keys_1B_8D_P_preshard.deallocate()
+            values_BKPD.deallocate()
+            q_heads_1QBD.deallocate()
+            q_heads_1BQD.deallocate()
+            q_heads_1B_Q_8D_preshard.deallocate()
+            keys_1B_8D_P.deallocate()
+            q_heads_1B_Q_8D.deallocate()
+            attn_1BQP.deallocate()
+            attn_1BQP_presoftmax.deallocate()
+            values_1B_P_8D.deallocate()
+            attn_output_1BQD.deallocate()
+            attn_output_1QBD.deallocate()
+            attn_output_1B_Q_8D.deallocate()
+            attn_output_1BQD.deallocate()
+            attn_output_1QBD.deallocate()
+            attn_output_11BH.deallocate()
+            duration = time() - start
+            print(f"22 deallocate calls took: {duration * 1e3:.3f} ms")
 
         return dense_outputs
