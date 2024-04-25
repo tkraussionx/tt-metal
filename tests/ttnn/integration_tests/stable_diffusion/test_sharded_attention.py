@@ -998,3 +998,120 @@ def test_q_and_kv(
 
     print(output)
     assert passing
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("size", [4096])
+@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
+@pytest.mark.parametrize("output_interleaved", [True, False])
+def test_out(
+    device,
+    size,
+    data_format,
+    output_interleaved,
+    function_level_defaults,
+):
+    # Test matmul attention sequence with InterleavedToShardedPartialOp
+    sizes = {4096: [1, 8192, 512, 320]}
+    grid_sizes = {4096: (4, 8)}
+    B, M, K, N = sizes[size]
+    grid_size = grid_sizes[size]
+    compute_grid_size = device.compute_with_storage_grid_size()
+    num_cores = grid_size[0] * grid_size[1]
+    if num_cores > (compute_grid_size.x * compute_grid_size.y):
+        pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
+
+    in_0_shape = [1, B, M, K]
+    in_1_shape = [1, B, K, N]
+
+    in_0_torch = torch.randn(in_0_shape).bfloat16().float()
+    in_1_torch = torch.randn(in_1_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    l1_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+
+    height_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    block_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    # compare output to regular case
+    in_0 = torch2tt_tensor(
+        in_0_torch,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    in_1 = torch2tt_tensor(
+        in_1_torch,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    passing = True
+    output = None
+
+    in_0_sharded = ttl.tensor.interleaved_to_sharded(
+        in_0,
+        grid_size,
+        [M // grid_size[1], K // grid_size[0]],
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
+    M, K = in_0.shape[-2], in_0.shape[-1]
+    N = in_1.shape[-1]
+    in0_block_h, in0_block_w, out_subblock_h, out_subblock_w, out_block_h, out_block_w = determine_blocking(
+        M, K, N, grid_size
+    )
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+    mm = ttl.operations.primary.matmul(
+        in_0_sharded,
+        in_1,
+        program_config=program_config,
+        output_mem_config=l1_interleaved_memory_config if output_interleaved else block_sharded_memory_config,
+        output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+        compute_kernel_config=compute_kernel_config,
+    )
+    in_0_sharded.deallocate()
+
+    mm_out_torch = tt2torch_tensor(mm)
+
+    out_torch = in_0_torch @ in_1_torch
+
+    passing, output = comp_pcc(mm_out_torch, out_torch)
+
+    print(output)
+    assert passing
