@@ -166,7 +166,7 @@ class TtFalconModelShared:
             attention_mask_bool = attention_mask_bool.triu(diagonal=1)
 
             attention_mask_bool_chunks = torch.chunk(
-                (attention_mask_bool * -100000).expand(-1, 16 * len(self.devices), -1, -1),
+                (attention_mask_bool * -100000).expand(-1, len(self.devices), -1, -1),
                 len(self.devices),
                 1,
             )
