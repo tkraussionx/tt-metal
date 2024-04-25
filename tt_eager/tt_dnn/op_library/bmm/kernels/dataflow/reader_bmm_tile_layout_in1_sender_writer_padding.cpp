@@ -184,6 +184,8 @@ void kernel_main() {
     #endif
     #endif
 
+    const uint32_t in1_block_w_bytes = in1_block_w * in1_single_tile_size_bytes;
+
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
         for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -198,7 +200,10 @@ void kernel_main() {
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
             for(uint32_t h = 0; h < in1_block_h; ++h) {
                 uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
-                uint32_t trid = h < 8 ? 1 : 2;
+                uint32_t trid = h + 1;
+                // uint32_t trid = (h >> 1) + 1;
+                // uint32_t trid = (h >> 2) + 1;
+                // uint32_t trid = (h >> 3) + 1;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
 
@@ -206,13 +211,13 @@ void kernel_main() {
                             #ifdef USE_VC
                             noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK), trid);
                             #else
-                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, trid);
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, 0, trid);
                             #endif
                         #else
                             #ifdef USE_VC
                             noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, (in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK));
                             #else
-                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0);
                             #endif
                         #endif
                     }
@@ -247,13 +252,17 @@ void kernel_main() {
             #ifdef USE_PARTIAL_BARRIER
             for (uint32_t h = 0; h < in1_block_h; ++h) {
                 // Barrier! make sure the reads are done
-                uint32_t trid = h < 8 ? 1 : 2;
+                uint32_t trid = h + 1;
+                // uint32_t trid = (h >> 1) + 1;
+                // uint32_t trid = (h >> 2) + 1;
+                // uint32_t trid = (h >> 3) + 1;
                 #ifdef USE_TRANSACTION_ID
                 noc_async_read_barrier_with_trid(trid);
                 #else
                 noc_async_read_barrier(trid);
                 #endif // barrier
 
+                #ifdef SPLIT_MCAST_TRANSACTIONS
                 for (uint32_t i = 0; i < in1_block_w; ++i) {
                     #ifdef MCAST_USE_SAME_NOC
                     noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
@@ -263,6 +272,15 @@ void kernel_main() {
                     in1_start_address += in1_single_tile_size_bytes;
                     in1_multicast_data_addr += in1_single_tile_size_bytes;
                 }
+                #else
+                    #ifdef MCAST_USE_SAME_NOC
+                    noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
+                    #else
+                    noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
+                    #endif
+                    in1_start_address += in1_block_w_bytes;
+                    in1_multicast_data_addr += in1_block_w_bytes;
+                #endif
             }
             #else
                 #ifdef SPLIT_MCAST_TRANSACTIONS

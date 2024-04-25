@@ -2778,15 +2778,13 @@ def run_bert_linear_batch8(
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
 
-    options = [True]
+    options = [True, False]
     # Generate all combinations of parameter values
-    for split_mcast_transactions, mcast_use_same_noc, use_noc_transaction_id, use_noc_vc in itertools.product(
-        options, repeat=4
-    ):
+    for split_mcast_transactions, mcast_use_same_noc, use_noc_vc in itertools.product(options, repeat=3):
         print(
             f"split_mcast_transactions={split_mcast_transactions}, "
             f"mcast_use_same_noc={mcast_use_same_noc}, "
-            f"use_noc_transaction_id={use_noc_transaction_id}, "
+            # f"use_noc_transaction_id={use_noc_transaction_id}, "
             f"use_noc_vc={use_noc_vc}"
         )
 
@@ -2830,7 +2828,7 @@ def run_bert_linear_batch8(
             fused_activation=activation,
             split_mcast_transactions=split_mcast_transactions,
             mcast_use_same_noc=mcast_use_same_noc,
-            use_noc_transaction_id=use_noc_transaction_id,
+            use_noc_transaction_id=True,
             use_noc_vc=use_noc_vc,
             use_partial_barrier=True,
         )
@@ -2915,10 +2913,10 @@ def run_bert_linear_batch8(
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation",
     [
-        (False, True, True, 256, 4096, 4096, None),
+        # (False, True, True, 256, 4096, 4096, None),
         # (False, True, True, 512, 1280, 5120, None),
         # (False, True, True, 512, 5120, 1280, None),
-        # (False, True, True, 512, 1280, 1280, None),
+        (False, True, True, 512, 1280, 1280, None),
         # (False, True, True, 512, 1280, 3840, None),
         # (False, True, True, 512, 2560, 1280, None),
     ],
