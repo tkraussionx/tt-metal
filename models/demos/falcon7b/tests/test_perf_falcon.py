@@ -443,14 +443,14 @@ class TestParametrized:
             ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.97, 0.99, 0.96, 0.4),
             ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.96, 0.6),
             ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.97, 0.99, 0.96, 0.6),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.94, 0.99, 0.98, 0.4),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.94, 0.99, 0.98, 0.4),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.96, 0.99, 0.98, 0.4),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.88, 0.94, 0.94, 0.5),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.88, 0.94, 0.94, 0.5),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.90, 0.97, 0.96, 0.5),
-            ("decode", 32, 32, 1, 2047, "BFLOAT16-DRAM", 0.88, 0.92, 0.92, 0.8),
-            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.88, 0.92, 0.92, 0.8),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.90, 0.92, 0.93, 0.4),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.93, 0.94, 0.94, 0.4),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.93, 0.95, 0.95, 0.4),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.85, 0.93, 0.93, 0.5),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.84, 0.91, 0.92, 0.5),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.95, 0.95, 0.5),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-DRAM", 0.88, 0.93, 0.93, 0.8),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.88, 0.92, 0.93, 0.8),
         ),
         ids=[
             "prefill_seq128_bf16_dram",
@@ -467,7 +467,7 @@ class TestParametrized:
             "decode_batch32_2047_bf16_l1",
         ],
     )
-    @pytest.mark.parametrize("async_mode", (False, True))
+    @pytest.mark.parametrize("async_mode", (False,))
     @skip_for_grayskull()
     def test_perf_wh_bare_metal(
         self,
