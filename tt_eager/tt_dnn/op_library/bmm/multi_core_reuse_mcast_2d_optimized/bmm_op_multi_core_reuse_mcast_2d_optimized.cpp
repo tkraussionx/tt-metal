@@ -221,7 +221,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)  (in0_shard_height_in_tiles),
             (std::uint32_t)  (in0_block_w),
             // batch args
-            (std::uint32_t)  B // batch
+            (std::uint32_t)  B, // batch
+
+            // in1
+            (std::uint32_t)  in1_mcast_receiver_semaphore
         };
     } else {
         in0_sender_compile_time_args = {
@@ -489,14 +492,25 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src0_cb_config);
     log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src0_cb_index, in0_single_tile_size, in0_CB_size / in0_single_tile_size, in0_CB_size);
 
+    // uint32_t src1_cb_index = 1;
+    // tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
+	// 	.set_page_size(src1_cb_index, in1_single_tile_size);
+    // if (in1_is_sharded) {
+    //     src1_cb_config.set_globally_allocated_address(*in1_buffer);
+    // }
+    // auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src1_cb_config);
+    // log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src1_cb_index, in1_single_tile_size, in1_CB_size / in1_single_tile_size, in1_CB_size);
+
     uint32_t src1_cb_index = 1;
-    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
-		.set_page_size(src1_cb_index, in1_single_tile_size);
-    if (in1_is_sharded) {
-        src1_cb_config.set_globally_allocated_address(*in1_buffer);
-    }
+    uint32_t src1_cb_index_inplace = 6;
+    std::map<uint8_t, tt::DataFormat> src1_cb_data_format_spec {
+        {src1_cb_index, in1_data_format},
+        {src1_cb_index_inplace, in1_data_format}
+    };
+    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, src1_cb_data_format_spec)
+        .set_page_size(src1_cb_index, in1_single_tile_size)
+        .set_page_size(src1_cb_index_inplace, in1_single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src1_cb_config);
-    log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src1_cb_index, in1_single_tile_size, in1_CB_size / in1_single_tile_size, in1_CB_size);
 
     uint32_t src2_cb_index = 2;
     CBHandle cb_src2 = 0;
@@ -559,6 +573,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         auto cb_src3 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
         log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src3_cb_index, bias_single_tile_size, in3_CB_size / bias_single_tile_size, in3_CB_size);
     }
+
+    uint32_t temp_cb_index = 7;
+    tt_metal::CircularBufferConfig temp_cb_config = tt_metal::CircularBufferConfig(output_single_tile_size, {{temp_cb_index, output_data_format}})
+        .set_page_size(temp_cb_index, output_single_tile_size);
+    auto cb_temp = tt_metal::CreateCircularBuffer(program, all_cores, temp_cb_config);
 
     // Parameters for last row, col, or block
     uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
@@ -662,6 +681,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
                     mm_in0_sender_args.push_back(diff_end_coord);
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
+
+                    // in1 mcast args
+                    mm_in0_sender_args.push_back(in1_mcast_start.x); // in1_mcast_dest_noc_start_x
+                    mm_in0_sender_args.push_back(in1_mcast_start.y); // in1_mcast_dest_noc_start_y
+                    mm_in0_sender_args.push_back(in1_mcast_end.x); // in1_mcast_dest_noc_end_x
+                    mm_in0_sender_args.push_back(in1_mcast_end.y); // in1_mcast_dest_noc_end_y
+
                     mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
                 }

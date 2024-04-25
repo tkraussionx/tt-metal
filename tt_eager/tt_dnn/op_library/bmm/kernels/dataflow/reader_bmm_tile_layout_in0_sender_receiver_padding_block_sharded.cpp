@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     constexpr uint32_t in0_block_num_tiles                = get_compile_time_arg_val(0);
@@ -27,13 +27,24 @@ void kernel_main() {
 
     constexpr uint32_t batch                              = get_compile_time_arg_val(13);
 
+    // in1 mcast args
+    constexpr uint32_t in1_mcast_receiver_semaphore_addr  = get_compile_time_arg_val(14);
+
     const uint32_t sender_id                              = get_arg_val<uint32_t>(0);
     const uint32_t in0_mcast_dest_noc_start_x             = get_arg_val<uint32_t>(1);
     const uint32_t in0_mcast_dest_noc_start_y             = get_arg_val<uint32_t>(2);
     const uint32_t in0_mcast_dest_noc_end_x               = get_arg_val<uint32_t>(3);
     const uint32_t in0_mcast_dest_noc_end_y               = get_arg_val<uint32_t>(4);
-    volatile tt_l1_ptr uint32_t * in0_mcast_noc_x          = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(5));
-    volatile tt_l1_ptr uint32_t * in0_mcast_noc_y          = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(5 + num_x));
+
+    // in1 mcast args
+    const uint32_t in1_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(5);
+    const uint32_t in1_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(6);
+    const uint32_t in1_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(7);
+    const uint32_t in1_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(8);
+
+
+    volatile tt_l1_ptr uint32_t * in0_mcast_noc_x          = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(9));
+    volatile tt_l1_ptr uint32_t * in0_mcast_noc_y          = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(9 + num_x));
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in2 = 2; // Sharded cb
@@ -105,6 +116,27 @@ void kernel_main() {
         local_read_addr = get_read_ptr(cb_id_in2);
     }
 
+    bool is_top_reader = my_y[0] == 1;
+    constexpr uint32_t cb_temp = 7;
+    constexpr uint32_t cb_id_in1 = 6;
+    uint32_t in1_mcast_num_cores = 7;
+
+    const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+        in1_mcast_dest_noc_end_x,
+        in1_mcast_dest_noc_end_y,
+        in1_mcast_dest_noc_start_x,
+        in1_mcast_dest_noc_start_y,
+
+        in1_mcast_receiver_semaphore_addr);
+
+    const uint64_t in1_multicast_data_noc = get_noc_multicast_addr(
+        in1_mcast_dest_noc_end_x,
+        in1_mcast_dest_noc_end_y,
+        in1_mcast_dest_noc_start_x,
+        in1_mcast_dest_noc_start_y,
+        0);
+
+
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
             const uint32_t block_id = block / num_blocks_per_shard;
@@ -143,28 +175,28 @@ void kernel_main() {
 
                 if constexpr (extract_shard_sub_blocks) {
                     // no need to mcast to self, since we are not really doing a local copy
-                    #ifdef SPLIT_MCAST_TRANSACTIONS
-                    for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
-                        noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores, false, false);
-                        local_read_addr += in0_single_tile_size_bytes;
-                        in0_multicast_data_addr += in0_single_tile_size_bytes;
-                    }
-                    #else
+                    // #ifdef SPLIT_MCAST_TRANSACTIONS
+                    // for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
+                    //     noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores, false, false);
+                    //     local_read_addr += in0_single_tile_size_bytes;
+                    //     in0_multicast_data_addr += in0_single_tile_size_bytes;
+                    // }
+                    // #else
                     noc_async_write_multicast(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false, false);
                     local_read_addr += in0_block_size_bytes;
-                    #endif
+                    // #endif
                 } else {
                     // num_dests must not include source, since we are NOT really doing a local copy!
-                    #ifdef SPLIT_MCAST_TRANSACTIONS
-                    for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
-                        noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores+1, false, false);
-                        local_read_addr += in0_single_tile_size_bytes;
-                        in0_multicast_data_addr += in0_single_tile_size_bytes;
-                    }
-                    #else
+                    // #ifdef SPLIT_MCAST_TRANSACTIONS
+                    // for (uint32_t i = 0; i < in0_block_num_tiles; ++i) {
+                    //     noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_single_tile_size_bytes, in0_mcast_num_cores+1, false, false);
+                    //     local_read_addr += in0_single_tile_size_bytes;
+                    //     in0_multicast_data_addr += in0_single_tile_size_bytes;
+                    // }
+                    // #else
                     noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores+1, false, false);
                     local_read_addr += in0_block_size_bytes;
-                    #endif
+                    // #endif
                 }
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
                 // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
@@ -180,6 +212,63 @@ void kernel_main() {
             // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             cb_push_back(cb_id_in0, in0_block_num_tiles);
+
+
+
+
+            if (is_top_reader) {
+                cb_wait_front(cb_temp, 1);
+                uint32_t in1_start_address = get_write_ptr(cb_id_in1);
+                // if (block % 2 == 0) {
+                //     in1_start_address = 173280;
+                // } else {
+                //     in1_start_address = 697568;
+                // }
+                // if (block % 2 == 0) {
+                //     // in1_start_address = 148704;
+                //     in1_start_address = 129504;
+                // } else {
+                //     // in1_start_address = 353504;
+                //     in1_start_address = 238304;
+                // }
+
+                if (block % 2 == 0) {
+                    // in1_start_address = 148704;
+                    in1_start_address = 129504;
+                } else {
+                    // in1_start_address = 353504;
+                    in1_start_address = 156704;
+                }
+                uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
+
+                // noc_async_read_barrier_with_noc_index(1-noc_index);
+
+                // noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, 524288, in1_mcast_num_cores, false, false);
+                // noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, 108800, in1_mcast_num_cores, false, false);
+                noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, 27200, in1_mcast_num_cores, false, false);
+
+
+                // for (uint32_t h = 0; h < 16; ++h) {
+                //     // Barrier! make sure the reads are done
+                //     // uint32_t trid = h + 1;
+                //     uint32_t trid = (h >> 1) + 1;
+                //     // uint32_t trid = (h >> 2) + 1;
+                //     // uint32_t trid = (h >> 3) + 1;
+                //     noc_async_read_barrier_with_trid_with_noc_index(1-noc_index, trid);
+
+                //     // for (uint32_t i = 0; i < 16; ++i) {
+                //         noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, 32768, in1_mcast_num_cores, false, false);
+                //         in1_start_address += 32768;
+                //         in1_multicast_data_addr += 32768;
+                //     // }
+                // }
+
+                noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+
+                cb_pop_front(cb_temp, 1);
+            }
+
+
         }
     }
 }

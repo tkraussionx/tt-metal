@@ -2793,14 +2793,14 @@ def run_bert_linear_batch8(
             in0,
             device,
             tt_memory_config=interleaved_mem_config_DRAM,
-            tt_dtype=ttl.tensor.DataType.BFLOAT16,
+            tt_dtype=ttl.tensor.DataType.BFLOAT8_B,
         )
         in1_t = torch2tt_tensor(
             # in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
             in1,
             device,
             tt_memory_config=interleaved_mem_config_DRAM,
-            tt_dtype=ttl.tensor.DataType.BFLOAT16,
+            tt_dtype=ttl.tensor.DataType.BFLOAT8_B,
         )
 
         output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config_L1
@@ -2899,7 +2899,7 @@ def run_bert_linear_batch8(
 @pytest.mark.parametrize(
     "fidelity",
     [
-        ttl.tensor.MathFidelity.HiFi2,
+        ttl.tensor.MathFidelity.LoFi,
     ],
     ids=["LoFi"],
 )

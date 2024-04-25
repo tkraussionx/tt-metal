@@ -185,6 +185,7 @@ void kernel_main() {
     #endif
 
     const uint32_t in1_block_w_bytes = in1_block_w * in1_single_tile_size_bytes;
+    constexpr uint32_t cb_temp = 7;
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -196,12 +197,14 @@ void kernel_main() {
 
             uint64_t in1_start_address = l1_write_addr_in1; // copy start address of block, to be used for mcasting
 
+            // DPRINT << in1_start_address << ENDL();
+
             // Copy in1 block into CB, as the default kernel
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
             for(uint32_t h = 0; h < in1_block_h; ++h) {
                 uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
-                uint32_t trid = h + 1;
-                // uint32_t trid = (h >> 1) + 1;
+                // uint32_t trid = h + 1;
+                uint32_t trid = (h >> 1) + 1;
                 // uint32_t trid = (h >> 2) + 1;
                 // uint32_t trid = (h >> 3) + 1;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
@@ -229,6 +232,8 @@ void kernel_main() {
 
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
+            noc_async_read_barrier();
+
             #ifndef USE_PARTIAL_BARRIER
                 // Barrier! make sure the reads are done
                 #ifdef USE_TRANSACTION_ID
@@ -245,73 +250,76 @@ void kernel_main() {
             noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
             noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
-            // Now we have the block in the CB address, we can mcast to dests!
-            uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
+            cb_reserve_back(cb_temp, 1);
+            cb_push_back(cb_temp, 1);
 
-            // num_dests must not include source, since we are NOT really doing a local copy!
-            #ifdef USE_PARTIAL_BARRIER
-            for (uint32_t h = 0; h < in1_block_h; ++h) {
-                // Barrier! make sure the reads are done
-                uint32_t trid = h + 1;
-                // uint32_t trid = (h >> 1) + 1;
-                // uint32_t trid = (h >> 2) + 1;
-                // uint32_t trid = (h >> 3) + 1;
-                #ifdef USE_TRANSACTION_ID
-                noc_async_read_barrier_with_trid(trid);
-                #else
-                noc_async_read_barrier(trid);
-                #endif // barrier
+            // // Now we have the block in the CB address, we can mcast to dests!
+            // uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
-                #ifdef SPLIT_MCAST_TRANSACTIONS
-                for (uint32_t i = 0; i < in1_block_w; ++i) {
-                    #ifdef MCAST_USE_SAME_NOC
-                    noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
-                    #else
-                    noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
-                    #endif
-                    in1_start_address += in1_single_tile_size_bytes;
-                    in1_multicast_data_addr += in1_single_tile_size_bytes;
-                }
-                #else
-                    #ifdef MCAST_USE_SAME_NOC
-                    noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
-                    #else
-                    noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
-                    #endif
-                    in1_start_address += in1_block_w_bytes;
-                    in1_multicast_data_addr += in1_block_w_bytes;
-                #endif
-            }
-            #else
-                #ifdef SPLIT_MCAST_TRANSACTIONS
-                for (uint32_t i = 0; i < in1_block_num_tiles; ++i) {
-                    #ifdef MCAST_USE_SAME_NOC
-                    noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
-                    #else
-                    noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
-                    #endif
-                    in1_start_address += in1_single_tile_size_bytes;
-                    in1_multicast_data_addr += in1_single_tile_size_bytes;
-                }
-                #else
-                    #ifdef MCAST_USE_SAME_NOC
-                    noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
-                    #else
-                    noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
-                    #endif
-                #endif
-            #endif
+            // // num_dests must not include source, since we are NOT really doing a local copy!
+            // #ifdef USE_PARTIAL_BARRIER
+            // for (uint32_t h = 0; h < in1_block_h; ++h) {
+            //     // Barrier! make sure the reads are done
+            //     uint32_t trid = h + 1;
+            //     // uint32_t trid = (h >> 1) + 1;
+            //     // uint32_t trid = (h >> 2) + 1;
+            //     // uint32_t trid = (h >> 3) + 1;
+            //     #ifdef USE_TRANSACTION_ID
+            //     noc_async_read_barrier_with_trid(trid);
+            //     #else
+            //     noc_async_read_barrier(trid);
+            //     #endif // barrier
 
-            // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-            // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+            //     #ifdef SPLIT_MCAST_TRANSACTIONS
+            //     for (uint32_t i = 0; i < in1_block_w; ++i) {
+            //         #ifdef MCAST_USE_SAME_NOC
+            //         noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+            //         #else
+            //         noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+            //         #endif
+            //         in1_start_address += in1_single_tile_size_bytes;
+            //         in1_multicast_data_addr += in1_single_tile_size_bytes;
+            //     }
+            //     #else
+            //         #ifdef MCAST_USE_SAME_NOC
+            //         noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
+            //         #else
+            //         noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_w_bytes, in1_mcast_num_cores, false, false);
+            //         #endif
+            //         in1_start_address += in1_block_w_bytes;
+            //         in1_multicast_data_addr += in1_block_w_bytes;
+            //     #endif
+            // }
+            // #else
+            //     #ifdef SPLIT_MCAST_TRANSACTIONS
+            //     for (uint32_t i = 0; i < in1_block_num_tiles; ++i) {
+            //         #ifdef MCAST_USE_SAME_NOC
+            //         noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+            //         #else
+            //         noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_single_tile_size_bytes, in1_mcast_num_cores, false, false);
+            //         #endif
+            //         in1_start_address += in1_single_tile_size_bytes;
+            //         in1_multicast_data_addr += in1_single_tile_size_bytes;
+            //     }
+            //     #else
+            //         #ifdef MCAST_USE_SAME_NOC
+            //         noc_async_write_multicast<true>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+            //         #else
+            //         noc_async_write_multicast<false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+            //         #endif
+            //     #endif
+            // #endif
 
-            // We should also multicast the flag to destinations
-            // num_dests must not include source, since we are NOT really doing a local copy!
-            #ifdef MCAST_USE_SAME_NOC
-            noc_semaphore_set_multicast<true>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
-            #else
-            noc_semaphore_set_multicast<false>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
-            #endif
+            // // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
+            // // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+
+            // // We should also multicast the flag to destinations
+            // // num_dests must not include source, since we are NOT really doing a local copy!
+            // #ifdef MCAST_USE_SAME_NOC
+            // noc_semaphore_set_multicast<true>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            // #else
+            // noc_semaphore_set_multicast<false>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            // #endif
 
             #endif
 

@@ -1558,6 +1558,16 @@ void noc_async_read_barrier() {
 }
 
 FORCE_INLINE
+void noc_async_read_barrier_with_noc_index(uint32_t noc_id) {
+    DEBUG_STATUS('N', 'R', 'B', 'W');
+    while (!ncrisc_noc_reads_flushed(noc_id))
+        ;
+    DEBUG_STATUS('N', 'R', 'B', 'D');
+}
+
+
+
+FORCE_INLINE
 void noc_async_read_barrier_partial(uint32_t val) {
     DEBUG_STATUS('N', 'R', 'B', 'W');
     while (!ncrisc_noc_reads_flushed_partial(noc_index, val))
@@ -1575,6 +1585,21 @@ void noc_async_read_barrier_with_trid(uint32_t trid) {
     //         ;
     // } else {
         while (!ncrisc_noc_read_tiles_flushed(noc_index, trid))
+            ;
+    // }
+    DEBUG_STATUS('N', 'R', 'B', 'D');
+}
+
+FORCE_INLINE
+void noc_async_read_barrier_with_trid_with_noc_index(uint32_t noc_id, uint32_t trid) {
+    DEBUG_STATUS('N', 'R', 'B', 'W');
+    // if (use_multi_noc) {
+    //     while (!ncrisc_noc_read_tiles_flushed(0, trid))
+    //         ;
+    //     while (!ncrisc_noc_read_tiles_flushed(1, trid))
+    //         ;
+    // } else {
+        while (!ncrisc_noc_read_tiles_flushed(noc_id, trid))
             ;
     // }
     DEBUG_STATUS('N', 'R', 'B', 'D');
