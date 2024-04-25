@@ -212,7 +212,8 @@ def test_cross_attn_up_block_2d_512x512(
     in_channels,
     out_channels,
 ):
-    pytest.skip("Skip: raising weird runtime-error")
+    # pytest.skip("Skip: raising weird runtime-error")
+
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)
     unet = pipe.unet
@@ -319,6 +320,8 @@ def test_cross_attn_up_block_2d_512x512(
         weight_to_bfp8(pre_process_input(device, res1)),
         weight_to_bfp8(pre_process_input(device, res2)),
     )
+    ttnn.CONFIG.enable_logging = True
+    ttnn.CONFIG.enable_comparison_mode = True
     op = model(
         hidden_state,
         res_hidden_states_tuple,

@@ -51,6 +51,7 @@ def pre_and_post(request):
 
 
 def pytest_addoption(parser):
+    parser.addoption("--option", action="store", default="")
     parser.addoption(
         "--no-skips", action="store_true", default=False, help="ignore pytest.skip() calls, and continue on with test"
     )
@@ -65,4 +66,3 @@ def pytest_cmdline_preparse(config, args):
         return
 
     pytest.skip = no_skip
-

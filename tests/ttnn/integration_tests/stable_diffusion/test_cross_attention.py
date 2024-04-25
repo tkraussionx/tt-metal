@@ -21,6 +21,11 @@ from models.utility_functions import (
 )
 
 
+@pytest.fixture(scope="session")
+def option(pytestconfig):
+    return pytestconfig.getoption("option")
+
+
 @skip_for_grayskull()
 @pytest.mark.parametrize("model_name", ["CompVis/stable-diffusion-v1-4"])
 @pytest.mark.parametrize(
@@ -209,9 +214,12 @@ def test_cross_attention_256x256(device, model_name, N, C, H, W, index, has_enco
         ),
     ],
 )
-def test_cross_attention_512x512(device, model_name, N, C, H, W, index, has_encoder_hidden_states):
-    pytest.skip()
+def test_cross_attention_512x512(device, model_name, N, C, H, W, index, has_encoder_hidden_states, option):
+    # pytest.skip()
+
     torch.manual_seed(0)
+
+    use_legacy_4096 = option == "legacy"
 
     pipe = StableDiffusionPipeline.from_pretrained(model_name, torch_dtype=torch.float32)
     model = pipe.unet
@@ -253,11 +261,14 @@ def test_cross_attention_512x512(device, model_name, N, C, H, W, index, has_enco
     ttnn_hidden_states = ttnn.to_device(ttnn_hidden_states, device)
 
     model = tt2_ttnn_cross_attention(device, parameters)
+    ttnn.CONFIG.enable_logging = True
+    ttnn.CONFIG.enable_comparison_mode = True
     ttnn_output = model(
         ttnn_hidden_states,
         ttnn_encoder_hidden_states,
         attention_mask=None,
         dim_head=W // 8,
+        use_legacy_4096=use_legacy_4096,
     )
 
     ttnn_output = ttnn.from_device(ttnn_output)
