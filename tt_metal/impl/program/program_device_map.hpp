@@ -45,5 +45,10 @@ struct ProgramTransferInfo {
 
 struct ProgramCommandIndices {
     std::uint32_t cb_configs_payload_start;    // device_commands
-    std::uint32_t runtime_args_payload_start;  // runtime_args_commands
+    // Array of cmd idx, # sub cmds, rt arg offset, rt arg len
+    // Currently we only really need the base cmd idx since they are sequential, and the rt arg len is currently the same for all splits
+    std::unordered_map<uint32_t, std::vector<std::array<uint32_t, 4>>> processor_to_cmd_mapping;
+    std::unordered_map<uint32_t, std::vector<std::array<uint32_t, 4>>> kernel_to_cmd_mapping;
+    std::set<uint32_t> unique_processors;
+    std::set<uint32_t> common_kernels;
 };
