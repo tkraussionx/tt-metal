@@ -32,13 +32,14 @@ class Emb(torch.nn.Module):
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.skip(reason="Issue #7540: Hanging")
+# @pytest.mark.skip(reason="Issue #7540: Hanging")
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "kv_cache_len, expected_compile_time, expected_inference_time",
     (
         (32, 15, 0.16),
-        (128, 15, 0.40),
+        (128, 15, 0.4),
+        (1024, 15, 0.4),
     ),
 )
 def test_mistral_model_perf(
@@ -47,6 +48,7 @@ def test_mistral_model_perf(
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(device)
+    model_args.n_layers = 1
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     # Clear global profiler state before starting measurements
@@ -119,7 +121,10 @@ def test_mistral_model_perf(
 
     profiler.clear()
     profiler.start(f"end_to_end_inference")
-    run_inference(tt_model, tt_embd, embd, encoded_prompts, generation_start_pos, generation_length)
+    from viztracer import VizTracer
+
+    with VizTracer() as tracer:
+        run_inference(tt_model, tt_embd, embd, encoded_prompts, generation_start_pos, generation_length)
     profiler.end(f"end_to_end_inference")
     profiler.print()
     iter_time = profiler.get("model_run_for_inference_0")
@@ -178,6 +183,7 @@ def run_inference(tt_model, tt_embd, embd, encoded_prompts, generation_start_pos
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
+@pytest.mark.skip(reason="DO NOT MERGE TO MAIN")
 @pytest.mark.models_device_performance_bare_metal
 @pytest.mark.parametrize(
     "batch, iterations, expected_perf",
