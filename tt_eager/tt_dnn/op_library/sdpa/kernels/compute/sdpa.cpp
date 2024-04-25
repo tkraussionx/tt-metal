@@ -491,8 +491,8 @@ void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
     cb_pop_front(in_cb, num_tiles);
 }
 
-void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M, uint32_t N, uint32_t K, uint32_t num_blocks, uint32_t in0_num_subblocks, uint32_t in1_num_subblocks,
-                    uint32_t in0_block_w, uint32_t subblock_h, uint32_t subblock_w) {
+void matmul_blocks(const uint32_t& in0_cb, const uint32_t& in1_cb, const uint32_t& out_cb, const uint32_t& M, const uint32_t& N, const uint32_t& K, const uint32_t& num_blocks, const uint32_t& in0_num_subblocks, const uint32_t& in1_num_subblocks,
+                    const uint32_t& in0_block_w, const uint32_t& subblock_h, const uint32_t& subblock_w, const bool& transpose) {
     //DeviceZoneScopedN("matmul_blocks");
 
     // preconditino: in0_cb has M*K produced
@@ -500,7 +500,7 @@ void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M
     // postcondition: out_cb has M*N produced
 
 
-    mm_block_init_short(in0_cb, in1_cb, 0 /*transpose*/, subblock_w /*ct_dim*/, subblock_h /*rt_dim*/, in0_block_w /*kt_dim*/);
+    mm_block_init_short(in0_cb, in1_cb, transpose /*transpose*/, subblock_w /*ct_dim*/, subblock_h /*rt_dim*/, in0_block_w /*kt_dim*/);
 
     unpack_reconfig_data_format(in1_cb, in0_cb);
 
@@ -518,7 +518,7 @@ void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M
             uint32_t in1_index = in1_index_offset;
 
             for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
-                matmul_block(in0_cb, in1_cb, in0_index, in1_index, dst_index, false, subblock_w, subblock_h, in0_block_w);
+                matmul_block(in0_cb, in1_cb, in0_index, in1_index, dst_index, transpose, subblock_w, subblock_h, in0_block_w);
                 in0_index++;
                 in1_index += N;
 
@@ -543,28 +543,28 @@ void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M
 }
 
 void MAIN {
-    constexpr uint16_t B = get_compile_time_arg_val(0);
-    constexpr uint16_t NQH = get_compile_time_arg_val(1);
-    constexpr uint16_t NKH = get_compile_time_arg_val(2);
-    constexpr uint16_t St = get_compile_time_arg_val(3);
-    constexpr uint16_t DHt = get_compile_time_arg_val(4);
-    constexpr uint16_t Sq_chunk_t = get_compile_time_arg_val(5);
-    constexpr uint16_t q_num_chunks = get_compile_time_arg_val(6);
-    constexpr uint16_t Sk_chunk_t = get_compile_time_arg_val(7);
-    constexpr uint16_t k_num_chunks = get_compile_time_arg_val(8);
+    constexpr uint32_t B = get_compile_time_arg_val(0);
+    constexpr uint32_t NQH = get_compile_time_arg_val(1);
+    constexpr uint32_t NKH = get_compile_time_arg_val(2);
+    constexpr uint32_t St = get_compile_time_arg_val(3);
+    constexpr uint32_t DHt = get_compile_time_arg_val(4);
+    constexpr uint32_t Sq_chunk_t = get_compile_time_arg_val(5);
+    constexpr uint32_t q_num_chunks = get_compile_time_arg_val(6);
+    constexpr uint32_t Sk_chunk_t = get_compile_time_arg_val(7);
+    constexpr uint32_t k_num_chunks = get_compile_time_arg_val(8);
 
-    constexpr uint16_t qk_in0_block_w = get_compile_time_arg_val(9);
-    constexpr uint16_t qk_subblock_w = get_compile_time_arg_val(10);
-    constexpr uint16_t qk_subblock_h = get_compile_time_arg_val(11);
-    constexpr uint16_t qk_in0_num_subblocks = get_compile_time_arg_val(12);
-    constexpr uint16_t qk_in1_num_subblocks = get_compile_time_arg_val(13);
-    constexpr uint16_t qk_num_blocks = get_compile_time_arg_val(14);
-    constexpr uint16_t out_in0_block_w = get_compile_time_arg_val(15);
-    constexpr uint16_t out_subblock_w = get_compile_time_arg_val(16);
-    constexpr uint16_t out_subblock_h = get_compile_time_arg_val(17);
-    constexpr uint16_t out_in0_num_subblocks = get_compile_time_arg_val(18);
-    constexpr uint16_t out_in1_num_subblocks = get_compile_time_arg_val(19);
-    constexpr uint16_t out_num_blocks = get_compile_time_arg_val(20);
+    constexpr uint32_t qk_in0_block_w = get_compile_time_arg_val(9);
+    constexpr uint32_t qk_subblock_w = get_compile_time_arg_val(10);
+    constexpr uint32_t qk_subblock_h = get_compile_time_arg_val(11);
+    constexpr uint32_t qk_in0_num_subblocks = get_compile_time_arg_val(12);
+    constexpr uint32_t qk_in1_num_subblocks = get_compile_time_arg_val(13);
+    constexpr uint32_t qk_num_blocks = get_compile_time_arg_val(14);
+    constexpr uint32_t out_in0_block_w = get_compile_time_arg_val(15);
+    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(16);
+    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(17);
+    constexpr uint32_t out_in0_num_subblocks = get_compile_time_arg_val(18);
+    constexpr uint32_t out_in1_num_subblocks = get_compile_time_arg_val(19);
+    constexpr uint32_t out_num_blocks = get_compile_time_arg_val(20);
 
     const uint32_t core_id    = get_arg_val<uint32_t>(0);
     const uint32_t num_cores    = get_arg_val<uint32_t>(1);
@@ -633,7 +633,7 @@ void MAIN {
                     /* QK = Q_CHUNK @ K_CHUNK */
                     cb_wait_front(cb_k_in, k_chunk_tiles);
                     pack_reconfig_data_format(cb_qk_im);
-                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w);
+                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w, true /*transpose*/);
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
                     {
@@ -711,7 +711,7 @@ void MAIN {
 
                     /* OUT_IM = QK @ V_CHUNK */
                     cb_wait_front(cb_v_in, k_chunk_tiles);
-                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w);
+                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w, false /*transpose*/);
                     unpack_reconfig_data_format_srca(cb_out_im);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
                     cb_pop_front(cb_v_in, k_chunk_tiles);

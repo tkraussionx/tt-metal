@@ -111,9 +111,9 @@ void kernel_main() {
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
         DPRINT << "READER: "  << "nb=" << nb << ENDL();
         const uint32_t q_batch_offset = nb * NQH * St * DHt;
-        const uint32_t k_batch_offset = nb * NKH * DHt * St;
+        const uint32_t k_batch_offset = nb * NKH * St * DHt;
         const uint32_t v_batch_offset = nb * NKH * St * DHt;
-        const uint32_t mask_batch_offset = nb * NQH * St * St;
+        const uint32_t mask_batch_offset = nb * St * St;
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
             DPRINT << "READER: "  << "nq=" << nq << ENDL();
             // for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
@@ -125,7 +125,7 @@ void kernel_main() {
                     uint32_t back_q_iter = q_iter - q_chunks_per_core / 2; // Back half should start at 0
                     q_chunk = q_num_chunks - 1 - (local_q_start + back_q_iter);
                 }
-                DeviceZoneScopedN("read Q");
+                // DeviceZoneScopedN("read Q");
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
@@ -156,21 +156,22 @@ void kernel_main() {
 
                 // loop while k_low < q_high
                 for (uint32_t k_chunk = 0; (k_chunk * Sk_chunk_t) < q_high_idx; ++k_chunk) {
-                    DeviceZoneScopedN("read K");
+                    // DeviceZoneScopedN("read K");
                     const uint32_t k_low_idx = k_chunk * Sk_chunk_t;
                     const uint32_t k_high_idx = k_low_idx + Sk_chunk_t;
                     // DPRINT << "READER: "  << "k_chunk=" << k_chunk << ENDL();
-                    k_tile_id = k_batch_offset + k_chunk * Sk_chunk_t;
+                    const uint32_t k_start_tile_id = k_batch_offset + k_chunk * Sk_chunk_t * DHt;
 
-                    // Read K chunk
+                    // Read K chunk transposed
                     cb_reserve_back(cb_k_in, k_chunk_tiles);
                     uint32_t k_write_ptr = get_write_ptr(cb_k_in);
                     barrier_count = 0;
-                    for (uint32_t row = 0; row < DHt; ++row) {
-                        for (uint32_t col = 0; col < Sk_chunk_t; ++col) {
+                    for (uint32_t col = 0; col < DHt; ++col) {
+                        k_tile_id = k_start_tile_id + col;
+                        for (uint32_t row = 0; row < Sk_chunk_t; ++row) {
                                 // DPRINT << "READER: "  << "k_tile_id=" << k_tile_id << ENDL();
                             noc_async_read_tile(k_tile_id, k_reader, k_write_ptr);
-                            k_tile_id += 1;
+                            k_tile_id += DHt;
                             k_write_ptr += k_tile_bytes;
 
                             if (++barrier_count == barrier_threshold) {
@@ -178,10 +179,6 @@ void kernel_main() {
                                 barrier_count = 0;
                             }
                         }
-
-                        // Strid along columns to get to next row
-                        k_tile_id -= Sk_chunk_t;
-                        k_tile_id += St;
                     }
                     noc_async_read_barrier();
                     cb_push_back(cb_k_in, k_chunk_tiles);
@@ -197,7 +194,7 @@ void kernel_main() {
                         cb_reserve_back(cb_mask_in, mask_chunk_tiles);
                         uint32_t mask_write_ptr = get_write_ptr(cb_mask_in);
                         barrier_count = 0;
-                        mask_tile_id = mask_batch_offset + nq * St * St /*head_offset*/ + q_chunk * Sq_chunk_t * St /*row_offset*/ + k_chunk * Sk_chunk_t /*col_offset*/;
+                        mask_tile_id = mask_batch_offset + q_chunk * Sq_chunk_t * St /*row_offset*/ + k_chunk * Sk_chunk_t /*col_offset*/;
                         for (uint32_t row = 0; row < Sq_chunk_t; ++row) {
                             for (uint32_t col = 0; col < Sk_chunk_t; ++col) {
                                     // DPRINT << "READER: "  << "mask_tile_id=" << mask_tile_id << ENDL();

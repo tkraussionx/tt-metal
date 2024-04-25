@@ -104,13 +104,24 @@ void py_module(py::module& m_transformers) {
         py::arg("input_tensor_q").noconvert(),
         py::arg("input_tensor_k").noconvert(),
         py::arg("input_tensor_v").noconvert(),
-        py::arg("attn_mask").noconvert(),
-        py::arg("is_causal").noconvert() = false,
+        py::arg("causal_mask").noconvert(),
+        py::arg("is_causal").noconvert() = true,
         py::arg("scale").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("program_config").noconvert() = SDPADefaultProgramConfig{},
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
-        "Scaled dot product attention operation"
+        "Causal scaled dot product attention. This API mimicks the PyTorch API of the same name."
+        "The implementation is FlashAttention-2 and it currently only supports MQA with causal masking.\n"
+
+        "Q:      [b x nqh x s x dh]"
+        "K:      [b x 1   x s x dh]"
+        "V:      [b x 1   x s x dh]"
+        "mask:   [b x 1   x s x s ]"
+        "output: [b x nqh x s x dh]"
+
+        "Mask must be a causal mask with 0s in the lower triangle and -inf in the upper triangle."
+
+        "Accepts a `SDPAMultiCoreProgramConfig` which specifies the grid size and chunk tiles in the Q and K sequence lengths. The op parallelizes over `b`, `nqh`, and Q's `s` dimension."
         );
 
 }

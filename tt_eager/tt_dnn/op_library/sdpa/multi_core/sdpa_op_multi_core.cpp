@@ -45,8 +45,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     attn_mask: B x NQH x S x S
     */
 
-    // TT_FATAL(q_chunk_size == k_chunk_size);
-
     const auto q_shape = input_tensor_q.get_legacy_shape();
     uint32_t B = q_shape[0], NQH = q_shape[1], S = q_shape[2], DH = q_shape[3];
     uint32_t St = S/TILE_HEIGHT;
@@ -60,28 +58,27 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const auto k_shape = input_tensor_k.get_legacy_shape();
     uint32_t NKH = k_shape[1];
 
-    // log_info all of the above
-    log_info("B: {}", B);
-    log_info("NQH: {}", NQH);
+    // log_debug all of the above
+    log_debug("B: {}", B);
+    log_debug("NQH: {}", NQH);
 
-    log_info("S: {}", S);
-    log_info("DH: {}", DH);
-    log_info("St: {}", St);
-    log_info("DHt: {}", DHt);
-    log_info("Sq_chunk_t: {}", Sq_chunk_t);
-    log_info("Sk_chunk_t: {}", Sk_chunk_t);
-    log_info("q_num_chunks: {}", q_num_chunks);
-    log_info("k_num_chunks: {}", k_num_chunks);
-    log_info("NKH: {}", NKH);
+    log_debug("S: {}", S);
+    log_debug("DH: {}", DH);
+    log_debug("St: {}", St);
+    log_debug("DHt: {}", DHt);
+    log_debug("Sq_chunk_t: {}", Sq_chunk_t);
+    log_debug("Sk_chunk_t: {}", Sk_chunk_t);
+    log_debug("q_num_chunks: {}", q_num_chunks);
+    log_debug("k_num_chunks: {}", k_num_chunks);
+    log_debug("NKH: {}", NKH);
 
 
     Program program = CreateProgram();
 
-    // This should allocate input_tensor DRAM buffer on the device
     Device *device = input_tensor_q.device();
 
-    MathFidelity math_fidelity = MathFidelity::HiFi2;
-    bool math_approx_mode = true;
+    MathFidelity math_fidelity;
+    bool math_approx_mode;
     bool fp32_dest_acc_en;
 
 
@@ -89,19 +86,21 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         using T = std::decay_t<decltype(compute_kernel_config)>;
         if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
-            // math_fidelity = compute_kernel_config.math_fidelity;
-            // math_approx_mode = compute_kernel_config.math_approx_mode;
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = false;
         } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
-            // math_fidelity = compute_kernel_config.math_fidelity;
-            // math_approx_mode = compute_kernel_config.math_approx_mode;
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = compute_kernel_config.fp32_dest_acc_en;
         } else {
             TT_FATAL("arch not supported");
         }
 
     }, compute_kernel_config);
+
+    TT_FATAL(!fp32_dest_acc_en, "fp32_dest_acc_en not supported yet");
 
     auto q_buffer = input_tensor_q.buffer();
     auto k_buffer = input_tensor_k.buffer();
@@ -118,7 +117,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         if constexpr (std::is_same_v<T, transformers::SDPAMultiCoreProgramConfig>) {
             grid_size = program_config.compute_with_storage_grid_size;
         } else {
-            log_info("Using default grid size");
+            log_debug("Using default grid size");
             grid_size = device->compute_with_storage_grid_size();
 
         }
@@ -127,7 +126,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
     uint32_t num_cores = grid_size.x * grid_size.y;
 
-    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
     TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
 
     // Parallelization scheme
@@ -138,10 +136,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
 
-    log_info("Parallelization scheme:");
-    log_info("batch_parallel_factor: {}", batch_parallel_factor);
-    log_info("nh_parallel_factor: {}", nh_parallel_factor);
-    log_info("q_parallel_factor: {}", q_parallel_factor);
+    log_debug("Parallelization scheme:");
+    log_debug("batch_parallel_factor: {}", batch_parallel_factor);
+    log_debug("nh_parallel_factor: {}", nh_parallel_factor);
+    log_debug("q_parallel_factor: {}", q_parallel_factor);
 
 
     // Ceiling divide to allow for non-perfect divisions
@@ -165,14 +163,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t statistics_tiles = Sq_chunk_t; // Single column of values in each iteration
 
     // log all values
-    log_info("q_tiles: {}", q_tiles);
-    log_info("k_tiles: {}", k_tiles);
-    log_info("v_tiles: {}", v_tiles);
-    log_info("mask_tiles: {}", mask_tiles);
-    log_info("qk_tiles: {}", qk_tiles);
-    log_info("out0_t: {}", out0_t);
-    log_info("scale_tiles: {}", scale_tiles);
-    log_info("statistics_tiles: {}", statistics_tiles);
+    log_debug("q_tiles: {}", q_tiles);
+    log_debug("k_tiles: {}", k_tiles);
+    log_debug("v_tiles: {}", v_tiles);
+    log_debug("mask_tiles: {}", mask_tiles);
+    log_debug("qk_tiles: {}", qk_tiles);
+    log_debug("out0_t: {}", out0_t);
+    log_debug("scale_tiles: {}", scale_tiles);
+    log_debug("statistics_tiles: {}", statistics_tiles);
 
 
 
@@ -199,19 +197,19 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const uint32_t out_num_blocks = Sk_chunk_t / out_in0_block_w;
 
     // log all values
-    log_info("dst_size: {}", dst_size);
-    log_info("qk_in0_block_w: {}", qk_in0_block_w);
-    log_info("qk_out_subblock_w: {}", qk_out_subblock_w);
-    log_info("qk_out_subblock_h: {}", qk_out_subblock_h);
-    log_info("qk_in0_num_subblocks: {}", qk_in0_num_subblocks);
-    log_info("qk_in1_num_subblocks: {}", qk_in1_num_subblocks);
-    log_info("qk_num_blocks: {}", qk_num_blocks);
-    log_info("out_in0_block_w: {}", out_in0_block_w);
-    log_info("out_out_subblock_w: {}", out_out_subblock_w);
-    log_info("out_out_subblock_h: {}", out_out_subblock_h);
-    log_info("out_in0_num_subblocks: {}", out_in0_num_subblocks);
-    log_info("out_in1_num_subblocks: {}", out_in1_num_subblocks);
-    log_info("out_num_blocks: {}", out_num_blocks);
+    log_debug("dst_size: {}", dst_size);
+    log_debug("qk_in0_block_w: {}", qk_in0_block_w);
+    log_debug("qk_out_subblock_w: {}", qk_out_subblock_w);
+    log_debug("qk_out_subblock_h: {}", qk_out_subblock_h);
+    log_debug("qk_in0_num_subblocks: {}", qk_in0_num_subblocks);
+    log_debug("qk_in1_num_subblocks: {}", qk_in1_num_subblocks);
+    log_debug("qk_num_blocks: {}", qk_num_blocks);
+    log_debug("out_in0_block_w: {}", out_in0_block_w);
+    log_debug("out_out_subblock_w: {}", out_out_subblock_w);
+    log_debug("out_out_subblock_h: {}", out_out_subblock_h);
+    log_debug("out_in0_num_subblocks: {}", out_in0_num_subblocks);
+    log_debug("out_in1_num_subblocks: {}", out_in1_num_subblocks);
+    log_debug("out_num_blocks: {}", out_num_blocks);
 
     // Determine granularity for statistics computation
     const uint32_t stats_granularity = std::min(Sq_chunk_t, dst_size);
@@ -232,14 +230,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const uint32_t log2_dht_granularity = std::log2(dht_granularity);
 
     // Log these
-    log_info("stats_granularity: {}", stats_granularity);
-    log_info("log2_stats_granularity: {}", log2_stats_granularity);
-    log_info("sub_exp_granularity: {}", sub_exp_granularity);
-    log_info("log2_sub_exp_granularity: {}", log2_sub_exp_granularity);
-    log_info("mul_bcast_granularity: {}", mul_bcast_granularity);
-    log_info("log2_mul_bcast_granularity: {}", log2_mul_bcast_granularity);
-    log_info("dht_granularity: {}", dht_granularity);
-    log_info("log2_dht_granularity: {}", log2_dht_granularity);
+    log_debug("stats_granularity: {}", stats_granularity);
+    log_debug("log2_stats_granularity: {}", log2_stats_granularity);
+    log_debug("sub_exp_granularity: {}", sub_exp_granularity);
+    log_debug("log2_sub_exp_granularity: {}", log2_sub_exp_granularity);
+    log_debug("mul_bcast_granularity: {}", mul_bcast_granularity);
+    log_debug("log2_mul_bcast_granularity: {}", log2_mul_bcast_granularity);
+    log_debug("dht_granularity: {}", dht_granularity);
+    log_debug("log2_dht_granularity: {}", log2_dht_granularity);
 
 
 
@@ -308,7 +306,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     tt::DataFormat mask_df = attn_mask.has_value() ? tt_metal::datatype_to_dataformat_converter(attn_mask.value().get_dtype()) : tt::DataFormat::Float16_b;
     tt::DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output_tensor.get_dtype());
     tt::DataFormat scalar_df = tt::DataFormat::Float16_b;
-    tt::DataFormat im_df = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    // tt::DataFormat im_df = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    tt::DataFormat im_df = tt::DataFormat::Float16_b;
     tt::DataFormat stats_df = tt::DataFormat::Float16_b;
 
     uint32_t q_tile_size = tt_metal::detail::TileSize(q_df);
@@ -320,14 +319,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t im_tile_size = tt_metal::detail::TileSize(im_df);
     uint32_t stats_tile_size = tt_metal::detail::TileSize(stats_df);
 
-    log_info("q_data_format: {}", q_df);
-    log_info("k_data_format: {}", k_df);
-    log_info("v_data_format: {}", v_df);
-    log_info("mask_data_format: {}", mask_df);
-    log_info("out_data_format: {}", out_df);
-    log_info("scalar_data_format: {}", scalar_df);
-    log_info("intermediate_data_format: {}", im_df);
-    log_info("statistics_data_format: {}", stats_df);
+    log_debug("q_data_format: {}", q_df);
+    log_debug("k_data_format: {}", k_df);
+    log_debug("v_data_format: {}", v_df);
+    log_debug("mask_data_format: {}", mask_df);
+    log_debug("out_data_format: {}", out_df);
+    log_debug("scalar_data_format: {}", scalar_df);
+    log_debug("intermediate_data_format: {}", im_df);
+    log_debug("statistics_data_format: {}", stats_df);
 
 
     // Q input
@@ -388,23 +387,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
     auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
 
-    // auto c_intermed1_config = CircularBufferConfig(im1_t * im_tile_size, {{CB::c_intermed1, im_cb_data_format}}).set_page_size(CB::c_intermed1, im_tile_size);
-    // auto cb_intermed1_id = CreateCircularBuffer( program, all_device_cores, c_intermed1_config );
-    // auto c_in2_config = CircularBufferConfig(in2_t * scalar_tile_size, {{CB::c_in2, scalar_cb_data_format}}).set_page_size(CB::c_in2, scalar_tile_size);
-    // auto cb_in2_id = CreateCircularBuffer( program, all_device_cores, c_in2_config );
-    // auto c_intermed0_config = CircularBufferConfig(im0_t * im_tile_size, {{CB::c_intermed0, im_cb_data_format}}).set_page_size(CB::c_intermed0, im_tile_size);
-    // auto cb_intermed0_id = CreateCircularBuffer( program, all_device_cores, c_intermed0_config );
-    // std::optional<CBHandle> cb_intermed3_id;
-    // std::optional<CBHandle> cb_in3_id;
-    // std::optional<CBHandle> cb_in4_id;
-    // if (mask.has_value()) {
-    //     CircularBufferConfig c_intermed3_config = CircularBufferConfig(im3_t * im_tile_size, {{CB::c_intermed3, im_cb_data_format}}).set_page_size(CB::c_intermed3, im_tile_size);
-    //     cb_intermed3_id = CreateCircularBuffer( program, all_device_cores, c_intermed3_config );
-    //     CircularBufferConfig c_in3_config = CircularBufferConfig(in3_t * scalar_tile_size, {{CB::c_in3, scalar_cb_data_format}}).set_page_size(CB::c_in3, scalar_tile_size);
-    //     cb_in3_id = CreateCircularBuffer( program, all_device_cores, c_in3_config );
-    //     CircularBufferConfig c_in4_config = CircularBufferConfig(in4_t * mask_tile_size, {{CB::c_in4, mask_cb_data_format}}).set_page_size(CB::c_in4, mask_tile_size);
-    //     cb_in4_id = CreateCircularBuffer( program, all_device_cores, c_in4_config);
-    // }
+
     uint32_t q_addr = q_buffer->address();
     uint32_t k_addr = k_buffer->address();
     uint32_t v_addr = v_buffer->address();
@@ -416,7 +399,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     for (uint32_t i = 0; i < num_cores; ++i) {
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
-        // log_info("core: {} getting runtime args for idx {i}", core, i);
+        // log_debug("core: {} getting runtime args for idx {i}", core, i);
         uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
         uint32_t local_batch_end = local_batch_start + batch_per_core;
         uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
@@ -448,44 +431,18 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         SetRuntimeArgs(program, compute_kernels_id, core, { i, num_cores, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
     }
 
-
-    // uint32_t curr_row = 0;
-    // union { float f; uint32_t u; } s; s.f = scale.value_or(1.0f); // scale for fused scale-mask-softmax
-    // for (uint32_t i = 0; i < grid_size.x * grid_size.y; ++i) {
-    //     CoreCoord core = {i % grid_size.x, i / grid_size.x};
-    //     if (i >= num_cores) {
-    //         SetRuntimeArgs(program, reader_kernels_id, core, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // [8]=1.0f is scaler
-    //         SetRuntimeArgs(program, softmax_kernels_id, core, { 0, 0, 0, 0, 0 });
-    //         SetRuntimeArgs(program, writer_kernels_id, core, { 0, 0, 0, 0 });
-    //         continue;
-    //     }
-    //     uint32_t num_tile_rows_per_core = 0;
-    //     if (core_group_1.core_coord_in_core_ranges(core)) {
-    //         num_tile_rows_per_core = num_tile_rows_per_core_group_1;
-    //     } else if (core_group_2.core_coord_in_core_ranges(core)) {
-    //         num_tile_rows_per_core = num_tile_rows_per_core_group_2;
-    //     } else {
-    //         TT_ASSERT(false, "Core not in specified core ranges");
-    //     }
-
-    //     uint32_t tile_offset = curr_row * Wt;
-    //     uint32_t curr_ht = curr_row % Ht;
-    //     uint32_t mask_curr_ht = curr_ht % mask_Ht;   // the start offset for causal mask
-    //     uint32_t mask_offset = curr_row / Ht * mask_Ht * Wt; // causal mask batch offset
-    //     uint32_t mask_id = causal_mask ? (mask_curr_ht * Wt + mask_offset) : (curr_row / Ht * Wt); // causal mask start offset + causal mask batch offset
-
-    //     if (causal_mask) {
-    //         SetRuntimeArgs(program, reader_kernels_id, core, { src_addr, block_size, s.u, num_tile_rows_per_core, tile_offset, Wt, Ht, mask_addr, curr_ht, mask_id, 0x3f803f80, mask_curr_ht, mask_offset }); // [10]=1.0f is scaler
-    //     } else {
-    //         SetRuntimeArgs(program, reader_kernels_id, core, { src_addr, block_size, s.u, num_tile_rows_per_core, tile_offset, Wt, Ht, mask_addr, curr_ht, mask_id, 0x3f803f80 }); // [10]=1.0f is scaler
-    //     }
-
-    //     SetRuntimeArgs(program, softmax_kernels_id, core, { num_tile_rows_per_core, Ht, Wt, block_size, curr_ht });
-    //     SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, num_tile_rows_per_core * Wt, tile_offset, block_size });
-    //     curr_row += num_tile_rows_per_core;
-    // }
-
-    auto override_runtime_arguments_callback = [&]
+    auto override_runtime_arguments_callback = [
+        num_cores,
+        grid_size,
+        reader_kernels_id,
+        writer_kernels_id,
+        compute_kernels_id,
+        batch_per_core,
+        nh_per_core,
+        q_per_core,
+        nh_parallel_factor,
+        q_parallel_factor
+        ]
     (
         const void* operation,
         Program& program,
@@ -500,7 +457,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         auto mask_buffer = optional_input_tensors.at(0).has_value() ? optional_input_tensors.at(0).value().buffer() : nullptr;
         TT_ASSERT(mask_buffer != nullptr);
 
-        auto out0_buffer = output_tensor.buffer();
+        auto out0_buffer = output_tensors.at(0).buffer();
         uint32_t q_addr = q_buffer->address();
         uint32_t k_addr = k_buffer->address();
         uint32_t v_addr = v_buffer->address();
@@ -511,7 +468,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         for (uint32_t i = 0; i < num_cores; ++i) {
             CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
-            // log_info("core: {} getting runtime args for idx {i}", core, i);
+            // log_debug("core: {} getting runtime args for idx {i}", core, i);
             const uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
             const uint32_t local_batch_end = local_batch_start + batch_per_core;
             const uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
@@ -538,7 +495,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
-} // scale_mask_softmax_multi_core
+}
 
 }  // namespace tt_metal
 }  // namespace tt_metal

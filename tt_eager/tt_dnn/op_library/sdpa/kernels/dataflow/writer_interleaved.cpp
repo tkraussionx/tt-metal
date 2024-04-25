@@ -77,7 +77,7 @@ void kernel_main() {
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
             for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
-                DeviceZoneScopedN("write out");
+                // DeviceZoneScopedN("write out");
                 uint32_t q_chunk;
                 if (q_iter < q_chunks_per_core / 2) {
                     q_chunk = local_q_start + q_iter;
