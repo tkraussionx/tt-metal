@@ -6,6 +6,11 @@
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 #include "debug/dprint.h"
+#include "tools/profiler/kernel_profiler.hpp"
+
+ const uint32_t get_barrier_read_threshold(uint32_t tile_bytes, uint32_t num_readers) {
+     return ((512 / num_readers) * (1024 + 128)) / tile_bytes;
+ }
 
 void kernel_main() {
     constexpr uint32_t B = get_compile_time_arg_val(0);
@@ -56,6 +61,9 @@ void kernel_main() {
         .data_format = data_format
     };
 
+    const uint32_t barrier_threshold = get_barrier_read_threshold(tile_bytes, num_cores);
+    uint32_t barrier_count = 0;
+
     constexpr uint32_t cb_scale_in = tt::CB::c_in4;
     constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
 
@@ -69,6 +77,7 @@ void kernel_main() {
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
             for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
+                DeviceZoneScopedN("write out");
                 uint32_t q_chunk;
                 if (q_iter < q_chunks_per_core / 2) {
                     q_chunk = local_q_start + q_iter;
@@ -86,12 +95,18 @@ void kernel_main() {
                 // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();
                 // Wait for compute to deliver output chunk
                 cb_wait_front(cb_out, out_chunk_tiles);
+                barrier_count = 0;
                 uint32_t l1_read_addr = get_read_ptr(cb_out);
                 for (uint32_t tile = 0; tile < out_chunk_tiles; ++tile) {
                     // DPRINT << "WRITER: "  << "out_tile_id=" << out_tile_id << ENDL();
                     noc_async_write_tile(out_tile_id, out_writer, l1_read_addr);
                     ++out_tile_id;
                     l1_read_addr += tile_bytes;
+
+                    if (++barrier_count == barrier_threshold) {
+                        noc_async_writes_flushed();
+                        barrier_count = 0;
+                    }
                 }
                 noc_async_write_barrier();
                 cb_pop_front(cb_out, out_chunk_tiles);
