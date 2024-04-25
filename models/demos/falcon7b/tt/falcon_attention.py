@@ -747,7 +747,9 @@ class TtFalconAttentionDecode(nn.Module):
                     -2,
                     -1,
                     output_mem_config=(
-                        tt_lib.tensor.MemoryConfig(
+                        self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"]
+                        if self.model_config["l1_sharded"] == False
+                        else tt_lib.tensor.MemoryConfig(
                             tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1
                         )
                     ),
