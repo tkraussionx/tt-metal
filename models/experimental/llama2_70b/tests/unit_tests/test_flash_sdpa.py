@@ -214,11 +214,11 @@ def fa2_fake(q, k, v, attn_mask):
     return out
 
 
-def tt_fa2(device, q, k, v, attn_mask, program_config):
-    tt_q = torch2tt_tensor(q, device)
-    tt_k = torch2tt_tensor(k.transpose(-1, -2), device)
-    tt_v = torch2tt_tensor(v, device)
-    tt_attn_mask = torch2tt_tensor(attn_mask, device)
+def tt_fa2(device, q, k, v, attn_mask, program_config, dtype):
+    tt_q = torch2tt_tensor(q, device, tt_dtype=dtype)
+    tt_k = torch2tt_tensor(k.transpose(-1, -2), device, tt_dtype=dtype)
+    tt_v = torch2tt_tensor(v, device, tt_dtype=dtype)
+    tt_attn_mask = torch2tt_tensor(attn_mask, device, tt_dtype=dtype)
 
     tt_out = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
         tt_q, tt_k, tt_v, tt_attn_mask, is_causal=True, program_config=program_config
@@ -235,7 +235,7 @@ def tt_fa2_noconvert(device, q, k, v, attn_mask, program_config):
     return tt2torch_tensor(tt_out)
 
 
-def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
+def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
     program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
         compute_with_storage_grid_size=[8, 8], q_chunk_size=q_chunk_size, k_chunk_size=k_chunk_size
     )
@@ -254,7 +254,7 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
     print(f"attn_mask: {attn_mask.shape}")
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
-    mine = tt_fa2(device, Q, K, V, attn_mask, program_config)
+    mine = tt_fa2(device, Q, K, V, attn_mask, program_config, dtype)
     out_pass, out_pcc = comp_pcc(gt, mine, 0.99)
     print(f"python vs pytorch: {out_pcc}")
 
@@ -388,6 +388,9 @@ def test_sdpa_python():
     run_test_sdpa_python()
 
 
+@pytest.mark.parametrize(
+    "dtype", [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16], ids=["bfp8", "bf16"]
+)
 @pytest.mark.parametrize("b", [1, 2, 32])
 @pytest.mark.parametrize("nh", [8, 16, 71])
 @pytest.mark.parametrize("nkv", [1])
@@ -395,5 +398,8 @@ def test_sdpa_python():
 @pytest.mark.parametrize("d", [64, 128])
 @pytest.mark.parametrize("q_chunk_size", [128, 256, 512])
 @pytest.mark.parametrize("k_chunk_size", [256, 512])
-def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
-    run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size)
+def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
+    if (s % q_chunk_size != 0) or (s % k_chunk_size != 0):
+        pytest.skip("s must be divisible by q_chunk_size and k_chunk_size")
+
+    run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype)

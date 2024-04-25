@@ -311,6 +311,7 @@ void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uin
     // Postcondition: in1_scalar_cb has 1 produced
     // unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
     // pack_reconfig_data_format(in0_cb);
+    unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
     cb_wait_front(in1_scalar_cb, 1);
     // cb_wait_front(in0_cb, num_tiles);
     mul_tiles_bcast_scalar_init_short();
@@ -498,7 +499,10 @@ void matmul_blocks(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t M
     // preconditino: in1_cb has K*N produced
     // postcondition: out_cb has M*N produced
 
+
     mm_block_init_short(in0_cb, in1_cb, 0 /*transpose*/, subblock_w /*ct_dim*/, subblock_h /*rt_dim*/, in0_block_w /*kt_dim*/);
+
+    unpack_reconfig_data_format(in1_cb, in0_cb);
 
     uint32_t output_num_tiles = M * N;
     uint32_t out_subblock_num_tiles = subblock_h * subblock_w;
@@ -628,6 +632,7 @@ void MAIN {
 
                     /* QK = Q_CHUNK @ K_CHUNK */
                     cb_wait_front(cb_k_in, k_chunk_tiles);
+                    pack_reconfig_data_format(cb_qk_im);
                     matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w);
                     cb_pop_front(cb_k_in, k_chunk_tiles);
 
@@ -647,6 +652,7 @@ void MAIN {
                             // DeviceZoneScopedN("stats 1.1");
                             /* QK += MASK */
                             // cb_push_back(cb_qk_im, qk_chunk_tiles);
+                            unpack_reconfig_data_format(cb_qk_im, cb_mask_in);
                             add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
                             // cb_pop_front(cb_qk_im, qk_chunk_tiles);
                         }
@@ -654,6 +660,7 @@ void MAIN {
 
                         /* cb_cur_max = max(QK, dim=-1)*/
                         // cb_push_back(cb_qk_im, qk_chunk_tiles);
+                        unpack_reconfig_data_format(cb_qk_im, cb_identity_scale_in);
                         reduce_max_c(cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
 
                         if (k_chunk > 0) {
@@ -705,6 +712,7 @@ void MAIN {
                     /* OUT_IM = QK @ V_CHUNK */
                     cb_wait_front(cb_v_in, k_chunk_tiles);
                     matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w);
+                    unpack_reconfig_data_format_srca(cb_out_im);
                     cb_pop_front(cb_qk_im, qk_chunk_tiles);
                     cb_pop_front(cb_v_in, k_chunk_tiles);
                     // cb_out_im points to end of CB
@@ -745,11 +753,6 @@ void MAIN {
                 }
 
                 {
-                    //DeviceZoneScopedN("Finalize Q loop");
-                    // free up cb_prev_max after K chunks
-                    cb_pop_front(cb_prev_max, Sq_chunk_t);
-                    cb_pop_front(cb_prev_sum, Sq_chunk_t);
-
                     /* cb_cur_sum = 1.0 / cb_cur_sum */
                     cb_push_back(cb_cur_sum, Sq_chunk_t);
                     recip_block_inplace(cb_cur_sum, Sq_chunk_t);
@@ -758,10 +761,13 @@ void MAIN {
                     /* cb_out_accumulate_im *= cb_cur_sum */
                     mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_cur_sum, Sq_chunk_t, DHt);
                     // cb_cur_sum is empty, cb_out_accumulate_im is full
-
+                    pack_reconfig_data_format(cb_out);
                     copy_block(cb_out_accumulate_im, cb_out, out_chunk_tiles);
 
                     cb_pop_front(cb_q_in, q_chunk_tiles);
+                    // free up cb_prev_max after K chunks
+                    cb_pop_front(cb_prev_max, Sq_chunk_t);
+                    cb_pop_front(cb_prev_sum, Sq_chunk_t);
                 }
 
 
