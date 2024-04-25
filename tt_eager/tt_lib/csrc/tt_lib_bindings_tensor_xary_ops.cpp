@@ -48,6 +48,7 @@ namespace tt::tt_metal::detail {
             R"doc(Returns tensor with the square-root of elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "sigmoid", sigmoid, R"doc(Applies the sigmoid function to the elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "sigmoid_accurate", sigmoid_accurate, R"doc(Applies the sigmoid_accurate function to the elements of the input tensor ``{0}``.)doc");
+        detail::bind_unary_op(m_tensor, "softplus_fused", softplus_fused, R"doc(Applies the softplus_fused function to the elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "log", log, R"doc(Returns tensor with the natural logarithm of elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "tanh", tanh, R"doc(Returns tensor with the hyperbolic tangent of elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "log2", log2, R"doc(Returns tensor with the base 2 logarithm of elements of the input tensor ``{0}``.)doc");

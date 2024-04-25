@@ -38,6 +38,11 @@ def test_hardtanh(device, h, w):
 @pytest.mark.parametrize("w", [128])
 def test_sigmoid_accurate(device, h, w):
     run_activation_unary_test(device, h, w, ttnn.sigmoid_accurate, torch.sigmoid)
+    
+@pytest.mark.parametrize("h", [32])
+@pytest.mark.parametrize("w", [5120])
+def test_softplus_fused(device, h, w):
+    run_activation_unary_test(device, h, w, ttnn.softplus_fused, torch.sigmoid)
 
 
 @pytest.mark.parametrize("h", [64])

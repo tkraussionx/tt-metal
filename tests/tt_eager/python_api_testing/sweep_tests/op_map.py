@@ -578,6 +578,14 @@ op_map = {
         "tt_lib_op": ttnn_ops.eltwise_sigmoid_accurate,
         "pytorch_op": pytorch_ops.sigmoid,
     },
+    "eltwise-softplus_fused": {
+        "tt_lib_op": tt_lib_ops.eltwise_softplus_fused,
+        "pytorch_op": pytorch_ops.softplus,
+    },
+    "ttnn-eltwise-softplus_fused": {
+        "tt_lib_op": ttnn_ops.eltwise_softplus_fused,
+        "pytorch_op": pytorch_ops.softplus,
+    },
     "eltwise-log_sigmoid": {
         "tt_lib_op": tt_lib_ops.eltwise_log_sigmoid,
         "pytorch_op": pytorch_ops.log_sigmoid,
