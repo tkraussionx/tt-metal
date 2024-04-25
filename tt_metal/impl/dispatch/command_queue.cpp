@@ -819,7 +819,13 @@ const DeviceCommand EnqueueRecordEventCommand::assemble_device_commands() {
     std::vector<const void *> event_payloads(num_hw_cqs);
 
     for (uint8_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
-        tt_cxy_pair dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_core(this->device->id(), channel, cq_id);
+        tt_cxy_pair dispatch_location;
+        if (device->is_mmio_capable()) {
+            dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_core(this->device->id(), channel, cq_id);
+        } else {
+            dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_d_core(this->device->id(), channel, cq_id);
+        }
+
         CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, core_type);
         unicast_sub_cmds[cq_id] = CQDispatchWritePackedUnicastSubCmd{.noc_xy_addr = get_noc_unicast_encoding(dispatch_physical_core)};
         event_payloads[cq_id] = event_payload.data();
