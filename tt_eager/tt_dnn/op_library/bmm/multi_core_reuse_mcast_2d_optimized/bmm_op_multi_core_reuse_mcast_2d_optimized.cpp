@@ -219,7 +219,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)  (in0_shard_height_in_tiles),
             (std::uint32_t)  (in0_block_w),
             // batch args
-            (std::uint32_t)  B // batch
+            (std::uint32_t)  B, // batch
+            // in1
+            (std::uint32_t)  in1_mcast_receiver_semaphore,
+            (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
+            (std::uint32_t)  per_core_N * in0_block_w * in1_single_tile_size
         };
     } else {
         in0_sender_compile_time_args = {
@@ -333,12 +337,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     }
 
     std::map<string, string> mm_kernel_defines;
+    std::map<string, string> mm_kernel_defines_top_row;
     std::map<string, string> mm_kernel_in0_sender_defines;
     std::map<string, string> mm_kernel_in1_sender_writer_defines;
     std::map<string, string> mm_kernel_in1_receiver_writer_defines;
     std::map<string, string> mm_kernel_in1_receiver_writer_other_noc_setup_defines;
     if (bias_buffer != nullptr) {
         mm_kernel_defines["FUSE_BIAS"] = "1";
+        mm_kernel_defines_top_row["FUSE_BIAS"] = "1";
         mm_kernel_in1_sender_writer_defines["FUSE_BIAS"] = "1";
         mm_kernel_in1_receiver_writer_defines["FUSE_BIAS"] = "1";
         mm_kernel_in1_receiver_writer_other_noc_setup_defines["FUSE_BIAS"] = "1";
@@ -346,15 +352,19 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     if (fused_activation.has_value()) {
         if (fused_activation.value().op_type == UnaryOpType::RELU) {
             mm_kernel_defines["PACK_RELU"] = "1";
+            mm_kernel_defines_top_row["PACK_RELU"] = "1";
         } else {
             mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
+            mm_kernel_defines_top_row.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
         }
     }
     if (packer_l1_acc_en) {
         mm_kernel_defines["PACKER_L1_ACC"] = "1";
+        mm_kernel_defines_top_row["PACKER_L1_ACC"] = "1";
     }
     if (fp32_dest_acc_en) {
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
+        mm_kernel_defines_top_row["FP32_DEST_ACC_EN"] = "1";
     }
     if (in0_height_sharded) {
         mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
@@ -362,6 +372,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     if (in1_is_sharded) {
         mm_kernel_in1_sender_writer_defines["IN1_SHARDED"] = "1";
     }
+
+    mm_kernel_defines_top_row["USE_SAME_NOC"] = "1";
 
     // if (in0_is_sharded) {
     //     mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
@@ -453,11 +465,17 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     // bool fp32_dest_acc_en = true;
     // Gelu currently has better accuracy when run in approx mode
     // bool math_approx_mode = false;
-    auto mm_kernel = tt_metal::CreateKernel(
+    auto mm_kernel_all_except_top_row = tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
-        all_cores,
+        all_except_top_row,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args, .defines = mm_kernel_defines}
+    );
+    auto mm_kernel_top_row = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
+        top_row,
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args, .defines = mm_kernel_defines_top_row}
     );
 
     // Create circular buffers
@@ -471,8 +489,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src0_cb_index, in0_single_tile_size, in0_CB_size / in0_single_tile_size, in0_CB_size);
 
     uint32_t src1_cb_index = 1;
-    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
-		.set_page_size(src1_cb_index, in1_single_tile_size);
+
+    uint32_t src1_cb_index_inplace = 6;
+    std::map<uint8_t, tt::DataFormat> src1_cb_data_format_spec {
+        {src1_cb_index, in1_data_format},
+        {src1_cb_index_inplace, in1_data_format}
+    };
+    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, src1_cb_data_format_spec)
+        .set_page_size(src1_cb_index, in1_single_tile_size)
+        .set_page_size(src1_cb_index_inplace, in1_single_tile_size);
+
+    // tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
+	// 	.set_page_size(src1_cb_index, in1_single_tile_size);
     if (in1_is_sharded) {
         src1_cb_config.set_globally_allocated_address(*in1_buffer);
     }
@@ -540,6 +568,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         auto cb_src3 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
         log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src3_cb_index, bias_single_tile_size, in3_CB_size / bias_single_tile_size, in3_CB_size);
     }
+
+    uint32_t temp_cb_index = 7;
+    tt_metal::CircularBufferConfig temp_cb_config = tt_metal::CircularBufferConfig(output_single_tile_size, {{temp_cb_index, output_data_format}})
+        .set_page_size(temp_cb_index, output_single_tile_size);
+    auto cb_temp = tt_metal::CreateCircularBuffer(program, all_cores, temp_cb_config);
 
     // Parameters for last row, col, or block
     uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
@@ -643,6 +676,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
                     mm_in0_sender_args.push_back(diff_end_coord);
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
+
+                    // in1 mcast args
+                    mm_in0_sender_args.push_back(in1_mcast_start.x); // in1_mcast_dest_noc_start_x
+                    mm_in0_sender_args.push_back(in1_mcast_start.y); // in1_mcast_dest_noc_start_y
+                    mm_in0_sender_args.push_back(in1_mcast_end.x); // in1_mcast_dest_noc_end_x
+                    mm_in0_sender_args.push_back(in1_mcast_end.y); // in1_mcast_dest_noc_end_y
+
                     mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
                     mm_in0_sender_args.push_back(worker_shard_same_coord);
                 }
