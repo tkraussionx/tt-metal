@@ -1286,13 +1286,11 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
     this->initialize_cluster();
     this->initialize_allocator(l1_bank_remap);
     this->initialize_build();
+    auto num_devices = tt::tt_metal::GetNumAvailableDevices();
+    tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
+    TT_ASSERT(id_ < num_devices);
+    tt::tt_metal::device_pool::devices[id_] = this;
     if (!already_initialized) {
-        auto num_devices = tt::tt_metal::GetNumAvailableDevices();
-        tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
-        TT_ASSERT(id_ < num_devices);
-        if (tt::tt_metal::device_pool::devices[id_] == nullptr) {
-            tt::tt_metal::device_pool::devices[id_] = this;
-        }
         this->build_firmware();
     }
 
@@ -1393,6 +1391,27 @@ bool Device::close() {
         uint16_t curr_channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
         CoreType dispatch_core_type = dispatch_core_manager::get(curr_num_hw_cqs).get_dispatch_core_type(device_id);
         for (uint8_t cq_id = 0; cq_id < curr_num_hw_cqs; cq_id++) {
+            if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
+                tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
+                not_done_dispatch_cores.insert(get_physical_core_coordinate(dispatch_location, dispatch_core_type));
+                log_info(tt::LogMetal, "Remote Device Dispatch core: {} will keep running on MMIO Device.", dispatch_location.str());
+            }
+            if (dispatch_core_manager::get(curr_num_hw_cqs).is_prefetcher_core_allocated(device_id, curr_channel, cq_id)) {
+                tt_cxy_pair prefetch_location = dispatch_core_manager::get(curr_num_hw_cqs).prefetcher_core(device_id, curr_channel, cq_id);
+                not_done_dispatch_cores.insert(get_physical_core_coordinate(prefetch_location, dispatch_core_type));
+                log_info(tt::LogMetal, "Remote Device Prefetch core: {} will keep running on MMIO Device.", prefetch_location.str());
+            }
+            if (dispatch_core_manager::get(curr_num_hw_cqs).is_mux_core_allocated(device_id, curr_channel, cq_id)) {
+                tt_cxy_pair mux_location = dispatch_core_manager::get(curr_num_hw_cqs).mux_core(device_id, curr_channel, cq_id);
+                not_done_dispatch_cores.insert(get_physical_core_coordinate(mux_location, dispatch_core_type));
+                log_info(tt::LogMetal, "Remote Device Mux core: {} will keep running on MMIO Device.", mux_location.str());
+            }
+            if (dispatch_core_manager::get(curr_num_hw_cqs).is_demux_core_allocated(device_id, curr_channel, cq_id)) {
+                tt_cxy_pair demux_location = dispatch_core_manager::get(curr_num_hw_cqs).demux_core(device_id, curr_channel, cq_id);
+                not_done_dispatch_cores.insert(get_physical_core_coordinate(demux_location, dispatch_core_type));
+                log_info(tt::LogMetal, "Remote Device Demux core: {} will keep running on MMIO Device.", demux_location.str());
+            }
+            /*
             tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
             tt_cxy_pair prefetch_location = dispatch_core_manager::get(curr_num_hw_cqs).prefetcher_core(device_id, curr_channel, cq_id);
             tt_cxy_pair mux_location = dispatch_core_manager::get(curr_num_hw_cqs).mux_core(device_id, curr_channel, cq_id);
@@ -1402,6 +1421,7 @@ bool Device::close() {
             not_done_dispatch_cores.insert(get_physical_core_coordinate(mux_location, dispatch_core_type));
             not_done_dispatch_cores.insert(get_physical_core_coordinate(demux_location, dispatch_core_type));
             log_info(tt::LogMetal, "Remote Device dispatch cores {} : {} : {} : {} will be reset on MMIO Device.", dispatch_location.str(), prefetch_location.str(), mux_location.str(), demux_location.str());
+            */
         }
     }
 
