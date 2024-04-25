@@ -30,6 +30,7 @@ void kernel_main() {
     const uint32_t local_q_start = get_arg_val<uint32_t>(7);
     const uint32_t local_q_end = get_arg_val<uint32_t>(8);
 
+    const uint32_t q_chunks_per_core = local_q_end - local_q_start;
 
 
     // constexpr uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
@@ -67,8 +68,16 @@ void kernel_main() {
         const uint32_t q_batch_offset = nb * NQH * St * DHt;
         // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
+            for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
+                uint32_t q_chunk;
+                if (q_iter < q_chunks_per_core / 2) {
+                    q_chunk = local_q_start + q_iter;
+                } else {
+                    uint32_t back_q_iter = q_iter - q_chunks_per_core / 2; // Back half should start at 0
+                    q_chunk = q_num_chunks - 1 - (local_q_start + back_q_iter);
+                }
             // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
-            for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
+            // for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
