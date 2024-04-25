@@ -7,7 +7,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "ttnn/operations/core.hpp"
+#include "tt_dnn/op_library/move/move_op.hpp"
 
 namespace py = pybind11;
 

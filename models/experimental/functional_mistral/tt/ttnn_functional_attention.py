@@ -5,7 +5,6 @@
 import ttnn
 import tt_lib
 import torch
-import ttnn.experimental
 from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 
 
@@ -135,11 +134,15 @@ def attention(config, x, bcast_freq_xq, bcast_freq_xk, positions, mask, seqlen, 
         mask = ttnn.unsqueeze_to_4D(mask)
         mask = ttnn.to_device(mask, device)
 
-        mask = ttnn.repeat(
+        mask = ttnn.pad(
             mask,
-            shape=ttnn.Shape(
-                (1, scores.shape[1], 1, 1),
+            padding=(
+                (0, 0),
+                (0, scores.shape[1] - mask.shape[1]),
+                (0, 0),
+                (0, 0),
             ),
+            value=0,
         )
 
         scores = ttnn.reshape(ttnn.add(scores, mask), scores.shape)

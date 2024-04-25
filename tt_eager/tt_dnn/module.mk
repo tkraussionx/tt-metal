@@ -163,7 +163,6 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_attn_matmul/multi_core_attn_matmul.cpp \
 	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_group_attn_matmul/multi_core_group_attn_matmul.cpp \
 	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_ssm_eltwise_mul/multi_core_ssm_eltwise_mul.cpp \
-	tt_eager/tt_dnn/op_library/operation.cpp \
 	tt_eager/tt_dnn/op_library/run_operation.cpp \
 	tt_eager/tt_dnn/op_library/split/split_tiled.cpp \
 	tt_eager/tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.cpp \
