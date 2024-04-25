@@ -163,11 +163,6 @@ def run_falcon_demo_kv(
     if perf_mode:
         logger.info("Running in performance measurement mode (invalid outputs)!")
 
-    model_config = get_model_config(model_config_strs_prefill_decode[0], max_seq_len)
-    tt_cache_path = get_tt_cache_path(
-        model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
-    )
-
     configuration = FalconConfig(**model_config_entries)
 
     profiler.start(f"loading_inputs")
@@ -184,8 +179,15 @@ def run_falcon_demo_kv(
     profiler.start(f"tokenizing_inputs")
 
     tokenizer = AutoTokenizer.from_pretrained(model_version)
-    prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len)
+    prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(
+        input_prompts, tokenizer, max_seq_len, perf_mode
+    )
     profiler.end(f"tokenizing_inputs")
+
+    model_config = get_model_config(model_config_strs_prefill_decode[0], nearest_32(num_input_tokens))
+    tt_cache_path = get_tt_cache_path(
+        model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
+    )
 
     # State dict is needed for embeddings
     logger.info("Loading weights...")
@@ -208,7 +210,7 @@ def run_falcon_demo_kv(
     profiler.start(f"moving_to_device")
 
     base_url = ""
-    model_config = get_model_config(model_config_strs_prefill_decode[0], nearest_32(num_input_tokens))
+
     tt_FalconCausalLM_singlelayer = TtFalconCausalLM(
         devices,
         state_dict,
@@ -333,7 +335,7 @@ def run_falcon_demo_kv(
         num_layers,
         configuration,
         max_seq_len,
-        model_config,
+        get_model_config(model_config_strs_prefill_decode[0], nearest_32(num_input_tokens)),
         tt_cache_path,
         nearest_32(num_input_tokens),
     )
