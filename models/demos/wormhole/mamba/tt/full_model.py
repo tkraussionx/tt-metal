@@ -99,6 +99,10 @@ class MambaTT(torch.nn.Module):
             tt_dtype=ttnn.bfloat16,
         )
 
+    def reset_states(self):
+        for layer in self.layers:
+            layer.reset_states()
+
     def forward(self, x):
         assert len(x.shape) == 2, f"Mamba expects inputs to be rank 2 (was {len(x.shape)})"
 

@@ -20,6 +20,7 @@ class TtMambaSSM(torch.nn.Module):
 
         self.device = device
         self.args = args
+        self.load_fn = load_fn
 
         # hidden state
         self.batch_size = args.batch_size
@@ -97,8 +98,7 @@ class TtMambaSSM(torch.nn.Module):
         )
 
         # hidden state
-        prev_hidden_states = torch.zeros((1, 1, self.batch_size, self.hidden_size * self.n))
-        self.tt_hidden_state = load_fn(f"tt_hidden_state_{args.batch_size}", torch_tensor=prev_hidden_states)
+        self.initialize_hidden_state()
 
         self.compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttl.tensor.MathFidelity.HiFi3,
@@ -112,6 +112,14 @@ class TtMambaSSM(torch.nn.Module):
         )
         self.core_grid_row = 5
         self.core_grid_col = 8
+
+    def reset_states(self):
+        ttnn.deallocate(self.tt_hidden_state)
+        self.initialize_hidden_state()
+
+    def initialize_hidden_state(self):
+        prev_hidden_states = torch.zeros((1, 1, self.batch_size, self.hidden_size * self.n))
+        self.tt_hidden_state = self.load_fn(f"tt_hidden_state_{self.args.batch_size}", torch_tensor=prev_hidden_states)
 
     def forward(self, x):
         assert len(x.shape) == 4, "SSM block expects inputs to be rank 4"

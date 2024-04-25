@@ -23,6 +23,7 @@ class TtMambaBlock(torch.nn.Module):
         self.args = args
         self.batch_size = args.batch_size
         self.configs = configs
+        self.load_fn = load_fn
 
         assert self.batch_size == 32, "Batch size must be 32 for now"
 
@@ -68,15 +69,7 @@ class TtMambaBlock(torch.nn.Module):
             postfix=f"{args.batch_size}",
         )
 
-        self.conv_states = []
-        for i in range(4):
-            self.conv_states.append(
-                load_fn(
-                    f"conv_state{i}",
-                    torch_tensor=torch.zeros(1, 1, self.batch_size, self.args.d_inner),
-                    postfix=f"{args.batch_size}",
-                )
-            )
+        self.initialize_conv_states()
 
         self.tt_ssm = TtMambaSSM(self.args, self.device, configs, load_fn, transformer)
 
@@ -87,6 +80,23 @@ class TtMambaBlock(torch.nn.Module):
         )
         self.core_grid_row = 4
         self.core_grid_col = 8
+
+    def reset_states(self):
+        for i in range(4):
+            ttnn.deallocate(self.conv_states[i])
+        self.initialize_conv_states()
+        self.tt_ssm.reset_states()
+
+    def initialize_conv_states(self):
+        self.conv_states = []
+        for i in range(4):
+            self.conv_states.append(
+                self.load_fn(
+                    f"conv_state{i}",
+                    torch_tensor=torch.zeros(1, 1, self.batch_size, self.args.d_inner),
+                    postfix=f"{self.args.batch_size}",
+                )
+            )
 
     def forward(self, x):
         assert len(x.shape) == 4, "Mamba block expects inputs to be rank 4"
