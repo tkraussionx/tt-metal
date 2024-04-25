@@ -10,6 +10,7 @@ import io
 import subprocess
 import time
 import socket
+from datetime import datetime
 
 from loguru import logger
 
@@ -159,8 +160,9 @@ def generate_report(outFolder, nameAppend):
                 if endTime > deviceEndTime:
                     deviceEndTime = endTime
 
-    with open(TT_METAL_HOME / "delay_time.csv", "a") as delayCsvFile:
-        print(f"{deviceEndTime}, {hostEndTime}, {(hostEndTime - deviceEndTime) / 1e3}", file=delayCsvFile)
+    with open(PROFILER_LOGS_DIR / "delay_time.csv", "w") as delayCsvFile:
+        print("deviceEndTime[ns], hostEndTime[ns], device to host [ns]", file=delayCsvFile)
+        print(f"{deviceEndTime}, {hostEndTime}, {(hostEndTime - deviceEndTime)}", file=delayCsvFile)
 
     # with open(PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME, "w") as csvFile:
     # subprocess.run(
@@ -333,7 +335,10 @@ def main():
 
             try:
                 captureProcess.communicate(timeout=15)
-                generate_report(options.output_folder, options.name_append)
+                date_time = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
+                os.system(f"mkdir -p {TT_METAL_HOME}/runs/{date_time}")
+                os.system(f"mv {PROFILER_LOGS_DIR} {TT_METAL_HOME}/runs/{date_time}")
+                # generate_report(options.output_folder, options.name_append)
             except subprocess.TimeoutExpired as e:
                 captureProcess.terminate()
                 captureProcess.communicate()

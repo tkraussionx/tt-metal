@@ -169,7 +169,7 @@ void InitTimeSync(int device_id, CoreCoord core)
 
 
     log_file.open(log_path, std::ios_base::app);
-    log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency") << std::endl;
+    log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio") << std::endl;
     int i = 0;
     for (auto& deviceHostTime : deviceHostTimePair)
     {
