@@ -111,9 +111,50 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     auto out0_buffer = output_tensor.buffer();
 
+    CoreCoord grid_size;
+
+    std::visit([&](auto&& program_config) {
+        using T = std::decay_t<decltype(program_config)>;
+        if constexpr (std::is_same_v<T, transformers::SDPAMultiCoreProgramConfig>) {
+            grid_size = program_config.compute_with_storage_grid_size;
+        } else {
+            log_info("Using default grid size");
+            grid_size = device->compute_with_storage_grid_size();
+
+        }
+    }, program_config);
+
+    auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
+    uint32_t num_cores = grid_size.x * grid_size.y;
+
+    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
+    TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
+
+    // Parallelization scheme
+    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
+    uint32_t batch_parallel_factor = std::min(B, num_cores);
+    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
+    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
+
+    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
+
+    log_info("Parallelization scheme:");
+    log_info("batch_parallel_factor: {}", batch_parallel_factor);
+    log_info("nh_parallel_factor: {}", nh_parallel_factor);
+    log_info("q_parallel_factor: {}", q_parallel_factor);
+
+
+    // Ceiling divide to allow for non-perfect divisions
+    const uint32_t batch_per_core = (B + batch_parallel_factor-1) / batch_parallel_factor;
+    const uint32_t nh_per_core = (NQH + nh_parallel_factor-1) / nh_parallel_factor;
+    const uint32_t q_per_core = (q_num_chunks + q_parallel_factor-1) / q_parallel_factor;
+
+    const uint32_t q_buffer_factor = (q_per_core > 1) ? 2 : 1;
+
+
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
-    uint32_t q_tiles  = Sq_chunk_t * DHt;
+    uint32_t q_tiles  = Sq_chunk_t * DHt * q_buffer_factor;
     uint32_t k_tiles  = Sk_chunk_t * DHt * 2; // double buffer
     uint32_t v_tiles  = Sk_chunk_t * DHt * 2; // double buffer
     uint32_t mask_tiles = Sq_chunk_t * Sk_chunk_t * 2; // double buffer
@@ -134,24 +175,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_info("statistics_tiles: {}", statistics_tiles);
 
 
-    CoreCoord grid_size;
-
-    std::visit([&](auto&& program_config) {
-        using T = std::decay_t<decltype(program_config)>;
-        if constexpr (std::is_same_v<T, transformers::SDPAMultiCoreProgramConfig>) {
-            grid_size = program_config.compute_with_storage_grid_size;
-        } else {
-            log_info("Using default grid size");
-            grid_size = device->compute_with_storage_grid_size();
-
-        }
-    }, program_config);
-
-    auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
-    uint32_t num_cores = grid_size.x * grid_size.y;
-
-    // TT_FATAL(num_cores == 64); // For now, we only support 64 cores
-    TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
 
 
     // Host code is responsible for determining matmul configuration
@@ -191,20 +214,22 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_info("out_num_blocks: {}", out_num_blocks);
 
     // Determine granularity for statistics computation
-    const uint32_t half_dst = 8; // Always 8 since stats don't use fp32 dst
-    const uint32_t stats_granularity = std::min(Sq_chunk_t, half_dst);
+    const uint32_t stats_granularity = std::min(Sq_chunk_t, dst_size);
     // Find log2 of stats_granularity using std
     const uint32_t log2_stats_granularity = std::log2(stats_granularity);
     // Assert that this is a power of 2
     TT_ASSERT(stats_granularity == (1 << log2_stats_granularity));
 
-    const uint32_t sub_exp_granularity = std::min(Sk_chunk_t, half_dst);
+    const uint32_t sub_exp_granularity = std::min(Sk_chunk_t, dst_size);
     const uint32_t log2_sub_exp_granularity = std::log2(sub_exp_granularity);
     TT_ASSERT(sub_exp_granularity == (1 << log2_sub_exp_granularity));
 
-    const uint32_t mul_bcast_granularity = std::min(Sq_chunk_t * Sk_chunk_t, half_dst);
+    const uint32_t mul_bcast_granularity = std::min(Sq_chunk_t * Sk_chunk_t, dst_size);
     const uint32_t log2_mul_bcast_granularity = std::log2(mul_bcast_granularity);
     TT_ASSERT(mul_bcast_granularity == (1 << log2_mul_bcast_granularity));
+
+    const uint32_t dht_granularity = std::min(DHt, dst_size);
+    const uint32_t log2_dht_granularity = std::log2(dht_granularity);
 
     // Log these
     log_info("stats_granularity: {}", stats_granularity);
@@ -213,6 +238,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_info("log2_sub_exp_granularity: {}", log2_sub_exp_granularity);
     log_info("mul_bcast_granularity: {}", mul_bcast_granularity);
     log_info("log2_mul_bcast_granularity: {}", log2_mul_bcast_granularity);
+    log_info("dht_granularity: {}", dht_granularity);
+    log_info("log2_dht_granularity: {}", log2_dht_granularity);
 
 
 
@@ -250,6 +277,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     defines["LOG2_SUB_EXP_GRANULARITY"] = std::to_string(log2_sub_exp_granularity);
     defines["MUL_BCAST_GRANULARITY"] = std::to_string(mul_bcast_granularity);
     defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
+    defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
+    defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
 
     auto reader_kernels_id = CreateKernel(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
@@ -381,26 +410,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t v_addr = v_buffer->address();
     uint32_t mask_addr = mask_buffer->address();
     uint32_t out_addr = out0_buffer->address();
-
-
-
-    // Parallelization scheme
-    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
-    uint32_t batch_parallel_factor = std::min(B, num_cores);
-    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
-    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
-
-    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
-
-    log_info("Parallelization scheme:");
-    log_info("batch_parallel_factor: {}", batch_parallel_factor);
-    log_info("nh_parallel_factor: {}", nh_parallel_factor);
-    log_info("q_parallel_factor: {}", q_parallel_factor);
-
-    // Ceiling divide to allow for non-perfect divisions
-    const uint32_t batch_per_core = (B + batch_parallel_factor-1) / batch_parallel_factor;
-    const uint32_t nh_per_core = (NQH + nh_parallel_factor-1) / nh_parallel_factor;
-    const uint32_t q_per_core = (q_num_chunks + q_parallel_factor-1) / q_parallel_factor;
 
 
     // Set reader rt args

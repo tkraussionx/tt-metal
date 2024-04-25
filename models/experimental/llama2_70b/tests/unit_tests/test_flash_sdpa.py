@@ -389,11 +389,11 @@ def test_sdpa_python():
 
 
 @pytest.mark.parametrize("b", [1, 2, 32])
-@pytest.mark.parametrize("nh", [8])
+@pytest.mark.parametrize("nh", [8, 16, 71])
 @pytest.mark.parametrize("nkv", [1])
 @pytest.mark.parametrize("s", [2048])
-@pytest.mark.parametrize("d", [128])
-@pytest.mark.parametrize("q_chunk_size", [256])
-@pytest.mark.parametrize("k_chunk_size", [256])
+@pytest.mark.parametrize("d", [64, 128])
+@pytest.mark.parametrize("q_chunk_size", [128, 256, 512])
+@pytest.mark.parametrize("k_chunk_size", [256, 512])
 def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size):
     run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size)
