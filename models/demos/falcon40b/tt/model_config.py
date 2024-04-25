@@ -851,12 +851,12 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     layernorm_max_num_cores_y = 8
 
     layernorm_slice_size = 512
-    attention_max_slice_size = 128
+    attention_max_slice_size = 256
     attention_slice_size = min(attention_max_slice_size, row_height)
     assert row_height % attention_slice_size == 0
 
     attention_num_slices = row_height // attention_slice_size
-    attention_num_cores = attention_slice_size * 16 // 32
+    attention_num_cores = min(attention_slice_size * 16 // 32, 64)
     assert attention_num_cores in (16, 32, 64)
 
     if attention_num_cores == 16:
