@@ -21,7 +21,7 @@ pytest==7.2.2
 pytest-timeout==2.2.0
 pytest-split==0.8.2
 jsbeautifier==1.14.7
-datasets==2.9.0
+datasets==2.16.0
 torch==2.2.1.0+cpu
 networkx==3.1
 torchvision==0.17.1+cpu
@@ -48,3 +48,4 @@ multiprocess==0.70.14
 evaluate==0.4.0
 bert-score==0.3.12
 fsspec==2023.9.2 # Temporary pin to 2023.9.2: https://github.com/tenstorrent/tt-metal/issues/3314
+lm-eval==0.4.2
