@@ -10,7 +10,7 @@ from models.demos.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
 from models.demos.falcon7b.tt.falcon_attention import TtFalconAttentionDecode, TtFalconAttentionPrefill
-from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path
+from models.demos.falcon7b.tt.model_config import get_model_config
 from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,

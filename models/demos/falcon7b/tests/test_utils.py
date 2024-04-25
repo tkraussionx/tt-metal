@@ -7,7 +7,7 @@ import tt_lib
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
 
-def create_prefill_attn_mask_for_sharded_softmax(attention_mask, seq_len, device):
+def create_prefill_attn_mask_for_sharded_softmax(attention_mask, num_attn_heads, seq_len):
     if seq_len == 2048:
         num_slices = 16
     elif seq_len == 128:
@@ -17,13 +17,9 @@ def create_prefill_attn_mask_for_sharded_softmax(attention_mask, seq_len, device
     else:
         raise ValueError("Unsupported seq_len for optimizations")
 
-    dram_memcfg = tt_lib.tensor.MemoryConfig(
-        tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
-    )
-    bfp_8 = tt_lib.tensor.DataType.BFLOAT8_B
     attn_masks_per_slice = []
     attention_mask_starting_index_per_slice = 0
-    slice_length = (71 * seq_len) // num_slices
+    slice_length = (num_attn_heads * seq_len) // num_slices
     number_of_attention_mask_elements_used_per_slice = slice_length - seq_len * (slice_length // seq_len)
     for _ in range(num_slices):
         torch_attn_mask_per_slice = torch.cat(
@@ -33,14 +29,7 @@ def create_prefill_attn_mask_for_sharded_softmax(attention_mask, seq_len, device
             ],
             dim=2,
         )
-
-        tt_attention_slices = torch2tt_tensor(
-            torch_attn_mask_per_slice,
-            device,
-            tt_memory_config=dram_memcfg,
-            tt_dtype=bfp_8,
-        )
-        attn_masks_per_slice.append(tt_attention_slices)
+        attn_masks_per_slice.append(torch_attn_mask_per_slice)
 
         attention_mask_starting_index_per_slice = (
             attention_mask_starting_index_per_slice + number_of_attention_mask_elements_used_per_slice
@@ -88,9 +77,13 @@ def get_rand_falcon_inputs(
                     attention_mask_bool_i = attention_mask_bool[batch * i : batch * (i + 1)]
                     tt_attention_input.append(torch2tt_tensor(attention_input_i.unsqueeze(1), device))
                     if seq_len in [2048, 128, 1024] and optimized:
-                        tt_attention_mask.append(
-                            create_prefill_attn_mask_for_sharded_softmax((attention_mask_bool_i * -1e3), q_len, device)
+                        attn_masks = create_prefill_attn_mask_for_sharded_softmax(
+                            (attention_mask_bool_i * -1e5),
+                            configuration.num_attention_heads,
+                            q_len,
                         )
+                        tt_attn_masks = [torch2tt_tensor(attn_mask, device) for attn_mask in attn_masks]
+                        tt_attention_mask.append(tt_attn_masks)
                     else:
                         tt_attention_mask.append(
                             torch2tt_tensor(

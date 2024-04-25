@@ -18,6 +18,7 @@ class TtFalconMLPPrefill(nn.Module):
         base_url,
         layer_num,
         hidden_size: int,
+        max_position_embeddings,
         model_config,
         tt_cache_path,
         weights_dict=None,
@@ -29,7 +30,7 @@ class TtFalconMLPPrefill(nn.Module):
         self.num_devices = len(devices)
         self.hidden_size = hidden_size
         self.model_config = model_config
-
+        self.max_position_embeddings = max_position_embeddings
         self.padding_value = model_config["MLP_PADDING_VALUE"]
         self.seq_len = model_config["MLP_SEQ_LEN"]
         # Padding tensor for 1024 and 2048 sequence lengths
@@ -80,10 +81,7 @@ class TtFalconMLPPrefill(nn.Module):
             mlp_padding_tensor = dict()
             for seq_len in [1024, 2048]:
                 # If explicitly set in model config, skip padding for larger sequence lengths, used for demo
-                if (
-                    "MAX_POSITION_EMBEDDINGS" in self.model_config
-                    and seq_len > self.model_config["MAX_POSITION_EMBEDDINGS"]
-                ):
+                if seq_len > self.max_position_embeddings:
                     continue
                 tt_padding = torch.zeros((1, 1, seq_len, 64)).bfloat16().float()  # 4608 - 4544 = 64
                 tt_padding = ttnn.from_torch(
@@ -218,6 +216,7 @@ class TtFalconMLPDecode(nn.Module):
         base_url,
         layer_num,
         hidden_size: int,
+        max_position_embeddings,
         model_config,
         tt_cache_path,
         weights_dict=None,
@@ -230,7 +229,7 @@ class TtFalconMLPDecode(nn.Module):
         self.model_config = model_config
         self.padding_value = model_config["MLP_PADDING_VALUE"]
         self.prefill_seq_len = model_config["MLP_SEQ_LEN"]
-
+        self.max_position_embeddings = max_position_embeddings
         layer_name = f"{base_url}.{layer_num}"
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"

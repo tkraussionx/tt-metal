@@ -7,7 +7,7 @@ import torch
 from loguru import logger
 from models.demos.falcon7b.reference.hf_modeling_falcon import FalconForCausalLM
 from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLPDecode, TtFalconMLPPrefill
-from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path
+from models.demos.falcon7b.tt.model_config import get_model_config
 from models.utility_functions import get_devices_for_t3000, torch2tt_tensor, tt2torch_tensor
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
@@ -35,6 +35,7 @@ def run_test_FalconMLP_inference(
     model_config,
     tt_cache_path,
     model_location_generator,
+    max_seq_len=2048,
 ):
     num_devices = len(devices)
     model_name = model_location_generator(model_version, model_subdir="Falcon")
@@ -69,6 +70,7 @@ def run_test_FalconMLP_inference(
         base_url,
         layer_num,
         configuration.hidden_size,
+        max_seq_len,
         model_config,
         tt_cache_path,
     )
@@ -146,7 +148,6 @@ def test_FalconMLP_inference(
     devices = get_devices_for_t3000(all_devices, num_devices)
 
     model_config = get_model_config(model_config_str, seq_len)
-    model_config["MAX_POSITION_EMBEDDINGS"] = 2048
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
@@ -161,4 +162,5 @@ def test_FalconMLP_inference(
         model_config,
         tt_cache_path,
         model_location_generator,
+        max_seq_len=2048,
     )

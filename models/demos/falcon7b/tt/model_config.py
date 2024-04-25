@@ -92,7 +92,7 @@ def pretty_print_model_config(model_config):
     return "\n".join(print_str)
 
 
-def get_model_config(model_config_str, seq_len, optimized=False):
+def get_model_config(model_config_str, prefill_seq_len=0, optimized=False):
     assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
@@ -188,7 +188,7 @@ def get_model_config(model_config_str, seq_len, optimized=False):
 
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
-    set_prefill_config(model_config, seq_len, DRAM_MEMCFG)
+    set_prefill_config(model_config, prefill_seq_len, DRAM_MEMCFG)
 
     return model_config
 
@@ -298,16 +298,6 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         fused_activation=None,
         mcast_in0=False,
     )
-
-
-# TODO: Generalize TT tensor caching
-def get_tt_cache_path(model_version):
-    tt_cache_path = Path("/mnt/MLPerf/tt_dnn-models/tt/Falcon") / model_version
-    if tt_cache_path.exists():
-        return tt_cache_path
-    else:
-        Path(f"models/demos/falcon7b/datasets/{model_version}").mkdir(parents=True, exist_ok=True)
-        return Path(f"models/demos/falcon7b/datasets/{model_version}")
 
 
 model_config_entries = {
