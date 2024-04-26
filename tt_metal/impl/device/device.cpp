@@ -60,6 +60,14 @@ void ActiveDevices::deactivate_device(chip_id_t id) {
     this->active_devices_[id] = ActiveState::INACTIVE;
 }
 
+bool ActiveDevices::is_device_active(chip_id_t id) {
+    if (this->active_devices_.size() < id + 1) {
+        TT_THROW("Invalid Device ", id);
+    } else {
+        return this->active_devices_[id] == ActiveState::ACTIVE;
+    }
+}
+
 Device::Device(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<uint32_t>& l1_bank_remap) : id_(device_id), num_hw_cqs_(num_hw_cqs)
 {
     ZoneScoped;
@@ -1340,6 +1348,7 @@ bool Device::close() {
             CoreType dispatch_core_type = dispatch_core_manager::get(curr_num_hw_cqs).get_dispatch_core_type(device_id);
             for (uint8_t cq_id = 0; cq_id < curr_num_hw_cqs; cq_id++) {
                 if (device_id == this->id_) {
+                    //mmio device.
                     if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
                         not_done_dispatch_cores.insert(get_physical_core_coordinate(dispatch_location, dispatch_core_type));
@@ -1350,7 +1359,9 @@ bool Device::close() {
                         not_done_dispatch_cores.insert(get_physical_core_coordinate(prefetch_location, dispatch_core_type));
                         log_info(tt::LogMetal, "MMIO Device Prefetch core: {}", prefetch_location.str());
                     }
-                } else {
+                } else if (this->active_devices_.is_device_active(device_id)) {
+                    //non mmio devices serviced by this mmio capable device.
+                    //skip remote dispatch cores only if respective remote device is active.
                     if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
                         cores_to_skip.insert(get_physical_core_coordinate(dispatch_location, dispatch_core_type));
@@ -1386,6 +1397,7 @@ bool Device::close() {
             }
         }
     } else {
+        //remote device that is active
         uint8_t curr_num_hw_cqs = 1;
         auto device_id = this->id_;
         uint16_t curr_channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
@@ -1394,22 +1406,22 @@ bool Device::close() {
             if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
                 not_done_dispatch_cores.insert(get_physical_core_coordinate(dispatch_location, dispatch_core_type));
-                log_info(tt::LogMetal, "Remote Device Dispatch core: {} will keep running on MMIO Device.", dispatch_location.str());
+                log_info(tt::LogMetal, "Remote Device Dispatch core: {} will be reset on MMIO Device.", dispatch_location.str());
             }
             if (dispatch_core_manager::get(curr_num_hw_cqs).is_prefetcher_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair prefetch_location = dispatch_core_manager::get(curr_num_hw_cqs).prefetcher_core(device_id, curr_channel, cq_id);
                 not_done_dispatch_cores.insert(get_physical_core_coordinate(prefetch_location, dispatch_core_type));
-                log_info(tt::LogMetal, "Remote Device Prefetch core: {} will keep running on MMIO Device.", prefetch_location.str());
+                log_info(tt::LogMetal, "Remote Device Prefetch core: {} will be reset on MMIO Device.", prefetch_location.str());
             }
             if (dispatch_core_manager::get(curr_num_hw_cqs).is_mux_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair mux_location = dispatch_core_manager::get(curr_num_hw_cqs).mux_core(device_id, curr_channel, cq_id);
                 not_done_dispatch_cores.insert(get_physical_core_coordinate(mux_location, dispatch_core_type));
-                log_info(tt::LogMetal, "Remote Device Mux core: {} will keep running on MMIO Device.", mux_location.str());
+                log_info(tt::LogMetal, "Remote Device Mux core: {} will be reset on MMIO Device.", mux_location.str());
             }
             if (dispatch_core_manager::get(curr_num_hw_cqs).is_demux_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair demux_location = dispatch_core_manager::get(curr_num_hw_cqs).demux_core(device_id, curr_channel, cq_id);
                 not_done_dispatch_cores.insert(get_physical_core_coordinate(demux_location, dispatch_core_type));
-                log_info(tt::LogMetal, "Remote Device Demux core: {} will keep running on MMIO Device.", demux_location.str());
+                log_info(tt::LogMetal, "Remote Device Demux core: {} will be reset on MMIO Device.", demux_location.str());
             }
             /*
             tt_cxy_pair dispatch_location = dispatch_core_manager::get(curr_num_hw_cqs).dispatcher_core(device_id, curr_channel, cq_id);
