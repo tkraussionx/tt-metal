@@ -160,7 +160,7 @@ def run_mistral_demo(user_input, batch_size, device):
     embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
 
     generation_start_pos = 0
-    max_generated_tokens = 1024
+    max_generated_tokens = model_args.kv_seq_len
     users_decoding = True
 
     # Preprocess initial prompt inputs
