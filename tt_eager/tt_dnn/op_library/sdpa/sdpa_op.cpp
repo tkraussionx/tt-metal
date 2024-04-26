@@ -167,7 +167,7 @@ namespace transformers {
 // Function which is bound to the Python API
 Tensor scaled_dot_product_attention(Tensor& input_tensor_q, Tensor& input_tensor_k, Tensor& input_tensor_v, std::optional<const Tensor> causal_mask, const bool is_causal, std::optional<float> scale, const MemoryConfig& output_mem_config, const SDPAProgramConfig& program_config, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     // make sure output is dram
-    TT_FATAL(output_mem_config.buffer_type() == tt_metal::BufferType::DRAM);
+    TT_FATAL(output_mem_config.buffer_type == tt_metal::BufferType::DRAM);
 
     auto kernel_config_val = init_device_compute_kernel_config(input_tensor_q.device()->arch(), compute_kernel_config, MathFidelity::HiFi2, true, false, false);
     return operation::run(ScaledDotProductAttention{.scale=scale, .output_mem_config=output_mem_config, .program_config=program_config, .is_causal=is_causal, .compute_kernel_config=kernel_config_val}, {input_tensor_q, input_tensor_k, input_tensor_v}, {causal_mask}).at(0);
