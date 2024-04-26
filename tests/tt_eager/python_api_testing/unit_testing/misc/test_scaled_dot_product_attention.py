@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
 
@@ -69,5 +69,30 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
 def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
     if (s % q_chunk_size != 0) or (s % k_chunk_size != 0):
         pytest.skip("s must be divisible by q_chunk_size and k_chunk_size")
+    if nh == 8 and q_chunk_size == 128 and k_chunk_size == 128:
+        pytest.skip("Can cause OOM if profiling is enabled.")
 
     run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype)
+
+
+@pytest.mark.parametrize(
+    "dtype", [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16], ids=["bfp8", "bf16"]
+)
+@pytest.mark.parametrize("q_chunk_size", [128, 256], ids=["q128", "q256"])
+@pytest.mark.parametrize("k_chunk_size", [128, 256], ids=["k128", "k256"])
+@pytest.mark.parametrize(
+    "b, nh, nkv, s, d",
+    (
+        [1, 8, 1, 2048, 128],  # Llama2-70B
+        [1, 16, 1, 2048, 64],  # Falcon-40B
+        [1, 71, 1, 2048, 64],  # Falcon-7B
+    ),
+)
+def test_sdpa_tt_with_program_cache(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype, use_program_cache):
+    if (s % q_chunk_size != 0) or (s % k_chunk_size != 0):
+        pytest.skip("s must be divisible by q_chunk_size and k_chunk_size")
+    if nh == 8 and q_chunk_size == 128 and k_chunk_size == 128:
+        pytest.skip("Can cause OOM if profiling is enabled.")
+
+    for _ in range(2):
+        run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype)

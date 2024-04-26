@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -134,7 +134,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
     uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
 
-    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor == num_cores );
+    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor <= num_cores );
 
     log_debug("Parallelization scheme:");
     log_debug("batch_parallel_factor: {}", batch_parallel_factor);
@@ -149,7 +149,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     const uint32_t q_buffer_factor = (q_per_core > 1) ? 2 : 1;
 
-
+    log_debug("q_per_core: {}", q_per_core);
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
     uint32_t q_tiles  = Sq_chunk_t * DHt * q_buffer_factor;
@@ -277,17 +277,25 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
     defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
     defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
+    uint32_t balanced_q_parallel = (q_per_core*q_parallel_factor == q_num_chunks) && (q_per_core % 2 == 0);
+    if (balanced_q_parallel) {
+        defines["BALANCED_Q_PARALLEL"] = "1";
+    }
+
+    log_debug("BALANCED_Q_PARALLEL: {}", balanced_q_parallel);
 
     auto reader_kernels_id = CreateKernel(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
         tt_metal::ReaderDataMovementConfig(
-            reader_compile_time_args
+            reader_compile_time_args,
+            defines
     ));
 
     auto writer_kernels_id = CreateKernel(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp", core_grid,
         tt_metal::WriterDataMovementConfig(
-            writer_compile_time_args
+            writer_compile_time_args,
+            defines
     ));
 
     auto compute_kernels_id = CreateKernel(
@@ -441,7 +449,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         nh_per_core,
         q_per_core,
         nh_parallel_factor,
-        q_parallel_factor
+        q_parallel_factor,
+        B,
+        NQH,
+        q_num_chunks
         ]
     (
         const void* operation,
@@ -469,12 +480,20 @@ operation::ProgramWithCallbacks sdpa_multi_core(
             CoreCoord core = {i % grid_size.x, i / grid_size.x};
 
             // log_debug("core: {} getting runtime args for idx {i}", core, i);
-            const uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
-            const uint32_t local_batch_end = local_batch_start + batch_per_core;
-            const uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
-            const uint32_t local_nh_end = local_nh_start + nh_per_core;
-            const uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
-            const uint32_t local_q_end = local_q_start + q_per_core;
+            uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
+            uint32_t local_batch_end = local_batch_start + batch_per_core;
+            uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
+            uint32_t local_nh_end = local_nh_start + nh_per_core;
+            uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
+            uint32_t local_q_end = local_q_start + q_per_core;
+
+            // clamp all to max values for non-even partitioning
+            local_batch_start = std::min(local_batch_start, B);
+            local_batch_end = std::min(local_batch_end, B);
+            local_nh_start = std::min(local_nh_start, NQH);
+            local_nh_end = std::min(local_nh_end, NQH);
+            local_q_start = std::min(local_q_start, q_num_chunks);
+            local_q_end = std::min(local_q_end, q_num_chunks);
 
             // log the above
             log_debug("core: {}", i);

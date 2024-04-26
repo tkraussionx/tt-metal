@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -37,20 +37,6 @@ void kernel_main() {
     const uint32_t local_q_end = get_arg_val<uint32_t>(11);
 
     const uint32_t q_chunks_per_core = local_q_end - local_q_start;
-
-    // constexpr uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
-    // const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
-    // const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
-    // const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
-    // const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
-
-    // DPRINT << "READER core=" << core_id  << " local_batch_start=" << local_batch_start << " local_batch_end=" << local_batch_end << " local_nh_start=" << local_nh_start << " local_nh_end=" << local_nh_end << " local_q_start=" << local_q_start << " local_q_end=" << local_q_end << ENDL();
-    // DPRINT << "READER core=" << core_id  << " local_batch=" << local_batch << " local_q_head=" << local_q_head << " local_q_chunk_start=" << local_q_chunk_start << " local_q_chunk_end=" << local_q_chunk_end << ENDL();
-
-    // const uint32_t my_q_head = core_id / num_chunks;
-    // const uint32_t my_q_chunk = core_id % num_chunks;
-
-    // DPRINT << "READER: scale_val: " << scale_val << ENDL();
 
     constexpr uint32_t q_chunk_tiles = Sq_chunk_t * DHt;
     constexpr uint32_t k_chunk_tiles = Sk_chunk_t * DHt;
@@ -109,35 +95,34 @@ void kernel_main() {
     uint32_t barrier_count = 0;
 
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
-        DPRINT << "READER: "  << "nb=" << nb << ENDL();
         const uint32_t q_batch_offset = nb * NQH * St * DHt;
         const uint32_t k_batch_offset = nb * NKH * St * DHt;
         const uint32_t v_batch_offset = nb * NKH * St * DHt;
         const uint32_t mask_batch_offset = nb * St * St;
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
-            DPRINT << "READER: "  << "nq=" << nq << ENDL();
-            // for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
             for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
                 uint32_t q_chunk;
+                #if defined BALANCED_Q_PARALLEL
                 if (q_iter < q_chunks_per_core / 2) {
                     q_chunk = local_q_start + q_iter;
                 } else {
                     uint32_t back_q_iter = q_iter - q_chunks_per_core / 2; // Back half should start at 0
                     q_chunk = q_num_chunks - 1 - (local_q_start + back_q_iter);
                 }
-                // DeviceZoneScopedN("read Q");
+                #else
+                q_chunk = local_q_start + q_iter;
+                #endif
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
                 q_tile_id = q_batch_offset + q_head_offset + q_chunk_offset;
-                DPRINT << "READER: "  << "q_chunk=" << q_chunk << ENDL();
+
                 // Read Q chunk
                 cb_reserve_back(cb_q_in, q_chunk_tiles);
                 uint32_t q_write_ptr = get_write_ptr(cb_q_in);
 
                 barrier_count = 0;
                 for (uint32_t tile = 0; tile < q_chunk_tiles; ++tile) {
-                        // DPRINT << "READER: "  << "q_tile_id=" << q_tile_id << ENDL();
                     noc_async_read_tile(q_tile_id, q_reader, q_write_ptr);
                     q_tile_id += 1;
                     q_write_ptr += q_tile_bytes;
@@ -156,10 +141,8 @@ void kernel_main() {
 
                 // loop while k_low < q_high
                 for (uint32_t k_chunk = 0; (k_chunk * Sk_chunk_t) < q_high_idx; ++k_chunk) {
-                    // DeviceZoneScopedN("read K");
                     const uint32_t k_low_idx = k_chunk * Sk_chunk_t;
                     const uint32_t k_high_idx = k_low_idx + Sk_chunk_t;
-                    // DPRINT << "READER: "  << "k_chunk=" << k_chunk << ENDL();
                     const uint32_t k_start_tile_id = k_batch_offset + k_chunk * Sk_chunk_t * DHt;
 
                     // Read K chunk transposed
@@ -169,7 +152,6 @@ void kernel_main() {
                     for (uint32_t col = 0; col < DHt; ++col) {
                         k_tile_id = k_start_tile_id + col;
                         for (uint32_t row = 0; row < Sk_chunk_t; ++row) {
-                                // DPRINT << "READER: "  << "k_tile_id=" << k_tile_id << ENDL();
                             noc_async_read_tile(k_tile_id, k_reader, k_write_ptr);
                             k_tile_id += DHt;
                             k_write_ptr += k_tile_bytes;
@@ -197,7 +179,6 @@ void kernel_main() {
                         mask_tile_id = mask_batch_offset + q_chunk * Sq_chunk_t * St /*row_offset*/ + k_chunk * Sk_chunk_t /*col_offset*/;
                         for (uint32_t row = 0; row < Sq_chunk_t; ++row) {
                             for (uint32_t col = 0; col < Sk_chunk_t; ++col) {
-                                    // DPRINT << "READER: "  << "mask_tile_id=" << mask_tile_id << ENDL();
                                 noc_async_read_tile(mask_tile_id, mask_reader, mask_write_ptr);
                                 mask_tile_id += 1;
                                 mask_write_ptr += mask_tile_bytes;
@@ -223,7 +204,6 @@ void kernel_main() {
                     uint32_t v_write_ptr = get_write_ptr(cb_v_in);
                     barrier_count = 0;
                     for (uint32_t tile = 0; tile < k_chunk_tiles; ++tile) {
-                        // DPRINT << "READER: "  << "v_tile_id=" << v_tile_id << ENDL();
                         noc_async_read_tile(v_tile_id, v_reader, v_write_ptr);
                         v_tile_id += 1;
                         v_write_ptr += v_tile_bytes;

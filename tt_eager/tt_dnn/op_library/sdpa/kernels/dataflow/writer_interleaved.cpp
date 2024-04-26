@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -37,16 +37,6 @@ void kernel_main() {
 
     const uint32_t q_chunks_per_core = local_q_end - local_q_start;
 
-
-    // constexpr uint32_t num_local_q_chunks = q_num_chunks / q_parallel_factor;
-    // const uint32_t local_batch = core_id / (NQH * q_parallel_factor);
-    // const uint32_t local_q_head = (core_id / q_parallel_factor) % NQH;
-    // const uint32_t local_q_chunk_start = num_local_q_chunks * (core_id % q_parallel_factor);
-    // const uint32_t local_q_chunk_end = local_q_chunk_start + num_local_q_chunks;
-
-    // const uint32_t my_q_head = core_id / num_chunks;
-    // const uint32_t my_q_chunk = core_id % num_chunks;
-
     constexpr uint32_t out_chunk_tiles = Sq_chunk_t * DHt;
 
     constexpr bool is_dram = true;
@@ -74,31 +64,29 @@ void kernel_main() {
 
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
         const uint32_t q_batch_offset = nb * NQH * St * DHt;
-        // DPRINT << "WRITER: "  << "nb=" << nb << ENDL();
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
             for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
-                // DeviceZoneScopedN("write out");
                 uint32_t q_chunk;
+                #if defined BALANCED_Q_PARALLEL
                 if (q_iter < q_chunks_per_core / 2) {
                     q_chunk = local_q_start + q_iter;
                 } else {
                     uint32_t back_q_iter = q_iter - q_chunks_per_core / 2; // Back half should start at 0
                     q_chunk = q_num_chunks - 1 - (local_q_start + back_q_iter);
                 }
-            // DPRINT << "WRITER: "  << "nq=" << nq << ENDL();
-            // for (uint32_t q_chunk = local_q_start; q_chunk < local_q_end; ++q_chunk) {
+                #else
+                q_chunk = local_q_start + q_iter;
+                #endif
 
                 uint32_t q_head_offset = nq * St * DHt;
                 uint32_t q_chunk_offset = q_chunk * Sq_chunk_t * DHt;
                 out_tile_id = q_batch_offset + q_head_offset + q_chunk_offset;
 
-                // DPRINT << "WRITER: "  << "q_chunk=" << q_chunk << ENDL();
                 // Wait for compute to deliver output chunk
                 cb_wait_front(cb_out, out_chunk_tiles);
                 barrier_count = 0;
                 uint32_t l1_read_addr = get_read_ptr(cb_out);
                 for (uint32_t tile = 0; tile < out_chunk_tiles; ++tile) {
-                    // DPRINT << "WRITER: "  << "out_tile_id=" << out_tile_id << ENDL();
                     noc_async_write_tile(out_tile_id, out_writer, l1_read_addr);
                     ++out_tile_id;
                     l1_read_addr += tile_bytes;
