@@ -755,7 +755,7 @@ class TtFalconAttentionDecode(nn.Module):
                     ),
                 ),
             )
-            key_layer[i].deallocate(True)
+            key_layer[i].deallocate()
 
         attn_weights = []
         if self.model_config["l1_sharded"]:
@@ -774,7 +774,7 @@ class TtFalconAttentionDecode(nn.Module):
                         compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                     )
                 )
-                query_layer[i].deallocate(True)
+                query_layer[i].deallocate()
                 key_layer_transposed[i].deallocate(True)
         elif is_wormhole_b0():
             for i, device in enumerate(self.devices):
@@ -787,8 +787,8 @@ class TtFalconAttentionDecode(nn.Module):
                         output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                     )
                 )
-                query_layer[i].deallocate(True)
-                key_layer_transposed[i].deallocate(True)
+                query_layer[i].deallocate()
+                key_layer_transposed[i].deallocate()
         else:
             for i, device in enumerate(self.devices):
                 attn_weights.append(
@@ -800,7 +800,7 @@ class TtFalconAttentionDecode(nn.Module):
                         output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                     )
                 )
-                query_layer[i].deallocate(True)
+                query_layer[i].deallocate()
                 key_layer_transposed[i].deallocate(True)
 
         if self.model_config["l1_sharded"] == False:
@@ -891,7 +891,7 @@ class TtFalconAttentionDecode(nn.Module):
                     )
                 )
                 attn_weights[i].deallocate(True)
-                value_layer[i].deallocate(True)
+                value_layer[i].deallocate()
 
             for i in range(self.num_devices):
                 attn_output[i] = tt_lib.tensor.sharded_to_interleaved(
@@ -948,7 +948,7 @@ class TtFalconAttentionDecode(nn.Module):
                         )
                     )
                 attn_weights[i].deallocate(True)
-                value_layer[i].deallocate(True)
+                value_layer[i].deallocate()
 
         #########################
         ### ATTENTION SELFOUT ###
