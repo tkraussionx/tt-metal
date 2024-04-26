@@ -38,7 +38,7 @@ namespace detail {
 
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
-void InitTimeSync(int device_id, CoreCoord core)
+void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 {
     //std::vector<uint32_t> time_sync_buffer(8, 0);
 
@@ -90,6 +90,7 @@ void InitTimeSync(int device_id, CoreCoord core)
     uint32_t preHostTime = 0;
     double frequency = 0;
     double tracyToSecRatio = TracyGetTimerMul();
+    int64_t tracyBaseTime = TracyGetBaseTime();
     double frequencySum = 0;
     double frequencyMin = 5000;
     double frequencyMax = 0;
@@ -169,7 +170,10 @@ void InitTimeSync(int device_id, CoreCoord core)
 
 
     log_file.open(log_path, std::ios_base::app);
-    log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio") << std::endl;
+    if (doHeader)
+    {
+        log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio,tracy_base_time") << std::endl;
+    }
     int i = 0;
     for (auto& deviceHostTime : deviceHostTimePair)
     {
@@ -184,7 +188,9 @@ void InitTimeSync(int device_id, CoreCoord core)
         double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
         double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
         log_file << fmt::format(
-                "{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f}",
+                "{:5},{:5},{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f},{:20}",
+                core.x,
+                core.y,
                 deviceHostTime.first,
                 deviceHostTime.second,
                 (double) deviceHostTime.second  * tracyToSecRatio,
@@ -192,7 +198,8 @@ void InitTimeSync(int device_id, CoreCoord core)
                 hostStartTime,
                 delay,
                 frequencyFit,
-                tracyToSecRatio
+                tracyToSecRatio,
+                tracyBaseTime
                 )
             << std::endl;
         i++;
@@ -238,8 +245,8 @@ void InitDeviceProfiler(Device *device){
             if (firstInit.exchange(false))
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
-                InitTimeSync (device_id, {1,1});
-                //InitTimeSync (device_id, {9,9});
+                InitTimeSync (device_id, {1,1}, true);
+                InitTimeSync (device_id, {9,9}, false);
             }
             else
             {
