@@ -544,8 +544,11 @@ Tensor _atanh(const Tensor& input_a, const MemoryConfig& output_mem_config) {
     // Input is -1 > value > 1, output is nan
     // Input is -1 < value < 1, output is atanh(input)
     float t_nan = std::nanf("");
+    Tensor t_inf = full_like(input_a, std::numeric_limits<float>::infinity(), output_mem_config);
     Tensor abs_temp = sub_unary(abs(input_a, output_mem_config), 1.0f, output_mem_config);
     Tensor result = where(ltz(abs_temp, output_mem_config), comp_result, t_nan, output_mem_config);
+    result = where(eq_unary(input_a, -1, output_mem_config), neg(t_inf), result, output_mem_config);
+    result = where(eq_unary(input_a, 1, output_mem_config), t_inf, result, output_mem_config);
     return result;
 }
 Tensor atanh(const Tensor& input_a, const MemoryConfig& output_mem_config) {
