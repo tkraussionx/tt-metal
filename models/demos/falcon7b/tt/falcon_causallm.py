@@ -9,6 +9,7 @@ import tt_lib
 from models.demos.falcon7b.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import torch_tensors_to_tt_tensors
 
 
 class TtFalconCausalLM(TtFalconModelShared):
@@ -77,6 +78,18 @@ class TtFalconCausalLM(TtFalconModelShared):
             weight_config_str="LM_HEAD_MM_WEIGHTS",
             weights_to_cache=lm_head_weight,
         )
+        # Generate padding for lm_head > 512
+        if self.seq_len > 512:
+            padding = torch.zeros([1, 1, seq_len, 64])
+
+            tt_paddings = torch_tensors_to_tt_tensors(
+                [padding.detach().clone() for _ in range(self.num_devices)],
+                tt_lib.tensor.Layout.TILE,
+                self.model_config["LM_HEAD_MM_INPUT_DTYPE"],
+                self.model_config["LM_HEAD_MM_INPUT_MEMCFG"],
+                self.devices,
+            )
+            self.lm_head_padding = tt_paddings
 
     def forward(
         self,
@@ -104,8 +117,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                     hidden_states[device_id],
                     [weights[device_id] for weights in self.lm_head_sliced_weights],
                     self.num_slices,
-                    in0_mem_config=self.model_config["LM_HEAD_MM_INPUT_MEMCFG"],
-                    in0_dtype=self.model_config["LM_HEAD_MM_INPUT_DTYPE"],
+                    lm_head_padding=self.lm_head_padding[device_id],
                     out_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
                     out_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                 )
