@@ -239,23 +239,23 @@ class TtMixtralAttention(torch.nn.Module):
             keys_1BDP = ttnn.permute(keys_1BPD, (0, 1, 3, 2))
 
             # pad, transpose, scale, and shard q head
-            q_heads_1B4D = ttnn.to_memory_config(q_heads_1B4D, self.model_config["Q_TRANSPOSE_MEMCFG"])
+            # q_heads_1B4D = ttnn.to_memory_config(q_heads_1B4D, self.model_config["Q_TRANSPOSE_MEMCFG"])
 
             # shard keys
-            k_cache_memcfg = self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
-            keys_1BDP = ttnn.to_memory_config(keys_1BDP, k_cache_memcfg)
+            # k_cache_memcfg = self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
+            # keys_1BDP = ttnn.to_memory_config(keys_1BDP, k_cache_memcfg)
             # shard values
-            v_cache_memcfg = self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
-            values_1BPD = ttnn.to_memory_config(values_1BPD, v_cache_memcfg)
+            # v_cache_memcfg = self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
+            # values_1BPD = ttnn.to_memory_config(values_1BPD, v_cache_memcfg)
             # create out cfg
-            attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"](padded_layer_past_len)
+            # attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"](padded_layer_past_len)
 
             # scores matmul
             attn_1B4P = ttnn.matmul(
                 q_heads_1B4D,
                 keys_1BDP,
                 dtype=ttnn.bfloat16,
-                memory_config=attn_output_memcfg,
+                # memory_config=attn_output_memcfg,
                 core_grid=self.core_grid_attention,
                 compute_kernel_config=self.compute_kernel_attn,
             )
