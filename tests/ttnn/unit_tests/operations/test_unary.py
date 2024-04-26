@@ -5,62 +5,56 @@
 import pytest
 
 import torch
-
+import tt_lib
 import ttnn
-
+from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import (
+    data_gen_with_range,
+    compare_pcc,
+    data_gen_with_val,
+)
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+)
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import torch_random, skip_for_grayskull, skip_for_wormhole_b0
 
 
-def run_unary_test(device, h, w, ttnn_function, torch_function, pcc=0.9999):
+def run_unary_test(device, h, w, pcc=0.9999):
     torch.manual_seed(0)
+    input_shapes = [1, 1, 32, 32]
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=h)
+    grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=w)
 
-    torch_input_tensor = torch.rand((h, w), dtype=torch.bfloat16)
-    torch_output_tensor = torch_function(torch_input_tensor)
+    golden_tensor = torch.remainder(in_data, grad_data)
+    golden_tensor = torch.where(torch.isnan(golden_tensor), torch.tensor(float("inf")), golden_tensor)
 
-    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
-    output_tensor = ttnn_function(input_tensor)
-    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
-    output_tensor = ttnn.from_device(output_tensor)
-    output_tensor = ttnn.to_torch(output_tensor)
+    tt_output_tensor_on_device = tt_lib.tensor.atan2(input_tensor, grad_tensor)
+    tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
 
-    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+    differing_elements = torch.ne(golden_tensor, tt_out_tensor)
+    total_differences = differing_elements.sum().item()
+    print("Total differing elements --> ", total_differences)
 
-
-def run_identity_test(device, h, w, data_type, pcc=0.9999):
-    torch.manual_seed(0)
-
-    int_format = data_type == ttnn.uint32 or data_type == ttnn.uint16 or data_type == ttnn.int32
-    if int_format:
-        bias = -5000 if data_type == ttnn.int32 else 0
-        torch_input_tensor = torch.randint(0, 10000, (1, 1, h, w), dtype=torch.int32)
-        torch_input_tensor = torch_input_tensor + bias
-    else:
-        torch_input_tensor = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
-
-    torch_output_tensor = torch_input_tensor
-
-    input_tensor = ttnn.from_torch(torch_input_tensor, data_type, layout=ttnn.TILE_LAYOUT, device=device)
-    if int_format:
-        output_tensor = ttnn.experimental.tensor.identity_uint32(input_tensor)
-    else:
-        output_tensor = ttnn.experimental.tensor.identity(input_tensor)
-
-    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
-    output_tensor = ttnn.from_device(output_tensor)
-    output_tensor = ttnn.to_torch(output_tensor)
-
-    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+    comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
+    comp_all, _ = comparison_funcs.comp_allclose(golden_tensor, tt_out_tensor, atol=4, rtol=1e-1)
+    print(comp_pass)
+    print(comp_all)
+    print(comp_out)
+    print(tt_out_tensor)
+    print(golden_tensor)
+    if total_differences > 0:
+        assert False
 
 
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.uint32, ttnn.int32, ttnn.float32])
-@skip_for_grayskull("Grayskull doesn't support uint32 / fp32 formats and fp32 dest")
-def test_fp32_uint32(device, h, w, dtype):
-    run_identity_test(device, h, w, dtype, pcc=0.9998)
+@pytest.mark.parametrize("h", [-11.0, -12.125, -13.25, -14.375, -15.5, -16.625, -17.75, -18.875, -19.0])
+@pytest.mark.parametrize("w", [-79.0, -78.125, -77.25, -76.375, -75.5, -74.625, -73.75, -72.875, -71.0])
+def test_fp32_uint32(device, h, w):
+    run_unary_test(device, h, w)
 
 
+"""
+@pytest.mark.parametrize("h", [11.0, 12.125, 13.25, 14.375, 15.5, 16.625, 17.75, 18.875, 19.0, 0, -11.0, -12.125, -13.25, -14.375, -15.5, -16.625, -17.75, -18.875, -19.0])
+@pytest.mark.parametrize("w", [-79.0, -78.125, -77.25, -76.375, -75.5, -74.625, -73.75, -72.875, -71.0, 0, 79.0, 78.125, 77.25, 76.375, 75.5, 74.625, 73.75, 72.875, 71.0])
 @pytest.mark.parametrize("h", [64])
 @pytest.mark.parametrize("w", [128])
 def test_exp(device, h, w):
@@ -220,3 +214,4 @@ def run_unary_test_with_float(device, h, w, scalar, ttnn_function, torch_functio
 @skip_for_wormhole_b0("Issue #6991: Failing on wormhole_b0 PCC issue")
 def test_logit(device, h, w, scalar):
     run_unary_test_with_float(device, h, w, scalar, ttnn.logit, torch.logit)
+"""

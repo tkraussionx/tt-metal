@@ -29,12 +29,14 @@ def test_bw_remainder(input_shapes, device):
     # grad_data, grad_tensor = data_gen_with_range(input_shapes, -80, 80, device)
     # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=10.6875)
     # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=-79)#d1 = -68.0 , d2 = -68.5 if diff=0.5, ret -68.5
-    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=14.875)  # 71.5 = 14.8750
+    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=14.875)  # 71.5 = 14.8750
+    # grad_data, grad_tensor = data_gen_with_val(
+    #    input_shapes, device, val=-71.5
+    # )  # d1 = -56.5 , d2 = -56.75 if diff=0.25 ret -56.5 both same
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-12.125)
     grad_data, grad_tensor = data_gen_with_val(
-        input_shapes, device, val=-71.5
-    )  # d1 = -56.5 , d2 = -56.75 if diff=0.25 ret -56.5
-    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=15.125)
-    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=-71.0)#d1 = -55.75 , d2 = -56.0 if diff=0.25 ret -56.0
+        input_shapes, device, val=-79.0
+    )  # d1 = -55.75 , d2 = -56.0 if diff=0.25 ret -56.0
     print(in_data)
     print(grad_data)
 

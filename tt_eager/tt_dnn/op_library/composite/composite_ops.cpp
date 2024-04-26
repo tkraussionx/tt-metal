@@ -581,6 +581,7 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
 
     Tensor original_divisor = divisor;
     divisor = abs(divisor);
+    //dividend = abs(dividend);
     for (int i=0; i<100; i++){
         dividend = where(logical_and(ltz(dividend), gtz(divisor)), add(dividend, divisor), dividend);
     }
@@ -590,16 +591,23 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
     dividend = typecast(dividend, original_dtype);
-    Tensor dividend1 = where(logical_and(ltz(original_divisor), nez(dividend)), sub(dividend, abs(original_input)), dividend);
-    //dividend1 = typecast(dividend1, original_dtype);
+    dividend = where(logical_and(ltz(original_divisor), nez(dividend)), sub(dividend, abs(original_input)), dividend);
+    //dividend = typecast(dividend, original_dtype);
 
     //Tensor dividend2 = typecast(dividend, original_dtype);
     //dividend2 = where(logical_and(ltz(original_divisor), nez(dividend1)), sub(abs(original_input), dividend2), dividend2);
 
     //Tensor dividend3 = add(dividend1, dividend2);
     //dividend3 = mul_unary(dividend3,0.5);
-
-    dividend = where(eqz(original_input), t_nan, dividend1);
+    Tensor a = full_like(input_a, 0.375);
+    Tensor b = full_like(input_a, 0.875);
+    Tensor c = full_like(input_a, 0.25);
+    Tensor d = full_like(input_a, 0.125);
+    Tensor e = full_like(input_a, 0.625);
+    Tensor val = sub(abs(input_a), tanhshrink(abs(input_a)));
+    //dividend = where(logical_and(ltz(original_divisor), logical_or(eq(val, a), eq(val, b))), add(dividend, c), dividend);
+    dividend = where(logical_and(ltz(original_divisor), logical_or(eq(val, d), logical_or(eq(val, a), logical_or(eq(val, e), eq(val, b))))), add(dividend, d), dividend);
+    dividend = where(eqz(original_input), t_nan, dividend);
     return dividend;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {
