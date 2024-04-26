@@ -484,10 +484,9 @@ void Device::compile_command_queue_programs() {
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0, dispatch_core_type);
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0, dispatch_core_type);
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type);
-
-            detail::CompileProgram(this, *command_queue_program_ptr);
-            this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
         }
+        detail::CompileProgram(this, *command_queue_program_ptr);
+        this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
     } else {
         /////////////////Following section is for mmio device serving Remote Device
         uint8_t num_hw_cqs = 1;
