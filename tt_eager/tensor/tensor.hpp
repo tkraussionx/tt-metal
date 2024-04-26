@@ -37,6 +37,8 @@ struct Tensor {
         bool deallocated = false; // Set to true if device side storage was deallocated
         bool dynamic_storage = false; // Storage type can change, depending on op behaviour
         bool track_ref_count = false;
+        bool device_producer = false;
+        bool device_consumer = false;
         TensorAttributes(const Storage storage, const ttnn::Shape shape, DataType dtype, Layout layout) : storage(storage), shape(shape), dtype(dtype), layout(layout) {}
         TensorAttributes() : shape({0xff, 0xff, 0xff, 0xff}), dtype(DataType::INVALID), layout(Layout::INVALID) {}
         ~TensorAttributes() = default;
@@ -222,6 +224,9 @@ struct Tensor {
     const ttnn::Shape &get_shape() const;
     const DataType& get_dtype() const;
     const Layout& get_layout() const;
+    const bool get_device_producer() const;
+    const bool get_device_consumer() const;
+
     // ======================================================================================
     //                                      Setters
     // ======================================================================================
@@ -229,6 +234,9 @@ struct Tensor {
     void set_shape (const ttnn::Shape& shape) { this->tensor_attributes->shape = shape; }
     void set_dtype(const DataType& dtype) { this->tensor_attributes->dtype = dtype; }
     void set_layout(const Layout& layout) { this->tensor_attributes->layout = layout; }
+    void set_device_producer(const bool val) { this->tensor_attributes->device_producer = val; }
+    void set_device_consumer(const bool val) { this->tensor_attributes->device_consumer = val; }
+
     void set_populated(Device* worker = nullptr);
     // ======================================================================================
     //                                      Extra Helper Functions
@@ -247,6 +255,11 @@ struct Tensor {
         } else {
             return false;
         }
+    }
+
+    bool is_intermediate() const {
+        this->wait_for_tensor_metadata_populated();
+        return this->tensor_attributes->device_producer and this->tensor_attributes->device_consumer;
     }
 
     // TODO(arakhmati): clean up the methods below

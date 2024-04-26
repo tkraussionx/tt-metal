@@ -218,6 +218,9 @@ void Tensor::deepcopy(const Tensor& other) {
     this->set_storage(other.get_storage());
     this->set_dtype(other.get_dtype());
     this->set_layout(other.get_layout());
+    this->set_device_producer(other.get_device_producer());
+    this->set_device_consumer(other.get_device_consumer());
+
     // Set metadata populated flag for getters
     this->set_populated();
 }
@@ -309,6 +312,16 @@ const Layout& Tensor::get_layout() const {
 const Storage& Tensor::get_storage() const {
     this->wait_for_tensor_data_populated();
     return this->tensor_attributes->storage;
+}
+
+const bool Tensor::get_device_producer() const {
+    this->wait_for_tensor_data_populated();
+    return this->tensor_attributes->device_producer;
+}
+
+const bool Tensor::get_device_consumer() const {
+    this->wait_for_tensor_data_populated();
+    return this->tensor_attributes->device_consumer;
 }
 
 Tensor Tensor::to(CommandQueue & queue, const MemoryConfig & mem_config) const {

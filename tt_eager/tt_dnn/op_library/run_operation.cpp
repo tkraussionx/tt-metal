@@ -4,6 +4,7 @@
 
 #include "tt_dnn/op_library/run_operation.hpp"
 
+#include <typeinfo>
 #include <chrono>
 #include <tt_eager/tensor/tensor.hpp>
 #include <tt_eager/tensor/tensor_utils.hpp>
@@ -210,6 +211,13 @@ OutputTensors run_device_operation(
     auto program = get_or_create_program(operation, input_tensors, optional_input_tensors, output_tensors);
     uint32_t device_id = detail::get_device(input_tensors, optional_input_tensors)->id();
 
+    for (auto& output_tensor: output_tensors) {
+        if constexpr (std::is_same_v<OutputTensors, Tensors>)
+            output_tensor.set_device_producer(true);
+        if constexpr (std::is_same_v<OutputTensors, OptionalTensors>)
+            output_tensor.value().set_device_producer(true);
+    }
+
     // Enqueue or Launch Program
     std::visit(
         [&operation, &input_tensors, &optional_input_tensors, &output_tensors, queue](auto&& program) {
@@ -222,12 +230,16 @@ OutputTensors run_device_operation(
                     // This invocation of the program will give up ownership once its enqueued.
                     for (const auto& input_tensor: input_tensors) {
                         if (input_tensor.storage_type() == StorageType::DEVICE) {
-                            AssignGlobalBufferToProgram(input_tensor.device_buffer(), program);
+                            if (not input_tensor.get_device_producer()) {
+                                AssignGlobalBufferToProgram(input_tensor.device_buffer(), program);
+                            }
                         }
                     }
                     for (auto& optional_input_tensor : optional_input_tensors) {
                         if (optional_input_tensor.has_value() and optional_input_tensor.value().storage_type() == StorageType::DEVICE) {
-                            AssignGlobalBufferToProgram(optional_input_tensor.value().device_buffer(), program);
+                            if (not optional_input_tensor.value().get_device_producer()) {
+                                AssignGlobalBufferToProgram(optional_input_tensor.value().device_buffer(), program);
+                            }
                         }
                     }
                     TT_ASSERT(queue.has_value(), "CommandQueue is required for fast dispatch mode");
