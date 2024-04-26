@@ -1696,6 +1696,11 @@ def reduce_sum_hw(x, *args, device, dtype, layout, input_mem_config, output_mem_
 @setup_host_and_device
 def reduce_max_h(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
+    print("t0 tensor lib", t0)
+    tensor_str = str(t0)
+    with open("../../tensor_values.txt", "w") as file:
+        file.write(tensor_str)
     t1 = ttl.tensor.reduce(
         t0,
         ttl.tensor.ReduceOpMath.MAX,
@@ -1703,6 +1708,8 @@ def reduce_max_h(x, *args, device, dtype, layout, input_mem_config, output_mem_c
         1.0,
         output_mem_config=output_mem_config,
     )
+    print("t1 shape", t1.get_legacy_shape())
+    print("t1", t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch())
 
     output = tt2torch_tensor(t1)
 

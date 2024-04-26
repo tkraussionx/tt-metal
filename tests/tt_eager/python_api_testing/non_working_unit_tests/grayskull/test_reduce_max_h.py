@@ -18,9 +18,13 @@ def run_reduce_max_h_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_c
     if in_mem_config == "SYSTEM_MEMORY":
         in_mem_config = None
 
-    x = torch.Tensor(size=input_shape).uniform_(-100, 100).to(torch.bfloat16)
+    numbers = torch.arange(1, 45)
+    result = numbers.unsqueeze(0).unsqueeze(0).expand(input_shape)
+    x = result.bfloat16()
+    # x = torch.Tensor(size=input_shape).uniform_(-100, 100).to(torch.bfloat16)
     x_ref = x.detach().clone()
-
+    torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
+    print("tt x", x)
     # get ref result
     ref_value = pytorch_ops.reduce_max(x_ref, dims=(-2,))
 
@@ -32,7 +36,8 @@ def run_reduce_max_h_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_c
         input_mem_config=[in_mem_config],
         output_mem_config=out_mem_config,
     )
-
+    torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
+    print("tt result", tt_result)
     # compare tt and golden outputs
     success, pcc_value = comp_equal(ref_value, tt_result)
     logger.debug(pcc_value)
@@ -42,21 +47,22 @@ def run_reduce_max_h_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_c
 
 test_sweep_args = [
     (
-        (4, 10, 72, 116),
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.ROW_MAJOR,
-        "SYSTEM_MEMORY",
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-        2763978,
-    ),
-    (
-        (1, 4, 20, 166),
+        (1, 1, 44, 44),
+        # (1, 1, 20, 116),
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR,
         "SYSTEM_MEMORY",
         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
         16899236,
     ),
+    #     (
+    #         (1, 1, 20, 20),
+    #         ttl.tensor.DataType.BFLOAT16,
+    #         ttl.tensor.Layout.ROW_MAJOR,
+    #         "SYSTEM_MEMORY",
+    #         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+    #         2763978,
+    #     ),
 ]
 
 

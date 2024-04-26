@@ -533,6 +533,7 @@ Tensors run_with_autoformat(
     const float pad_value,
     const bool pad_c
 ) {
+    log_debug(tt::LogOp, "reduce run_with_autoformat 1 cpp" );
     ZoneScoped;
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return run<Tensors>(operation, input_tensors, optional_input_tensors);

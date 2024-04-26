@@ -195,9 +195,10 @@ def max(
     """
     max(input_tensor: ttnn.Tensor, dim: Union[int, Tuple[int], None]) -> ttnn.Tensor
     """
-
+    print("INPUT TENsor", input_tensor)
     input_shape = tuple(input_tensor.shape)
     rank = len(input_shape)
+    print("in shape", input_shape)
 
     if dim == None:
         input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
@@ -232,9 +233,13 @@ def max(
             padded_output_shape.append(size)
     output_shape = tuple(output_shape)
     padded_output_shape = tuple(padded_output_shape)
+    print("out shape", output_shape)
+    print("pad shape", padded_output_shape)
 
     input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
     output_tensor = ttl.tensor.reduce(input_tensor, ttl.tensor.ReduceOpMath.MAX, reduce_op_dim, 1.0)
+    print("ttl out", output_tensor)
+
     output_tensor = ttnn.reshape(output_tensor, ttnn.Shape(output_shape, padded_output_shape))
 
     return output_tensor
@@ -353,10 +358,8 @@ def sum(
     """
     sum(input_tensor: ttnn.Tensor, dim: Union[int, Tuple[int], None]) -> ttnn.Tensor
     """
-
     input_shape = tuple(input_tensor.shape)
     rank = len(input_shape)
-
     if dim == None:
         input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
         output_tensor = ttl.tensor.global_sum(input_tensor)

@@ -164,12 +164,14 @@ def torch2tt_tensor(
     tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
 ):
     size = list(py_tensor.size())
-
+    print("in torch to tt", size, tt_device, tt_layout)
     while len(size) < 4:
         size.insert(0, 1)
 
     tt_tensor = tt_lib.tensor.Tensor(py_tensor.reshape(size), tt_dtype)
+    # tt_tensor = tt_tensor.to(tt_lib.tensor.Layout.TILE)
     tt_tensor = tt_tensor.to(tt_layout)
+    print("tt_tensor tensor lib", tt_tensor)
 
     if tt_device is not None:
         tt_tensor = tt_tensor.to(tt_device, tt_memory_config)
@@ -210,6 +212,7 @@ def torch_tensors_to_tt_tensors(torch_tensors, layout, dtype, mem_config, device
 
 def tt2torch_tensor(tt_tensor):
     tt_output = tt_tensor.cpu()
+    print("tt2torch layout", tt_output.get_layout())
     if tt_output.get_layout() != tt_lib.tensor.Layout.ROW_MAJOR:
         tt_output = tt_output.to(tt_lib.tensor.Layout.ROW_MAJOR)
     return tt_output.to_torch()
@@ -257,6 +260,7 @@ def pad_by_zero(
 ):
     initial_shape = x.shape
     pad_shape = list(x.shape)
+    print("pad_by_zero")
     while len(pad_shape) < 4:
         pad_shape.insert(0, 1)
     if pad_shape[-1] % 32 != 0 or pad_shape[-2] % 32 != 0:
@@ -282,6 +286,7 @@ def pad_by_zero(
 
 
 def unpad_from_zero(x, desired_shape):
+    print("unpad_from_zero")
     if x.get_legacy_shape()[-1] == desired_shape[-1] and x.get_legacy_shape()[-2] == desired_shape[-2]:
         x = tt2torch_tensor(x)
     else:

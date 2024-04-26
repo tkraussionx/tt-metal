@@ -25,16 +25,19 @@ using namespace tt::tt_metal;
 
 string dim_to_kernel_name(ReduceOpDim reduce_dim, ReduceOpMath reduce_op){
     string kernel_name;
+    log_debug(tt::LogOp, "dim_to_kernel_name {}", reduce_dim );
     switch(reduce_dim){
         case ReduceOpDim::H: kernel_name = "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_h.cpp"; break;
         case ReduceOpDim::W: kernel_name = "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_w.cpp"; break;
         case ReduceOpDim::HW: kernel_name = "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_hw.cpp"; break;
         default: TT_FATAL(false && "Undefined dim");
     }
+    log_debug(tt::LogOp, "dim_to_kernel_name {}", kernel_name );
     return kernel_name;
 }
 
 std::map<string, string> get_defines(ReduceOpMath reduce_op, ReduceOpDim reduce_dim){
+    log_debug(tt::LogOp, "in ReduceOp get defines");
     std::map<string, string> defines;
     // TOOD(AP): need a sync with Reduce::Max from HLK headers
     bool do_max = reduce_op == ReduceOpMath::MAX;
@@ -55,11 +58,13 @@ namespace tt {
 namespace tt_metal {
 
 void Reduce::validate(const std::vector<Tensor> &input_tensors) const {
+    log_debug(tt::LogOp, "validate");
     const auto& input_tensor = input_tensors.at(0);
     TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to reduce need to be on device!");
     TT_FATAL(input_tensor.buffer() != nullptr , "Operands to reduce need to be allocated in buffers on device!");
     TT_FATAL((input_tensor.get_layout() == Layout::TILE), "Inputs to reduce must be tilized");
     if (this->dim == ReduceOpDim::H) {
+        log_debug(tt::LogOp, "validate dim {}", this->dim);
         if (input_tensor.memory_config().is_sharded()) {
             TT_FATAL(input_tensor.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED);
         } else {
@@ -72,14 +77,23 @@ void Reduce::validate(const std::vector<Tensor> &input_tensors) const {
 }
 
 std::vector<Shape> Reduce::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+    const int counter = 0;
+    log_debug(tt::LogOp, "compute_output_shapes ");
     const auto& input_tensor = input_tensors.at(0);
 
     auto output_shape = input_tensor.get_legacy_shape();
+    log_debug(tt::LogOp, "compute_output_shapes {}", output_shape );
+
     auto padding = output_shape.padding();
+    log_debug(tt::LogOp, "compute_output_shapes {} output_shape.padding", output_shape );
+    log_debug(tt::LogOp, "compute_output_shapes {}", padding );
+
     switch (this->dim){
         case ReduceOpDim::H:
             output_shape[2] = TILE_HEIGHT;
             padding[2] = Padding::PadDimension{0, 31};
+            log_debug(tt::LogOp, "compute_output_shapes in H op shape {}", output_shape );
+            log_debug(tt::LogOp, "compute_output_shapes in H padding {}", padding );
             break;
         case ReduceOpDim::W:
             output_shape[3] = TILE_WIDTH;
@@ -93,10 +107,12 @@ std::vector<Shape> Reduce::compute_output_shapes(const std::vector<Tensor> &inpu
             break;
 
     }
+    log_debug(tt::LogOp, "compute_output_shapes {}", Shape(output_shape, padding) );
     return {Shape(output_shape, padding)};
 }
 
 std::vector<Tensor> Reduce::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+    log_debug(tt::LogOp, "create_output_tensors ");
     const auto& input_tensor = input_tensors.at(0);
     if(this->output_mem_config.is_sharded()){
         auto output_shape = this->compute_output_shapes(input_tensors).at(0);
@@ -111,6 +127,7 @@ std::vector<Tensor> Reduce::create_output_tensors(const std::vector<Tensor> &inp
 }
 
 operation::ProgramWithCallbacks Reduce::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    log_debug(tt::LogOp, "create_program ");
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
 
@@ -129,6 +146,7 @@ operation::ProgramWithCallbacks Reduce::create_program(const std::vector<Tensor>
 }
 
 ReduceOpParallelizationStrategy Reduce::get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const {
+    log_debug(tt::LogOp, "ReduceOpParallelizationStrategy ");
     const auto& input_tensor = input_tensors.at(0);
 
     uint32_t num_tiles = input_tensor.volume() / TILE_HW;
@@ -136,6 +154,7 @@ ReduceOpParallelizationStrategy Reduce::get_parallelization_strategy(const std::
     uint32_t Wt = shape[3]/TILE_WIDTH;
     uint32_t Ht = shape[2]/TILE_HEIGHT;
     uint32_t NC = shape[1]*shape[0];
+    log_debug(tt::LogOp, "ReduceOpParallelizationStrategy {} ", Ht);
     if((NC * Wt > 1 || (input_tensor.storage_type() == StorageType::DEVICE && input_tensor.is_sharded())) and this->dim == ReduceOpDim::H){
         return ReduceOpParallelizationStrategy::MULTI_CORE_H;
     }else if(NC * Ht > 1 and this->dim == ReduceOpDim::W){
@@ -143,6 +162,7 @@ ReduceOpParallelizationStrategy Reduce::get_parallelization_strategy(const std::
     }else if(num_tiles > 1 and this->dim == ReduceOpDim::HW){
         return ReduceOpParallelizationStrategy::MULTI_CORE_HW;
     }else{
+        log_debug(tt::LogOp, "ReduceOpParallelizationStrategy single");
         return ReduceOpParallelizationStrategy::SINGLE_CORE;
     }
 }
@@ -160,10 +180,13 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
     if ( reduce_math == ReduceOpMath::MIN ) {
         return reduce_min(input_tensor,reduce_dim,scaler,output_mem_config);
     }
-
+    log_debug(tt::LogOp, "reduce ");
+    log_debug(tt::LogOp, "reduce {}",reduce_dim );
+    log_debug(tt::LogOp, "reduce {}", reduce_math);
     auto parallelization_strategy = Reduce{reduce_math, reduce_dim, scaler, output_mem_config}.get_parallelization_strategy({input_tensor});
     auto is_multicore_hw = parallelization_strategy == ReduceOpParallelizationStrategy::MULTI_CORE_HW;
     float pad_value = reduce_math == ReduceOpMath::MAX ? -std::numeric_limits<float>::infinity() : 0;
+    log_debug(tt::LogOp, "reduce {} aft strategy", pad_value);
 
     if (is_multicore_hw) {
         Device * device;
@@ -176,6 +199,7 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
             device = input_tensor.device();
         }
         auto input_tensor_pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape());
+        log_debug(tt::LogOp, "reduce {} input_tensor_pad_shape", input_tensor_pad_shape );
         auto formatted_input_tensor = input_tensor;
         if (!AutoFormat::check_input_tensor_format(input_tensor, input_tensor_pad_shape)) {
             formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, pad_value, Layout::TILE);
@@ -183,6 +207,7 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
         const Tensor output_tensor = operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::W, 1.0, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {formatted_input_tensor}).at(0);
         return operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::H, scaler, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {output_tensor}).at(0);
     } else {
+        log_debug(tt::LogOp, "reduce run_with_autoformat" );
         return operation::run_with_autoformat(Reduce{reduce_math, reduce_dim, scaler, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {input_tensor}, {}, pad_value).at(0);
     }
 }
@@ -215,12 +240,14 @@ Tensor mean(const Tensor& input_tensor,uint aggregate_dims /* = 2 */, const Memo
 
 template <ReduceOpMath OpKind>
 Tensor reduce_on_dim(const Tensor &input_tensor, uint dim, const MemoryConfig& output_mem_config) {
+    log_debug(tt::LogOp, "reduce_on_dim {}", dim);
     TT_FATAL( dim >= 0 && dim <= 3, "dimension have to be 0-3 only corresponding to N,C,H,W");
     constexpr float scaler1 = 1.0;
 
     if ( dim == 3 ) {
         return reduce(input_tensor, OpKind, ReduceOpDim::W, scaler1, output_mem_config);
     } else if ( dim == 2 ) {
+        log_debug(tt::LogOp, "reduce_on_dim {}", dim);
         return reduce(input_tensor, OpKind, ReduceOpDim::H, scaler1, output_mem_config);
     }
 

@@ -357,6 +357,7 @@ inline auto run_with_autoformat(
     const float pad_value = 0,
     const bool pad_c = false
 )-> Tensors {
+    log_debug(tt::LogOp, "reduce run_with_autoformat 1 hpp" );
     using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
     const auto operation = DeviceOperation<Tensors>(concrete_op);
     return run_with_autoformat(operation, input_tensors, optional_input_tensors, pad_value, pad_c);
