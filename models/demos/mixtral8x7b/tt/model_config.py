@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import ttnn
 from pathlib import Path
 
@@ -22,6 +23,10 @@ class TtModelArgs:
     moe = True
     num_experts = 8
     num_experts_per_tok = 2
+
+    DEFAULT_CKPT_DIR = os.getenv("MIXTRAL_CKPT_DIR", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1")
+    DEFAULT_TOKENIZER_PATH = os.getenv("MIXTRAL_TOKENIZER_PATH", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1")
+    DEFAULT_CACHE_PATH = Path(os.getenv("MIXTRAL_CACHE_PATH", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1"))
 
     OP_KEYS = (
         # Embedding
@@ -56,24 +61,12 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
-        self.model_base_path = Path(model_base_path)
-        # Some consumers like SentencePiece only accept str not Path for files
-        self.instruct = instruct
-        if instruct:  # Load instruct weights and tokenizer (Mixtral-8x7B-Instruct-v0.1)
-            self.consolidated_weights_path = lambda i: str(
-                self.model_base_path / f"Mixtral-8x7B-v0.1/instruct/consolidated_instruct.{i:02d}.pt"
-            )
-            self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/instruct/tokenizer_instruct.model")
-            self.state_dict_path = str(
-                self.model_base_path / "Mixtral-8x7B-v0.1/instruct/partial_state_dict_instruct.pt"
-            )
-        else:  # Load generative weights and tokenizer (Mixtral-8x7B-v0.1)
-            self.consolidated_weights_path = lambda i: str(
-                self.model_base_path / f"Mixtral-8x7B-v0.1/consolidated.{i:02d}.pt"
-            )
-            self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/tokenizer.model")
-            self.state_dict_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/partial_state_dict.pt")
+    def __init__(self, device=None, instruct=False):
+        self.model_base_path = Path(self.DEFAULT_CKPT_DIR)
+        self.model_cache_path = self.DEFAULT_CACHE_PATH
+        self.consolidated_weights_path = lambda i: str(self.model_base_path / f"consolidated.{i:02d}.pt")
+        self.tokenizer_path = self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
+        self.state_dict_path = str(self.model_base_path / "repack_weights.pt")
 
         DRAM_MEMCFG = ttnn.DRAM_MEMORY_CONFIG
         L1_MEMCFG = ttnn.L1_MEMORY_CONFIG
@@ -177,7 +170,7 @@ class TtModelArgs:
         # Keep the weight cache separate for generative and instruct weights
         if self.instruct:
             return (
-                self.model_base_path
+                self.model_cache_path
                 / {
                     ttnn.bfloat16: "mixtral_tensor_cache_instruct_bf16",
                     ttnn.bfloat8_b: "mixtral_tensor_cache_instruct_bfp8",
@@ -186,7 +179,7 @@ class TtModelArgs:
             )
         else:
             return (
-                self.model_base_path
+                self.model_cache_path
                 / {
                     ttnn.bfloat16: "mixtral_tensor_cache_bf16",
                     ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8",

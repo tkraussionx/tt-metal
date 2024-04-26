@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 import torch
+import tt_lib as ttl
 from loguru import logger
 import json
 import ttnn
@@ -97,6 +98,9 @@ def run_mixtral_demo(user_input, batch_size, devices):
     else:
         input_prompts = load_inputs(user_input, 32)
 
+    # TODO Test same prompt, then test different ones per user
+    input_prompts = ["This is a"] * 32
+
     # Load model args, weights, and tokenizer
     # Specify model_base_path=<mixtral_WEIGHTS_PATH> below to use your own weights
     model_args = TtModelArgs(devices[0], instruct=instruct_mode)  # TtModelArgs(model_base_path=<weights_path>)
@@ -164,7 +168,7 @@ def run_mixtral_demo(user_input, batch_size, devices):
     logger.info("Finished first token embedding. Starting inference...")
 
     generation_start_pos = 0
-    max_generated_tokens = 20  # TODO change back to 120+ when multichip hangs are fixed
+    max_generated_tokens = 10  # TODO change back to 120+ when multichip hangs are fixed
 
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
@@ -177,6 +181,9 @@ def run_mixtral_demo(user_input, batch_size, devices):
         model_args.max_seq_len,
         tt_model.devices,
     )
+
+    # TODO Required for now for argmax. Alternatively, send the output back to device: tt_lib.tensor.Tensor.to()
+    ttl.device.SetDefaultDevice(devices[0])
 
     # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
     for iteration in range(max_generated_tokens):
