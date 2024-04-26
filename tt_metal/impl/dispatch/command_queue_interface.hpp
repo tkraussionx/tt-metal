@@ -5,6 +5,7 @@
 #pragma once
 #include <mutex>
 
+#include "tt_metal/common/logger.hpp"
 #include "tt_metal/common/base.hpp"
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"

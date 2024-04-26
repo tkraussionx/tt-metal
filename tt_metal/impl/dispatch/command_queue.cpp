@@ -1018,32 +1018,41 @@ EnqueueTraceCommand::EnqueueTraceCommand(
     clear_count(true) {}
 
 void EnqueueTraceCommand::process() {
-    uint32_t cmd_sequence_sizeB =
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_EXEC_BUF
+    constexpr size_t kFetchEntries = 2;
+    constexpr uint32_t kCmdSeqSizes[kFetchEntries] = {2*CQ_PREFETCH_CMD_BARE_MIN_SIZE, CQ_PREFETCH_CMD_BARE_MIN_SIZE};
+    constexpr uint32_t kCmdSeqSizeTotal =
+        kCmdSeqSizes[0] + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT + CQ_PREFETCH_CMD_STALL
+        kCmdSeqSizes[1];  // CQ_PREFETCH_CMD_EXEC_BUF
 
-    void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
+    for (int i=0; i<kFetchEntries; i++) {
+        void *cmd_region = this->manager.issue_queue_reserve(kCmdSeqSizes[i], this->command_queue_id);
+        DeviceCommand command_sequence(cmd_region, kCmdSeqSizes[i]);
 
-    DeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
+        switch(i) {
+            case 0: {
+                command_sequence.add_dispatch_wait_with_prefetch_stall(
+                    true, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
+                if (this->clear_count) {
+                    this->expected_num_workers_completed = 0;
+                }
+                break;
+            }
+            case 1: {
+                uint32_t page_size = buffer.page_size();
+                uint32_t page_size_log2 = __builtin_ctz(page_size);
+                TT_ASSERT((page_size & (page_size - 1)) == 0, "Page size must be a power of 2");
+                command_sequence.add_prefetch_exec_buf(buffer.address(), page_size_log2, buffer.num_pages());
+                break;
+            }
+            default: {
+                TT_ASSERT(false, "Invalid command sequence index");
+            }
+        }
 
-    command_sequence.add_dispatch_wait(
-        false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
-
-    if (this->clear_count) {
-        this->expected_num_workers_completed = 0;
+        this->manager.issue_queue_push_back(kCmdSeqSizes[i], this->command_queue_id);
+        this->manager.fetch_queue_reserve_back(this->command_queue_id);
+        this->manager.fetch_queue_write(kCmdSeqSizes[i], this->command_queue_id);
     }
-
-    uint32_t page_size = buffer.page_size();
-    uint32_t page_size_log2 = __builtin_ctz(page_size);
-    TT_ASSERT((page_size & (page_size - 1)) == 0, "Page size must be a power of 2");
-
-    command_sequence.add_prefetch_exec_buf(buffer.address(), page_size_log2, buffer.num_pages());
-
-    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
-
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
-    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
     // log_trace(LogDispatch, "EnqueueTraceCommand issued write_ptr={}, fetch_size={}, commands={}", write_ptr, fetch_size_bytes, this->commands);
 }
 
