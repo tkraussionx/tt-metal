@@ -373,7 +373,7 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const {
     ZoneScoped;
     auto all_workers = device_mesh->get_devices();
-    auto workers = std::vector<Device*>(all_workers.begin(), all_workers.end());
+    auto workers = std::vector<Device*>(all_workers.begin(), all_workers.begin() + num_buffers_in_tensor(*this));
     TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
     Tensor multi_device_tensor = Tensor(workers);
     uint32_t device_tensor_ref_count = multi_device_tensor.tensor_attributes->record_main_thread_ref_count();
@@ -456,6 +456,30 @@ Tensor Tensor::extract_shard(const uint32_t & core_id) const{
 
     return tensor_impl::to_extract_shard_wrapper(*this, core_id);
 
+}
+
+Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
+    ZoneScoped;
+    auto all_workers = device_mesh->get_devices();
+    auto workers = std::vector<Device*>(all_workers.begin(), all_workers.begin() + num_buffers_in_tensor(*this));
+    TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
+    Tensor tensor_modified_layout = Tensor({}, workers.size());
+    for (auto worker : workers) {
+        worker->push_work([*this, tensor_modified_layout, target_layout, worker] () mutable {
+            TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST&& "Bring tensor to host before converting to target layout");
+            auto shard = get_shard_for_device(*this, worker);
+            shard = tensor_impl::to_layout_wrapper(shard, target_layout);
+            // std::cout << "Converting layout to: " << static_cast<int>(target_layout) << std::endl;
+            insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout);
+            if (not (worker->id())) {
+                tensor_modified_layout.set_shape(this->get_shape());
+                tensor_modified_layout.set_dtype(this->get_dtype());
+                tensor_modified_layout.set_layout(target_layout);
+            }
+            tensor_modified_layout.set_populated(worker);
+        });
+    }
+    return tensor_modified_layout;
 }
 
 Tensor Tensor::to(Layout target_layout, Device* worker) const {

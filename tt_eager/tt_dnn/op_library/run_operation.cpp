@@ -692,7 +692,7 @@ void launch_op(
         output_tensor_ref_count.push_back(output_tensors[i].tensor_attributes->record_main_thread_ref_count());
     }
     {
-        ZoneScopedN("PushOpToWorkers");
+        ZoneScopedN("Push_OpToWorkers");
         for (auto target_device : workers) {
             target_device->push_work([target_device, workers, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors] () mutable {
                 std::vector<Tensor> input_shards = {};

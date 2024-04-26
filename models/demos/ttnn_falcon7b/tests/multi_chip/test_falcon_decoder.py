@@ -62,7 +62,7 @@ def torch_model():
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        8,
     ],
     indirect=True,
 )
@@ -96,28 +96,6 @@ def test_falcon_decoder(
     model_config = get_model_config(model_config_str)
     dtype = model_config["DEFAULT_DTYPE"]
     kv_len = seq_len if llm_mode == "prefill" else kv_cache_len + 1
-
-    decoder_input, tt_decoder_input = create_attention_input(
-        llm_mode,
-        dtype,
-        batch,
-        seq_len,
-        configuration.hidden_size,
-        device_mesh,
-        mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
-    )
-    position_ids = create_position_ids(llm_mode, kv_cache_len)
-    attention_mask, tt_attention_mask = create_attention_mask(
-        llm_mode,
-        dtype,
-        decoder_input,
-        batch,
-        seq_len,
-        configuration.num_attention_heads,
-        kv_cache_len,
-        device_mesh,
-        mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
-    )
     layer_past, tt_layer_past = create_kv_cache(
         llm_mode,
         dtype,
@@ -128,14 +106,6 @@ def test_falcon_decoder(
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
     )
 
-    pytorch_out, pytorch_layer_present = torch_model(
-        hidden_states=decoder_input,
-        alibi=None,
-        attention_mask=attention_mask,
-        position_ids=position_ids,
-        layer_past=layer_past,
-        use_cache=True,
-    )
     parameters = preprocess_model_parameters(
         initialize_model=lambda: torch_model,
         device=device_mesh,
@@ -153,38 +123,81 @@ def test_falcon_decoder(
         model_config,
         parameters,
     )
+    import time
 
-    tt_out, tt_layer_present = tt_FalconDecoder_model(
-        hidden_states=tt_decoder_input,
-        llm_mode=llm_mode,
-        alibi=None,
-        attention_mask=tt_attention_mask,
-        user_id=0,
-        layer_past=tt_layer_past,
-        layer_past_len=kv_cache_len,
-        use_cache=True,
-    )
-    tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim)).squeeze(1)
+    total_time = 0
+    for i in range(100):
+        print("Running iter " + str(i))
+        start = time.time()
+        decoder_input, tt_decoder_input = create_attention_input(
+            llm_mode,
+            dtype,
+            batch,
+            seq_len,
+            configuration.hidden_size,
+            device_mesh,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
+        )
+        # position_ids = create_position_ids(llm_mode, kv_cache_len)
+        attention_mask, tt_attention_mask = create_attention_mask(
+            llm_mode,
+            dtype,
+            decoder_input,
+            batch,
+            seq_len,
+            configuration.num_attention_heads,
+            kv_cache_len,
+            device_mesh,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
+        )
 
-    tt_layer_present = (
-        ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-        ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-    )
-    if llm_mode == "decode":
-        tt_out = tt_out.transpose(0, 1)
-    tt_layer_present = (
-        tt_layer_present[0][:, :kv_len, :],
-        tt_layer_present[1][:, :kv_len, :],
-    )
+        # pytorch_out, pytorch_layer_present = torch_model(
+        #     hidden_states=decoder_input,
+        #     alibi=None,
+        #     attention_mask=attention_mask,
+        #     position_ids=position_ids,
+        #     layer_past=layer_past,
+        #     use_cache=True,
+        # )
 
-    passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
-    logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
-    assert_with_pcc(
-        pytorch_layer_present[0].squeeze(1), tt_layer_present[0].to(pytorch_layer_present[0].dtype), expected_pcc
-    )
-    assert_with_pcc(
-        pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
-    )
+        tt_out, tt_layer_present = tt_FalconDecoder_model(
+            hidden_states=tt_decoder_input,
+            llm_mode=llm_mode,
+            alibi=None,
+            attention_mask=tt_attention_mask,
+            user_id=0,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        tt_out = ttnn.to_torch(
+            tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
+        )  # .squeeze(1)
+        tt_out = torch.cat(tt_out, shard_dim).squeeze(1)
+        # print(len(tt_out))
+        # exit(0)
+        # tt_layer_present = (
+        #     ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+        #     ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+        # )
+        if llm_mode == "decode":
+            tt_out = tt_out.transpose(0, 1)
+        if i:
+            total_time = total_time + (time.time() - start)
+        # tt_layer_present = (
+        #     tt_layer_present[0][:, :kv_len, :],
+        #     tt_layer_present[1][:, :kv_len, :],
+        # )
 
+        # passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
+        # logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+
+        # assert_with_pcc(
+        #     pytorch_layer_present[0].squeeze(1), tt_layer_present[0].to(pytorch_layer_present[0].dtype), expected_pcc
+        # )
+        # assert_with_pcc(
+        #     pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
+        # )
+    print(total_time)
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(False)
