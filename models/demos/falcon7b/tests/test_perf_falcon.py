@@ -506,7 +506,6 @@ class TestParametrized:
                     )
         if model_config_str == "BFLOAT16-L1_SHARDED" and llm_mode == "prefill":
             pytest.skip(f"prefill does not support L1_SHARDED")
-        devices = get_devices_for_t3000(all_devices, num_devices)
 
         devices = get_devices_for_t3000(all_devices, num_devices)
         # Enable Async Mode
