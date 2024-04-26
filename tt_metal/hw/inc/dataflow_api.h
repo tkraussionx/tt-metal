@@ -784,7 +784,7 @@ struct InterleavedPow2AddrGen {
     }
 };
 
-template <bool DRAM>
+template <bool DRAM, bool use_vc = false>
 struct InterleavedAddrGenFast {
     uint32_t bank_base_address;  // Base address for the whole tensor.
     uint32_t page_size;          // Num bytes in bank unit.
@@ -863,8 +863,10 @@ struct InterleavedAddrGenFast {
         while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
-        uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+        if constexpr(use_vc) {
+            uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+        }
 
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
@@ -1122,9 +1124,9 @@ FORCE_INLINE void noc_async_read_page(
     s.noc_async_read_page(id, dst_local_l1_addr, offset);
 }
 
-template <bool DRAM>
+template <bool DRAM, bool use_vc = false>
 FORCE_INLINE void noc_async_read_tile(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, uint32_t vc = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM, use_vc>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, uint32_t vc = 0) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
