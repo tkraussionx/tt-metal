@@ -1026,6 +1026,26 @@ def eltwise_addalpha(
 
 
 @setup_host_and_device
+def eltwise_div(
+    x,
+    y,
+    *args,
+    accurate_mode,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = ttl.tensor.div(t0, t1, accurate_mode, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t2)
+
+
+@setup_host_and_device
 def lamb_optimizer(
     x,
     y,
@@ -1078,6 +1098,24 @@ def eltwise_heaviside(
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = ttl.tensor.heaviside(t0, scalar, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
+def eltwise_unary_ne(
+    x,
+    *args,
+    scalar,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.unary_ne(t0, scalar, output_mem_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1139,6 +1177,42 @@ def eltwise_isclose(
     t2 = ttl.tensor.isclose(t0, t1, rtol, atol, equal_nan, output_mem_config=output_mem_config)
 
     return tt2torch_tensor(t2)
+
+
+@setup_host_and_device
+def eltwise_unary_gt(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.unary_gt(t0, value, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
+def eltwise_unary_lt(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.unary_lt(t0, value, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
 
 
 @setup_host_and_device
@@ -1317,6 +1391,28 @@ def arange(
     )
 
     return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
+def prod(
+    x,
+    *args,
+    all_dimensions,
+    dim,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.prod(t0, all_dimensions, dim, output_mem_config=output_mem_config)
+    output = tt2torch_tensor(t1)
+    if all_dimensions:
+        return output[:1, :1, :1, :1]
+    else:
+        return output
 
 
 @setup_host_and_device

@@ -114,7 +114,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
     model_inputs = torch.split(model_input, 1)
 
     # First run to get reference output ----------------------------------------------------
-    tt_embeddings, tt_attention_mask = zip(
+    tt_inputs, tt_attention_mask = zip(
         *[
             tt_FalconCausalLM.model_preprocessing("prefill", m_i, kv_cache_len, num_input_tokens=seq_len)
             for m_i in model_inputs
@@ -126,7 +126,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
     tt_outs = []
     for user_id in range(batch):
         tt_out, tt_layer_present = tt_FalconCausalLM(
-            input_embeddings=tt_embeddings[user_id],
+            tt_inputs=tt_inputs[user_id],
             llm_mode="prefill",
             attention_mask=tt_attention_mask[user_id],
             user_id=user_id,
@@ -156,7 +156,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
 
     del tt_out
     del tt_layer_present
-    del tt_embeddings
+    del tt_inputs
     del tt_attention_mask
 
     # Determinism runs ---------------------------------------------------------------------
@@ -165,7 +165,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
     logger.info(f"Running {iterations} iterations...")
     for i in range(iterations):
         logger.info(f"Iteration {i}")
-        tt_embeddings, tt_attention_mask = zip(
+        tt_inputs, tt_attention_mask = zip(
             *[
                 tt_FalconCausalLM.model_preprocessing("prefill", m_i, kv_cache_len, num_input_tokens=seq_len)
                 for m_i in model_inputs
@@ -175,7 +175,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
         tt_outs = []
         for user_id in range(batch):
             tt_out, tt_layer_present = tt_FalconCausalLM(
-                input_embeddings=tt_embeddings[user_id],
+                input_ids=tt_inputs[user_id],
                 llm_mode="prefill",
                 attention_mask=tt_attention_mask[user_id],
                 user_id=user_id,
@@ -215,7 +215,7 @@ def run_test_falcon_prefill_end_to_end_determinism(
 
         del tt_out
         del tt_layer_present
-        del tt_embeddings
+        del tt_inputs
         del tt_attention_mask
 
     assert does_pass, "Determinism test failed"
@@ -250,7 +250,13 @@ def run_test_falcon_prefill_end_to_end_determinism(
     ("tiiuae/falcon-40b-instruct",),
     ids=["falcon_40b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT8_B-DRAM",))
+@pytest.mark.parametrize(
+    "model_config_str",
+    (
+        "BFLOAT8_B-DRAM",
+        "BFLOAT16-DRAM",
+    ),
+)
 def test_falcon_prefill_end_to_end_determinism(
     generate_weights,
     enable_program_cache,
@@ -267,8 +273,6 @@ def test_falcon_prefill_end_to_end_determinism(
     all_devices,
 ):
     num_devices = 8
-    if model_config_str not in ["BFLOAT8_B-DRAM"]:
-        pytest.skip("Prefill is only supported for BFLOAT8_B-DRAM memory config!")
 
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, "prefill", input_shape, num_devices)

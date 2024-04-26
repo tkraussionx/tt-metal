@@ -159,11 +159,14 @@ def operations(report_hash):
 
     operations = list(ttnn.database.query_operations(get_report_path()))
 
+    try:
+        operation_history = pd.read_csv(report_path / ttnn.database.OPERATION_HISTORY_CSV, index_col=False)
+    except FileNotFoundError:
+        logger.warning(f"Operation history file not found: {report_path / ttnn.database.OPERATION_HISTORY_CSV}")
+
     def load_underlying_operations(operation_id):
         try:
-            operation_history = pd.read_csv(
-                report_path / ttnn.database.OPERATION_HISTORY_PATH / f"{operation_id}.csv", index_col=False
-            )
+            underlying_operations = operation_history[operation_history["ttnn_operation_id"] == operation_id]
 
             def normalize_program_cache_hit(value):
                 if value == "std::nullopt":
@@ -171,7 +174,9 @@ def operations(report_hash):
                 else:
                     return "HIT" if value == 1 else "MISS"
 
-            operation_history["program_cache"] = operation_history.program_cache_hit.apply(normalize_program_cache_hit)
+            underlying_operations["program_cache"] = underlying_operations.program_cache_hit.apply(
+                normalize_program_cache_hit
+            )
 
             def normalize_program_hash(value):
                 if value == "std::nullopt":
@@ -179,9 +184,9 @@ def operations(report_hash):
                 else:
                     return value
 
-            operation_history["program_hash"] = operation_history.program_hash.apply(normalize_program_hash)
+            underlying_operations["program_hash"] = underlying_operations.program_hash.apply(normalize_program_hash)
 
-            return operation_history.to_html(
+            return underlying_operations.to_html(
                 columns=["operation_name", "operation_type", "program_cache", "program_hash"],
                 index=False,
                 justify="center",
@@ -670,6 +675,8 @@ def operation_tensor_report(operation_id):
 
         file_name = ttnn.database.get_tensor_file_name_by_id(get_report_path(), tensor_record.tensor_id)
         tensor = ttnn.database.load_tensor_by_id(get_report_path(), tensor_record.tensor_id)
+        if tensor is None:
+            return "", "", ""
 
         if isinstance(tensor, ttnn.Tensor):
             tensor = ttnn.to_torch(tensor)
@@ -724,6 +731,8 @@ def operation_tensor_report(operation_id):
             return ""
 
         tensor = ttnn.database.load_tensor_by_id(get_report_path(), tensor_record.tensor_id)
+        if tensor is None:
+            return ""
 
         if isinstance(tensor, ttnn.Tensor):
             tensor = ttnn.to_torch(tensor)

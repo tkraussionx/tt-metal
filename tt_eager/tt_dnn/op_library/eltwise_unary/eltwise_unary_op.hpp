@@ -74,7 +74,11 @@ enum class UnaryOpType {
     SUB_UNARY_SFPU = 56,
     MUL_UNARY_SFPU = 57,
     DIV_UNARY_SFPU = 58,
-    IDENTITY_UINT32 = 59
+    IDENTITY_UINT32 = 59,
+    UNARY_NE = 60,
+    UNARY_GT = 61,
+    UNARY_LT = 62,
+    TILED_PROD = 60
 };
 
 template <typename T>
@@ -100,7 +104,10 @@ bool is_parametrized_type(T val) {
         case UnaryOpType::ADD_UNARY_SFPU:
         case UnaryOpType::SUB_UNARY_SFPU:
         case UnaryOpType::MUL_UNARY_SFPU:
-        case UnaryOpType::DIV_UNARY_SFPU: return true;
+        case UnaryOpType::DIV_UNARY_SFPU:
+        case UnaryOpType::UNARY_NE:
+        case UnaryOpType::UNARY_GT:
+        case UnaryOpType::UNARY_LT: return true;
         default: return false;
     }
     return false;
@@ -270,6 +277,7 @@ constexpr auto recip = make_eltwise_unary<UnaryOpType::RECIP>{};
 constexpr auto relu = make_eltwise_unary<UnaryOpType::RELU>{};
 constexpr auto relu6 = make_eltwise_unary<UnaryOpType::RELU6>{};
 constexpr auto sigmoid = make_eltwise_unary<UnaryOpType::SIGMOID>{};
+constexpr auto tiled_prod = make_eltwise_unary<UnaryOpType::TILED_PROD>{};
 constexpr auto log = make_eltwise_unary<UnaryOpType::LOG>{};
 constexpr auto tanh = make_eltwise_unary<UnaryOpType::TANH>{};
 constexpr auto log2 = make_eltwise_unary<UnaryOpType::LOG2>{};
@@ -308,12 +316,15 @@ constexpr auto leaky_relu = make_eltwise_unary_with_param<UnaryOpType::LEAKY_REL
 constexpr auto prelu = leaky_relu;
 constexpr auto elu = make_eltwise_unary_with_param<UnaryOpType::ELU>{};
 constexpr auto heaviside = make_eltwise_unary_with_param<UnaryOpType::HEAVISIDE>{};
+constexpr auto unary_ne = make_eltwise_unary_with_param<UnaryOpType::UNARY_NE>{};
 constexpr auto rsub = make_eltwise_unary_with_param<UnaryOpType::RSUB>{};
 constexpr auto silu = make_eltwise_unary<UnaryOpType::SILU>{};
 constexpr auto identity = make_eltwise_unary<UnaryOpType::IDENTITY>{};
 constexpr auto identity_uint32 = make_eltwise_unary<UnaryOpType::IDENTITY_UINT32>{};
 constexpr auto add_unary_sfpu = make_eltwise_symmetric_binop_unary_with_param<UnaryOpType::ADD_UNARY_SFPU>{};
 constexpr auto mul_unary_sfpu = make_eltwise_symmetric_binop_unary_with_param<UnaryOpType::MUL_UNARY_SFPU>{};
+constexpr auto unary_gt = make_eltwise_unary_with_param<UnaryOpType::UNARY_GT>{};
+constexpr auto unary_lt = make_eltwise_unary_with_param<UnaryOpType::UNARY_LT>{};
 constexpr auto sub_unary_sfpu =
     make_eltwise_asymmetric_binop_unary_with_param<UnaryOpType::SUB_UNARY_SFPU, UnaryOpType::RSUB>{};
 constexpr auto div_unary_sfpu =

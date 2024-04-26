@@ -548,6 +548,12 @@ def heaviside(x, *args, **kwargs):
     return result
 
 
+def unary_ne(x, *args, **kwargs):
+    value = kwargs.pop("scalar")
+    result = torch.ne(x, value)
+    return result
+
+
 def erf(x, *args, **kwargs):
     return torch.erf(x)
 
@@ -678,6 +684,11 @@ def swish(x, *args, **kwargs):
 
 def silu(x, *args, **kwargs):
     return torch.nn.functional.silu(x)
+
+
+def div(x, y, *args, accurate_mode, **kwargs):
+    result = torch.div(x, y)
+    return result
 
 
 def div_unary(x, *args, scalar, **kwargs):
@@ -863,6 +874,13 @@ def xlogy(x, y, *args, **kwargs):
     return torch.xlogy(x, y)
 
 
+def prod(x, *args, all_dimensions, dim, **kwargs):
+    if all_dimensions:
+        result = torch.prod(x)
+        return result.view(1, 1, 1, 1)
+    return torch.prod(x, dim, keepdim=True)
+
+
 def ldexp(x, y, *args, **kwargs):
     return torch.ldexp(x, y)
 
@@ -945,6 +963,18 @@ def ne(x, y, *args, **kwargs):
         return x != scalar
     else:
         return x != y
+
+
+def unary_gt(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    result = torch.gt(x, value)
+    return result
+
+
+def unary_lt(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    result = torch.lt(x, value)
+    return result
 
 
 def max(x, y, *args, **kwargs):
@@ -2031,3 +2061,9 @@ def preprocessing_model_bert_4(x, *args, **kwargs):
     )
 
     return torch_output.start_logits
+
+
+def max_pool2d(x, *args, **kwargs):
+    m = nn.MaxPool2d(3, stride=2)
+    output = m(x)
+    return output

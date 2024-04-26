@@ -48,6 +48,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.arange,
         "pytorch_op": pytorch_ops.arange,
     },
+    "prod": {
+        "tt_lib_op": tt_lib_ops.prod,
+        "pytorch_op": pytorch_ops.prod,
+    },
     # stats
     "stats-var_hw": {
         "tt_lib_op": tt_lib_ops.var_hw,
@@ -297,6 +301,10 @@ op_map = {
     "eltwise-elu": {
         "tt_lib_op": tt_lib_ops.eltwise_elu,
         "pytorch_op": pytorch_ops.elu,
+    },
+    "eltwise-div": {
+        "tt_lib_op": tt_lib_ops.eltwise_div,
+        "pytorch_op": pytorch_ops.div,
     },
     "eltwise-square": {
         "tt_lib_op": tt_lib_ops.eltwise_square,
@@ -582,6 +590,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.eltwise_heaviside,
         "pytorch_op": pytorch_ops.heaviside,
     },
+    "eltwise-unary_ne": {
+        "tt_lib_op": tt_lib_ops.eltwise_unary_ne,
+        "pytorch_op": pytorch_ops.unary_ne,
+    },
     "eltwise-erf": {
         "tt_lib_op": tt_lib_ops.eltwise_erf,
         "pytorch_op": pytorch_ops.erf,
@@ -685,6 +697,14 @@ op_map = {
     "eltwise-identity": {
         "tt_lib_op": tt_lib_ops.eltwise_identity,
         "pytorch_op": pytorch_ops.eltwise_identity,
+    },
+    "eltwise-unary_gt": {
+        "tt_lib_op": tt_lib_ops.eltwise_unary_gt,
+        "pytorch_op": pytorch_ops.unary_gt,
+    },
+    "eltwise-unary_lt": {
+        "tt_lib_op": tt_lib_ops.eltwise_unary_lt,
+        "pytorch_op": pytorch_ops.unary_lt,
     },
     # Eltwise binary
     "eltwise-ne": {
@@ -1655,6 +1675,10 @@ op_map = {
     "ttnn-global-avg-pool2d": {
         "tt_lib_op": ttnn_ops.global_avg_pool2d,
         "pytorch_op": pytorch_ops.global_avg_pool2d,
+    },
+    "ttnn-max-pool2d": {
+        "tt_lib_op": ttnn_ops.max_pool2d_tt,
+        "pytorch_op": pytorch_ops.max_pool2d,
     },
     "ttnn-upsample": {
         "tt_lib_op": ttnn_ops.upsample,

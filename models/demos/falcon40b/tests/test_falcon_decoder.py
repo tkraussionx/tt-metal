@@ -97,12 +97,8 @@ def run_test_FalconDecoder_inference(
                 )
             )
 
-        attention_mask_heads_dim = (
-            configuration.num_attention_heads if model_config["ATTN_MASK_MEMCFG"].is_sharded() else len(devices)
-        )
-
         attention_mask_bool_chunks = torch.chunk(
-            (attention_mask_bool * -100000).expand(-1, attention_mask_heads_dim, -1, -1),
+            (attention_mask_bool * -100000).expand(-1, len(devices), -1, -1),
             len(devices),
             1,
         )
@@ -335,6 +331,7 @@ def run_test_FalconDecoder_inference(
         assert does_pass
 
 
+@pytest.mark.skip("#7842: Possible hangs in t3k")
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize("enable_program_cache", (True, False), ids=["enable_program_cache", "disable_program_cache"])
 @pytest.mark.parametrize("num_devices", (4, 8), ids=["4chips", "8chips"])
@@ -369,8 +366,9 @@ def run_test_FalconDecoder_inference(
         ("BFLOAT8_B-SHARDED", 0.99, 0.99, 0.99),
         ("BFLOAT16-SHARDED", 0.99, 0.99, 0.99),
         ("BFLOAT8_B-DRAM", 0.99, 0.99, 0.99),
+        ("BFLOAT8_B-DRAM", 0.99, 0.99, 0.99),
     ],
-    ids=["BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED", "BFLOAT8_B-DRAM"],
+    ids=["BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED", "BFLOAT8_B-DRAM", "BFLOAT16-DRAM"],
 )
 def test_FalconDecoder_inference(
     num_devices,
@@ -390,7 +388,7 @@ def test_FalconDecoder_inference(
     all_devices,
     # use_program_cache, # TODO: remove workaround when low PCC issue 7159 is fixed
 ):
-    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM"] or num_devices != 8):
+    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM", "BFLOAT16-DRAM"] or num_devices != 8):
         pytest.skip("Prefill is only supported for DRAM memory config and 8 chips!")
     if llm_mode == "decode" and model_config_str not in ["BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED"]:
         pytest.skip("Decode is only supported for SHARDED memory config!")

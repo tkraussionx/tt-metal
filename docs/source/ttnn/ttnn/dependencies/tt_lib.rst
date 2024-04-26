@@ -303,6 +303,8 @@ Tensor elementwise operations
 
 .. autofunction:: tt_lib.tensor.mul
 
+.. autofunction:: tt_lib.tensor.div
+
 .. autofunction:: tt_lib.tensor.add_unary
 
 .. autofunction:: tt_lib.tensor.sub_unary
@@ -500,6 +502,12 @@ Tensor relational operations
 .. autofunction:: tt_lib.tensor.eq
 
 .. autofunction:: tt_lib.tensor.ne
+
+.. autofunction:: tt_lib.tensor.unary_ne
+
+.. autofunction:: tt_lib.tensor.unary_gt
+
+.. autofunction:: tt_lib.tensor.unary_lt
 
 Tensor ternary operations
 =========================
@@ -787,6 +795,10 @@ Other Operations
 
 .. autofunction:: tt_lib.tensor.xlogy
 
+.. autofunction:: tt_lib.tensor.prod
+
+.. autofunction:: tt_lib.tensor.tiled_prod
+
 .. autofunction:: tt_lib.tensor.addcmul
 
 .. autofunction:: tt_lib.tensor.addcdiv
@@ -831,6 +843,8 @@ Other Operations
 
 Backward Operations
 ===================
+
+.. autofunction:: tt_lib.tensor.prod_bw
 
 .. autofunction:: tt_lib.tensor.addalpha_bw
 
@@ -1069,6 +1083,10 @@ Backward Operations
 .. autofunction:: tt_lib.tensor.complex_div_bw
 
 .. autofunction:: tt_lib.tensor.polar_bw
+
+.. autofunction:: tt_lib.tensor.complex_add_bw
+
+.. autofunction:: tt_lib.tensor.complex_sub_bw
 
 .. autofunction:: tt_lib.tensor.multigammaln_bw
 

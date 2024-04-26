@@ -372,30 +372,42 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 
 Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const {
     ZoneScoped;
-    auto all_workers = device_mesh->get_devices();
-    auto workers = std::vector<Device*>(all_workers.begin(), all_workers.end());
-    TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
-    Tensor multi_device_tensor = Tensor(workers);
-    uint32_t device_tensor_ref_count = multi_device_tensor.tensor_attributes->record_main_thread_ref_count();
+    return this->to(device_mesh->get_devices(), mem_config);
+}
 
-    for (auto& target_device : workers) {
-        target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
-            TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST or this->storage_type() == StorageType::MULTI_DEVICE, "Tensor::to(...) requires the tensor the be multi-device tensor.");
-            auto shard = get_shard_for_device(*this, target_device);
-            if (this->storage_type() ==  StorageType::MULTI_DEVICE_HOST) {
-                shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
-            }
-            insert_buffer_and_shape_for_device(target_device, shard, multi_device_tensor);
-            if (not (target_device->id())) {
-                multi_device_tensor.set_shape(this->get_shape());
-                multi_device_tensor.set_dtype(this->get_dtype());
-                multi_device_tensor.set_layout(this->get_layout());
-            }
-            multi_device_tensor.set_populated(target_device);
+Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig &mem_config) const {
+    ZoneScoped;
+    TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
+    // When broadcasting a single shard to all devices, we use all workers.
+    // When sending a MultiDeviceHost tensor to the cluster, send it only to devices for which shards exist
+    auto workers_to_use = workers;
+    if (std::holds_alternative<MultiDeviceStorage>(this->get_storage()) or std::holds_alternative<MultiDeviceHostStorage>(this->get_storage())) {
+        workers_to_use = std::vector<Device*>(workers.begin(), workers.begin() + num_buffers_in_tensor(*this));
+    }
+    Tensor device_tensor = Tensor(workers_to_use);
+    uint32_t device_tensor_ref_count = device_tensor.tensor_attributes->record_main_thread_ref_count();
+    uint32_t original_tensor_ref_count = this->tensor_attributes->record_main_thread_ref_count();
+    uint32_t num_workers = workers_to_use.size();
+    for (auto& worker : workers_to_use) {
+        worker->push_work(
+            [worker, *this, device_tensor, mem_config, num_workers] () mutable {
+                auto shard = get_shard_for_device(*this, worker);
+                if (shard.storage_type() == StorageType::OWNED) {
+                    shard = tensor_impl::to_device_wrapper(shard, worker, mem_config);
+                }
+                insert_buffer_and_shape_for_device(worker, shard, device_tensor);
+                if (not worker->id()) {
+                    device_tensor.set_shape(this->get_shape());
+                    device_tensor.set_dtype(this->get_dtype());
+                    device_tensor.set_layout(this->get_layout());
+                }
+                if (num_workers > 1) device_tensor.set_populated(worker);
+                else device_tensor.set_populated();
         });
     }
-    multi_device_tensor.tensor_attributes->update_main_thread_ref_count(multi_device_tensor.workers.at(0), device_tensor_ref_count);
-    return multi_device_tensor;
+    device_tensor.tensor_attributes->update_main_thread_ref_count(workers.at(0), device_tensor_ref_count);
+    this->tensor_attributes->update_main_thread_ref_count(workers.at(0), original_tensor_ref_count);
+    return device_tensor;
 }
 
 Tensor Tensor::cpu(bool blocking) const {
@@ -458,10 +470,23 @@ Tensor Tensor::extract_shard(const uint32_t & core_id) const{
 
 }
 
-Tensor Tensor::to(Layout target_layout) const {
+Tensor Tensor::to(Layout target_layout, Device* worker) const {
     ZoneScoped;
-    TT_ASSERT(this->storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
-    return tensor_impl::to_layout_wrapper(*this, target_layout);
+    // Tensor can be using borrowed storage. If so, when running in async mode, copy this tensor to owned storage.
+    if (worker) {
+        Tensor async_safe_tensor = copy_borrowed_tensor_in_async_mode(worker, *this);
+        Tensor tensor_modified_layout = Tensor({}, 1);
+        worker->push_work([async_safe_tensor, tensor_modified_layout, target_layout] () mutable {
+            TT_ASSERT(async_safe_tensor.storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
+            auto local_tensor = tensor_impl::to_layout_wrapper(async_safe_tensor, target_layout);
+            // Populate modified layout tensor
+            tensor_modified_layout.populate_buffers_and_metadata(local_tensor);
+        });
+        return tensor_modified_layout;
+    } else {
+        TT_ASSERT(this->storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
+        return tensor_impl::to_layout_wrapper(*this, target_layout);
+    }
 }
 
 const std::string Tensor::write_to_string() const { return tensor_impl::to_string_wrapper(*this); }
@@ -593,7 +618,9 @@ std::vector<uint32_t> Tensor::host_page_ordering(){
     std::vector<uint32_t> ret_vec;
     ret_vec.reserve(num_pages);
     for(int page_id = 0; page_id <num_pages ; page_id++){
-        ret_vec.push_back(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id]);
+        if(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id].has_value()) {
+            ret_vec.push_back(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id].value());
+        }
     }
     return ret_vec;
 }

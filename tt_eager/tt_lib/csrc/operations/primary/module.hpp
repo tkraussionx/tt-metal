@@ -28,6 +28,7 @@
 #include "tt_dnn/op_library/moreh_softmax/moreh_softmax_op.hpp"
 #include "tt_dnn/op_library/moreh_softmax_backward/moreh_softmax_backward_op.hpp"
 #include "tt_dnn/op_library/softmax/softmax_op.hpp"
+#include "tt_dnn/op_library/prod/prod_nc_op.hpp"
 #include "tt_dnn/op_library/moreh_sum/moreh_sum_op.hpp"
 #include "tt_dnn/op_library/moreh_sum_backward/moreh_sum_backward_op.hpp"
 #include "tt_dnn/op_library/moreh_cumsum/moreh_cumsum_op.hpp"
@@ -39,6 +40,7 @@
 #include "tt_dnn/op_library/moreh_mean/moreh_mean_op.hpp"
 #include "tt_dnn/op_library/moreh_mean_backward/moreh_mean_backward_op.hpp"
 #include "tt_dnn/op_library/moreh_getitem/moreh_getitem_op.hpp"
+#include "tt_dnn/op_library/prod/prod_op_all.hpp"
 
 namespace py = pybind11;
 
@@ -479,6 +481,14 @@ void py_module(py::module& m_primary) {
             Performs a rmsnorm(a+b)*gamma + beta operation.
         )doc");
 
+    //prod along all dimensions
+    m_primary.def(
+        "prod_all",
+        &prod_all,
+        py::arg("input").noconvert(),
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        "Computes prod along along dimensions of the tensor.");
+
     // moreh_adam
     m_primary.def(
         "moreh_adam",
@@ -557,26 +567,35 @@ void py_module(py::module& m_primary) {
         R"doc(
         "Performs a moreh_bmm_backward operation.
     )doc");
+
     m_primary.def(
         "moreh_linear",
         &moreh_linear,
         py::arg("input").noconvert(),
         py::arg("weight").noconvert(),
+        py::kw_only(),
         py::arg("bias").noconvert() = std::nullopt,
+        py::arg("output").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
         "Performs a moreh_linear operation.
     )doc");
+
     m_primary.def(
         "moreh_linear_backward",
         &moreh_linear_backward,
         py::arg("output_grad").noconvert(),
         py::arg("input").noconvert(),
         py::arg("weight").noconvert(),
+        py::kw_only(),
+        py::arg("are_required_outputs").noconvert() = std::vector<bool>{true, true, true},
+        py::arg("bias").noconvert() = std::nullopt,
         py::arg("input_grad").noconvert() = std::nullopt,
         py::arg("weight_grad").noconvert() = std::nullopt,
         py::arg("bias_grad").noconvert() = std::nullopt,
-        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("input_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("weight_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("bias_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
         "Performs a moreh_linear_backward operation.
     )doc");
@@ -634,8 +653,8 @@ void py_module(py::module& m_primary) {
         py::arg("input_grad_tensor").noconvert(),
         py::arg("ignore_index").noconvert(),
         py::arg("reduction_mean").noconvert(),
-        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        "Performs a nll_loss_backward operation. Returns an output tensor.");
+        py::arg("input_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        "Performs a nll_loss_backward operation. Returns an input_grad tensor.");
 
     // moreh_norm
     m_primary.def(
@@ -838,6 +857,16 @@ void py_module(py::module& m_primary) {
         "Performs sum operation. Returns an output tensor.");
 
     m_primary.def(
+        "prod_nc",
+        &prod_nc,
+        py::arg("input").noconvert(),
+        py::arg("output").noconvert(),
+        py::kw_only(),
+        py::arg("dims").noconvert() = std::vector<int64_t>(),
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        "Performs product operation. Returns an output tensor.");
+
+    m_primary.def(
         "moreh_sum_backward",
         &moreh_sum_backward,
         py::arg("output_grad").noconvert(),
@@ -884,7 +913,7 @@ void py_module(py::module& m_primary) {
         py::arg("param_in").noconvert(),
         py::arg("grad").noconvert(),
         py::arg("momentum_buffer_in").noconvert() = std::nullopt,
-        py::arg("param_out").noconvert(),
+        py::arg("param_out").noconvert() = std::nullopt,
         py::arg("momentum_buffer_out").noconvert() = std::nullopt,
         py::arg("lr").noconvert(),
         py::arg("momentum").noconvert(),
@@ -892,6 +921,8 @@ void py_module(py::module& m_primary) {
         py::arg("weight_decay").noconvert(),
         py::arg("nesterov").noconvert(),
         py::arg("momentum_initialized").noconvert(),
+        py::arg("param_out_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("momentum_buffer_out_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         "Performs a SGD operation.");
 
     py::class_<GroupNormShardedMultiCoreProgramConfig>(m_primary, "GroupNormShardedMultiCoreProgramConfig")

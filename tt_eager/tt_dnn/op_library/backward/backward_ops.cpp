@@ -13,6 +13,8 @@
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_dnn/op_library/unpad/unpad_op.hpp"
 #include "tt_dnn/op_library/complex/complex_ops.hpp"
+#include "tt_eager/tt_dnn/op_library/pad/pad_op.hpp"
+#include "tt_dnn/op_library/permute/permute_op.hpp"
 
 namespace tt {
 
@@ -152,7 +154,10 @@ std::vector<Tensor> _sqrt_bw(const Tensor& grad, const Tensor& input, const Memo
     Tensor sqrt_result = sqrt(input, output_mem_config);
     Tensor result = mul(grad, recip(mul_unary(sqrt_result, 2.0, output_mem_config), output_mem_config), std::nullopt, output_mem_config);
     float t_nan  = std::nanf("");
+    float t_inf = std::numeric_limits<float>::infinity();
     result = where(lez(input, output_mem_config), t_nan, result, output_mem_config);
+    result = where(logical_and(eqz(input, output_mem_config), ltz(grad, output_mem_config), std::nullopt, output_mem_config), -t_inf, result, output_mem_config);
+    result = where(logical_and(eqz(input, output_mem_config), gtz(grad, output_mem_config), std::nullopt, output_mem_config), t_inf, result, output_mem_config);
     grad_tensor.emplace_back(result);
     return grad_tensor;
 }
@@ -608,10 +613,18 @@ std::vector<Tensor> relu_bw(const Tensor& grad, const Tensor& input, const Memor
 
 std::vector<Tensor> _atan2_bw(const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
-    Tensor recip_mul = mul(grad, recip(square(hypot(input,other))),std::nullopt, output_mem_config);
+    float t_nan  = std::nanf("");
+    UnaryWithParam op1 {UnaryOpType::SQUARE};
+    UnaryWithParam op2 {UnaryOpType::RECIP};
+    Tensor recip_mul = mul(grad, unary_chain(hypot(input,other), {op1, op2}, output_mem_config), std::nullopt, output_mem_config);
     Tensor grad_a = mul(other, recip_mul, std::nullopt, output_mem_config);
+    Tensor cond = logical_and(eqz(input, output_mem_config), eqz(other, output_mem_config));
+    grad_a = where(cond, t_nan, grad_a, output_mem_config);
     grad_tensor.emplace_back(grad_a);
     Tensor grad_b = mul(neg(input), recip_mul, std::nullopt, output_mem_config);
+    grad_b = where(cond, t_nan, grad_b, output_mem_config);
+    recip_mul.deallocate();
+    cond.deallocate();
     grad_tensor.emplace_back(grad_b);
     return grad_tensor;
 }
@@ -1000,7 +1013,10 @@ std::vector<Tensor> polygamma_bw(const Tensor& grad, const Tensor& input, int n,
 
 std::vector<Tensor> _atan_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
-    Tensor grad_a = mul(grad, recip(add_unary(square(input), 1), output_mem_config), std::nullopt, output_mem_config);
+    UnaryWithParam op1 {UnaryOpType::SQUARE};
+    UnaryWithParam op2 {UnaryOpType::ADD_UNARY_SFPU, 1.0f};
+    UnaryWithParam op3 {UnaryOpType::RECIP};
+    Tensor grad_a = mul(grad, unary_chain( input, {op1, op2, op3}, output_mem_config), std::nullopt, output_mem_config);
     grad_tensor.emplace_back(grad_a);
     return grad_tensor;
 }
@@ -1011,7 +1027,17 @@ std::vector<Tensor> atan_bw(const Tensor& grad, const Tensor& input, const Memor
 
 std::vector<Tensor> _atanh_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
-    Tensor grad_a = mul(grad, recip(sub_unary(1, square(input)), output_mem_config), std::nullopt, output_mem_config);
+    float t_nan  = std::nanf("");
+    float t_inf = std::numeric_limits<float>::infinity();
+    UnaryWithParam op1 {UnaryOpType::SQUARE};
+    UnaryWithParam op2 {UnaryOpType::SUB_UNARY_SFPU, 1.0f};
+    UnaryWithParam op3 {UnaryOpType::NEG};
+    UnaryWithParam op4 {UnaryOpType::RECIP};
+    Tensor grad_a = mul(grad, unary_chain( input, {op1, op2, op3, op4}, output_mem_config), std::nullopt, output_mem_config);
+    grad_a = where(eqz(grad, output_mem_config), t_nan, grad_a, output_mem_config);
+    grad_a = where(logical_and(eqz(grad, output_mem_config), eqz(input, output_mem_config)), 0, grad_a, output_mem_config);
+    grad_a = where(logical_and(logical_or(eq_unary(input, 1, output_mem_config), eq_unary(input, -1, output_mem_config), std::nullopt, output_mem_config), nez(grad, output_mem_config)), t_inf, grad_a, output_mem_config);
+    grad_a = where(logical_and(eq_unary(grad_a, t_inf, output_mem_config), ltz(grad, output_mem_config)), -t_inf, grad_a, output_mem_config);
     grad_tensor.emplace_back(grad_a);
     return grad_tensor;
 }
@@ -1506,6 +1532,111 @@ std::vector<Tensor> binary_gt_bw(const Tensor& grad, const Tensor& input, const 
     return operation::decorate_as_composite(__func__, _binary_gt_bw)(grad, input, output_mem_config);
 }
 
+// Prod
+// along a single dimension --> result: grad_data * (y / input )
+std::vector<Tensor> _prod_bw(
+    const Tensor& grad, const Tensor& input, bool all_dimensions, int64_t dim, const MemoryConfig& output_mem_config) {
+    std::vector<Tensor> grad_tensor;
+    Tensor prod_result = prod(input, all_dimensions, dim, output_mem_config);
+    if (all_dimensions == true) {
+        Tensor temp = mul(prod_result, grad, std::nullopt, output_mem_config);  // result is stored in the first position
+        Tensor fill_tensor = tt::numpy::fill_first_val_into_tensor<bfloat16>( temp, temp.get_dtype(), temp.get_layout(), temp.device(), output_mem_config);
+        Tensor all_dimension_result = mul(recip(input, output_mem_config), fill_tensor, std::nullopt, output_mem_config);
+        grad_tensor.emplace_back(all_dimension_result);
+        return grad_tensor;
+    }
+    // all_dimensions = False
+    Tensor updated_grad = prod_result;
+    if (prod_result.get_legacy_shape() != grad.get_legacy_shape()) {
+        if (dim == 3 || dim == -1) {
+            std::vector<int64_t> after_permute_dims = {0, 3, 1, 2};
+            Tensor required = permute(grad, after_permute_dims, output_mem_config);
+            const Shape start_index = {0, 0, 0, 0};
+            const Shape end_index = { grad.get_legacy_shape()[0] - 1, 0, grad.get_legacy_shape()[1] - 1, grad.get_legacy_shape()[2] - 1};
+            Tensor new_unpad_tensor = unpad(required, start_index, end_index);
+            after_permute_dims = {0, 2, 3, 1};
+            updated_grad = permute(new_unpad_tensor, after_permute_dims, output_mem_config);
+        } else if (dim == 2 || dim == -2) {
+            std::vector<int64_t> after_permute_dims = {0, 2, 1, 3};
+            Tensor required = permute(grad, after_permute_dims, output_mem_config);
+            const Shape start_index = {0, 0, 0, 0};
+            const Shape end_index = { grad.get_legacy_shape()[0] - 1, 0, grad.get_legacy_shape()[1] - 1, grad.get_legacy_shape()[3] - 1};
+            Tensor new_unpad_tensor = unpad(required, start_index, end_index);
+            updated_grad = permute(new_unpad_tensor, after_permute_dims, output_mem_config);
+        }
+    }
+    Tensor reciprocal_input = recip(input, output_mem_config);
+    Tensor temp = mul(prod_result, (dim == 1 || dim == 0 || dim == -4 || dim == -3) ? grad : updated_grad, std::nullopt, output_mem_config);
+    if (dim == 3 || dim == -1) {
+        Tensor grad_result = bcast(reciprocal_input, temp, BcastOpMath::MUL, BcastOpDim::W, output_mem_config);
+        grad_tensor.emplace_back(grad_result);
+        return grad_tensor;
+    } else if (dim == 2 || dim == -2) {
+        Tensor grad_result = bcast(reciprocal_input, temp, BcastOpMath::MUL, BcastOpDim::H, output_mem_config);
+        grad_tensor.emplace_back(grad_result);
+        return grad_tensor;
+    } else if (dim == 1 || dim == -3) {
+        Tensor tensor_1_temp = reciprocal_input;
+        if (reciprocal_input.get_legacy_shape()[1] % 32 != 0) {
+            const Shape start_index = {0, 0, 0, 0};
+            const Shape required_shape = {
+                reciprocal_input.get_legacy_shape()[0],
+                reciprocal_input.get_legacy_shape()[1] + (32 - (reciprocal_input.get_legacy_shape()[1] % 32)),
+                reciprocal_input.get_legacy_shape()[2],
+                reciprocal_input.get_legacy_shape()[3]};
+            tensor_1_temp = pad(reciprocal_input, required_shape, start_index, 0);
+        }
+        std::vector<int64_t> after_permute_dims = {0, 2, 3, 1};
+        Tensor tensor_1 = permute(tensor_1_temp, after_permute_dims, output_mem_config);
+        Tensor tensor_2 = permute(temp, after_permute_dims, output_mem_config);
+        after_permute_dims = {0, 3, 1, 2};
+        Tensor result = permute( bcast(tensor_1, tensor_2, BcastOpMath::MUL, BcastOpDim::W, output_mem_config), after_permute_dims, output_mem_config);
+        Tensor grad_result = result;
+        if (reciprocal_input.get_legacy_shape()[1] % 32 != 0) {
+            const Shape start_index = {0, 0, 0, 0};
+            const Shape end_index = {
+                input.get_legacy_shape()[0] - 1,
+                input.get_legacy_shape()[1] - 1,
+                input.get_legacy_shape()[2] - 1,
+                input.get_legacy_shape()[3] - 1};
+            grad_result = unpad(result, start_index, end_index);
+        }
+        grad_tensor.emplace_back(grad_result);
+        return grad_tensor;
+    }
+    // dim 0
+    Tensor tensor_1_temp = reciprocal_input;
+    if (reciprocal_input.get_legacy_shape()[0] % 32 != 0) {
+        const Shape start_index = {0, 0, 0, 0};
+        const Shape required_shape = {
+            reciprocal_input.get_legacy_shape()[0] + (32 - (reciprocal_input.get_legacy_shape()[0] % 32)),
+            reciprocal_input.get_legacy_shape()[1],
+            reciprocal_input.get_legacy_shape()[2],
+            reciprocal_input.get_legacy_shape()[3]};
+        tensor_1_temp = pad(reciprocal_input, required_shape, start_index, 0);
+    }
+    std::vector<int64_t> after_permute_dims = {3, 1, 2, 0};
+    Tensor tensor_1 = permute(tensor_1_temp, after_permute_dims, output_mem_config);
+    Tensor tensor_2 = permute(temp, after_permute_dims, output_mem_config);
+    Tensor result = permute( bcast(tensor_1, tensor_2, BcastOpMath::MUL, BcastOpDim::W, output_mem_config), after_permute_dims, output_mem_config);
+    Tensor grad_result = result;
+    if (reciprocal_input.get_legacy_shape()[0] % 32 != 0) {
+        const Shape start_index = {0, 0, 0, 0};
+        const Shape end_index = {
+            input.get_legacy_shape()[0] - 1,
+            input.get_legacy_shape()[1] - 1,
+            input.get_legacy_shape()[2] - 1,
+            input.get_legacy_shape()[3] - 1};
+        grad_result = unpad(result, start_index, end_index);
+    }
+    grad_tensor.emplace_back(grad_result);
+    return grad_tensor;
+}
+std::vector<Tensor> prod_bw(
+    const Tensor& grad, const Tensor& input, bool all_dimensions, int64_t dim, const MemoryConfig& output_mem_config) {
+    return operation::decorate_as_composite(__func__, _prod_bw)(grad, input, all_dimensions, dim, output_mem_config);
+}
+
 // square
 // result:  2 * input * grad_data
 std::vector<Tensor> _square_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {
@@ -1773,7 +1904,8 @@ std::vector<Tensor> unary_remainder_bw(const Tensor& grad, const Tensor& input, 
   /* TT_ASSERT( input.shape()[0] == 1, "tensor should have batch size 1"); */ \
   } while(0);
 
-//complex conj
+// complex conj
+// self: grad.conj()
 std::vector<Tensor> _conj_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {
     CHECK_FOR_COMPLEX(input);
     CHECK_FOR_COMPLEX(grad);
@@ -1800,7 +1932,7 @@ std::vector<Tensor> _complex_recip_bw(const Tensor& grad, const Tensor& input, c
     input_i.deallocate();
     Tensor nan_flag = mk_complex(condition_nan, condition_nan, output_mem_config);
     condition_nan.deallocate();
-    Tensor grad_result = where(nan_flag, full_like(input, std::nanf(""), output_mem_config), complex_mul(neg(grad, output_mem_config), conj(complex_mul(complex_recip(input, output_mem_config), complex_recip(input, output_mem_config), output_mem_config), output_mem_config), output_mem_config)) ;
+    Tensor grad_result = where(nan_flag, full_like(input, std::nanf(""), output_mem_config), complex_mul(neg(grad, output_mem_config), conj(complex_mul(complex_recip(input, output_mem_config), complex_recip(input, output_mem_config), output_mem_config), output_mem_config), output_mem_config), output_mem_config) ;
     nan_flag.deallocate();
     grad_tensor.emplace_back(grad_result);
     return grad_tensor;
@@ -1963,6 +2095,41 @@ std::vector<Tensor> complex_mul_bw(const Tensor& grad, const Tensor& input, cons
     return operation::decorate_as_composite(__func__, _complex_mul_bw)(grad, input, other, output_mem_config);
 }
 
+// complex add
+// self: grad, other: grad * alpha
+std::vector<Tensor> _complex_add_bw(const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config) {
+    CHECK_FOR_COMPLEX(input);
+    CHECK_FOR_COMPLEX(other);
+    CHECK_FOR_COMPLEX(grad);
+    std::vector<Tensor> grad_tensor;
+    grad_tensor.emplace_back(grad);
+    Tensor grad_b = mul_unary(grad, alpha, output_mem_config );
+    grad_tensor.emplace_back(grad_b);
+    return grad_tensor;
+}
+std::vector<Tensor> complex_add_bw(const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config)
+{
+    return operation::decorate_as_composite(__func__, _complex_add_bw)(grad, input, other, alpha, output_mem_config);
+}
+
+// complex sub
+// self: grad, other: -grad * alpha
+std::vector<Tensor> _complex_sub_bw(const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config) {
+    CHECK_FOR_COMPLEX(input);
+    CHECK_FOR_COMPLEX(other);
+    CHECK_FOR_COMPLEX(grad);
+    std::vector<Tensor> grad_tensor;
+    grad_tensor.emplace_back(grad);
+    UnaryWithParam op1 {UnaryOpType::NEG};
+    UnaryWithParam op2 {UnaryOpType::MUL_UNARY_SFPU, alpha};
+    Tensor grad_b = unary_chain( grad, {op1, op2}, output_mem_config);
+    grad_tensor.emplace_back(grad_b);
+    return grad_tensor;
+}
+std::vector<Tensor> complex_sub_bw(const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config)
+{
+    return operation::decorate_as_composite(__func__, _complex_sub_bw)(grad, input, other, alpha, output_mem_config);
+}
 #undef CHECK_FOR_COMPLEX
 
 std::vector<Tensor> _multigammaln_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {

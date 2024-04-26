@@ -59,6 +59,7 @@ namespace tt::tt_metal::detail {
         detail::bind_unary_op(m_tensor, "isfinite", isfinite, R"doc(Returns boolean tensor that is True where input tensor ``{0}``, is finite and False elsewhere.)doc");
         detail::bind_unary_op(m_tensor, "isinf", isinf, R"doc(Returns boolean tensor that is True where input tensor ``{0}``, is infinite and False elsewhere.)doc");
         detail::bind_unary_op(m_tensor, "isposinf", isposinf, R"doc(Returns each element of input tensor ``{0}``, is positive infinity or not.)doc");
+        detail::bind_unary_op(m_tensor, "tiled_prod", tiled_prod, R"doc(Performs tile-wise multiplication on input tensor ``{0}`` and store the result in the last tile of the input tensor.)doc");
         detail::bind_unary_op(m_tensor, "isneginf", isneginf, R"doc(Returns each element of input tensor ``{0}``, is negative infinity or not.)doc");
         detail::bind_unary_op(m_tensor, "isnan", isnan, R"doc(Returns boolean tensor that is True where tensor ``{0}``, is NaN and False elsewhere.)doc");
         detail::bind_unary_op(m_tensor, "sign", sign, R"doc(Returns tensor with the elementwise signum of the input tensor ``{0}``.)doc");
@@ -151,6 +152,13 @@ namespace tt::tt_metal::detail {
 
         );
         detail::bind_unary_op_with_param(
+            m_tensor, "unary_ne", unary_ne,
+            py::arg("value"),
+            R"doc(Perform an eltwise-unary not-equal (``{0} != {1}``) on input tensor.)doc",
+            R"doc("value", "float", "")doc"
+
+        );
+        detail::bind_unary_op_with_param(
             m_tensor, "rdiv", rdiv,
             py::arg("denominator"),
             R"doc(Returns tensor  with value ``{1}`` divided by each of respective elements of the input tensor ``{0}``.)doc",
@@ -179,6 +187,18 @@ namespace tt::tt_metal::detail {
             py::arg("unary_chain"),
             R"doc(Returns tensor with the unary op chain applied to all of elements of the input tensor ``{0}``.)doc",
             R"doc("Unary op chain", "Vector<FusibleActivation>", "At least 1 activation")doc"
+        );
+        detail::bind_unary_op_with_param(
+            m_tensor, "unary_gt", unary_gt,
+            py::arg("value"),
+            R"doc(Perform an eltwise-unary greater-than (``{0} > {1}``) on input tensor.)doc",
+            R"doc("value", "float", "")doc"
+        );
+        detail::bind_unary_op_with_param(
+            m_tensor, "unary_lt", unary_lt,
+            py::arg("value"),
+            R"doc(Perform an eltwise-unary less-than (``{0} < {1}``) on input tensor.)doc",
+            R"doc("value", "float", "")doc"
         );
 
         // *** bcast binary tied to unary ***
