@@ -62,7 +62,7 @@ void ActiveDevices::deactivate_device(chip_id_t id) {
 
 bool ActiveDevices::is_device_active(chip_id_t id) {
     if (this->active_devices_.size() < id + 1) {
-        TT_THROW("Invalid Device ", id);
+        return false;
     } else {
         return this->active_devices_[id] == ActiveState::ACTIVE;
     }
