@@ -2,39 +2,41 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_lib_bindings.hpp"
-#include "tt_dnn/op_library/downsample/downsample_op.hpp"
-#include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
-#include "tt_dnn/op_library/conv/conv_op.hpp"
-#include "tt_dnn/op_library/conv/optimized_conv_op.hpp"
-#include "tt_dnn/op_library/softmax/softmax_op.hpp"
-#include "tt_dnn/op_library/upsample/upsample_op.hpp"
-#include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
-#include "tt_dnn/op_library/pool/average_pool.hpp"
-#include "tt_dnn/op_library/pool/max_pool.hpp"
-#include "tt_dnn/op_library/fully_connected/fully_connected_op.hpp"
-#include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
-#include "tt_dnn/op_library/moreh_matmul/moreh_matmul_op.hpp"
-#include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
-#include "tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.hpp"
-#include "tt_dnn/op_library/scan/scan_op.hpp"
-#include "tt_dnn/op_library/rotate_half/rotate_half_op.hpp"
-#include "tt_dnn/op_library/rotary_embedding/rotary_embedding_op.hpp"
-#include "tt_eager/tt_dnn/op_library/loss/loss_op.hpp"
-#include "tt_dnn/op_library/embeddings/embeddings_op.hpp"
-#include "tt_dnn/op_library/update_cache/update_cache_op.hpp"
-#include "tt_dnn/op_library/reduce/reduce_op.hpp"
-#include "tt_dnn/op_library/work_split.hpp"
-#include "tensor/owned_buffer.hpp"
+#include "tt_lib_bindings_tensor.hpp"
+
 #include "tensor/borrowed_buffer.hpp"
+#include "tensor/owned_buffer.hpp"
+#include "tensor/serialization.hpp"
 #include "tensor/tensor_impl.hpp"
 #include "tensor/tensor_utils.hpp"
-#include "tensor/serialization.hpp"
-#include "type_caster.hpp"
-#include "tt_lib_bindings_tensor_impl.hpp"
-#include "tt_lib_bindings_tensor.hpp"
+#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/compute_kernel_config.hpp"
+#include "tt_dnn/op_library/conv/conv_op.hpp"
+#include "tt_dnn/op_library/conv/optimized_conv_op.hpp"
+#include "tt_dnn/op_library/downsample/downsample_op.hpp"
+#include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
+#include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "tt_dnn/op_library/embeddings/embeddings_op.hpp"
+#include "tt_dnn/op_library/fully_connected/fully_connected_op.hpp"
+#include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
+#include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
+#include "tt_dnn/op_library/mm_multi_device/mm_multi_device.hpp"
+#include "tt_dnn/op_library/moreh_matmul/moreh_matmul_op.hpp"
+#include "tt_dnn/op_library/pool/average_pool.hpp"
+#include "tt_dnn/op_library/pool/max_pool.hpp"
+#include "tt_dnn/op_library/reduce/reduce_op.hpp"
+#include "tt_dnn/op_library/rotary_embedding/rotary_embedding_op.hpp"
+#include "tt_dnn/op_library/rotate_half/rotate_half_op.hpp"
+#include "tt_dnn/op_library/scan/scan_op.hpp"
+#include "tt_dnn/op_library/softmax/softmax_op.hpp"
+#include "tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.hpp"
+#include "tt_dnn/op_library/update_cache/update_cache_op.hpp"
+#include "tt_dnn/op_library/upsample/upsample_op.hpp"
+#include "tt_dnn/op_library/work_split.hpp"
+#include "tt_eager/tt_dnn/op_library/loss/loss_op.hpp"
+#include "tt_lib_bindings.hpp"
+#include "tt_lib_bindings_tensor_impl.hpp"
+#include "type_caster.hpp"
 
 namespace tt::tt_metal{
 
@@ -800,6 +802,15 @@ void TensorModule(py::module &m_tensor) {
         +===================+===================================================================================+===============+=============+==========+
         | a                 | Input tensor (TILED)                                                              | uint32_t      |             | Yes      |
         +-------------------+-----------------------------------------------------------------------------------+---------------+-------------+----------+
+    )doc");
+
+    m_tensor.def(
+        "mm_multi_device",
+        &mm_multi_device,
+        py::arg().noconvert(),
+        py::arg().noconvert(),
+        py::arg("bias").noconvert() = std::nullopt,
+        R"doc(
     )doc");
 
     detail::TensorModuleCompositeOPs( m_tensor);
