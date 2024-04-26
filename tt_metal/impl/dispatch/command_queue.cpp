@@ -997,8 +997,8 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
         if (blocking) {
             this->finish();
         } else {
-            std::shared_ptr<Event> event = std::make_shared<Event>();
-            this->enqueue_record_event(event);
+            // std::shared_ptr<Event> event = std::make_shared<Event>();
+            // this->enqueue_record_event(event);
         }
     } else {
         // this is a streaming command so we don't need to break down to multiple
@@ -1012,8 +1012,8 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
 
         this->enqueue_command(command, blocking);
         if (not blocking) { // should this be unconditional?
-            std::shared_ptr<Event> event = std::make_shared<Event>();
-            this->enqueue_record_event(event);
+            // std::shared_ptr<Event> event = std::make_shared<Event>();
+            // this->enqueue_record_event(event);
         }
     }
 }
@@ -1170,8 +1170,8 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     if (blocking) {
         this->finish();
     } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
+        // std::shared_ptr<Event> event = std::make_shared<Event>();
+        // this->enqueue_record_event(event);
     }
 }
 
@@ -1280,8 +1280,8 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     if (blocking) {
         this->finish();
     } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
+        // std::shared_ptr<Event> event = std::make_shared<Event>();
+        // this->enqueue_record_event(event);
     }
 }
 

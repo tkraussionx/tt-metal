@@ -18,6 +18,7 @@ TT_METAL_IMPL_SRCS = \
 	tt_metal/impl/dispatch/device_command.cpp \
 	tt_metal/impl/dispatch/debug_tools.cpp \
 	tt_metal/impl/dispatch/command_queue.cpp \
+	tt_metal/impl/dispatch/command_queue_interface.cpp \
 	tt_metal/impl/debug/dprint_server.cpp \
 	tt_metal/impl/debug/watcher_server.cpp \
 	tt_metal/impl/trace/trace.cpp
