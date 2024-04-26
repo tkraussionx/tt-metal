@@ -30,6 +30,12 @@ jobs:
             runs-on: ["wormhole_b0", "multi-chip-num-pcie-4", "multi-chip-num-chips-8"],
             cmd: './tests/scripts/run_tests.sh --tt-arch wormhole_b0 --pipeline-type post_commit_multi_device_unstable --dispatch-mode ""'
           },
+          {
+            name: "T3000 profiler regression tests",
+            arch: wormhole_b0,
+            runs-on: ["wormhole_b0", "multi-chip-num-pcie-4", "multi-chip-num-chips-8"],
+            cmd: './scripts/build_scripts/build_with_profiler_opt.sh && ./tests/scripts/run_profiler_regressions.sh'
+          },
         ]
     name: ${{ matrix.test-group.name }} ${{ matrix.test-group.arch }}
     env:
