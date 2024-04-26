@@ -52,7 +52,7 @@ def torch_model():
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        8,
     ],
     indirect=True,
 )
@@ -93,14 +93,15 @@ def test_falcon_mlp(
     )
 
     ttnn_model = TtFalconMLP(model_config, parameters)
-    ttnn_input = ttnn.from_torch(
-        torch_input,
-        dtype=model_config["DEFAULT_DTYPE"],
-        device=device_mesh,
-        layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
-    )
-    ttnn_output = ttnn_model(ttnn_input)
+    for i in range(20):
+        ttnn_input = ttnn.from_torch(
+            torch_input,
+            dtype=model_config["DEFAULT_DTYPE"],
+            device=device_mesh,
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        )
+        ttnn_output = ttnn_model(ttnn_input)
 
     passed, pcc = assert_with_pcc(
         torch_output,

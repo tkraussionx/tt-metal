@@ -270,7 +270,7 @@ def from_torch(
         tensor = ttl.tensor.Tensor(tensor, dtype)
 
     if layout is not None:
-        tensor = ttnn.to_layout(tensor, layout)
+        tensor = ttnn.to_layout(tensor, layout, device=device)
 
     if device is not None:
         if memory_config is None:
@@ -320,7 +320,11 @@ class TorchTensor(torch.Tensor):
     name="ttnn.to_torch", validate_input_tensors=_to_torch_validate_input_tensors, golden_function=_golden_function
 )
 def to_torch(
-    tensor: ttnn.Tensor, *, torch_rank: Optional[int] = None, mesh_composer: Optional[ttnn.MeshToTensor] = None
+    tensor: ttnn.Tensor,
+    *,
+    torch_rank: Optional[int] = None,
+    mesh_composer: Optional[ttnn.MeshToTensor] = None,
+    device: Optional[ttnn.Device] = None,
 ) -> "torch.Tensor":
     """
     to_torch(tensor: ttnn.Tensor, torch_rank: Optional[int] = None) -> torch.Tensor
@@ -338,17 +342,25 @@ def to_torch(
         tensor([[-0.3008, -0.8438,  0.3242],
                 [ 0.9023, -0.5820,  0.5312]], dtype=torch.bfloat16)
     """
-    if mesh_composer:
-        return mesh_composer.compose(tensor)
+    # if mesh_composer:
+    #     return mesh_composer.compose(tensor)
 
     if ttnn.is_tensor_storage_on_device(tensor):
-        tensor = ttnn.from_device(tensor)
-
+        tensor = tensor.cpu(False)
+        tensor.sync()
+        for dev in device.get_device_ids():
+            ttl.device.Synchronize(device.get_device(dev))
+    torch_tensors = []
     if tensor.layout != ttnn.ROW_MAJOR_LAYOUT:
-        tensor = tensor.to(ttnn.ROW_MAJOR_LAYOUT)
+        tensor = tensor.to(ttnn.ROW_MAJOR_LAYOUT, device)
 
     shape_without_tile_padding = tuple(tensor.shape)
     tensor = tensor.reshape(tensor.shape.with_tile_padding().value)
+
+    tensors = ttnn.get_device_tensors(tensor)
+    for tensor in tensors:
+        torch_tensors.append(tensor.to_torch())
+    return torch_tensors
 
     if tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE:
         raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch.Tensor!")
@@ -531,6 +543,7 @@ doc = """
         >>> print(tensor[0,0,:3])
         Tensor([ 1.42188, -1.25, -0.398438], dtype=bfloat16 )
     """
+
 
 to_layout = ttnn.register_operation(
     name="ttnn.to_layout",

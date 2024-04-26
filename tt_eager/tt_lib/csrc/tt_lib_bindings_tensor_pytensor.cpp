@@ -982,6 +982,27 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
 
                     tt_tensor = tt_tensor.to(tt_lib.tensor.Layout.TILE)
             )doc")
+             .def(
+                "to",
+                py::overload_cast<Layout, DeviceMesh*>(&Tensor::to, py::const_),
+                py::arg("target_layout").noconvert(),
+                py::arg("device_mesh") = nullptr,
+                R"doc(
+                Convert TT Tensor to provided memory layout. Available layouts conversions are:
+
+                * ROW_MAJOR to TILE
+                * TILE to ROW_MAJOR
+
+                +-----------+-------------------------------------------------+----------------------------+--------------------------------+----------+
+                | Argument  | Description                                     | Data type                  | Valid range                    | Required |
+                +===========+=================================================+============================+================================+==========+
+                | arg0      | Target memory layout                            | tt_lib.tensor.Layout       | ROW_MAJOR, TILE                | Yes      |
+                +-----------+-------------------------------------------------+----------------------------+--------------------------------+----------+
+
+                .. code-block:: python
+
+                    tt_tensor = tt_tensor.to(tt_lib.tensor.Layout.TILE)
+            )doc")
             .def(
                 "pad",
                 [](const Tensor &self,

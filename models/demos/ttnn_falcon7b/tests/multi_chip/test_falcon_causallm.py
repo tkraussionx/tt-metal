@@ -58,7 +58,7 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        8,
     ],
     indirect=True,
 )
