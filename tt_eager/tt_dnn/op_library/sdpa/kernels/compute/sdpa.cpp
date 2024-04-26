@@ -55,7 +55,7 @@ void reduce_max_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     // Precondition: scale_cb has 1 produced
     // Postcondition: out_cb has rows produced
 
-    reduce_init_delta<false, PoolType::MAX, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
+    reduce_init_delta<false, PoolType::MAX, ReduceDim::REDUCE_ROW>(PoolType::MAX, ReduceDim::REDUCE_ROW, in0_cb, scale_cb, out_cb);
 
     // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
 
@@ -91,7 +91,7 @@ void reduce_sum_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t 
     // Precondition: scale_cb has 1 produced
     // Postcondition: out_cb has rows produced
 
-    reduce_init_delta<false, PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, out_cb);
+    reduce_init_delta<false, PoolType::SUM, ReduceDim::REDUCE_ROW>(PoolType::SUM, ReduceDim::REDUCE_ROW, in0_cb, scale_cb, out_cb);
 
     // DEBUG: Does reduce_init_delta mess up matmul config? YES! Need to revert
 
