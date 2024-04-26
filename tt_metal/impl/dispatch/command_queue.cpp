@@ -1049,11 +1049,13 @@ void EnqueueTraceCommand::process() {
             }
         }
 
+        bool stall_flag = i == 1 ? true : false;
         this->manager.issue_queue_push_back(kCmdSeqSizes[i], this->command_queue_id);
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
-        this->manager.fetch_queue_write(kCmdSeqSizes[i], this->command_queue_id);
+        this->manager.fetch_queue_write(kCmdSeqSizes[i], this->command_queue_id, stall_flag);
+        log_info(LogDispatch, "EnqueueTraceCommand issued fetch_size={}, commands={} stall_flag: {}", kCmdSeqSizes[i], command_sequence.cmd_vector(), stall_flag);
     }
-    // log_trace(LogDispatch, "EnqueueTraceCommand issued write_ptr={}, fetch_size={}, commands={}", write_ptr, fetch_size_bytes, this->commands);
+
 }
 
 EnqueueTerminateCommand::EnqueueTerminateCommand(
