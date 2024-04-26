@@ -502,6 +502,7 @@ void Device::compile_command_queue_programs() {
         CoreType dispatch_core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(mmio_device_id);
         tt_cxy_pair prefetch_location = dispatch_core_manager::get(num_hw_cqs).prefetcher_core(device_id, channel, cq_id);
         tt_cxy_pair dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_core(device_id, channel, cq_id);
+        bool dispatch_on_eth = dispatch_core_type == CoreType::ETH;
 
         TT_ASSERT(prefetch_location.chip == mmio_device_id and dispatch_location.chip == mmio_device_id,
             "Prefetcher is on device {} and Dispatcher is on device {} but they are expected to be on device {}", prefetch_location.chip, dispatch_location.chip, mmio_device_id);
@@ -545,21 +546,21 @@ void Device::compile_command_queue_programs() {
         constexpr uint32_t src_endpoint_start_id = 0xaa;
         constexpr uint32_t dest_endpoint_start_id = 0xbb;
 
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, 0); // prefetch_sync_sem
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, dispatch_constants::PREFETCH_D_BUFFER_PAGES); // prefetch_downstream_cb_sem
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, 0);
+        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, 0, dispatch_core_type); // prefetch_sync_sem
+        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, dispatch_constants::PREFETCH_D_BUFFER_PAGES, dispatch_core_type); // prefetch_downstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_location, 0, dispatch_core_type);
 
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_location, 0); // unused mux semaphore
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_location, 0); // mux_upstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_location, 0, dispatch_core_type); // unused mux semaphore
+        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_location, 0, dispatch_core_type); // mux_upstream_cb_sem
 
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0); // unused
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0); // unused
+        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0, dispatch_core_type); // unused
+        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0, dispatch_core_type); // unused
         // for the unpacketize stage, we use rptr/wptr for flow control, and poll semaphore
         // value only to update the rptr:
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0);
+        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_location, 0, dispatch_core_type);
 
         constexpr uint32_t dispatch_h_cb_sem = 0;
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, dispatch_location, 0);
+        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, dispatch_location, 0, dispatch_core_type);
 
         std::map<string, string> prefetch_defines = {
             {"MY_NOC_X", std::to_string(prefetch_physical_core.x)},
@@ -596,6 +597,17 @@ void Device::compile_command_queue_programs() {
             true    // is_host_variant
         };
 
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *mmio_command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp",
+                prefetch_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = prefetch_compile_args,
+                    .defines = prefetch_defines});
+        } else {
         tt::tt_metal::CreateKernel(
             *mmio_command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp", // update this for remote device
@@ -605,7 +617,7 @@ void Device::compile_command_queue_programs() {
                 .noc = tt::tt_metal::NOC::RISCV_0_default,
                 .compile_args = prefetch_compile_args,
                 .defines = prefetch_defines});
-
+        }
         log_debug(LogDevice, "run prefetch_h {}", prefetch_location.str());
 
         uint32_t relay_mux_queue_start_addr = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -657,6 +669,19 @@ void Device::compile_command_queue_programs() {
         };
 
         log_debug(LogDevice, "run mux at {}", mux_location.str());
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *mmio_command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/packet_mux.cpp",
+                mux_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = mux_compile_args,
+                    .defines = {}
+                }
+            );
+        } else {
         tt_metal::CreateKernel(
             *mmio_command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/packet_mux.cpp",
@@ -668,6 +693,7 @@ void Device::compile_command_queue_programs() {
                 .defines = {}
             }
         );
+        }
 
         std::vector<uint32_t> tunneler_l_compile_args =
         {
@@ -768,6 +794,19 @@ void Device::compile_command_queue_programs() {
 
         log_debug(LogDevice, "run dispatch demux at {}", demux_location.str());
 
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *mmio_command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/packet_demux.cpp",
+                demux_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = demux_compile_args,
+                    .defines = {}
+                }
+            );
+        } else {
         tt_metal::CreateKernel(
             *mmio_command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/packet_demux.cpp",
@@ -779,6 +818,7 @@ void Device::compile_command_queue_programs() {
                 .defines = {}
             }
         );
+        }
 
         std::vector<uint32_t> dispatch_compile_args = {
             dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -811,6 +851,19 @@ void Device::compile_command_queue_programs() {
 
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_location.str());
 
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *mmio_command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp",
+                dispatch_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = dispatch_compile_args,
+                    .defines = dispatch_defines
+                }
+            );
+        } else {
         tt::tt_metal::CreateKernel(
             *mmio_command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp",
@@ -820,13 +873,14 @@ void Device::compile_command_queue_programs() {
                 .noc = tt::tt_metal::NOC::RISCV_0_default,
                 .compile_args = dispatch_compile_args,
                 .defines = dispatch_defines});
-
+        }
 
         /////////////////Following section is for Remote Device
         //auto device_id = this->id();
         //uint8_t num_hw_cqs = 1;
         //uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
         dispatch_core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(device_id);
+        dispatch_on_eth = dispatch_core_type == CoreType::ETH;
 
         uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
         uint32_t mux_queue_start_addr = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -877,19 +931,19 @@ void Device::compile_command_queue_programs() {
         dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_d_core(device_id, channel, cq_id);
         dispatch_physical_core = get_physical_core_coordinate(dispatch_location, dispatch_core_type);
 
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, 0); // prefetch_d_sync_sem
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, 0); // prefetch_d_upstream_cb_sem
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, dispatch_buffer_pages); // prefetch_d_downstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, 0, dispatch_core_type); // prefetch_d_sync_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, 0, dispatch_core_type); // prefetch_d_upstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_location, dispatch_buffer_pages, dispatch_core_type); // prefetch_d_downstream_cb_sem
 
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, {demux_d_location}, 0); // unused demux semaphore
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, {demux_d_location}, 0); // demux_downstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, {demux_d_location}, 0, dispatch_core_type); // unused demux semaphore
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, {demux_d_location}, 0, dispatch_core_type); // demux_downstream_cb_sem
 
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0); // dispatch_sync_sem
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0); // dispatch_cb_sem
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, dispatch_buffer_pages); // dispatch_downstream_cb_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0, dispatch_core_type); // dispatch_sync_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0, dispatch_core_type); // dispatch_cb_sem
+        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, dispatch_buffer_pages, dispatch_core_type); // dispatch_downstream_cb_sem
 
         //constexpr uint32_t dispatch_h_cb_sem = 0;
-        tt_metal::CreateSemaphore(*command_queue_program_ptr, mux_d_location, 0);
+        tt_metal::CreateSemaphore(*command_queue_program_ptr, mux_d_location, 0, dispatch_core_type);
 
         uint32_t prefetch_d_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE;
 
@@ -988,6 +1042,20 @@ void Device::compile_command_queue_programs() {
         };
 
         log_debug(LogDevice, "run demux at {}", demux_d_location.str());
+
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/packet_demux.cpp",
+                demux_d_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = demux_d_compile_args,
+                    .defines = {}
+                }
+            );
+        } else {
         tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/packet_demux.cpp",
@@ -999,6 +1067,7 @@ void Device::compile_command_queue_programs() {
                 .defines = {}
             }
         );
+        }
 
         // prefetch_d
         uint32_t scratch_db_base = prefetch_d_buffer_base + (((dispatch_constants::PREFETCH_D_BUFFER_PAGES << dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE) +
@@ -1040,6 +1109,19 @@ void Device::compile_command_queue_programs() {
             false
         };
 
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp",
+                prefetch_d_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = prefetch_d_compile_args,
+                    .defines = prefetch_d_defines
+                }
+            );
+        } else {
         tt::tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp", // update this for remote device
@@ -1049,6 +1131,7 @@ void Device::compile_command_queue_programs() {
                 .noc = tt::tt_metal::NOC::RISCV_0_default,
                 .compile_args = prefetch_d_compile_args,
                 .defines = prefetch_d_defines});
+        }
 
         log_debug(LogDevice, "run prefertch_d at {}", prefetch_d_location.str());
 
@@ -1081,6 +1164,19 @@ void Device::compile_command_queue_programs() {
             false    // is_host_variant
         };
 
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp",
+                dispatch_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = dispatch_d_compile_args,
+                    .defines = dispatch_d_defines
+                }
+            );
+        } else {
         tt::tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp",
@@ -1090,6 +1186,7 @@ void Device::compile_command_queue_programs() {
                 .noc = tt::tt_metal::NOC::RISCV_0_default,
                 .compile_args = dispatch_d_compile_args,
                 .defines = dispatch_d_defines});
+        }
 
         log_debug(LogDevice, "run dispatch at {}", dispatch_location.str());
 
@@ -1139,6 +1236,20 @@ void Device::compile_command_queue_programs() {
         };
 
         log_debug(LogDevice, "run mux at {}", mux_d_location.str());
+
+        if (dispatch_on_eth) {
+            tt::tt_metal::CreateKernel(
+                *command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/packet_mux.cpp",
+                mux_d_location,
+                EthernetConfig{
+                    .eth_mode = Eth::IDLE,
+                    .noc = NOC::NOC_0,
+                    .compile_args = mux_d_compile_args,
+                    .defines = {}
+                }
+            );
+        } else {
         tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/packet_mux.cpp",
@@ -1150,6 +1261,7 @@ void Device::compile_command_queue_programs() {
                 .defines = {}
             }
         );
+        }
 
         detail::CompileProgram(this, *command_queue_program_ptr);
         this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
@@ -1192,7 +1304,7 @@ void Device::configure_command_queue_programs() {
         tt_cxy_pair prefetch_location = dispatch_core_manager::get(num_hw_cqs).prefetcher_core(device_id, channel, cq_id);
         tt_cxy_pair completion_q_writer_location = dispatch_core_manager::get(num_hw_cqs).completion_queue_writer_core(device_id, channel, cq_id);
         tt_cxy_pair dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_core(device_id, channel, cq_id);
-        CoreType dispatch_core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(device_id);
+        CoreType dispatch_core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(mmio_device_id);
 
         TT_ASSERT(prefetch_location.chip == mmio_device_id and completion_q_writer_location.chip == mmio_device_id,
             "Issue queue interface is on device {} and completion queue interface is on device {} but they are expected to be on device {}", prefetch_location.chip, completion_q_writer_location.chip, mmio_device_id);
@@ -1220,6 +1332,7 @@ void Device::configure_command_queue_programs() {
         detail::WriteToDeviceL1(mmio_device, dispatch_location, DISPATCH_MESSAGE_ADDR, zero, dispatch_core_type);
         if (device_id != mmio_device_id) {
             tt_cxy_pair dispatch_d_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_d_core(device_id, channel, cq_id);
+            dispatch_core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(device_id);
             detail::WriteToDeviceL1(this, dispatch_d_location, DISPATCH_MESSAGE_ADDR, zero, dispatch_core_type);
         }
     }
@@ -1464,8 +1577,12 @@ bool Device::close() {
     if (this->id_ != mmio_device_id) {
         for (auto it = not_done_dispatch_cores.begin(); it != not_done_dispatch_cores.end(); it++) {
             const auto &phys_core = *it;
-            log_info(tt::LogMetal, "Resetting core {} on Device {} when closing Device {}", phys_core.str(), mmio_device_id, this->id());
-            tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(mmio_device_id, phys_core));
+            if(llrt::is_ethernet_core(phys_core, this->id_)) {
+                log_info(tt::LogMetal, "Ethernet dispatch core {} on Device {} is idle. Closing Device {}", phys_core.str(), mmio_device_id, this->id());
+            } else {
+                log_info(tt::LogMetal, "Resetting core {} on Device {} when closing Device {}", phys_core.str(), mmio_device_id, this->id());
+                tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(mmio_device_id, phys_core));
+            }
         }
     }
 
