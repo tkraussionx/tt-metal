@@ -46,9 +46,7 @@ class TtMistralAttention(nn.Module):
         self.dtype = dtype
 
         self.kv_seq_len = configuration.kv_seq_len
-        self.sliding_window = (
-            configuration.kv_seq_len
-        )  # TODO Change sliding window back to configuration.sliding_window
+        self.sliding_window = configuration.kv_seq_len  # .sliding_window doesn't fit into DRAM on n150
         self.grid_size = configuration.max_grid_size
 
         self.model_config = configuration.get_model_config()
@@ -305,8 +303,8 @@ class TtMistralAttention(nn.Module):
                 dtype=self.dtype,
             )
 
-            # Comment out to work around a deterministic hang when from_torch is called on the model's output
-            ttnn.deallocate(attn_norm, force=False)
+            # Comment out to work around a deterministic hang when from_torch is called on the model's output (#7822)
+            # ttnn.deallocate(attn_norm, force=False)
 
             ###
             # Reshape and rotary embeddings

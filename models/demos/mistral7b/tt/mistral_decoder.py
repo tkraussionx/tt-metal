@@ -84,7 +84,7 @@ class TtTransformerBlock(torch.nn.Module):
             current_pos,
             [attn_masks],
         )
-        # ttnn.deallocate(attn_norm)
+        ttnn.deallocate(attn_norm)
         r = r[0]
         r = ttnn.reshape(r, (1, 1, 32, 4096))
         h = ttnn.add(x, r, memory_config=ttnn.L1_MEMORY_CONFIG)
