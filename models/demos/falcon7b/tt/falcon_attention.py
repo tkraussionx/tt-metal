@@ -18,6 +18,7 @@ from models.utility_functions import (
 )
 
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import torch_tensors_to_tt_tensors
 
 
 class TtFalconRotaryEmbedding(torch.nn.Module):
@@ -179,6 +180,21 @@ class TtFalconAttentionPrefill(nn.Module):
         else:
             # optimized version can utilize single float value for softmax
             self.scalar = 1 / math.sqrt(self.head_dim)
+
+        # generate output buffer on device
+        if "ATTN_OUTPUT_TENSORS" not in self.model_config and self.model_config["OPTIMIZED_MODE"]:
+            # create output tensors
+            for seq_len in [128, 1024, 2048]:
+                tensor = torch.zeros((1, self.num_heads, seq_len, self.head_dim)).bfloat16().float()
+
+                tt_tensors = torch_tensors_to_tt_tensors(
+                    [tensor.detach().clone() for _ in range(self.num_devices)],
+                    tt_lib.tensor.Layout.TILE,
+                    tt_lib.tensor.DataType.BFLOAT16,
+                    self.model_config["ATTN_OPTIMIZED_MEMCFG"],
+                    self.devices,
+                )
+                self.model_config["ATTN_OUTPUT_TENSORS"][seq_len] = tt_tensors
 
     def forward(
         self,
@@ -435,15 +451,7 @@ class TtFalconAttentionPrefill(nn.Module):
         mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
         # Define output buffer on devices
-        attention_outputs_concatenated = [
-            torch2tt_tensor(
-                torch_attention_output,
-                self.devices[device_id],
-                tt_memory_config=self.model_config["ATTN_OPTIMIZED_MEMCFG"],
-                tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
-            )
-            for device_id in range(self.num_devices)
-        ]
+        attention_outputs_concatenated = self.model_config["ATTN_OUTPUT_TENSORS"][seq_len]
 
         # Slice inputs and operate on each slice separately
         for i in range(num_slices):

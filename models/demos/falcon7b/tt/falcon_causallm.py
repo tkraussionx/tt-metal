@@ -69,17 +69,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
                 for i in range(self.num_slices)
             ]
-
-        self.lm_head_weights = get_weights_cached(
-            devices,
-            model_config,
-            tt_cache_path,
-            f"lm_head.weight",
-            weight_config_str="LM_HEAD_MM_WEIGHTS",
-            weights_to_cache=lm_head_weight,
-        )
-        # Generate padding for lm_head > 512
-        if self.seq_len > 512:
+            # Generate padding for lm_head > 512
             padding = torch.zeros([1, 1, seq_len, 64])
 
             tt_paddings = torch_tensors_to_tt_tensors(
@@ -90,6 +80,15 @@ class TtFalconCausalLM(TtFalconModelShared):
                 self.devices,
             )
             self.lm_head_padding = tt_paddings
+
+        self.lm_head_weights = get_weights_cached(
+            devices,
+            model_config,
+            tt_cache_path,
+            f"lm_head.weight",
+            weight_config_str="LM_HEAD_MM_WEIGHTS",
+            weights_to_cache=lm_head_weight,
+        )
 
     def forward(
         self,
@@ -111,7 +110,7 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        if hidden_states[0].get_legacy_shape()[-2] > 512:
+        if hidden_states[0].get_legacy_shape()[-2] > 512 and self.model_config["OPTIMIZED_MODE"]:
             lm_logits = [
                 falcon_lm_head_matmul_2d(
                     hidden_states[device_id],

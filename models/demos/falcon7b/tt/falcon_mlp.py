@@ -73,6 +73,8 @@ class TtFalconMLPPrefill(nn.Module):
 
         if "MLP_PREFILL_PADDING_TENSORS" not in self.model_config and model_config["OPTIMIZED_MODE"]:
             self._load_mlp_padded_tensors()
+        if "MLP_OUTPUT_TENSORS" not in self.model_config and model_config["OPTIMIZED_MODE"]:
+            self._allocate_output_mlp_tensors()
 
     def _load_mlp_padded_tensors(self):
         # Load MLP padded tensors for 1024 and 2048 if they are smaller than max_position_embeddings or equal
@@ -96,6 +98,23 @@ class TtFalconMLPPrefill(nn.Module):
 
         self.model_config["MLP_PREFILL_PADDING_TENSORS"] = mlp_padding_tensors
 
+    def _allocate_output_mlp_tensors(self):
+        # prepare output tensor on device
+        out_shape = [(1, 1, self.seq_len, self.dense_4h_to_h_weights[i].shape[-1]) for i in range(len(self.devices))]
+        out_tensors = [torch.zeros(out_shape[i]).bfloat16().float() for i in range(len(self.devices))]
+
+        out_tt = [
+            ttnn.from_torch(
+                out_tensors[i],
+                ttnn.bfloat16,
+                device=self.devices[i],
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+            for i in range(len(self.devices))
+        ]
+        self.model_config["MLP_OUTPUT_TENSORS"] = out_tt
+
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         if self.model_config["OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]:
             for device_id in range(self.num_devices):
@@ -103,22 +122,7 @@ class TtFalconMLPPrefill(nn.Module):
 
                 x[device_id] = ttnn.concat([x[device_id], tt_padding], dim=3)
 
-            # prepare output tensor on device
-            out_shape = [
-                (1, 1, x[i].shape[-2], self.dense_4h_to_h_weights[i].shape[-1]) for i in range(len(self.devices))
-            ]
-            out_tensors = [torch.zeros(out_shape[i]).bfloat16().float() for i in range(len(self.devices))]
-
-            out_tt = [
-                ttnn.from_torch(
-                    out_tensors[i],
-                    ttnn.bfloat16,
-                    device=self.devices[i],
-                    layout=ttnn.TILE_LAYOUT,
-                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                )
-                for i in range(len(self.devices))
-            ]
+            out_tt = self.model_config["MLP_OUTPUT_TENSORS"]
 
             num_slices = 2 if self.seq_len == 2048 else 1  # seq_len = 1024 num_slices = 1
             padded_hidden_size = self.model_config["MLP_PADDING_VALUE"]
