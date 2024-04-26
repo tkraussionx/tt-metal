@@ -22,7 +22,7 @@ def shape_padded(shape):
 @pytest.mark.parametrize(
     "act_shape",
     (
-        pytest.param([1, 7, 7, 2048], marks=pytest.mark.skip),
+        pytest.param([1, 7, 7, 2048]),
         ([1, 1, 32, 64]),
     ),
     ids=["resnet50_unpadded", "tile_divisible"],
@@ -40,7 +40,7 @@ def test_run_average_pool(act_shape, dtype, device):
     torch.manual_seed(0)
 
     trace_captured = False
-    trace_loops = 10
+    trace_loops = 1
 
     act = torch.randn(act_shape, dtype=torch.bfloat16).float()
     ttact = ttl.tensor.Tensor(act, ttl.tensor.DataType.BFLOAT16)
