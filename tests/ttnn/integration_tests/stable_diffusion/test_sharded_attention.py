@@ -243,7 +243,7 @@ def test_time_sharded_attnention_hwb(
 # Test matmul attention sequence with InterleavedToShardedPartialOp
 @skip_for_grayskull()
 @pytest.mark.parametrize("seq_len", [4096, 1024])
-@pytest.mark.parametrize("num_slices", [16])
+@pytest.mark.parametrize("num_slices", [8])
 @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.parametrize("num_heads", [16])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
@@ -256,7 +256,8 @@ def test_time_sharded_attnention(
     data_format,
     function_level_defaults,
 ):
-    pytest.skip()  # ND hang on CI
+    num_slices = 8 if seq_len == 4096 else 2
+    # pytest.skip()  # ND hang on CI
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -354,6 +355,7 @@ def test_time_sharded_attnention(
             (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
             output_mem_config=l1_interleaved_memory_config,
         )
+        slice = ttnn.reshape(slice, (1, heads_per_slice, seq_len, 64))
         mm_slice = ttl.operations.primary.matmul(
             slice,
             k_slice,
@@ -411,17 +413,12 @@ def test_time_sharded_attnention(
 
         mm_slice.deallocate()
 
-        return
-
     mm_out_torch = tt2torch_tensor(mm_out)
 
-    attn_weights = ttl.tensor.bmm(
-        reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
-    )
-    attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
-    attn_weights = ttl.tensor.bmm(attn_weights, reference_value_layer, output_mem_config=dram_interleaved_memory_config)
+    attn_weights_torch = torch_query_layer @ torch_key_layer_transposed
+    attn_weights_torch = torch.nn.functional.softmax(attn_weights_torch, dim=-1)
+    attn_weights_torch = attn_weights_torch @ torch_value_layer
 
-    attn_weights_torch = tt2torch_tensor(attn_weights)
     passing, output = comp_pcc(mm_out_torch, attn_weights_torch)
 
     print(output)
