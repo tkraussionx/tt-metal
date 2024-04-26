@@ -16,3 +16,5 @@ pytest models/demos/ttnn_falcon7b/tests/multi_chip/test_falcon_mlp.py
 pytest models/demos/ttnn_falcon7b/tests/multi_chip/test_falcon_attention.py
 pytest models/demos/ttnn_falcon7b/tests/multi_chip/test_falcon_decoder.py
 pytest models/demos/ttnn_falcon7b/tests/multi_chip/test_falcon_causallm.py
+
+pytest models/demos/falcon40b/tests/ci/test_falcon_end_to_end_60_layer_t3000_prefill.py

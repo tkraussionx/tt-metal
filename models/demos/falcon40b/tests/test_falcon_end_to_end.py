@@ -46,7 +46,8 @@ def run_test_FalconCausalLM_end_to_end(
     kv_cache_len,
     num_layers,
     out_pcc,
-    cache_pcc,
+    k_cache_pcc,
+    v_cache_pcc,
     token_pcc,
     model_config,
     tt_cache_path,
@@ -338,12 +339,12 @@ def run_test_FalconCausalLM_end_to_end(
             ),
         )
 
-        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[0], tt_layer_pres[0], cache_pcc)
+        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[0], tt_layer_pres[0], k_cache_pcc)
         logger.info(f"K Cache Layer {i}: {output_pcc}")
 
         does_pass = does_pass and does_pass2
 
-        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[1], tt_layer_pres[1], cache_pcc)
+        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[1], tt_layer_pres[1], v_cache_pcc)
         logger.info(f"V Cache Layer {i}: {output_pcc}")
 
         does_pass = does_pass and does_pass2
@@ -478,6 +479,7 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
         kv_cache_len,
         num_layers,
         out_pcc,
+        cache_pcc,
         cache_pcc,
         token_pcc,
         model_config,
