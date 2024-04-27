@@ -67,6 +67,7 @@ class TtModelArgs:
         self.consolidated_weights_path = lambda i: str(self.model_base_path / f"consolidated.{i:02d}.pt")
         self.tokenizer_path = self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
         self.state_dict_path = str(self.model_base_path / "repack_weights.pt")
+        self.instruct = instruct
 
         DRAM_MEMCFG = ttnn.DRAM_MEMORY_CONFIG
         L1_MEMCFG = ttnn.L1_MEMORY_CONFIG
