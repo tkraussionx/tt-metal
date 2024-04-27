@@ -567,7 +567,7 @@ def to_layout(
     layout: ttnn.Layout,
     dtype: ttnn.DataType = None,
     memory_config: ttnn.MemoryConfig = None,
-    use_multicore: bool = False,
+    use_multicore: bool = True,
 ):
     """
     to_layout(tensor: ttnn.Tensor, layout: Layout) -> ttnn.Tensor
