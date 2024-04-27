@@ -2,57 +2,45 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import pytest
+
+import torch
 import tt_lib
+import ttnn
 from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import (
     data_gen_with_range,
     compare_pcc,
     data_gen_with_val,
 )
-from loguru import logger
 from tests.tt_eager.python_api_testing.sweep_tests import (
     comparison_funcs,
 )
+from tests.ttnn.utils_for_testing import assert_with_pcc
+from models.utility_functions import torch_random, skip_for_grayskull, skip_for_wormhole_b0
 
 
-@pytest.mark.parametrize(
-    "input_shapes",
-    (
-        (torch.Size([1, 1, 32, 32])),
-        # (torch.Size([1, 1, 320, 384])),
-        # (torch.Size([1, 3, 320, 384])),
-    ),
-)
-def test_bw_remainder_floor(input_shapes, device):
-    in_data, input_tensor = data_gen_with_range(input_shapes, 50, 100, device, True)
-    grad_data, grad_tensor = data_gen_with_range(input_shapes, 10, 50, device)
-    # in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=69)
-    # grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=25)
-    print(in_data)
-    print(grad_data)
+def run_unary_test(device, h, w, pcc=0.9999):
+    torch.manual_seed(0)
+    input_shapes = [1, 1, 32, 32]
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=h)
+    grad_data, grad_tensor = data_gen_with_val(input_shapes, device, val=w)
 
     golden_tensor = torch.remainder(in_data, grad_data)
+    golden_tensor = torch.where(torch.isnan(golden_tensor), torch.tensor(float("inf")), golden_tensor)
 
-    tt_output_tensor_on_device = tt_lib.tensor.xlogy(input_tensor, grad_tensor)
+    tt_output_tensor_on_device = tt_lib.tensor.atan2(input_tensor, grad_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
 
-    comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
-    comp_all, _ = comparison_funcs.comp_allclose(golden_tensor, tt_out_tensor, atol=4, rtol=1e-1)
-    print(comp_pass)
-    print(comp_all)
-    print(comp_out)
-    print(tt_out_tensor)
-    print(golden_tensor)
+    differing_elements = torch.ne(golden_tensor, tt_out_tensor)
+    total_differences = differing_elements.sum().item()
+    print("Total differing elements --> ", total_differences)
     diff = torch.abs(golden_tensor - tt_out_tensor)
-    max_diff = torch.max(diff)
-
-    if max_diff > 0:
+    if True:
         print("Inputs for which the outputs differ by more than 0:")
-        indices = torch.nonzero(diff > 0)
+        indices = torch.nonzero(diff)
         iter = 0
         for idx in indices:
-            if iter < 30:
+            if iter < 2:
                 input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
                 input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
                 expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
@@ -60,6 +48,1223 @@ def test_bw_remainder_floor(input_shapes, device):
                 print(
                     f"Input 1 value: {input1_val}, Input 2 value: {input2_val}, Expected output: {expected_output_val}, Actual output: {actual_output_val}"
                 )
+                print("diff ", torch.abs(expected_output_val) - torch.abs(actual_output_val))
                 iter += 1
 
-    assert comp_pass
+    comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
+    comp_all, _ = comparison_funcs.comp_allclose(golden_tensor, tt_out_tensor, atol=4, rtol=1e-1)
+    print(comp_pass)
+    print(comp_all)
+    print(comp_out)
+    # print(tt_out_tensor)
+    # print(golden_tensor)
+    if total_differences > 0:
+        print("NOOOOOOO")
+        assert False
+
+
+@pytest.mark.parametrize(
+    "h",
+    [
+        -20,
+        -19.875,
+        -19.75,
+        -19.625,
+        -19.5,
+        -19.375,
+        -19.25,
+        -19.125,
+        -19.0,
+        -18.875,
+        -18.75,
+        -18.625,
+        -18.5,
+        -18.375,
+        -18.25,
+        -18.125,
+        -18.0,
+        -17.875,
+        -17.75,
+        -17.625,
+        -17.5,
+        -17.375,
+        -17.25,
+        -17.125,
+        -17.0,
+        -16.875,
+        -16.75,
+        -16.625,
+        -16.5,
+        -16.375,
+        -16.25,
+        -16.125,
+        -16.0,
+        -15.875,
+        -15.75,
+        -15.625,
+        -15.5,
+        -15.375,
+        -15.25,
+        -15.125,
+        -15.0,
+        -14.875,
+        -14.75,
+        -14.625,
+        -14.5,
+        -14.375,
+        -14.25,
+        -14.125,
+        -14.0,
+        -13.875,
+        -13.75,
+        -13.625,
+        -13.5,
+        -13.375,
+        -13.25,
+        -13.125,
+        -13.0,
+        -12.875,
+        -12.75,
+        -12.625,
+        -12.5,
+        -12.375,
+        -12.25,
+        -12.125,
+        -12.0,
+        -11.875,
+        -11.75,
+        -11.625,
+        -11.5,
+        -11.375,
+        -11.25,
+        -11.125,
+        -11.0,
+        -10.875,
+        -10.75,
+        -10.625,
+        -10.5,
+        -10.375,
+        -10.25,
+        -10.125,
+        -10.0,
+        -9.875,
+        -9.75,
+        -9.625,
+        -9.5,
+        -9.375,
+        -9.25,
+        -9.125,
+        -9.0,
+        -8.875,
+        -8.75,
+        -8.625,
+        -8.5,
+        -8.375,
+        -8.25,
+        -8.125,
+        -8.0,
+        -7.875,
+        -7.75,
+        -7.625,
+        -7.5,
+        -7.375,
+        -7.25,
+        -7.125,
+        -7.0,
+        -6.875,
+        -6.75,
+        -6.625,
+        -6.5,
+        -6.375,
+        -6.25,
+        -6.125,
+        -6.0,
+        -5.875,
+        -5.75,
+        -5.625,
+        -5.5,
+        -5.375,
+        -5.25,
+        -5.125,
+        -5.0,
+        -4.875,
+        -4.75,
+        -4.625,
+        -4.5,
+        -4.375,
+        -4.25,
+        -4.125,
+        -4.0,
+        -3.875,
+        -3.75,
+        -3.625,
+        -3.5,
+        -3.375,
+        -3.25,
+        -3.125,
+        -3.0,
+        -2.875,
+        -2.75,
+        -2.625,
+        -2.5,
+        -2.375,
+        -2.25,
+        -2.125,
+        -2.0,
+        -1.875,
+        -1.75,
+        -1.625,
+        -1.5,
+        -1.375,
+        -1.25,
+        -1.125,
+        -1.0,
+        -0.875,
+        -0.75,
+        -0.625,
+        -0.5,
+        -0.375,
+        -0.25,
+        -0.125,
+        0.0,
+        0.125,
+        0.25,
+        0.375,
+        0.5,
+        0.625,
+        0.75,
+        0.875,
+        1.0,
+        1.125,
+        1.25,
+        1.375,
+        1.5,
+        1.625,
+        1.75,
+        1.875,
+        2.0,
+        2.125,
+        2.25,
+        2.375,
+        2.5,
+        2.625,
+        2.75,
+        2.875,
+        3.0,
+        3.125,
+        3.25,
+        3.375,
+        3.5,
+        3.625,
+        3.75,
+        3.875,
+        4.0,
+        4.125,
+        4.25,
+        4.375,
+        4.5,
+        4.625,
+        4.75,
+        4.875,
+        5.0,
+        5.125,
+        5.25,
+        5.375,
+        5.5,
+        5.625,
+        5.75,
+        5.875,
+        6.0,
+        6.125,
+        6.25,
+        6.375,
+        6.5,
+        6.625,
+        6.75,
+        6.875,
+        7.0,
+        7.125,
+        7.25,
+        7.375,
+        7.5,
+        7.625,
+        7.75,
+        7.875,
+        8.0,
+        8.125,
+        8.25,
+        8.375,
+        8.5,
+        8.625,
+        8.75,
+        8.875,
+        9.0,
+        9.125,
+        9.25,
+        9.375,
+        9.5,
+        9.625,
+        9.75,
+        9.875,
+        10.0,
+        10.125,
+        10.25,
+        10.375,
+        10.5,
+        10.625,
+        10.75,
+        10.875,
+        11.0,
+        11.125,
+        11.25,
+        11.375,
+        11.5,
+        11.625,
+        11.75,
+        11.875,
+        12.0,
+        12.125,
+        12.25,
+        12.375,
+        12.5,
+        12.625,
+        12.75,
+        12.875,
+        13.0,
+        13.125,
+        13.25,
+        13.375,
+        13.5,
+        13.625,
+        13.75,
+        13.875,
+        14.0,
+        14.125,
+        14.25,
+        14.375,
+        14.5,
+        14.625,
+        14.75,
+        14.875,
+        15.0,
+        15.125,
+        15.25,
+        15.375,
+        15.5,
+        15.625,
+        15.75,
+        15.875,
+        16.0,
+        16.125,
+        16.25,
+        16.375,
+        16.5,
+        16.625,
+        16.75,
+        16.875,
+        17.0,
+        17.125,
+        17.25,
+        17.375,
+        17.5,
+        17.625,
+        17.75,
+        17.875,
+        18.0,
+        18.125,
+        18.25,
+        18.375,
+        18.5,
+        18.625,
+        18.75,
+        18.875,
+        19.0,
+        19.125,
+        19.25,
+        19.375,
+        19.5,
+        19.625,
+        19.75,
+        19.875,
+    ],
+)
+@pytest.mark.parametrize(
+    "w",
+    [
+        -100,
+        -99.875,
+        -99.75,
+        -99.625,
+        -99.5,
+        -99.375,
+        -99.25,
+        -99.125,
+        -99.0,
+        -98.875,
+        -98.75,
+        -98.625,
+        -98.5,
+        -98.375,
+        -98.25,
+        -98.125,
+        -98.0,
+        -95.25,
+        -95.125,
+        -95.0,
+        -94.875,
+        -94.75,
+        -94.625,
+        -94.5,
+        -94.375,
+        -94.25,
+        -94.125,
+        -94.0,
+        -93.875,
+        -93.75,
+        -93.625,
+        -93.5,
+        -93.375,
+        -93.25,
+        -93.125,
+        -93.0,
+        -92.875,
+        -92.75,
+        -92.625,
+        -92.5,
+        -92.375,
+        -92.25,
+        -92.125,
+        -92.0,
+        -91.875,
+        -91.75,
+        -91.625,
+        -91.5,
+        -91.375,
+        -91.25,
+        -91.125,
+        -91.0,
+        -90.875,
+        -90.75,
+        -90.625,
+        -90.5,
+        -90.375,
+        -90.25,
+        -90.125,
+        -90.0,
+        -89.875,
+        -89.75,
+        -89.625,
+        17.625,
+        17.75,
+        17.875,
+        18.0,
+        18.125,
+        18.25,
+        18.375,
+        18.5,
+        18.625,
+        18.75,
+        18.875,
+        19.0,
+        19.125,
+        19.25,
+        19.375,
+        19.5,
+        19.625,
+        19.75,
+        19.875,
+        20.0,
+        20.125,
+        20.25,
+        20.375,
+        20.5,
+        20.625,
+        20.75,
+        20.875,
+        21.0,
+        21.125,
+        21.25,
+        21.375,
+        21.5,
+        21.625,
+        21.75,
+        21.875,
+        22.0,
+        22.125,
+        22.25,
+        22.375,
+        22.5,
+        22.625,
+        22.75,
+        22.875,
+        23.0,
+        23.125,
+        23.25,
+        23.375,
+        23.5,
+        23.625,
+        23.75,
+        23.875,
+        24.0,
+        24.125,
+        24.25,
+        24.375,
+        24.5,
+        24.625,
+        24.75,
+        24.875,
+        25.0,
+        25.125,
+        25.25,
+        25.375,
+        25.5,
+        25.625,
+        25.75,
+        25.875,
+        26.0,
+        26.125,
+        26.25,
+        26.375,
+        26.5,
+        26.625,
+        26.75,
+        26.875,
+        27.0,
+        27.125,
+        27.25,
+        27.375,
+        27.5,
+        27.625,
+        27.75,
+        27.875,
+        28.0,
+        28.125,
+        28.25,
+        28.375,
+        28.5,
+        28.625,
+        28.75,
+        28.875,
+        29.0,
+        30.125,
+        30.25,
+        30.375,
+        30.5,
+        30.625,
+        30.75,
+        30.875,
+        31.0,
+        31.125,
+        31.25,
+        31.375,
+        31.5,
+        31.625,
+        31.75,
+        31.875,
+        32.0,
+        32.125,
+        32.25,
+        32.375,
+        32.5,
+        32.625,
+        32.75,
+        32.875,
+        33.0,
+        33.125,
+        33.25,
+        33.375,
+        33.5,
+        33.625,
+        33.75,
+        33.875,
+        34.0,
+        34.125,
+        34.25,
+        34.375,
+        34.5,
+        34.625,
+        34.75,
+        34.875,
+        35.0,
+        35.125,
+        35.25,
+        35.375,
+        35.5,
+        35.625,
+        35.75,
+        35.875,
+        36.0,
+        36.125,
+        36.25,
+        37.375,
+        37.5,
+        37.625,
+        37.75,
+        37.875,
+        38.0,
+        38.125,
+        38.25,
+        38.375,
+        38.5,
+        38.625,
+        38.75,
+        38.875,
+        39.0,
+        39.125,
+        39.25,
+        39.375,
+        39.5,
+        39.625,
+        39.75,
+        39.875,
+        40.0,
+        40.125,
+        40.25,
+        40.375,
+        40.5,
+        40.625,
+        40.75,
+        40.875,
+        41.0,
+        41.125,
+        41.25,
+        41.375,
+        41.5,
+        41.625,
+        41.75,
+        41.875,
+        42.0,
+        42.125,
+        42.25,
+        42.375,
+        42.5,
+        42.625,
+        42.75,
+        42.875,
+        43.0,
+        43.125,
+        43.25,
+        43.375,
+        43.5,
+        43.625,
+        43.75,
+        43.875,
+        44.0,
+        44.125,
+        44.25,
+        44.375,
+        44.5,
+        44.625,
+        44.75,
+        44.875,
+        45.0,
+        45.125,
+        45.25,
+        45.375,
+        45.5,
+        45.625,
+        45.75,
+        45.875,
+        46.0,
+        46.125,
+        46.25,
+        46.375,
+        46.5,
+        46.625,
+        46.75,
+        46.875,
+        47.0,
+        47.125,
+        47.25,
+        47.375,
+        47.5,
+        47.625,
+        47.75,
+        47.875,
+        48.0,
+        48.125,
+        48.25,
+        48.375,
+        48.5,
+        48.625,
+        48.75,
+        48.875,
+        49.0,
+        49.125,
+        49.25,
+        49.375,
+        49.5,
+        49.625,
+        49.75,
+        49.875,
+        50.0,
+        50.125,
+        50.25,
+        50.375,
+        50.5,
+        50.625,
+        50.75,
+        50.875,
+        51.0,
+        51.125,
+        51.25,
+        51.375,
+        51.5,
+        51.625,
+        51.75,
+        51.875,
+        52.0,
+        52.125,
+        52.25,
+        52.375,
+        52.5,
+        52.625,
+        52.75,
+        52.875,
+        53.0,
+        53.125,
+        53.25,
+        53.375,
+        53.5,
+        53.625,
+        53.75,
+        53.875,
+        54.0,
+        54.125,
+        54.25,
+        54.375,
+        54.5,
+        54.625,
+        54.75,
+        54.875,
+        55.0,
+        55.125,
+        55.25,
+        55.375,
+        55.5,
+        55.625,
+        55.75,
+        55.875,
+        56.0,
+        56.125,
+        56.25,
+        56.375,
+        56.5,
+        56.625,
+        56.75,
+        56.875,
+        57.0,
+        57.125,
+        57.25,
+        57.375,
+        57.5,
+        57.625,
+        57.75,
+        57.875,
+        58.0,
+        58.125,
+        58.25,
+        58.375,
+        58.5,
+        58.625,
+        58.75,
+        58.875,
+        59.0,
+        59.125,
+        59.25,
+        59.375,
+        59.5,
+        59.625,
+        59.75,
+        59.875,
+        60.0,
+        60.125,
+        60.25,
+        60.375,
+        60.5,
+        60.625,
+        60.75,
+        60.875,
+        61.0,
+        61.125,
+        61.25,
+        61.375,
+        61.5,
+        61.625,
+        61.75,
+        61.875,
+        62.0,
+        62.125,
+        62.25,
+        62.375,
+        62.5,
+        62.625,
+        62.75,
+        62.875,
+        63.0,
+        63.125,
+        63.25,
+        63.375,
+        63.5,
+        63.625,
+        63.75,
+        63.875,
+        64.0,
+        64.125,
+        64.25,
+        64.375,
+        64.5,
+        64.625,
+        64.75,
+        64.875,
+        65.0,
+        65.125,
+        65.25,
+        65.375,
+        65.5,
+        65.625,
+        65.75,
+        65.875,
+        66.0,
+        66.125,
+        66.25,
+        66.375,
+        66.5,
+        66.625,
+        66.75,
+        66.875,
+        67.0,
+        67.125,
+        67.25,
+        67.375,
+        67.5,
+        67.625,
+        67.75,
+        67.875,
+        68.0,
+        68.125,
+        68.25,
+        68.375,
+        68.5,
+        68.625,
+        68.75,
+        68.875,
+        69.0,
+        69.125,
+        69.25,
+        69.375,
+        69.5,
+        69.625,
+        69.75,
+        69.875,
+        70.0,
+        70.125,
+        70.25,
+        70.375,
+        70.5,
+        70.625,
+        70.75,
+        70.875,
+        71.0,
+        71.125,
+        71.25,
+        71.375,
+        71.5,
+        71.625,
+        71.75,
+        71.875,
+        72.0,
+        72.125,
+        72.25,
+        72.375,
+        72.5,
+        72.625,
+        72.75,
+        72.875,
+        73.0,
+        73.125,
+        73.25,
+        73.375,
+        73.5,
+        73.625,
+        73.75,
+        73.875,
+        74.0,
+        74.125,
+        74.25,
+        74.375,
+        74.5,
+        74.625,
+        74.75,
+        74.875,
+        75.0,
+        75.125,
+        75.25,
+        75.375,
+        75.5,
+        75.625,
+        75.75,
+        75.875,
+        76.0,
+        76.125,
+        76.25,
+        76.375,
+        76.5,
+        76.625,
+        76.75,
+        76.875,
+        77.0,
+        77.125,
+        77.25,
+        77.375,
+        77.5,
+        77.625,
+        77.75,
+        77.875,
+        78.0,
+        78.125,
+        78.25,
+        78.375,
+        78.5,
+        78.625,
+        78.75,
+        78.875,
+        79.0,
+        79.125,
+        79.25,
+        79.375,
+        79.5,
+        79.625,
+        79.75,
+        79.875,
+        80.0,
+        80.125,
+        80.25,
+        80.375,
+        80.5,
+        80.625,
+        80.75,
+        80.875,
+        81.0,
+        81.125,
+        81.25,
+        81.375,
+        81.5,
+        81.625,
+        81.75,
+        81.875,
+        82.0,
+        82.125,
+        82.25,
+        82.375,
+        82.5,
+        82.625,
+        82.75,
+        82.875,
+        83.0,
+        83.125,
+        83.25,
+        83.375,
+        83.5,
+        83.625,
+        83.75,
+        83.875,
+        84.0,
+        84.125,
+        84.25,
+        84.375,
+        84.5,
+        84.625,
+        84.75,
+        84.875,
+        85.0,
+        85.125,
+        85.25,
+        85.375,
+        85.5,
+        85.625,
+        85.75,
+        85.875,
+        86.0,
+        86.125,
+        86.25,
+        86.375,
+        86.5,
+        86.625,
+        86.75,
+        86.875,
+        87.0,
+        87.125,
+        87.25,
+        87.375,
+        87.5,
+        87.625,
+        87.75,
+        87.875,
+        88.0,
+        88.125,
+        88.25,
+        88.375,
+        88.5,
+        88.625,
+        88.75,
+        88.875,
+        89.0,
+        89.125,
+        89.25,
+        89.375,
+        89.5,
+        89.625,
+        89.75,
+        89.875,
+        90.0,
+        90.125,
+        90.25,
+        90.375,
+        90.5,
+        90.625,
+        90.75,
+        90.875,
+        91.0,
+        91.125,
+        91.25,
+        91.375,
+        91.5,
+        91.625,
+        91.75,
+        91.875,
+        92.0,
+        92.125,
+        92.25,
+        92.375,
+        92.5,
+        92.625,
+        92.75,
+        92.875,
+        93.0,
+        93.125,
+        93.25,
+        93.375,
+        93.5,
+        93.625,
+        93.75,
+        93.875,
+        94.0,
+        94.125,
+        94.25,
+        94.375,
+        94.5,
+        94.625,
+        94.75,
+        94.875,
+        95.0,
+        95.125,
+        95.25,
+        95.375,
+        95.5,
+        95.625,
+        95.75,
+        95.875,
+        96.0,
+        96.125,
+        96.25,
+        96.375,
+        96.5,
+        96.625,
+        96.75,
+        96.875,
+        97.0,
+        97.125,
+        97.25,
+        97.375,
+        97.5,
+        97.625,
+        97.75,
+        97.875,
+        98.0,
+        98.125,
+        98.25,
+        98.375,
+        98.5,
+        98.625,
+        98.75,
+        98.875,
+        99.0,
+        99.125,
+        99.25,
+        99.375,
+        99.5,
+        99.625,
+        99.75,
+        99.875,
+    ],
+)
+def test_fp32_uint32(device, h, w):
+    run_unary_test(device, h, w)
+
+
+"""
+@pytest.mark.parametrize("h", [11.0, 12.125, 13.25, 14.375, 15.5, 16.625, 17.75, 18.875, 19.0, 0, -11.0, -12.125, -13.25, -14.375, -15.5, -16.625, -17.75, -18.875, -19.0])
+@pytest.mark.parametrize("w", [-89.0, -88.125, -87.25, -86.375, -85.5, -84.625, -83.75, -82.875, -81.0, 0, 79.0, 78.125, 77.25, 76.375, 75.5, 74.625, 73.75, 72.875, 71.0])
+@pytest.mark.parametrize("h", [11.0, 12.125, 13.25, 14.375, 15.5, 16.625, 17.75, 18.875, 19.0, 0, -11.0, -12.125, -13.25, -14.375, -15.5, -16.625, -17.75, -18.875, -19.0, -89.0, -88.125, -87.25, -86.375, -85.5, -84.625, -83.75, -82.875, -81.0, 79.0, 78.125, 77.25, 76.375, 75.5, 74.625, 73.75, 72.875, 71.0])
+@pytest.mark.parametrize("w", [-89.0, -88.125, -87.25, -86.375, -85.5, -84.625, -83.75, -82.875, -81.0, 0, 79.0, 78.125, 77.25, 76.375, 75.5, 74.625, 73.75, 72.875, 71.0, 11.0, 12.125, 13.25, 14.375, 15.5, 16.625, 17.75, 18.875, 19.0, -11.0, -12.125, -13.25, -14.375, -15.5, -16.625, -17.75, -18.875, -19.0])
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_exp(device, h, w):
+    run_unary_test(device, h, w, ttnn.exp, torch.exp, pcc=0.9998)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_tanh(device, h, w):
+    run_unary_test(device, h, w, ttnn.tanh, torch.tanh, pcc=0.993)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_gelu(device, h, w):
+    run_unary_test(device, h, w, ttnn.gelu, torch.nn.functional.gelu, pcc=0.9996)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_relu(device, h, w):
+    run_unary_test(device, h, w, ttnn.relu, torch.relu)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_rsqrt(device, h, w):
+    run_unary_test(device, h, w, ttnn.rsqrt, torch.rsqrt)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_silu(device, h, w):
+    run_unary_test(device, h, w, ttnn.silu, torch.nn.functional.silu)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_log(device, h, w):
+    run_unary_test(device, h, w, ttnn.log, torch.log)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_sin(device, h, w):
+    run_unary_test(device, h, w, ttnn.sin, torch.sin)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_asin(device, h, w):
+    run_unary_test(device, h, w, ttnn.asin, torch.asin, pcc=0.999)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_cos(device, h, w):
+    run_unary_test(device, h, w, ttnn.cos, torch.cos, pcc=0.999)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_acos(device, h, w):
+    run_unary_test(device, h, w, ttnn.acos, torch.acos, pcc=0.999)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_tan(device, h, w):
+    run_unary_test(device, h, w, ttnn.tan, torch.tan)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_atan(device, h, w):
+    run_unary_test(device, h, w, ttnn.atan, torch.atan)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_sinh(device, h, w):
+    run_unary_test(device, h, w, ttnn.sinh, torch.sinh)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_asinh(device, h, w):
+    run_unary_test(device, h, w, ttnn.asinh, torch.asinh, pcc=0.9997)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_cosh(device, h, w):
+    run_unary_test(device, h, w, ttnn.cosh, torch.cosh, pcc=0.999)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+@skip_for_wormhole_b0("Issue #6991: Failing on wormhole_b0 PCC issue")
+def test_acosh(device, h, w):
+    run_unary_test(device, h, w, ttnn.acosh, torch.acosh)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_atanh(device, h, w):
+    run_unary_test(device, h, w, ttnn.atanh, torch.atanh)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_logical_not(device, h, w):
+    run_unary_test(device, h, w, ttnn.logical_not, torch.logical_not)
+
+
+def run_unary_test_range(device, h, w, ttnn_function, torch_function, pcc=0.9999):
+    torch.manual_seed(0)
+    low = -100
+    high = 100
+
+    torch_input_tensor = torch_random((h, w), low, high, dtype=torch.bfloat16)
+    torch_output_tensor = torch_function(torch_input_tensor)
+
+    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+    output_tensor = ttnn_function(input_tensor)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+
+
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+def test_signbit(device, h, w):
+    run_unary_test_range(device, h, w, ttnn.signbit, torch.signbit, pcc=0.99)
+
+
+def run_unary_test_with_float(device, h, w, scalar, ttnn_function, torch_function, pcc=0.9999):
+    torch.manual_seed(0)
+
+    torch_input_tensor = torch.rand((h, w), dtype=torch.bfloat16)
+    torch_output_tensor = torch_function(torch_input_tensor, scalar)
+
+    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+    output_tensor = ttnn_function(input_tensor, scalar)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+
+
+@pytest.mark.parametrize("scalar", [1, 2])
+@pytest.mark.parametrize("h", [64])
+@pytest.mark.parametrize("w", [128])
+@skip_for_wormhole_b0("Issue #6991: Failing on wormhole_b0 PCC issue")
+def test_logit(device, h, w, scalar):
+    run_unary_test_with_float(device, h, w, scalar, ttnn.logit, torch.logit)
+"""

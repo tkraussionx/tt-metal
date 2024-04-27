@@ -33,10 +33,11 @@ def test_bw_remainder(input_shapes, device):
     # grad_data, grad_tensor = data_gen_with_val(
     #    input_shapes, device, val=-71.5
     # )  # d1 = -56.5 , d2 = -56.75 if diff=0.25 ret -56.5 both same
-    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-12.125)
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-13.125)
     grad_data, grad_tensor = data_gen_with_val(
-        input_shapes, device, val=-79.0
-    )  # d1 = -55.75 , d2 = -56.0 if diff=0.25 ret -56.0
+        input_shapes, device, val=74.25  # 45.5 97.5
+    )  # more than 45.25 less than 63.75, except .25 and .75, add 0.25
+    # more than 63.75, add 0.5
     print(in_data)
     print(grad_data)
 
@@ -65,7 +66,7 @@ def test_bw_remainder(input_shapes, device):
         indices = torch.nonzero(diff)
         iter = 0
         for idx in indices:
-            if iter < 100:
+            if iter < 10:
                 input1_val = in_data[idx[0], idx[1], idx[2], idx[3]]
                 input2_val = grad_data[idx[0], idx[1], idx[2], idx[3]]
                 expected_output_val = golden_tensor[idx[0], idx[1], idx[2], idx[3]]
