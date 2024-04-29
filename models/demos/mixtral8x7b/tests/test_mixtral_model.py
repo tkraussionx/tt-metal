@@ -55,7 +55,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    prompts = [""] * 32
+    prompts = ["Once"] * 32
 
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
@@ -88,9 +88,10 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
     pt_decode_input = embd(encoded_prompts_tensor[:, 0]).view(batch, seqlen, -1)
 
     tt_decode_input = pt_decode_input
-
+    ref_tokens = []
+    tt_tokens = []
     for i in range(generation_length):
-        print(f"[Decode] Generating token {i}")
+        logger.info(f"[Decode] Generating token {i}")
 
         start_pos = generation_start_pos + i
         current_pos = start_pos % model_args.sliding_window
@@ -105,6 +106,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
 
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
+
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1).detach().float()
 
@@ -125,9 +127,18 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         top5_acc = top_k_accuracy_score(
             reference_top1, tt_output_torch.squeeze(), k=5, labels=np.arange(tt_output_torch.shape[-1])
         )
-
         logger.info(f"Mean Top-1: {top1_acc}")
         logger.info(f"Mean Top-5: {top5_acc}")
+
+        ref_token_batch = ref_output.squeeze().argmax(axis=-1)
+        tt_token_batch = tt_output_torch.squeeze().argmax(axis=-1)
+
+        ref_tokens.append(ref_token_batch[0].item())
+        tt_tokens.append(tt_token_batch[0].item())
+        logger.info(f'ref_output: {"".join(tokenizer.decode(ref_tokens))}')
+        logger.info(f'tt_output_torch: {"".join(tokenizer.decode(tt_tokens))}')
+        pt_decode_input = embd(ref_token_batch).view(batch, seqlen, -1)
+        tt_decode_input = embd(tt_token_batch).view(batch, seqlen, -1)
 
         if passing:
             logger.info("Mistral Model Passed!")
