@@ -64,6 +64,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     const bool in1_is_sharded = in1_buffer->buffer_layout() == TensorMemoryLayout::WIDTH_SHARDED;
     const bool output_is_sharded = out_buffer->buffer_layout() == TensorMemoryLayout::BLOCK_SHARDED;
 
+    if (not in0_is_sharded or in1_is_sharded) {
+        mcast_use_same_noc = false;
+    }
+
     uint32_t in0_block_tiles = per_core_M * in0_block_w;
     uint32_t in0_CB_tiles = in0_block_tiles;
     if (B * num_blocks > 1) {
@@ -691,10 +695,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                         mm_in0_sender_args.push_back(diff_end_coord);
 
                         // in1 mcast args
-                        mm_in0_sender_args.push_back(in1_mcast_end.x); // in1_mcast_dest_noc_end_x
-                        mm_in0_sender_args.push_back(in1_mcast_end.y); // in1_mcast_dest_noc_end_y
                         mm_in0_sender_args.push_back(in1_mcast_start.x); // in1_mcast_dest_noc_start_x
                         mm_in0_sender_args.push_back(in1_mcast_start.y); // in1_mcast_dest_noc_start_y
+                        mm_in0_sender_args.push_back(in1_mcast_end.x); // in1_mcast_dest_noc_end_x
+                        mm_in0_sender_args.push_back(in1_mcast_end.y); // in1_mcast_dest_noc_end_y
                         mm_in0_sender_args.push_back(core_idx_x == 0); // is_in1_sender
 
                         mm_in0_sender_args.push_back(worker_shard_same_coord);
@@ -1015,6 +1019,12 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     uint32_t in1_single_tile_size = tt_metal::detail::TileSize(in1_data_format);
     tt_metal::Buffer *in0_buffer = a.buffer();
     tt_metal::Buffer *in1_buffer = b.buffer();
+
+    TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
+    if (in0_memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
+        log_info("block shard orientation: {}", a.shard_spec().value().orientation);
+    }
+
     if (bcast_batch)
         TT_FATAL(bshape[0]*bshape[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
     else {

@@ -65,8 +65,8 @@ uint32_t _get_maximum_block_dim(int32_t block_dim, int32_t in0_block_w) {
 }
 
 bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_b, const DeviceComputeKernelConfig& compute_kernel_config) {
-    const auto& in_a_shape = input_tensor_a.get_shape();
-    const auto& in_b_shape = input_tensor_b.get_shape();
+    const auto& in_a_shape = input_tensor_a.get_legacy_shape();
+    const auto& in_b_shape = input_tensor_b.get_legacy_shape();
 
     uint32_t M = in_a_shape[0] * in_a_shape[2];
     uint32_t K = in_a_shape[3];
