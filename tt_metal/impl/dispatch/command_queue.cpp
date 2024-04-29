@@ -969,6 +969,12 @@ void EnqueueRecordEventCommand::process() {
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
     log_info(tt::LogMetal, "EnqueueRecordEventCommand issued fetch_size={}, commands={}", cmd_sequence_sizeB, command_sequence.cmd_vector());
 
+    // What does EnqueueRecordEvent do?
+    // 1. Dispatch Wait
+    // 2. DispatchWritePacked
+    // 3. DispatchWriteHost
+    // Can we reorder these?
+
 }
 
 EnqueueWaitForEventCommand::EnqueueWaitForEventCommand(
@@ -1408,6 +1414,7 @@ void HWCommandQueue::enqueue_program(
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool clear_count) {
     ZoneScopedN("HWCommandQueue_enqueue_record_event");
 
+    log_info(tt::LogMetal, "KCM Inside {} bypass_mode: {}", __FUNCTION__, this->manager.get_bypass_mode());
     // Populate event struct for caller. When async queues are enabled, this is in child thread, so consumers
     // of the event must wait for it to be ready (ie. populated) here. Set ready flag last. This couldn't be
     // in main thread otherwise event_id selection would get out of order due to main/worker thread timing.
@@ -1429,9 +1436,11 @@ void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool cle
     if (this->manager.get_bypass_mode()) {
         this->trace_ctx->traced_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
         this->trace_ctx->num_completion_q_reads++;
+        log_info(tt::LogMetal, "Increased this->trace_ctx->num_completion_q_reads: {}", this->trace_ctx->num_completion_q_reads);
     } else {
         this->issued_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
         this->num_entries_in_completion_q++;
+        log_info(tt::LogMetal, "Increased this->num_entries_in_completion_q: {}", this->num_entries_in_completion_q);
     }
 }
 
@@ -1482,6 +1491,7 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     // Increment the exepected worker cores counter due to trace programs completions
     this->expected_num_workers_completed += trace_inst.desc->num_completion_worker_cores;
 
+    // FIXME - Consider removing this entirely as experiment.
     if (blocking) {
         log_info(tt::LogMetal, "Before Finish for {}", __FUNCTION__);
         this->finish();
@@ -1757,6 +1767,7 @@ void HWCommandQueue::finish() {
             //     break;
             // }
         };
+        log_info(tt::LogMetal, "Finish finished with attempts: {} num_entries_in_completion_q: {} num_completed_completion_q_reads: {}", attempts, this->num_entries_in_completion_q, this->num_completed_completion_q_reads);
     }
 }
 
