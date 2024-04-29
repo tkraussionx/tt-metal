@@ -120,7 +120,7 @@ class TtMixtralAttention(torch.nn.Module):
         # Scale tensor for q_heads to avoid falling back to host.
         self.head_dims = [
             ttnn.from_torch(
-                torch.ones(1, self.max_batch_size, self.n_local_heads, self.head_dim) * (self.head_dim**-0.5),
+                torch.ones(1, self.n_local_heads, self.max_batch_size, self.head_dim) * (self.head_dim**-0.5),
                 device=self.devices[i],
                 layout=ttnn.TILE_LAYOUT,
                 dtype=ttnn.bfloat16,
@@ -170,7 +170,7 @@ class TtMixtralAttention(torch.nn.Module):
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
             rot_mat = rot_mats[i][start_pos]
-            head_dim_1B4D = self.head_dims[i]
+            head_dim_14BD = self.head_dims[i]
             ###
             # QKV matmuls
             ###
@@ -213,10 +213,12 @@ class TtMixtralAttention(torch.nn.Module):
                 use_1d_systolic_array=True,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
             )
+
+            q_heads_14BD = q_heads_14BD * head_dim_14BD  # Scale q_heads
             q_heads_14BD = ttnn.pad(
                 q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
             )
-            q_heads_1B4D = ttnn.permute(q_heads_14BD, (0, 2, 1, 3)) * head_dim_1B4D
+            q_heads_1B4D = ttnn.permute(q_heads_14BD, (0, 2, 1, 3))
             k_heads_11BD = ttnn.pad(k_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
             k_heads_1B1D = ttnn.permute(k_heads_11BD, (0, 2, 1, 3))
             v_heads_11BD = ttnn.pad(v_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
