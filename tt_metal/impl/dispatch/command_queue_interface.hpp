@@ -442,11 +442,23 @@ class SystemMemoryManager {
         uint32_t write_toggle;
         const SystemMemoryCQInterface& cq_interface = this->cq_interfaces[cq_id];
 
+        uint32_t attempts = 0;
         do {
             write_ptr_and_toggle = get_cq_completion_wr_ptr<true>(this->device_id, cq_id, this->cq_size);
             write_ptr = write_ptr_and_toggle & 0x7fffffff;
             write_toggle = write_ptr_and_toggle >> 31;
+
+            if ((attempts++ % 100000) == 0) {
+                log_info(tt::LogMetal, "{} waiting. completion_fifo_rd_ptr: {} write_ptr: {} -- completion_fifo_rd_toggle: {} write_toggle: {} -- exit_condition: {}",
+                    __FUNCTION__, cq_interface.completion_fifo_rd_ptr, write_ptr, cq_interface.completion_fifo_rd_toggle , write_toggle, exit_condition);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+
         } while (cq_interface.completion_fifo_rd_ptr == write_ptr and cq_interface.completion_fifo_rd_toggle == write_toggle and not exit_condition);
+
+        log_info(tt::LogMetal, "{} finished. completion_fifo_rd_ptr: {} write_ptr: {} -- completion_fifo_rd_toggle: {} write_toggle: {} -- exit_condition: {}",
+            __FUNCTION__, cq_interface.completion_fifo_rd_ptr, write_ptr, cq_interface.completion_fifo_rd_toggle , write_toggle, exit_condition);
+
     }
 
     void send_completion_queue_read_ptr(const uint8_t cq_id) const {

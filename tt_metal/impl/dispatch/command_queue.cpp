@@ -1722,7 +1722,7 @@ void HWCommandQueue::read_completion_queue() {
 
 void HWCommandQueue::finish() {
     ZoneScopedN("HWCommandQueue_finish");
-    tt::log_debug(tt::LogDispatch, "Finish for command queue {}", this->id);
+    tt::log_info(tt::LogDispatch, "Finish for command queue {}", this->id);
     std::shared_ptr<Event> event = std::make_shared<Event>();
     this->enqueue_record_event(event);
 
@@ -1748,7 +1748,7 @@ void HWCommandQueue::finish() {
             if (attempts++ == 1000) {
                 log_info(tt::LogMetal, "Waiting for Finish to complete. attempts: {} num_entries_in_completion_q: {} num_completed_completion_q_reads: {}", attempts, this->num_entries_in_completion_q, this->num_completed_completion_q_reads);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
             // Hack to allow exit out of this loop in case of hang, for debug.
             // attempts++;
