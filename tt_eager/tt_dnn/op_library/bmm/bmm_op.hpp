@@ -184,7 +184,6 @@ struct MatmulMultiCoreReuseMultiCastProgramConfig {
     std::size_t per_core_N;
     bool transpose_mcast;
     std::optional<UnaryWithParam> fused_activation;
-    bool mcast_use_same_noc;
     bool use_noc_vc;
 
     static constexpr auto attribute_names = std::make_tuple(
@@ -259,8 +258,6 @@ struct Matmul {
     const DataType output_dtype;
     const DeviceComputeKernelConfig compute_kernel_config;
     const bool untilize_out;
-    bool mcast_use_same_noc;
-    bool use_noc_vc;
 
     void validate(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;

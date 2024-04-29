@@ -95,6 +95,7 @@ void kernel_main() {
     #endif
 
     constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t cb_sync = 7;
     constexpr uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
     constexpr uint32_t in1_block_size_bytes = in1_block_num_tiles * in1_single_tile_size_bytes;
 
@@ -156,7 +157,6 @@ void kernel_main() {
     #endif
     #endif
 
-    constexpr uint32_t cb_temp = 7;
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -193,9 +193,9 @@ void kernel_main() {
 
             #ifndef SKIP_MCAST
             #ifdef USE_SAME_NOC
-            cb_reserve_back(cb_temp, 1);
+            cb_reserve_back(cb_sync, 1);
             noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-            cb_push_back(cb_temp, 1);
+            cb_push_back(cb_sync, 1);
             noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
             #else
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
