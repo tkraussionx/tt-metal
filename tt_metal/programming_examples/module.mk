@@ -17,6 +17,8 @@ include $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_single_core/module
 include $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multi_core/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/module.mk
+include $(TT_METAL_HOME)/tt_metal/programming_examples/reverse/module.mk
+
 
 # Need to depend on set_up_kernels.
 
@@ -36,6 +38,9 @@ programming_examples: programming_examples/hello_world_compute_kernel \
                       programming_examples/matmul_single_core \
                       programming_examples/matmul_multi_core \
                       programming_examples/matmul_multicore_reuse \
+                      programming_examples/reverse_single_core \
+                      programming_examples/reverse_multi_core \
+                      programming_examples/reverse_single_core_rw \
                       programming_examples/matmul_multicore_reuse_mcast \
                       $(PROFILER_TESTS)
 
@@ -52,3 +57,6 @@ programming_examples/matmul_multi_core: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_m
 programming_examples/matmul_multicore_reuse: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse;
 programming_examples/matmul_multicore_reuse_mcast: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast;
 programming_examples/profiler/%: $(PROGRAMMING_EXAMPLES_TESTDIR)/profiler/%;
+programming_examples/reverse_multi_core: $(PROGRAMMING_EXAMPLES_TESTDIR)/reverse_multi_core;
+programming_examples/reverse_single_core: $(PROGRAMMING_EXAMPLES_TESTDIR)/reverse_single_core;
+programming_examples/reverse_single_core_rw: $(PROGRAMMING_EXAMPLES_TESTDIR)/reverse_single_core_rw;

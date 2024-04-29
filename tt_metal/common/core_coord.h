@@ -54,6 +54,88 @@ inline CoreCoord get_core_coord_from_relative(const RelativeCoreCoord& in, const
   return coord;
 }
 
+struct CoreRangeIterator{
+    //Input Iterator is read-only, which is what we want, as there is no underlying storage to be written to.
+    using iterator_category = std::input_iterator_tag;
+    using difference_type   = std::ptrdiff_t;
+    using value_type        = CoreCoord const;
+    using pointer           = CoreCoord* ;
+    using reference         = CoreCoord const;
+
+private:
+  CoreCoord start;
+  CoreCoord end;
+  difference_type index;
+  difference_type grid_major_dim_size;
+  bool row_major;
+
+public:
+    CoreRangeIterator(const CoreCoord _start, const CoreCoord _end, bool _row_major = true)
+    {
+      start = _start;
+      end = _end;
+      row_major = _row_major;
+      index = 0;
+      if(row_major)
+      {
+        grid_major_dim_size = (end.x - start.x + 1);
+      }
+      else
+      {
+        grid_major_dim_size = (end.y - start.y + 1);
+      }
+    }
+    CoreRangeIterator(const CoreCoord _start, const CoreCoord _end,difference_type _index, bool _row_major = true)
+    {
+      start = _start;
+      end = _end;
+      row_major = _row_major;
+      index = _index;
+      if(row_major)
+      {
+        grid_major_dim_size = (end.x - start.x + 1);
+      }
+      else
+      {
+        grid_major_dim_size = (end.y - start.y + 1);
+      }
+    }
+    constexpr reference operator*() const {
+      if(row_major)
+      {
+        return CoreCoord(index%grid_major_dim_size,index/grid_major_dim_size);
+      }
+      else
+      {
+        return CoreCoord(index/grid_major_dim_size,index%grid_major_dim_size);
+
+      }
+    }
+    // pointer operator->() { return m_ptr; }
+
+    // Prefix increment
+    CoreRangeIterator& operator++() { index++; return *this; }
+
+
+    friend bool operator== (const CoreRangeIterator& a, const CoreRangeIterator& b) { return ((a.start == b.start)&&(a.end==b.end)&&(a.index==b.index)); }
+    friend bool operator!= (const CoreRangeIterator& a, const CoreRangeIterator& b) { return ((a.start != b.start)||(a.end!=b.end)||(a.index!=b.index)); };
+
+};
+
+struct CoreRangeIteratorBase
+{
+    CoreCoord start_coord;
+    CoreCoord end_coord;
+    CoreRangeIteratorBase (CoreCoord _start, CoreCoord _end)
+    {
+      start_coord = _start;
+      end_coord = _end;
+    }
+    size_t size() const { return (this->end_coord.x - this->start_coord.x + 1) * (this->end_coord.y - this->start_coord.y + 1); }
+    CoreRangeIterator begin(){return CoreRangeIterator(start_coord,end_coord,true);}
+    CoreRangeIterator end(){return CoreRangeIterator(start_coord,end_coord,(long)this->size(),true);}
+};
+
 struct CoreRange {
     CoreCoord start;
     CoreCoord end;
@@ -117,6 +199,10 @@ struct CoreRange {
                (other.y >= this->start.y)  &&
                (other.y <= this->end.y);
     }
+    CoreRangeIteratorBase iterate()
+    {
+      return CoreRangeIteratorBase(start,end);
+    }
 
     // Merge lined-up (in x or y dimension) intersecting/adjacent rectangles
     std::optional<CoreRange> merge ( const CoreRange & cr) const
@@ -164,6 +250,7 @@ struct CoreRange {
 
     CoreCoord grid_size() const { return {this->end.x - this->start.x + 1, this->end.y - this->start.y + 1}; }
 };
+
 
 constexpr inline bool operator==(const CoreRange &a, const CoreRange &b) { return a.start == b.start && a.end == b.end; }
 
