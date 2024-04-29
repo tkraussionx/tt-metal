@@ -578,9 +578,15 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     DataType original_dtype = input_a.get_dtype();
     Tensor dividend = typecast(input_a,tt::tt_metal::DataType::FLOAT32);
     Tensor divisor = typecast(input_b,tt::tt_metal::DataType::FLOAT32);
-
+    Tensor cond = logical_and(ltz(dividend), gtz(divisor));
+    Tensor condboth = logical_and(ltz(dividend), ltz(divisor));
+    dividend = where(cond, abs(dividend), dividend);
+    divisor = where(cond, neg(divisor), divisor);
+    dividend = where(condboth, abs(dividend), dividend);
+    divisor = where(condboth, abs(divisor), divisor);
     Tensor original_divisor = divisor;
     Tensor original_dividend = dividend;
+
     divisor = abs(divisor);
     //dividend = abs(dividend);
     for (int i=0; i<100; i++){
@@ -591,9 +597,9 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     for (int i=0; i<100; i++){
         dividend = where(gte(dividend, divisor), sub(dividend, divisor), dividend);
     }
-    //dividend = typecast(dividend, original_dtype);
-    dividend = where(logical_and(ltz(original_divisor), nez(dividend)), sub(dividend, abs(original_input)), dividend);
     dividend = typecast(dividend, original_dtype);
+    dividend = where(logical_and(ltz(original_divisor), nez(dividend)), sub(dividend, abs(original_divisor)), dividend);
+    //dividend = typecast(dividend, original_dtype);
 
     //Tensor dividend2 = typecast(dividend, original_dtype);
     //dividend2 = where(logical_and(ltz(original_divisor), nez(dividend1)), sub(abs(original_input), dividend2), dividend2);
@@ -602,30 +608,44 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& 
     //dividend3 = mul_unary(dividend3,0.5);
     Tensor a = full_like(input_a, 45.25);
     Tensor b = full_like(input_a, 63.75);
-    Tensor c = full_like(input_a, 0.25);
-    Tensor d = full_like(input_a, 0.75);
-    Tensor e = full_like(input_a, 0.5);
-    Tensor val = sub(abs(input_b), tanhshrink(abs(input_b)));
+    Tensor c = full_like(input_a, 0.375);
+    Tensor d = full_like(input_a, 0.875);
+    Tensor e = full_like(input_a, 0.25);
+    Tensor val1 = sub(abs(input_a), tanhshrink(abs(input_a)));
+    Tensor val2 = sub(abs(input_b), tanhshrink(abs(input_b)));
+    val1 = where(ltz(input_a), neg(val1), val1);
+    val2 = where(ltz(input_b), neg(val2), val2);
+    Tensor diff_deci = add(val1, val2);
+    diff_deci = abs(diff_deci);
+    Tensor match = logical_or(eq(diff_deci, c), eq(diff_deci, d));
+    Tensor t_inf = full_like(input_a, std::numeric_limits<float>::infinity(), output_mem_config);
     //add 0.25 if dividend more than divisor
     //more than 45.25 less than 63.75, except .25 and .75, add 0.25
         // more than 63.75, add 0.5
-    Tensor more4525 = gt(abs(original_divisor), a);
-    Tensor less6375 = lt(abs(original_divisor), b);
-    Tensor not25 = ne(abs(val), c);
-    Tensor not75 = ne(abs(val), d);
+    Tensor more4525 = gte(abs(original_divisor), a);
+    Tensor less6375 = lte(abs(original_divisor), b);
+    Tensor not25 = ne(abs(val2), c);
+    Tensor not75 = ne(abs(val2), d);
     Tensor notboth = logical_and(not25, not75);
     Tensor moreless = logical_and(more4525, less6375);
+    Tensor moreless_match = logical_and(moreless, match);
     Tensor more6375 = gt(abs(original_divisor), b);
-    dividend = where(logical_and(logical_and(ltz(original_dividend), gtz(original_divisor)), logical_and(notboth, moreless)), add(dividend, c), dividend);
-    dividend = where(logical_and(logical_and(ltz(original_dividend), gtz(original_divisor)), more6375), add(dividend, c), dividend);
+    //dividend = where(logical_and(logical_and(ltz(original_dividend), gtz(original_divisor)), logical_and(notboth, moreless)), add(dividend, c), dividend);
+    //dividend = where(logical_and(logical_and(ltz(original_dividend), gtz(original_divisor)), more6375), add(dividend, c), dividend);
     //dividend = where(logical_and(logical_and(ltz(original_dividend), ltz(original_divisor)), lte(abs(original_divisor), g)), sub(dividend, d), dividend);
     //dividend = where(logical_and(logical_and(ltz(original_dividend), ltz(original_divisor)), gte(abs(original_divisor), h)), sub(dividend, c), dividend);
     //dividend = where(logical_and(ltz(original_divisor), logical_or(eq(val, d), logical_or(eq(val, a), logical_or(eq(val, e), eq(val, b))))), add(dividend, d), dividend);
     Tensor both_neg = logical_and(ltz(original_dividend), ltz(original_divisor));
     Tensor num_les_div = lt(abs(original_dividend), abs(original_divisor));
-    dividend = where(logical_and(both_neg, num_les_div), original_dividend, dividend);
+    //dividend = where(logical_and(both_neg, num_les_div), original_dividend, dividend);
     //dividend = where(eq(original_dividend, original_divisor), 0, dividend);
     dividend = where(eqz(original_input), t_nan, dividend);
+    dividend = where(eqz(original_divisor), t_inf, dividend);
+    dividend = where(cond, neg(dividend), dividend);
+    dividend = where(condboth, neg(dividend), dividend);
+    //dividend = where(moreless_match, sub(dividend, e), dividend);
+    //dividend = sub(original_divisor, original_dividend);
+    //dividend = typecast(dividend, original_dtype);
     return dividend;
 }
 Tensor atan2(const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config) {

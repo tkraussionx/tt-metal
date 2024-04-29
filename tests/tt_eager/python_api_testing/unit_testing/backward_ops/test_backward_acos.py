@@ -33,14 +33,28 @@ def test_bw_remainder(input_shapes, device):
     # grad_data, grad_tensor = data_gen_with_val(
     #    input_shapes, device, val=-71.5
     # )  # d1 = -56.5 , d2 = -56.75 if diff=0.25 ret -56.5 both same
-    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-13.125)
+    in_data, input_tensor = data_gen_with_val(input_shapes, device, True, val=-18.875)
     grad_data, grad_tensor = data_gen_with_val(
-        input_shapes, device, val=74.25  # 45.5 97.5
+        input_shapes, device, val=81  # 78.875 97.5
     )  # more than 45.25 less than 63.75, except .25 and .75, add 0.25
     # more than 63.75, add 0.5
     print(in_data)
     print(grad_data)
-
+    """
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-17.375] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-16.875] - assert False  61.0, Actual output: 61.25
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-16.375] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-15.875] - assert False 62.0, Actual output: 62.25
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-15.375] - assert False  62.5, Actual output: 62.75
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-14.875] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-14.375] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-13.75] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-12.75] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-11.75] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-10.75] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-9.75] - assert False
+    FAILED tests/ttnn/unit_tests/operations/test_unary.py::test_fp32_uint32[w=78-h=-8.75] - assert False
+    """
     golden_tensor = torch.remainder(in_data, grad_data)
     golden_tensor = torch.where(torch.isnan(golden_tensor), torch.tensor(float("inf")), golden_tensor)
 
