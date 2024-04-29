@@ -154,8 +154,15 @@ void read_from_pcie(volatile tt_l1_ptr uint32_t *& prefetch_q_rd_ptr,
         prefetch_q_rd_ptr = (volatile tt_l1_ptr uint32_t*)prefetch_q_base;
     }
 
-    // NOT_STALLED Persists. STALL_NEXT -> STALLED.
-    stall_state = static_cast<StallState>(stall_state << 1);
+    // If prefetcher must stall after this fetch, wait for data to come back, and move to next state.
+    if (stall_state == STALL_NEXT) {
+        noc_async_read_barrier();
+        fence += pending_read_size;
+        DPRINT << "KCM STALL_NEXT -> STALLED. Barrier. Increased fence: " << fence << " by pending_read_size: " << pending_read_size << ENDL();
+        pending_read_size = 0;
+        stall_state = STALLED;
+    }
+
 }
 
 // This routine can be called in 8 states based on the boolean values cmd_ready, prefetch_q_ready, read_pending:
@@ -200,16 +207,17 @@ void dump_fetchq() {
 template<uint32_t preamble_size>
 void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_ptr) {
 
-    if (stall_state) {
-         DPRINT << "CQ_PREFETCH: " << "fetch_q_get_cmds - early exit due to stall" << ENDL();
-         return;
-    }
-
     static uint32_t pending_read_size = 0;
     static volatile tt_l1_ptr uint32_t* prefetch_q_rd_ptr = (volatile tt_l1_ptr uint32_t*)prefetch_q_base;
     constexpr uint32_t prefetch_q_msb_mask = 1u << 31; // dispatch_constants::prefetch_q_entry_type is 32 bit.
 
-    DPRINT << "CQ_PREFETCH: " << "fetch_q_get_cmds start. cmd_ptr: " << cmd_ptr << " fence: " << fence << " fetchq_entry_idx: " << ((uint32_t) prefetch_q_rd_ptr - prefetch_q_base) / sizeof(uint32_t) << " rtptr_val: " << (uint32_t) *prefetch_q_rd_ptr << ENDL();
+    if (stall_state == STALLED) {
+         DPRINT << "CQ_PREFETCH: " << "fetch_q_get_cmds - early exit due to stall. pending_read_size:" << pending_read_size << ENDL();
+         ASSERT(pending_read_size == 0); // Before stalling, fetch must have been completed.
+         return;
+    }
+
+    DPRINT << "CQ_PREFETCH: " << "fetch_q_get_cmds start (!!!!) cmd_ptr: " << cmd_ptr << " fence: " << fence << " fetchq_entry_idx: " << ((uint32_t) prefetch_q_rd_ptr - prefetch_q_base) / sizeof(uint32_t) << " rtptr_val: " << (uint32_t) *prefetch_q_rd_ptr << ENDL();
     if (fence < cmd_ptr) {
         DPRINT << "CQ_PREFETCH: " <<  "fetch_q_get_cmds wrap cmd" << ENDL();
         cmd_ptr = fence;
