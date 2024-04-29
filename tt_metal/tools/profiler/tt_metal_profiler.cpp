@@ -40,7 +40,7 @@ std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
 void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 {
-    //std::vector<uint32_t> time_sync_buffer(8, 0);
+    std::vector<uint32_t> time_sync_buffer(8, 0);
 
     std::filesystem::path output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
     std::filesystem::path log_path = output_dir / "sync_device_info.csv";
@@ -66,6 +66,8 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         int64_t writeStart = TracyGetCpuTime();
         uint32_t sinceStart = writeStart - hostStartTime;
         tt::Cluster::instance().write_reg(&sinceStart, tt_cxy_pair(device_id, core) , PROFILER_L1_BUFFER_CONTROL + kernel_profiler::FW_RESET_L * sizeof(uint32_t));
+
+        //time_sync_buffer[0] = sinceStart;
 
         //tt::llrt::write_hex_vec_to_core(
         //device_id,
@@ -246,7 +248,9 @@ void InitDeviceProfiler(Device *device){
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
                 InitTimeSync (device_id, {1,1}, true);
-                InitTimeSync (device_id, {9,9}, false);
+                std::this_thread::sleep_for(std::chrono::milliseconds(120000));
+                InitTimeSync (device_id, {1,1}, false);
+                //InitTimeSync (device_id, {9,9}, false);
             }
             else
             {
