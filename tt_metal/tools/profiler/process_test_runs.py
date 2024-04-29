@@ -23,6 +23,7 @@ from tt_metal.tools.profiler.common import (
     TRACY_CSVEXPROT_TOOL,
 )
 
+# RUN_TYPE = "runs_2min_apart_syncs"
 RUN_TYPE = "runs"
 
 lsCmd = subprocess.run(

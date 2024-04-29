@@ -38,6 +38,8 @@ namespace detail {
 
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
+std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
+
 void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 {
     std::vector<uint32_t> time_sync_buffer(8, 0);
@@ -56,6 +58,8 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         millisecond_wait = std::stoi(FREQ);
     }
 
+    const double tracyToSecRatio = TracyGetTimerMul();
+    const int64_t tracyBaseTime = TracyGetBaseTime();
     const int64_t hostStartTime = TracyGetCpuTime();
     std::vector<int64_t> writeTimes(sampleCount);
 
@@ -90,12 +94,7 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 
     uint32_t preDeviceTime = 0;
     uint32_t preHostTime = 0;
-    double frequency = 0;
-    double tracyToSecRatio = TracyGetTimerMul();
-    int64_t tracyBaseTime = TracyGetBaseTime();
-    double frequencySum = 0;
-    double frequencyMin = 5000;
-    double frequencyMax = 0;
+    bool firstSample = true;
 
     uint64_t deviceStartTime = (uint64_t(sync_times[0] & 0xFFF) << 32) | sync_times[1];
     uint32_t deviceStartTime_H = sync_times[0] & 0xFFF;
@@ -109,7 +108,6 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
     uint64_t firstDeviceTimeLarge = 0;
     uint64_t firstHostTimeLarge = 0;
 
-    std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
     for (int i = 2; i < 2 * (sampleCount + 1); i += 2)
     {
 
@@ -118,34 +116,23 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         preDeviceTime = deviceTime;
         uint64_t deviceTimeLarge = (uint64_t(deviceStartTime_H) << 32) | deviceTime;
 
-        //uint32_t hostTime = sync_times[i + 1];
         uint32_t hostTime = sync_times[i + 1] + writeTimes[i/2 - 1];
         if (hostTime < preHostTime) hostStartTime_H ++;
         preHostTime = hostTime;
-        uint64_t hostTimeLarge = (uint64_t(hostStartTime_H) << 32) | hostTime;
+        uint64_t hostTimeLarge = hostStartTime - tracyBaseTime + ((uint64_t(hostStartTime_H) << 32) | hostTime);
 
         deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
 
-        if (frequency)
+        if (firstSample)
         {
-            frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
-            if (frequency < frequencyMin ) frequencyMin = frequency;
-            if (frequency > frequencyMax) frequencyMax = frequency;
-            frequencySum += frequency;
-        }
-        else
-        {
-            frequency = (double)(deviceTimeLarge - preDeviceTimeLarge) / ((double)(hostTimeLarge - preHostTimeLarge) * (tracyToSecRatio)) ;
             firstDeviceTimeLarge = deviceTimeLarge;
             firstHostTimeLarge = hostTimeLarge;
+            firstSample = false;
         }
 
         preDeviceTimeLarge = deviceTimeLarge;
         preHostTimeLarge = hostTimeLarge;
     }
-
-    double frequencyFirstLast = (double)(preDeviceTimeLarge - firstDeviceTimeLarge) / ((double)(preHostTimeLarge - firstHostTimeLarge) * tracyToSecRatio);
-    double frequencyAvg = frequencySum / (double)(sampleCount - 1.0);
 
     double hostSum = 0.0;
     double deviceSum = 0.0;
@@ -161,42 +148,30 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         hostSum += hostTime;
         hostSquaredSum += (hostTime * hostTime);
         hostDeviceProductSum += (hostTime * deviceTime);
-
     }
-    double deviceTimeMean = deviceSum / sampleCount;
-    double hostTimeMean = hostSum / sampleCount;
+    double deviceTimeMean = deviceSum / deviceHostTimePair.size();
+    double hostTimeMean = hostSum / deviceHostTimePair.size();
 
     double frequencyFit = (hostDeviceProductSum - hostSum * deviceTimeMean) / (hostSquaredSum - hostSum * hostTimeMean);
 
     double delay = deviceTimeMean - frequencyFit * hostTimeMean;
 
-
     log_file.open(log_path, std::ios_base::app);
     if (doHeader)
     {
-        log_file << fmt::format("device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio,tracy_base_time") << std::endl;
+        log_file << fmt::format("core_x, core_y,device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio,tracy_base_time") << std::endl;
     }
-    int i = 0;
-    for (auto& deviceHostTime : deviceHostTimePair)
+    int init = deviceHostTimePair.size() - sampleCount;
+    for (int i = init ;i < deviceHostTimePair.size(); i++)
     {
-        double scaledDeviceTime1 = (double)deviceHostTime.first / frequencyAvg;
-        double scaledDeviceTime2 = (double)deviceHostTime.first / frequencyFirstLast;
-        double scaledDeviceTime3 = (double)deviceHostTime.first / frequencyMin;
-        double scaledDeviceTime4 = (double)deviceHostTime.first / frequencyMax;
-        double scaledDeviceTime5 = (double)deviceHostTime.first / frequencyFit;
-        double diff1 = scaledDeviceTime1 - deviceHostTime.second * tracyToSecRatio;
-        double diff2 = scaledDeviceTime2 - deviceHostTime.second * tracyToSecRatio;
-        double diff3 = scaledDeviceTime3 - deviceHostTime.second * tracyToSecRatio;
-        double diff4 = scaledDeviceTime4 - deviceHostTime.second * tracyToSecRatio;
-        double diff5 = scaledDeviceTime5 - deviceHostTime.second * tracyToSecRatio;
         log_file << fmt::format(
                 "{:5},{:5},{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f},{:20}",
                 core.x,
                 core.y,
-                deviceHostTime.first,
-                deviceHostTime.second,
-                (double) deviceHostTime.second  * tracyToSecRatio,
-                writeTimes[i],
+                deviceHostTimePair[i].first,
+                deviceHostTimePair[i].second,
+                (double) deviceHostTimePair[i].second  * tracyToSecRatio,
+                writeTimes[i - init],
                 hostStartTime,
                 delay,
                 frequencyFit,
@@ -204,28 +179,12 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
                 tracyBaseTime
                 )
             << std::endl;
-        i++;
-        //std::cout << fmt::format(
-                //"{:20},{:20},{:20.2f},{:20.2f},{:20.2f},{:20.2f},{:20.2f}",
-                //deviceHostTime.first,
-                //deviceHostTime.second,
-                //diff1,
-                //diff2,
-                //diff3,
-                //diff4,
-                //diff5)
-            //<< std::endl;
     }
+    std::cout << fmt::format ("c:{},g:{},f:{}",hostStartTime, delay, frequencyFit) << std::endl;
+
 
     tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(hostStartTime, delay, frequencyFit));
-
-    //std::cout << fmt::format("Average freq = {}", frequencyAvg ) << std::endl;
-    //std::cout << fmt::format("Min freq = {}", frequencyMin) << std::endl;
-    //std::cout << fmt::format("Max freq = {}", frequencyMax) << std::endl;
-    //std::cout << fmt::format("First Last freq = {}", frequencyFirstLast) << std::endl;
-    //std::cout << fmt::format("Host times = {}, {}, {}", hostStartTime, tracyToSecRatio, writeOverhead) << std::endl;
-    //std::cout << fmt::format("Device time = {}", delay) << std::endl;
-
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(hostStartTime, delay, frequencyFit);
 }
 
 
@@ -248,8 +207,8 @@ void InitDeviceProfiler(Device *device){
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
                 InitTimeSync (device_id, {1,1}, true);
-                std::this_thread::sleep_for(std::chrono::milliseconds(120000));
-                InitTimeSync (device_id, {1,1}, false);
+                //std::this_thread::sleep_for(std::chrono::milliseconds(120000));
+                //InitTimeSync (device_id, {1,1}, false);
                 //InitTimeSync (device_id, {9,9}, false);
             }
             else
@@ -345,6 +304,7 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
+            if (free_buffers) InitTimeSync (device_id, {1,1}, false);
             tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
             tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
             if (free_buffers)

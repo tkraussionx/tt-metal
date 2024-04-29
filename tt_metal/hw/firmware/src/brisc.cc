@@ -276,32 +276,8 @@ inline void wait_ncrisc_trisc()
     DEBUG_STATUS('N', 'T', 'D');
 }
 
-int main() {
-
-    DEBUG_STATUS('I');
-
-    int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
-    l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr *)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
-
-    risc_init();
-    device_setup();
-    noc_init();
-
-    // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
-    mailboxes->ncrisc_halt.resume_addr = 0;
-    mailboxes->slave_sync.ncrisc = RUN_SYNC_MSG_GO;
-    deassert_ncrisc_trisc();
-    set_ncrisc_kernel_resume_deassert_address();
-
-    // Wait for ncrisc to halt
-    DEBUG_STATUS('I', 'N', 'W');
-    while (mailboxes->slave_sync.ncrisc != RUN_SYNC_MSG_DONE);
-    DEBUG_STATUS('I', 'N', 'D');
-
-    mailboxes->launch.run = RUN_MSG_DONE;
-
-    //if (false)
-    //if ((my_x[0] == 1 && my_y[0] == 1) || (my_x[0] == 9 && my_y[0] == 9))
+void sync_loop()
+{
     if (my_x[0] == 1 && my_y[0] == 1)
     {
         volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
@@ -335,35 +311,40 @@ int main() {
                 profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
             }
         }
-        syncTimeBufferIndex = kernel_profiler::ID_HH;
-        while ( syncTimeBufferIndex < 2) {
-            uint32_t deviceTime = p_reg[0];
-
-            uint32_t hostTime = profiler_control_buffer[kernel_profiler::FW_RESET_L];
-            if (hostTime > 0)
-            {
-                briscBuffer[syncTimeBufferIndex++] = p_reg[1];
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = hostTime;
-                profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
-            }
-        }
-
-        while ( syncTimeBufferIndex < 502) {
-            uint32_t deviceTime = p_reg[0];
-
-            uint32_t hostTime = profiler_control_buffer[kernel_profiler::FW_RESET_L];
-            if (hostTime > 0)
-            {
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = hostTime;
-                profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
-            }
-        }
     }
+}
+
+
+int main() {
+
+    DEBUG_STATUS('I');
+
+    int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
+    l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr *)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
+
+    risc_init();
+    device_setup();
+    noc_init();
+
+    // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
+    mailboxes->ncrisc_halt.resume_addr = 0;
+    mailboxes->slave_sync.ncrisc = RUN_SYNC_MSG_GO;
+    deassert_ncrisc_trisc();
+    set_ncrisc_kernel_resume_deassert_address();
+
+    // Wait for ncrisc to halt
+    DEBUG_STATUS('I', 'N', 'W');
+    while (mailboxes->slave_sync.ncrisc != RUN_SYNC_MSG_DONE);
+    DEBUG_STATUS('I', 'N', 'D');
+
+    mailboxes->launch.run = RUN_MSG_DONE;
+
+    sync_loop();
+
+    int syncCount = 0;
 
     while (1) {
+        syncCount ++;
         init_sync_registers();
         assert_just_ncrisc_reset();
 
@@ -411,6 +392,10 @@ int main() {
                 uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
             }
+        }
+        if (syncCount == 2)
+        {
+            sync_loop();
         }
     }
 

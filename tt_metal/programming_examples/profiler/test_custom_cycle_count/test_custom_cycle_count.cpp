@@ -10,7 +10,7 @@
 
 using namespace tt;
 
-bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool dumpProfile = false)
+bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool lastCall = false)
 {
     bool pass = true;
 
@@ -46,7 +46,7 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool dumpProfile =
     );
 
     EnqueueProgram(device->command_queue(), program, false);
-    tt_metal::detail::DumpDeviceProfileResults(device);
+    tt_metal::detail::DumpDeviceProfileResults(device, lastCall);
 
     return pass;
 }
@@ -64,7 +64,8 @@ int main(int argc, char **argv) {
 
         int loop_count = 2000;
         pass &= RunCustomCycle(device, loop_count);
-        pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(60000));
+        pass &= RunCustomCycle(device, loop_count, true);
 
         pass &= tt_metal::CloseDevice(device);
 

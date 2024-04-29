@@ -351,6 +351,8 @@ void DeviceProfiler::generateZoneSourceLocationsHashes()
     }
 }
 
+
+static int callCount = 0;
 void DeviceProfiler::dumpResults (
         Device *device,
         const vector<CoreCoord> &worker_cores_arg){
@@ -358,6 +360,7 @@ void DeviceProfiler::dumpResults (
     ZoneScoped;
     std::vector<CoreCoord> worker_cores {{1,1},{9,9},{1,11},{7,11}};
     //auto const &worker_cores = worker_cores_arg;
+    callCount ++;
 
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
@@ -378,62 +381,37 @@ void DeviceProfiler::dumpResults (
 
         }
 
+        if (callCount != 2) return;
+
         double timeShift = 0;
         double frequency = 0;
         uint64_t cpuTime = 0;
-        int syncedCoreCount = 0;
-        //std::cout << fmt::format("x,y,cpuTime,delay,freq,cpu-device-diff") << std::endl;
+
         for (const auto &worker_core : worker_cores) {
             std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
             if (device_tracy_contexts.find(device_core) == device_tracy_contexts.end())
             {
                 if (device_core_sync_info.find(worker_core) != device_core_sync_info.end())
                 {
-                    cpuTime += get<0>(device_core_sync_info.at(worker_core));
-                    timeShift += get<1>(device_core_sync_info.at(worker_core));
-                    frequency += get<2>(device_core_sync_info.at(worker_core));
-
-                    //std::cout << fmt::format("{:5},{:5},{:20.2f},{:20.2f},{:20.15f},{:25.2f}",
-                            //worker_core.x,
-                            //worker_core.y,
-                            //get<0>(device_core_sync_info.at(worker_core)) * TracyGetTimerMul(),
-                            //get<1>(device_core_sync_info.at(worker_core)),
-                            //get<2>(device_core_sync_info.at(worker_core)),
-                            //get<0>(device_core_sync_info.at(worker_core)) * TracyGetTimerMul() -
-                              //get<1>(device_core_sync_info.at(worker_core)) / get<2>(device_core_sync_info.at(worker_core))
-                            //)
-                        //<<std::endl;
-
-                    syncedCoreCount ++;
+                    cpuTime = get<0>(device_core_sync_info.at(worker_core));
+                    timeShift = get<1>(device_core_sync_info.at(worker_core));
+                    frequency = get<2>(device_core_sync_info.at(worker_core));
                 }
 
             }
         }
+
         if (timeShift == 0.0 || frequency == 0.0)
         {
             timeShift = smallest_timestamp;
             frequency = device_core_frequency/1000.0;
             cpuTime = 0;
         }
-        else
-        {
-            timeShift /= (double)syncedCoreCount;
-            frequency /= (double)syncedCoreCount;
-            cpuTime /= (double)syncedCoreCount;
-        }
+
         for (const auto &worker_core : worker_cores) {
             std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
             if (device_tracy_contexts.find(device_core) == device_tracy_contexts.end())
             {
-                //timeShift = smallest_timestamp;
-                //frequency = device_core_frequency/1000.0;
-                //cpuTime = 0;
-                //if (device_core_sync_info.find(worker_core) != device_core_sync_info.end())
-                //{
-                    //cpuTime = get<0>(device_core_sync_info.at(worker_core));
-                    //timeShift = get<1>(device_core_sync_info.at(worker_core));
-                    //frequency = get<2>(device_core_sync_info.at(worker_core));
-                //}
                 auto tracyCtx = TracyTTContext();
                 std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
 
