@@ -39,51 +39,47 @@ runData = {}
 pd.options.display.float_format = "{:,.2f}".format
 pd.options.display.max_rows = 2550
 
-syncDataAll = pd.DataFrame()
-for run in runsList:
-    tracyCsv = ""
-    logsFolder = TT_METAL_HOME / RUN_TYPE / run / ".logs"
-    tracyFile = logsFolder / TRACY_FILE_NAME
-    deviceCsvFile = logsFolder / PROFILER_DEVICE_SIDE_LOG
-    syncInfoFile = logsFolder / "sync_device_info.csv"
+# syncDataAll = pd.DataFrame()
+# for run in runsList:
+# tracyCsv = ""
+# logsFolder = TT_METAL_HOME / RUN_TYPE / run / ".logs"
+# tracyFile = logsFolder / TRACY_FILE_NAME
+# deviceCsvFile = logsFolder / PROFILER_DEVICE_SIDE_LOG
+# syncInfoFile = logsFolder / "sync_device_info.csv"
 
-    filesExist = True
-    for file in [tracyFile, deviceCsvFile, syncInfoFile]:
-        filesExist &= os.path.isfile(file)
+# filesExist = True
+# for file in [tracyFile, deviceCsvFile, syncInfoFile]:
+# filesExist &= os.path.isfile(file)
 
-    testPoints = 2
-    if filesExist:
-        syncinfoDF = pd.read_csv(syncInfoFile)
-        if syncDataAll.empty:
-            syncDataAll = syncinfoDF.copy()
-        else:
-            syncDataAll = pd.concat([syncDataAll, syncinfoDF.copy()])
+# testPoints = 2
+# if filesExist:
+# syncinfoDF = pd.read_csv(syncInfoFile)
+# if syncDataAll.empty:
+# syncDataAll = syncinfoDF.copy()
+# else:
+# syncDataAll = pd.concat([syncDataAll, syncinfoDF.copy()])
 
-syncDataAll["host_tracy_global [ns]"] = (syncDataAll["host_tracy"] + syncDataAll["host_start"]) * syncDataAll[
-    "tracy_ratio"
-].mean()
+# syncDataAll["host_tracy_global [ns]"] = (syncDataAll["host_tracy"] + syncDataAll["host_start"]) * syncDataAll[
+# "tracy_ratio"
+# ].mean()
 
-syncDataAll.reset_index()
+# syncDataAll.reset_index()
 
-# print(syncDataAll)
-# print(syncDataAll.diff())
+# # print(syncDataAll)
+# # print(syncDataAll.diff())
 
 
-syncDataAll.to_excel("output.xlsx")
-# X = [[x] for x in list(syncDataAll["host_tracy_global [ns]"])]
-# y = list(syncDataAll["device"])
-X = [[x] for x in list(syncDataAll.iloc[:250]["host_real"])]
-y = list(syncDataAll.iloc[:250]["device"])
-# X = [[syncDataAll.iloc[260]["host_tracy_global [ns]"]], [syncDataAll.iloc[700]["host_tracy_global [ns]"]]]
-# y = [syncDataAll.iloc[260]["device"], syncDataAll.iloc[700]["device"]]
-with contextlib.redirect_stderr(StringIO()) as f:
-    # reg = TheilSenRegressor(random_state=0).fit(X, y)
-    reg = LinearRegression().fit(X, y)
+# syncDataAll.to_excel("output.xlsx")
+# # X = [[x] for x in list(syncDataAll["host_tracy_global [ns]"])]
+# # y = list(syncDataAll["device"])
+# X = [[x] for x in list(syncDataAll.iloc[:250]["host_real"])]
+# y = list(syncDataAll.iloc[:250]["device"])
+# # X = [[syncDataAll.iloc[260]["host_tracy_global [ns]"]], [syncDataAll.iloc[700]["host_tracy_global [ns]"]]]
+# # y = [syncDataAll.iloc[260]["device"], syncDataAll.iloc[700]["device"]]
+# with contextlib.redirect_stderr(StringIO()) as f:
+# # reg = TheilSenRegressor(random_state=0).fit(X, y)
+# reg = LinearRegression().fit(X, y)
 
-frequency = reg.coef_[0]
-delayCycle = reg.intercept_
-
-print(frequency, delayCycle)
 
 for run in runsList:
     tracyCsv = ""
@@ -118,23 +114,25 @@ for run in runsList:
         tracyDF = tracyDF.reset_index()
         tracyDF = tracyDF.drop(columns=["level_0", "index"])
         tracyDF["ns_end_time"] = tracyDF["ns_since_start"] + tracyDF["exec_time_ns"]
-        # customSyncData["device_delta"] = customSyncDataDiff["device"]
-
-        # host_delta_mean = customSyncData["host_real_delta"].mean()
-        # # print (customSyncData[["device","host_real", "device_delta", "host_real_delta"]])
-        # margin = 1/1e5
-        # customSyncData =  customSyncData.loc[(customSyncData["host_real_delta"] < host_delta_mean * (1+margin)) & (customSyncData["host_real_delta"] > host_delta_mean * (1-margin))]
-        # print (f"Count: {customSyncData['write_overhead'].count()}")
 
         syncinfoDF = pd.read_csv(syncInfoFile)
-        hostStart = syncinfoDF.iloc[0]["host_start"] * syncinfoDF.iloc[0]["tracy_ratio"]
-        tracyBaseTime_ns = syncinfoDF.iloc[0]["tracy_base_time"] * syncinfoDF.iloc[0]["tracy_ratio"]
-        frequencyRec = syncinfoDF.iloc[0]["frequency"]
-        delayRecCycle = syncinfoDF.iloc[0]["delay"]
 
-        # frequency = frequencyRec
-        # delayCycle = delayRecCycle
-        print(frequencyRec, delayRecCycle)
+        tracyBaseTime_ns = syncinfoDF.iloc[0]["tracy_base_time"] * syncinfoDF.iloc[0]["tracy_ratio"]
+
+        syncinfoDF["host_time_global [ns]"] = (syncinfoDF["host_tracy"] + syncinfoDF["host_start"]) * syncinfoDF[
+            "tracy_ratio"
+        ]
+
+        X = [[x] for x in list(syncinfoDF["host_time_global [ns]"])]
+        y = list(syncinfoDF["device"])
+        with contextlib.redirect_stderr(StringIO()) as f:
+            # reg = TheilSenRegressor(random_state=0).fit(X, y)
+            reg = LinearRegression().fit(X, y)
+
+        frequency = reg.coef_[0]
+        delayCycle = reg.intercept_
+
+        print(frequency, delayCycle)
 
         deviceDF = pd.read_csv(deviceCsvFile, skiprows=[0])
         deviceDF = deviceDF.loc[(deviceDF[" zone name"] == "CQ-CONSUMER-MAIN") & (deviceDF[" zone phase"] == "end")]
@@ -146,15 +144,17 @@ for run in runsList:
         deviceDF["time[ns since reset]"] = deviceDF[" time[cycles since reset]"] / frequency
         deviceDF["time[cycles host synced]"] = deviceDF[" time[cycles since reset]"] - delayCycle
         deviceDF["time[ns host synced]"] = deviceDF["time[cycles host synced]"] / frequency
-        deviceDF["corrected device time [ns]"] = round(deviceDF["time[ns host synced]"] + hostStart - tracyBaseTime_ns)
+        # deviceDF["corrected device time [ns]"] = round(deviceDF["time[ns host synced]"] + hostStart - tracyBaseTime_ns)
 
-        testDF = deviceDF[["corrected device time [ns]"]].copy()
-        testDF["tracy device time [ns]"] = tracyDF.loc[(tracyDF["name"] == "CQ-CONSUMER-MAIN")]["ns_end_time"] * 1.0
+        testDF = deviceDF[["time[ns host synced]"]].copy()
+        testDF["tracy device time [ns]"] = (
+            tracyDF.loc[(tracyDF["name"] == "CQ-CONSUMER-MAIN")]["ns_end_time"] + tracyBaseTime_ns
+        )
         testDF["tracy host time [ns]"] = (
-            tracyDF.loc[(tracyDF["name"] == "HWCommandQueue_finish")].reset_index()["ns_end_time"] * 1.0
+            tracyDF.loc[(tracyDF["name"] == "HWCommandQueue_finish")].reset_index()["ns_end_time"] + tracyBaseTime_ns
         )
         testDF["original host device diff [ns]"] = testDF["tracy host time [ns]"] - testDF["tracy device time [ns]"]
-        testDF["new host device diff [ns]"] = testDF["tracy host time [ns]"] - testDF["corrected device time [ns]"]
+        testDF["new host device diff [ns]"] = testDF["tracy host time [ns]"] - testDF["time[ns host synced]"]
 
-        # print(deviceDF)
+        print(deviceDF)
         print(testDF)
