@@ -76,37 +76,6 @@ void reduce_c() {
    reduce_revert_delta<reduce_dim>(out_cb);
 }
 
-// void reduce_sum_c(uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols) {
-//     // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
-//     // Precondition: scale_cb has 1 produced
-//     // Precondition: out_cb has rows free
-//     // Postcondition: in0_cb has rows*cols produced
-//     // Precondition: scale_cb has 1 produced
-//     // Postcondition: out_cb has rows produced
-
-//     reduce_init_delta<false, PoolType::SUM, ReduceDim::REDUCE_ROW>(PoolType::SUM, ReduceDim::REDUCE_ROW, in0_cb, scale_cb, out_cb);
-
-//     const uint32_t num_tiles = rows * cols;
-//     cb_wait_front(scale_cb, 1);
-//     cb_wait_front(in0_cb, num_tiles);
-
-//     constexpr uint32_t reduce_dst_idx = 0;
-
-//     for (uint32_t i = 0; i < rows; i++) {
-//         acquire_dst(tt::DstMode::Half);
-//         for (uint32_t j = 0; j < cols; j++) {
-//             reduce_tile<PoolType::SUM, ReduceDim::REDUCE_ROW>(in0_cb, scale_cb, i*cols+j, 0, reduce_dst_idx);
-//         }
-
-//         cb_reserve_back(out_cb, 1);
-//         pack_tile(reduce_dst_idx, out_cb);
-//         cb_push_back(out_cb, 1);
-//         release_dst(tt::DstMode::Half);
-//     }
-
-//    reduce_revert_delta<ReduceDim::REDUCE_ROW>(out_cb);
-// }
-
 void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     // Precondition: in_cb has num_tiles produced
     // Postcondition: in_cb has num_tiles produced
@@ -146,11 +115,9 @@ void sub_exp_block_bcast_cols_inplace() {
             tile_regs_acquire();
             for (uint32_t j = 0; j < dst_tiles; ++j) {
                 sub_tiles_bcast_cols(in0_cb, in1_cb, j, i, j);
+                exp_tile(j, true);
             }
             cb_pop_front(in0_cb, dst_tiles);
-            for (uint32_t i = 0; i < dst_tiles; i++) {
-                exp_tile(i, true);
-            }
             tile_regs_commit();
             cb_reserve_back(in0_cb, dst_tiles);
             tile_regs_wait();
