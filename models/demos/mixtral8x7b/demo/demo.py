@@ -81,7 +81,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
         ]
         for i in range(max_prompt_len)
     ]
-    return input_tokens_tt, max_prompt_len, input_mask_tt
+    return input_tokens_tt, max_prompt_len, input_mask_tt, input_tokens
 
 
 @torch.no_grad()
@@ -89,8 +89,12 @@ def run_mixtral_demo(user_input, batch_size, devices):
     assert batch_size == 32, "Batch size must be 32"
 
     instruct_mode = False
-
     dtype = ttnn.bfloat8_b
+
+    # Do embedding and argmax on host. TODO Seeing bad output when on device
+    embed_on_host = True
+
+    seqlen = 1  # Generating one token per user at a time
 
     logger.info(f"Reading inputs...")
     if len(user_input) == 1:
@@ -98,15 +102,14 @@ def run_mixtral_demo(user_input, batch_size, devices):
     else:
         input_prompts = load_inputs(user_input, 32)
 
-    # TODO Test same prompt, then test different ones per user
-    input_prompts = ["This is a"] * 32
+    # # TODO Test same prompt, then test different ones per user
+    # input_prompts = [""] * 32
 
     # Load model args, weights, and tokenizer
-    # Specify model_base_path=<mixtral_WEIGHTS_PATH> below to use your own weights
-    model_args = TtModelArgs(devices[0], instruct=instruct_mode)  # TtModelArgs(model_base_path=<weights_path>)
-
-    model_args.n_layers = 1  # TODO Remove for full model
+    model_args = TtModelArgs(devices[0], instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
+
+    model_args.n_layers = 32  # Full model
 
     logger.info("Loading weights...")
     state_dict = torch.load(model_args.state_dict_path)
@@ -117,14 +120,15 @@ def run_mixtral_demo(user_input, batch_size, devices):
         if any([r in k for r in remv]):
             state_dict.pop(k)
 
-    # # Embedding on host
-    # embd = Emb()
-    # embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
+    # Embedding on host
+    if embed_on_host:
+        embd = Emb()
+        embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
 
     logger.info("Loading weights finished!")
 
     # Preprocess initial prompt inputs
-    input_tokens, max_prompt_len, input_mask = preprocess_inputs(
+    input_tokens_tt, max_prompt_len, input_mask, input_tokens_pt = preprocess_inputs(
         input_prompts, tokenizer, model_args, dtype, instruct_mode, devices
     )
 
@@ -142,78 +146,103 @@ def run_mixtral_demo(user_input, batch_size, devices):
         dtype=dtype,
     )
 
-    tt_embds = [
-        TtMixtralEmbedding(
-            device=devices[i],
-            args=model_args,
-            weight_cache_path=model_args.weight_cache_path(dtype),
-            state_dict=state_dict,
-            dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
-        )
-        for i in range(len(devices))
-    ]
+    if not embed_on_host:
+        tt_embds = [
+            TtMixtralEmbedding(
+                device=devices[i],
+                args=model_args,
+                weight_cache_path=model_args.weight_cache_path(dtype),
+                state_dict=state_dict,
+                dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
+            )
+            for i in range(len(devices))
+        ]
 
     logger.info("Finished loading weights to device.")
 
     # Prepare the first token embedding for each user
-    # Each device does its own embedding
-    decode_input_11BH = [tt_embds[i](input_tokens[0][i]) for i in range(len(devices))]
-    # Reshape and change row major to tile layout
-    decode_input_11BH = [
-        ttnn.reshape(decode_input_11BH[i], ttnn.Shape([1, 1, batch_size, model_args.dim])) for i in range(len(devices))
-    ]
-    decode_input_11BH = [ttnn.to_layout(decode_input_11BH[i], layout=ttnn.TILE_LAYOUT) for i in range(len(devices))]
-    # decode_input_11BH = [ttnn.experimental.tensor.tilize(decode_input_11BH[i]) for i in range(len(devices))]
-    # decode_input_11BH = [ttnn.experimental.tensor.tilize_with_val_padding(decode_input_11BH[i], ) for i in range(len(devices))]
+    if embed_on_host:
+        pt_decode_input = embd(input_tokens_pt[:, 0]).view(batch_size, seqlen, -1)
+    else:  # Embedding on device
+        # Each device does its own embedding
+        decode_input_11BH = [tt_embds[i](input_tokens_tt[0][i]) for i in range(len(devices))]
+        # Reshape and change row major to tile layout
+        decode_input_11BH = [
+            ttnn.reshape(decode_input_11BH[i], ttnn.Shape([1, 1, batch_size, model_args.dim]))
+            for i in range(len(devices))
+        ]
+        decode_input_11BH = [ttnn.to_layout(decode_input_11BH[i], layout=ttnn.TILE_LAYOUT) for i in range(len(devices))]
+        # decode_input_11BH = [ttnn.experimental.tensor.tilize(decode_input_11BH[i]) for i in range(len(devices))]
+        # decode_input_11BH = [ttnn.experimental.tensor.tilize_with_val_padding(decode_input_11BH[i], ) for i in range(len(devices))]
     logger.info("Finished first token embedding. Starting inference...")
 
     generation_start_pos = 0
-    max_generated_tokens = 10  # TODO change back to 120+ when multichip hangs are fixed
+    max_generated_tokens = 10  # TODO Increase to around 100 tokens
 
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
 
     # Prepare inputs for decode mode (rotary embeddings, attention mask, padding)
-    rot_mats = prepare_inputs_ttnn(
-        None,
-        model_args.dim,
-        model_args.head_dim,
-        model_args.max_seq_len,
-        tt_model.devices,
-    )
 
-    # TODO Required for now for argmax. Alternatively, send the output back to device: tt_lib.tensor.Tensor.to()
-    ttl.device.SetDefaultDevice(devices[0])
+    if not embed_on_host:  # embed on device
+        rot_mats = prepare_inputs_ttnn(
+            None,
+            model_args.dim,
+            model_args.head_dim,
+            model_args.max_seq_len,
+            tt_model.devices,
+        )
+        # TODO Required for now for argmax (only device 0 is doing argmax!)
+        # Alternatively, send the output back to device: tt_lib.tensor.Tensor.to()
+        ttl.device.SetDefaultDevice(devices[0])
 
     # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
     for iteration in range(max_generated_tokens):
         start_pos = generation_start_pos + iteration
         current_pos = start_pos % model_args.sliding_window
 
+        if embed_on_host:
+            decode_input_11BH, rot_mats = prepare_inputs_ttnn(
+                pt_decode_input,
+                model_args.dim,
+                model_args.head_dim,
+                model_args.max_seq_len,
+                tt_model.devices,
+            )
         # Run ttnn mixtral model
         tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, rot_mats)
 
-        for i in range(len(devices)):
-            # TODO Update argmax to ttnn when OP becomes available
-            tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH[i], dim=-1)
-            tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
-            if iteration < max_prompt_len:
-                # TODO: With left padding we don't need to use ttnn.where. Just reuse the input token until all users finish their initial prompt len
-                decode_input_1B = input_tokens[iteration][i]
-                # With right padding use ttnn.where. It requires all 3 inputs to be bfloat16, however input tokens lose precision if in bfloat16...
-                # decode_input_1B = ttnn.where(input_mask[iteration][i], input_tokens[iteration][i], tt_out_1B)
-            else:
-                decode_input_1B = tt_out_1B
+        if embed_on_host:
+            # Convert ttnn tensor to torch tensor
+            tt_output_torch = ttnn.to_torch(tt_out_11BH[0]).squeeze(1).view(batch_size, seqlen, -1).detach().float()
+            tt_token_batch = sample(tt_output_torch, temperature=0, top_p=0.8).view(32)
+            # tt_token_batch = tt_output_torch.squeeze().argmax(axis=-1)
+            pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
+        else:
+            for i in range(len(devices)):
+                # TODO Update argmax to ttnn when OP becomes available
+                tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH[i], dim=-1)
+                tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
+                if iteration < max_prompt_len:
+                    # TODO: With left padding we don't need to use ttnn.where. Just reuse the input token until all users finish their initial prompt len
+                    decode_input_1B = input_tokens_tt[iteration][i]
+                    # With right padding use ttnn.where. It requires all 3 inputs to be bfloat16, however input tokens lose precision if in bfloat16...
+                    # decode_input_1B = ttnn.where(input_mask[iteration][i], input_tokens_tt[iteration][i], tt_out_1B)
+                else:
+                    decode_input_1B = tt_out_1B
 
-            # embed inputs
-            decode_input_1BH = tt_embds[i](decode_input_1B)
-            decode_input_11BH[i] = ttnn.reshape(decode_input_1BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
-            decode_input_11BH[i] = ttnn.to_layout(decode_input_11BH[i], layout=ttnn.TILE_LAYOUT)
+                # Next input embeddings
+                decode_input_1BH = tt_embds[i](decode_input_1B)
+                decode_input_11BH[i] = ttnn.reshape(decode_input_1BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
+                decode_input_11BH[i] = ttnn.to_layout(decode_input_11BH[i], layout=ttnn.TILE_LAYOUT)
 
-        # Convert ttnn tensor to torch tensor and print decoded output (from device 0)
-        tt_output_torch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
+            # Convert ttnn tensor to torch tensor and print decoded output (from device 0)
+            tt_output_torch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
         for user in range(batch_size):
-            user_tok = int(tt_output_torch[user].item())
+            if embed_on_host:
+                user_tok = int(tt_token_batch[user].item())
+            else:
+                user_tok = int(tt_output_torch[user].item())
             # TODO: With left padding we have to ignore the -1 padding token. For final demo clean up the printing
             user_tok = 0 if user_tok == -1 else user_tok  # Convert the -1 padding to token 0
             if user_tok != tokenizer.eos_id:  # Stop saving the ouput after hitting the EOS token
