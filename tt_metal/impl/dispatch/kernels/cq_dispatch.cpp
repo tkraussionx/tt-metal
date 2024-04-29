@@ -120,6 +120,9 @@ void notify_host_of_completion_queue_write_pointer() {
 
 FORCE_INLINE
 void completion_queue_push_back(uint32_t num_pages) {
+
+    DPRINT << "CQ_DISPATCH: KCM completion_queue_push_back" << ENDL();
+
     // Transfer pages are aligned
     uint32_t push_size_16B = num_pages * completion_queue_page_size_16B;
     cq_write_interface.completion_fifo_wr_ptr += push_size_16B;
@@ -137,6 +140,8 @@ void completion_queue_push_back(uint32_t num_pages) {
 FORCE_INLINE
 void process_write_host_h() {
     volatile tt_l1_ptr CQDispatchCmd *cmd = (volatile tt_l1_ptr CQDispatchCmd *)cmd_ptr;
+
+    DPRINT << "CQ_DISPATCH: KCM process_write_host_h" << ENDL();
 
     uint32_t completion_write_ptr;
     // We will send the cmd back in the first X bytes, this makes the logic of reserving/pushing completion queue
@@ -283,6 +288,8 @@ void relay_to_next_cb(uint32_t data_ptr,
 
 FORCE_INLINE
 void process_write_host_d() {
+
+    DPRINT << "CQ_DISPATCH: KCM process_write_host_d" << ENDL();
 
     volatile tt_l1_ptr CQDispatchCmd *cmd = (volatile tt_l1_ptr CQDispatchCmd *)cmd_ptr;
     // Remember: host transfer command includes the command in the payload, don't add it here
@@ -686,7 +693,7 @@ static inline bool process_cmd_d(uint32_t& cmd_ptr) {
         break;
 
     case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
-        DPRINT << "CQ_DISPATCH: " << "cmd_write_linear_h_host\n";
+        DPRINT << "CQ_DISPATCH: " << "cmd_write_linear_h_host. is_h_variant: " << is_h_variant << " \n";
         if (is_h_variant) {
             process_write_host_h();
         } else {

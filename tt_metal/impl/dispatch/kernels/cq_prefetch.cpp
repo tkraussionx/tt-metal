@@ -817,9 +817,10 @@ uint32_t process_exec_buf_cmd(uint32_t cmd_ptr_outer,
         paged_read_into_cmddat_q(cmd_ptr);
         noc_async_read_barrier(); // XXXXX no no no no
 
-        DPRINT << "CQ_PREFETCH: exec_buf_state.length: " << exec_buf_state.length << ENDL();
+        DPRINT << "CQ_PREFETCH: exec_buf_state. length: " << exec_buf_state.length << " cmd_ptr: " << cmd_ptr << " cmddat_q_size: " << cmddat_q_size << ENDL();
         while (exec_buf_state.length > 0) {
             uint32_t stride;
+            // DPRINT << "Processing ExecBuf Command. exec_buf_state.length: " << exec_buf_state.length << " cmd_ptr: " << cmd_ptr << ENDL();
             done = process_cmd<false, true>(cmd_ptr, downstream_data_ptr, stride);
 
             if (done) {
