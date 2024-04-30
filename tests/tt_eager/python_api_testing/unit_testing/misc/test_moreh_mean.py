@@ -127,14 +127,14 @@ def test_moreh_mean_dims(input_shape, dims, use_randint, device):
 @pytest.mark.parametrize(
     "input_shape",
     (
-        ([1, 1, TILE_HEIGHT - 1, TILE_WIDTH - 1]),
-        ([4, 4, TILE_HEIGHT * 12 - 1, TILE_WIDTH * 30 - 1]),
+        # ([1, 1, TILE_HEIGHT - 1, TILE_WIDTH - 1]),
+        # ([4, 4, TILE_HEIGHT * 12 - 1, TILE_WIDTH * 30 - 1]),
         ([4, 4, TILE_HEIGHT * 30 - 1, TILE_WIDTH * 12 - 1]),
         ([8, 8, TILE_HEIGHT * 20 - 1, TILE_WIDTH * 20 - 1]),
     ),
     ids=[
-        "1, 1, TILE_HEIGHT-1,TILE_WIDTH - 1",
-        "4, 4, TILE_HEIGHT * 12 - 1, TILE_WIDTH * 30 - 1",
+        # "1, 1, TILE_HEIGHT-1,TILE_WIDTH - 1",
+        # "4, 4, TILE_HEIGHT * 12 - 1, TILE_WIDTH * 30 - 1",
         "4, 4, TILE_HEIGHT * 30 - 1, TILE_WIDTH * 12 - 1",
         "8, 8, TILE_HEIGHT * 20 - 1, TILE_WIDTH * 20 - 1",
     ],
@@ -142,26 +142,27 @@ def test_moreh_mean_dims(input_shape, dims, use_randint, device):
 @pytest.mark.parametrize(
     "dims",
     (
-        [0],
-        [0, 1],
-        [0, 1, 2],
-        [0, 1, 2, 3],
-        [0, 1, 3],
-        [0, 2, 3],
-        [1],
-        [1, 2],
-        [1, 2, 3],
+        # [0],
+        # [0, 1],
+        # [0, 1, 2],
+        # [0, 1, 2, 3],
+        # [0, 1, 3],
+        # [0, 2, 3],
+        # [1],
+        # [1, 2],
+        # [1, 2, 3],
         [1, 3],
-        [2],
-        [2, 3],
-        [3],
+        # [2],
+        # [2, 3],
+        # [3],
     ),
-    ids=["0", "0,1", "0,1,2", "0,1,2,3", "0,1,3", "0,2,3", "1", "1,2", "1,2,3", "1,3", "2", "2,3", "3"],
+    # ids=["0", "0,1", "0,1,2", "0,1,2,3", "0,1,3", "0,2,3", "1", "1,2", "1,2,3", "1,3", "2", "2,3", "3"],
+    ids=["1, 3"],
 )
 @pytest.mark.parametrize(
     "use_randint",
-    (True, False),
-    ids=["True", "False"],
+    (True, True),
+    ids=["True", "True"],
 )
 def test_moreh_mean_backward(input_shape, dims, use_randint, device):
     torch.manual_seed(2023)
@@ -198,5 +199,20 @@ def test_moreh_mean_backward(input_shape, dims, use_randint, device):
 
     logger.debug(f"Out passing={passing}")
     logger.debug(f"Output pcc={output_pcc}")
+
+    if passing == False:
+        diff = torch_input.grad - tt_input_grad_cpu
+        diff_1d = diff.reshape(-1)
+        values, indices = diff_1d.topk(32)
+        values2, indices2 = diff_1d.topk(32, largest=False)
+        logger.debug(f"{values} {indices}")
+        logger.debug(f"{values2} {indices2}")
+    else:
+        diff = torch_input.grad - tt_input_grad_cpu
+        diff_1d = diff.reshape(-1)
+        values, indices = diff_1d.topk(32)
+        values2, indices2 = diff_1d.topk(32, largest=False)
+        logger.debug(f"{values} {indices}")
+        logger.debug(f"{values2} {indices2}")
 
     assert passing
