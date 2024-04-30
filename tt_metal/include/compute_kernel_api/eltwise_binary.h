@@ -51,8 +51,8 @@ ALWI void mul_tiles_init_f() { MATH(( llk_math_eltwise_binary_init<ELWMUL, NONE,
 /**
  * Please refer to documentation for any_init.
  */
-ALWI void mul_tiles_init(uint32_t icb0 = 0, uint32_t icb1 = 1) {
-    MATH(( llk_math_eltwise_binary_init<ELWMUL, NONE, MATH_FIDELITY>() ));
+ALWI void mul_tiles_init(uint32_t icb0 = 0, uint32_t icb1 = 1, const std::uint32_t transpose = 0, const std::uint32_t acc_to_dest = 0) {
+    MATH(( llk_math_eltwise_binary_init<ELWMUL, NONE, MATH_FIDELITY>(transpose, acc_to_dest) ));
     UNPACK(( llk_unpack_AB_init<BroadcastType::NONE>(icb0, icb1) ));
 }
 

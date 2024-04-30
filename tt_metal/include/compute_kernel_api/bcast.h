@@ -247,9 +247,9 @@ ALWI void mul_tiles_bcast_scalar(uint32_t icb0, uint32_t icb1, uint32_t itile0, 
 /**
  * Performs a first-call or switch-from-another-op tile hw reconfiguration step needed for mul_bcast_cols to be executed correctly.
  */
-ALWI void mul_bcast_cols_init_short(uint32_t icb0 = 0, uint32_t icb1 = 1)
+ALWI void mul_bcast_cols_init_short(uint32_t icb0 = 0, uint32_t icb1 = 1, const std::uint32_t transpose = 0, const std::uint32_t acc_to_dest = 0)
 {
-    MATH(( llk_math_eltwise_binary_init<ELWMUL, BroadcastType::COL, MATH_FIDELITY>() )); // TODO(AP)
+    MATH(( llk_math_eltwise_binary_init<ELWMUL, BroadcastType::COL, MATH_FIDELITY>(transpose, acc_to_dest) )); // TODO(AP)
     // FIXME: API Update needed in compute kernel?
     UNPACK(( llk_unpack_AB_init<BroadcastType::COL>(icb0, icb1) ));
 }
