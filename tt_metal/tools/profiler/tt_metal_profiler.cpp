@@ -158,12 +158,9 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 
     uint16_t accumulateSampleCount = deviceHostTimePair.size();
 
-    double deviceTimeMean = deviceSum / accumulateSampleCount;
-    double hostTimeMean = hostSum / accumulateSampleCount;
-
     double frequencyFit = (hostDeviceProductSum * accumulateSampleCount - hostSum * deviceSum)  / ((hostSquaredSum * accumulateSampleCount - hostSum * hostSum) * tracyToSecRatio);
 
-    double delay = deviceTimeMean - frequencyFit * hostTimeMean;
+    double delay = (deviceSum - frequencyFit * hostSum * tracyToSecRatio) / accumulateSampleCount;
 
     log_file.open(log_path, std::ios_base::app);
     if (doHeader)
