@@ -15,11 +15,12 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
-
+// #include "debug/dprint.h"
 
 namespace NAMESPACE {
 template<uint32_t in0, uint32_t in1, uint32_t num_tiles>
 void max_block_inplace() {
+    PACK(DeviceZoneScopedN("max_inplace"));
     // inputs come in full, outputs go out full
     copy_tile_to_dst_init_short(in0);
     max_tile_init();
@@ -41,8 +42,49 @@ void max_block_inplace() {
     }
 }
 
+// SLOW REDUCE
+// template<PoolType pool_type, ReduceDim reduce_dim, uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols>
+// void reduce_c() {
+//     PACK(DeviceZoneScopedN("reduce_c"));
+//     // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
+//     // Precondition: scale_cb has 1 produced
+//     // Precondition: out_cb has rows free
+//     // Postcondition: in0_cb has rows*cols produced
+//     // Precondition: scale_cb has 1 produced
+//     // Postcondition: out_cb has rows produced
+//     constexpr uint32_t dst_size = STATS_GRANULARITY;
+//     constexpr uint32_t granularity = rows >> LOG2_STATS_GRANULARITY;
+//     reduce_init_delta<false, pool_type, reduce_dim>(pool_type, reduce_dim, in0_cb, scale_cb, out_cb);
+//     // PACK(DPRINT << "reduce_c: rows=" << rows << " cols=" << cols << " granularity=" << granularity << " dst_size=" << dst_size << ENDL());
+
+//     const uint32_t num_tiles = rows * cols;
+//     cb_wait_front(scale_cb, 1);
+//     cb_wait_front(in0_cb, num_tiles);
+//     cb_reserve_back(out_cb, rows);
+
+//     uint32_t reduce_dst_idx = 0;
+//     uint32_t index = 0;
+//     for (uint32_t g = 0; g < granularity; ++g) {
+//         acquire_dst(tt::DstMode::Half);
+//         for (uint32_t i = 0; i < dst_size; i++) {
+//             for (uint32_t j = 0; j < cols; j++) {
+//                 // PACK(DPRINT << "reduce_c: reduce_tile " << index << " " << i << " " << j << ENDL());
+//                 reduce_tile<pool_type, reduce_dim>(in0_cb, scale_cb, index++, 0, i);
+//             }
+
+//             pack_tile(i, out_cb);
+//         }
+//         cb_push_back(out_cb, dst_size);
+//         release_dst(tt::DstMode::Half);
+
+//     }
+
+//    reduce_revert_delta<reduce_dim>(out_cb);
+// }
+
 template<PoolType pool_type, ReduceDim reduce_dim, uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols>
 void reduce_c() {
+    PACK(DeviceZoneScopedN("reduce_c"));
     // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
     // Precondition: scale_cb has 1 produced
     // Precondition: out_cb has rows free
@@ -67,9 +109,9 @@ void reduce_c() {
 
         cb_reserve_back(out_cb, 1);
         pack_tile(reduce_dst_idx, out_cb);
-        cb_push_back(out_cb, 1);
         release_dst(tt::DstMode::Half);
     }
+    cb_push_back(out_cb, rows);
 
    reduce_revert_delta<reduce_dim>(out_cb);
 }
@@ -220,6 +262,42 @@ void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
     }
 }
 
+template<uint32_t out_cb, uint32_t in1_cb, uint32_t in2_cb, uint32_t num_tiles>
+void add_mul_block_inplace() {
+    // Precondition: all are full
+    // Postcondition: all are full except in1
+    // mul_tiles_init();
+
+    // out = out + in1 * in2
+    constexpr uint32_t dst_size = STATS_GRANULARITY;
+    constexpr uint32_t granularity = num_tiles >> LOG2_STATS_GRANULARITY;
+    cb_wait_front(out_cb, num_tiles);
+    cb_wait_front(in1_cb, num_tiles);
+    cb_wait_front(in2_cb, num_tiles);
+    for (uint32_t i = 0; i < granularity; i++) {
+        acquire_dst(tt::DstMode::Half);
+        copy_tile_to_dst_init_short(out_cb);
+        for (uint32_t u = 0; u < dst_size; ++u) {
+            copy_tile(out_cb, u, u);
+        }
+        cb_pop_front(out_cb, dst_size);
+        cb_reserve_back(out_cb, dst_size);
+        // copy_tile(out_cb, 0, 0);
+        mul_tiles_init(in1_cb, in2_cb, 0 /*transpose*/, 1 /*acc_to_dst*/);
+        for (uint32_t j = 0; j < dst_size; j++) {
+            mul_tiles(in1_cb, in2_cb, i*dst_size + j, i*dst_size + j, j);
+            pack_tile(j, out_cb);
+        }
+        // mul_tiles(in1_cb, in2_cb, i, i, 0);
+
+        // pack_tile(0, out_cb);
+        cb_push_back(out_cb, dst_size);
+        release_dst(tt::DstMode::Half);
+    }
+
+    cb_pop_front(in1_cb, num_tiles);
+}
+
 void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t num_tiles) {
     // Precondition: in0_cb and in1_cb have num_tiles produced
     // Postcondition: out_cb has num_tiles produced
@@ -241,18 +319,19 @@ void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t n
 
         pack_tile(0, out_cb);
 
-        cb_push_back(out_cb, 1);
         release_dst(tt::DstMode::Half);
     }
+    cb_push_back(out_cb, num_tiles);
 }
 
+// use mamtul partials
 void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
     // Precondition: in_cb has num_tiles produced
     // Precondition: out_cb has num_tiles free
     // Postcondition: in_cb has num_tiles consumed
     // Postcondition: out_cb has num_tiles produced
 
-    copy_tile_to_dst_init_short();
+    copy_tile_to_dst_init_short(in_cb); // TODO: use correct index for every init call
 
     cb_wait_front(in_cb, num_tiles);
     cb_reserve_back(out_cb, num_tiles);
@@ -261,19 +340,19 @@ void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
         acquire_dst(tt::DstMode::Half);
         copy_tile(in_cb, i, 0/*dst*/);
         pack_tile(0, out_cb);
-        cb_push_back(out_cb, 1);
         release_dst(tt::DstMode::Half);
     }
+    cb_push_back(out_cb, num_tiles);
     cb_pop_front(in_cb, num_tiles);
 }
 
 void matmul_blocks(const uint32_t& in0_cb, const uint32_t& in1_cb, const uint32_t& out_cb, const uint32_t& M, const uint32_t& N, const uint32_t& K, const uint32_t& num_blocks, const uint32_t& in0_num_subblocks, const uint32_t& in1_num_subblocks,
-                    const uint32_t& in0_block_w, const uint32_t& subblock_h, const uint32_t& subblock_w, const bool& transpose) {
+                    const uint32_t& in0_block_w, const uint32_t& subblock_h, const uint32_t& subblock_w, const bool& transpose, const uint32_t& bias, const bool& use_bias) {
     // precondition: in0_cb has M*K produced
     // preconditino: in1_cb has K*N produced
     // postcondition: in0_cb is full, in1_cb is empty
     // postcondition: out_cb has M*N produced
-
+    PACK(DeviceZoneScopedN("matmul_blocks"));
 
     mm_block_init_short(in0_cb, in1_cb, transpose /*transpose*/, subblock_w /*ct_dim*/, subblock_h /*rt_dim*/, in0_block_w /*kt_dim*/);
 
@@ -285,9 +364,25 @@ void matmul_blocks(const uint32_t& in0_cb, const uint32_t& in1_cb, const uint32_
     uint32_t in0_index_offset = 0;
     uint32_t in1_index_offset = 0;
 
+    if (use_bias) {
+        cb_wait_front(bias, output_num_tiles);
+    }
+
     for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; ++in0_subblock) {
         for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; ++in1_subblock) {
             tile_regs_acquire();
+
+            if (use_bias) {
+                copy_tile_to_dst_init_short_with_dt(in1_cb, bias);
+
+                uint32_t start_dst_index = 0;
+                uint32_t start_tile_index = 0;
+                copy_block_matmul_partials(bias, start_tile_index, start_dst_index, out_subblock_num_tiles);
+
+                cb_pop_front(bias, out_subblock_num_tiles);
+                // Reconfigure srcA back
+                mm_block_init_short_with_dt(in0_cb, in1_cb, bias, transpose, subblock_w, subblock_h, in0_block_w);
+            }
 
             uint32_t dst_index = 0;
             uint32_t in0_index = in0_index_offset;
@@ -407,21 +502,10 @@ void MAIN {
 
                     /* QK = Q_CHUNK @ K_CHUNK */
                     pack_reconfig_data_format(cb_qk_im);
-                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w, true /*transpose*/);
+                    matmul_blocks(cb_q_in, cb_k_in, cb_qk_im, Sq_chunk_t, Sk_chunk_t, DHt, qk_num_blocks, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_in0_block_w, qk_subblock_h, qk_subblock_w, true /*transpose*/, cb_mask_in, !(q_low_idx >= k_high_idx));
 
                     /* QK *= SCALE */
                     mul_block_bcast_scalar_inplace<cb_qk_im, cb_scale_in, qk_chunk_tiles>();
-
-                    // Finding the diagonal is harder now that q_chunk_size and k_chunk_size can differ
-                    // Q-range = [q_low, q_high)
-                    // K-range = [k_low, k_high)
-                    // does_overlap = not (q_low >= k_high or k_low >= q_high)
-                    // Due to loop bounds, we should never have k_low >= q_high. Can simplify this conditional check
-                    if (!(q_low_idx >= k_high_idx)) {
-                        /* QK += MASK */
-                        unpack_reconfig_data_format(cb_qk_im, cb_mask_in);
-                        add_block_inplace(cb_qk_im, cb_mask_in, qk_chunk_tiles);
-                    }
 
                     unpack_reconfig_data_format(cb_qk_im, cb_identity_scale_in);
                     reduce_c<PoolType::MAX, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_max, Sq_chunk_t, Sk_chunk_t>();
@@ -437,31 +521,35 @@ void MAIN {
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
                     reduce_c<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
 
-                    /* OUT_IM = QK @ V_CHUNK */
-                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w, false /*transpose*/);
-                    unpack_reconfig_data_format_srca(cb_out_im);
-                    cb_pop_front(cb_qk_im, qk_chunk_tiles);
-
                     /* OUT_ACC += OUT_IM */
                     if (k_chunk == 0) {
-                        copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
+                        // copy_block(cb_out_im, cb_out_accumulate_im, out_chunk_tiles);
                     } else {
+                        PACK(DeviceZoneScopedN("stats2"));
                         /* cb_exp_max_diff = torch.exp(cb_prev_max - cb_cur_max) */
                         sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, Sq_chunk_t);
                         cb_pop_front(cb_prev_max, Sq_chunk_t);
 
-                        /* cb_prev_sum *= cb_exp_max_diff */
-                        mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
+                        add_mul_block_inplace<cb_cur_sum, cb_prev_sum, cb_exp_max_diff, Sq_chunk_t>();
+                        // /* cb_prev_sum *= cb_exp_max_diff */
+                        // mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
+
+                        // /* cb_cur_sum += cb_prev_sum */
+                        // add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
 
                         /* cb_out_accumulate_im *= cb_exp_max_diff */
                         mul_block_bcast_cols_inplace(cb_out_accumulate_im, cb_exp_max_diff, Sq_chunk_t, DHt);
 
-                        /* cb_cur_sum += cb_prev_sum */
-                        add_block_inplace(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-
                         /* cb_out_accumulate_im += cb_out_im */
-                        add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
+                        // add_block_inplace(cb_out_accumulate_im, cb_out_im, out_chunk_tiles);
                     }
+
+                    /* OUT_IM = QK @ V_CHUNK */
+                    matmul_blocks(cb_qk_im, cb_v_in, cb_out_accumulate_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w, false /*transpose*/, cb_out_accumulate_im, k_chunk > 0);
+                    unpack_reconfig_data_format_srca(cb_out_im);
+                    cb_pop_front(cb_qk_im, qk_chunk_tiles);
+
+
 
                     // Set cb_prev_sum and cb_prev_max
                     copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
