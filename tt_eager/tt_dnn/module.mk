@@ -76,6 +76,8 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/untilize/untilize_with_halo_op_v2.cpp \
 	tt_eager/tt_dnn/op_library/softmax/multi_core/softmax_op_multi_core.cpp \
 	tt_eager/tt_dnn/op_library/softmax/softmax_op.cpp \
+	tt_eager/tt_dnn/op_library/sdpa/multi_core/sdpa_op_multi_core.cpp \
+	tt_eager/tt_dnn/op_library/sdpa/sdpa_op.cpp \
 	tt_eager/tt_dnn/op_library/moreh_helper_functions.cpp \
 	tt_eager/tt_dnn/op_library/moreh_adam/moreh_adam.cpp \
 	tt_eager/tt_dnn/op_library/moreh_adam/moreh_adam_op.cpp \
@@ -168,6 +170,7 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_group_attn_matmul/multi_core_group_attn_matmul.cpp \
 	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_ssm_eltwise_mul/multi_core_ssm_eltwise_mul.cpp \
 	tt_eager/tt_dnn/op_library/operation.cpp \
+	tt_eager/tt_dnn/op_library/transformer_tms/multi_core_ssm_1d_sum_reduce/multi_core_ssm_1d_sum_reduce.cpp \
 	tt_eager/tt_dnn/op_library/run_operation.cpp \
 	tt_eager/tt_dnn/op_library/split/split_tiled.cpp \
 	tt_eager/tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.cpp \

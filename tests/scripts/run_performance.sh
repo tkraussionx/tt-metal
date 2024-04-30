@@ -162,7 +162,6 @@ main() {
         exit 1
     fi
 
-
     if [[ "$pipeline_type" == *"device_performance"* ]]; then
         run_device_perf_models "$test_marker"
         run_device_perf_ops "$test_marker"
