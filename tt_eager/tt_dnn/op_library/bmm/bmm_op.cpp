@@ -64,7 +64,7 @@ uint32_t _get_maximum_block_dim(int32_t block_dim, int32_t in0_block_w) {
     return 0;
 }
 
-bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_b, const DeviceComputeKernelConfig& compute_kernel_config) {
+bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_b, const DeviceComputeKernelConfig& compute_kernel_config, const CoreCoord& grid) {
     const auto& in_a_shape = input_tensor_a.get_legacy_shape();
     const auto& in_b_shape = input_tensor_b.get_legacy_shape();
 
@@ -107,7 +107,11 @@ bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_
         use_same_noc = check_thresholds(fp16_bfp8_lofi_threshold);
     }
 
-    tt::log_info("M: {}, K: {}, N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}", M, K, N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc);
+    if (input_tensor_a.shard_spec().has_value()) {
+        tt::log_info("M: {}, K: {}, N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}, or: {}, grid: {}", M, K, N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc, input_tensor_a.shard_spec().value().orientation, grid);
+    } else {
+        tt::log_info("M: {}, K: {}, N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}, or: interleaved, grid: {}", M, K, N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc, grid);
+    }
 
     return use_same_noc;
 }
@@ -1221,7 +1225,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                 );
             }
             else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
-                bool mcast_use_same_noc = _get_use_same_noc(input_tensor_a, input_tensor_b, this->compute_kernel_config);
+                bool mcast_use_same_noc = _get_use_same_noc(input_tensor_a, input_tensor_b, this->compute_kernel_config, program_config.compute_with_storage_grid_size);
 
                 return matmul_multi_core_reuse_mcast_2d_optimized(
                     input_tensor_a, input_tensor_b, bias, output_tensor,

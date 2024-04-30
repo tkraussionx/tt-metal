@@ -2591,12 +2591,12 @@ def run_bert_linear_batch8(
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
     bias_shape = [1, 1, N]
-    grid_size = (4, 8)
+    grid_size = (5, 8)
 
-    in0_block_h = M // grid_size[0] // 32
-    in0_block_w = K // grid_size[1] // 32
-    out_block_h = M // grid_size[0] // 32
-    out_block_w = N // grid_size[1] // 32
+    in0_block_h = M // grid_size[1] // 32
+    in0_block_w = K // grid_size[0] // 32
+    out_block_h = M // grid_size[1] // 32
+    out_block_w = N // grid_size[0] // 32
 
     out_subblock_h, out_subblock_w, _ = find_max_subblock(out_block_h, out_block_w)
 
@@ -2656,9 +2656,9 @@ def run_bert_linear_batch8(
         in0_t = ttl.tensor.interleaved_to_sharded(
             in0_t,
             grid_size,
-            [M // grid_size[0], K // grid_size[1]],
+            [M // grid_size[1], K // grid_size[0]],
             ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-            ttl.tensor.ShardOrientation.COL_MAJOR,
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
         )
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -2668,9 +2668,8 @@ def run_bert_linear_batch8(
         out_subblock_w=out_subblock_w,
         per_core_M=out_block_h,
         per_core_N=out_block_w,
-        transpose_mcast=True,
+        transpose_mcast=False,
         fused_activation=activation,
-        # mcast_use_same_noc=True,
         use_noc_vc=False,
     )
 
@@ -2754,7 +2753,7 @@ def run_bert_linear_batch8(
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation",
     [
-        (False, True, True, 128, 1280, 2560, None),
+        (False, True, True, 8192, 640, 320, None),
         # (False, True, True, 256, 256, 256, None),
         # (False, True, True, 256, 256, 512, None),
         # (False, True, True, 256, 256, 1024, None),

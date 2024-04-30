@@ -58,6 +58,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in2 = 2; // Sharded cb
     constexpr uint32_t in1_inplace_cb_id = 6;
     constexpr uint32_t cb_sync = 7;
+    constexpr uint32_t split_noc_cb_sync = 8;
 
     constexpr uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
     constexpr DataFormat in0_data_format = get_dataformat(cb_id_in0);

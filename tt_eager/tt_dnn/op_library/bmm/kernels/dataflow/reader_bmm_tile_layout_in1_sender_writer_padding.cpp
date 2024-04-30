@@ -94,8 +94,31 @@ void kernel_main() {
     };
     #endif
 
+    #ifdef SPLIT_IN0_MCAST
+        #ifdef FUSE_BIAS
+        constexpr uint32_t in0_split_block_num_tile_bytes = get_compile_time_arg_val(26);
+        constexpr uint32_t in0_split_mcast_receiver_semaphore = get_compile_time_arg_val(27);
+
+        const uint32_t in0_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(18);
+        const uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(19);
+        const uint32_t in0_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(20);
+        const uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(21);
+        const uint32_t is_in0_sender                      = get_arg_val<uint32_t>(22);
+        #else
+        constexpr uint32_t in0_split_block_num_tile_bytes = get_compile_time_arg_val(24);
+        constexpr uint32_t in0_split_mcast_receiver_semaphore = get_compile_time_arg_val(25);
+
+        const uint32_t in0_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(16);
+        const uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(17);
+        const uint32_t in0_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(18);
+        const uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(19);
+        const uint32_t is_in0_sender                      = get_arg_val<uint32_t>(20);
+        #endif
+    #endif
+
     constexpr uint32_t cb_id_in1 = 1;
     constexpr uint32_t cb_sync = 7;
+    constexpr uint32_t split_in0_mcast_cb_sync = 8;
     constexpr uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
     constexpr uint32_t in1_block_size_bytes = in1_block_num_tiles * in1_single_tile_size_bytes;
 
@@ -152,6 +175,18 @@ void kernel_main() {
         in1_mcast_dest_noc_end_x,
         in1_mcast_dest_noc_end_y,
         0);
+
+    #ifdef SPLIT_IN0_MCAST
+    const uint64_t in0_multicast_data_noc = get_noc_multicast_addr(
+        in0_mcast_dest_noc_end_x,
+        in0_mcast_dest_noc_end_y,
+        in0_mcast_dest_noc_start_x,
+        in0_mcast_dest_noc_start_y,
+        0);
+
+    uint64_t in0_mcast_receiver_semaphore_noc_addr = in0_multicast_data_noc | (uint64_t) in0_split_mcast_receiver_semaphore;
+    #endif
+
     #ifdef IN1_SHARDED
     uint64_t in1_start_address = get_write_ptr(cb_id_in1);
     #endif
@@ -215,6 +250,23 @@ void kernel_main() {
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            #endif
+
+            #ifdef SPLIT_IN0_MCAST
+            if (is_in0_sender) {
+                cb_reserve_back(in0_inplace_cb_id, in0_block_num_tiles);
+                cb_wait_front(cb_sync, 1);
+                uint32_t in1_start_address = get_write_ptr(in1_inplace_cb_id);
+                cb_push_back(in1_inplace_cb_id, in1_block_num_tiles);
+
+                uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
+
+                noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+
+                noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+
+                cb_pop_front(cb_sync, 1);
+            }
             #endif
             #endif
 

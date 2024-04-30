@@ -37,6 +37,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     bool untilize_out,
     bool mcast_use_same_noc, bool use_noc_vc
 ) {
+    bool mcast_split_noc = true;
+    uint32_t mcast_split_div = 2;
+
     TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
     tt_metal::Program program{};
 
@@ -186,6 +189,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     // Mcast args
     auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+
+    auto in0_split_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+
     auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
@@ -199,6 +205,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t in0_num_subblocks = (per_core_M/out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h*in0_block_w*in0_num_subblocks;
+    uint32_t in0_block_num_tile_bytes = in0_block_num_tiles * in0_single_tile_size;
+    if (mcast_split_noc) {
+        in0_block_num_tile_bytes = in0_block_num_tile_bytes / mcast_split_div;
+    }
 
     std::vector<uint32_t> in0_sender_compile_time_args;
 
@@ -213,7 +223,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         }
         in0_sender_compile_time_args = {
             (std::uint32_t)  in0_block_num_tiles, // in0_block_num_tiles
-            (std::uint32_t)  in0_block_num_tiles * in0_single_tile_size, // in0_block_size_bytes
+            (std::uint32_t)  in0_block_num_tile_bytes, // in0_block_size_bytes / 2
             // in0/in1 common args
             (std::uint32_t)  num_blocks, // num_blocks
             // in0 mcast args
@@ -229,10 +239,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)  (in0_block_w),
             // batch args
             (std::uint32_t)  B, // batch
-            // // in1
-            // (std::uint32_t)  in1_mcast_receiver_semaphore,
-            // (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
-            // (std::uint32_t)  per_core_N * in0_block_w * in1_single_tile_size // in1_block_size_bytes
         };
         if (mcast_use_same_noc) {
             in0_sender_compile_time_args.push_back(in1_mcast_receiver_semaphore);
@@ -308,6 +314,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in3_is_dram);
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  1);
     }
+    if (mcast_split_noc) {
+        in1_sender_writer_compile_time_args.push_back(in0_block_num_tile_bytes - in0_block_num_tile_bytes / mcast_split_div);
+        in1_sender_writer_compile_time_args.push_back(in0_split_mcast_receiver_semaphore);
+    }
     std::vector<uint32_t> in0_receiver_compile_time_args = {
             // in0 block args
             (std::uint32_t)  in0_block_w * per_core_M, // in0_block_num_tiles
@@ -349,6 +359,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     };
     if (bias_buffer != nullptr) {
         in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  per_core_N);
+    }
+    if (mcast_split_noc) {
+        in1_receiver_writer_compile_time_args.push_back(in0_block_num_tile_bytes - in0_block_num_tile_bytes / mcast_split_div);
+        in1_receiver_writer_compile_time_args.push_back(in0_split_mcast_receiver_semaphore);
     }
 
     std::map<string, string> mm_kernel_compute_in1_receiver_defines;
@@ -394,6 +408,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     }
     if (use_noc_vc) {
         mm_kernel_in1_sender_writer_defines["USE_NOC_VC"] = "1";
+    }
+    if (mcast_split_noc) {
+        mm_kernel_in1_sender_writer_defines["SPLIT_IN0_MCAST"] = "1";
+        mm_kernel_in0_sender_defines["SPLIT_IN0_MCAST"] = "1";
     }
 
     // if (in0_is_sharded) {
@@ -597,6 +615,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         tt_metal::CircularBufferConfig sync_cb_config = tt_metal::CircularBufferConfig(bfp8_b_single_tile_size, {{sync_cb_index, tt::DataFormat::Bfp8_b}})
             .set_page_size(sync_cb_index, bfp8_b_single_tile_size);
         auto cb_sync = tt_metal::CreateCircularBuffer(program, all_cores, sync_cb_config);
+    }
+
+    if (mcast_split_noc) {
+        uint32_t split_noc_sync_cb_index = 8;
+        tt_metal::CircularBufferConfig split_noc_sync_cb_config = tt_metal::CircularBufferConfig(bfp8_b_single_tile_size, {{split_noc_sync_cb_index, tt::DataFormat::Bfp8_b}})
+            .set_page_size(split_noc_sync_cb_index, bfp8_b_single_tile_size);
+        auto split_noc_cb_sync = tt_metal::CreateCircularBuffer(program, all_cores, split_noc_sync_cb_config);
     }
 
     // Parameters for last row, col, or block
@@ -833,6 +858,20 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     mm_in1_sender_writer_args.push_back((std::uint32_t)  bias_buffer->address());
                     mm_in1_sender_writer_args.push_back((std::uint32_t)  per_core_N * in1_idx); //in1_tensor_start_tile_id
                 }
+
+                // in0 mcast args
+                if (mcast_split_noc) {
+                    mm_in1_sender_writer_args.push_back(in0_mcast_start.x);
+                    mm_in1_sender_writer_args.push_back(in0_mcast_start.y);
+                    mm_in1_sender_writer_args.push_back(in0_mcast_end.x);
+                    mm_in1_sender_writer_args.push_back(in0_mcast_end.y);
+                    if (transpose_mcast) {
+                        mm_in1_sender_writer_args.push_back(core_idx_y == 0);
+                    } else {
+                        mm_in1_sender_writer_args.push_back(core_idx_x == 0);
+                    }
+                }
+
                 tt_metal::SetRuntimeArgs(program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args); // RISCV_1_default
                 writer_kernel_ids.push_back(mm_kernel_in1_sender_writer_id);
 
@@ -886,6 +925,19 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     mm_in1_receiver_writer_args.push_back(out_subblock_w);
                     mm_in1_receiver_writer_args.push_back(0);
                     mm_in1_receiver_writer_args.push_back(0);
+                }
+
+                // in0 mcast args
+                if (mcast_split_noc) {
+                    mm_in1_receiver_writer_args.push_back(in0_mcast_start.x);
+                    mm_in1_receiver_writer_args.push_back(in0_mcast_start.y);
+                    mm_in1_receiver_writer_args.push_back(in0_mcast_end.x);
+                    mm_in1_receiver_writer_args.push_back(in0_mcast_end.y);
+                    if (transpose_mcast) {
+                        mm_in1_receiver_writer_args.push_back(core_idx_y == 0);
+                    } else {
+                        mm_in1_receiver_writer_args.push_back(core_idx_x == 0);
+                    }
                 }
 
                 // left half
@@ -1019,11 +1071,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     uint32_t in1_single_tile_size = tt_metal::detail::TileSize(in1_data_format);
     tt_metal::Buffer *in0_buffer = a.buffer();
     tt_metal::Buffer *in1_buffer = b.buffer();
-
-    TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
-    if (in0_memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
-        log_info("block shard orientation: {}", a.shard_spec().value().orientation);
-    }
 
     if (bcast_batch)
         TT_FATAL(bshape[0]*bshape[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
