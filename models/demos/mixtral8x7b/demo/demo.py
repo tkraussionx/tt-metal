@@ -4,6 +4,7 @@
 import torch
 import json
 import tt_lib as ttl
+import pytest
 from loguru import logger
 from time import time
 import ttnn
@@ -84,10 +85,9 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
 
 
 @torch.no_grad()
-def run_mixtral_demo(user_input, batch_size, devices):
+def run_mixtral_demo(user_input, batch_size, devices, instruct_mode):
     assert batch_size == 32, "Batch size must be 32"
 
-    instruct_mode = False
     dtype = ttnn.bfloat8_b
 
     embed_on_host = True  # Do embedding and argmax on host. TODO Seeing bad output when on device
@@ -260,6 +260,16 @@ def run_mixtral_demo(user_input, batch_size, devices):
         )
 
 
-def test_demo(all_devices, user_input="models/demos/mixtral8x7b/reference/input_data.json"):
+@pytest.mark.timeout(10000)
+@pytest.mark.parametrize(
+    "input_prompts, instruct_weights",
+    [
+        ("models/demos/mixtral8x7b/demo/input_data.json", False),
+        ("models/demos/mixtral8x7b/demo/input_data_questions.json", True),
+    ],
+    ids=["general_weights", "instruct_weights"],
+)
+def test_mixtral8x7b_demo(all_devices, input_prompts, instruct_weights):
+    # def test_mixtral8x7b_demo(all_devices, user_input="models/demos/mixtral8x7b/reference/input_data.json", instruct_weights=False):
     devices = get_devices_for_t3000(all_devices, 8)
-    return run_mixtral_demo(user_input=user_input, batch_size=32, devices=devices)
+    return run_mixtral_demo(user_input=input_prompts, batch_size=32, devices=devices, instruct_mode=instruct_weights)
