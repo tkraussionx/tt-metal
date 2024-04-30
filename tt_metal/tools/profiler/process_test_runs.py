@@ -24,7 +24,7 @@ from tt_metal.tools.profiler.common import (
 )
 
 # RUN_TYPE = "runs_2min_apart_syncs"
-RUN_TYPE = "runs"
+RUN_TYPE = "runs_first_last_10ms_sync"
 
 lsCmd = subprocess.run(
     f"cd {TT_METAL_HOME / RUN_TYPE}; ls",
@@ -82,6 +82,7 @@ pd.options.display.max_rows = 2550
 # reg = LinearRegression().fit(X, y)
 
 
+finalReport = pd.DataFrame()
 for run in runsList:
     tracyCsv = ""
     logsFolder = TT_METAL_HOME / RUN_TYPE / run / ".logs"
@@ -156,6 +157,19 @@ for run in runsList:
         )
         testDF["original host device diff [ns]"] = testDF["tracy host time [ns]"] - testDF["tracy device time [ns]"]
         testDF["new host device diff [ns]"] = testDF["tracy host time [ns]"] - testDF["time[ns host synced]"]
+        finalReportTmp = pd.DataFrame()
+        finalReportTmp["C++ diff 1"] = [testDF.iloc[0]["original host device diff [ns]"]]
+        finalReportTmp["C++ diff 2"] = testDF.iloc[1]["original host device diff [ns]"]
+        finalReportTmp["Python diff 1"] = testDF.iloc[0]["new host device diff [ns]"]
+        finalReportTmp["Python diff 2"] = testDF.iloc[1]["new host device diff [ns]"]
+        finalReportTmp["frequency init"] = syncinfoDF.iloc[5]["frequency"] * 1e9
+        finalReportTmp["frequency init + dump"] = syncinfoDF.iloc[260]["frequency"] * 1e9
+        finalReportTmp["delay init"] = syncinfoDF.iloc[5]["delay"]
+        finalReportTmp["delay init + dump"] = syncinfoDF.iloc[260]["delay"]
 
-        print(deviceDF)
-        print(testDF)
+        finalReport = pd.concat([finalReport, finalReportTmp])
+
+        print(finalReportTmp)
+
+finalReport.reindex()
+finalReport.to_excel("final_report.xlsx")
