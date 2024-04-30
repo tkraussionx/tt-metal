@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "rkim/0-apr-11-1-27-1-ttkmd"
+      - "tpatel/t3k-1G"
 
 jobs:
   single-chip:
