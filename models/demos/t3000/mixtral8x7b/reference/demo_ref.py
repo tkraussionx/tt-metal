@@ -2,9 +2,9 @@ import torch
 from loguru import logger
 import json
 
-from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
-from models.demos.mixtral8x7b.reference.model import Transformer
-from models.demos.mixtral8x7b.reference.tokenizer import Tokenizer
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.t3000.mixtral8x7b.reference.model import Transformer
+from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 
 
 class Emb(torch.nn.Module):
