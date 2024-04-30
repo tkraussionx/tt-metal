@@ -124,6 +124,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     }, program_config);
 
     auto core_grid = CoreRange({0, 0}, {grid_size.x - 1, grid_size.y - 1});
+    auto sender_core_grid = CoreRange({0,0}, {7,0});
+    auto receiver_core_grid = CoreRange({0,1}, {7,7});
+
     uint32_t num_cores = grid_size.x * grid_size.y;
 
     TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
@@ -287,8 +290,15 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     log_debug("BALANCED_Q_PARALLEL: {}", balanced_q_parallel);
 
-    auto reader_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
+    auto reader_sender_kernels_id = CreateKernel(
+        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved_sender.cpp", sender_core_grid,
+        tt_metal::ReaderDataMovementConfig(
+            reader_compile_time_args,
+            defines
+    ));
+
+    auto reader_receiver_kernels_id = CreateKernel(
+        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved_receiver.cpp", receiver_core_grid,
         tt_metal::ReaderDataMovementConfig(
             reader_compile_time_args,
             defines
@@ -300,6 +310,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
             writer_compile_time_args,
             defines
     ));
+
 
     auto compute_kernels_id = CreateKernel(
         program, "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp", core_grid,
@@ -398,6 +409,13 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
     auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
 
+    // mcast args
+    auto k_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, core_grid, INVALID);
+    auto k_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, core_grid, INVALID);
+    auto v_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, core_grid, INVALID);
+    auto v_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, core_grid, INVALID);
+    uint32_t num_dests = 7; // Hardcoded: Each sender sends to 7 receivers
+
 
     uint32_t q_addr = q_buffer->address();
     uint32_t k_addr = k_buffer->address();
@@ -409,6 +427,14 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // Set reader rt args
     for (uint32_t i = 0; i < num_cores; ++i) {
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
+
+        CoreCoord top_receiver = {(std::size_t) core.x, (std::size_t) 1};
+        CoreCoord bottom_receiver = {(std::size_t) core.x, (std::size_t) 7};
+        auto top_receiver_core_physical = device->worker_core_from_logical_core(top_receiver);
+        auto bottom_receiver_core_physical = device->worker_core_from_logical_core(bottom_receiver);
+
+        CoreCoord sender_core = {core.x, 0};
+        auto sender_core_physical = device->worker_core_from_logical_core(sender_core);
 
         // log_debug("core: {} getting runtime args for idx {i}", core, i);
         uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
@@ -437,7 +463,21 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         log_debug("local_q_end: {}", local_q_end);
 
 
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+        bool is_sender = core.y == 0;
+        if (is_sender) {
+            log_debug("core: {} is sender", i);
+            log_debug("top_receiver_core_physical: {}, {}", top_receiver_core_physical.x, top_receiver_core_physical.y);
+            log_debug("bottom_receiver_core_physical: {}, {}", bottom_receiver_core_physical.x, bottom_receiver_core_physical.y);
+
+            SetRuntimeArgs(program, reader_sender_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end,
+                num_dests, k_mcast_sender_semaphore, k_mcast_receiver_semaphore, v_mcast_sender_semaphore, v_mcast_receiver_semaphore, (uint32_t)top_receiver_core_physical.x, (uint32_t)top_receiver_core_physical.y, (uint32_t)bottom_receiver_core_physical.x, (uint32_t)bottom_receiver_core_physical.y });
+        } else {
+            log_debug("core: {} is receiver", i);
+            log_debug("sender_core_physical: {}, {}", sender_core_physical.x, sender_core_physical.y);
+            SetRuntimeArgs(program, reader_receiver_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end,
+                num_dests, k_mcast_sender_semaphore, k_mcast_receiver_semaphore, v_mcast_sender_semaphore, v_mcast_receiver_semaphore, (uint32_t)sender_core_physical.x, (uint32_t)sender_core_physical.y });
+        }
+
         SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
         SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
     }
@@ -445,7 +485,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     auto override_runtime_arguments_callback = [
         num_cores,
         grid_size,
-        reader_kernels_id,
+        // reader_kernels_id,
         writer_kernels_id,
         compute_kernels_id,
         batch_per_core,
@@ -508,9 +548,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
             log_debug("local_q_end: {}", local_q_end);
 
 
-            SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            // SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            // SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            // SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
         }
 
 
