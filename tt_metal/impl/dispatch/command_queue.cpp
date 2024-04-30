@@ -1399,16 +1399,24 @@ void HWCommandQueue::enqueue_program(
         }
     });
 
-    auto command = EnqueueProgramCommand(this->id, this->device, program, this->manager, this->expected_num_workers_completed);
-    this->enqueue_command(command, blocking);
+    // Snapshot of expected workers from previous programs, used for dispatch_wait cmd generation.
+    uint32_t expected_workers_completed;
 
     if (this->manager.get_bypass_mode()) {
+        expected_workers_completed = this->trace_ctx->num_completion_worker_cores;
         this->trace_ctx->num_completion_worker_cores += program.program_transfer_info.num_active_cores;
         this->trace_ctx->owned_buffer_pool.insert(this->trace_ctx->owned_buffer_pool.end(), program.kg_buffers.begin(), program.kg_buffers.end());
         this->trace_ctx->owned_buffer_pool.insert(this->trace_ctx->owned_buffer_pool.end(), program.owned_buffer_pool.begin(), program.owned_buffer_pool.end());
     } else {
+        expected_workers_completed = this->expected_num_workers_completed;
         this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
     }
+
+    log_trace(tt::LogMetal, "Creating EnqueueProgramCommand (active_cores: {} bypass_mode: {} expected_workers_completed: {})",
+        program.program_transfer_info.num_active_cores, this->manager.get_bypass_mode(), expected_workers_completed);
+    auto command = EnqueueProgramCommand(this->id, this->device, program, this->manager, expected_workers_completed);
+    this->enqueue_command(command, blocking);
+
 }
 
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool clear_count) {
