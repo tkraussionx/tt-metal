@@ -634,10 +634,10 @@ Tensor bert_large_post_softmax_bmm(const Tensor &input_tensor_a, const Tensor &i
 
 CoreCoord get_falcon_matmul_grid_size(Device *device){
     CoreCoord grid_size = device->compute_with_storage_grid_size();
-    // TODO: Remove this once there are no more hangs on 8x8 (Issue #6795)
-    if (device->arch() == ARCH::WORMHOLE_B0 and grid_size.y >= 8){
-        grid_size.y = 7;
-    }
+    // // TODO: Remove this once there are no more hangs on 8x8 (Issue #6795)
+    // if (device->arch() == ARCH::WORMHOLE_B0 and grid_size.y >= 8){
+    //     grid_size.y = 7;
+    // }
     return grid_size;
 }
 
