@@ -5,9 +5,9 @@ import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
-from models.demos.mixtral8x7b.reference.model import RMSNorm
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
+from models.demos.t3000.mixtral8x7b.reference.model import RMSNorm
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,

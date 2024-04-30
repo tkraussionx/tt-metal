@@ -8,11 +8,11 @@ import pytest
 from loguru import logger
 from time import time
 import ttnn
-from models.demos.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, sample
-from models.demos.mixtral8x7b.tt.mixtral_model import TtTransformer
-from models.demos.mixtral8x7b.tt.mixtral_embedding import TtMixtralEmbedding
-from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
-from models.demos.mixtral8x7b.reference.tokenizer import Tokenizer
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, sample
+from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
+from models.demos.t3000.mixtral8x7b.tt.mixtral_embedding import TtMixtralEmbedding
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.utility_functions import get_devices_for_t3000
 
 
@@ -264,12 +264,11 @@ def run_mixtral_demo(user_input, batch_size, devices, instruct_mode):
 @pytest.mark.parametrize(
     "input_prompts, instruct_weights",
     [
-        ("models/demos/mixtral8x7b/demo/input_data.json", False),
-        ("models/demos/mixtral8x7b/demo/input_data_questions.json", True),
+        ("models/demos/t3000/mixtral8x7b/demo/input_data.json", False),
+        ("models/demos/t3000/mixtral8x7b/demo/input_data_questions.json", True),
     ],
     ids=["general_weights", "instruct_weights"],
 )
 def test_mixtral8x7b_demo(all_devices, input_prompts, instruct_weights):
-    # def test_mixtral8x7b_demo(all_devices, user_input="models/demos/mixtral8x7b/reference/input_data.json", instruct_weights=False):
     devices = get_devices_for_t3000(all_devices, 8)
     return run_mixtral_demo(user_input=input_prompts, batch_size=32, devices=devices, instruct_mode=instruct_weights)

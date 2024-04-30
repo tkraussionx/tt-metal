@@ -4,8 +4,8 @@
 
 import ttnn
 import torch
-from models.demos.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
+from models.demos.t3000.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
+from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
 
 
 class TtTransformer(torch.nn.Module):

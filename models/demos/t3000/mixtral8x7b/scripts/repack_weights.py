@@ -4,7 +4,7 @@
 
 import torch
 import argparse
-from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
 # Helper function to recreate Mixtral state dictionary.
