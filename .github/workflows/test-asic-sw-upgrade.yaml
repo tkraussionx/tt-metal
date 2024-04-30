@@ -36,5 +36,5 @@ jobs:
         timeout-minutes: 60
         run: |
           source build/python_env/bin/activate
-          tt-smi-metal -r 0 ; for i in {1..20}; do tt-smi-metal -r 0 && (timeout 10 ./build/test/tt_metal/unit_tests_fast_dispatch || true) ; tt-smi-metal -r 0; done; ./build/test/tt_metal/unit_tests_fast_dispatch
-          tt-smi-metal -r 0 ; for i in {1..20}; do tt-smi-metal -r 0 && (TT_METAL_SLOW_DISPATCH_MODE=1 timeout 10 ./build/test/tt_metal/unit_tests || true) ; tt-smi-metal -r 0; done; TT_METAL_SLOW_DISPATCH_MODE=1 ./build/test/tt_metal/unit_tests
+          tt-smi-metal -r 0,1,2,3 ; for i in {1..20}; do tt-smi-metal -r 0,1,2,3 && (timeout 10 ./build/test/tt_metal/unit_tests_fast_dispatch || true) ; tt-smi-metal -r 0,1,2,3; done; ./build/test/tt_metal/unit_tests_fast_dispatch
+          tt-smi-metal -r 0,1,2,3 ; for i in {1..20}; do tt-smi-metal -r 0,1,2,3 && (TT_METAL_SLOW_DISPATCH_MODE=1 timeout 10 ./build/test/tt_metal/unit_tests || true) ; tt-smi-metal -r 0,1,2,3; done; TT_METAL_SLOW_DISPATCH_MODE=1 ./build/test/tt_metal/unit_tests
