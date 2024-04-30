@@ -199,11 +199,11 @@ namespace kernel_profiler{
 
     PROFILER_INLINE void mark_BR_fw_first_start()
     {
-        uint32_t time_L = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
-        uint32_t time_H = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
+        //uint32_t time_L = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
+        //uint32_t time_H = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
 
-        profiler_control_buffer[FW_RESET_L] = time_L;
-        profiler_control_buffer[FW_RESET_H] = time_H;
+        //profiler_control_buffer[FW_RESET_L] = time_L;
+        //profiler_control_buffer[FW_RESET_H] = time_H;
     }
 
     inline __attribute__((always_inline)) void risc_finished_profiling()

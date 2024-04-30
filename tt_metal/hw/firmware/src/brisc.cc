@@ -276,45 +276,6 @@ inline void wait_ncrisc_trisc()
     DEBUG_STATUS('N', 'T', 'D');
 }
 
-void sync_loop()
-{
-    if (my_x[0] == 1 && my_y[0] == 1)
-    {
-        volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
-        volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
-        volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
-
-        uint32_t syncTimeBufferIndex = kernel_profiler::ID_HH;
-
-        while ( syncTimeBufferIndex < 2) {
-            uint32_t deviceTime = p_reg[0];
-
-            uint32_t hostTime = profiler_control_buffer[kernel_profiler::FW_RESET_L];
-            if (hostTime > 0)
-            {
-                briscBuffer[syncTimeBufferIndex++] = p_reg[1];
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = hostTime;
-                profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
-            }
-        }
-
-        while ( syncTimeBufferIndex < 502) {
-            uint32_t deviceTime = p_reg[0];
-
-            uint32_t hostTime = profiler_control_buffer[kernel_profiler::FW_RESET_L];
-            if (hostTime > 0)
-            {
-                briscBuffer[syncTimeBufferIndex++] = deviceTime;
-                briscBuffer[syncTimeBufferIndex++] = hostTime;
-                profiler_control_buffer[kernel_profiler::FW_RESET_L] = 0;
-            }
-        }
-    }
-}
-
-
 int main() {
 
     DEBUG_STATUS('I');
@@ -339,12 +300,7 @@ int main() {
 
     mailboxes->launch.run = RUN_MSG_DONE;
 
-    sync_loop();
-
-    int syncCount = 0;
-
     while (1) {
-        syncCount ++;
         init_sync_registers();
         assert_just_ncrisc_reset();
 
@@ -392,10 +348,6 @@ int main() {
                 uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
             }
-        }
-        if (syncCount == 2)
-        {
-            sync_loop();
         }
     }
 

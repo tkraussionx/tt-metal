@@ -405,7 +405,7 @@ void DeviceProfiler::dumpResults (
         {
             timeShift = smallest_timestamp;
             frequency = device_core_frequency/1000.0;
-            cpuTime = 0;
+            cpuTime = TracyGetCpuTime();
         }
 
         for (const auto &worker_core : worker_cores) {

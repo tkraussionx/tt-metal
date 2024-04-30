@@ -41,15 +41,34 @@ std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
 uint64_t smallestHostime = 0;
 
-void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
+void InitTimeSync(Device *device, CoreCoord logical_core, bool doHeader)
 {
+    auto core = device->worker_core_from_logical_core(logical_core);
+    constexpr uint16_t sampleCount = 250;
+    auto device_id = device->id();
+    tt_metal::Program program = tt_metal::CreateProgram();
+
+    std::map<string, string> kernel_defines = {
+        {"SAMPLE_COUNT", std::to_string(sampleCount)},
+    };
+
+    tt_metal::KernelHandle brisc_kernel = tt_metal::CreateKernel(
+        program, "tt_metal/tools/profiler/sync/sync_kernel.cpp",
+        logical_core,
+        tt_metal::DataMovementConfig{
+            .processor = tt_metal::DataMovementProcessor::RISCV_0,
+            .noc = tt_metal::NOC::RISCV_0_default,
+            .defines = kernel_defines}
+        );
+
+    EnqueueProgram(device->command_queue(), program, false);
+
     std::vector<uint32_t> time_sync_buffer(8, 0);
 
     std::filesystem::path output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
     std::filesystem::path log_path = output_dir / "sync_device_info.csv";
     std::ofstream log_file;
 
-    constexpr uint16_t sampleCount = 250;
     int64_t writeSum = 0;
 
     const auto FREQ = std::getenv("TT_METAL_PROFILER_FREQ");
@@ -82,6 +101,7 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         writeTimes[i] = (TracyGetCpuTime() - writeStart);
     }
 
+    Finish(device->command_queue());
     if ((smallestHostime == 0) || (smallestHostime > hostStartTime))
     {
         smallestHostime = hostStartTime;
@@ -95,7 +115,7 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
     vector<std::uint32_t> sync_times = tt::llrt::read_hex_vec_from_core(
             device_id,
             core,
-            PROFILER_L1_BUFFER_BR,
+            PROFILER_L1_BUFFER_BR + kernel_profiler::CUSTOM_MARKERS * sizeof(uint32_t),
             (sampleCount + 1) * 2 * sizeof(uint32_t));
 
     uint32_t preDeviceTime = 0;
@@ -212,10 +232,7 @@ void InitDeviceProfiler(Device *device){
             if (firstInit.exchange(false))
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
-                InitTimeSync (device_id, {1,1}, true);
-                //std::this_thread::sleep_for(std::chrono::milliseconds(120000));
-                //InitTimeSync (device_id, {1,1}, false);
-                //InitTimeSync (device_id, {9,9}, false);
+                InitTimeSync (device, {0,0}, true);
             }
             else
             {
@@ -310,7 +327,7 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
-            if (free_buffers) InitTimeSync (device_id, {1,1}, false);
+            if (free_buffers) InitTimeSync (device, {0,0}, false);
             tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
             tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
             if (free_buffers)
