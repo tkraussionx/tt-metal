@@ -93,7 +93,7 @@ def test_falcon_mlp(
     )
 
     ttnn_model = TtFalconMLP(model_config, parameters)
-    for i in range(20):
+    for i in range(200):
         ttnn_input = ttnn.from_torch(
             torch_input,
             dtype=model_config["DEFAULT_DTYPE"],
@@ -103,13 +103,13 @@ def test_falcon_mlp(
         )
         ttnn_output = ttnn_model(ttnn_input)
 
-    passed, pcc = assert_with_pcc(
-        torch_output,
-        ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
-            torch_output.dtype
-        ),
-        expected_pcc,
-    )
+        passed, pcc = assert_with_pcc(
+            torch_output,
+            ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
+                torch_output.dtype
+            ),
+            expected_pcc,
+        )
     logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
 
     for device in device_mesh.get_device_ids():

@@ -36,6 +36,7 @@ namespace op_profiler {
 
 
 #if defined(TRACY_ENABLE)
+    inline std::mutex cache_mtx;
     inline std::unordered_map<uint32_t, std::unordered_map<tt::tt_metal::operation::Hash, std::string>> cached_ops {};
     inline stack<TracyCZoneCtx> call_stack;
 #endif
@@ -275,7 +276,7 @@ namespace op_profiler {
             const std::vector<std::optional<const tt::tt_metal::Tensor>>& optional_input_tensors,
             OutputTensors& output_tensors)
     {
-
+        std::scoped_lock<std::mutex> lock(cache_mtx);
         const bool useCachedOps = std::getenv("TT_METAL_PROFILER_NO_CACHE_OP_INFO") == nullptr;
         if (
                 !useCachedOps ||\

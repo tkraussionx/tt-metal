@@ -64,7 +64,7 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 )
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 20), (False, 1)),
+    ((True, 200), (False, 1)),
 )
 def test_falcon_causal_lm(
     device_mesh,
@@ -209,8 +209,12 @@ def test_falcon_causal_lm(
 
     for i in range(num_layers):
         tt_layer_pres = (
-            ttnn.to_torch(tt_layer_present[i][0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)),
-            ttnn.to_torch(tt_layer_present[i][1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)),
+            ttnn.to_torch(
+                tt_layer_present[i][0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh
+            ),
+            ttnn.to_torch(
+                tt_layer_present[i][1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh
+            ),
         )
         if llm_mode == "prefill":
             pytorch_layer_pres = pytorch_layer_present[i]

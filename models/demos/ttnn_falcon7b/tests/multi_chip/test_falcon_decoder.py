@@ -45,7 +45,7 @@ def torch_model():
     return torch_model
 
 
-@pytest.mark.skip("#7841: Possible hang, need to investigate on t3k")
+# @pytest.mark.skip("#7841: Possible hang, need to investigate on t3k")
 @pytest.mark.parametrize(
     "llm_mode, device_batch_size, seq_len, kv_cache_len",
     (
@@ -172,8 +172,8 @@ def test_falcon_decoder(
         )
         tt_out = ttnn.to_torch(
             tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
-        )  # .squeeze(1)
-        tt_out = torch.cat(tt_out, shard_dim).squeeze(1)
+        ).squeeze(1)
+        # tt_out = torch.cat(tt_out, shard_dim).squeeze(1)
         # print(len(tt_out))
         # exit(0)
         # tt_layer_present = (
