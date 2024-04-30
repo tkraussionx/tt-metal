@@ -96,6 +96,7 @@ Args:
         py::arg("layout") = std::nullopt,
         py::arg("dtype") = std::nullopt,
         py::arg("memory_config") = std::nullopt,
+        py::arg("device") = std::nullopt,
         R"doc(
 Changes the layout of the tensor. Optionally, changes dtype and memory config.
 

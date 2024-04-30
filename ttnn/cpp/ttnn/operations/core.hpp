@@ -217,7 +217,8 @@ inline Tensor to_layout(
     const ttnn::Tensor& tensor_arg,
     ttnn::Layout layout,
     std::optional<ttnn::DataType> dtype,
-    std::optional<ttnn::MemoryConfig> memory_config) {
+    std::optional<ttnn::MemoryConfig> memory_config,
+    DeviceMesh* device) {
     if (tensor_arg.get_layout() == layout) {
         if (dtype.has_value() and dtype.value() != tensor_arg.get_dtype()) {
             tt::log_warning(
@@ -331,11 +332,11 @@ inline Tensor to_layout(
     } else {
         TT_ASSERT(not dtype.has_value(), "dtype cannot be specified when converting layout on host!");
         if (not requires_padding_change(layout, tensor.get_shape())) {
-            return tensor.to(layout);
+            return tensor.to(layout, device);
 
         } else if (layout == ttnn::ROW_MAJOR_LAYOUT) {
             tensor = unsqueeze_to_4D(tensor);
-            tensor = tensor.to(layout);
+            tensor = tensor.to(layout, device);
             tensor = tensor.unpad_from_tile(tensor.get_shape().value().without_padding());
             return reshape(tensor, ttnn::Shape(tt::tt_metal::Shape{output_shape}));
 

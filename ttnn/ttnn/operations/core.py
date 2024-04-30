@@ -342,8 +342,6 @@ def to_torch(
         tensor([[-0.3008, -0.8438,  0.3242],
                 [ 0.9023, -0.5820,  0.5312]], dtype=torch.bfloat16)
     """
-    # if mesh_composer:
-    #     return mesh_composer.compose(tensor)
 
     if ttnn.is_tensor_storage_on_device(tensor):
         tensor = tensor.cpu(False)
@@ -357,17 +355,17 @@ def to_torch(
     shape_without_tile_padding = tuple(tensor.shape)
     tensor = tensor.reshape(tensor.shape.with_tile_padding().value)
 
-    tensors = ttnn.get_device_tensors(tensor)
-    for tensor in tensors:
-        torch_tensors.append(tensor.to_torch())
-    return torch_tensors
+    if mesh_composer:
+        tensors = ttnn.get_device_tensors(tensor)
+        for tensor in tensors:
+            torch_tensors.append(tensor.to_torch())
+        return torch.cat(torch_tensors, dim=mesh_composer.concat_dim)
 
     if tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE:
         raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch.Tensor!")
     if tensor.get_layout() != ttnn.ROW_MAJOR_LAYOUT:
         raise RuntimeError("ttnn.Tensor has to be in ROW_MAJOR Layout to be converted to torch.Tensor")
     tensor = tensor.to_torch()
-
     slices = [slice(None, x) for x in shape_without_tile_padding]
     tensor = tensor[slices]
 
