@@ -107,7 +107,6 @@ void reduce_c() {
             reduce_tile<pool_type, reduce_dim>(in0_cb, scale_cb, i*cols+j, 0, reduce_dst_idx);
         }
 
-        cb_reserve_back(out_cb, 1);
         pack_tile(reduce_dst_idx, out_cb);
         release_dst(tt::DstMode::Half);
     }
@@ -123,14 +122,23 @@ void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     recip_tile_init();
 
     cb_wait_front(in_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; ++i) {
+    constexpr uint32_t dst_size = STATS_GRANULARITY;
+    const uint32_t granularity = num_tiles >> LOG2_STATS_GRANULARITY;
+    for (uint32_t g = 0; g < granularity; ++g) {
         acquire_dst(tt::DstMode::Half);
-        copy_tile(in_cb, 0, 0);
-        cb_pop_front(in_cb, 1);
-        recip_tile(0);
-        cb_reserve_back(in_cb, 1);
-        pack_tile(0, in_cb);
-        cb_push_back(in_cb, 1);
+        for (uint32_t t = 0; t < dst_size; ++t) {
+            copy_tile(in_cb, t, t);
+            recip_tile(t);
+        }
+        // copy_tile(in_cb, 0, 0);
+        cb_pop_front(in_cb, dst_size);
+        // recip_tile(0);
+        cb_reserve_back(in_cb, dst_size);
+        for (uint32_t t = 0; t < dst_size; ++t) {
+            pack_tile(t, in_cb);
+        }
+        // pack_tile(0, in_cb);
+        cb_push_back(in_cb, dst_size);
         release_dst(tt::DstMode::Half);
     }
 }
@@ -176,18 +184,25 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
     // Postcondition: in0_cb has rows*cols produced
     // Postcondition: in1_cb has rows consumed
 
+    constexpr uint32_t dst_tiles = DHT_GRANULARITY;
+    const uint32_t granularity = cols >> LOG2_DHT_GRANULARITY;
+
     uint32_t num_tiles = rows * cols;
     mul_bcast_cols_init_short(in0_cb, in1_cb);
     cb_wait_front(in0_cb, num_tiles);
     cb_wait_front(in1_cb, rows);
     for (uint32_t i = 0; i < rows; ++i) {
-        for (uint32_t j = 0; j < cols; ++j) {
+        for (uint32_t g = 0; g < granularity; ++g) {
             acquire_dst(tt::DstMode::Half);
-            mul_tiles_bcast_cols(in0_cb, in1_cb, 0, i, 0);
-            cb_pop_front(in0_cb, 1);
-            cb_reserve_back(in0_cb, 1);
-            pack_tile(0, in0_cb);
-            cb_push_back(in0_cb, 1);
+            for (uint32_t j = 0; j < dst_tiles; ++j) {
+                mul_tiles_bcast_cols(in0_cb, in1_cb, j, i, j);
+            }
+            cb_pop_front(in0_cb, dst_tiles);
+            cb_reserve_back(in0_cb, dst_tiles);
+            for (uint32_t j = 0; j < dst_tiles; ++j) {
+                pack_tile(j, in0_cb);
+            }
+            cb_push_back(in0_cb, dst_tiles);
             release_dst(tt::DstMode::Half);
         }
     }
@@ -222,45 +237,45 @@ void mul_block_bcast_scalar_inplace() {
     }
 }
 
-void add_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb and in1_cb have num_tiles produced
-    // Postcondition: in0_cb has num_tiles produced
-    // Postcondition: in1_cb has num_tiles consumed
+// void add_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
+//     // Precondition: in0_cb and in1_cb have num_tiles produced
+//     // Postcondition: in0_cb has num_tiles produced
+//     // Postcondition: in1_cb has num_tiles consumed
 
-    add_tiles_init();
-    cb_wait_front(in0_cb, num_tiles);
-    cb_wait_front(in1_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; i++) {
-        acquire_dst(tt::DstMode::Half);
-        add_tiles(in0_cb, in1_cb, 0, i, 0);
-        cb_pop_front(in0_cb, 1);
-        cb_reserve_back(in0_cb, 1);
-        pack_tile(0, in0_cb);
-        cb_push_back(in0_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
+//     add_tiles_init();
+//     cb_wait_front(in0_cb, num_tiles);
+//     cb_wait_front(in1_cb, num_tiles);
+//     for (uint32_t i = 0; i < num_tiles; i++) {
+//         acquire_dst(tt::DstMode::Half);
+//         add_tiles(in0_cb, in1_cb, 0, i, 0);
+//         cb_pop_front(in0_cb, 1);
+//         cb_reserve_back(in0_cb, 1);
+//         pack_tile(0, in0_cb);
+//         cb_push_back(in0_cb, 1);
+//         release_dst(tt::DstMode::Half);
+//     }
 
-    cb_pop_front(in1_cb, num_tiles);
-}
+//     cb_pop_front(in1_cb, num_tiles);
+// }
 
-void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
-    // Precondition: in0_cb and in1_cb have num_tiles produced
-    // Postcondition: in0_cb has num_tiles produced
-    // Postcondition: in1_cb has num_tiles produced
+// void mul_block_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t num_tiles) {
+//     // Precondition: in0_cb and in1_cb have num_tiles produced
+//     // Postcondition: in0_cb has num_tiles produced
+//     // Postcondition: in1_cb has num_tiles produced
 
-    mul_tiles_init();
-    cb_wait_front(in0_cb, num_tiles);
-    cb_wait_front(in1_cb, num_tiles);
-    for (uint32_t i = 0; i < num_tiles; i++) {
-        acquire_dst(tt::DstMode::Half);
-        mul_tiles(in0_cb, in1_cb, 0, i, 0);
-        cb_pop_front(in0_cb, 1);
-        cb_reserve_back(in0_cb, 1);
-        pack_tile(0, in0_cb);
-        cb_push_back(in0_cb, 1);
-        release_dst(tt::DstMode::Half);
-    }
-}
+//     mul_tiles_init();
+//     cb_wait_front(in0_cb, num_tiles);
+//     cb_wait_front(in1_cb, num_tiles);
+//     for (uint32_t i = 0; i < num_tiles; i++) {
+//         acquire_dst(tt::DstMode::Half);
+//         mul_tiles(in0_cb, in1_cb, 0, i, 0);
+//         cb_pop_front(in0_cb, 1);
+//         cb_reserve_back(in0_cb, 1);
+//         pack_tile(0, in0_cb);
+//         cb_push_back(in0_cb, 1);
+//         release_dst(tt::DstMode::Half);
+//     }
+// }
 
 template<uint32_t out_cb, uint32_t in1_cb, uint32_t in2_cb, uint32_t num_tiles>
 void add_mul_block_inplace() {
@@ -333,17 +348,25 @@ void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
 
     copy_tile_to_dst_init_short(in_cb); // TODO: use correct index for every init call
 
+    const uint32_t dst_tiles = STATS_GRANULARITY;
+    const uint32_t granularity = num_tiles >> LOG2_STATS_GRANULARITY;
     cb_wait_front(in_cb, num_tiles);
     cb_reserve_back(out_cb, num_tiles);
-
-    for (uint32_t i = 0; i < num_tiles; i++) {
+    uint32_t start_dst_index = 0;
+    uint32_t start_tile_index = 0;
+    for (uint32_t i = 0; i < granularity; i++) {
         acquire_dst(tt::DstMode::Half);
-        copy_tile(in_cb, i, 0/*dst*/);
-        pack_tile(0, out_cb);
+        // copy_tile(in_cb, i, 0/*dst*/);
+        copy_block_matmul_partials(in_cb, start_tile_index, start_dst_index, dst_tiles);
+        // start_tile_index += dst_tiles;
+        cb_pop_front(in_cb, dst_tiles);
+        uint32_t start_dst_index_pack = 0;
+        matmul_pack_tile(start_dst_index_pack, out_cb, dst_tiles);
+        cb_push_back(out_cb, dst_tiles);
         release_dst(tt::DstMode::Half);
     }
-    cb_push_back(out_cb, num_tiles);
-    cb_pop_front(in_cb, num_tiles);
+    // cb_push_back(out_cb, num_tiles);
+    // cb_pop_front(in_cb, num_tiles);
 }
 
 void matmul_blocks(const uint32_t& in0_cb, const uint32_t& in1_cb, const uint32_t& out_cb, const uint32_t& M, const uint32_t& N, const uint32_t& K, const uint32_t& num_blocks, const uint32_t& in0_num_subblocks, const uint32_t& in1_num_subblocks,
@@ -497,6 +520,7 @@ void MAIN {
 
                 // loop while k_low < q_high
                 for (uint32_t k_chunk = 0; (k_chunk * Sk_chunk_t) < q_high_idx; ++k_chunk) {
+                    PACK(DeviceZoneScopedN("K chunk"));
                     const uint32_t k_low_idx = k_chunk * Sk_chunk_t;
                     const uint32_t k_high_idx = k_low_idx + Sk_chunk_t;
 
