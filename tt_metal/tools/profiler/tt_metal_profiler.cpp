@@ -39,6 +39,7 @@ namespace detail {
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
 std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
+uint64_t smallestHostime = 0;
 
 void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
 {
@@ -81,6 +82,11 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         writeTimes[i] = (TracyGetCpuTime() - writeStart);
     }
 
+    if ((smallestHostime == 0) || (smallestHostime > hostStartTime))
+    {
+        smallestHostime = hostStartTime;
+    }
+
     for (auto writeTime : writeTimes)
     {
         writeSum += writeTime;
@@ -119,7 +125,7 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         uint32_t hostTime = sync_times[i + 1] + writeTimes[i/2 - 1];
         if (hostTime < preHostTime) hostStartTime_H ++;
         preHostTime = hostTime;
-        uint64_t hostTimeLarge = hostStartTime - tracyBaseTime + ((uint64_t(hostStartTime_H) << 32) | hostTime);
+        uint64_t hostTimeLarge = hostStartTime - smallestHostime + ((uint64_t(hostStartTime_H) << 32) | hostTime);
 
         deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
 
@@ -134,25 +140,28 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
         preHostTimeLarge = hostTimeLarge;
     }
 
-    double hostSum = 0.0;
-    double deviceSum = 0.0;
-    double hostSquaredSum = 0.0;
-    double hostDeviceProductSum = 0.0;
+    double hostSum = 0;
+    double deviceSum = 0;
+    double hostSquaredSum = 0;
+    double hostDeviceProductSum = 0;
 
     for (auto& deviceHostTime : deviceHostTimePair)
     {
         double deviceTime = deviceHostTime.first;
-        double hostTime = (double) deviceHostTime.second  * tracyToSecRatio;
+        double hostTime = deviceHostTime.second;
 
         deviceSum += deviceTime;
         hostSum += hostTime;
         hostSquaredSum += (hostTime * hostTime);
         hostDeviceProductSum += (hostTime * deviceTime);
     }
-    double deviceTimeMean = deviceSum / deviceHostTimePair.size();
-    double hostTimeMean = hostSum / deviceHostTimePair.size();
 
-    double frequencyFit = (hostDeviceProductSum - hostSum * deviceTimeMean) / (hostSquaredSum - hostSum * hostTimeMean);
+    uint16_t accumulateSampleCount = deviceHostTimePair.size();
+
+    double deviceTimeMean = deviceSum / accumulateSampleCount;
+    double hostTimeMean = hostSum / accumulateSampleCount;
+
+    double frequencyFit = (hostDeviceProductSum * accumulateSampleCount - hostSum * deviceSum)  / ((hostSquaredSum * accumulateSampleCount - hostSum * hostSum) * tracyToSecRatio);
 
     double delay = deviceTimeMean - frequencyFit * hostTimeMean;
 
@@ -172,7 +181,7 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
                 deviceHostTimePair[i].second,
                 (double) deviceHostTimePair[i].second  * tracyToSecRatio,
                 writeTimes[i - init],
-                hostStartTime,
+                smallestHostime,
                 delay,
                 frequencyFit,
                 tracyToSecRatio,
@@ -180,11 +189,11 @@ void InitTimeSync(int device_id, CoreCoord core, bool doHeader)
                 )
             << std::endl;
     }
-    std::cout << fmt::format ("c:{},g:{},f:{}",hostStartTime, delay, frequencyFit) << std::endl;
+    std::cout << fmt::format ("c:{},g:{},f:{}",smallestHostime, delay, frequencyFit) << std::endl;
 
 
-    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(hostStartTime, delay, frequencyFit));
-    tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(hostStartTime, delay, frequencyFit);
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(smallestHostime, delay, frequencyFit));
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(smallestHostime, delay, frequencyFit);
 }
 
 
