@@ -32,7 +32,7 @@ class Emb(torch.nn.Module):
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 127, 511),
+    (1, 10, 127, 511),
 )
 def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds):
     pcc = 0.99

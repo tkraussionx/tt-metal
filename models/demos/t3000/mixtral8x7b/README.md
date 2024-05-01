@@ -26,9 +26,9 @@ mkdir <weight_cache_dir>
 
 2. Set up environment variables:
 ```
-export DEFAULT_CKPT_DIR=<repacked_output_dir>
-export DEFAULT_TOKENIZER_PATH=<path_to_tokenizer_dir>
-export DEFAULT_CACHE_PATH=<weights_cache_dir>
+export MIXTRAL_CKPT_DIR=<repacked_output_dir>
+export MIXTRAL_TOKENIZER_PATH=<path_to_tokenizer_dir>
+export MIXTRAL_CACHE_PATH=<weights_cache_dir>
 ```
 
 Note that the cached weights folder structure will contain the general and instruct cached weights in separate directories, like so:

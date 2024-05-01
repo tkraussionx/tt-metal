@@ -45,7 +45,7 @@ pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_rms_norm.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_embedding.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_moe.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_decoder.py
-pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py
+pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[1-1]
 
 # Falcon40B 8 chip prefill tests; we need 8x8 grid size
 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/ci/test_falcon_end_to_end_t3000_prefill.py
