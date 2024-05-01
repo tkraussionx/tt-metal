@@ -78,7 +78,7 @@ class Conv2d:
 
         assert dilation_h == 1, f"Only convs with dilation == 1 supported. Found dilation_h={dilation_h}"
         assert dilation_w == 1, f"Only convs with dilation == 1 supported. Found dilation_w={dilation_w}"
-        assert groups == 1, "Only convs with groups == 1 supported"
+        # assert groups == 1, "Only convs with groups == 1 supported"
         sliding_window_op_params = SlidingWindowOpParams(
             stride_h=stride_h,
             stride_w=stride_w,
@@ -120,6 +120,7 @@ class Conv2d:
             compute_kernel_config=compute_kernel_config,
             use_dram_for_matmul=use_dram_for_matmul,
             output_layout=output_layout,
+            groups=groups,
         )
         self.batch_size = batch_size
         self.input_height = input_height

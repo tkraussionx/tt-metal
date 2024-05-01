@@ -382,6 +382,7 @@ class TTPyCompositeConv(TTPyOp):
         compute_kernel_config=None,
         output_layout=ttl.tensor.Layout.TILE,
         use_dram_for_matmul=False,
+        groups=1,
     ):
         fp32_accum = (
             compute_kernel_config
@@ -531,7 +532,7 @@ class TTPyCompositeConv(TTPyOp):
             pad_h,
             pad_w,
             1,
-            1,
+            groups,
         ]
         conv_reader_indices = None
         if not self.use_matmul_for_1x1_conv:
@@ -726,10 +727,10 @@ class TTPyCompositeConv(TTPyOp):
         assert len(conv_params) == 10
         K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
 
-        assert dilation == 1 and groups == 1
+        assert dilation == 1
         assert padded_input_channels >= C
         if not using_parameters_cache:
-            weights_shape = [K, C, R, S]
+            weights_shape = [K, C // groups, R, S]
             weights_channels_padded_shape = [
                 _nearest_32(K),
                 padded_input_channels,

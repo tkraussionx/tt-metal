@@ -14,7 +14,7 @@ def trace_conv_to_generate_data_top_left_indices_and_pad_metadata(conv_params, i
     output_channels, input_channels, filter_h, filter_w, stride_h, stride_w, pad_h, pad_w, dilation, groups = [
         conv_params[i] for i in range(10)
     ]
-    assert dilation == 1 and groups == 1
+    assert dilation == 1
     assert len(input_nchw_shape) == 4
     input_n, input_c, input_h, input_w = [input_nchw_shape[i] for i in range(4)]
 
