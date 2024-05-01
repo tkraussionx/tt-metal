@@ -489,26 +489,44 @@ Tensor Tensor::extract_shard(const uint32_t & core_id) const{
 
 Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
     ZoneScoped;
-    auto all_workers = device_mesh->get_devices();
-    auto workers = std::vector<Device*>(all_workers.begin(), all_workers.begin() + num_buffers_in_tensor(*this));
-    TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
-    Tensor tensor_modified_layout = Tensor({}, workers.size());
-    for (auto worker : workers) {
-        worker->push_work([*this, tensor_modified_layout, target_layout, worker] () mutable {
-            TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST&& "Bring tensor to host before converting to target layout");
-            auto shard = get_shard_for_device(*this, worker);
+    if (device_mesh) {
+        auto all_workers = device_mesh->get_devices();
+        auto workers = std::vector<Device*>(all_workers.begin(), all_workers.begin() + num_buffers_in_tensor(*this));
+        TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
+        Tensor tensor_modified_layout = Tensor({}, workers.size());
+        for (auto worker : workers) {
+            worker->push_work([*this, tensor_modified_layout, target_layout, worker] () mutable {
+                TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST&& "Bring tensor to host before converting to target layout");
+                auto shard = get_shard_for_device(*this, worker);
+                shard = tensor_impl::to_layout_wrapper(shard, target_layout);
+                insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout);
+                if (not (worker->id())) {
+                    tensor_modified_layout.set_shape(this->get_shape());
+                    tensor_modified_layout.set_dtype(this->get_dtype());
+                    tensor_modified_layout.set_layout(target_layout);
+                }
+                tensor_modified_layout.set_populated(worker);
+            });
+        }
+        return tensor_modified_layout;
+    } else {
+        TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST&& "Bring tensor to host before converting to target layout");
+        uint32_t num_buffers = std::get<tt::tt_metal::MultiDeviceHostStorage>(this->get_storage()).num_buffers();
+        Tensor tensor_modified_layout = Tensor({}, num_buffers);
+        for (uint32_t buf_idx = 0; buf_idx < num_buffers; buf_idx++) {
+            auto host_storage = std::get<tt::tt_metal::MultiDeviceHostStorage>(this->get_storage());
+            auto shard_shape = host_storage.get_tensor_shape_at_idx(buf_idx);
+            auto shard_buffer = host_storage.get_buffer_at_idx(buf_idx);
+            Tensor shard = Tensor{OwnedStorage{shard_buffer}, shard_shape, this->get_dtype(), this->get_layout()};
             shard = tensor_impl::to_layout_wrapper(shard, target_layout);
-            // std::cout << "Converting layout to: " << static_cast<int>(target_layout) << std::endl;
-            insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout);
-            if (not (worker->id())) {
-                tensor_modified_layout.set_shape(this->get_shape());
-                tensor_modified_layout.set_dtype(this->get_dtype());
-                tensor_modified_layout.set_layout(target_layout);
-            }
-            tensor_modified_layout.set_populated(worker);
-        });
+            std::get<MultiDeviceHostStorage>(tensor_modified_layout.tensor_attributes->storage).insert_buffer_and_shape_at_idx(buf_idx, std::get<OwnedStorage>(shard.get_storage()).buffer, shard.get_legacy_shape());
+        }
+        tensor_modified_layout.set_shape(this->get_shape());
+        tensor_modified_layout.set_dtype(this->get_dtype());
+        tensor_modified_layout.set_layout(target_layout);
+        tensor_modified_layout.set_populated();
+        return tensor_modified_layout;
     }
-    return tensor_modified_layout;
 }
 
 Tensor Tensor::to(Layout target_layout, Device* worker) const {

@@ -348,7 +348,7 @@ struct MultiDeviceHostStorage {
         DistributedTensorConfig strategy;
         std::vector<OwnedBuffer> buffers;
         std::vector<Shape> shapes;
-        std::mutex mtx;
+        mutable std::mutex mtx;
         MultiDeviceHostStorage() = default;
         MultiDeviceHostStorage(DistributedTensorConfig strategy_, std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : strategy(strategy_), buffers(buffers_), shapes(shapes_) {}
         MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
@@ -403,7 +403,25 @@ struct MultiDeviceHostStorage {
             return shapes[device->id()];
         }
 
-        uint32_t num_buffers() {
+        OwnedBuffer get_buffer_at_idx(uint32_t idx) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(idx < buffers.size(), "Buffer not found for idx " + std::to_string(idx));
+            return buffers[idx];;
+        }
+
+        Shape get_tensor_shape_at_idx(uint32_t idx) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(idx < shapes.size(), "Buffer not found for device " + std::to_string(idx));
+            return shapes[idx];
+        }
+
+        void insert_buffer_and_shape_at_idx(uint32_t idx, const OwnedBuffer buffer, const Shape shape) {
+            std::lock_guard<std::mutex> lock(mtx);
+            buffers[idx] = buffer;
+            shapes[idx] = shape;
+        }
+
+        uint32_t num_buffers() const {
             std::lock_guard<std::mutex> lock(mtx);
             return buffers.size();
         }
