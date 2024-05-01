@@ -31,7 +31,7 @@ pytest models/demos/t3000/llama2_70b/tests/test_llama_decoder_t3000.py
 pytest models/demos/t3000/llama2_70b/tests/test_llama_model_t3000.py
 
 # Mistral8x7b 8 chip decode full model tests and related weights and cached files
-export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
+export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7b-v0.1/
+export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7b-v0.1/
+export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7b-v0.1/
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[10-32]

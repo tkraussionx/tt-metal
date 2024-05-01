@@ -35,9 +35,9 @@ pytest models/demos/t3000/falcon40b/tests/test_falcon_end_to_end.py::test_Falcon
 
 # Mistral8x7b 8 chip decode tests
 # Related weights and cached files
-export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
+export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral8x7b/
+export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral8x7b/
+export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral8x7b/
 
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_attention.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_mlp.py
