@@ -17,7 +17,7 @@ from models.utility_functions import (
 from models.utility_functions import get_devices_for_t3000
 
 
-def test_mixtral_moe_inference(all_devices, reset_seeds):
+def test_mixtral_moe_inference(all_devices, use_program_cache, reset_seeds):
     pcc = 0.99
     iterations = 1
     dtype = ttnn.bfloat8_b
@@ -56,7 +56,11 @@ def test_mixtral_moe_inference(all_devices, reset_seeds):
             args=model_args,
             layer_num=0,
             expert_num=i,
-            dtype=dtype,
+            dtypes={
+                "w1": ttnn.bfloat4_b,
+                "w2": ttnn.bfloat8_b,
+                "w3": ttnn.bfloat4_b,
+            },
         )
         for i in range(len(devices))
     ]
