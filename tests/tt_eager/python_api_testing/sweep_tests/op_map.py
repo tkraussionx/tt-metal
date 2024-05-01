@@ -1796,4 +1796,8 @@ op_map = {
         "tt_lib_op": ttnn_ops.preprocessing_model_bert_4,
         "pytorch_op": pytorch_ops.preprocessing_model_bert_4,
     },
+    "ttnn-repeat": {
+        "tt_lib_op": ttnn_ops.repeat,
+        "pytorch_op": pytorch_ops.repeat,
+    },
 }

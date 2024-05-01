@@ -906,8 +906,8 @@ def repeat_interleave(x, *args, repeat, dim, **kwargs):
     return torch.repeat_interleave(x, repeats=repeat, dim=dim)
 
 
-def repeat(x, *args, repeat, **kwargs):
-    return x.repeat(*repeat)
+def repeat(x, *args, shape, **kwargs):
+    return x.repeat(*shape)
 
 
 def lte(x, y, *args, **kwargs):

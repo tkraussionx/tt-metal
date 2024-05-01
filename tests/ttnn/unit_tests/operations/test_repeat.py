@@ -20,7 +20,7 @@ def test_repeat(device):
     torch_result = torch_input_tensor.repeat(repeat_shape.shape)
 
     input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
-
+    print(input_tensor1.shape)
     output = ttnn.repeat(input_tensor, input_tensor1.shape)
     output = ttnn.to_torch(output)
 

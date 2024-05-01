@@ -1906,6 +1906,40 @@ def gen_ttnn_repeat_interleave_args(
         yield input_info
 
 
+def gen_ttnn_repeat_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    mem_configs,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        mem_configs,
+        "shape",
+        low,
+        high,
+        dtype,
+    ):
+        print(input_shapes[0])
+        shapes_size = len(input_shapes[0])
+        print(shapes_size)
+        shapes = []
+
+        for i in range(0, shapes_size):
+            rand_shape = np.random.randint(1, 3)
+            shapes.append(rand_shape)
+            print(i)
+
+        input_info.update({"shape": shapes})
+        print(shapes)
+        yield input_info
+
+
 def gen_ttnn_groupnorm_args(
     input_shapes,
     dtypes=[supported_tt_dtypes],
@@ -2010,6 +2044,7 @@ def gen_dim_args(
         dtype,
     ):
         rank = len(input_shapes[0])
+        dims = np.random.choice([0, 2])
 
         # select one of the possible combnations
         if rank == 4 or rank == 3:
