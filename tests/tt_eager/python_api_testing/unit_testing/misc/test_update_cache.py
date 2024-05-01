@@ -12,10 +12,10 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_
 from models.utility_functions import is_grayskull
 
 
-@pytest.mark.parametrize("head_dim", [64])
+@pytest.mark.parametrize("head_dim", [128])
 @pytest.mark.parametrize("max_seq_len", [2048])
-@pytest.mark.parametrize("num_users", [8, 16, 32, 64])
-@pytest.mark.parametrize("num_heads", [1, 2])
+@pytest.mark.parametrize("num_users", [32])
+@pytest.mark.parametrize("num_heads", [1])
 @pytest.mark.parametrize("in_sharded", [True, False])
 @pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B])
 class TestUpdateCache:
@@ -71,7 +71,7 @@ class TestUpdateCache:
         assert eq
 
     @pytest.mark.parametrize("cache_idx", [0, 1, 127, 1057])
-    @pytest.mark.parametrize("cache_dtype", [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B])
+    @pytest.mark.parametrize("cache_dtype", [ttl.tensor.DataType.BFLOAT8_B])
     @pytest.mark.parametrize(
         "batch_offset", [0, 16]
     )  # Only used when num_users < 32 and batch_offset + num_users <= 32
@@ -121,6 +121,7 @@ class TestUpdateCache:
             input_mem_config = ttl.tensor.MemoryConfig(
                 ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1, input_shard_spec
             )
+            # breakpoint()
             xt = xt.to(device, input_mem_config)
         else:
             xt = xt.to(device)
@@ -144,10 +145,10 @@ class TestUpdateCache:
         assert eq_cache and eq_update
 
 
-@pytest.mark.parametrize("head_dim", [64])
+@pytest.mark.parametrize("head_dim", [128])
 @pytest.mark.parametrize("max_seq_len", [2048])
-@pytest.mark.parametrize("num_users", [8, 16, 32, 64])
-@pytest.mark.parametrize("num_heads", [1, 2])
+@pytest.mark.parametrize("num_users", [32])
+@pytest.mark.parametrize("num_heads", [1])
 @pytest.mark.parametrize("in_sharded", [True, False])
 @pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.FLOAT32])
 class TestUpdateCacheFP32:

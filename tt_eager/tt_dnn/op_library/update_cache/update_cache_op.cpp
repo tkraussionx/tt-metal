@@ -90,6 +90,8 @@ operation::ProgramWithCallbacks UpdateCache::create_program(const std::vector<Te
             } else {
                 return update_cache_multi_core(cache_tensor, input_tensor, this->update_idx, this->batch_offset, this->compute_kernel_config);
             }
+        case UpdateCacheOpParallelizationStrategy::MULTI_CORE_MCAST:
+            return update_cache_multi_core_mcast(cache_tensor, input_tensor, this->update_idx, this->batch_offset, this->compute_kernel_config);
         case UpdateCacheOpParallelizationStrategy::SINGLE_CORE:
         default:
             if (this->op_type == UpdateCacheOpType::FILL) {
@@ -109,7 +111,13 @@ UpdateCacheOpParallelizationStrategy UpdateCache::get_parallelization_strategy(c
         return UpdateCacheOpParallelizationStrategy::MULTI_CORE;
     } else {
         uint32_t num_batch_heads = input_tensor.get_legacy_shape()[1] * input_tensor.get_legacy_shape()[-2] / TILE_HEIGHT;
-        if (num_batch_heads > 1 || input_tensor.is_sharded()) {
+        uint32_t num_user = input_tensor.get_legacy_shape()[-2];
+        bool is_single_head = input_tensor.get_legacy_shape()[1] == 1;
+
+        if(num_user == 32 && is_single_head){
+             return UpdateCacheOpParallelizationStrategy::MULTI_CORE_MCAST;
+        }
+        else if (num_batch_heads > 1 || input_tensor.is_sharded()) {
             return UpdateCacheOpParallelizationStrategy::MULTI_CORE;
         }
         else{
