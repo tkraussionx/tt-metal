@@ -41,7 +41,7 @@ std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
 uint64_t smallestHostime = 0;
 
-void InitTimeSync(Device *device, CoreCoord logical_core, bool doHeader)
+void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
 {
     ZoneScopedC(tracy::Color::Tomato3);
     auto core = device->worker_core_from_logical_core(logical_core);
@@ -86,6 +86,7 @@ void InitTimeSync(Device *device, CoreCoord logical_core, bool doHeader)
 
     for (int i = 0; i < sampleCount; i++)
     {
+        ZoneScopedC(tracy::Color::Tomato2);
         std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
         int64_t writeStart = TracyGetCpuTime();
         uint32_t sinceStart = writeStart - hostStartTime;
@@ -290,7 +291,7 @@ void InitDeviceProfiler(Device *device){
         tt_metal::detail::WriteToBuffer(tt_metal_device_profiler_map.at(device_id).output_dram_buffer, inputs_DRAM);
         if (doSync)
         {
-            InitTimeSync (device, {0,0}, true);
+            syncDeviceHost (device, {0,0}, true);
         }
     }
 #endif
@@ -332,7 +333,7 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
-            if (free_buffers) InitTimeSync (device, {0,0}, false);
+            syncDeviceHost (device, {0,0}, false);
             tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
             tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
             if (free_buffers)

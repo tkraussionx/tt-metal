@@ -65,6 +65,14 @@ int main(int argc, char **argv) {
         int loop_count = 2000;
         pass &= RunCustomCycle(device, loop_count);
         std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        pass &= RunCustomCycle(device, loop_count);
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        pass &= RunCustomCycle(device, loop_count);
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        pass &= RunCustomCycle(device, loop_count);
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        pass &= RunCustomCycle(device, loop_count);
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
         pass &= RunCustomCycle(device, loop_count, true);
 
         pass &= tt_metal::CloseDevice(device);
