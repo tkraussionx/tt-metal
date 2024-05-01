@@ -82,8 +82,8 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
         # Check kv cache
         # PyTorch output --------------------------------------------------------------------
         pytorch_layer_present = [
-            reference_model.cache_k.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
-            reference_model.cache_v.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
+            reference_model.cache_k.clone().permute(2, 0, 1, 3),  # [n_kv_heads, batch, seq, head_dim]
+            reference_model.cache_v.clone().permute(2, 0, 1, 3),  # [n_kv_heads, batch, seq, head_dim]
         ]
         # TT hardware execution -------------------------------------------------------------
         tt_layer_present = []
@@ -92,28 +92,31 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
         # concat the pasts by heads
         if len(devices) > 1:
             tt_layer_present = [
-                torch.cat([tt_cache for tt_cache in tt_cache_head], dim=1) for tt_cache_head in zip(*tt_layer_present)
+                torch.cat([tt_cache for tt_cache in tt_cache_head], dim=0) for tt_cache_head in zip(*tt_layer_present)
             ]
         else:
             tt_layer_present = tt_layer_present[0]
 
         for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            if i == 0:
-                logger.info(
-                    f"Skipping K cache comparison, since tt_lib rot_embed op does a different permutation from reference PyTorch code"
-                )
-                continue
-
             cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
             cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
             cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
             does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
-            logger.info(f"V cache output: {output_pcc}")
+            if i == 0:
+                logger.info(f"K cache output: {output_pcc}")
+            else:
+                logger.info(f"V cache output: {output_pcc}")
 
             if does_pass:
-                logger.info(f"V Cache Passed!")
+                if i == 0:
+                    logger.info(f"K Cache Passed!")
+                else:
+                    logger.info(f"V Cache Passed!")
             else:
-                logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
+                if i == 0:
+                    logger.warning(f"K Cache Failed! PCC value is lower than {pcc}")
+                else:
+                    logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
                 all_tests_pass = False
 
     if all_tests_pass:
