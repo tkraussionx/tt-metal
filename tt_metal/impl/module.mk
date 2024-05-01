@@ -1,7 +1,10 @@
 # Every variable in subdir must be prefixed with subdir (emulating a namespace)
 TT_METAL_IMPL_DEFINES =
-TT_METAL_IMPL_INCLUDES = $(COMMON_INCLUDES) -I$(TT_METAL_HOME)/tt_metal/impl -I$(TT_METAL_HOME)/.
+TT_METAL_IMPL_INCLUDES = $(COMMON_INCLUDES) -I$(TT_METAL_HOME)/tt_metal/third_party/concurrentqueue -I$(TT_METAL_HOME)/tt_metal/impl -I$(TT_METAL_HOME)/.
 TT_METAL_IMPL_CFLAGS = $(CFLAGS) -Werror -Wno-int-to-pointer-cast
+
+$(info TT_METAL_HOME is set to $(TT_METAL_HOME))
+
 
 TT_METAL_IMPL_SRCS = \
 	tt_metal/impl/device/device.cpp \

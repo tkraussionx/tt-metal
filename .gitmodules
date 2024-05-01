@@ -28,3 +28,6 @@
 [submodule "tt_metal/third_party/tt_llk_blackhole"]
 	path = tt_metal/third_party/tt_llk_blackhole
 	url = https://github.com/tenstorrent/tt-llk-bh.git
+[submodule "tt_metal/third_party/concurrentqueue"]
+	path = tt_metal/third_party/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue.git

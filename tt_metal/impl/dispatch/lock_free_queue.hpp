@@ -7,90 +7,69 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+
+#include "third_party/concurrentqueue/concurrentqueue.h"
 #include "tt_metal/common/assert.hpp"
 
-template<typename T>
+template <typename T>
 class LockFreeQueue {
-    private:
-        struct Node {
-            std::shared_ptr<T> data = nullptr;
-            Node* next = nullptr;
-        };
+   private:
+    moodycamel::ConcurrentQueue<std::shared_ptr<T>> queue;
 
-        std::atomic<Node*> head;
-        std::atomic<Node*> tail;
+   public:
+    // Optional - Set these if the worker and parent thread state needs to be tracked
+    std::atomic<uint64_t> worker_thread_id = 0;
+    std::atomic<uint64_t> parent_thread_id = 0;
 
-        Node* pop_head() {
-            Node* oldHead = head.load();
-            if (oldHead == tail.load()) {
-                return nullptr; // Queue is empty
-            }
-            head.store(oldHead->next);
-            return oldHead;
+    LockFreeQueue() = default;
+    LockFreeQueue(const LockFreeQueue&) = delete;  // Disable copying
+    LockFreeQueue& operator=(const LockFreeQueue&) = delete;
+
+    LockFreeQueue(LockFreeQueue&& other) : queue(std::move(other.queue)) {
+        worker_thread_id.store(other.worker_thread_id.load());
+        parent_thread_id.store(other.parent_thread_id.load());
+    }
+    void push(const T& value) { queue.enqueue(std::make_shared<T>(value)); }
+
+    std::shared_ptr<T> pop() {
+        std::shared_ptr<T> result;
+        if (!queue.try_dequeue(result)) {
+            TT_THROW("Queue is empty");
         }
+        return result;
+    }
 
-    public:
-        // Optional - Set these if the worker and parent thread state needs to be tracked
-        std::atomic<uint64_t> worker_thread_id = 0;
-        std::atomic<uint64_t> parent_thread_id = 0;
-        LockFreeQueue() : head(new Node), tail(head.load()) {}
-        LockFreeQueue(LockFreeQueue&& other) {
-            head.store(other.head.load());
-            tail.store(other.tail.load());
-            worker_thread_id.store(other.worker_thread_id.load());
-            parent_thread_id.store(other.parent_thread_id.load());
-        }
-        void push(const T& value) {
-            std::shared_ptr<T> newData(std::make_shared<T>(value));
-            Node* newNode = new Node;
-            tail.load()->data = newData;
-            tail.load()->next = newNode;
-            tail.store(newNode);
-        }
+    bool empty() const { return queue.size_approx() == 0; }
+    // class Iterator {
+    //    public:
+    //     using iterator_category = std::forward_iterator_tag;
+    //     using value_type = T;
+    //     using difference_type = std::ptrdiff_t;
+    //     using pointer = T*;
+    //     using reference = T&;
 
-        std::shared_ptr<T> pop() {
-            Node* oldHead = pop_head();
-            if (!oldHead) {
-                TT_THROW("Queue is empty");
-            }
-            std::shared_ptr<T> result(oldHead->data);
-            delete oldHead;
-            return result;
-        }
+    //    private:
+    //     Node* current;
 
-        bool empty() const {
-            return head.load() == tail.load();
-        }
-        class Iterator {
-           public:
-            using iterator_category = std::forward_iterator_tag;
-            using value_type = T;
-            using difference_type = std::ptrdiff_t;
-            using pointer = T*;
-            using reference = T&;
+    //    public:
+    //     // Constructor initializes the iterator with a pointer to a Node
+    //     Iterator(Node* start) : current(start) {}
 
-           private:
-            Node* current;
+    //     // Prefix increment operator overloading
+    //     Iterator& operator++() {
+    //         if (current != nullptr) {
+    //             current = current->next;
+    //         }
+    //         return *this;
+    //     }
 
-           public:
-            // Constructor initializes the iterator with a pointer to a Node
-            Iterator(Node* start) : current(start) {}
+    //     // Inequality operator overloading
+    //     bool operator!=(const Iterator& other) const { return current != other.current; }
 
-            // Prefix increment operator overloading
-            Iterator& operator++() {
-                if (current != nullptr) {
-                    current = current->next;
-                }
-                return *this;
-            }
+    //     // Dereference operator overloading
+    //     const T& operator*() const { return *(current->data); }
+    // };
 
-            // Inequality operator overloading
-            bool operator!=(const Iterator& other) const { return current != other.current; }
-
-            // Dereference operator overloading
-            const T& operator*() const { return *(current->data); }
-        };
-
-        Iterator begin() { return Iterator(head.load()); }
-        Iterator end() { return Iterator(tail.load()); }
+    // Iterator begin() { return Iterator(head.load()); }
+    // Iterator end() { return Iterator(tail.load()); }
 };
