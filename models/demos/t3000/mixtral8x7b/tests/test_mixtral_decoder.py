@@ -14,7 +14,7 @@ from models.demos.t3000.mixtral8x7b.reference.model import TransformerBlock, pre
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
 
-def test_mixtral_decoder_inference(all_devices, reset_seeds):
+def test_mixtral_decoder_inference(all_devices, use_program_cache, reset_seeds):
     """
     b: batch
     s: sequence length

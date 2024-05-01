@@ -14,7 +14,7 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_rms_norm_inference(device, reset_seeds):
+def test_mistral_rms_norm_inference(device, use_program_cache, reset_seeds):
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(device)

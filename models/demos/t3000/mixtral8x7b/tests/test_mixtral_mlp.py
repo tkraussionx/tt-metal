@@ -14,7 +14,7 @@ from models.utility_functions import (
 )
 
 
-def test_mixtral_mlp_inference(device, reset_seeds):
+def test_mixtral_mlp_inference(device, use_program_cache, reset_seeds):
     # Specify different dtypes for each feedForward weights
     dtypes = {
         "w1": ttnn.bfloat4_b,

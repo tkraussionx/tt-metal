@@ -19,7 +19,7 @@ from models.utility_functions import (
 from models.utility_functions import get_devices_for_t3000
 
 
-def test_mixtral_attention_inference(all_devices, reset_seeds):
+def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
     devices = all_devices
