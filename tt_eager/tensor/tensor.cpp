@@ -510,7 +510,7 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
         }
         return tensor_modified_layout;
     } else {
-        TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST&& "Bring tensor to host before converting to target layout");
+        TT_ASSERT(not (this->storage_type() == StorageType::MULTI_DEVICE or this->storage_type() == StorageType::DEVICE) && "Bring tensor to host before converting to target layout");
         uint32_t num_buffers = std::get<tt::tt_metal::MultiDeviceHostStorage>(this->get_storage()).num_buffers();
         Tensor tensor_modified_layout = Tensor({}, num_buffers);
         for (uint32_t buf_idx = 0; buf_idx < num_buffers; buf_idx++) {

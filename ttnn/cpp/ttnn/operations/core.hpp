@@ -332,11 +332,11 @@ inline Tensor to_layout(
     } else {
         TT_ASSERT(not dtype.has_value(), "dtype cannot be specified when converting layout on host!");
         if (not requires_padding_change(layout, tensor.get_shape())) {
-            return tensor.to(layout, device);
+            return device ? tensor.to(layout, device) : tensor.to(layout);
 
         } else if (layout == ttnn::ROW_MAJOR_LAYOUT) {
             tensor = unsqueeze_to_4D(tensor);
-            tensor = tensor.to(layout, device);
+            tensor = device ? tensor.to(layout, device) : tensor.to(layout);
             tensor = tensor.unpad_from_tile(tensor.get_shape().value().without_padding());
             return reshape(tensor, ttnn::Shape(tt::tt_metal::Shape{output_shape}));
 
@@ -347,7 +347,8 @@ inline Tensor to_layout(
             padded_4D_output_shape.push_back(tensor.get_shape()[-3]);
             padded_4D_output_shape.push_back(ttnn::pad_to_multiple_of_tile_size(tensor.get_shape()[-2]));
             padded_4D_output_shape.push_back(ttnn::pad_to_multiple_of_tile_size(tensor.get_shape()[-1]));
-            tensor = tensor.pad(padded_4D_output_shape, {0, 0, 0, 0}, 0).to(layout);
+            tensor = tensor.pad(padded_4D_output_shape, {0, 0, 0, 0}, 0);
+            tensor = device ? tensor.to(layout, device) : tensor.to(layout);
             return reshape(tensor, ttnn::Shape(tt::tt_metal::Shape{output_shape, padded_output_shape}));
 
         } else {
