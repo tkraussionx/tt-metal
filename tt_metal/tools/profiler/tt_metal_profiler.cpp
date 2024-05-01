@@ -43,8 +43,9 @@ uint64_t smallestHostime = 0;
 
 void InitTimeSync(Device *device, CoreCoord logical_core, bool doHeader)
 {
+    ZoneScopedC(tracy::Color::Tomato3);
     auto core = device->worker_core_from_logical_core(logical_core);
-    constexpr uint16_t sampleCount = 250;
+    constexpr uint16_t sampleCount = 249;
     auto device_id = device->id();
     tt_metal::Program program = tt_metal::CreateProgram();
 
@@ -85,7 +86,6 @@ void InitTimeSync(Device *device, CoreCoord logical_core, bool doHeader)
 
     for (int i = 0; i < sampleCount; i++)
     {
-        ZoneScopedN("sync_LOOP");
         std::this_thread::sleep_for(std::chrono::milliseconds(millisecond_wait));
         int64_t writeStart = TracyGetCpuTime();
         uint32_t sinceStart = writeStart - hostStartTime;
@@ -220,6 +220,7 @@ void InitDeviceProfiler(Device *device){
 
     TracySetCpuTime (TracyGetCpuTime());
 
+    bool doSync = false;
     auto device_id = device->id();
     if (getDeviceProfilerState())
     {
@@ -232,7 +233,7 @@ void InitDeviceProfiler(Device *device){
             if (firstInit.exchange(false))
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
-                InitTimeSync (device, {0,0}, true);
+                doSync = true;
             }
             else
             {
@@ -287,6 +288,10 @@ void InitDeviceProfiler(Device *device){
 
         std::vector<uint32_t> inputs_DRAM(tt_metal_device_profiler_map.at(device_id).output_dram_buffer->size()/sizeof(uint32_t), 0);
         tt_metal::detail::WriteToBuffer(tt_metal_device_profiler_map.at(device_id).output_dram_buffer, inputs_DRAM);
+        if (doSync)
+        {
+            InitTimeSync (device, {0,0}, true);
+        }
     }
 #endif
 }

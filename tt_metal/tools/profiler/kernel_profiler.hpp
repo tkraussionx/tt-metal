@@ -38,9 +38,13 @@ namespace kernel_profiler{
 
     extern uint32_t wIndex;
     extern uint32_t stackSize;
+    extern bool resultsPushed;
 
     extern uint32_t sums[SUM_COUNT];
     extern uint32_t sumIDs[SUM_COUNT];
+
+    constexpr int WALL_CLOCK_HIGH_INDEX = 1;
+    constexpr int WALL_CLOCK_LOW_INDEX = 0;
 
 #if defined(COMPILE_FOR_BRISC)
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_BR;
@@ -72,6 +76,7 @@ namespace kernel_profiler{
 
     inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
+        resultsPushed = false;
         wIndex = CUSTOM_MARKERS;
         stackSize = 0;
 
@@ -182,8 +187,8 @@ namespace kernel_profiler{
     {
         volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
         volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
-        buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);
-        buffer[index+1] = p_reg[0];
+        buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
+        buffer[index+1] = p_reg[WALL_CLOCK_LOW_INDEX];
     }
 
     PROFILER_INLINE void mark_padding()
@@ -235,6 +240,7 @@ namespace kernel_profiler{
         risc_finished_profiling();
 #if (defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC))
 
+        if (resultsPushed) return;
         uint32_t pageSize =
             PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC * PROFILER_RISC_COUNT * profiler_core_count_per_dram;
 
@@ -317,6 +323,7 @@ namespace kernel_profiler{
 #endif
         noc_async_write_barrier();
         profiler_control_buffer[RUN_COUNTER] ++;
+        resultsPushed = true;
 #endif
     }
 
@@ -392,12 +399,12 @@ namespace kernel_profiler{
 
         inline __attribute__((always_inline)) profileScopeAccumulate ()
         {
-            start_time = ((uint64_t)p_reg[1] << 32) | p_reg[0];
+            start_time = ((uint64_t)p_reg[WALL_CLOCK_HIGH_INDEX] << 32) | p_reg[WALL_CLOCK_LOW_INDEX];
         }
         inline __attribute__((always_inline))  ~profileScopeAccumulate ()
         {
             sumIDs[index] = timer_id;
-            sums[index] += (((uint64_t)p_reg[1] << 32) | p_reg[0]) - start_time;
+            sums[index] += (((uint64_t)p_reg[WALL_CLOCK_HIGH_INDEX] << 32) | p_reg[WALL_CLOCK_LOW_INDEX]) - start_time;
         }
     };
 }
