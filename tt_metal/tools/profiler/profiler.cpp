@@ -402,7 +402,7 @@ void DeviceProfiler::pushTracyDeviceResults()
         }
     }
 
-    double timeShift = 0;
+    double delay = 0;
     double frequency = 0;
     uint64_t cpuTime = 0;
 
@@ -414,8 +414,13 @@ void DeviceProfiler::pushTracyDeviceResults()
         if (device_core_sync_info.find(worker_core) != device_core_sync_info.end())
         {
             cpuTime = get<0>(device_core_sync_info.at(worker_core));
-            timeShift = get<1>(device_core_sync_info.at(worker_core));
+            delay = get<1>(device_core_sync_info.at(worker_core));
             frequency = get<2>(device_core_sync_info.at(worker_core));
+            log_info("Device {} sync info are, frequency {} GHz,  delay {} cycles and, sync point {} seconds",
+                        device_id,
+                        frequency,
+                        delay,
+                        cpuTime);
         }
     }
 
@@ -424,20 +429,21 @@ void DeviceProfiler::pushTracyDeviceResults()
         int device_id = device_core.first;
         CoreCoord worker_core = device_core.second;
 
-        if (timeShift == 0.0 || frequency == 0.0)
+        if (delay == 0.0 || frequency == 0.0)
         {
-            timeShift = smallest_timestamp;
+            delay = smallest_timestamp;
             frequency = device_core_frequency/1000.0;
             cpuTime = TracyGetCpuTime();
+            log_warning("For device {}, core {},{} default frequency was used and its zones will be out of sync", device_id, worker_core.x, worker_core.y);
         }
+
 
         if (device_tracy_contexts.find(device_core) == device_tracy_contexts.end())
         {
             auto tracyCtx = TracyTTContext();
             std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
 
-            std::cout << timeShift << "," << frequency << "," << cpuTime << std::endl;
-            TracyTTContextPopulate(tracyCtx, cpuTime, timeShift, frequency);
+            TracyTTContextPopulate(tracyCtx, cpuTime, delay, frequency);
 
             TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
 

@@ -207,8 +207,8 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
                 )
             << std::endl;
     }
-    std::cout << fmt::format ("c:{},g:{},f:{}",smallestHostime, delay, frequencyFit) << std::endl;
 
+    log_info("Sync data for device: {}, c:{}, d:{}, f:{}",device_id, smallestHostime, delay, frequencyFit);
 
     tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(smallestHostime, delay, frequencyFit));
     tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(smallestHostime, delay, frequencyFit);
