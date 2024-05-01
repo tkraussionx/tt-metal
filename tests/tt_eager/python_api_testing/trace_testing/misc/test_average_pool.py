@@ -11,6 +11,7 @@ import tt_lib as ttl
 
 from tt_lib.utils import _nearest_32
 from models.utility_functions import comp_pcc
+from models.utility_functions import is_wormhole_b0, is_grayskull, skip_for_wormhole_b0
 
 TILE_HEIGHT = TILE_WIDTH = 32
 
@@ -34,6 +35,8 @@ def shape_padded(shape):
         "BFLOAT16",
     ],
 )
+
+# @skip_for_wormhole_b0("KYLE SKIP FOR TEST")
 def test_run_average_pool(act_shape, dtype, device):
     batch_size, _, _, channels = act_shape
 
@@ -60,6 +63,9 @@ def test_run_average_pool(act_shape, dtype, device):
 
         logger.info(f"Running iteration {iter}")
         ttl.device.ExecuteLastTrace(device, True)
+        # out = ttl.tensor.average_pool_2d(ttact)
+
+        # Explicitly deallocate the trace buffers.
 
         out = out.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
         out_shape = [batch_size, 1, 1, channels]
@@ -80,3 +86,5 @@ def test_run_average_pool(act_shape, dtype, device):
         print(f"Output PCC = {output_pcc}")
 
         assert passing_pcc
+
+    logger.info(f"Done running {trace_loops} iterations of average_pool_2d. passing_pcc: {passing_pcc}")
