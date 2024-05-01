@@ -87,4 +87,7 @@ def test_run_average_pool(act_shape, dtype, device):
 
         assert passing_pcc
 
+    # Done with the trace, can deallocate the buffers now.
+    ttl.device.ReleaseLastTrace(device)
+
     logger.info(f"Done running {trace_loops} iterations of average_pool_2d. passing_pcc: {passing_pcc}")
