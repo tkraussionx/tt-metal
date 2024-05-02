@@ -15,12 +15,14 @@ echo \
 sudo apt-get update -y
 
 # Install docker and plugins
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+sudo apt-get install -y \
+  docker-ce=5:26.1.1-1~ubuntu.20.04~focal \
+  docker-ce-cli=5:26.1.1-1~ubuntu.20.04~focal \
+  containerd.io=1.6.31-1 \
+  docker-buildx-plugin=0.14.0-1~ubuntu.20.04~focal \
+  docker-compose-plugin=2.27.0-1~ubuntu.20.04~focal
 
 # Set up docker for non-root user
 sudo groupadd docker
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Test docker installation
-docker run hello-world
