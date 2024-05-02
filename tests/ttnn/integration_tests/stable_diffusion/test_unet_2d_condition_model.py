@@ -225,28 +225,31 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
     signpost(header="stop")
     first_iter = time.time() - first_iter
     print(f"First iteration took {first_iter} seconds")
-    # times = []
-    # for i in range(50):
-    #     start = time.time()
-    #     ttnn_output = model(
-    #         input,
-    #         timestep=ttnn_timestep,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #         class_labels=class_labels,
-    #         attention_mask=attention_mask,
-    #         cross_attention_kwargs=cross_attention_kwargs,
-    #         return_dict=return_dict,
-    #         config=config,
-    #     )
-    #     end = time.time()
-    #     times.append(end - start)
-    #     print(f"Current iteration took {end - start} seconds")
-    # total_time = 0
-    # for iter in times:
-    #     total_time += iter
-    #     print(iter)
-    # print(f"Time taken for 50 iterations: {total_time}")
-    # print(f"Samples per second: {50 / total_time}")
+    times = []
+    for i in range(50):
+        start = time.time()
+        ttnn_output = model(
+            input,
+            timestep=ttnn_timestep,
+            encoder_hidden_states=encoder_hidden_states,
+            class_labels=class_labels,
+            attention_mask=attention_mask,
+            cross_attention_kwargs=cross_attention_kwargs,
+            return_dict=return_dict,
+            config=config,
+        )
+        ttnn_output = ttnn_to_torch(ttnn_output)
+        passing, output = comp_pcc(torch_output, ttnn_output, pcc=0.99)
+        print(output)
+        end = time.time()
+        times.append(end - start)
+        print(f"Current iteration took {end - start} seconds")
+    total_time = 0
+    for iter in times:
+        total_time += iter
+        print(iter)
+    print(f"Time taken for 50 iterations: {total_time}")
+    print(f"Samples per second: {50 / total_time}")
     ttnn_output = ttnn_to_torch(ttnn_output)
     passing, output = comp_pcc(torch_output, ttnn_output, pcc=0.99)
     print(output)
