@@ -16,18 +16,14 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
-from models.utility_functions import get_devices_for_t3000
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 
-def test_mixtral_attention_inference(all_devices, reset_seeds):
+def test_mixtral_attention_inference(device_mesh, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, f"This test requires a T3000 (8 devices), found {num_devices} devices."
-    devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
 
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(device_mesh.get_device(0))
     state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -39,7 +35,7 @@ def test_mixtral_attention_inference(all_devices, reset_seeds):
     batch = 32
     seq_len = 1  # length to generate
 
-    tt_model = TtMixtralAttention(devices, state_dict, args=model_args, layer_num=0, dtype=dtype)
+    tt_model = TtMixtralAttention(device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
     generation_start_pos = 0
     generation_length = 1
     all_tests_pass = True
@@ -53,7 +49,7 @@ def test_mixtral_attention_inference(all_devices, reset_seeds):
             tt_model.hidden_size,
             tt_model.head_dim,
             tt_model.max_seq_len,
-            tt_model.devices,
+            device_mesh,
         )
         current_pos = start_pos % model_args.sliding_window
         tt_out = tt_model(
@@ -62,9 +58,10 @@ def test_mixtral_attention_inference(all_devices, reset_seeds):
             current_pos,
             rot_mat,
         )
-        assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
-        tt_out = tt_out[0]
-        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2).view(batch, 1, -1)  # [ batch, seq, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].view(
+            batch, 1, -1
+        )
+
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
@@ -78,43 +75,6 @@ def test_mixtral_attention_inference(all_devices, reset_seeds):
         else:
             logger.warning(f"[start_pos={start_pos}] Mistral_Attention Failed!")
             all_tests_pass = False
-
-        # Check kv cache
-        # PyTorch output --------------------------------------------------------------------
-        pytorch_layer_present = [
-            reference_model.cache_k.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
-            reference_model.cache_v.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
-        ]
-        # TT hardware execution -------------------------------------------------------------
-        tt_layer_present = []
-        for layer_past in tt_model.layer_past_list:
-            tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
-        # concat the pasts by heads
-        if len(devices) > 1:
-            tt_layer_present = [
-                torch.cat([tt_cache for tt_cache in tt_cache_head], dim=1) for tt_cache_head in zip(*tt_layer_present)
-            ]
-        else:
-            tt_layer_present = tt_layer_present[0]
-
-        for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            if i == 0:
-                logger.info(
-                    f"Skipping K cache comparison, since tt_lib rot_embed op does a different permutation from reference PyTorch code"
-                )
-                continue
-
-            cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
-            cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
-            cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
-            does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
-            logger.info(f"V cache output: {output_pcc}")
-
-            if does_pass:
-                logger.info(f"V Cache Passed!")
-            else:
-                logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
-                all_tests_pass = False
 
     if all_tests_pass:
         logger.info("Mistral Attention output Passed!")

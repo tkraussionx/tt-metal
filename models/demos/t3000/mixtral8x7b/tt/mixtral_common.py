@@ -4,6 +4,7 @@
 
 import torch
 import ttnn
+from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 
 
 def precompute_freqs(dim: int, end: int, theta: float = 1000000.0):
@@ -47,7 +48,7 @@ def get_rotation_mat(dhead, end):
     return rot_mat
 
 
-def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
+def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, device_mesh):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
@@ -60,14 +61,19 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
     """
     if x_bsh is None:  # First token
         rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2)
-        rot_mats = []
-        for device in devices:
-            rot_mats.append(
-                [
-                    ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-                    for rot_mat_i in rot_mat
-                ]
+
+        rot_mats = [
+            ttnn.from_torch(
+                rot_mat_i,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                device=device_mesh,
+                mesh_mapper=ReplicateTensorToMesh(device_mesh),
             )
+            for rot_mat_i in rot_mat
+        ]
+        rot_mats = [ttnn.to_device(rot_mat, device_mesh) for rot_mat in rot_mats]
+
         return rot_mats
     else:
         assert x_bsh.size(2) == hidden_size
@@ -81,15 +87,26 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
 
         x_1SBH = x_bsh.view(1, seq_len, batch, hidden_size)
 
-        xs_1SBH, rot_mats = [], []
-        for device in devices:
-            xs_1SBH.append(ttnn.from_torch(x_1SBH, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
-            rot_mats.append(
-                [
-                    ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-                    for rot_mat_i in rot_mat
-                ]
+        xs_1SBH = ttnn.from_torch(
+            x_1SBH,
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            device=device_mesh,
+            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        )
+        xs_1SBH = ttnn.to_device(xs_1SBH, device_mesh)
+        rot_mats = [
+            ttnn.from_torch(
+                rot_mat_i,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                device=device_mesh,
+                mesh_mapper=ReplicateTensorToMesh(device_mesh),
             )
+            for rot_mat_i in rot_mat
+        ]
+        rot_mats = [ttnn.to_device(rot_mat, device_mesh) for rot_mat in rot_mats]
+
         return (
             xs_1SBH,
             rot_mats,

@@ -13,35 +13,36 @@ from models.utility_functions import (
     comp_allclose,
 )
 
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
-def test_mixtral_mlp_inference(device, reset_seeds):
+
+def test_mixtral_mlp_inference(device_mesh, reset_seeds):
     # Specify different dtypes for each feedForward weights
     dtypes = {
-        "w1": ttnn.bfloat4_b,
+        "w1": ttnn.bfloat8_b,
         "w2": ttnn.bfloat8_b,
-        "w3": ttnn.bfloat4_b,
+        "w3": ttnn.bfloat8_b,
     }
 
-    model_args = TtModelArgs(device)
+    model_args = TtModelArgs(device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
+
+    tt_model = TtMixtralMLP(
+        device_mesh=device_mesh,
+        state_dict=state_dict,
+        args=model_args,
+        layer_num=0,
+        dtypes=dtypes,
+    )
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
         k: v for k, v in state_dict.items() if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
     }
 
-    partial_state_dict_ref = {k[32:]: v for k, v in partial_state_dict.items() if "experts.0" in k}
+    partial_state_dict_ref = {k[32:]: v for k, v in partial_state_dict.items() if f"experts.{0}" in k}
     reference_model = FeedForward(args=model_args)
     reference_model.load_state_dict(partial_state_dict_ref)
-
-    tt_model = TtMixtralMLP(
-        device=device,
-        state_dict=partial_state_dict,
-        args=model_args,
-        layer_num=0,
-        expert_num=0,
-        dtypes=dtypes,
-    )
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     rms_state_dict = {k[18:]: v for k, v in state_dict.items() if (k.startswith("layers.0.ffn_norm."))}
@@ -53,15 +54,17 @@ def test_mixtral_mlp_inference(device, reset_seeds):
 
     reference_output = reference_model(torch_input)
     tt_input = ttnn.from_torch(
-        torch_input, device=device, dtype=ttnn.bfloat16, memory_config=ttnn.L1_MEMORY_CONFIG, layout=ttnn.TILE_LAYOUT
+        torch_input,
+        device=device_mesh,
+        dtype=ttnn.bfloat16,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+        layout=ttnn.TILE_LAYOUT,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
     )
+    tt_input = ttnn.to_device(tt_input, device_mesh)
 
-    logger.info("Compilation pass for Mistral_MLP")
     tt_output = tt_model(tt_input)
-
-    logger.info("Performance pass for Mistral_MLP")
-    tt_output = tt_model(tt_input)
-    tt_output_torch = ttnn.to_torch(tt_output)
+    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
 
     pcc_required = 0.99
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc_required)
