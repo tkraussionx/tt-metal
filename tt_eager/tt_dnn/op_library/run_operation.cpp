@@ -47,7 +47,7 @@ void validate_op_launch(Device* worker) {
     }
 }
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 void override_addresses(
     const OverrideAddressesCallback& override_addresses_callback,
     const Program &program,
@@ -114,7 +114,7 @@ constexpr auto decorate_device_operation(const Function& function) {
     };
 }
 
-template<typename OutputTensors = Tensors>
+template<typename OutputTensors>
 OutputTensors run_host_operation(const HostOperation<OutputTensors>& operation, const Tensors& input_tensors) {
     ZoneScopedN("TT_DNN_HOST_OP");
     uint32_t op_id = assign_id();
@@ -132,7 +132,7 @@ template OptionalTensors run_host_operation(const HostOperation<OptionalTensors>
 
 inline const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
 
-template<typename OutputTensors = Tensors>
+template<typename OutputTensors>
 OutputTensors run_device_operation(
     std::optional<std::reference_wrapper<CommandQueue>> queue,
     const DeviceOperation<OutputTensors>& operation,
@@ -255,7 +255,7 @@ template OptionalTensors run_device_operation(
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors);
 
-template<typename OutputTensors = Tensors>
+template<typename OutputTensors>
 OutputTensors run_multi_device_operation(
     std::optional<std::reference_wrapper<CommandQueue>> queue,
     const DeviceOperation<OutputTensors>& operation,
@@ -352,14 +352,14 @@ template Tensors run_multi_device_operation(
 
 }  // namespace detail
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 OutputTensors run(const HostOperation<OutputTensors>& operation, const Tensors& input_tensors) {
     return detail::decorate_host_operation(detail::run_host_operation<OutputTensors>)(operation, input_tensors);
 }
 template Tensors run(const HostOperation<Tensors>& operation, const Tensors& input_tensors);
 template OptionalTensors run(const HostOperation<OptionalTensors>& operation, const Tensors& input_tensors);
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 OutputTensors run(
     CommandQueue& queue,
     const DeviceOperation<OutputTensors>& operation,
@@ -398,7 +398,7 @@ template OptionalTensors run(
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors);
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 OutputTensors run(
     const DeviceOperation<OutputTensors>& operation,
     const Tensors& input_tensors,
@@ -438,7 +438,7 @@ template OptionalTensors run(
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors);
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 OutputTensors run_without_autoformat(
     const DeviceOperation<OutputTensors>& operation,
     const Tensors& input_tensors,
@@ -480,7 +480,7 @@ template OptionalTensors run_without_autoformat<OptionalTensors>(
     const OptionalConstTensors& optional_input_tensors
 );
 
-template<class OutputTensors=Tensors>
+template<class OutputTensors>
 OutputTensors run_without_autoformat(
     const DeviceOperation<OutputTensors>& operation,
     const Tensors& input_tensors,
@@ -672,6 +672,8 @@ void launch_op(
 
     std::vector<Tensor> async_safe_input_tensors = {};
     std::vector<std::optional<const Tensor>> async_safe_optional_input_tensors = {};
+    std::unordered_set<uint32_t> cross_worker_input_tensor_idx = {};
+    std::unordered_set<uint32_t> cross_worker_optional_input_tensor_idx = {};
     // When running on a single device, input tensors can be using borrowed storage. If so, when running in async mode,
     // copy borrowed tensors to owned storage.
     for (int i = 0; i < input_tensors.size(); i++) {
@@ -691,10 +693,31 @@ void launch_op(
     for (int i = 0; i < output_tensors.size(); i++) {
         output_tensor_ref_count.push_back(output_tensors[i].tensor_attributes->record_main_thread_ref_count());
     }
+    // Check if this op dispatch step relies on tensors from other workers.
+    // If so, mark them in use by current worker. Tensors shared across workers
+    // are only supported when each tensor is tied to a single device/worker
+    // (example all-gather).
+    if (workers.size() == 1) {
+        // Single worker per tensor and.
+        for (int i = 0; i < async_safe_input_tensors.size(); i++) {
+            if (async_safe_input_tensors.at(i).get_workers().size() and async_safe_input_tensors.at(i).get_workers().at(0) != workers.at(0)) {
+                // This input has a worker assigned that doesn't match the worker of the output being created (its shared).
+                async_safe_input_tensors.at(i).tensor_attributes->num_sibling_workers_sharing_tensor++;
+                cross_worker_input_tensor_idx.insert(i);
+            }
+        }
+        for (int i = 0; i < async_safe_optional_input_tensors.size(); i++) {
+            if (async_safe_optional_input_tensors.at(i).has_value() and async_safe_optional_input_tensors.at(i).value().get_workers().size() and async_safe_optional_input_tensors.at(i).value().get_workers().at(0) != workers.at(0)) {
+                async_safe_optional_input_tensors.at(i).value().tensor_attributes->num_sibling_workers_sharing_tensor++;
+                cross_worker_optional_input_tensor_idx.insert(i);
+            }
+        }
+    }
+
     {
         ZoneScopedN("PushOpToWorkers");
         for (auto target_device : workers) {
-            target_device->push_work([target_device, workers, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors] () mutable {
+            target_device->push_work([target_device, workers, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors, shared_input_idx = cross_worker_input_tensor_idx, shared_optional_input_idx = cross_worker_optional_input_tensor_idx] () mutable {
                 std::vector<Tensor> input_shards = {};
                 std::vector<std::optional<const Tensor>> optional_input_shards = {};
 
@@ -710,6 +733,14 @@ void launch_op(
                     }
                 }
                 auto local_tensors = op_func(input_shards, optional_input_shards);
+                // Release shared ownership of tensors belonging to other workers.
+                // If the workers for this tensor are stalled to deallocate
+                for (auto& shared_input : shared_input_idx) {
+                    inputs.at(shared_input).tensor_attributes->num_sibling_workers_sharing_tensor--;
+                }
+                for (auto& shared_optional_input : shared_optional_input_idx) {
+                    async_safe_optional_input_tensors.at(shared_optional_input).value().tensor_attributes->num_sibling_workers_sharing_tensor--;
+                }
                 for (int i = 0; i < local_tensors.size(); i++) {
                     if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
                         TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
