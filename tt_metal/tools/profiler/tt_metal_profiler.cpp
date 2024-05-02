@@ -38,17 +38,21 @@ namespace detail {
 
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
-std::vector <std::pair<uint64_t,uint64_t>> deviceHostTimePair;
-uint64_t smallestHostime = 0;
+std::unordered_map <uint32_t, std::vector <std::pair<uint64_t,uint64_t>>> deviceHostTimePair;
+std::unordered_map <uint32_t, uint64_t> smallestHostime;
 
 void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
 {
     ZoneScopedC(tracy::Color::Tomato3);
     auto core = device->worker_core_from_logical_core(logical_core);
-    constexpr uint16_t sampleCount = 249;
     auto device_id = device->id();
+
+    deviceHostTimePair.emplace(device_id, (std::vector <std::pair<uint64_t,uint64_t>>){});
+    smallestHostime.emplace(device_id, 0);
+
     tt_metal::Program program = tt_metal::CreateProgram();
 
+    constexpr uint16_t sampleCount = 249;
     std::map<string, string> kernel_defines = {
         {"SAMPLE_COUNT", std::to_string(sampleCount)},
     };
@@ -103,9 +107,11 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
     }
 
     Finish(device->command_queue());
-    if ((smallestHostime == 0) || (smallestHostime > hostStartTime))
+
+    log_info ("SYNC PROGRAM FINISH IS DONE ON {}",device_id);
+    if ((smallestHostime[device_id] == 0) || (smallestHostime[device_id] > hostStartTime))
     {
-        smallestHostime = hostStartTime;
+        smallestHostime[device_id] = hostStartTime;
     }
 
     for (auto writeTime : writeTimes)
@@ -146,9 +152,9 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
         uint32_t hostTime = sync_times[i + 1] + writeTimes[i/2 - 1];
         if (hostTime < preHostTime) hostStartTime_H ++;
         preHostTime = hostTime;
-        uint64_t hostTimeLarge = hostStartTime - smallestHostime + ((uint64_t(hostStartTime_H) << 32) | hostTime);
+        uint64_t hostTimeLarge = hostStartTime - smallestHostime[device_id] + ((uint64_t(hostStartTime_H) << 32) | hostTime);
 
-        deviceHostTimePair.push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
+        deviceHostTimePair[device_id].push_back(std::pair<uint64_t,uint64_t> {deviceTimeLarge,hostTimeLarge});
 
         if (firstSample)
         {
@@ -166,7 +172,7 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
     double hostSquaredSum = 0;
     double hostDeviceProductSum = 0;
 
-    for (auto& deviceHostTime : deviceHostTimePair)
+    for (auto& deviceHostTime : deviceHostTimePair[device_id])
     {
         double deviceTime = deviceHostTime.first;
         double hostTime = deviceHostTime.second;
@@ -177,7 +183,7 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
         hostDeviceProductSum += (hostTime * deviceTime);
     }
 
-    uint16_t accumulateSampleCount = deviceHostTimePair.size();
+    uint16_t accumulateSampleCount = deviceHostTimePair[device_id].size();
 
     double frequencyFit = (hostDeviceProductSum * accumulateSampleCount - hostSum * deviceSum)  / ((hostSquaredSum * accumulateSampleCount - hostSum * hostSum) * tracyToSecRatio);
 
@@ -186,20 +192,21 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
     log_file.open(log_path, std::ios_base::app);
     if (doHeader)
     {
-        log_file << fmt::format("core_x, core_y,device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio,tracy_base_time") << std::endl;
+        log_file << fmt::format("device id,core_x, core_y,device,host_tracy,host_real,write_overhead,host_start,delay,frequency,tracy_ratio,tracy_base_time") << std::endl;
     }
-    int init = deviceHostTimePair.size() - sampleCount;
-    for (int i = init ;i < deviceHostTimePair.size(); i++)
+    int init = deviceHostTimePair[device_id].size() - sampleCount;
+    for (int i = init ;i < deviceHostTimePair[device_id].size(); i++)
     {
         log_file << fmt::format(
-                "{:5},{:5},{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f},{:20}",
+                "{:5},{:5},{:5},{:20},{:20},{:20.2f},{:20},{:20},{:20.2f},{:20.15f},{:20.15f},{:20}",
+                device_id,
                 core.x,
                 core.y,
-                deviceHostTimePair[i].first,
-                deviceHostTimePair[i].second,
-                (double) deviceHostTimePair[i].second  * tracyToSecRatio,
+                deviceHostTimePair[device_id][i].first,
+                deviceHostTimePair[device_id][i].second,
+                (double) deviceHostTimePair[device_id][i].second  * tracyToSecRatio,
                 writeTimes[i - init],
-                smallestHostime,
+                smallestHostime[device_id],
                 delay,
                 frequencyFit,
                 tracyToSecRatio,
@@ -208,10 +215,10 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, bool doHeader)
             << std::endl;
     }
 
-    log_info("Sync data for device: {}, c:{}, d:{}, f:{}",device_id, smallestHostime, delay, frequencyFit);
+    log_info("Sync data for device: {}, c:{}, d:{}, f:{}",device_id, smallestHostime[device_id], delay, frequencyFit);
 
-    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(smallestHostime, delay, frequencyFit));
-    tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(smallestHostime, delay, frequencyFit);
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info.emplace(core, std::make_tuple(smallestHostime[device_id], delay, frequencyFit));
+    tt_metal_device_profiler_map.at(device_id).device_core_sync_info[core] = std::make_tuple(smallestHostime[device_id], delay, frequencyFit);
 }
 
 
@@ -226,15 +233,16 @@ void InitDeviceProfiler(Device *device){
     if (getDeviceProfilerState())
     {
         static std::atomic<bool> firstInit = true;
+        bool doHeader = firstInit;
 
         auto device_id = device->id();
 
         if (tt_metal_device_profiler_map.find(device_id) == tt_metal_device_profiler_map.end())
         {
+            doSync = true;
             if (firstInit.exchange(false))
             {
                 tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
-                doSync = true;
             }
             else
             {
@@ -291,7 +299,7 @@ void InitDeviceProfiler(Device *device){
         tt_metal::detail::WriteToBuffer(tt_metal_device_profiler_map.at(device_id).output_dram_buffer, inputs_DRAM);
         if (doSync)
         {
-            syncDeviceHost (device, {0,0}, true);
+            syncDeviceHost (device, {0,0}, doHeader);
         }
     }
 #endif

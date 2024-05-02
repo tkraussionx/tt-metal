@@ -28,6 +28,7 @@ void kernel_main() {
     uint32_t remote_issue_cmd_slots = 0;
 
     while (routing_info->routing_enabled) {
+        DeviceZoneScopedMainN("ETH-TUNNEL");
         // Implement yielding if SENDER is not ISSUE, this may help with devices getting commands first
         while (routing_info->routing_enabled && eth_src_db_semaphore_addr[0] == 0 &&
                routing_info->fd_buffer_msgs[buffer_id].bytes_sent != 1 &&
