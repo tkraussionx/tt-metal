@@ -53,6 +53,11 @@ run_perf_models_llm_javelin_multi_device() {
     local test_marker=$2
 
     env pytest models/demos/falcon7b/tests -m $test_marker
+
+    # Mistral8x7b weights and cached files
+    export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
+    export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
+    export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
     env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
 
     ## Merge all the generated reports
