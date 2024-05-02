@@ -109,6 +109,7 @@ void DeviceProfiler::readRiscProfilerResults(
                     riscNumRead = profile_buffer[index] & 0x7;
                     coreFlatIDRead = (profile_buffer[index] >> 3) & 0xFF;
                     runCounterRead = profile_buffer[index + 1];
+
                 }
                 else
                 {
@@ -358,8 +359,9 @@ void DeviceProfiler::dumpResults (
         const vector<CoreCoord> &worker_cores_arg){
 #if defined(PROFILER)
     ZoneScoped;
-    std::vector<CoreCoord> worker_cores {{1,1},{9,9},{1,11},{7,11}};
-    //auto const &worker_cores = worker_cores_arg;
+    //std::vector<CoreCoord> worker_cores {{1,1}};
+    auto const &worker_cores = worker_cores_arg;
+
 
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
@@ -373,6 +375,7 @@ void DeviceProfiler::dumpResults (
         tt_metal::detail::ReadFromBuffer(output_dram_buffer, profile_buffer);
 
         for (const auto &worker_core : worker_cores) {
+            //std::cout << fmt::format ("x:{},y:{}", worker_core.x, worker_core.y) << std::endl;
             readRiscProfilerResults(
                 device_id,
                 profile_buffer,

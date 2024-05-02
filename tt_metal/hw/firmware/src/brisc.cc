@@ -64,6 +64,7 @@ namespace kernel_profiler {
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
     bool resultsPushed __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
 }
 
 void enable_power_management() {
@@ -311,7 +312,6 @@ int main() {
 
         {
             DeviceZoneScopedMainN("BRISC-FW");
-
 
             // Always copy ncrisc even if its size is 0 (save branch)...
             l1_to_ncrisc_iram_copy((MEM_NCRISC_INIT_IRAM_L1_BASE >> 4) + ncrisc_kernel_start_offset16,

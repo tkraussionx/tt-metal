@@ -14,6 +14,7 @@ void kernel_main() {
 
     constexpr int FIRST_READ_COUNT = 2;
 
+
     while ( syncTimeBufferIndex < FIRST_READ_COUNT) {
         uint32_t deviceTime = p_reg[kernel_profiler::WALL_CLOCK_LOW_INDEX];
 

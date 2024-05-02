@@ -38,7 +38,6 @@ namespace kernel_profiler{
 
     extern uint32_t wIndex;
     extern uint32_t stackSize;
-    extern bool resultsPushed;
 
     extern uint32_t sums[SUM_COUNT];
     extern uint32_t sumIDs[SUM_COUNT];
@@ -50,12 +49,14 @@ namespace kernel_profiler{
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_BR;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_BR;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
-    uint16_t core_flat_id;
+    extern uint16_t core_flat_id;
+    extern bool resultsPushed;
 #elif defined(COMPILE_FOR_ERISC)
     constexpr uint32_t profilerBuffer = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_ER;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL);
-    uint16_t core_flat_id;
+    extern uint16_t core_flat_id;
+    extern bool resultsPushed;
 #elif defined(COMPILE_FOR_NCRISC)
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_NC;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_NC;
@@ -76,7 +77,6 @@ namespace kernel_profiler{
 
     inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
-        resultsPushed = false;
         wIndex = CUSTOM_MARKERS;
         stackSize = 0;
 
@@ -88,6 +88,7 @@ namespace kernel_profiler{
 
 #if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC)
         uint32_t runCounter = profiler_control_buffer[RUN_COUNTER];
+        resultsPushed = false;
 
 #if defined(COMPILE_FOR_ERISC)
         volatile tt_l1_ptr uint32_t *eriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER);
@@ -168,6 +169,7 @@ namespace kernel_profiler{
         trisc0Buffer[ID_LL] = runCounter;
         trisc1Buffer[ID_LL] = runCounter;
         trisc2Buffer[ID_LL] = runCounter;
+
 
 #endif //BRISC_INIT
 #endif
