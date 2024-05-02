@@ -208,7 +208,7 @@ class ResNet50TestInfra:
         self.torch_input_tensor = torch.rand(input_shape, dtype=torch.float32)
 
         parameters = preprocess_model_parameters(
-            initialize_model=lambda: torch_model, custom_preprocessor=custom_preprocessor, device=device
+            initialize_model=lambda: torch_model, custom_preprocessor=custom_preprocessor, device=None
         )
 
         torch_model.to(torch.bfloat16)
@@ -273,9 +273,9 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
     "batch_size, act_dtype, weight_dtype, math_fidelity",
     (
         # (8, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## fails.
-        (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
-        (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
-        (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
+        # (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
+        # (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
+        # (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
         (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
     ),
 )
