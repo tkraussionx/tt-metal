@@ -15,6 +15,7 @@ from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 
 class Emb(torch.nn.Module):
@@ -34,16 +35,11 @@ class Emb(torch.nn.Module):
     "iterations",
     (1, 127, 511),
 )
-def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds):
+def test_mixtral_model_inference(device_mesh, iterations, n_layers, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, "This test requires a T3000 (8 devices)"
-    devices = get_devices_for_t3000(devices, num_devices)
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(device_mesh.get_device(0))
     model_args.n_layers = n_layers
 
     state_dict = torch.load(model_args.state_dict_path)
@@ -69,7 +65,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
 
     # Load TTNN model
     tt_model = TtTransformer(
-        devices=devices,
+        devices=device_mesh,
         state_dict=state_dict,
         args=model_args,
         layers=list(range(model_args.n_layers)),
@@ -108,7 +104,12 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
 
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1).detach().float()
+        tt_output_torch = (
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
+            .view(batch, 1, -1)
+            .detach()
+            .float()
+        )
 
         positions = torch.LongTensor([start_pos])
         ref_output = reference_model(pt_decode_input, positions).detach().float()

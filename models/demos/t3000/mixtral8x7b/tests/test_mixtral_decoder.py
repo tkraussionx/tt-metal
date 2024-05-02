@@ -12,9 +12,10 @@ from models.demos.t3000.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.t3000.mixtral8x7b.reference.model import TransformerBlock, precompute_freqs_cis
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 
-def test_mixtral_decoder_inference(all_devices, reset_seeds):
+def test_mixtral_decoder_inference(device_mesh, reset_seeds):
     """
     b: batch
     s: sequence length
@@ -23,12 +24,7 @@ def test_mixtral_decoder_inference(all_devices, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, "This test requires a T3000 (8 devices)"
-    devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
     reference_model = TransformerBlock(args=model_args)
@@ -36,7 +32,7 @@ def test_mixtral_decoder_inference(all_devices, reset_seeds):
 
     # Initialize TT model
     tt_model = TtTransformerBlock(
-        devices=devices,
+        device_mesh=device_mesh,
         state_dict=state_dict,
         args=model_args,
         layer_num=0,
@@ -67,8 +63,9 @@ def test_mixtral_decoder_inference(all_devices, reset_seeds):
         )
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)
-        tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1).view(batch, 1, -1)
-
+        tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].view(
+            batch, 1, -1
+        )
         # Reference model
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]

@@ -5,7 +5,7 @@
 import torch
 import ttnn
 from models.utility_functions import nearest_32
-from ttnn import ShardTensorToMesh
+from ttnn import ShardTensorToMesh, ReplicateTensorToMesh
 
 
 class TtMixtralAttention(torch.nn.Module):
@@ -81,14 +81,20 @@ class TtMixtralAttention(torch.nn.Module):
                 -1,
             ),
             device=self.device_mesh,
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=-2),
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=0),
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wo_mesh_"),
+            cache_file_name=cache_name(f"wo_mesh"),
         )
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
-
+        print(
+            torch.transpose(
+                self.state_dict[wo_str],
+                -2,
+                -1,
+            ).shape
+        )
         cache_k = torch.zeros(
             (
                 self.n_kv_heads,
@@ -121,9 +127,9 @@ class TtMixtralAttention(torch.nn.Module):
 
         # Scale tensor for q_heads to avoid falling back to host.
         self.head_dims = ttnn.from_torch(
-            torch.ones(1, 32, self.max_batch_size, self.head_dim) * (self.head_dim**-0.5),
+            torch.ones(1, 4, self.max_batch_size, self.head_dim) * (self.head_dim**-0.5),
             device=self.device_mesh,
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=1),
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
             layout=ttnn.TILE_LAYOUT,
             dtype=ttnn.bfloat16,
         )
@@ -131,11 +137,10 @@ class TtMixtralAttention(torch.nn.Module):
         reduce_mask_torch = torch.zeros(1, 1, self.max_batch_size, self.max_batch_size * 8)
         for i in range(self.max_batch_size):
             reduce_mask_torch[:, :, i, range(i, self.max_batch_size * 8, self.max_batch_size)] = 1
-        reduce_mask_torch = reduce_mask_torch.repeat(1, 1, 1, 8)
         self.reduce_mask = ttnn.from_torch(
             reduce_mask_torch,
             device=self.device_mesh,
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=3),
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
             dtype=ttnn.bfloat8_b,
             layout=ttnn.TILE_LAYOUT,
         )
@@ -266,6 +271,7 @@ class TtMixtralAttention(torch.nn.Module):
         # scores slice and softmax
         attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
         attn_1B4P = ttnn.softmax(attn_1B4P, dim=-1)  # , memory_config=attn_output_memcfg_post_sm)
+        print(attn_1B4P)
         # values matmul
         attn_output_1B4D = ttnn.matmul(
             attn_1B4P,
@@ -285,6 +291,7 @@ class TtMixtralAttention(torch.nn.Module):
             attn_output_14BD,
             output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
         )
+        print(attn_output_11BH)
 
         ###
         # Output matmul
@@ -297,7 +304,6 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel,
             dtype=ttnn.bfloat8_b,
         )
-        print("done pre all-gather")
         # All gather
         dense_outputs_11BH = ttnn.all_gather(dense_out_11BH, dim=2, num_links=1)
 
