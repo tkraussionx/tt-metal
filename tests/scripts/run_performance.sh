@@ -53,6 +53,7 @@ run_perf_models_llm_javelin_multi_device() {
     local test_marker=$2
 
     env pytest models/demos/falcon7b/tests -m $test_marker
+    env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py

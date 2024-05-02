@@ -27,7 +27,7 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
-@pytest.mark.models_performance_bare_metal
+@pytest.mark.models_performance_bare_metal_multi_device
 @pytest.mark.parametrize(
     "expected_compile_time, expected_inference_time",
     ((155, 10),),
