@@ -33,12 +33,7 @@ pytest models/demos/t3000/falcon40b/tests/test_falcon_end_to_end.py::test_Falcon
 pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-8chips-enable_program_cache]
 pytest models/demos/t3000/falcon40b/tests/test_falcon_end_to_end.py::test_FalconCausalLM_end_to_end_with_program_cache[BFLOAT8_B-SHARDED-falcon_40b-layers_1-decode_batch32-8chips-enable_program_cache]
 
-# Mistral8x7b 8 chip decode tests
-# Related weights and cached files
-export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
-export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
-export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1
-
+# Mistral8x7b 8 chip decode tests (env flags set inside the tests)
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_attention.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_mlp.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_rms_norm.py

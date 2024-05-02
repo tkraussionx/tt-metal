@@ -1,13 +1,13 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+import os
 import torch
 import pytest
 from loguru import logger
 import ttnn
 from models.demos.t3000.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
 from models.demos.t3000.mixtral8x7b.tt.mixtral_moe import TtMoeLayer
-from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.t3000.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.t3000.mixtral8x7b.reference.model import FeedForward
 from models.utility_functions import (
@@ -15,6 +15,14 @@ from models.utility_functions import (
     comp_allclose,
 )
 from models.utility_functions import get_devices_for_t3000
+
+# Set Mixtral flags for CI, if CI environment is setup
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
 def test_mixtral_moe_inference(all_devices, use_program_cache, reset_seeds):

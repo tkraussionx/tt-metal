@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+import os
 import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+
 from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
 from models.demos.t3000.mixtral8x7b.reference.model import RMSNorm
 from models.utility_functions import (
@@ -13,10 +14,17 @@ from models.utility_functions import (
     comp_allclose,
 )
 
+# Set Mixtral flags for CI, if CI environment is setup
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+
 
 def test_mistral_rms_norm_inference(device, use_program_cache, reset_seeds):
     dtype = ttnn.bfloat8_b
-
     model_args = TtModelArgs(device)
     state_dict = torch.load(model_args.consolidated_weights_path(0))
 

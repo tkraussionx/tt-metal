@@ -4,18 +4,26 @@
 import torch
 import pytest
 import ttnn
+import os
 
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
 )
 from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
-from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.utility_functions import get_devices_for_t3000
 
 
 from models.perf.perf_utils import prep_perf_report
 from models.utility_functions import profiler, enable_persistent_kernel_cache
+
+# Set Mixtral flags for CI, if CI environment is setup
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+
+from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
 class Emb(torch.nn.Module):
