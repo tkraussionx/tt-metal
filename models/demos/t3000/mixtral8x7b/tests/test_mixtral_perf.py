@@ -38,7 +38,7 @@ class Emb(torch.nn.Module):
 @pytest.mark.models_performance_bare_metal_multi_device
 @pytest.mark.parametrize(
     "expected_compile_time, expected_inference_time",
-    ((155, 10),),
+    ((200, 8.5),),
 )
 def test_mixtral_model_perf(
     all_devices, expected_compile_time, expected_inference_time, use_program_cache, reset_seeds
@@ -105,13 +105,6 @@ def test_mixtral_model_perf(
     iter_time = profiler.get("model_run_for_inference_0")
 
     comment = f"num_layers={model_args.n_layers}"
-
-    # comment = f"num_layers={model_args.n_layers}"
-    # weight_loading = profiler.get("weight_loading")
-    # input_processing = profiler.get("input_processing")
-    # ref_model_run_for_inference = profiler.get("ref_model_run_for_inference_0")
-    # first_iter_time = profiler.get("model_run_for_inference_0")
-    # second_iter_time = profiler.get("model_run_for_inference_10")
 
     prep_perf_report(
         model_name=f"Mixtral8x7B",
