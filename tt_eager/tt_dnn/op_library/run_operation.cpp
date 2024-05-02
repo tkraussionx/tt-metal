@@ -366,16 +366,6 @@ OutputTensors run(
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
-    // Async Mode: Asserts to ensure that tensors are populated before running op
-    // TODO : Joseph/Eyon, this was deleted in a prior PR, is that correct?
-    // for (const Tensor& tensor : input_tensors) {
-    //     TT_ASSERT(tensor.metadata_populated(), "Input tensors must be populated before running op.");
-    // }
-    // for (auto& tensor : optional_input_tensors) {
-    //     if (tensor.has_value()) {
-    //         TT_ASSERT(tensor.value().metadata_populated(), "Input tensors must be populated before running op.");
-    //     }
-    // }
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return detail::decorate_device_operation(detail::run_multi_device_operation<OutputTensors>)(
             std::make_optional(std::ref(queue)), operation, input_tensors, optional_input_tensors, optional_output_tensors);
@@ -404,15 +394,6 @@ OutputTensors run(
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
-    // Async Mode: Asserts to ensure that tensors are populated before running op
-    // for (const Tensor& tensor : input_tensors) {
-    //     TT_ASSERT(tensor.metadata_populated(), "Input tensors must be populated before running op.");
-    // }
-    // for (auto& tensor : optional_input_tensors) {
-    //     if (tensor.has_value()) {
-    //         TT_ASSERT(tensor.value().metadata_populated(), "Input tensors must be populated before running op.");
-    //     }
-    // }
 #ifdef DEBUG
     operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
 #endif
@@ -781,7 +762,11 @@ void validate_workers_and_storage(const std::vector<Tensor>& inputs, const std::
     }
 }
 
-std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& inputs, const std::vector<std::optional<const Tensor>>&& optional_inputs) {
+// std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor> inputs, const std::vector<std::optional<const Tensor>> optional_inputs) {
+//     return get_workers_for_op_output(std::move(inputs), std::move(outputs));
+// }
+
+std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor> inputs, const std::vector<std::optional<const Tensor>> optional_inputs) {
     std::vector<Device*> workers_for_op = {};
     // Infer output workers from inputs. For multi-device tensors the number
     // of workers used for the op (and assigned to the ouput) is the minimum

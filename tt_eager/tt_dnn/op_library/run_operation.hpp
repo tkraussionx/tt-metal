@@ -301,12 +301,33 @@ OutputTensors run(
     const OptionalConstTensors& optional_input_tensors = {},
     const OptionalTensors& optional_output_tensors = {});
 
+// template<typename ConcreteOperation>
+// inline auto run(
+//     ConcreteOperation&& concrete_op,
+//     const Tensors& input_tensors,
+//     const OptionalConstTensors& optional_input_tensors={},
+//     const OptionalTensors& optional_output_tensors={}
+// ) -> ProgramOutputTensors<ConcreteOperation> {
+//     using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
+//     if constexpr (detail::is_host_operation<ConcreteOperation>()) {
+//         TT_ASSERT(optional_input_tensors.empty());
+//         const auto operation = HostOperation(concrete_op);
+//         return run<OutputTensors>(operation, input_tensors);
+//     } else if constexpr (detail::is_device_operation<ConcreteOperation>()) {
+//         const auto operation = DeviceOperation(concrete_op);
+//         return run<OutputTensors>(operation, input_tensors, optional_input_tensors, optional_output_tensors);
+//     } else {
+//         static_assert(tt::stl::concepts::always_false_v<ConcreteOperation>, "Unsupported Operation");
+//     }
+// }
+
 template<typename ConcreteOperation>
 inline auto run(
     ConcreteOperation&& concrete_op,
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors={},
-    const OptionalTensors& optional_output_tensors={}
+    const OptionalTensors& optional_output_tensors={},
+    std::optional<std::reference_wrapper<CommandQueue>> queue = std::nullopt
 ) -> ProgramOutputTensors<ConcreteOperation> {
     using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
     if constexpr (detail::is_host_operation<ConcreteOperation>()) {
@@ -315,6 +336,9 @@ inline auto run(
         return run<OutputTensors>(operation, input_tensors);
     } else if constexpr (detail::is_device_operation<ConcreteOperation>()) {
         const auto operation = DeviceOperation(concrete_op);
+        if (queue.has_value()) {
+            return run<OutputTensors>(queue.value(), operation, input_tensors, optional_input_tensors, optional_output_tensors);
+        }
         return run<OutputTensors>(operation, input_tensors, optional_input_tensors, optional_output_tensors);
     } else {
         static_assert(tt::stl::concepts::always_false_v<ConcreteOperation>, "Unsupported Operation");
@@ -397,7 +421,9 @@ void launch_with_autoformat(
     const std::vector<std::optional<const Tensor>> optional_input_tensors = {}
 );
 
-std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& inputs, const std::vector<std::optional<const Tensor>>&& optional_inputs = {});
+// std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& inputs, const std::vector<std::optional<const Tensor>>&& optional_inputs = {});
+
+std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor> inputs, const std::vector<std::optional<const Tensor>> optional_inputs = {});
 
 } //namespace operation
 

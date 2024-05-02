@@ -113,10 +113,7 @@ DeviceBuffer allocate_contiguous_buffer_on_device(uint32_t buffer_size_bytes, De
 }
 
 
-DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Device *device,
-                                            const Shape& shape, DataType data_type, Layout layout,
-                                            std::optional<ShardSpecBuffer> shard_params,
-                                            const MemoryConfig& memory_config) {
+void validate_sharded_buffer_allocation(const Shape& shape, Layout layout, std::optional<ShardSpecBuffer> shard_params, const MemoryConfig& memory_config) {
     TT_ASSERT(shard_params.has_value(), "Shard params are required for sharded buffer and they were not initialized");
 
     auto shard_spec = memory_config.shard_spec.value();
@@ -158,7 +155,13 @@ DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Devic
         // Require alignment for now
         // TT_ASSERT(shard_shape[1] * tensor_impl::element_size_bytes_wrapper(data_type) % ADDRESS_ALIGNMENT == 0);
     }
+}
 
+DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Device *device,
+                                            const Shape& shape, DataType data_type, Layout layout,
+                                            std::optional<ShardSpecBuffer> shard_params,
+                                            const MemoryConfig& memory_config) {
+    validate_sharded_buffer_allocation(shape, layout, shard_params, memory_config);
     auto page_shape = shard_params.value().page_shape;
     uint32_t size_of_element = element_size_bytes_wrapper(data_type);
     uint32_t page_size = page_shape[0] * page_shape[1] * size_of_element;

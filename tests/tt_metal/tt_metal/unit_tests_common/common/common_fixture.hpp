@@ -67,7 +67,7 @@ protected:
         for (unsigned int id = 0; id < num_devices; id++) {
             if (SkipTest(id))
                 continue;
-            auto* device = tt::tt_metal::CreateDevice(id);
+            auto* device = tt::tt_metal::CreateDevice(id, 2);
             devices_.push_back(device);
         }
         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
