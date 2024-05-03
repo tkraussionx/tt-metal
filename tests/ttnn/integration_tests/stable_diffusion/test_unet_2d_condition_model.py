@@ -250,7 +250,6 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
         print(iter)
     print(f"Time taken for 50 iterations: {total_time}")
     print(f"Samples per second: {50 / total_time}")
-    ttnn_output = ttnn_to_torch(ttnn_output)
     passing, output = comp_pcc(torch_output, ttnn_output, pcc=0.99)
     print(output)
     assert passing
