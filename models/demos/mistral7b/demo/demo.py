@@ -104,7 +104,7 @@ def cache_attention(device, state_dict, model_args, rot_emb_matrix_list, dtype):
         rot_mat=rot_emb_matrix_list,
         start_pos=0,
     )
-    for iter in range(990):
+    for iter in range(1024):
         pos = iter
         tt_out = tt_model(
             [attention_input],
@@ -248,8 +248,8 @@ def run_mistral_demo(user_input, batch_size, device):
                 else:
                     logger.trace(f"[User {user}] Finished decoding at iteration {iteration}")
                     user_done[user] = True
-                    if all(user_done):
-                        users_decoding = False
+                    # if all(user_done):
+                    #     users_decoding = False
 
         if embed_on_device:
             tt_out_tok = ttnn.from_torch(tt_out_tok, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)

@@ -410,10 +410,10 @@ class TtMistralAttention(nn.Module):
                 ttnn.deallocate(attn_output)
 
             else:
-                print("pos>575")
                 # reshape and shard keys
                 keys_BKPD = keys[:, :, :padded_layer_past_len, :]
                 keys_1B_P_8D = ttnn.unsqueeze_to_4D(ttnn.transformer.concatenate_heads(keys_BKPD))
+                keys_1B_P_8D = ttnn.clone(keys_1B_P_8D, dtype=ttnn.bfloat16, memory_config=ttnn.L1_MEMORY_CONFIG)
                 keys_1B_8D_P_preshard = ttnn.permute(keys_1B_P_8D, (0, 1, 3, 2))
 
                 keys_BKPD.deallocate()
@@ -427,6 +427,7 @@ class TtMistralAttention(nn.Module):
 
                 # reshape and shard queries
                 q_heads_1QBD = q_heads * head_dim  # Scale q_heads instead of QK before softmax
+                q_heads_1QBD = ttnn.clone(q_heads_1QBD, dtype=ttnn.bfloat16, memory_config=ttnn.L1_MEMORY_CONFIG)
                 q_heads_1BQD = ttnn.permute(q_heads_1QBD, (0, 2, 1, 3))
                 q_heads_1QBD.deallocate()
                 q_heads_1B_Q_8D_preshard = (
@@ -465,7 +466,7 @@ class TtMistralAttention(nn.Module):
                     values_1B_P_8D_preshard,
                     program_config=self.attn_program_config,
                     memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
-                    dtype=ttnn.bfloat8_b,
+                    dtype=ttnn.bfloat16,
                     compute_kernel_config=self.compute_kernel_config_attn,
                 )
 
