@@ -50,6 +50,7 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/bcast/bcast_op.cpp \
 	tt_eager/tt_dnn/op_library/bcast/single_core/bcast_op_single_core.cpp \
 	tt_eager/tt_dnn/op_library/bcast/multi_core_h/bcast_op_multi_core_h.cpp \
+	tt_eager/tt_dnn/op_library/bcast/multi_core_h/bcast_op_sharded_h.cpp \
 	tt_eager/tt_dnn/op_library/bcast/multi_core_w/bcast_op_multi_core_w.cpp \
 	tt_eager/tt_dnn/op_library/bcast/multi_core_hw/bcast_op_multi_core_hw.cpp \
 	tt_eager/tt_dnn/op_library/bmm/bmm_op.cpp \

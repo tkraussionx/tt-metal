@@ -50,6 +50,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/bcast_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/single_core/bcast_op_single_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/multi_core_h/bcast_op_multi_core_h.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/multi_core_h/bcast_op_sharded_h.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/multi_core_w/bcast_op_multi_core_w.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bcast/multi_core_hw/bcast_op_multi_core_hw.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/op_library/bmm/bmm_op.cpp

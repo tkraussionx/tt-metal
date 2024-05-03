@@ -166,6 +166,8 @@ operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
     std::cout << "get_parallelization_strategy: " << magic_enum::enum_name(parallelization_strategy) << "\n";
     switch (parallelization_strategy){
+        case BcastOpParallelizationStrategy::MULTI_CORE_H_SHARDED:
+            return bcast_sharded_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
             return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
@@ -201,7 +203,10 @@ BcastOpParallelizationStrategy EltwiseBinaryBroadcast::get_parallelization_strat
     uint32_t Wt = input_tensor_a.get_legacy_shape()[3] / TILE_WIDTH;
 
     if(Ht > 1 and this->dim == BcastOpDim::H){
-        return BcastOpParallelizationStrategy::MULTI_CORE_H;
+        if(input_tensor_a.is_sharded())
+            return BcastOpParallelizationStrategy::MULTI_CORE_H_SHARDED;
+        else
+            return BcastOpParallelizationStrategy::MULTI_CORE_H;
     }
     else if(Wt > 1 and this->dim == BcastOpDim::W){
         return BcastOpParallelizationStrategy::MULTI_CORE_W;

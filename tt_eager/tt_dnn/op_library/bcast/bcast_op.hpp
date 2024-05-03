@@ -19,7 +19,7 @@ enum class BcastOpMath { ADD = 0, SUB = 1, MUL = 2 };
 enum class BcastOpDim { H = 0, W = 1, HW = 2 };
 
 // TODO: Accept parallelization
-enum class BcastOpParallelizationStrategy { MULTI_CORE_H = 0, MULTI_CORE_W = 1, MULTI_CORE_HW = 2, SINGLE_CORE = 3 };
+enum class BcastOpParallelizationStrategy { MULTI_CORE_H = 0, MULTI_CORE_W = 1, MULTI_CORE_HW = 2, SINGLE_CORE = 3, MULTI_CORE_H_SHARDED = 4 };
 
 operation::ProgramWithCallbacks bcast_single_core(
     const Tensor &input_tensor_a,
@@ -28,6 +28,12 @@ operation::ProgramWithCallbacks bcast_single_core(
     BcastOpMath bcast_op,
     BcastOpDim bcast_dim);
 operation::ProgramWithCallbacks bcast_multi_core_h(
+    const Tensor &input_tensor_a,
+    const Tensor &input_tensor_b,
+    const Tensor &output_tensor,
+    BcastOpMath bcast_op,
+    BcastOpDim bcast_dim);
+operation::ProgramWithCallbacks bcast_sharded_h(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     const Tensor &output_tensor,
