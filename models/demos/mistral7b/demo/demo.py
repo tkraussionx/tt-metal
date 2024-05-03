@@ -85,7 +85,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, embd, instruc
 
 def cache_attention(device, state_dict, model_args, rot_emb_matrix_list, dtype):
     logger.info("Caching attention ops..")
-    from models.demos.mistral7b.tt.mistral_attention_fast import TtMistralAttention
+    from models.demos.mistral7b.tt.mistral_attention import TtMistralAttention
 
     attention_input = ttnn.from_torch(
         torch.randn(1, 1, 32, 4096),
@@ -110,7 +110,7 @@ def cache_attention(device, state_dict, model_args, rot_emb_matrix_list, dtype):
             [attention_input],
             pos,
         )
-        ttnn.deallocate(tt_out[0])
+        # ttnn.deallocate(tt_out[0])
         print("Cached iter", iter)
 
     ttnn.deallocate(tt_model.wqkv_list[0])

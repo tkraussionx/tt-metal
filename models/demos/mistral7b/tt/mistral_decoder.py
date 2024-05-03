@@ -4,7 +4,7 @@
 import torch
 import ttnn
 from typing import Optional
-from models.demos.mistral7b.tt.mistral_attention_fast import TtMistralAttention
+from models.demos.mistral7b.tt.mistral_attention import TtMistralAttention
 from models.demos.mistral7b.tt.mistral_mlp import TtMistralMLP
 from models.demos.mistral7b.tt.mistral_rms_norm import TtRMSNorm
 
