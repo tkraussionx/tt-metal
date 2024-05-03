@@ -18,7 +18,7 @@ struct SliceRange {
     // [0:32:4, 0:32:4]
     static inline SliceRange hw0_32_4() { return SliceRange{ .h0 = 0, .h1 = 32, .hs = 4, .w0 = 0, .w1 = 32, .ws = 4 }; }
     // [0, 0:32]
-    static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 31, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
     // [0:32, 0]
     static inline SliceRange h0_32_w0() { return SliceRange{ .h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 1, .ws = 1 }; }
     // [0:32:1, 1]
