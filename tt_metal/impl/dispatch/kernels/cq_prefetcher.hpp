@@ -7,6 +7,7 @@
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 #include "cq_cmds.hpp"
+#include "debug/dprint.h"
 
 CQWriteInterface cq_write_interface;
 CQReadInterface cq_read_interface;
@@ -291,15 +292,29 @@ FORCE_INLINE void write_event(uint32_t event_address) {
 FORCE_INLINE void record_last_completed_event(uint32_t event_id) {
     volatile tt_l1_ptr uint32_t* last_event_id = get_cq_completion_last_event();
     last_event_id[0] = event_id;
+    DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") KCM record_last_completed_event setting last_complated_event_id: " << event_id << ENDL();
 }
 
 // Cross CQ sync by waiting for a given CQ to have completed up to a certain event id.
 FORCE_INLINE void wait_for_event(uint32_t event_id, uint32_t noc_x, uint32_t noc_y) {
     uint64_t src_noc_addr = get_noc_addr(noc_x, noc_y, CQ_COMPLETION_LAST_EVENT);
+
+
+
+    noc_async_read(src_noc_addr, CQ_COMPLETION_16B_SCRATCH, 4);
+    noc_async_read_barrier();
+    auto observed = *get_16b_scratch_l1();
+
+    // DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") wait_for_event InitialCheck for event_id: " << event_id << " observed: " << observed << ENDL();
     do {
         noc_async_read(src_noc_addr, CQ_COMPLETION_16B_SCRATCH, 4);
         noc_async_read_barrier();
-    } while (*get_16b_scratch_l1() < event_id);
+        observed = *get_16b_scratch_l1();
+        // DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") wait_for_event Checking for event_id: " << event_id << " observed: " << observed << ENDL();
+
+    } while (observed < event_id);
+
+    DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") KCM wait_for_event Success for event_id: " << event_id << " observed: " << observed << ENDL();
 }
 
 class ProgramEventBuffer {

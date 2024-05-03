@@ -39,56 +39,129 @@ TEST_F(CommonFixture, TestBuffer) {
         .buffer_type = BufferType::DRAM,
         .shard_spec = std::nullopt};
 
-    ttnn::Shape shape = ttnn::Shape(Shape({1, 1, 128, 128}));
-    auto host_data_0 = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
-    auto host_data_1 = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
-    auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
-    for (int i = 0; i < 16384; i++) {
-        float val = static_cast<float>(i);
-        host_data_0[i] = bfloat16(static_cast<float>(16));
-        host_data_1[i] = bfloat16(2 * val);
+
+    uint32_t num_test_loops = tt::parse_env("NUM_TEST_LOOPS", 1);
+
+    for (uint32_t test_idx = 0; test_idx < num_test_loops; test_idx++) {
+
+        int test_val_int = tt::parse_env("VALUE", 16);
+
+        // Set test_val_int to perfect squares increasing based on test_idx:
+        if (num_test_loops > 1) {
+            test_val_int = (test_idx + 1) * (test_idx + 1);
+        }
+
+        float test_val = (float) test_val_int;
+        auto expected = static_cast<int>(std::round(std::sqrt(test_val)));
+
+        log_info(tt::LogTest, "=====================================================");
+        log_info(tt::LogTest, "Running test: {} with value: {} expected: {}", test_idx, test_val_int, expected);
+
+        ttnn::Shape shape = ttnn::Shape(Shape({1, 1, 128, 128}));
+        auto host_data_0 = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
+        auto host_data_1 = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
+        auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[16384]);
+        for (int i = 0; i < 16384; i++) {
+            float val = static_cast<float>(i);
+            host_data_0[i] = bfloat16(test_val);
+            host_data_1[i] = bfloat16(2 * val);
+        }
+
+        auto event0 = std::make_shared<Event>();
+        auto event1 = std::make_shared<Event>();
+        auto buffer0 = ttnn::allocate_buffer_on_device(16384 * 2, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
+        auto buffer1 = ttnn::allocate_buffer_on_device(16384 * 2, device, shape, DataType::BFLOAT16, Layout::ROW_MAJOR, mem_cfg);
+        auto storage0 = tt::tt_metal::DeviceStorage{buffer0};
+        auto storage1 = tt::tt_metal::DeviceStorage{buffer1};
+        Tensor tensor0 = Tensor(storage0, shape, DataType::BFLOAT16, Layout::TILE);
+
+
+        bool write_cq0 = tt::parse_env("WRITE_CQ0", false);
+
+        if (write_cq0) {
+            log_info(tt::LogTest, "KCM Writing using CQ0");
+            ttnn::write_buffer(0, tensor0, {host_data_0}); // Write using cq 0
+        } else {
+            log_info(tt::LogTest, "KCM Writing using CQ1 w/ event sync");
+            ttnn::write_buffer(1, tensor0, {host_data_0}); // Write using cq 1
+            ttnn::record_event(device->command_queue(1), event0); // Record write on cq 1
+            // Wait until cq 1 write is complete
+            // ttnn::queue_synchronize(device->command_queue(1));
+            ttnn::wait_for_event(device->command_queue(0), event0);
+        }
+
+
+
+        std::vector<Tensor> tensors = {tensor0};
+
+        auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::SQRT}}};
+        // Run operation on cq 0
+        Tensor tensor1 = ttnn::run_operation(0, op0, tensors).at(0);
+
+        // KCM - Read using CQ0
+        bool read_cq0 = tt::parse_env("READ_CQ0", false);
+        if (read_cq0) {
+            log_info(tt::LogTest, "KCM Reading using CQ0");
+            // Read using cq 1
+            ttnn::read_buffer(0, tensor1, {readback_data});
+
+        } else {
+
+            log_info(tt::LogTest, "KCM Reading using CQ1 w/ event sync");
+
+            // Record cq 0 prog execution
+            ttnn::record_event(device->command_queue(0), event1);
+            // Wait until cq 0 prog execution is done
+            // ttnn::queue_synchronize(device->command_queue(0));
+            ttnn::wait_for_event(device->command_queue(1), event1);
+            // Read using cq 1
+            ttnn::read_buffer(1, tensor1, {readback_data});
+
+        }
+
+        // KCM Tweak
+        int num_words_to_check = 10;
+        // log_info(tt::LogTest, "Test {} expected: {} readback data ({} words) is...", test_idx, expected, num_words_to_check);
+        bool check_passed = true;
+
+        int observed;
+        for (int i = 0; i < num_words_to_check; i++) { // Was 16384
+            // std::cout << bfloat16(readback_data[i]).to_float() << " ";
+            observed = static_cast<int>(std::round(bfloat16(readback_data[i]).to_float()));
+
+            bool match = (observed == expected);
+            // if (match) {
+            //     log_info(tt::LogTest, "Rounded. Matching: {} Observed: {} Expected: {}", match, observed, expected);
+            // } else {
+            //     log_warning(tt::LogTest, "Rounded. Matching: {} Observed: {} Expected: {}", match, observed, expected);
+            // }
+            check_passed &= match;
+        }
+
+        if (check_passed) {
+            log_info(tt::LogTest, "Test {} Passed. Observed: {} Expected: {}", test_idx, observed, expected);
+        } else {
+            log_warning(tt::LogTest, "Test {} Failed. Observed: {} Expected: {}", test_idx, observed, expected);
+        }
+
+        EXPECT_EQ(check_passed, true);
+
+        // auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
+        // std::vector<Tensor> tensors = {tensor0};
+
+        // ttnn::read_buffer(0, tensor0, {readback_data});
+        // Tensor tensor3 = ttnn::run_operation(0, op0, tensors).at(0);
+        // std::vector<Tensor> tensors1 = {tensor3};
+        // Tensor tensor4 = ttnn::run_operation(0, op1, tensors1).at(0);
+        //
+        // ttnn::wait_for_event(device->command_queue(1), event1);
+
+        std::cout << std::endl;
+        ttnn::queue_synchronize(device->command_queue());
+
     }
 
-    auto event0 = std::make_shared<Event>();
-    auto event1 = std::make_shared<Event>();
-    auto buffer0 = ttnn::allocate_buffer_on_device(16384 * 2, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
-    auto buffer1 = ttnn::allocate_buffer_on_device(16384 * 2, device, shape, DataType::BFLOAT16, Layout::ROW_MAJOR, mem_cfg);
-    auto storage0 = tt::tt_metal::DeviceStorage{buffer0};
-    auto storage1 = tt::tt_metal::DeviceStorage{buffer1};
-    Tensor tensor0 = Tensor(storage0, shape, DataType::BFLOAT16, Layout::TILE);
-    ttnn::write_buffer(1, tensor0, {host_data_0}); // Write using cq 1
-    ttnn::record_event(device->command_queue(1), event0); // Record write on cq 1
 
-    std::vector<Tensor> tensors = {tensor0};
-    // Wait until cq 1 write is complete
-    ttnn::queue_synchronize(device->command_queue(1));
-    // ttnn::wait_for_event(device->command_queue(0), event0);
-    auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::SQRT}}};
-    // Run operation on cq 0
-    Tensor tensor1 = ttnn::run_operation(0, op0, tensors).at(0);
-    // Record cq 0 prog execution
-    ttnn::record_event(device->command_queue(0), event1);
-    // Wait until cq 0 prog execution is done
-    // ttnn::queue_synchronize(device->command_queue(0));
-    ttnn::wait_for_event(device->command_queue(1), event1);
-    // Read using cq 1
-    ttnn::read_buffer(1, tensor1, {readback_data});
-    for (int i = 0; i < 16384; i++) {
-        std::cout << bfloat16(readback_data[i]).to_float() << " ";
-    }
-
-    // auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
-    // std::vector<Tensor> tensors = {tensor0};
-
-    // ttnn::read_buffer(0, tensor0, {readback_data});
-    // Tensor tensor3 = ttnn::run_operation(0, op0, tensors).at(0);
-    // std::vector<Tensor> tensors1 = {tensor3};
-    // Tensor tensor4 = ttnn::run_operation(0, op1, tensors1).at(0);
-    //
-    // ttnn::wait_for_event(device->command_queue(1), event1);
-
-    std::cout << std::endl;
-    ttnn::queue_synchronize(device->command_queue());
 }
 
 TEST_F(CommonFixture, TestTensorOwnershipSanity) {

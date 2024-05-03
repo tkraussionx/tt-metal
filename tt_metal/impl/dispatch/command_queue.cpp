@@ -1498,7 +1498,7 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
 }
 
 void EnqueueRecordEvent(CommandQueue& cq, std::shared_ptr<Event> event) {
-    std::cout << "Issuing record to: " << cq.id() << std::endl;
+    // std::cout << "Issuing record to: " << cq.id() << std::endl;
     TT_ASSERT(event->device == nullptr, "EnqueueRecordEvent expected to be given an uninitialized event");
     TT_ASSERT(event->event_id == -1, "EnqueueRecordEvent expected to be given an uninitialized event");
     TT_ASSERT(event->cq_id == -1, "EnqueueRecordEvent expected to be given an uninitialized event");
@@ -1517,7 +1517,7 @@ void EnqueueRecordEventImpl(CommandQueue& cq, std::shared_ptr<Event> event) {
 
 
 void EnqueueWaitForEvent(CommandQueue& cq, std::shared_ptr<Event> event) {
-    std::cout << "Issuing wait to: " << cq.id() << std::endl;
+    // std::cout << "Issuing wait to: " << cq.id() << std::endl;
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_WAIT_FOR_EVENT,
