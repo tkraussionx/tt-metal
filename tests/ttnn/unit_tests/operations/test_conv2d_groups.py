@@ -15,6 +15,7 @@ import math
 import os
 
 
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
 def test_conv_normal(
     device,
 ):
@@ -23,13 +24,13 @@ def test_conv_normal(
 
     # Test parameters
     batch_size = 1
-    in_channels = 8
-    input_height = 6
-    input_width = 7
-    out_channels = 4
+    in_channels = 64
+    input_height = 8
+    input_width = 8
+    out_channels = 64
     kernel_size = (3, 3)
     stride = (1, 1)
-    padding = (0, 0)
+    padding = (1, 1)
     num_groups = 1
     math_fidelity = ttnn.MathFidelity.HiFi4
 
