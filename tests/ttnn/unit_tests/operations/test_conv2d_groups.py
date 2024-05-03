@@ -124,79 +124,25 @@ def test_conv_normal(
     # Permute shape
     torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
 
-    breakpoint()
-
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=0.999)
     logger.info(pcc_msg)
     assert passing
 
 
-def test_conv_grouped(
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+def test_pytorch_conv_grouped(
     device,
 ):
-    # Generate pytorch golden grouped evaluation
-    torch.manual_seed(0)
-
-    # Test parameters
-    batch_size = 1
-    in_channels = 8
-    input_height = 6
-    input_width = 7
-    out_channels = 4
-    kernel_size = (3, 3)
-    stride = (1, 1)
-    padding = (0, 0)
-    num_groups = 2
-    math_fidelity = ttnn.MathFidelity.HiFi4
-
-    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-        math_fidelity=math_fidelity,
-        math_approx_mode=True,
-        fp32_dest_acc_en=True,
-        packer_l1_acc=True,
-    )
-
-    # Define original tensors and shapes
-    conv_input_shape = [batch_size, in_channels, input_height, input_width]
-    conv_weight_shape = [out_channels, in_channels // num_groups, kernel_size[0], kernel_size[1]]
-    conv_bias_shape = [1, 1, 1, out_channels]
-    torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
-    torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
-    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
-    torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float()
-
-    # Define pytorch convolutional layer
-    conv_layer_pytorch = nn.Conv2d(
-        in_channels=in_channels,
-        out_channels=out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=padding,
-        groups=num_groups,
-    )
-    conv_layer_pytorch.weight = nn.Parameter(torch_weight_tensor)
-    conv_layer_pytorch.bias = nn.Parameter(torch_bias_tensor.reshape(-1))
-
-    # Apply convolution operation
-    torch_out_golden_tensor = conv_layer_pytorch(torch_input_tensor_nchw)
-
-    output_shape_nhwc = [
-        torch_out_golden_tensor.shape[0],
-        torch_out_golden_tensor.shape[2],
-        torch_out_golden_tensor.shape[3],
-        torch_out_golden_tensor.shape[1],
-    ]
-
     # Compute groups=2
     # Test parameters
     batch_size_groups_2 = 1
-    in_channels_groups_2 = 8
-    input_height_groups_2 = 6
-    input_width_groups_2 = 7
-    out_channels_groups_2 = 4
+    in_channels_groups_2 = 64
+    input_height_groups_2 = 8
+    input_width_groups_2 = 8
+    out_channels_groups_2 = 64
     kernel_size_groups_2 = (3, 3)
     stride_groups_2 = (1, 1)
-    padding_groups_2 = (0, 0)
+    padding_groups_2 = (1, 1)
     num_groups_groups_2 = 2
 
     # Define original tensors and shapes
@@ -238,13 +184,13 @@ def test_conv_grouped(
     # Pad the weight and compute with groups=1, this should equal groups=2
     # Test parameters
     batch_size_groups_1 = 1
-    in_channels_groups_1 = 8
-    input_height_groups_1 = 6
-    input_width_groups_1 = 7
-    out_channels_groups_1 = 4
+    in_channels_groups_1 = 64
+    input_height_groups_1 = 8
+    input_width_groups_1 = 8
+    out_channels_groups_1 = 64
     kernel_size_groups_1 = (3, 3)
     stride_groups_1 = (1, 1)
-    padding_groups_1 = (0, 0)
+    padding_groups_1 = (1, 1)
     num_groups_groups_1 = 1
 
     # Define original tensors and shapes
@@ -279,11 +225,81 @@ def test_conv_grouped(
         torch_out_golden_tensor_groups_1.shape[1],
     ]
 
-    # passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_out_golden_tensor_groups_1, torch_out_golden_tensor_groups_2, pcc=0.99999)
-    # logger.info(pcc_msg)
-    # assert passing
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(
+        torch_out_golden_tensor_groups_1, torch_out_golden_tensor_groups_2, pcc=0.99999
+    )
+    logger.info(pcc_msg)
+    assert passing
 
-    # Generate normal convolution via ttnn
+
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+def test_pytorch_ttnn_conv_grouped(
+    device,
+):
+    # Pad the weight and compute with groups=1, this should equal groups=2
+    # Test parameters
+    batch_size = 1
+    in_channels = 64
+    input_height = 8
+    input_width = 8
+    out_channels = 64
+    kernel_size = (3, 3)
+    stride = (1, 1)
+    padding = (1, 1)
+    num_groups = 1
+    math_fidelity = ttnn.MathFidelity.HiFi4
+
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=math_fidelity,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    # Define original tensors and shapes
+    conv_input_shape = [batch_size, in_channels, input_height, input_width]
+    conv_weight_shape = [
+        out_channels,
+        in_channels // 2,
+        kernel_size[0],
+        kernel_size[1],
+    ]
+    conv_bias_shape = [1, 1, 1, out_channels]
+    torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
+    torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
+    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
+    torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float()
+
+    # Convert weights
+    tensor1, tensor2 = torch.chunk(torch_weight_tensor, 2, dim=0)
+    zero_tensor = torch.zeros_like(tensor1)
+    tensor1_resized = torch.cat((tensor1, zero_tensor), dim=1)
+    tensor2_resized = torch.cat((zero_tensor, tensor2), dim=1)
+    torch_weight_tensor = torch.cat((tensor1_resized, tensor2_resized), dim=0)
+    torch_bias_tensor = torch_bias_tensor
+
+    # Define pytorch convolutional layer
+    conv_layer_pytorch = nn.Conv2d(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        groups=num_groups,
+    )
+    conv_layer_pytorch.weight = nn.Parameter(torch_weight_tensor)
+    conv_layer_pytorch.bias = nn.Parameter(torch_bias_tensor.reshape(-1))
+
+    # Apply convolution operation
+    torch_out_golden_tensor = conv_layer_pytorch(torch_input_tensor_nchw)
+
+    output_shape_nhwc = [
+        torch_out_golden_tensor.shape[0],
+        torch_out_golden_tensor.shape[2],
+        torch_out_golden_tensor.shape[3],
+        torch_out_golden_tensor.shape[1],
+    ]
+
     # Define ttnn tensors and shapes
     tt_weight_tensor = ttnn.from_torch(torch_weight_tensor, ttnn.bfloat16)
     tt_bias_tensor = ttnn.from_torch(torch_bias_tensor, ttnn.bfloat16)
@@ -329,14 +345,12 @@ def test_conv_grouped(
     tt_output_tensor_on_device = ttnn.to_layout(tt_output_tensor_on_device, ttnn.ROW_MAJOR_LAYOUT)
     tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
     torch_output_tensor = ttnn.to_torch(tt_output_tensor)
-    torch_output_tensor = torch.split(torch_output_tensor, out_channels, 3)[0]
+    # torch_output_tensor = torch.split(torch_output_tensor, out_channels, 3)[0]
     torch_output_tensor = torch.reshape(torch_output_tensor, output_shape_nhwc)
 
     # Permute shape
     torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
 
-    passing, pcc_msg = check_with_pcc_without_tensor_printout(
-        torch_output_tensor, torch_out_golden_tensor, pcc=0.999999
-    )
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=0.999)
     logger.info(pcc_msg)
     assert passing
