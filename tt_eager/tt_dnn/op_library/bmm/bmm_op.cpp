@@ -930,7 +930,7 @@ void Matmul::validate(
                 uint32_t K = input_tensor_a.get_legacy_shape()[-1];
                 uint32_t per_core_M = program_config.per_core_M;
                 uint32_t per_core_N = program_config.per_core_N;
-                TT_FATAL(per_core_M % (input_tensor_a.get_legacy_shape()[-2] / TILE_HEIGHT) == 0);
+                TT_FATAL(M % per_core_M == 0);
                 TT_FATAL(N == per_core_N);
                 if (input_tensor_a.is_sharded()) {
                     TT_FATAL(input_tensor_a.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
@@ -959,6 +959,7 @@ void Matmul::validate(
                 TT_FATAL(!broadcast_batch);
 
                 if (input_tensor_b.is_sharded()) {
+                    TT_FATAL(per_core_M % (input_tensor_a.get_legacy_shape()[-2] / TILE_HEIGHT) == 0);
                     TT_FATAL(input_tensor_b.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
                     auto in1_shard_shape = input_tensor_b.shard_spec().value().shape;
                     TT_FATAL(in1_shard_shape[1] == input_tensor_b.get_legacy_shape()[-1]);
@@ -969,8 +970,6 @@ void Matmul::validate(
                     TT_FATAL(this->output_mem_config.memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
                     TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1);
                 }
-                TT_FATAL(M % per_core_M == 0);
-                TT_FATAL(N % per_core_N == 0);
             } else {
                 TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
                 TT_FATAL(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
@@ -1167,6 +1166,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
             }
             else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseProgramConfig>) {
                 TT_FATAL(!bias.has_value(), "Bias is not supported for MatmulMultiCoreReuseProgramConfig!");
+                // TODO: fuse_batch doesn't do anything for this variant! Code is doing fuse_batch=false
                 return bmm_multi_core_reuse_optimized(
                     input_tensor_a, input_tensor_b, output_tensor,
                     broadcast_batch,
@@ -1174,7 +1174,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     output_dtype,
                     this->compute_kernel_config,
                     program_config.in0_block_w, program_config.out_subblock_h, program_config.out_subblock_w,
-                    program_config.per_core_M, program_config.per_core_N, fuse_batch,
+                    program_config.per_core_M, program_config.per_core_N, /*fuse_batch=*/false,
                     this->untilize_out
                 );
             }
