@@ -41,13 +41,15 @@ def write_to_file(tensor, filename):
         (128, 1280, 40, (8, 5), ttnn.ShardStrategy.WIDTH),
     ),
 )
-def test_bcast(device, input_height, input_width, num_cores, shard_grid, shard_stragey):
-    dtype = ttl.tensor.DataType.BFLOAT16
+@pytest.mark.parametrize("dtype", (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16))
+def test_bcast(device, input_height, input_width, num_cores, shard_grid, shard_stragey, dtype):
     torch.manual_seed(0)
     input_shape = [1, 1, input_height, input_width]
     input = torch.rand(input_shape, dtype=torch.bfloat16)
 
-    input_tensor = ttnn.from_torch(input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG, layout=ttnn.TILE_LAYOUT)
+    input_tensor = ttnn.from_torch(
+        input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG, layout=ttnn.TILE_LAYOUT, dtype=dtype
+    )
     input_2d_height = input_tensor.get_legacy_shape()[2]
     input_2d_width = input_tensor.get_legacy_shape()[3]
     if shard_stragey == ttnn.ShardStrategy.BLOCK:
@@ -85,7 +87,7 @@ def test_bcast(device, input_height, input_width, num_cores, shard_grid, shard_s
     torch_ref_output = torch.add(input, B_pyt)
 
     B_pyt = B_pyt.reshape(b_weights_shape)
-    tt_weight = ttnn.from_torch(B_pyt, device=device, layout=ttnn.TILE_LAYOUT)
+    tt_weight = ttnn.from_torch(B_pyt, device=device, layout=ttnn.TILE_LAYOUT, dtype=dtype)
     tt_output = ttl.tensor.bcast(
         tt_input,
         tt_weight,
