@@ -30,7 +30,7 @@ void kernel_main() {
         for (uint32_t row = 0, row_offset = 0; row < stride_h; ++row, row_offset += aligned_row_size) {
             for (uint32_t col = 0, col_offset = 0; col < stride_w; ++col, col_offset += aligned_pixel_size) {
                 uint32_t offset = col_offset + row_offset;
-                noc_async_read(src_noc_address + offset, dst_l1_addr, pixel_size);
+                noc_async_read<true>(src_noc_address + offset, dst_l1_addr, pixel_size);
                 dst_l1_addr += pixel_size;
             }
         }

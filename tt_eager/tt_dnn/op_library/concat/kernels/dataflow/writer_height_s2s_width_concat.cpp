@@ -15,7 +15,7 @@ void kernel_main() {
 	uint32_t tensor_id_offset = 0;
 	cb_wait_front(input_cb, num_pages);
 	uint32_t l1_read_addr = get_read_ptr(input_cb);
-	noc_async_read(get_noc_addr(l1_read_addr), l1_write_addr, total_data_size);
+	noc_async_read<true>(get_noc_addr(l1_read_addr), l1_write_addr, total_data_size);
 	noc_async_read_barrier();
 	cb_pop_front(input_cb, num_pages);
 }

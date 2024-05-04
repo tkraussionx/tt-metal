@@ -121,11 +121,11 @@ void kernel_main() {
                     uint32_t reader_idx_2 = two_reader_indices >> 16;
 
                     act_l1_offset = reader_offset + (reader_idx_1 * conv_act_c_read_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                     l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
 
                     act_l1_offset = reader_offset + (reader_idx_2 * conv_act_c_read_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                     l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
 
                     reader_idx++;
@@ -177,7 +177,7 @@ void kernel_main() {
                 for (uint32_t inner = 0; inner < window_inner; inner++) {
                     // local read from reader_index + reader_offset;
                     act_l1_offset = act_l1_read_addr + ((packed_reader_idx + reader_offsets[reader_offset_idx + inner]) * conv_act_c_read_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                     l1_write_addr_act += conv_act_c_read_bytes;
 
                 }
@@ -203,7 +203,7 @@ void kernel_main() {
                     for (uint32_t inner = 0; inner < window_inner; inner++) {
                         // local read from reader_index + reader_offset;
                         act_l1_offset = act_l1_read_addr + ((packed_reader_idx + reader_offsets[reader_offset_idx + inner]) * conv_act_c_read_bytes);
-                        noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                        noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                         l1_write_addr_act += conv_act_c_read_bytes;
 
                     }

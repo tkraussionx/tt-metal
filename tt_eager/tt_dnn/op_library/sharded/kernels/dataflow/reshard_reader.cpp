@@ -53,7 +53,7 @@ void kernel_main() {
 			uint32_t core_id_y = get_arg_val<uint32_t>(y_offset + core_id_y_index);
 			uint64_t noc_address = get_noc_addr(core_id_x, core_id_y,
 					input_shard_addr + addr_offset);
-			noc_async_read(noc_address, l1_write_addr, stride_size);
+			noc_async_read<true>(noc_address, l1_write_addr, stride_size);
 			l1_write_addr+=stride_size;
 			if(stride_x == 0 and stride_y == 0) {
 				addr_offset += (stride_data + stride_size);

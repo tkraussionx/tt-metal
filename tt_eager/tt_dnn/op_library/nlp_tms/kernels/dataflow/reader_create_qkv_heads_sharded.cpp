@@ -66,7 +66,7 @@ void kernel_main() {
             uint32_t seq_tile_offset = 0;
             for (uint32_t i = 0; i < block_ht; i++) { // iterate across seq_len dimension tiles
                 uint64_t q_src_noc_addr = src_noc_addr + seq_tile_offset + head_in_group_offset + group_addr_offset;
-                noc_async_read(q_src_noc_addr, q_write_addr, q_head_size_bytes); // read one head worth of tiles
+                noc_async_read<true>(q_src_noc_addr, q_write_addr, q_head_size_bytes); // read one head worth of tiles
                 q_write_addr += q_head_size_bytes; // go to output address for next Q head
                 seq_tile_offset += block_wt_size_bytes; // go to next tile along seq_len
             }
@@ -90,7 +90,7 @@ void kernel_main() {
                 uint32_t seq_tile_offset = 0;
                 for (uint32_t i = 0; i < block_ht; i++) { // iterate across seq_len dimension tiles
                     uint64_t k_src_noc_addr = src_noc_addr + seq_tile_offset + head_in_group_offset + group_addr_offset + k_head_tile_offset;
-                    noc_async_read(k_src_noc_addr, k_write_addr, single_tile_size_bytes); // read only one tile since we're transposing
+                    noc_async_read<true>(k_src_noc_addr, k_write_addr, single_tile_size_bytes); // read only one tile since we're transposing
                     k_write_addr += single_tile_size_bytes; // output address of next K head
                     seq_tile_offset += block_wt_size_bytes; // go to next tile in seq_len
                 }
@@ -99,7 +99,7 @@ void kernel_main() {
             uint32_t seq_tile_offset = 0;
             for (uint32_t i = 0; i < block_ht; i++) { // iterate across seq_len dimension tiles
                 uint64_t k_src_noc_addr = src_noc_addr + seq_tile_offset + head_in_group_offset + group_addr_offset;
-                noc_async_read(k_src_noc_addr, k_write_addr, k_head_size_bytes); // read one head worth of tiles
+                noc_async_read<true>(k_src_noc_addr, k_write_addr, k_head_size_bytes); // read one head worth of tiles
                 k_write_addr += k_head_size_bytes; // output address of next K head
                 seq_tile_offset += block_wt_size_bytes; // go to next tile in seq_len
             }
@@ -121,7 +121,7 @@ void kernel_main() {
             uint32_t seq_tile_offset = 0;
             for (uint32_t i = 0; i < block_ht; i++) { // iterate across seq_len dimension tiles
                 uint64_t k_src_noc_addr = src_noc_addr + seq_tile_offset + head_in_group_offset + group_addr_offset;
-                noc_async_read(k_src_noc_addr, v_write_addr, v_head_size_bytes); // read one head worth of tiles
+                noc_async_read<true>(k_src_noc_addr, v_write_addr, v_head_size_bytes); // read one head worth of tiles
                 v_write_addr += v_head_size_bytes; // output address of next V head
                 seq_tile_offset += block_wt_size_bytes; // go to next tile in seq_len
             }

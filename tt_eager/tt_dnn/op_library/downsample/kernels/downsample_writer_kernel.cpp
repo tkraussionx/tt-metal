@@ -237,7 +237,7 @@ void kernel_main() {
         cb_reserve_back(halo_prev_input_cb_index, halo_prev_num_tiles);
         uint32_t halo_prev_cb_write_addr = get_write_ptr(halo_prev_input_cb_index);
         uint32_t halo_prev_addr = halo_prev_start_addr + halo_prev_addr_offset;
-        noc_async_read(get_noc_addr(halo_prev_core_noc_x, halo_prev_core_noc_y, halo_prev_addr), halo_prev_cb_write_addr, halo_prev_size_bytes);
+        noc_async_read<true>(get_noc_addr(halo_prev_core_noc_x, halo_prev_core_noc_y, halo_prev_addr), halo_prev_cb_write_addr, halo_prev_size_bytes);
         noc_async_read_barrier();
         cb_push_back(halo_prev_input_cb_index, halo_prev_num_tiles);
     }
@@ -249,7 +249,7 @@ void kernel_main() {
         cb_reserve_back(halo_next_input_cb_index, halo_next_num_tiles);
         uint32_t halo_next_cb_write_addr = get_write_ptr(halo_next_input_cb_index);
         uint32_t halo_next_addr = halo_next_start_addr + halo_next_addr_offset;
-        noc_async_read(get_noc_addr(halo_next_core_noc_x, halo_next_core_noc_y, halo_next_addr), halo_next_cb_write_addr, halo_next_size_bytes);
+        noc_async_read<true>(get_noc_addr(halo_next_core_noc_x, halo_next_core_noc_y, halo_next_addr), halo_next_cb_write_addr, halo_next_size_bytes);
         noc_async_read_barrier();
         cb_push_back(halo_next_input_cb_index, halo_next_num_tiles);
     }
@@ -340,7 +340,7 @@ void kernel_main() {
             // local read into untilized downsampled l1, read_address = l1_read_addr + (reader_pattern[reader_pattern_index] * conv_act_c_bytes), read_size = conv_act_c_bytes, write_address = untilize_downsampled_cb_l1_write_addr
             // reader pattern indices are for the whole sharded input. Need to subtract by block offset to read from the block which is 1 row of tiles.
             uint32_t read_address = untilize_block_l1_read_addr + ((uint32_t) ((int32_t) reader_pattern[reader_pattern_index] - (int32_t) untilize_block_offset) << log_base_2_of_conv_act_size_c_bytes);
-            noc_async_read(get_noc_addr(read_address), untilize_downsampled_cb_l1_write_addr, conv_act_size_c_bytes);
+            noc_async_read<true>(get_noc_addr(read_address), untilize_downsampled_cb_l1_write_addr, conv_act_size_c_bytes);
             untilize_downsampled_cb_l1_write_addr += conv_act_size_c_bytes;
             reader_pattern_index += 1;
         }

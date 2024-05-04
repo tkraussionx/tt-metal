@@ -164,7 +164,7 @@ void kernel_main() {
                 for (uint32_t bhd = 0; bhd < act_block_h_datums; bhd++) {
                     // local read from reader_index + reader_offset;
                     act_l1_offset = reader_offset + (reader_indices_ptr[reader_idx] << log_base_2_of_conv_act_size_c_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                     l1_write_addr_act += coalesced_read_bytes;
                     reader_idx++;
                 }
@@ -200,7 +200,7 @@ void kernel_main() {
                     for (uint32_t inner = 0; inner < window_inner; inner++) {
                         // local read from reader_index + reader_offset;
                         act_l1_offset = act_l1_read_addr + ((reader_indices_ptr[reader_idx] + reader_offsets_ptr[reader_offset_idx + inner]) << log_base_2_of_conv_act_size_c_bytes);
-                        noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                        noc_async_read_one_packet_with_state(act_l1_offset, l1_write_addr_act);
                         l1_write_addr_act += conv_act_c_read_bytes;
 
                     }

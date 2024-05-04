@@ -105,7 +105,7 @@ void kernel_main() {
 
             // Read 32 untilized tiles and select correct rows to reconstruct single correct tile
             cb_wait_front(cb_id_intermed1, 1);
-            noc_async_read(get_noc_addr(cb_intermed1_addr), cb_intermed2_addr, bfloat16_row_bytes);
+            noc_async_read<true>(get_noc_addr(cb_intermed1_addr), cb_intermed2_addr, bfloat16_row_bytes);
             noc_async_read_barrier();
             cb_pop_front(cb_id_intermed1, 1);
             cb_intermed1_addr += bfloat16_row_bytes;

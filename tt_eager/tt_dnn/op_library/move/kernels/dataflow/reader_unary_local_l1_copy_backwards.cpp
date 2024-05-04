@@ -23,13 +23,13 @@ void kernel_main() {
     for (uint32_t i = 0; i<num_chunks; i += 1) {
         src_cb_addr -= chunk_size_bytes;
         dst_cb_addr -= chunk_size_bytes;
-        noc_async_read(get_noc_addr(src_cb_addr), dst_cb_addr, chunk_size_bytes);
+        noc_async_read<true>(get_noc_addr(src_cb_addr), dst_cb_addr, chunk_size_bytes);
         noc_async_read_barrier();
     }
     if(remainder_chunk_size_bytes > 0) {
         src_cb_addr -= remainder_chunk_size_bytes;
         dst_cb_addr -= remainder_chunk_size_bytes;
-        noc_async_read(get_noc_addr(src_cb_addr), dst_cb_addr, remainder_chunk_size_bytes);
+        noc_async_read<true>(get_noc_addr(src_cb_addr), dst_cb_addr, remainder_chunk_size_bytes);
         noc_async_read_barrier();
     }
 }

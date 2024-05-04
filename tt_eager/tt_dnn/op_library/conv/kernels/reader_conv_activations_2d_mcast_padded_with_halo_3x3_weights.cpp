@@ -14,7 +14,7 @@ void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr,
     uint32_t act_l1_read_addr_plus_offset = act_l1_read_addr + (reader_channel_idx << log_base_2_of_conv_act_size_c_bytes);
     #pragma GCC unroll unroll_factor
     for (uint32_t inner = 0; inner < WINDOW_INNER; inner++) {
-        noc_async_read_one_packet_with_state<true>(act_l1_read_addr_plus_offset, l1_write_addr_act);
+        noc_async_read_one_packet_with_state(act_l1_read_addr_plus_offset, l1_write_addr_act);
         l1_write_addr_act += coalesced_read_bytes;
         // +2 is hard-coded, TODO: generalize
         act_l1_read_addr_plus_offset += stride_h_bytes;

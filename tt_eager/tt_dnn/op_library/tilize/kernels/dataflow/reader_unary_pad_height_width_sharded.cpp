@@ -30,7 +30,7 @@ void kernel_main() {
     uint32_t pad_addr = get_write_ptr(pad_cb);
     uint64_t pad_noc_addr = get_noc_addr(pad_addr);
 
-    noc_async_read(read_noc_addr, write_addr, input_block_size);
+    noc_async_read<true>(read_noc_addr, write_addr, input_block_size);
     read_noc_addr += input_block_size;
     write_addr += input_block_size;
     volatile tt_l1_ptr std::uint32_t* pad = (volatile tt_l1_ptr uint32_t*)(pad_addr);
@@ -38,7 +38,7 @@ void kernel_main() {
         pad[i] = packed_pad_value;
     }
     for (uint32_t i = 0; i < num_padded_rows; ++i) {
-        noc_async_read(pad_noc_addr, write_addr, input_width_bytes);
+        noc_async_read<true>(pad_noc_addr, write_addr, input_width_bytes);
         write_addr += input_width_bytes;
     }
     noc_async_read_barrier();
@@ -47,11 +47,11 @@ void kernel_main() {
     for(uint32_t b = 1; b < num_batches; ++b) {
         cb_reserve_back(cb_id_in1, num_padded_tiles_per_batch);
         write_addr = get_write_ptr(cb_id_in1);
-        noc_async_read(read_noc_addr, write_addr, input_block_size);
+        noc_async_read<true>(read_noc_addr, write_addr, input_block_size);
         read_noc_addr += input_block_size;
         write_addr+= input_block_size;
         for (uint32_t i = 0; i < num_padded_rows; ++i) {
-            noc_async_read(pad_noc_addr, write_addr, input_width_bytes);
+            noc_async_read<true>(pad_noc_addr, write_addr, input_width_bytes);
             write_addr += input_width_bytes;
         }
         noc_async_read_barrier();

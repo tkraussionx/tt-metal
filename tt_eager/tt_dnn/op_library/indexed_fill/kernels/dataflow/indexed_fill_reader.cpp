@@ -61,7 +61,7 @@ void kernel_main() {
     if(batch_id_size > 0) {
         uint64_t src_noc_addr = get_noc_addr(0, batchAddr);
         uint32_t l1_write_addr = get_write_ptr(batch_cb_id);
-        noc_async_read(src_noc_addr, l1_write_addr, (batch_id_size << 2) );
+        noc_async_read<true>(src_noc_addr, l1_write_addr, (batch_id_size << 2) );
         noc_async_read_barrier();
         addr_ptr = reinterpret_cast<volatile tt_l1_ptr int*>(l1_write_addr);
     }
@@ -94,7 +94,7 @@ void kernel_main() {
         else {
             src_noc_addr = get_noc_addr(i, s0);
         }
-        noc_async_read(src_noc_addr, l1_write_addr, stick_size);
+        noc_async_read<true>(src_noc_addr, l1_write_addr, stick_size);
         noc_async_read_barrier();
         cb_push_back(cb_id_in0, 1);
     }

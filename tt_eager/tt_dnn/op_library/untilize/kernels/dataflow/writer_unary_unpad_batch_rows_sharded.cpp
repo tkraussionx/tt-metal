@@ -25,7 +25,7 @@ void kernel_main() {
         uint64_t noc_l1_read_addr = get_noc_addr(get_read_ptr(cb_id_untilize_out));
 
         for (uint32_t row = 0; row < num_padded_rows_per_batch; ++row) {
-            noc_async_read(noc_l1_read_addr, l1_write_addr, unpadded_block_row_size_bytes);
+            noc_async_read<true>(noc_l1_read_addr, l1_write_addr, unpadded_block_row_size_bytes);
             noc_l1_read_addr += padded_block_row_size_bytes;
             l1_write_addr += unpadded_block_row_size_bytes;
         }

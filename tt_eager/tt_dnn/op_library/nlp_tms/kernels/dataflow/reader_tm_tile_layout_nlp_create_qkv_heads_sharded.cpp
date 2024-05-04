@@ -32,7 +32,7 @@ void kernel_main() {
 
     for (uint32_t q = 0; q < num_q_heads; ++q) {
         // Q
-        noc_async_read(q_read_addr, q_write_addr, head_size);
+        noc_async_read<true>(q_read_addr, q_write_addr, head_size);
         q_read_addr += head_size;
         q_write_addr += head_size;
         remote_q_head_idx++;
@@ -68,7 +68,7 @@ void kernel_main() {
 
         // K or V
         for (uint32_t kv = 0; kv < num_kv_heads; ++kv) {
-            noc_async_read(kv_read_addr, kv_write_addr, head_size);
+            noc_async_read<true>(kv_read_addr, kv_write_addr, head_size);
             kv_read_addr += head_size;
             kv_write_addr += head_size;
             remote_kv_head_idx++;

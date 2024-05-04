@@ -75,7 +75,7 @@ void kernel_main() {
             uint64_t src_noc_addr = get_noc_addr(curr_stick_id + k, s) + offset;
 
             // Read from DRAM to tmp buffer
-            noc_async_read(src_noc_addr, l1_write_addr, block_size);
+            noc_async_read<true>(src_noc_addr, l1_write_addr, block_size);
 
             if (block_row_size > block_size) {
                 volatile tt_l1_ptr std::uint32_t* dst = (volatile tt_l1_ptr uint32_t*)(l1_write_addr + block_size);

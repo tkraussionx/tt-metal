@@ -67,8 +67,8 @@ void kernel_main() {
             cb_reserve_back(cb_in1_bcast_row, onetile);
             uint32_t cb_in1_bcast_row_write_ptr = get_write_ptr(cb_in1_bcast_row);
 
-            noc_async_read(cb_in1_transposed_read_ptr, cb_in1_bcast_row_write_ptr, bfloat16_one_row_in_face_bytes);
-            noc_async_read(cb_in1_transposed_read_ptr + bfloat16_one_face_bytes, cb_in1_bcast_row_write_ptr + bfloat16_one_face_bytes, bfloat16_one_row_in_face_bytes);
+            noc_async_read<true>(cb_in1_transposed_read_ptr, cb_in1_bcast_row_write_ptr, bfloat16_one_row_in_face_bytes);
+            noc_async_read<true>(cb_in1_transposed_read_ptr + bfloat16_one_face_bytes, cb_in1_bcast_row_write_ptr + bfloat16_one_face_bytes, bfloat16_one_row_in_face_bytes);
             noc_async_read_barrier();
             cb_push_back(cb_in1_bcast_row, onetile);
 
@@ -81,8 +81,8 @@ void kernel_main() {
             cb_reserve_back(cb_in1_bcast_row, onetile);
             uint32_t cb_in1_bcast_row_write_ptr = get_write_ptr(cb_in1_bcast_row);
 
-            noc_async_read(cb_in1_transposed_read_ptr, cb_in1_bcast_row_write_ptr, bfloat16_one_row_in_face_bytes);
-            noc_async_read(cb_in1_transposed_read_ptr + bfloat16_one_face_bytes, cb_in1_bcast_row_write_ptr + bfloat16_one_face_bytes, bfloat16_one_row_in_face_bytes);
+            noc_async_read<true>(cb_in1_transposed_read_ptr, cb_in1_bcast_row_write_ptr, bfloat16_one_row_in_face_bytes);
+            noc_async_read<true>(cb_in1_transposed_read_ptr + bfloat16_one_face_bytes, cb_in1_bcast_row_write_ptr + bfloat16_one_face_bytes, bfloat16_one_row_in_face_bytes);
             noc_async_read_barrier();
             cb_push_back(cb_in1_bcast_row, onetile);
 

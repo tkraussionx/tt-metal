@@ -17,11 +17,11 @@ void fill_with_val_async(const uint64_t in_noc_addr, const uint32_t begin_addr, 
     uint32_t nchunks = size_nbytes / chunk_nbytes;
     uint32_t rem_nbytes = size_nbytes % chunk_nbytes;
     for (uint32_t i = 0; i < nchunks; ++ i) {
-        noc_async_read(in_noc_addr, curr_addr, chunk_nbytes);
+        noc_async_read<true>(in_noc_addr, curr_addr, chunk_nbytes);
         curr_addr += chunk_nbytes;
     }
     if (rem_nbytes > 0) {
-        noc_async_read(in_noc_addr, curr_addr, rem_nbytes);
+        noc_async_read<true>(in_noc_addr, curr_addr, rem_nbytes);
     }
 }
 
@@ -90,7 +90,7 @@ void kernel_main() {
                 } else {
                     // this is a data row possibly with padding at end
                     uint64_t src_noc_addr = get_noc_addr(src_stick_id, s0, start_src_stick_offset);
-                    noc_async_read(src_noc_addr, l1_addr, unpadded_X_nbytes);
+                    noc_async_read<true>(src_noc_addr, l1_addr, unpadded_X_nbytes);
                     l1_addr_partial = l1_addr + unpadded_X_nbytes;
                     fill_with_val_async(const_buffer_noc_addr, l1_addr_partial, l1_addr_partial + l1_addr_align_offset, padded_X_diff_nbytes, pad_value_const_buffer_nbytes, pad_value);
                     ++ src_stick_id;

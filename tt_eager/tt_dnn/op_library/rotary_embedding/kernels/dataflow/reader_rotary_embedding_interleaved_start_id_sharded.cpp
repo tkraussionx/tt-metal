@@ -84,8 +84,8 @@ void kernel_main() {
     for (uint32_t i = 0; i<num_rows; ++i) {
         cb_reserve_back(rotated_input_cb_id, Wt);
         uint32_t rotated_input_l1_write_addr = get_write_ptr(rotated_input_cb_id);
-        noc_async_read(input_l1_read_addr + half_Wt_size, rotated_input_l1_write_addr, half_Wt_size);
-        noc_async_read(input_l1_read_addr, rotated_input_l1_write_addr + half_Wt_size, half_Wt_size);
+        noc_async_read<true>(input_l1_read_addr + half_Wt_size, rotated_input_l1_write_addr, half_Wt_size);
+        noc_async_read<true>(input_l1_read_addr, rotated_input_l1_write_addr + half_Wt_size, half_Wt_size);
         input_l1_read_addr += Wt_size;
         noc_async_read_barrier();
         cb_push_back(rotated_input_cb_id, Wt);

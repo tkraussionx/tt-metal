@@ -32,7 +32,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < nheads; ++i) {
         uint32_t curr_l1_write_addr = l1_write_addr;
         for (uint32_t j = 0; j < in0_h_tiles; ++j) {
-            noc_async_read(noc_l1_read_addr, curr_l1_write_addr, head_dim_size_bytes);
+            noc_async_read<true>(noc_l1_read_addr, curr_l1_write_addr, head_dim_size_bytes);
             noc_l1_read_addr += head_dim_size_bytes;
             curr_l1_write_addr += out_row_size_bytes;
         }

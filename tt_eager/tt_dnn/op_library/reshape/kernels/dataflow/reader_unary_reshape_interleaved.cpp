@@ -68,11 +68,11 @@ void kernel_main() {
                         dest_tr0_l1 += (((tile_h >> 4) << 1) << 9); // if intra-tile source h is > 16, add 2*512 to subtile offset
                         dest_tr0_l1 += ((tile_h & 15) << 5); // 16 * 2 bytes per face row
 
-                        noc_async_read(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
+                        noc_async_read<true>(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
                         // Read the 16 elements for the row of the face directly adjacent since this comes from the same input tile
                         dest_tr0_l1 += 512; // 16 subtile rows of 16 elements of 2 bytes for bfloat16 (16 * 16 * 2)
                         banked_addr += 512;
-                        noc_async_read(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
+                        noc_async_read<true>(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
 
                         output_stick_id += output_Wt;
 

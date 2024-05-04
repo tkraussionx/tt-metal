@@ -184,6 +184,9 @@ void debug_sanitize_noc_and_worker_addr(
     debug_sanitize_noc_cast_t multicast,
     debug_sanitize_noc_dir_t dir
 ) {
+    if (len == 0) {
+        debug_sanitize_post_noc_addr_and_hang(noc_addr, worker_addr, len, multicast, DebugSanitizeNocInvalidLen);
+    }
     // Check noc addr, get any extra alignment req for worker.
     uint32_t alignment_mask = debug_sanitize_noc_addr(noc_addr, worker_addr, len, multicast, dir);
 

@@ -38,7 +38,7 @@ void kernel_main() {
                 // replicate stick scale_w times.
                 if constexpr (is_reader) {
                     uint64_t src_noc_addr = get_noc_addr(l1_read_addr);
-                    noc_async_read(src_noc_addr, l1_write_addr, stick_nbytes);
+                    noc_async_read<true>(src_noc_addr, l1_write_addr, stick_nbytes);
                 } else {
                     uint64_t dst_noc_addr = get_noc_addr(l1_write_addr);
                     noc_async_write(l1_read_addr, dst_noc_addr, stick_nbytes);
@@ -51,7 +51,7 @@ void kernel_main() {
         // Duplicate the whole image row in one shot
         if constexpr (is_reader) {
             uint64_t src_noc_addr = get_noc_addr(l1_write_addr_image_row_start);
-            noc_async_read(src_noc_addr, l1_write_addr, out_image_row_nbytes);
+            noc_async_read<true>(src_noc_addr, l1_write_addr, out_image_row_nbytes);
         } else {
             uint64_t dst_noc_addr = get_noc_addr(l1_write_addr);
             noc_async_write(l1_write_addr_image_row_start, dst_noc_addr, out_image_row_nbytes);
@@ -60,7 +60,9 @@ void kernel_main() {
     }
 
     cb_push_back(out_cb_id, out_w);
-
-    noc_async_write_barrier();
-    noc_async_read_barrier();
+    if constexpr (is_reader) {
+        noc_async_read_barrier();
+    } else {
+        noc_async_write_barrier();
+    }
 }

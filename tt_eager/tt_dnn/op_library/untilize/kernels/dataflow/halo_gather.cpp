@@ -72,7 +72,7 @@ void copy_sticks_async(
             if constexpr (is_read) {
                 uint32_t dst_addr = out_base_l1_addr + dst_offset;
                 uint64_t src_addr = base_addr + src_offset;
-                noc_async_read(src_addr, dst_addr, size);
+                noc_async_read<is_read>(src_addr, dst_addr, size);
             } else {
                 uint64_t dst_addr = base_addr + dst_offset;
                 uint32_t src_addr = in_base_l1_addr + src_offset;

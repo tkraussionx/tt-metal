@@ -92,7 +92,7 @@ void kernel_main() {
                     // loop over each row of the tile
                     for (uint32_t in0_row_h_i = 0; in0_row_h_i < TILE_HEIGHT; ++in0_row_h_i) {
                         uint64_t in0_row_noc_addr = get_noc_addr(in0_curr_row_bank_id, s0, in0_row_offset_bytes);
-                        noc_async_read(in0_row_noc_addr, in0_write_l1_addr, in0_read_row_size_bytes);
+                        noc_async_read<true>(in0_row_noc_addr, in0_write_l1_addr, in0_read_row_size_bytes);
                         in0_write_l1_addr += in0_read_row_size_bytes;
                         ++in0_curr_row_bank_id;
                     }
@@ -113,7 +113,7 @@ void kernel_main() {
                     // loop over in1 block tiles along w
                     for(uint32_t in1_tile_w_i = 0; in1_tile_w_i < in1_block_w; ++in1_tile_w_i) {
                         uint64_t in1_tile_noc_addr = get_noc_addr(in1_tile_id, s1);
-                        noc_async_read(in1_tile_noc_addr, in1_write_l1_addr, in1_tile_nbytes);
+                        noc_async_read<true>(in1_tile_noc_addr, in1_write_l1_addr, in1_tile_nbytes);
                         in1_write_l1_addr += in1_tile_nbytes;
                         in1_tile_id += 1;
                     } // for in1_block_w

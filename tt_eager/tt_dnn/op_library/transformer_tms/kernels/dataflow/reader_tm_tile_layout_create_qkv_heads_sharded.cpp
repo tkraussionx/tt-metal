@@ -34,7 +34,7 @@ void kernel_main() {
         uint32_t l1_read_addr_offset = 0;
         for (uint32_t i = 0; i < block_ht; i++) { // 12
             uint64_t src_noc_addr = get_noc_addr(l1_read_addr + l1_read_addr_offset + src_noc_addr_offset_outer);
-            noc_async_read(src_noc_addr, l1_write_addr_out0, out_block_wt_size_bytes);
+            noc_async_read<true>(src_noc_addr, l1_write_addr_out0, out_block_wt_size_bytes);
             l1_write_addr_out0 += out_block_wt_size_bytes;
             l1_read_addr_offset += block_wt_size_bytes;
         }
@@ -53,7 +53,7 @@ void kernel_main() {
         uint32_t l1_read_addr_offset = 0;
         for (uint32_t i = 0; i < block_ht; i++) { // 12
             uint64_t src_noc_addr = get_noc_addr(l1_read_addr + l1_read_addr_offset + src_noc_addr_offset_outer);
-            noc_async_read(src_noc_addr, l1_write_addr_out2, out_block_wt_size_bytes);
+            noc_async_read<true>(src_noc_addr, l1_write_addr_out2, out_block_wt_size_bytes);
             l1_write_addr_out2 += out_block_wt_size_bytes;
             l1_read_addr_offset += block_wt_size_bytes;
         }

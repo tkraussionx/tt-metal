@@ -102,6 +102,7 @@ enum debug_sanitize_noc_invalid_enum {
     DebugSanitizeNocInvalidUnicast    = 4,
     DebugSanitizeNocInvalidMulticast  = 5,
     DebugSanitizeNocInvalidAlignment  = 6,
+    DebugSanitizeNocInvalidLen        = 7,
 };
 
 struct debug_assert_msg_t {

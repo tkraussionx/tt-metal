@@ -132,7 +132,7 @@ void kernel_main() {
                 banked_addr += rem;
 
                 // this starts async NOC dma from DRAM to TR0_L1 buffer
-                noc_async_read(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
+                noc_async_read<true>(banked_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
 
                 //if (h == 0 && ct == 0 && wt == 0)
                 //    DPRINT << uint32_t( reinterpret_cast<uint16_t*>( dest_tr0_l1 )[0] ) << ENDL();

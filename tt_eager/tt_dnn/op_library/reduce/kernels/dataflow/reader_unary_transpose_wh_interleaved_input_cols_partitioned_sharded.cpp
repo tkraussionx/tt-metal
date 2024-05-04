@@ -36,7 +36,7 @@ void kernel_main() {
             for (uint32_t j = 0; j < Ht; ++j) {
                 cb_reserve_back(cb_id_in0, onetile);
                 uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
-                noc_async_read(curr_noc_addr, l1_write_addr, tile_bytes);
+                noc_async_read<true>(curr_noc_addr, l1_write_addr, tile_bytes);
                 curr_noc_addr += row_size_bytes;
                 noc_async_read_barrier();
                 cb_push_back(cb_id_in0, onetile);

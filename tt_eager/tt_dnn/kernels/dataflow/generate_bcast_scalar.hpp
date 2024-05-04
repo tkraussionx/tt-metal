@@ -11,9 +11,9 @@ FORCE_INLINE void generate_bcast_col_scalar(const uint32_t cb_id, const uint32_t
     const uint16_t scalar_val = scalar>>16;
     cb_reserve_back(cb_id, 1);
     volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(get_write_ptr(cb_id));
-    for (int k = 0; k < 4; k+=2) {
+    for (uint32_t k = 0; k < 4; k+=2) {
         uint32_t idx = k << 8;
-        for (int j = 0; j < 256; j+=16) {
+        for (uint32_t j = 0; j < 256; j+=16) {
             ptr[idx + j] = scalar_val;
         }
     }
@@ -25,9 +25,9 @@ FORCE_INLINE void generate_bcast_row_scalar(const uint32_t cb_id, const uint32_t
     const uint32_t scalar_val = scalar>>16;
     cb_reserve_back(cb_id, 1);
     volatile tt_l1_ptr uint32_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_write_ptr(cb_id));
-    for (int k = 0; k < 2; ++k) {
+    for (uint32_t k = 0; k < 2; ++k) {
         uint32_t idx = k << 7;
-        for (int j = 0; j < 8; ++j) {
+        for (uint32_t j = 0; j < 8; ++j) {
             ptr[idx + j] = scalar_val;
         }
     }
@@ -36,7 +36,6 @@ FORCE_INLINE void generate_bcast_row_scalar(const uint32_t cb_id, const uint32_t
 
 // HW-bcast scalar
 FORCE_INLINE void generate_bcast_unary_scalar(const uint32_t cb_id, const uint32_t scalar) {
-    const uint32_t scalar_val = scalar>>16;
     cb_reserve_back(cb_id, 1);
     volatile tt_l1_ptr uint32_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_write_ptr(cb_id));
     ptr[0] = scalar>>16;

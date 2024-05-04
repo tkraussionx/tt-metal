@@ -63,7 +63,7 @@ void kernel_main() {
         cb_reserve_back(cb_id_in2, 1);
         uint32_t local_pad_addr = get_write_ptr(cb_id_in2);
         uint64_t src_noc_addr = get_noc_addr(pad_token, weights);
-        noc_async_read(src_noc_addr, local_pad_addr, weight_stick_size);
+        noc_async_read<true>(src_noc_addr, local_pad_addr, weight_stick_size);
         noc_async_read_barrier();
         pad_noc_addr = get_noc_addr(local_pad_addr);
     }
@@ -73,12 +73,12 @@ void kernel_main() {
         cb_reserve_back(cb_id_in2, 2);
         uint32_t local_write_addr = get_write_ptr(cb_id_in2);
         uint64_t src_noc_addr = get_noc_addr(0, weights);
-        noc_async_read(src_noc_addr, local_write_addr, weight_stick_size);
+        noc_async_read<true>(src_noc_addr, local_write_addr, weight_stick_size);
         zero_noc_addr = get_noc_addr(local_write_addr);
 
         local_write_addr += weight_stick_size;
         src_noc_addr = get_noc_addr(1, weights);
-        noc_async_read(src_noc_addr, local_write_addr, weight_stick_size);
+        noc_async_read<true>(src_noc_addr, local_write_addr, weight_stick_size);
         one_noc_addr = get_noc_addr(local_write_addr);
 
         noc_async_read_barrier();
@@ -119,7 +119,7 @@ void kernel_main() {
             src_noc_addr = get_noc_addr(token, weights);
             #endif
         #endif
-        noc_async_read(src_noc_addr, l1_write_addr, width_size);
+        noc_async_read<true>(src_noc_addr, l1_write_addr, width_size);
         noc_async_read_barrier();
         cb_push_back(cb_id_in0, 1);
     };
@@ -131,7 +131,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < num_blocks; ++i) {
         if (read_indices) {
             uint64_t noc_input_src_addr = get_noc_addr(curr_row, input) + offset;
-            noc_async_read(noc_input_src_addr, input_l1_addr, input_block_size_bytes);
+            noc_async_read<true>(noc_input_src_addr, input_l1_addr, input_block_size_bytes);
             noc_async_read_barrier();
             read_indices = false;
         }

@@ -29,7 +29,7 @@ void kernel_main() {
 		noc_async_read_one_packet_set_state(noc_addr, input_stick_size);
 		uint32_t read_offset = l1_read_addr;
 		for(uint32_t page_id_input = page_start; page_id_input < page_end; page_id_input++) {
-			noc_async_read_one_packet_with_state<true>(read_offset, l1_write_addr);
+			noc_async_read_one_packet_with_state(read_offset, l1_write_addr);
 			l1_write_addr += (input_stick_size + input_stride);
 			read_offset += input_stick_size;
 		}

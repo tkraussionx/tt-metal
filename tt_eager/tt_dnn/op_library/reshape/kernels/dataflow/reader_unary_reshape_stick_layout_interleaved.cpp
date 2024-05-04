@@ -49,7 +49,7 @@ void kernel_main() {
             uint64_t src_noc_addr = get_noc_addr(
                 stick_id, s);
 
-            noc_async_read(src_noc_addr, l1_write_addr, stick_size);
+            noc_async_read<true>(src_noc_addr, l1_write_addr, stick_size);
             l1_write_addr += stick_size;
             stick_id++;
         }

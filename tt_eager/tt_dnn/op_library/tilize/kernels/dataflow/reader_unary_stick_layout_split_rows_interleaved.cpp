@@ -44,7 +44,7 @@ void kernel_main() {
         uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
         for (uint32_t k = 0; k < tile_height; k++) {
             uint64_t src_noc_addr = base_src_noc_addr[k];
-            noc_async_read(src_noc_addr, l1_write_addr, width_size);
+            noc_async_read<true>(src_noc_addr, l1_write_addr, width_size);
             l1_write_addr += width_size;
             base_src_noc_addr[k] += width_size;
         }

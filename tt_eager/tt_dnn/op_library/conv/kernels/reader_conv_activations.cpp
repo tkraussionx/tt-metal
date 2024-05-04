@@ -175,7 +175,7 @@ void kernel_main() {
                                 uint32_t src_addr = act_addr_dram_base + src_address_offset_dram;
                                 uint32_t dst_addr = l1_write_addr_act + dst_address_offset_l1;
                                 uint64_t act_noc_addr = get_noc_addr(act_tensor_channel_id, s_act, (channel_stick_offset<<1));
-                                noc_async_read(act_noc_addr, dst_addr, read_size_bytes);
+                                noc_async_read<true>(act_noc_addr, dst_addr, read_size_bytes);
                             }
                         }
                         dst_address_offset_l1 += read_size_bytes;

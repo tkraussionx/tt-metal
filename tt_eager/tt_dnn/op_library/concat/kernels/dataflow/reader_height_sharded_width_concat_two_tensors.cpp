@@ -29,7 +29,7 @@ void kernel_main() {
 	uint32_t read_offset_0 = l1_read_addr_0;
 	uint32_t l1_write_addr_inc_0 = input_stick_size_0 + input_stride_0;
 	for(uint32_t page_id_input = page_start; page_id_input < page_end; page_id_input++) {
-		noc_async_read_one_packet_with_state<true>(read_offset_0, l1_write_addr_0);
+		noc_async_read_one_packet_with_state(read_offset_0, l1_write_addr_0);
 		l1_write_addr_0 += (l1_write_addr_inc_0);
 		read_offset_0 += input_stick_size_0;
 	}
@@ -42,7 +42,7 @@ void kernel_main() {
 	uint32_t read_offset_1 = l1_read_addr_1;
 	uint32_t l1_write_addr_inc_1 = input_stick_size_1 + input_stride_1;
 	for(uint32_t page_id_input = page_start; page_id_input < page_end; page_id_input++) {
-		noc_async_read_one_packet_with_state<true>(read_offset_1, l1_write_addr_1);
+		noc_async_read_one_packet_with_state(read_offset_1, l1_write_addr_1);
 		l1_write_addr_1 += (l1_write_addr_inc_1);
 		read_offset_1 += input_stick_size_1;
 	}

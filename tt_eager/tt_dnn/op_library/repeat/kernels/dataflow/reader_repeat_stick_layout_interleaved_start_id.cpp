@@ -45,7 +45,7 @@ void kernel_main() {
         l1_write_addr += page_size;
         noc_async_read_barrier();
         for (uint32_t j = 1; j < num_repeats; ++j) {
-            noc_async_read(local_read_addr, l1_write_addr, page_size);
+            noc_async_read<true>(local_read_addr, l1_write_addr, page_size);
             l1_write_addr += page_size;
         }
         curr_id++;

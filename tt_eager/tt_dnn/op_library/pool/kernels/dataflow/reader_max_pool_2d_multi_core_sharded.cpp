@@ -225,28 +225,28 @@ void kernel_main() {
                     // left left halo stick
                     // DPRINT << "(LL) ";
                     noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    noc_async_read<true>(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 } else if (has_left == 1 && global_in_stick_i < local_in_stick_start) {
                     // left halo stick
                     // DPRINT << "(L) ";
                     noc_addr = get_noc_addr(left_noc_x, left_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    noc_async_read<true>(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 } else if (has_right_right == 1 && global_in_stick_i >= right_in_stick_end) {
                     // right right halo stick
                     // DPRINT << "(RR) ";
                     noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    noc_async_read<true>(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 } else if (has_right == 1 && global_in_stick_i >= local_in_stick_end) {
                     // right halo stick
                     // DPRINT << "(R) ";
                     noc_addr = get_noc_addr(right_noc_x, right_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    noc_async_read<true>(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 } else if (global_in_stick_i >= local_in_stick_start && global_in_stick_i < local_in_stick_end) {
@@ -255,7 +255,7 @@ void kernel_main() {
                     // uint32_t noc_id_y = my_y[0];
                     // DPRINT << "(O) ";
                     noc_addr = get_noc_addr(l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    noc_async_read<true>(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 }
