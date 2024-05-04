@@ -315,7 +315,9 @@ struct Tensor {
     }
     const std::optional<ShardSpec> shard_spec() const { return this->memory_config().shard_spec; }
 
-    const bool is_sharded() const;
+    const bool is_sharded() const {
+        return this->storage_type() == StorageType::DEVICE ? this->memory_config().is_sharded() : false;
+    }
 
     // Size in bytes of a single element held in tensor
     uint32_t element_size() const;
