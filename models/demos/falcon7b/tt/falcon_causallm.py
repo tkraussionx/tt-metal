@@ -111,6 +111,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
 
         if hidden_states[0].get_legacy_shape()[-2] > 512 and self.model_config["OPTIMIZED_MODE"]:
+            print("Running falcon_lm_head_matmul_2d")
             lm_logits = [
                 falcon_lm_head_matmul_2d(
                     hidden_states[device_id],
@@ -122,7 +123,9 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
                 for device_id in range(self.num_devices)
             ]
+            print("Done")
         else:
+            print("running falcon_lm_head_matmul")
             lm_logits = [
                 tt_lib.tensor.falcon_lm_head_matmul(
                     hidden_states[device_id],
@@ -133,5 +136,6 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
                 for device_id in range(self.num_devices)
             ]
+            print("Done")
 
         return lm_logits, presents

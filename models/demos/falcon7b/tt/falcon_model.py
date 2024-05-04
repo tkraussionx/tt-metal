@@ -280,6 +280,7 @@ class TtFalconModelShared(torch.nn.Module):
 
         layer_output = input_embeddings
         presents = ()
+        print("running layers")
         for idx, layer in enumerate(self.layers):
             layer_output = layer(
                 hidden_states=layer_output,
@@ -295,12 +296,14 @@ class TtFalconModelShared(torch.nn.Module):
             layer_output = layer_output[0]
 
         # apply final norm layer
+        print("Running bcast0")
         for i in range(self.num_devices):
             layer_output[i] = tt_lib.tensor.layernorm(
                 layer_output[i],
                 self.layernorm_eps,
                 output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             )
+        print("Running bcast1")
         for i in range(self.num_devices):
             layer_output[i] = tt_lib.tensor.bcast(
                 layer_output[i],
@@ -309,6 +312,7 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_lib.tensor.BcastOpDim.H,
                 output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             )
+        print("running bcast2")
         for i in range(self.num_devices):
             layer_output[i] = tt_lib.tensor.bcast(
                 layer_output[i],
@@ -317,7 +321,7 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_lib.tensor.BcastOpDim.H,
                 output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             )
-
+        print("done running bcast2")
         return layer_output, presents
 
 

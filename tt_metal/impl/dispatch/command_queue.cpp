@@ -1162,7 +1162,7 @@ void HWCommandQueue::enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* d
 // Read buffer command is enqueued in the issue region and device writes requested buffer data into the completion region
 void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking) {
     ZoneScopedN("HWCommandQueue_read_buffer");
-
+    std::cout << "Calling: enqueue_read_buffer" << std::endl;
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
     CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
@@ -1173,6 +1173,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
     uint32_t src_page_index = 0;
 
     if (is_sharded(buffer.buffer_layout())) {
+        std::cout << "Sharded path" << std::endl;
         auto buffer_page_mapping = generate_buffer_page_mapping(buffer);
         // Note that the src_page_index is the device page idx, not the host page idx
         // Since we read core by core we are reading the device pages sequentially
@@ -1197,14 +1198,18 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
                 this->enqueue_command(command, false);
             }
         }
+        std::cout << "Sharded Cmd enqueued" << std::endl;
         if (blocking) {
+            std::cout << "Sharded Finish" << std::endl;
             this->finish();
+            std::cout << "Done sharded finish" << std::endl;
         } else {
             std::shared_ptr<Event> event = std::make_shared<Event>();
             this->enqueue_record_event(event);
         }
     } else {
         // this is a streaming command so we don't need to break down to multiple
+        std::cout << "interleaved read cmd " << buffer.address() << std::endl;
         auto command = EnqueueReadInterleavedBufferCommand(
             this->id, this->device, buffer, dst, this->manager, this->expected_num_workers_completed, src_page_index, pages_to_read);
 
@@ -1213,11 +1218,16 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
         );
         this->num_entries_in_completion_q++;
 
-        this->enqueue_command(command, blocking);
-        if (not blocking) { // should this be unconditional?
+        this->enqueue_command(command, false);
+        if (blocking) {
+            std::cout << "interleaved finish" << std::endl;
+            this->finish();
+            std::cout << "Done interleaved finish" << std::endl;
+        } else { // should this be unconditional?
             std::shared_ptr<Event> event = std::make_shared<Event>();
             this->enqueue_record_event(event);
         }
+        std::cout << "Done Read" << std::endl;
     }
 }
 
