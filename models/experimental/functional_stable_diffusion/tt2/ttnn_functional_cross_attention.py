@@ -278,17 +278,23 @@ class cross_attention:
         self.output_tensors[1024] = output_tensor_1024
 
     def time_sharded_attention(self, query, t_key, value, head_size):
-        num_slices = 16
+        num_heads = 16
+        num_slices = 8 if query.shape[-2] == 4096 else 2
+        heads_per_slice = num_heads // num_slices
         grid_size = (8, 8)
         num_cores = grid_size[0] * grid_size[1]
         seq_len = query.shape[-2]
         key_len = t_key.shape[-1]
         attention_mask = self.attention_masks[seq_len][key_len]
-        tiles_per_shard = math.ceil((((num_slices * seq_len) / num_cores) / num_slices) / 32)
+        tiles_per_shard = math.ceil((((num_heads * seq_len) / num_cores) / num_slices) / 32)
         mm_activations_height_shard_spec = [tiles_per_shard * 32, query.shape[-1]]
         mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
         for j in range(2):
             for i in range(num_slices // 2):
+                print(
+                    j * num_slices // 2 + i,
+                )
+                breakpoint()
                 slice = ttnn.experimental.tensor.interleaved_to_sharded_partial(
                     query,
                     grid_size,
@@ -298,21 +304,19 @@ class cross_attention:
                     ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                     ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 )
-                program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                slice = ttnn.reshape(slice, (1, heads_per_slice, slice.shape[-2] // heads_per_slice, slice.shape[-1]))
+                program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
                     compute_with_storage_grid_size=grid_size,
                     in0_block_w=t_key.shape[-2] // 32,
                     per_core_M=tiles_per_shard,
                     per_core_N=seq_len // 32,
                     out_subblock_h=1,
                     out_subblock_w=4,
-                    fuse_batch=True,
-                    fused_activation=None,
-                    mcast_in0=False,
                 )
                 k_slice = ttnn.experimental.tensor.unpad(
                     t_key,
-                    (j, i, 0, 0),
-                    (j, i, t_key.shape[-2] - 1, seq_len - 1),
+                    (j, (i * heads_per_slice), 0, 0),
+                    (j, (i * heads_per_slice) + (heads_per_slice - 1), t_key.shape[-2] - 1, seq_len - 1),
                     output_mem_config=self.l1_interleaved_memory_config,
                 )
 
@@ -362,21 +366,18 @@ class cross_attention:
                         program_config=softmax_program_config,
                     )
 
-                program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
                     compute_with_storage_grid_size=grid_size,
                     in0_block_w=seq_len // 32,
                     per_core_M=tiles_per_shard,
                     per_core_N=t_key.shape[-2] // 32,
                     out_subblock_h=tiles_per_shard,
                     out_subblock_w=t_key.shape[-2] // 32,
-                    fuse_batch=True,
-                    fused_activation=None,
-                    mcast_in0=False,
                 )
                 v_slice = ttnn.experimental.tensor.unpad(
                     value,
-                    (j, i, 0, 0),
-                    (j, i, seq_len - 1, value.shape[-1] - 1),
+                    (j, (i * heads_per_slice), 0, 0),
+                    (j, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, t_key.shape[-2] - 1),
                     output_mem_config=self.l1_interleaved_memory_config,
                 )
                 mm_slice = ttnn.experimental.operations.primary.matmul(
