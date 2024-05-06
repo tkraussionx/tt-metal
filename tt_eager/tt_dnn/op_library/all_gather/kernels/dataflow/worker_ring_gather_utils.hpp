@@ -9,7 +9,8 @@
 
 using tt::tt_metal::ccl::ShardType;
 using tt::tt_metal::ccl::WorkerXY;
-
+using tt::tt_metal::ccl::UNINITIALIZED_VALUE_U32;
+using tt::tt_metal::ccl::UNINITIALIZED_VALUE_U16;
 FORCE_INLINE void validate_sane_transaction_counters() {
 }
 
@@ -40,17 +41,17 @@ struct FullWorkerGridShardAddrGen {
         input_args.dest_cores = reinterpret_cast<WorkerXY*>(get_arg_addr(curr_arg_index));
         curr_arg_index += input_args.total_num_cores;
 
-        ASSERT(input_args.tile_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32);
-        ASSERT(input_args.shards_start_address != ccl::UNINITIALIZED_VALUE_U32);
-        ASSERT(input_args.curr_core_index != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.total_num_cores != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.curr_shard_tile_x != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.curr_shard_tile_y != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.curr_tile_index != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.curr_shard != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.input_shard_num_tiles_x != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.input_shard_num_tiles_y != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.total_shards_x != ccl::UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.tile_size_in_bytes != UNINITIALIZED_VALUE_U32);
+        ASSERT(input_args.shards_start_address != UNINITIALIZED_VALUE_U32);
+        ASSERT(input_args.curr_core_index != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.total_num_cores != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.curr_shard_tile_x != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.curr_shard_tile_y != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.curr_tile_index != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.curr_shard != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.input_shard_num_tiles_x != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.input_shard_num_tiles_y != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.total_shards_x != UNINITIALIZED_VALUE_U16);
 
         ASSERT(curr_arg_index - arg_index == input_args.get_expected_num_args());
 
@@ -192,12 +193,12 @@ struct ShardAddrGen final {
         input_args.dest_cores = reinterpret_cast<WorkerXY*>(get_arg_addr(curr_arg_index));
         curr_arg_index += input_args.num_dest_cores;
 
-        ASSERT(input_args.shard_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32);
-        ASSERT(input_args.total_chunks_per_core != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.shards_start_address != ccl::UNINITIALIZED_VALUE_U32);
-        ASSERT(input_args.starting_core_index != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.starting_chunk_into_shard != ccl::UNINITIALIZED_VALUE_U16);
-        ASSERT(input_args.num_dest_cores != ccl::UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.shard_size_in_bytes != UNINITIALIZED_VALUE_U32);
+        ASSERT(input_args.total_chunks_per_core != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.shards_start_address != UNINITIALIZED_VALUE_U32);
+        ASSERT(input_args.starting_core_index != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.starting_chunk_into_shard != UNINITIALIZED_VALUE_U16);
+        ASSERT(input_args.num_dest_cores != UNINITIALIZED_VALUE_U16);
 
         ASSERT(curr_arg_index - arg_index == input_args.get_expected_num_args());
 
