@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 ENVS = dict(os.environ)
+print(ENVS)
 TT_METAL_HOME = ""
 if "TT_METAL_HOME" in ENVS.keys():
     TT_METAL_HOME = Path(ENVS["TT_METAL_HOME"])

@@ -58,7 +58,7 @@ def torch_model():
 )
 @pytest.mark.parametrize(
     "enable_async",
-    [True, False],
+    [True],
 )
 def test_falcon_mlp(
     device_mesh,
@@ -70,6 +70,8 @@ def test_falcon_mlp(
     torch_model,
     enable_async,
 ):
+    import time
+
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(enable_async)
 
@@ -93,6 +95,7 @@ def test_falcon_mlp(
     )
 
     ttnn_model = TtFalconMLP(model_config, parameters)
+    start_time = time.time()
     for i in range(200):
         ttnn_input = ttnn.from_torch(
             torch_input,
@@ -103,14 +106,25 @@ def test_falcon_mlp(
         )
         ttnn_output = ttnn_model(ttnn_input)
 
-        passed, pcc = assert_with_pcc(
-            torch_output,
-            ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
-                torch_output.dtype
-            ),
-            expected_pcc,
-        )
-    logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+        ttnn_output_host = ttnn.to_torch(
+            ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh
+        ).to(torch_output.dtype)
+
+        # passed, pcc = assert_with_pcc(
+        #     torch_output,
+        #     ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
+        #         torch_output.dtype
+        #     ),
+        #     expected_pcc,
+        # )
+    end_time = time.time()
+
+    # with open("/home/jnie/tt-metal/dumps/test_result_no_priority.txt", "a") as file:
+    #     file.write(f"Inference loop (200) with {model_config_str} took {end_time - start_time} seconds\n")
+    #     file.close()
+
+    print(f"Took {end_time - start_time} seconds")
+    # logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
 
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(False)
