@@ -291,10 +291,6 @@ class cross_attention:
         mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
         for j in range(2):
             for i in range(num_slices // 2):
-                print(
-                    j * num_slices // 2 + i,
-                )
-                breakpoint()
                 slice = ttnn.experimental.tensor.interleaved_to_sharded_partial(
                     query,
                     grid_size,
@@ -371,7 +367,7 @@ class cross_attention:
                     in0_block_w=seq_len // 32,
                     per_core_M=tiles_per_shard,
                     per_core_N=t_key.shape[-2] // 32,
-                    out_subblock_h=tiles_per_shard,
+                    out_subblock_h=tiles_per_shard if seq_len == 4096 else 2,
                     out_subblock_w=t_key.shape[-2] // 32,
                 )
                 v_slice = ttnn.experimental.tensor.unpad(

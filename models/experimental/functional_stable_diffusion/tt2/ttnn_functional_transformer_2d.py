@@ -226,17 +226,23 @@ class transformer_2d_model:
         width = self.input_width
 
         residual = hidden_states
-        spilled_residual = False
+        spilled_residual = residual.shape[-2] == 8192
         if spilled_residual:
             residual = ttnn.to_memory_config(residual, ttnn.DRAM_MEMORY_CONFIG)
-
-        # print(hidden_states.shape)
-        # print(hidden_states.memory_config())
-        hidden_states = ttnn.to_layout(
-            hidden_states,
-            ttnn.ROW_MAJOR_LAYOUT,
-            memory_config=hidden_states.memory_config(),
-        )
+            # we need to explicitly deallocate hidden_states here since the residual
+            # was moved and no longer points to the same memory
+            hidden_states = dealloc_input(
+                ttnn.to_layout,
+                hidden_states,
+                ttnn.ROW_MAJOR_LAYOUT,
+                memory_config=hidden_states.memory_config(),
+            )
+        else:
+            hidden_states = ttnn.to_layout(
+                hidden_states,
+                ttnn.ROW_MAJOR_LAYOUT,
+                memory_config=hidden_states.memory_config(),
+            )
 
         if self.fallback_on_groupnorm:
             hidden_states = ttnn.to_memory_config(hidden_states, ttnn.L1_MEMORY_CONFIG)
