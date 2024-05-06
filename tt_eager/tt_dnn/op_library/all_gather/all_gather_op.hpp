@@ -10,6 +10,7 @@
 #include "tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/host_api.hpp"
+#include "tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
 
 #include "tt_dnn/op_library/run_operation.hpp"
 
@@ -28,12 +29,15 @@ enum AllGatherMode {
 };
 
 namespace all_gather_op {
-enum Topology {
-    Ring = 0,
-    Linear = 1,
-    Meash = 2
-};
+using ccl::Topology;
+// enum Topology {
+//     Ring = 0,
+//     Linear = 1,
+//     Meash = 2
+// };
 }; // namespace all_gather_op
+
+using ccl::EriscDatamoverBuilder;
 
 AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim);
 
@@ -46,13 +50,24 @@ class AllGatherConfig {
 
         erisc_handshake_address(eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE),
         topology(topology),
-        enable_bidirectional(*/false*/topology == all_gather_op::Topology::Ring && dim != 0 && dim != 1),
+        enable_bidirectional(/*false*/topology == all_gather_op::Topology::Ring && dim != 0 && dim != 1),
 
         input_is_dram(input_tensor.buffer()->buffer_type() == BufferType::DRAM),
         output_is_dram(output_tensor.buffer()->buffer_type() == BufferType::DRAM),
 
         mode(choose_all_gather_mode(input_tensor, output_tensor, dim))
     {
+        if (input_tensor.get_layout() == Layout::TILE && dim != 3) {
+            // See issue #6448
+            int outer_dims_size = 1;
+            for (std::size_t i = 0; i < dim; i++) {
+                outer_dims_size *= input_tensor.get_legacy_shape()[i];
+            }
+            if (outer_dims_size > 1) {
+                this->enable_bidirectional = false;
+            }
+        }
+
         // "duplicate" directions are a short hand to enable linear/mesh all-gather topologies with
         // less code-changes. Ideally a new concept is added amongst "num_eth_buffers", "num_workers_per_link", etc.
         uint32_t num_duplicate_directions = topology == all_gather_op::Topology::Ring ? 1 : 2;
@@ -162,7 +177,7 @@ class AllGatherConfig {
     const all_gather_op::Topology topology;
     AllGatherMode mode;
     bool is_sharded;
-    const bool enable_bidirectional;
+    bool enable_bidirectional;
     const bool input_is_dram;
     const bool output_is_dram;
 };
@@ -747,6 +762,30 @@ class EriscDatamoverBuilder {
         uint32_t eth_semaphore_l1_address;
     };
 
+    EriscDatamoverBuilder(uint32_t eth_buffer_size, uint32_t handshake_addr, std::vector<uint32_t> const& local_semaphore_addresses, std::vector<uint32_t> const& local_buffer_addresses, ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode) :
+        local_semaphore_addresses(local_semaphore_addresses),
+        local_buffer_addresses(local_buffer_addresses),
+        eth_buffer_size_bytes(eth_buffer_size),
+        handshake_addr(handshake_addr),
+        num_channel_buffers(local_buffer_addresses.size()),
+        buffer_sharing_mode(buffer_sharing_mode),
+        enable_sender(false),
+        enable_receiver(false),
+        num_senders(0),
+        num_receivers(0)
+        {
+            TT_ASSERT(local_buffer_addresses.size() == local_semaphore_addresses.size());
+            active_channels.reserve(num_channel_buffers);
+            TT_ASSERT(eth_buffer_size_bytes < 163000);
+            log_trace(tt::LogOp, "EriscDatamoverBuilder:");
+            for (auto const& addr : local_semaphore_addresses) {
+                log_trace(tt::LogOp, "\tsemaphore_address: {}", addr);
+            }
+            for (auto const& addr : local_buffer_addresses) {
+                log_trace(tt::LogOp, "\tbuffer_address: {}", addr);
+            }
+        }
+
     EriscDatamoverBuilder(AllGatherConfig const& all_gather_config, std::vector<uint32_t> const& local_semaphore_addresses, std::vector<uint32_t> const& local_buffer_addresses, ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode) :
         local_semaphore_addresses(local_semaphore_addresses),
         local_buffer_addresses(local_buffer_addresses),
@@ -759,6 +798,7 @@ class EriscDatamoverBuilder {
         num_senders(0),
         num_receivers(0)
         {
+            TT_ASSERT(local_buffer_addresses.size() == local_semaphore_addresses.size());
             active_channels.reserve(num_channel_buffers);
             TT_ASSERT(eth_buffer_size_bytes < 163000);
             log_trace(tt::LogOp, "EriscDatamoverBuilder:");

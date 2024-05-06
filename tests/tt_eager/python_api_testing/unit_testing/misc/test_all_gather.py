@@ -101,7 +101,23 @@ def run_all_gather_on_t3000_impl(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.rand(input_shape).bfloat16()
+    # input_tensor = torch.rand(input_shape).bfloat16()
+    input_tensor = torch.zeros(input_shape).bfloat16()
+    id = 0
+    if layout == ttl.tensor.Layout.TILE:
+        for w in range(input_shape[0]):
+            for z in range(input_shape[1]):
+                for i in range(0, input_shape[2], 32):
+                    for j in range(0, input_shape[3], 32):
+                        input_tensor[w][z][i : i + 32][j : j + 32] = id
+                        id += 1
+    else:
+        for w in range(input_shape[0]):
+            for z in range(input_shape[1]):
+                for i in range(input_shape[2]):
+                    for j in range(0, input_shape[3], 32):
+                        input_tensor[w][z][i][j : j + 32] = id
+                        id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
@@ -121,7 +137,6 @@ def run_all_gather_on_t3000_impl(
             eq, output = comp_equal(tt_output_tensor, input_tensor)
         else:
             eq, output = comp_pcc(tt_output_tensor, input_tensor)
-        count = 0
         if not eq:
             logger.error(f"output mismatch for tensor {i}")
         assert eq, f"{i} FAILED: {output}"
@@ -229,6 +244,7 @@ def test_all_gather_on_t3000_post_commit_looping(
         (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
         # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
         (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (4, 2, [8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
@@ -373,23 +389,25 @@ def test_line_all_gather_on_t3000_post_commit(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.zeros(input_shape).bfloat16()
-
-    id = 0
-    if layout == ttl.tensor.Layout.TILE:
-        for w in range(input_shape[0]):
-            for z in range(input_shape[1]):
-                for i in range(0, input_shape[2], 32):
-                    for j in range(0, input_shape[3], 32):
-                        input_tensor[w][z][i : i + 32][j : j + 32] = id
-                        id += 1
+    if input_dtype == ttl.tensor.DataType.BFLOAT8_B:
+        input_tensor = torch.rand(input_shape).bfloat16()
     else:
-        for w in range(input_shape[0]):
-            for z in range(input_shape[1]):
-                for i in range(input_shape[2]):
-                    for j in range(0, input_shape[3], 32):
-                        input_tensor[w][z][i][j : j + 32] = id
-                        id += 1
+        input_tensor = torch.zeros(input_shape).bfloat16()
+        id = 0
+        if layout == ttl.tensor.Layout.TILE:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for i in range(0, input_shape[2], 32):
+                        for j in range(0, input_shape[3], 32):
+                            input_tensor[w][z][i : i + 32][j : j + 32] = id
+                            id += 1
+        else:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for i in range(input_shape[2]):
+                        for j in range(0, input_shape[3], 32):
+                            input_tensor[w][z][i][j : j + 32] = id
+                            id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []

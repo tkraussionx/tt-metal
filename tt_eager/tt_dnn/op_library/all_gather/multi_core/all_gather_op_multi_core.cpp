@@ -162,11 +162,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     }
 
     // number of worker cores is 2x this since there is 1 worker for the sender buffer and 1 worker for the receiver buffer
-    uint32_t total_worker_core_pairs_used = num_links * all_gather_config.get_num_eth_buffers_per_edm();
-    std::vector<KernelHandle> eth_sender_kernels;
-    eth_sender_kernels.reserve(num_links);
-    std::vector<KernelHandle> eth_receiver_kernels;
-    eth_receiver_kernels.reserve(num_links);
+    uint32_t total_worker_core_pairs_used = num_links * all_gather_config.get_num_eth_buffers_per_edm(););
 
     std::vector<KernelHandle> worker_reader_sender_kernels;
     worker_reader_sender_kernels.reserve(total_worker_core_pairs_used);
@@ -188,8 +184,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     uint32_t min_pages_per_link = num_input_pages / num_links;
 
 
-    auto sender_noc = detail::GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch());
-    auto receiver_noc = detail::GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch());
 
     const uint32_t num_full_send_directions = topology == all_gather_op::Topology::Linear ? 2 : 1;
     constexpr uint32_t max_num_full_send_directions = 2;
@@ -1239,95 +1233,17 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         }
     } // num_full_send_directions
 
-
-    {  // emit EDM kernel configs
-    uint32_t sender_socket_idx = 0;
-    uint32_t receiver_socket_idx = 0;
-    if (receiver_device_id == sender_device_id) {
-        if (ring_index == 0) {
-            receiver_socket_idx = 1;
-        } else {
-            sender_socket_idx = 1;
-        }
-    }
-    for (uint32_t i = 0; i < num_links; ++i) {
-        bool is_clockwise_direction_edm_enabled = !is_linear || ring_index != ring_size - 1;
-        if (is_clockwise_direction_edm_enabled) {
-            log_trace(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
-            clockwise_edm_builders.at(i).dump_to_log();
-
-            auto eth_sender_core = device->get_ethernet_sockets(receiver_device_id.value()).at(sender_socket_idx);
-
-            std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = clockwise_edm_builders.at(i).emit_runtime_args();
-            // Ethernet Kernels
-            std::vector<uint32_t> eth_sender_ct_args = clockwise_edm_builders.at(i).emit_compile_time_args();
-
-            auto eth_sender_kernel = tt_metal::CreateKernel(
-                program,
-                "tt_eager/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
-                eth_sender_core,
-                tt_metal::EthernetConfig{.noc=sender_noc, .compile_args=eth_sender_ct_args});
-
-
-            tt_metal::SetRuntimeArgs(
-                program,
-                eth_sender_kernel,
-                eth_sender_core,
-                edm_clockwise_kernel_rt_args);
-
-            eth_sender_kernels.push_back(eth_sender_kernel);
-            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={})", ring_index, i, eth_sender_core.x, eth_sender_core.y);
-
-            std::stringstream ss;
-            ss << "HOST SENDER EDM ARGS:\n";
-            for (auto const& s : edm_clockwise_kernel_rt_args) {
-                ss << "\t" << s << "\n";
-            }
-            log_trace(tt::LogOp, "{}", ss.str());
-        }
-
-        bool is_counter_clockwise_direction_edm_enabled = !is_linear || ring_index != 0;
-        if (is_counter_clockwise_direction_edm_enabled) {
-            log_trace(tt::LogOp, "EDM COUNTER CLOCKWISE KERNEL RT ARGS: ");
-            counter_clockwise_edm_builders.at(i).dump_to_log();
-            std::vector<uint32_t> const& edm_counter_clockwise_kernel_rt_args = counter_clockwise_edm_builders.at(i).emit_runtime_args();
-
-            auto eth_receiver_core = device->get_ethernet_sockets(sender_device_id.value()).at(receiver_socket_idx);
-            std::vector<uint32_t> eth_receiver_ct_args = counter_clockwise_edm_builders.at(i).emit_compile_time_args();
-
-            auto eth_receiver_kernel = tt_metal::CreateKernel(
-                program,
-                "tt_eager/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
-                eth_receiver_core,
-                tt_metal::EthernetConfig{.noc=receiver_noc, .compile_args=eth_receiver_ct_args});
-
-            eth_receiver_kernels.push_back(eth_receiver_kernel);
-
-            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Counter-clockwise EDM Core (x={},y={})", ring_index, i, eth_receiver_core.x, eth_receiver_core.y);
-
-            std::stringstream ss2;
-            ss2 << "HOST RECEIVER EDM ARGS:\n";
-            for (auto const& s : edm_counter_clockwise_kernel_rt_args) {
-                ss2 << "\t" << s << "\n";
-            }
-            log_trace(tt::LogOp, "{}", ss2.str());
-
-            tt_metal::SetRuntimeArgs(
-                program,
-                eth_receiver_kernel,
-                eth_receiver_core,
-                edm_counter_clockwise_kernel_rt_args);
-        }
-
-        if (receiver_device_id == sender_device_id) {
-            receiver_socket_idx += 2;
-            sender_socket_idx += 2;
-        } else {
-            receiver_socket_idx += 1;
-            sender_socket_idx += 1;
-        }
-    }
-    }
+    generate_edm_kernels_for_ring_or_linear_topology(
+        program,
+        device,
+        clockwise_edm_builders,
+        counter_clockwise_edm_builders,
+        receiver_device_id,
+        sender_device_id,
+        num_links,
+        ring_size,
+        ring_index,
+        is_linear);
 
     auto override_runtime_arguments_callback = [num_links, total_worker_core_pairs_used, worker_reader_sender_kernels, worker_writer_sender_kernels, worker_reader_receiver_kernels, worker_writer_receiver_kernels, all_worker_sender_cores, all_worker_receiver_cores] (
         const void* operation,
