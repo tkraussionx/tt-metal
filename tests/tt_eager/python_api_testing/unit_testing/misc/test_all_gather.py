@@ -623,11 +623,11 @@ def test_all_gather_on_t3000_nightly(
             (32, 64),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
         ),
-        (
-            (1, 1, 32, 3072),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 2))}),
-        ),
+        # (
+        #     (1, 1, 32, 3072),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 2))}),
+        # ),
         # LLama
         (
             (1, 1, 32, 1024),

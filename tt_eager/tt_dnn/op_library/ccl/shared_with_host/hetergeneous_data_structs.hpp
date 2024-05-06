@@ -105,7 +105,7 @@ inline void addr_gen_advance_width_sharded(
 ) {
     if (is_clockwise) {
         bool do_stride = contiguous_chunk_count == contiguous_chunks_before_stride;
-        bool stride_induced_chunk_wraparound = (do_stride && curr_core_chunk_index < (intra_core_stride_in_shards + contiguous_chunks_before_stride));
+        bool stride_induced_chunk_wraparound = (do_stride && curr_core_chunk_index < (intra_core_stride_in_shards + (contiguous_chunks_before_stride - 1)));
         bool do_chunk_wrap = curr_core_chunk_index >= total_chunks_per_core || stride_induced_chunk_wraparound;
 
         // current_core_chunks_visited++;

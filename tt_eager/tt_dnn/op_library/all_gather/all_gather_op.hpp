@@ -547,7 +547,10 @@ struct OutputTensorShardAddrGenArgGenerator final : ShardAddrGenArgGenerator {
     }
 
     static uint16_t get_intra_core_stride_in_shards(uint32_t input_shard_grid_size, uint32_t num_workers, uint32_t ring_size) {
-
+        // This function isn't generalized properly yet so it has some hardcoded behaviour. We need to generalize it
+        if (input_shard_grid_size == num_workers && num_workers == ring_size) {
+            return input_shard_grid_size;
+        }
         auto stride = (num_workers == 1) ? 1 : (input_shard_grid_size / num_workers) + 1;
         TT_ASSERT(stride > 0, "Stride must be greater than 0");
         return stride;

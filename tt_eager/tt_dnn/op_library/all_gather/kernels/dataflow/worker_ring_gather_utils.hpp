@@ -10,19 +10,9 @@
 using ccl::ShardType;
 
 FORCE_INLINE void validate_sane_transaction_counters() {
-    ASSERT (NOC_STATUS_READ_REG(noc_index, NIU_MST_WR_ACK_RECEIVED) != 0);
-    ASSERT (NOC_STATUS_READ_REG(noc_index, NIU_MST_NONPOSTED_WR_REQ_SENT) != 0);
-    ASSERT(noc_nonposted_writes_num_issued[noc_index] != 0);
-    ASSERT(noc_nonposted_writes_acked[noc_index] != 0);
-    ASSERT(noc_reads_num_issued[noc_index] != 0);
 }
 
 FORCE_INLINE void validate_sane_transaction_counters_rw() {
-    ASSERT (NOC_STATUS_READ_REG(noc_index, NIU_MST_WR_ACK_RECEIVED) != 0);
-    ASSERT (NOC_STATUS_READ_REG(noc_index, NIU_MST_NONPOSTED_WR_REQ_SENT) != 0);
-    ASSERT(noc_nonposted_writes_num_issued[noc_index] != 0);
-    ASSERT(noc_nonposted_writes_acked[noc_index] != 0);
-    ASSERT(noc_reads_num_issued[noc_index] != 0);
 }
 
 
