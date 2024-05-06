@@ -215,9 +215,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         }
 
         clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED);
         counter_clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED);
     }
 
     for (uint32_t direction = 0; direction < num_full_send_directions; direction++) {
@@ -278,46 +278,53 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             pages_per_link.at(i)++;
         }
 
-        uint32_t num_rows = 0, num_cols = 0, row_offset = 0, col_offset = 0, num_tiles = 0;
+        auto tensor_slicer = ccl::CclTensorSlicer (
+            input_tensor,
+            output_tensor,
+            dim,
+            ring_index
+        );
 
-        if (rm) {
-            num_cols = input_tensor.get_legacy_shape()[-1];
-            auto input_shape = input_tensor.get_legacy_shape();
-            auto output_shape = output_tensor.get_legacy_shape();
-            num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>());
-            row_offset = std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) - num_rows;
-        } else {
-            num_cols = input_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
-            auto input_shape = input_tensor.get_legacy_shape();
-            auto output_shape = output_tensor.get_legacy_shape();
-            uint32_t num_output_cols = output_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
-            num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT;
-            row_offset = (std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT - num_rows) * num_output_cols;
-            col_offset = num_output_cols - num_cols;
-            num_tiles = num_rows * num_cols;
-        }
+        // uint32_t num_rows = 0, num_cols = 0, row_offset = 0, col_offset = 0, num_tiles = 0;
 
-        uint32_t input_start_page_idx = 0;
-        uint32_t output_addr_offset = 0;
-        uint32_t col_idx = 0;
-        uint32_t row_idx = 0;
-        uint32_t output_page_offset = 0;
+        // if (rm) {
+        //     num_cols = input_tensor.get_legacy_shape()[-1];
+        //     auto input_shape = input_tensor.get_legacy_shape();
+        //     auto output_shape = output_tensor.get_legacy_shape();
+        //     num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>());
+        //     row_offset = std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) - num_rows;
+        // } else {
+        //     num_cols = input_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
+        //     auto input_shape = input_tensor.get_legacy_shape();
+        //     auto output_shape = output_tensor.get_legacy_shape();
+        //     uint32_t num_output_cols = output_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
+        //     num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT;
+        //     row_offset = (std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT - num_rows) * num_output_cols;
+        //     col_offset = num_output_cols - num_cols;
+        //     num_tiles = num_rows * num_cols;
+        // }
 
-        if (rm) {
-            if (width) {
-                output_addr_offset = input_page_size;
-            } else {
-                output_page_offset = num_rows;
-            }
-        } else {
-            if (width) {
-                output_page_offset = num_cols;
-            } else {
-                output_page_offset = num_tiles;
-            }
-        }
-        uint32_t output_start_page_idx = ring_index * output_page_offset;
-        uint32_t output_start_addr_offset = ring_index * output_addr_offset;
+        // uint32_t input_start_page_idx = 0;
+        // uint32_t output_addr_offset = 0;
+        // uint32_t col_idx = 0;
+        // uint32_t row_idx = 0;
+        // uint32_t output_page_offset = 0;
+
+        // if (rm) {
+        //     if (width) {
+        //         output_addr_offset = input_page_size;
+        //     } else {
+        //         output_page_offset = num_rows;
+        //     }
+        // } else {
+        //     if (width) {
+        //         output_page_offset = num_cols;
+        //     } else {
+        //         output_page_offset = num_tiles;
+        //     }
+        // }
+        // uint32_t output_start_page_idx = ring_index * output_page_offset;
+        // uint32_t output_start_addr_offset = ring_index * output_addr_offset;
 
         ///
         /// (counter clockwise sender) < ----- (this chip) < ----- (counter-clockwise receiver)
@@ -515,8 +522,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 bool is_clockwise_direction = is_buffer_in_clockwise_direction(b);
 
                 // Not fully sure about these two
-                uint32_t last_output_page_offset = (ring_size - 1) * output_page_offset;
-                uint32_t last_output_addr_offset = (ring_size - 1) * output_addr_offset;
+                uint32_t last_output_page_offset = (ring_size - 1) * tensor_slicer.output_page_offset;
+                uint32_t last_output_addr_offset = (ring_size - 1) * tensor_slicer.output_addr_offset;
 
                 log_trace(tt::LogOp,"\tlast_output_page_offset={}", last_output_page_offset);
                 log_trace(tt::LogOp,"\tlast_output_addr_offset={}", last_output_addr_offset);
@@ -547,19 +554,19 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                 static_cast<uint32_t>(output_page_size),
                                 static_cast<uint32_t>(pages_per_eth_l1_buffer.at(b)),
                                 static_cast<uint32_t>(rem_pages_per_worker.at(b)),
-                                static_cast<uint32_t>(input_start_page_idx),
-                                static_cast<uint32_t>(output_start_page_idx),
-                                static_cast<uint32_t>(output_start_addr_offset),
-                                static_cast<uint32_t>(row_idx),
-                                static_cast<uint32_t>(col_idx),
-                                static_cast<uint32_t>(row_offset),
-                                static_cast<uint32_t>(col_offset),
-                                static_cast<uint32_t>(num_rows),
-                                static_cast<uint32_t>(num_cols),
+                                static_cast<uint32_t>(tensor_slicer.input_start_page_idx),
+                                static_cast<uint32_t>(tensor_slicer.output_start_page_idx),
+                                static_cast<uint32_t>(tensor_slicer.output_start_addr_offset),
+                                static_cast<uint32_t>(tensor_slicer.row_idx),
+                                static_cast<uint32_t>(tensor_slicer.col_idx),
+                                static_cast<uint32_t>(tensor_slicer.row_offset),
+                                static_cast<uint32_t>(tensor_slicer.col_offset),
+                                static_cast<uint32_t>(tensor_slicer.num_rows),
+                                static_cast<uint32_t>(tensor_slicer.num_cols),
                                 static_cast<uint32_t>(last_output_page_offset),
-                                static_cast<uint32_t>(output_page_offset),
+                                static_cast<uint32_t>(tensor_slicer.output_page_offset),
                                 static_cast<uint32_t>(last_output_addr_offset),
-                                static_cast<uint32_t>(output_addr_offset),
+                                static_cast<uint32_t>(tensor_slicer.output_addr_offset),
                                 static_cast<uint32_t>(ring_index),
                                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
                                 static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
@@ -576,19 +583,19 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             log_trace(tt::LogOp, "\toutput_page_size: {}", output_page_size);
                             log_trace(tt::LogOp, "\tpages_per_eth_l1_buffer.at(b): {}", pages_per_eth_l1_buffer.at(b));
                             log_trace(tt::LogOp, "\trem_pages_per_worker.at(b): {}", rem_pages_per_worker.at(b));
-                            log_trace(tt::LogOp, "\tinput_start_page_idx: {}", input_start_page_idx);
-                            log_trace(tt::LogOp, "\toutput_start_page_idx: {}", output_start_page_idx);
-                            log_trace(tt::LogOp, "\toutput_start_addr_offset: {}", output_start_addr_offset);
-                            log_trace(tt::LogOp, "\trow_idx: {}", row_idx);
-                            log_trace(tt::LogOp, "\tcol_idx: {}", col_idx);
-                            log_trace(tt::LogOp, "\trow_offset: {}", row_offset);
-                            log_trace(tt::LogOp, "\tcol_offset: {}", col_offset);
-                            log_trace(tt::LogOp, "\tnum_rows: {}", num_rows);
-                            log_trace(tt::LogOp, "\tnum_cols: {}", num_cols);
+                            log_trace(tt::LogOp, "\tinput_start_page_idx: {}", tensor_slicer.input_start_page_idx);
+                            log_trace(tt::LogOp, "\toutput_start_page_idx: {}", tensor_slicer.output_start_page_idx);
+                            log_trace(tt::LogOp, "\toutput_start_addr_offset: {}", tensor_slicer.output_start_addr_offset);
+                            log_trace(tt::LogOp, "\trow_idx: {}", tensor_slicer.row_idx);
+                            log_trace(tt::LogOp, "\tcol_idx: {}", tensor_slicer.col_idx);
+                            log_trace(tt::LogOp, "\trow_offset: {}", tensor_slicer.row_offset);
+                            log_trace(tt::LogOp, "\tcol_offset: {}", tensor_slicer.col_offset);
+                            log_trace(tt::LogOp, "\tnum_rows: {}", tensor_slicer.num_rows);
+                            log_trace(tt::LogOp, "\tnum_cols: {}", tensor_slicer.num_cols);
                             log_trace(tt::LogOp, "\tlast_output_page_offset: {}", last_output_page_offset);
-                            log_trace(tt::LogOp, "\toutput_page_offset: {}", output_page_offset);
+                            log_trace(tt::LogOp, "\toutput_page_offset: {}", tensor_slicer.output_page_offset);
                             log_trace(tt::LogOp, "\tlast_output_addr_offset: {}", last_output_addr_offset);
-                            log_trace(tt::LogOp, "\toutput_addr_offset: {}", output_addr_offset);
+                            log_trace(tt::LogOp, "\toutput_addr_offset: {}", tensor_slicer.output_addr_offset);
                             log_trace(tt::LogOp, "\tring_index: {}", ring_index);
                             log_trace(tt::LogOp, "\tsender_worker_reader_semaphore_addr: {}", sender_worker_reader_semaphore_addr);
                             log_trace(tt::LogOp, "\tis_clockwise_direction: {}", is_clockwise_direction ? 1 : 0);
@@ -713,15 +720,15 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                 static_cast<uint32_t>(output_page_size),
                                 static_cast<uint32_t>(pages_per_eth_l1_buffer.at(b)),
                                 static_cast<uint32_t>(rem_pages_per_worker.at(b)),
-                                static_cast<uint32_t>(input_start_page_idx),
-                                static_cast<uint32_t>(output_start_page_idx),
-                                static_cast<uint32_t>(output_start_addr_offset),
-                                static_cast<uint32_t>(row_idx),
-                                static_cast<uint32_t>(col_idx),
-                                static_cast<uint32_t>(row_offset),
-                                static_cast<uint32_t>(col_offset),
-                                static_cast<uint32_t>(num_rows),
-                                static_cast<uint32_t>(num_cols),
+                                static_cast<uint32_t>(tensor_slicer.input_start_page_idx),
+                                static_cast<uint32_t>(tensor_slicer.output_start_page_idx),
+                                static_cast<uint32_t>(tensor_slicer.output_start_addr_offset),
+                                static_cast<uint32_t>(tensor_slicer.row_idx),
+                                static_cast<uint32_t>(tensor_slicer.col_idx),
+                                static_cast<uint32_t>(tensor_slicer.row_offset),
+                                static_cast<uint32_t>(tensor_slicer.col_offset),
+                                static_cast<uint32_t>(tensor_slicer.num_rows),
+                                static_cast<uint32_t>(tensor_slicer.num_cols),
                                 static_cast<uint32_t>(ring_index),
 
                                 // worker local L1 address of semaphore
@@ -738,15 +745,15 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             log_trace(tt::LogOp, "\toutput_page_size: {}", output_page_size);
                             log_trace(tt::LogOp, "\tpages_per_eth_l1_buffer: {}", pages_per_eth_l1_buffer.at(b));
                             log_trace(tt::LogOp, "\trem_pages_per_worker: {}", rem_pages_per_worker.at(b));
-                            log_trace(tt::LogOp, "\tinput_start_page_idx: {}", input_start_page_idx);
-                            log_trace(tt::LogOp, "\toutput_start_page_idx: {}", output_start_page_idx);
-                            log_trace(tt::LogOp, "\toutput_start_addr_offset: {}", output_start_addr_offset);
-                            log_trace(tt::LogOp, "\trow_idx: {}", row_idx);
-                            log_trace(tt::LogOp, "\tcol_idx: {}", col_idx);
-                            log_trace(tt::LogOp, "\trow_offset: {}", row_offset);
-                            log_trace(tt::LogOp, "\tcol_offset: {}", col_offset);
-                            log_trace(tt::LogOp, "\tnum_rows: {}", num_rows);
-                            log_trace(tt::LogOp, "\tnum_cols: {}", num_cols);
+                            log_trace(tt::LogOp, "\tinput_start_page_idx: {}", tensor_slicer.input_start_page_idx);
+                            log_trace(tt::LogOp, "\toutput_start_page_idx: {}", tensor_slicer.output_start_page_idx);
+                            log_trace(tt::LogOp, "\toutput_start_addr_offset: {}", tensor_slicer.output_start_addr_offset);
+                            log_trace(tt::LogOp, "\trow_idx: {}", tensor_slicer.row_idx);
+                            log_trace(tt::LogOp, "\tcol_idx: {}", tensor_slicer.col_idx);
+                            log_trace(tt::LogOp, "\trow_offset: {}", tensor_slicer.row_offset);
+                            log_trace(tt::LogOp, "\tcol_offset: {}", tensor_slicer.col_offset);
+                            log_trace(tt::LogOp, "\tnum_rows: {}", tensor_slicer.num_rows);
+                            log_trace(tt::LogOp, "\tnum_cols: {}", tensor_slicer.num_cols);
                             log_trace(tt::LogOp, "\tring_index: {}", ring_index);
                             log_trace(tt::LogOp, "\tsender_worker_writer_semaphore_addr: {}", sender_worker_writer_semaphore_addr);
                             log_trace(tt::LogOp, "\tethernet_core_x: {}", device->ethernet_core_from_logical_core(worker_eth_sender_core).x);
@@ -884,14 +891,14 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             (ring_index == 0 ? ring_size - 1 : ring_index - 1):
                             (ring_index == ring_size - 1 ? 0 : ring_index + 1));
 
-                    uint32_t receiver_output_start_addr_offset = receiver_ring_index * output_addr_offset;
+                    uint32_t receiver_output_start_addr_offset = receiver_ring_index * tensor_slicer.output_addr_offset;
 
-                    uint32_t receiver_output_start_page_idx = output_start_page_idx;
+                    uint32_t receiver_output_start_page_idx = tensor_slicer.output_start_page_idx;
                     if (topology == all_gather_op::Topology::Linear) {
                         if (is_clockwise_direction) {
-                            receiver_output_start_page_idx -= output_page_offset;
+                            receiver_output_start_page_idx -= tensor_slicer.output_page_offset;
                         } else {
-                            receiver_output_start_page_idx += output_page_offset;
+                            receiver_output_start_page_idx += tensor_slicer.output_page_offset;
                         }
                     } else {
                         if (is_clockwise_direction) {
@@ -899,7 +906,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             if (is_wraparound_ring_index) {
                                 receiver_output_start_page_idx += last_output_page_offset;
                             } else {
-                                receiver_output_start_page_idx -= output_page_offset;
+                                receiver_output_start_page_idx -= tensor_slicer.output_page_offset;
                             }
                         } else {
                             // counter clockwise direction
@@ -907,7 +914,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             if (is_wraparound_ring_index) {
                                 receiver_output_start_page_idx -= last_output_page_offset;
                             } else {
-                                receiver_output_start_page_idx += output_page_offset;
+                                receiver_output_start_page_idx += tensor_slicer.output_page_offset;
                             }
                         }
                     }
@@ -1067,16 +1074,16 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                 static_cast<uint32_t>(rem_pages_per_worker.at(b)),
                                 static_cast<uint32_t>(receiver_output_start_page_idx),
                                 static_cast<uint32_t>(receiver_output_start_addr_offset),
-                                static_cast<uint32_t>(row_idx),
-                                static_cast<uint32_t>(col_idx),
-                                static_cast<uint32_t>(row_offset),
-                                static_cast<uint32_t>(col_offset),
-                                static_cast<uint32_t>(num_rows),
-                                static_cast<uint32_t>(num_cols),
+                                static_cast<uint32_t>(tensor_slicer.row_idx),
+                                static_cast<uint32_t>(tensor_slicer.col_idx),
+                                static_cast<uint32_t>(tensor_slicer.row_offset),
+                                static_cast<uint32_t>(tensor_slicer.col_offset),
+                                static_cast<uint32_t>(tensor_slicer.num_rows),
+                                static_cast<uint32_t>(tensor_slicer.num_cols),
                                 static_cast<uint32_t>(last_output_page_offset),
-                                static_cast<uint32_t>(output_page_offset),
+                                static_cast<uint32_t>(tensor_slicer.output_page_offset),
                                 static_cast<uint32_t>(last_output_addr_offset),
-                                static_cast<uint32_t>(output_addr_offset),
+                                static_cast<uint32_t>(tensor_slicer.output_addr_offset),
                                 static_cast<uint32_t>(receiver_ring_index),
                                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
                                 static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
@@ -1094,16 +1101,16 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             log_trace(tt::LogOp, "\trem_pages_per_worker.at(b): {}", rem_pages_per_worker.at(b));
                             log_trace(tt::LogOp, "\treceiver_output_start_page_idx: {}", receiver_output_start_page_idx);
                             log_trace(tt::LogOp, "\treceiver_output_start_addr_offset: {}", receiver_output_start_addr_offset);
-                            log_trace(tt::LogOp, "\trow_idx: {}", row_idx);
-                            log_trace(tt::LogOp, "\tcol_idx: {}", col_idx);
-                            log_trace(tt::LogOp, "\trow_offset: {}", row_offset);
-                            log_trace(tt::LogOp, "\tcol_offset: {}", col_offset);
-                            log_trace(tt::LogOp, "\tnum_rows: {}", num_rows);
-                            log_trace(tt::LogOp, "\tnum_cols: {}", num_cols);
+                            log_trace(tt::LogOp, "\trow_idx: {}", tensor_slicer.row_idx);
+                            log_trace(tt::LogOp, "\tcol_idx: {}", tensor_slicer.col_idx);
+                            log_trace(tt::LogOp, "\trow_offset: {}", tensor_slicer.row_offset);
+                            log_trace(tt::LogOp, "\tcol_offset: {}", tensor_slicer.col_offset);
+                            log_trace(tt::LogOp, "\tnum_rows: {}", tensor_slicer.num_rows);
+                            log_trace(tt::LogOp, "\tnum_cols: {}", tensor_slicer.num_cols);
                             log_trace(tt::LogOp, "\tlast_output_page_offset: {}", last_output_page_offset);
-                            log_trace(tt::LogOp, "\toutput_page_offset: {}", output_page_offset);
+                            log_trace(tt::LogOp, "\toutput_page_offset: {}", tensor_slicer.output_page_offset);
                             log_trace(tt::LogOp, "\tlast_output_addr_offset: {}", last_output_addr_offset);
-                            log_trace(tt::LogOp, "\toutput_addr_offset: {}", output_addr_offset);
+                            log_trace(tt::LogOp, "\toutput_addr_offset: {}", tensor_slicer.output_addr_offset);
                             log_trace(tt::LogOp, "\treceiver_ring_index: {}", receiver_ring_index);
                             log_trace(tt::LogOp, "\tsender_worker_reader_semaphore_addr: {}", sender_worker_reader_semaphore_addr);
                             log_trace(tt::LogOp, "\tis_clockwise_direction ? 1 : 0: {}", is_clockwise_direction ? 1 : 0);
@@ -1201,27 +1208,28 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 }
 
                 uint32_t pages_per_worker = num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b);
-                if (is_sharded) {
-                    // nothing to do here - is handled by
-                } else {
-                    // Only for interleaved
-                    if (pages_per_worker > 0) {
-                        if (rm) {
-                            uint32_t num_rows_shifted = row_idx + pages_per_worker;
-                            uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
-                            output_start_page_idx += pages_per_worker + num_blocks_shifted * row_offset;
-                            row_idx = width ? 0 : num_rows_shifted % num_rows;
-                        } else {
-                            uint32_t num_cols_shifted = col_idx + pages_per_worker;
-                            uint32_t num_rows_shifted = num_cols_shifted / num_cols;
-                            uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
-                            output_start_page_idx += pages_per_worker + num_rows_shifted * col_offset + num_blocks_shifted * row_offset;
-                            col_idx = num_cols_shifted % num_cols;
-                            row_idx = width ? 0 : num_rows_shifted % num_rows;
-                        }
-                    }
-                    input_start_page_idx += pages_per_worker;
-                }
+                tensor_slicer.increment(pages_per_worker);
+                // if (is_sharded) {
+                //     // nothing to do here - is handled by
+                // } else {
+                //     // Only for interleaved
+                //     if (pages_per_worker > 0) {
+                //         if (rm) {
+                //             uint32_t num_rows_shifted = row_idx + pages_per_worker;
+                //             uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
+                //             output_start_page_idx += pages_per_worker + num_blocks_shifted * row_offset;
+                //             row_idx = width ? 0 : num_rows_shifted % num_rows;
+                //         } else {
+                //             uint32_t num_cols_shifted = col_idx + pages_per_worker;
+                //             uint32_t num_rows_shifted = num_cols_shifted / num_cols;
+                //             uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
+                //             output_start_page_idx += pages_per_worker + num_rows_shifted * col_offset + num_blocks_shifted * row_offset;
+                //             col_idx = num_cols_shifted % num_cols;
+                //             row_idx = width ? 0 : num_rows_shifted % num_rows;
+                //         }
+                //     }
+                //     input_start_page_idx += pages_per_worker;
+                // }
             }
 
 

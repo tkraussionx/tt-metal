@@ -8,6 +8,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #include "eth_l1_address_map.h"
+#include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_eager/tt_dnn/op_library/ccl/edm/erisc_async_datamover.hpp"
 
 // Args Schema:
@@ -42,6 +43,8 @@ FORCE_INLINE void eth_setup_handshake2(std::uint32_t handshake_register_address,
         eth_receiver_channel_done(0);
     }
 }
+
+using tt::tt_metal::ccl::WorkerXY;
 
 template<uint8_t num_senders, uint8_t num_receivers>
 struct sender_receiver_index_t {
@@ -113,7 +116,7 @@ void kernel_main() {
 
     constexpr uint32_t num_senders = get_compile_time_arg_val(2);
     constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
-    constexpr ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode = static_cast<ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
+    constexpr tt::tt_metal::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode = static_cast<tt::tt_metal::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
 
     std::array<erisc::datamover::ChannelBuffer<edm_buffer_sharing_mode>, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> buffer_channels;
 
@@ -148,7 +151,7 @@ void kernel_main() {
             sender_num_workers,
             sender_num_messages_to_send,
             (volatile tt_l1_ptr uint32_t *const)sender_semaphores_base_address,
-            (const ccl::WorkerXY *)workers_xy_list_addr,
+            (const WorkerXY *)workers_xy_list_addr,
             true);
         if (sender_num_messages_to_send == 0) {
             num_senders_with_no_work++;
@@ -178,7 +181,7 @@ void kernel_main() {
             receiver_num_workers,
             receiver_num_messages_to_send,
             (volatile tt_l1_ptr uint32_t *const)receiver_semaphores_base_address,
-            (const ccl::WorkerXY *)workers_xy_list_addr,
+            (const WorkerXY *)workers_xy_list_addr,
             false);
 
         if (receiver_num_messages_to_send == 0) {

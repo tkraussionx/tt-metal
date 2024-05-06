@@ -15,6 +15,110 @@ namespace tt {
 namespace tt_metal {
 namespace ccl {
 
+class CclTensorSlicer {
+   public:
+    CclTensorSlicer (
+        Tensor const& input_tensor,
+        Tensor const& output_tensor,
+        int slice_dim,
+        uint32_t slice_idx
+    ) :
+        row_major(input_tensor.get_layout() == Layout::ROW_MAJOR),
+        is_sharded(input_tensor.is_sharded()),
+        slice_dim_is_width(input_tensor.get_legacy_shape().rank() - 1 == slice_dim),
+        num_rows(0),
+        num_cols(0),
+        row_offset(0),
+        col_offset(0),
+        num_tiles(0),
+        input_start_page_idx(0),
+        output_addr_offset(0),
+        col_idx(0),
+        row_idx(0),
+        output_page_offset(0)
+    {
+        int32_t shard_size_in_bytes = is_sharded ?
+            (input_tensor.buffer()->page_size() * input_tensor.buffer()->shard_spec().tensor2d_shape[0] * input_tensor.buffer()->shard_spec().tensor2d_shape[1]) / input_tensor.shard_spec()->num_cores() :
+            -1;
+        this->input_page_size = is_sharded ? shard_size_in_bytes : input_tensor.buffer()->page_size();;
+        if (row_major) {
+            num_cols = input_tensor.get_legacy_shape()[-1];
+            auto input_shape = input_tensor.get_legacy_shape();
+            auto output_shape = output_tensor.get_legacy_shape();
+            num_rows = std::accumulate(input_shape.begin() + slice_dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>());
+            row_offset = std::accumulate(output_shape.begin() + slice_dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) - num_rows;
+        } else {
+            num_cols = input_tensor.get_legacy_shape()[-1] / tt::constants::TILE_WIDTH;
+            auto input_shape = input_tensor.get_legacy_shape();
+            auto output_shape = output_tensor.get_legacy_shape();
+            uint32_t num_output_cols = output_tensor.get_legacy_shape()[-1] / tt::constants::TILE_WIDTH;
+            num_rows = std::accumulate(input_shape.begin() + slice_dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>()) / tt::constants::TILE_HEIGHT;
+            row_offset = (std::accumulate(output_shape.begin() + slice_dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) / tt::constants::TILE_HEIGHT - num_rows) * num_output_cols;
+            col_offset = num_output_cols - num_cols;
+            num_tiles = num_rows * num_cols;
+        }
+
+        if (row_major) {
+            if (slice_dim_is_width) {
+                output_addr_offset = input_page_size;
+            } else {
+                output_page_offset = num_rows;
+            }
+        } else {
+            if (slice_dim_is_width) {
+                output_page_offset = num_cols;
+            } else {
+                output_page_offset = num_tiles;
+            }
+        }
+        output_start_page_idx = slice_idx/*ring_index*/ * output_page_offset;
+        output_start_addr_offset = slice_idx/*ring_index*/ * output_addr_offset;
+    }
+
+    void increment(uint32_t num_pages) {
+        // uint32_t pages_per_worker = num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b);
+        if (is_sharded) {
+            // nothing to do here - is handled by
+        } else {
+            // Only for interleaved
+            if (num_pages/*pages_per_worker*/ > 0) {
+                if (row_major) {
+                    uint32_t num_rows_shifted = row_idx + num_pages/*pages_per_worker*/;
+                    uint32_t num_blocks_shifted = slice_dim_is_width ? 0 : num_rows_shifted / num_rows;
+                    output_start_page_idx += num_pages/*pages_per_worker*/ + num_blocks_shifted * row_offset;
+                    row_idx = slice_dim_is_width ? 0 : num_rows_shifted % num_rows;
+                } else {
+                    uint32_t num_cols_shifted = col_idx + num_pages/*pages_per_worker*/;
+                    uint32_t num_rows_shifted = num_cols_shifted / num_cols;
+                    uint32_t num_blocks_shifted = slice_dim_is_width ? 0 : num_rows_shifted / num_rows;
+                    output_start_page_idx += num_pages/*pages_per_worker*/ + num_rows_shifted * col_offset + num_blocks_shifted * row_offset;
+                    col_idx = num_cols_shifted % num_cols;
+                    row_idx = slice_dim_is_width ? 0 : num_rows_shifted % num_rows;
+                }
+            }
+            input_start_page_idx += num_pages/*pages_per_worker*/;
+        }
+    }
+
+    uint32_t input_page_size;
+    uint32_t num_rows;
+    uint32_t num_cols;
+    uint32_t row_offset;
+    uint32_t col_offset;
+    uint32_t num_tiles;
+    uint32_t input_start_page_idx;
+    uint32_t output_addr_offset;
+    uint32_t col_idx;
+    uint32_t row_idx;
+    uint32_t output_page_offset;
+    uint32_t output_start_page_idx;
+    uint32_t output_start_addr_offset;
+    bool row_major;
+    bool slice_dim_is_width;
+    bool is_sharded;
+
+};
+
 KernelHandle generate_edm_kernel(
     tt_metal::Program &program,
     Device const* device,

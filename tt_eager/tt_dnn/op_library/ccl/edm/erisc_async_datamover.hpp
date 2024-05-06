@@ -13,7 +13,7 @@
 #include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/hw/inc/wormhole/noc/noc.h"
 
-using tt::tt_metal::ccl::EriscDataMoverBufferSharingMode
+using tt::tt_metal::ccl::EriscDataMoverBufferSharingMode;
 
 namespace erisc {
 namespace datamover {
@@ -27,6 +27,7 @@ struct edm_worker_index<EriscDataMoverBufferSharingMode::ROUND_ROBIN> {
     uint16_t worker_index = 0;
 };
 
+using tt::tt_metal::ccl::WorkerXY;
 
 /*
  * The `ChannelBuffer` is a building block of the Erisc Data Mover (EDM). For every concurrent transaction
@@ -85,7 +86,7 @@ class ChannelBuffer final {
         uint32_t num_workers,
         uint32_t total_num_messages_to_move,
         volatile tt_l1_ptr uint32_t *const local_semaphore_address,
-        tt_l1_ptr const ccl::WorkerXY *worker_coords,
+        tt_l1_ptr const WorkerXY *worker_coords,
         bool is_sender_side) :
         eth_transaction_channel(eth_transaction_channel),
         local_semaphore_address(local_semaphore_address),
@@ -122,14 +123,14 @@ class ChannelBuffer final {
             // We have to be careful that the worker x/y matches for the `noc_index`
             // active on the erisc
             for (std::size_t i = 0; i < this->num_workers; i++) {
-                ccl::WorkerXY worker_xy = this->worker_coords[i];
+                WorkerXY worker_xy = this->worker_coords[i];
                 uint64_t worker_semaphore_address =
                     get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
 
                 noc_semaphore_inc(worker_semaphore_address, 1);
             }
         } else if (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::ROUND_ROBIN) {
-                ccl::WorkerXY worker_xy = this->worker_coords[this->worker_index.worker_index];
+                WorkerXY worker_xy = this->worker_coords[this->worker_index.worker_index];
                 uint64_t worker_semaphore_address =
                     get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
 
@@ -199,7 +200,7 @@ class ChannelBuffer final {
    public:
     uint32_t eth_transaction_channel;  //
     volatile tt_l1_ptr uint32_t *const local_semaphore_address;
-    ccl::WorkerXY const *const worker_coords;
+    WorkerXY const *const worker_coords;
     std::size_t const address;
     std::size_t const size_in_bytes;
     // Even for multiple workers, this address will be the same
