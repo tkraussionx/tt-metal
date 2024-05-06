@@ -1397,13 +1397,19 @@ void HWCommandQueue::enqueue_program(
     auto command = EnqueueProgramCommand(this->id, this->device, program, this->manager, expected_workers_completed);
     this->enqueue_command(command, blocking);
 
-    log_trace(tt::LogMetal, "Created EnqueueProgramCommand (active_cores: {} bypass_mode: {} expected_workers_completed: {})",
-        program.program_transfer_info.num_active_cores, this->manager.get_bypass_mode(), expected_workers_completed);
+    log_info(tt::LogMetal, "Created EnqueueProgramCommand (id: {} active_cores: {} bypass_mode: {} expected_workers_completed: {})",
+        program.id, program.program_transfer_info.num_active_cores, this->manager.get_bypass_mode(), expected_workers_completed);
 
+    // KCM - Debug Experiment
+    bool pin_program_buffers = tt::parse_env("PIN_PROGRAM_BUFFERS", true);
     if (this->manager.get_bypass_mode()) {
         this->trace_ctx->num_completion_worker_cores += program.program_transfer_info.num_active_cores;
         this->trace_ctx->owned_buffer_pool.insert(this->trace_ctx->owned_buffer_pool.end(), program.kg_buffers.begin(), program.kg_buffers.end());
-        this->trace_ctx->owned_buffer_pool.insert(this->trace_ctx->owned_buffer_pool.end(), program.owned_buffer_pool.begin(), program.owned_buffer_pool.end());
+
+        // KCM - Tony added this to extend IO and intermediate buffers lifetime. Want to reduce it to just IO buffers.
+        if (pin_program_buffers) {
+            this->trace_ctx->owned_buffer_pool.insert(this->trace_ctx->owned_buffer_pool.end(), program.owned_buffer_pool.begin(), program.owned_buffer_pool.end());
+        }
     } else {
         this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
     }

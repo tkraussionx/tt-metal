@@ -11,6 +11,7 @@ import math
 from models.demos.resnet.utils import fold_bn_to_conv_weights_bias
 from models.utility_functions import tt2torch_tensor, torch2tt_tensor
 from tt_lib.utils import pad_weight
+from loguru import logger
 
 from models.utility_functions import is_grayskull
 from tt_lib.fused_ops.average_pool import run_avg_pool_on_device_wrapper as TtAvgPool
@@ -91,6 +92,8 @@ def ResnetLinear(
         assert bias.get_legacy_shape()[-1] == out_features, "bias shape is not as expected"
         if device is not None:
             bias = bias.to(device)
+
+    logger.info("KCM Inside ResnetLinear")
 
     if transpose:
         assert weight.get_legacy_shape() == [1, 1, out_features, in_features], "weight does not have the expected shape"
@@ -1367,6 +1370,12 @@ class ResNet(nn.Module):
         self.sharded = sharded
         self.model_config = model_config
         self.reader_patterns_cache = {}
+
+        self.call_count = 0
+        self.trace_captured = False
+
+        logger.info("KCM INSIDE HERE ResNet init")
+
         if self.storage_in_dram:
             self.memory_config = tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
@@ -2099,6 +2108,8 @@ class ResNet(nn.Module):
         return x
 
     def forward(self, x: tt_lib.tensor) -> tt_lib.tensor:
+        logger.info(f"KCM Inside Forward call_count: {self.call_count}")
+
         if not self.sharded:
             original_A_cl_host_shape = x.get_legacy_shape()
             x = x.reshape(
@@ -2128,188 +2139,217 @@ class ResNet(nn.Module):
             )
             x = x.to(self.device, mem_config)
 
-        x = self.conv1(x)
-        # Relu is fused with conv1
+        # KCM - .to() calls (EnqueueWriteBuffer) are done now. Start tracing.
 
-        if self.batch_size == 20:
-            x = tt_lib.tensor.move_sharded(x)
+        # Davor suggested to trace 2nd pass only, but have traced 1st pass only in other tests, so do that for now.
+        use_trace = True
+        capture_this_iteration = use_trace and self.call_count == 0  # 1 for 2nd pass.
 
-        if not self.sharded:
-            x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+        if not self.trace_captured:
+            if capture_this_iteration:
+                logger.info("KCM Starting to capture a trace. call_count: {}", self.call_count)
+                tt_lib.device.BeginTraceCapture(self.device)
+            else:
+                logger.info("KCM Starting iteration without trace. call_count: {}", self.call_count)
+
+            x = self.conv1(x)
+            # Relu is fused with conv1
+
+            if self.batch_size == 20:
+                x = tt_lib.tensor.move_sharded(x)
+
+            if not self.sharded:
+                x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+                x = x.reshape(
+                    self.conv1_output_shape[0],
+                    self.conv1_output_shape[1],
+                    self.conv1_output_shape[2],
+                    self.conv1_output_shape[3],
+                )
+            x = self.maxpool(x)
+
             x = x.reshape(
-                self.conv1_output_shape[0],
-                self.conv1_output_shape[1],
-                self.conv1_output_shape[2],
-                self.conv1_output_shape[3],
-            )
-        x = self.maxpool(x)
-
-        x = x.reshape(
-            1,
-            1,
-            self.maxpool_output_shape[0] * self.maxpool_output_shape[1] * self.maxpool_output_shape[2],
-            self.maxpool_output_shape[3],
-        )
-        x = tt_lib.tensor.tilize(
-            x,
-            output_mem_config=self.height_sharded_memory_config,
-            output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
-            use_multicore=True,
-        )
-        if self.batch_size == 20:
-            x = tt_lib.tensor.move_sharded(x)
-
-        x = self.layer1_module1(x)
-        x = self.layer1_module2(x)
-        x = self.layer1_module3(x)
-
-        x = self.layer2_module1(x)
-        x = self.layer2_module2(x)
-        x = self.layer2_module3(x)
-        x = self.layer2_module4(x)
-        if self.sharded:
-            grid_size = (10, 8)
-            x = tt_lib.tensor.interleaved_to_sharded(
-                x,
-                self.layer_3_grid_size,
-                [
-                    math.ceil((x.get_legacy_shape()[-2] // 32) / self.layer_3_grid_size[0]) * 32,
-                    x.get_legacy_shape()[-1] // self.layer_3_grid_size[1],
-                ],
-                tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                tt_lib.tensor.ShardOrientation.COL_MAJOR,
-            )
-        x = self.layer3_module1(x)
-        x = self.layer3_module2(x)
-        x = self.layer3_module3(x)
-        x = self.layer3_module4(x)
-        x = self.layer3_module5(x)
-        x = self.layer3_module6(x)
-        if self.sharded:
-            x = tt_lib.tensor.interleaved_to_sharded(
-                x,
-                self.layer_4_grid_size,
-                [
-                    math.ceil((x.get_legacy_shape()[-2] // 32) / self.layer_4_grid_size[0]) * 32,
-                    x.get_legacy_shape()[-1] // self.layer_4_grid_size[1],
-                ],
-                tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                tt_lib.tensor.ShardOrientation.COL_MAJOR,
-            )
-        x = self.layer4_module1(x)
-        x = self.layer4_module2(x)
-        x = self.layer4_module3(x)
-
-        unpadded_shape = x.shape_without_padding()
-        x = tt_lib.tensor.untilize_with_unpadding(
-            x,
-            (0, 0, 0, 0),
-            (unpadded_shape[0] - 1, unpadded_shape[1] - 1, unpadded_shape[2] - 1, unpadded_shape[3] - 1),
-            self.memory_config,
-        )
-
-        x = x.reshape(
-            self.batch_size,
-            x.get_legacy_shape()[1],
-            (int)(x.get_legacy_shape()[2] / self.batch_size),
-            x.get_legacy_shape()[3],
-        )
-        if self.sharded:
-            grid_size = (8, 4)
-            x = tt_lib.tensor.interleaved_to_sharded(
-                x,
-                grid_size,
-                [x.volume() // x.get_legacy_shape()[-1], x.get_legacy_shape()[-1] // (grid_size[0] * grid_size[1])],
-                tt_lib.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-                tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-            )
-
-        unpadded_shape = x.get_legacy_shape()
-        padded_shape = [
-            unpadded_shape[0],
-            unpadded_shape[1],
-            _nearest_32(unpadded_shape[2]),
-            _nearest_32(unpadded_shape[3]),
-        ]
-        if self.sharded:
-            x = tt_lib.tensor.tilize_with_val_padding(
-                x,
-                padded_shape,
-                [0, 0, 0, 0],
-                0,
-                output_mem_config=self.width_sharded_memory_config,
-                output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
-            )
-        else:
-            x = tt_lib.tensor.pad(
-                x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True
+                1,
+                1,
+                self.maxpool_output_shape[0] * self.maxpool_output_shape[1] * self.maxpool_output_shape[2],
+                self.maxpool_output_shape[3],
             )
             x = tt_lib.tensor.tilize(
                 x,
-                output_mem_config=self.memory_config,
+                output_mem_config=self.height_sharded_memory_config,
                 output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
                 use_multicore=True,
             )
+            if self.batch_size == 20:
+                x = tt_lib.tensor.move_sharded(x)
 
-        x = self.avgpool(x, self.width_sharded_memory_config)
+            x = self.layer1_module1(x)
+            x = self.layer1_module2(x)
+            x = self.layer1_module3(x)
 
-        unpadded_shape_end = [
-            x.get_legacy_shape()[0] - 1,
-            x.get_legacy_shape()[1] - 1,
-            1 - 1,
-            x.get_legacy_shape()[3] - 1,
-        ]
-        if self.sharded:
+            x = self.layer2_module1(x)
+            x = self.layer2_module2(x)
+            x = self.layer2_module3(x)
+            x = self.layer2_module4(x)
+            if self.sharded:
+                grid_size = (10, 8)
+                x = tt_lib.tensor.interleaved_to_sharded(
+                    x,
+                    self.layer_3_grid_size,
+                    [
+                        math.ceil((x.get_legacy_shape()[-2] // 32) / self.layer_3_grid_size[0]) * 32,
+                        x.get_legacy_shape()[-1] // self.layer_3_grid_size[1],
+                    ],
+                    tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                    tt_lib.tensor.ShardOrientation.COL_MAJOR,
+                )
+            x = self.layer3_module1(x)
+            x = self.layer3_module2(x)
+            x = self.layer3_module3(x)
+            x = self.layer3_module4(x)
+            x = self.layer3_module5(x)
+            x = self.layer3_module6(x)
+            if self.sharded:
+                x = tt_lib.tensor.interleaved_to_sharded(
+                    x,
+                    self.layer_4_grid_size,
+                    [
+                        math.ceil((x.get_legacy_shape()[-2] // 32) / self.layer_4_grid_size[0]) * 32,
+                        x.get_legacy_shape()[-1] // self.layer_4_grid_size[1],
+                    ],
+                    tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                    tt_lib.tensor.ShardOrientation.COL_MAJOR,
+                )
+            x = self.layer4_module1(x)
+            x = self.layer4_module2(x)
+            x = self.layer4_module3(x)
+
+            unpadded_shape = x.shape_without_padding()
             x = tt_lib.tensor.untilize_with_unpadding(
-                x, (0, 0, 0, 0), unpadded_shape_end, output_mem_config=self.width_sharded_memory_config
-            )
-        else:
-            x = tt_lib.tensor.untilize(x, self.memory_config, use_multicore=True)
-            x = tt_lib.tensor.unpad(x, (0, 0, 0, 0), unpadded_shape_end, output_mem_config=self.memory_config)
-
-        x = x.reshape(1, x.get_legacy_shape()[1], self.batch_size * x.get_legacy_shape()[2], x.get_legacy_shape()[3])
-
-        unpadded_shape = x.get_legacy_shape()
-        padded_shape = [
-            unpadded_shape[0],
-            unpadded_shape[1],
-            _nearest_32(unpadded_shape[2]),
-            _nearest_32(unpadded_shape[3]),
-        ]
-        if self.sharded:
-            x = tt_lib.tensor.tilize_with_val_padding(
                 x,
-                padded_shape,
+                (0, 0, 0, 0),
+                (unpadded_shape[0] - 1, unpadded_shape[1] - 1, unpadded_shape[2] - 1, unpadded_shape[3] - 1),
+                self.memory_config,
+            )
+
+            x = x.reshape(
+                self.batch_size,
+                x.get_legacy_shape()[1],
+                (int)(x.get_legacy_shape()[2] / self.batch_size),
+                x.get_legacy_shape()[3],
+            )
+            if self.sharded:
+                grid_size = (8, 4)
+                x = tt_lib.tensor.interleaved_to_sharded(
+                    x,
+                    grid_size,
+                    [x.volume() // x.get_legacy_shape()[-1], x.get_legacy_shape()[-1] // (grid_size[0] * grid_size[1])],
+                    tt_lib.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                    tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                )
+
+            unpadded_shape = x.get_legacy_shape()
+            padded_shape = [
+                unpadded_shape[0],
+                unpadded_shape[1],
+                _nearest_32(unpadded_shape[2]),
+                _nearest_32(unpadded_shape[3]),
+            ]
+            if self.sharded:
+                x = tt_lib.tensor.tilize_with_val_padding(
+                    x,
+                    padded_shape,
+                    [0, 0, 0, 0],
+                    0,
+                    output_mem_config=self.width_sharded_memory_config,
+                    output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                )
+            else:
+                x = tt_lib.tensor.pad(
+                    x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True
+                )
+                x = tt_lib.tensor.tilize(
+                    x,
+                    output_mem_config=self.memory_config,
+                    output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                    use_multicore=True,
+                )
+
+            x = self.avgpool(x, self.width_sharded_memory_config)
+
+            unpadded_shape_end = [
+                x.get_legacy_shape()[0] - 1,
+                x.get_legacy_shape()[1] - 1,
+                1 - 1,
+                x.get_legacy_shape()[3] - 1,
+            ]
+            if self.sharded:
+                x = tt_lib.tensor.untilize_with_unpadding(
+                    x, (0, 0, 0, 0), unpadded_shape_end, output_mem_config=self.width_sharded_memory_config
+                )
+            else:
+                x = tt_lib.tensor.untilize(x, self.memory_config, use_multicore=True)
+                x = tt_lib.tensor.unpad(x, (0, 0, 0, 0), unpadded_shape_end, output_mem_config=self.memory_config)
+
+            x = x.reshape(
+                1, x.get_legacy_shape()[1], self.batch_size * x.get_legacy_shape()[2], x.get_legacy_shape()[3]
+            )
+
+            unpadded_shape = x.get_legacy_shape()
+            padded_shape = [
+                unpadded_shape[0],
+                unpadded_shape[1],
+                _nearest_32(unpadded_shape[2]),
+                _nearest_32(unpadded_shape[3]),
+            ]
+            if self.sharded:
+                x = tt_lib.tensor.tilize_with_val_padding(
+                    x,
+                    padded_shape,
+                    [0, 0, 0, 0],
+                    0,
+                    output_mem_config=self.width_sharded_memory_config,
+                    output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                )
+            else:
+                x = tt_lib.tensor.pad(
+                    x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True
+                )
+                x = tt_lib.tensor.tilize(
+                    x,
+                    output_mem_config=self.memory_config,
+                    output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                    use_multicore=True,
+                )
+
+            x = self.fc(x)
+            desired_shape = list(x.shape_without_padding())
+            desired_shape[-1] = 1000
+            x = tt_lib.tensor.untilize_with_unpadding(
+                x,
                 [0, 0, 0, 0],
-                0,
-                output_mem_config=self.width_sharded_memory_config,
-                output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
+                (desired_shape[0] - 1, desired_shape[1] - 1, desired_shape[2] - 1, desired_shape[3] - 1),
+                self.memory_config,
             )
-        else:
-            x = tt_lib.tensor.pad(
-                x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True
-            )
-            x = tt_lib.tensor.tilize(
-                x,
-                output_mem_config=self.memory_config,
-                output_dtype=self.model_config["ACTIVATIONS_DTYPE"],
-                use_multicore=True,
+            x = x.reshape(
+                self.batch_size,
+                x.get_legacy_shape()[1],
+                (int)(x.get_legacy_shape()[2] / self.batch_size),
+                x.get_legacy_shape()[3],
             )
 
-        x = self.fc(x)
-        desired_shape = list(x.shape_without_padding())
-        desired_shape[-1] = 1000
-        x = tt_lib.tensor.untilize_with_unpadding(
-            x,
-            [0, 0, 0, 0],
-            (desired_shape[0] - 1, desired_shape[1] - 1, desired_shape[2] - 1, desired_shape[3] - 1),
-            self.memory_config,
-        )
-        x = x.reshape(
-            self.batch_size,
-            x.get_legacy_shape()[1],
-            (int)(x.get_legacy_shape()[2] / self.batch_size),
-            x.get_legacy_shape()[3],
-        )
+            if capture_this_iteration:
+                tt_lib.device.EndTraceCapture(self.device)
+                logger.info("KCM Done capturing trace call_count: {}", self.call_count)
+                self.trace_captured = True
+
+        if self.trace_captured:
+            logger.info("KCM Executing Trace for call_count: {}", self.call_count)
+            tt_lib.device.ExecuteLastTrace(self.device, True)
+
+        self.call_count += 1
+
+        # KCM - What to do about this return x when replaying Trace?
+        # Leaving it alone seems to match test_avergage_pool.py intention
 
         return x

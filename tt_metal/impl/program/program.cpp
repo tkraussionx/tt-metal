@@ -492,8 +492,11 @@ void Program::validate_circular_buffer_region(const Device *device) const {
         if (cb_region_end > max_l1_size) {
             TT_THROW("Statically allocated circular buffers on core range {} grow to {} B which is beyond max L1 size of {} B", cb_allocator.core_range.str(), cb_region_end, max_l1_size);
         }
+
+        log_info(tt::LogMetal, "Checking statically allocated circular buffers in program {}. L1 buffers on core range {}. L1 buffer allocated at {} and static circular buffer region ends at {}", this->id, cb_allocator.core_range.str(), lowest_address.value(), cb_region_end);
         if (lowest_address.has_value() and lowest_address.value() < cb_region_end) {
             TT_THROW("Statically allocated circular buffers in program {} clash with L1 buffers on core range {}. L1 buffer allocated at {} and static circular buffer region ends at {}", this->id, cb_allocator.core_range.str(), lowest_address.value(), cb_region_end);
+            // log_warning("Statically allocated circular buffers in program {} clash with L1 buffers on core range {}. L1 buffer allocated at {} and static circular buffer region ends at {}", this->id, cb_allocator.core_range.str(), lowest_address.value(), cb_region_end);
         }
     }
 }
