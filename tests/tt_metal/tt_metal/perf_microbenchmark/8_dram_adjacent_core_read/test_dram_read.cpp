@@ -227,7 +227,7 @@ int main(int argc, char **argv) {
     }
 
     bool pass = true;
-    bool use_device_profiler;
+    bool use_device_profiler = false;
     bool bypass_check = false;
     uint32_t df = 0;
     std::vector<double> dram_bandwidth;
