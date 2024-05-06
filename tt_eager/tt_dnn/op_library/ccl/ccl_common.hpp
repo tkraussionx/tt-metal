@@ -15,17 +15,49 @@ namespace tt {
 namespace tt_metal {
 namespace ccl {
 
-class CclTensorSlicer {
-   public:
-    CclTensorSlicer (
-        Tensor const& input_tensor,
-        Tensor const& output_tensor,
-        int slice_dim,
-        uint32_t slice_idx
+struct CclTensorSlicer {
+    CclTensorSlicer(
+        Shape tensor_shape,
+        Shape dim_slice_factors,
+        Shape page_shape
     ) :
-        row_major(input_tensor.get_layout() == Layout::ROW_MAJOR),
-        is_sharded(input_tensor.is_sharded()),
-        slice_dim_is_width(input_tensor.get_legacy_shape().rank() - 1 == slice_dim),
+        tensor_shape(tensor_shape),
+        dim_slice_factors_per_rank(dim_slice_factors),
+        page_shape(page_shape)
+    {
+        TT_ASSERT(tensor_shape.rank() == dim_slice_factors.rank(),
+                  "Tensor shape and dim slice factors must have the same size");
+        TT_ASSERT(std::all_of(dim_slice_factors.begin(), dim_slice_factors.end(), [](uint32_t factor) { return factor > 0; }),
+                  "All factors must be greater than 0");
+        TT_ASSERT(page_shape.rank() == 2 || page_shape.rank() == tensor_shape.rank(),
+                  "Page shape must have rank 2 or the same rank as the tensor shape");
+
+    }
+
+    Shape const tensor_shape;
+    Shape const dim_slice_factors_per_rank;
+    Shape const page_shape;
+
+    Shape rank_slice_shape;
+};
+
+class InterleavedRingReduceScatterTensorSlicer : public CclTensorSlicer {
+   public:
+    InterleavedRingReduceScatterTensorSlicer() :
+        CclTensorSlicer() {
+
+        }
+
+
+};
+
+
+
+// To be replaced by the CclTensorSlicer class, which should be reusable between sharded and interleaved
+// specs and also provides a simpler interface to reason about
+struct LegacyCclTensorSlicer {
+    LegacyCclTensorSlicer() :
+        input_page_size(0),
         num_rows(0),
         num_cols(0),
         row_offset(0),
@@ -35,8 +67,80 @@ class CclTensorSlicer {
         output_addr_offset(0),
         col_idx(0),
         row_idx(0),
-        output_page_offset(0)
-    {
+        output_page_offset(0),
+        output_start_page_idx(0),
+        output_start_addr_offset(0),
+        row_major(false),
+        slice_dim_is_width(false),
+        is_sharded(false) {}
+
+    LegacyCclTensorSlicer(
+        uint32_t input_page_size,
+        uint32_t num_rows,
+        uint32_t num_cols,
+        uint32_t row_offset,
+        uint32_t col_offset,
+        uint32_t num_tiles,
+        uint32_t input_start_page_idx,
+        uint32_t output_addr_offset,
+        uint32_t col_idx,
+        uint32_t row_idx,
+        uint32_t output_page_offset,
+        uint32_t output_start_page_idx,
+        uint32_t output_start_addr_offset,
+        bool row_major,
+        bool slice_dim_is_width,
+        bool is_sharded) :
+        input_page_size(input_page_size),
+        num_rows(num_rows),
+        num_cols(num_cols),
+        row_offset(row_offset),
+        col_offset(col_offset),
+        num_tiles(num_tiles),
+        input_start_page_idx(input_start_page_idx),
+        output_addr_offset(output_addr_offset),
+        col_idx(col_idx),
+        row_idx(row_idx),
+        output_page_offset(output_page_offset),
+        output_start_page_idx(output_start_page_idx),
+        output_start_addr_offset(output_start_addr_offset),
+        row_major(row_major),
+        slice_dim_is_width(slice_dim_is_width),
+        is_sharded(is_sharded) {}
+
+    virtual void increment(uint32_t num_pages) = 0;
+
+    uint32_t input_page_size;
+    uint32_t num_rows;
+    uint32_t num_cols;
+    uint32_t row_offset;
+    uint32_t col_offset;
+    uint32_t num_tiles;
+    uint32_t input_start_page_idx;
+    uint32_t output_addr_offset;
+    uint32_t col_idx;
+    uint32_t row_idx;
+    uint32_t output_page_offset;
+    uint32_t output_start_page_idx;
+    uint32_t output_start_addr_offset;
+    bool row_major;
+    bool slice_dim_is_width;
+    bool is_sharded;
+};
+
+class InterleavedRingAllGatherTensorSlicer : public LegacyCclTensorSlicer {
+   public:
+    InterleavedRingAllGatherTensorSlicer (
+        Tensor const& input_tensor,
+        Tensor const& output_tensor,
+        int slice_dim,
+        uint32_t slice_idx
+    ) : LegacyCclTensorSlicer() {
+
+        this->row_major = input_tensor.get_layout() == Layout::ROW_MAJOR;
+        this->slice_dim_is_width = input_tensor.get_legacy_shape().rank() - 1 == slice_dim;
+        this->is_sharded = input_tensor.is_sharded();
+
         int32_t shard_size_in_bytes = is_sharded ?
             (input_tensor.buffer()->page_size() * input_tensor.buffer()->shard_spec().tensor2d_shape[0] * input_tensor.buffer()->shard_spec().tensor2d_shape[1]) / input_tensor.shard_spec()->num_cores() :
             -1;
@@ -75,7 +179,7 @@ class CclTensorSlicer {
         output_start_addr_offset = slice_idx/*ring_index*/ * output_addr_offset;
     }
 
-    void increment(uint32_t num_pages) {
+    virtual void increment(uint32_t num_pages) override {
         // uint32_t pages_per_worker = num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b);
         if (is_sharded) {
             // nothing to do here - is handled by
@@ -99,25 +203,9 @@ class CclTensorSlicer {
             input_start_page_idx += num_pages/*pages_per_worker*/;
         }
     }
-
-    uint32_t input_page_size;
-    uint32_t num_rows;
-    uint32_t num_cols;
-    uint32_t row_offset;
-    uint32_t col_offset;
-    uint32_t num_tiles;
-    uint32_t input_start_page_idx;
-    uint32_t output_addr_offset;
-    uint32_t col_idx;
-    uint32_t row_idx;
-    uint32_t output_page_offset;
-    uint32_t output_start_page_idx;
-    uint32_t output_start_addr_offset;
-    bool row_major;
-    bool slice_dim_is_width;
-    bool is_sharded;
-
 };
+
+
 
 KernelHandle generate_edm_kernel(
     tt_metal::Program &program,

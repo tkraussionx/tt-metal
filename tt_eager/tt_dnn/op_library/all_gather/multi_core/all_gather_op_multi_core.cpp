@@ -285,47 +285,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             ring_index
         );
 
-        // uint32_t num_rows = 0, num_cols = 0, row_offset = 0, col_offset = 0, num_tiles = 0;
-
-        // if (rm) {
-        //     num_cols = input_tensor.get_legacy_shape()[-1];
-        //     auto input_shape = input_tensor.get_legacy_shape();
-        //     auto output_shape = output_tensor.get_legacy_shape();
-        //     num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>());
-        //     row_offset = std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) - num_rows;
-        // } else {
-        //     num_cols = input_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
-        //     auto input_shape = input_tensor.get_legacy_shape();
-        //     auto output_shape = output_tensor.get_legacy_shape();
-        //     uint32_t num_output_cols = output_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
-        //     num_rows = std::accumulate(input_shape.begin()+dim, input_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT;
-        //     row_offset = (std::accumulate(output_shape.begin()+dim, output_shape.end() - 1, 1, std::multiplies<uint32_t>()) / TILE_HEIGHT - num_rows) * num_output_cols;
-        //     col_offset = num_output_cols - num_cols;
-        //     num_tiles = num_rows * num_cols;
-        // }
-
-        // uint32_t input_start_page_idx = 0;
-        // uint32_t output_addr_offset = 0;
-        // uint32_t col_idx = 0;
-        // uint32_t row_idx = 0;
-        // uint32_t output_page_offset = 0;
-
-        // if (rm) {
-        //     if (width) {
-        //         output_addr_offset = input_page_size;
-        //     } else {
-        //         output_page_offset = num_rows;
-        //     }
-        // } else {
-        //     if (width) {
-        //         output_page_offset = num_cols;
-        //     } else {
-        //         output_page_offset = num_tiles;
-        //     }
-        // }
-        // uint32_t output_start_page_idx = ring_index * output_page_offset;
-        // uint32_t output_start_addr_offset = ring_index * output_addr_offset;
-
         ///
         /// (counter clockwise sender) < ----- (this chip) < ----- (counter-clockwise receiver)
         ///
@@ -1209,27 +1168,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
                 uint32_t pages_per_worker = num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b);
                 tensor_slicer.increment(pages_per_worker);
-                // if (is_sharded) {
-                //     // nothing to do here - is handled by
-                // } else {
-                //     // Only for interleaved
-                //     if (pages_per_worker > 0) {
-                //         if (rm) {
-                //             uint32_t num_rows_shifted = row_idx + pages_per_worker;
-                //             uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
-                //             output_start_page_idx += pages_per_worker + num_blocks_shifted * row_offset;
-                //             row_idx = width ? 0 : num_rows_shifted % num_rows;
-                //         } else {
-                //             uint32_t num_cols_shifted = col_idx + pages_per_worker;
-                //             uint32_t num_rows_shifted = num_cols_shifted / num_cols;
-                //             uint32_t num_blocks_shifted = width ? 0 : num_rows_shifted / num_rows;
-                //             output_start_page_idx += pages_per_worker + num_rows_shifted * col_offset + num_blocks_shifted * row_offset;
-                //             col_idx = num_cols_shifted % num_cols;
-                //             row_idx = width ? 0 : num_rows_shifted % num_rows;
-                //         }
-                //     }
-                //     input_start_page_idx += pages_per_worker;
-                // }
+
             }
 
 
