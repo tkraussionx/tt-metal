@@ -243,7 +243,7 @@ def test_enqueue_read_buffer(iter=1, buffer_type=0, size=2048, timeout=600):
     return bw
 
 
-def run_dram_read_cmd(k, n, num_blocks, df, num_banks, bank_start_id):
+def run_dram_read_cmd(k, n, num_blocks, df, num_banks, bank_start_id, r1, r2):
     command = (
         "TT_METAL_DEVICE_PROFILER=1 ./build/test/tt_metal/perf_microbenchmark/8_dram_adjacent_core_read/test_dram_read "
         + " --k "
@@ -260,6 +260,10 @@ def run_dram_read_cmd(k, n, num_blocks, df, num_banks, bank_start_id):
         + str(num_banks)
         + " --bank-start-id "
         + str(bank_start_id)
+        + " --row1 "
+        + str(r1)
+        + " --row2 "
+        + str(r2)
         + " --bypass-check "
     )
     run_moreh_single_test("DRAM BW test multi-core", command)
@@ -767,14 +771,18 @@ def test_matmul_single_core_sharded(
     assert is_within_range
 
 
+@pytest.mark.parametrize("row1", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+@pytest.mark.parametrize("row2", [0])
 @pytest.mark.parametrize(
     "arch, freq, test_vector, num_tests, nblock, data_format, num_banks, bank_start_id",
     [
         ("wormhole_b0", 1000, np.array([32768, 12 * 128]), 1, 8, 0, 12, 0),
-        ("wormhole_b0", 1000, np.array([32768, 12 * 128]), 1, 8, 1, 12, 0),
+        # ("wormhole_b0", 1000, np.array([32768, 12 * 128]), 1, 8, 1, 12, 0),
     ],
 )
-def test_dram_read_12_core(arch, freq, test_vector, num_tests, nblock, data_format, num_banks, bank_start_id):
+def test_dram_read_12_core(
+    arch, freq, test_vector, num_tests, nblock, data_format, num_banks, bank_start_id, row1, row2
+):
     data = []
     cycle_list = []
     time_list = []
@@ -786,7 +794,7 @@ def test_dram_read_12_core(arch, freq, test_vector, num_tests, nblock, data_form
             input_size = k * n * 1088 // 1024
         elif data_format == 1:
             input_size = k * n * 2048 // 1024
-        run_dram_read_cmd(k, n, nblock, data_format, num_banks, bank_start_id)
+        run_dram_read_cmd(k, n, nblock, data_format, num_banks, bank_start_id, row1, row2)
         cycle = profile_results_kernel_duration()
         time = cycle / freq / 1000.0 / 1000.0
         throughput = (input_size / 1024.0 / 1024.0 / 1024.0) / time

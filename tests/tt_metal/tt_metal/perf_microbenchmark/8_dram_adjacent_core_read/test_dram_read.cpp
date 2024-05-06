@@ -125,7 +125,7 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
         for (int j=0; j<i; ++j) {
             auto core_ = all_cores_list[j].start;
 
-            if (core_.x == core.x and ((bank_id & 0x3) == (bank_ids[j] & 0x3))) { // same vc and same row
+            if (core_.y == core.y and ((bank_id & 0x3) == (bank_ids[j] & 0x3))) { // same vc and same row
                 vc = (vc + 1) & 0x3;
                 break;
             }
@@ -221,6 +221,30 @@ uint32_t get_dram_bandwidth(tt::ARCH arch) {
     return dram_bandwidth_gb_per_sec;
 }
 
+CoreCoord worker_core_from_logical_core(CoreCoord& logical_core, uint32_t logical_row_index1, uint32_t logical_row_index2) {
+    auto x = logical_core.x;
+    auto y = logical_core.y;
+    CoreCoord phy_core;
+    if (x <= 3) {
+        phy_core.x = x + 1;
+    } else {
+        phy_core.x = x + 2;
+    }
+
+    if (logical_row_index1 <= y or logical_row_index2 <= y) {
+        y += 1;
+        logical_core.y = y;
+    }
+
+    if (y <= 4) {
+        phy_core.y = y + 1;
+    } else {
+        phy_core.y = y + 2;
+    }
+
+    return phy_core;
+}
+
 int main(int argc, char **argv) {
     if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
         log_error("Test not supported w/ slow dispatch, exiting");
@@ -237,6 +261,7 @@ int main(int argc, char **argv) {
     uint32_t dram_bandwidth_spec = 0;
     uint32_t num_banks = 1;
     uint32_t bank_start_id = 1;
+    uint32_t harv_row1 = 0, harv_row2 = 9;
 
     log_info("start DRAM benchmark");
 
@@ -272,6 +297,12 @@ int main(int argc, char **argv) {
 
             std::tie(bank_start_id, input_args) =
                 test_args::get_command_option_uint32_and_remaining_args(input_args, "--bank-start-id", 0);
+
+            std::tie(harv_row1, input_args) =
+                test_args::get_command_option_uint32_and_remaining_args(input_args, "--row1", 0);
+
+            std::tie(harv_row2, input_args) =
+                test_args::get_command_option_uint32_and_remaining_args(input_args, "--row2", 0);
 
             test_args::validate_remaining_args(input_args);
         } catch (const std::exception &e) {
@@ -345,6 +376,7 @@ int main(int argc, char **argv) {
         uint32_t num_cores_x = compute_with_storage_grid_size.x;
         uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
+
         std::vector<CoreCoord> all_worker_cores_log;
         for (int i=0; i<num_cores_x; ++i) {
             for (int j=0; j<num_cores_y; ++j) {
@@ -353,7 +385,8 @@ int main(int argc, char **argv) {
         }
 
         for (int i=0; i < all_worker_cores_log.size(); ++i) {
-            auto core = device->worker_core_from_logical_core(all_worker_cores_log[i]);
+            // auto core = device->worker_core_from_logical_core(all_worker_cores_log[i]);
+            auto core = worker_core_from_logical_core(all_worker_cores_log[i], harv_row1, harv_row2);
             log_info("all_worker_cores_phy: {}", core);
         }
 
@@ -361,7 +394,9 @@ int main(int argc, char **argv) {
         uint32_t max_worker_y_phy = 0;
         uint32_t min_worker_y_phy = 100;
         for (int i=0; i<num_cores_y; ++i) {
-            auto core_phy = device->worker_core_from_logical_core(CoreCoord(0,i));
+            // auto core_phy = device->worker_core_from_logical_core(CoreCoord(0,i));
+            CoreCoord core = CoreCoord(0,i);
+            auto core_phy = worker_core_from_logical_core(core, harv_row1, harv_row2);
             all_worker_cores_phy.push_back(core_phy.y);
             if (core_phy.y > max_worker_y_phy) {
                 max_worker_y_phy = core_phy.y;
