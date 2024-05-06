@@ -115,8 +115,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
     auto const& sharding_info = ShardedAllGatherConfig(input_tensor, output_tensor, dim);
     bool enable_print = false; // ring_index == 0
+    all_gather_config.print();
     if (enable_print) {
-        all_gather_config.print();
     }
 
     bool is_sharded = input_tensor.is_sharded();
@@ -127,16 +127,14 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     const auto output_buffer = output_tensor.buffer();
 
     int32_t shard_size_in_bytes = is_sharded ?
-        (input_buffer->shard_spec().page_shape[0] * input_buffer->shard_spec().page_shape[1] * input_buffer->shard_spec().tensor2d_shape[0] * input_buffer->shard_spec().tensor2d_shape[1] * input_tensor.element_size()) / input_tensor.shard_spec()->num_cores() :
+        (input_buffer->page_size() * input_buffer->shard_spec().tensor2d_shape[0] * input_buffer->shard_spec().tensor2d_shape[1]) / input_tensor.shard_spec()->num_cores() :
         -1;
     uint32_t input_page_size = is_sharded ? shard_size_in_bytes : input_buffer->page_size();
     uint32_t output_page_size = is_sharded ? shard_size_in_bytes : output_buffer->page_size();
     if (is_sharded) {
-        log_trace(tt::LogOp, "input_buffer->shard_spec().page_shape[0]: {}", input_buffer->shard_spec().page_shape[0]);
-        log_trace(tt::LogOp, "input_buffer->shard_spec().page_shape[1]: {}", input_buffer->shard_spec().page_shape[1]);
+        log_trace(tt::LogOp, "input_buffer->page_size: {}", input_buffer->page_size());
         log_trace(tt::LogOp, "input_buffer->shard_spec().tensor2d_shape[0]: {}", input_buffer->shard_spec().tensor2d_shape[0]);
         log_trace(tt::LogOp, "input_buffer->shard_spec().tensor2d_shape[1]: {}", input_buffer->shard_spec().tensor2d_shape[1]);
-        log_trace(tt::LogOp, "input_tensor.element_size(): {}", input_tensor.element_size());
     }
     const uint32_t max_buffer_per_chunk = is_sharded ?
         round_down(all_gather_config.get_eth_buffer_size(), shard_size_in_bytes):
@@ -154,6 +152,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     bool width = input_tensor.get_legacy_shape().rank() - 1 == dim;
     DataFormat df = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
 
+    uint32_t global_num_workers = all_gather_config.get_num_eth_buffers_per_edm() * num_links;
 
     std::map<string, string> worker_defines;
     if (rm) {
@@ -225,9 +224,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             all_gather_config, edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
     }
 
-
     for (uint32_t direction = 0; direction < num_full_send_directions; direction++) {
-        uint32_t global_num_workers = all_gather_config.get_num_eth_buffers_per_edm() * num_links;
         // if we're in ring topology, we'll always need to transfer all ring indices (except the last one)
         // but if we are implementing a line topology, the number of transfers will depend on whether we
         // are setting up the forward/clockwise direction or the backward/counter-clockwise direction and also
@@ -273,8 +270,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 log_trace(tt::LogOp, "\teth_receiver_core on link {}: (x={},y={})", l, eth_receiver_core.x, eth_receiver_core.y);
             }
         }
-
-
 
         auto is_buffer_in_clockwise_direction = [&all_gather_config,&direction](uint32_t b) {
             TT_ASSERT(direction < max_num_full_send_directions);
@@ -492,6 +487,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         ccl::WorkerXY(
                             device->worker_core_from_logical_core(receiver_worker_cores.at(w)).x,
                             device->worker_core_from_logical_core(receiver_worker_cores.at(w)).y));
+
                 }
 
                 bool sender_enabled = (!is_linear || !is_last_chip_in_chain);
