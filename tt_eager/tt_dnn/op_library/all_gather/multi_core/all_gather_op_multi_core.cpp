@@ -113,7 +113,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     bool is_linear = topology == all_gather_op::Topology::Linear;
 
     tt_metal::Program program{};
+    const auto& device = input_tensor.device();
     auto const& all_gather_config = AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology);
+    auto const& topology_config = ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
 
     auto const& sharding_info = ShardedAllGatherConfig(input_tensor, output_tensor, dim);
     bool enable_print = false; // ring_index == 0
@@ -148,8 +150,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     log_trace(tt::LogOp, "input_page_size: {}", input_page_size);
     log_trace(tt::LogOp, "max_buffer_per_chunk: {}", max_buffer_per_chunk);
     log_trace(tt::LogOp, "max_pages_per_chunk: {}", max_pages_per_chunk);
-    const auto& device = input_tensor.device();
-
     bool rm = input_tensor.get_layout() == Layout::ROW_MAJOR;
     bool width = input_tensor.get_legacy_shape().rank() - 1 == dim;
     DataFormat df = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
@@ -278,7 +278,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             pages_per_link.at(i)++;
         }
 
-        auto tensor_slicer = ccl::CclTensorSlicer (
+        auto tensor_slicer = ccl::InterleavedRingAllGatherTensorSlicer (
             input_tensor,
             output_tensor,
             dim,
@@ -1185,14 +1185,11 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     ccl::generate_edm_kernels_for_ring_or_linear_topology(
         program,
         device,
+        topology_config,
         clockwise_edm_builders,
         counter_clockwise_edm_builders,
         receiver_device_id,
-        sender_device_id,
-        num_links,
-        ring_size,
-        ring_index,
-        is_linear);
+        sender_device_id);
 
     auto override_runtime_arguments_callback = [num_links, total_worker_core_pairs_used, worker_reader_sender_kernels, worker_writer_sender_kernels, worker_reader_receiver_kernels, worker_writer_receiver_kernels, all_worker_sender_cores, all_worker_receiver_cores] (
         const void* operation,

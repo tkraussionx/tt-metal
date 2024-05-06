@@ -49,19 +49,22 @@ struct EriscDatamoverConfig {
 
 struct CCLOpConfig {
    public:
-    CCLOpConfig(const Tensor& input_tensor, const Tensor &output_tensor) :
-        input_sharded(input_tensor.is_sharded()),
-        output_sharded(output_tensor.is_sharded()),
-        page_size(input_tensor.buffer()->page_size()),
+    CCLOpConfig(const std::vector<Tensor>& input_tensors, const std::vector<Tensor>& output_tensors, Topology topology) :
+        input_tensors(&input_tensors),
+        output_tensors(&output_tensors),
+        input_sharded(input_tensors.at(0).is_sharded()),
+        output_sharded(output_tensors.at(0).is_sharded()),
+        page_size(input_tensors.at(0).buffer()->page_size()),
         input_shard_size_bytes(
-            input_tensor.is_sharded() ?
-                static_cast<std::optional<uint32_t>>((input_tensor.buffer()->page_size() * input_tensor.buffer()->shard_spec().tensor2d_shape[0] * input_tensor.buffer()->shard_spec().tensor2d_shape[1]) / input_tensor.shard_spec()->num_cores()) :
+            input_tensors.at(0).is_sharded() ?
+                static_cast<std::optional<uint32_t>>((input_tensors.at(0).buffer()->page_size() * input_tensors.at(0).buffer()->shard_spec().tensor2d_shape[0] * input_tensors.at(0).buffer()->shard_spec().tensor2d_shape[1]) / input_tensors.at(0).shard_spec()->num_cores()) :
                 std::nullopt),
         output_shard_size_bytes(
-            output_tensor.is_sharded() ?
-                static_cast<std::optional<uint32_t>>((output_tensor.buffer()->page_size() * output_tensor.buffer()->shard_spec().tensor2d_shape[0] * output_tensor.buffer()->shard_spec().tensor2d_shape[1]) / input_tensor.shard_spec()->num_cores()) :
+            output_tensors.at(0).is_sharded() ?
+                static_cast<std::optional<uint32_t>>((output_tensors.at(0).buffer()->page_size() * output_tensors.at(0).buffer()->shard_spec().tensor2d_shape[0] * output_tensors.at(0).buffer()->shard_spec().tensor2d_shape[1]) / input_tensors.at(0).shard_spec()->num_cores()) :
                 std::nullopt),
-        shard_grid_size(input_tensor.shard_spec()->num_cores())
+        shard_grid_size(output_tensors.at(0).is_sharded() ? input_tensors.at(0).shard_spec()->num_cores() : 0),
+        topology(topology)
     {
         TT_ASSERT(!this->is_input_sharded() || input_shard_size_bytes.has_value());
         TT_ASSERT(!this->is_output_sharded() || output_shard_size_bytes.has_value());
@@ -76,25 +79,40 @@ struct CCLOpConfig {
         return output_shard_size_bytes.value();
     }
     uint32_t get_page_size() const {
-        return page_size;
+        return this->page_size;
+    }
+    Topology get_topology() const {
+        return this->topology;
     }
     bool is_input_sharded() const {
-        return input_sharded;
+        return this->input_sharded;
     }
     bool is_output_sharded() const {
-        return output_sharded;
+        return this->output_sharded;
     }
     bool get_shard_grid_size() const {
-        return shard_grid_size;
+        return this->shard_grid_size;
+    }
+    Tensor const& get_input_tensor(std::size_t i) const {
+        return input_tensors->at(i);
+    }
+    Tensor const& get_output_tensor(std::size_t i) const {
+        return output_tensors->at(i);
     }
 
    private:
+
+
     std::optional<uint32_t> input_shard_size_bytes; // TODO: split off into CCL op input config ()
     std::optional<uint32_t> output_shard_size_bytes; // TODO: split off into CCL op input config ()
     uint32_t page_size;
     uint32_t shard_grid_size;
+    Topology topology;
     bool input_sharded;
     bool output_sharded;
+
+    std::vector<Tensor> const* input_tensors;
+    std::vector<Tensor> const* output_tensors;
 };
 
 class EriscDatamoverBuilder {
@@ -235,6 +253,11 @@ class EriscDatamoverBuilder {
             log_trace(tt::LogOp, "\t{}", arg);
         }
     };
+
+    [[nodiscard]]
+    uint32_t get_eth_buffer_size_bytes() const {
+        return this->eth_buffer_size_bytes;
+    }
 
    private:
     struct ChannelBufferSpec {

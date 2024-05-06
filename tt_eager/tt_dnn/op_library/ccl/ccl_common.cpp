@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include "ccl_common.hpp"
+#include "ccl_host_datastructures.hpp"
 
 namespace tt {
 namespace tt_metal {
@@ -13,31 +14,28 @@ namespace ccl {
 void generate_edm_kernels_for_ring_or_linear_topology(
     tt_metal::Program &program,
     Device const* device,
+    RingTopology const& topology_config,
     std::vector<ccl::EriscDatamoverBuilder> const& clockwise_edm_builders,
     std::vector<ccl::EriscDatamoverBuilder> const& counter_clockwise_edm_builders,
     std::optional<uint32_t> receiver_device_id,
-    std::optional<uint32_t> sender_device_id,
-    // TODO: move to linear/ring topology specific config
-    uint32_t num_links,
-    uint32_t ring_size,
-    uint32_t ring_index,
-    bool is_linear) {
+    std::optional<uint32_t> sender_device_id
+    ) {
 
     auto sender_noc = detail::GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch());
     auto receiver_noc = detail::GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch());
     uint32_t sender_socket_idx = 0;
     uint32_t receiver_socket_idx = 0;
     if (receiver_device_id == sender_device_id) {
-        if (ring_index == 0) {
+        if (topology_config.ring_index == 0) {
             receiver_socket_idx = 1;
         } else {
             sender_socket_idx = 1;
         }
     }
-    for (uint32_t i = 0; i < num_links; ++i) {
-        bool is_clockwise_direction_edm_enabled = !is_linear || ring_index != ring_size - 1;
+    for (uint32_t i = 0; i < topology_config.num_links; ++i) {
+        bool is_clockwise_direction_edm_enabled = !topology_config.is_linear || topology_config.ring_index != topology_config.ring_size - 1;
         if (is_clockwise_direction_edm_enabled) {
-            auto eth_sender_core = device->get_ethernet_sockets(receiver_device_id.value()).at(sender_socket_idx);
+            auto eth_sender_core = topology_config.eth_sender_cores.at(i);
             log_trace(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
             auto eth_sender_kernel = ccl::generate_edm_kernel(
                 program,
@@ -45,29 +43,20 @@ void generate_edm_kernels_for_ring_or_linear_topology(
                 clockwise_edm_builders.at(i),
                 eth_sender_core,
                 sender_noc);
-            // eth_sender_kernels.push_back(eth_sender_kernel);
-            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={})", ring_index, i, eth_sender_core.x, eth_sender_core.y);
+            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={})", topology_config.ring_index, i, eth_sender_core.x, eth_sender_core.y);
         }
 
-        bool is_counter_clockwise_direction_edm_enabled = !is_linear || ring_index != 0;
+        bool is_counter_clockwise_direction_edm_enabled = !topology_config.is_linear || topology_config.ring_index != 0;
         if (is_counter_clockwise_direction_edm_enabled) {
             log_trace(tt::LogOp, "EDM COUNTER CLOCKWISE KERNEL RT ARGS: ");
-            auto eth_receiver_core = device->get_ethernet_sockets(sender_device_id.value()).at(receiver_socket_idx);
+            auto eth_receiver_core = topology_config.eth_receiver_cores.at(i);
             auto eth_receiver_kernel = ccl::generate_edm_kernel(
                 program,
                 device,
                 counter_clockwise_edm_builders.at(i),
                 eth_receiver_core,
                 receiver_noc);
-            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Counter-clockwise EDM Core (x={},y={})", ring_index, i, eth_receiver_core.x, eth_receiver_core.y);
-        }
-
-        if (receiver_device_id == sender_device_id) {
-            receiver_socket_idx += 2;
-            sender_socket_idx += 2;
-        } else {
-            receiver_socket_idx += 1;
-            sender_socket_idx += 1;
+            log_trace(tt::LogOp, "RingIndex: {}. Link {}. Counter-clockwise EDM Core (x={},y={})", topology_config.ring_index, i, eth_receiver_core.x, eth_receiver_core.y);
         }
     }
 
