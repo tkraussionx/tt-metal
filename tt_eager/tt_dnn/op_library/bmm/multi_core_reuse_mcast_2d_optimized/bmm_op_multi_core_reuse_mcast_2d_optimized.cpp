@@ -21,39 +21,40 @@ using namespace tt::constants;
 using namespace tt;
 using namespace tt_metal;
 
-bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_b, MathFidelity math_fidelity) {
+bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_b, MathFidelity math_fidelity, uint32_t per_core_M, uint32_t per_core_N, uint32_t in0_block_w) {
     const auto& in_a_shape = input_tensor_a.get_legacy_shape();
     const auto& in_b_shape = input_tensor_b.get_legacy_shape();
-
-    uint32_t M = in_a_shape[0] * in_a_shape[2];
-    uint32_t K = in_a_shape[3];
-    uint32_t N = in_b_shape[3];
 
     auto in_a_dtype = input_tensor_a.get_dtype();
     auto in_b_dtype = input_tensor_b.get_dtype();
 
+    bool in0_is_sharded = input_tensor_a.shard_spec().has_value();
+    bool in1_is_sharded = input_tensor_b.shard_spec().has_value();
+
     bool use_same_noc = false;
 
-    std::vector<std::vector<int> > bfp8_bfp8_lofi_threshold = { {512, 8192, 1024} };
-    std::vector<std::vector<int> > fp16_fp16_hifi2_threshold = { {256, 8192, 1024}, {512, 256, 4096}, {512, 512, 2048}, {512, 2048, 1024}, {512, 4096, 2048}, {512, 8192, 1024}};
-    std::vector<std::vector<int> > fp16_bfp8_lofi_threshold = { {512, 8192, 2048} };
+    std::vector<std::vector<int> > bfp8_bfp8_lofi_threshold = { {64, 1024, 128} };
+    std::vector<std::vector<int> > fp16_fp16_hifi2_threshold = { {32, 1024, 128}, {64, 32, 512}, {64, 64, 256}, {64, 256, 128}, {64, 512, 256}, {64, 1024, 128}};
+    std::vector<std::vector<int> > fp16_bfp8_lofi_threshold = { {64, 1024, 256} };
 
     auto check_thresholds = [&](const std::vector<std::vector<int>>& thresholds) {
         return std::any_of(thresholds.begin(), thresholds.end(), [&](const std::vector<int>& threshold) {
             auto [m_thresh, k_thresh, n_thresh] = std::tie(threshold[0], threshold[1], threshold[2]);
-            return M <= m_thresh && K <= k_thresh && N >= n_thresh;
+            return per_core_M <= m_thresh && in0_block_w <= k_thresh && per_core_N >= n_thresh;
         });
     };
 
-    if (in_a_dtype == DataType::BFLOAT8_B && in_b_dtype == DataType::BFLOAT8_B && math_fidelity == MathFidelity::LoFi) {
-        use_same_noc = check_thresholds(bfp8_bfp8_lofi_threshold);
-    } else if (in_a_dtype == DataType::BFLOAT16 && in_b_dtype == DataType::BFLOAT16 && math_fidelity == MathFidelity::HiFi2) {
-        use_same_noc = check_thresholds(fp16_fp16_hifi2_threshold);
-    } else if (in_a_dtype == DataType::BFLOAT16 && in_b_dtype == DataType::BFLOAT8_B && math_fidelity == MathFidelity::LoFi) {
-        use_same_noc = check_thresholds(fp16_bfp8_lofi_threshold);
+    if (in0_is_sharded and not in1_is_sharded) {
+        if (in_a_dtype == DataType::BFLOAT8_B && in_b_dtype == DataType::BFLOAT8_B && math_fidelity == MathFidelity::LoFi) {
+            use_same_noc = check_thresholds(bfp8_bfp8_lofi_threshold);
+        } else if (in_a_dtype == DataType::BFLOAT16 && in_b_dtype == DataType::BFLOAT16 && math_fidelity == MathFidelity::HiFi2) {
+            use_same_noc = check_thresholds(fp16_fp16_hifi2_threshold);
+        } else if (in_a_dtype == DataType::BFLOAT16 && in_b_dtype == DataType::BFLOAT8_B && math_fidelity == MathFidelity::LoFi) {
+            use_same_noc = check_thresholds(fp16_bfp8_lofi_threshold);
+        }
     }
 
-    tt::log_debug("M: {}, K: {}, N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}", M, K, N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc);
+    tt::log_info("per_core_M: {}, per_core_K: {}, per_core_N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}", per_core_M, in0_block_w, per_core_N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc);
 
     return use_same_noc;
 }
@@ -78,6 +79,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt_metal::Program program{};
 
     uint32_t num_blocks = K / in0_block_w;
+
+    tt::log_info("per_core_M: {}, per_core_N: {}, in0_block_w: {}, core_range: {}, B: {}, M: {}, K: {}, N: {}", per_core_M, per_core_N, in0_block_w, core_range, B, M, K, N);
 
     //Only enable packer l1 accumulation when there are num_blocks > 2, otherwise
     //unnecessary overhead for reconfigs are added. Last iteration of l1 accumulation
@@ -1103,12 +1106,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
         TT_FATAL(out_subblock_h * out_subblock_w <= 4 && "Total number of tiles in a subblock must be less than 4 when in fp32_dest_acc mode");
     }
 
-    bool mcast_use_same_noc = reuse_mcast_optimized_helpers::_get_use_same_noc(a, b, math_fidelity);
-    bool in0_is_sharded = a.shard_spec().has_value();
-    bool in1_is_sharded = b.shard_spec().has_value();
-    if (not in0_is_sharded or in1_is_sharded) {
-        mcast_use_same_noc = false;
-    }
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Matmul Parameters Setup
@@ -1145,6 +1142,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
         std::swap(num_blocks_x, num_blocks_y);
     }
     CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
+
+    bool mcast_use_same_noc = reuse_mcast_optimized_helpers::_get_use_same_noc(a, b, math_fidelity, per_core_M, per_core_N, in0_block_w);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup
