@@ -699,16 +699,16 @@ TEST(AllGatherUtils, OutputTensorShardAddrGenArgGenerator_GetContiguousChunksBef
 
 TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWidthSharding) {
     {
-        std::vector<CoreCoord> all_shard_cores = {CoreCoord(0,0), CoreCoord(1,0)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0)}, CoreCoord(1,0)});
         uint32_t num_workers = 2;
         uint32_t worker_index = 0;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
-            all_shard_cores, worker_index, num_workers);
+            CoreRangeSet(all_shard_cores), worker_index, num_workers);
         ASSERT_EQ(dest_cores.size(), 1);
         ASSERT_EQ(dest_cores.at(0), CoreCoord(0,0));
     }
     {
-        std::vector<CoreCoord> all_shard_cores = {CoreCoord(0,0), CoreCoord(1,0)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(1,0)}});
         uint32_t num_workers = 2;
         uint32_t worker_index = 1;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -718,7 +718,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
     }
 
     {
-        std::vector<CoreCoord> all_shard_cores = {CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(3,0)}});
         uint32_t num_workers = 2;
         uint32_t worker_index = 0;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -728,7 +728,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
         ASSERT_EQ(dest_cores.at(1), CoreCoord(1,0));
     }
     {
-        std::vector<CoreCoord> all_shard_cores = {CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(3,0)}});
         uint32_t num_workers = 2;
         uint32_t worker_index = 1;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -738,7 +738,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
         ASSERT_EQ(dest_cores.at(1), CoreCoord(3,0));
     }
         {
-        std::vector<CoreCoord> all_shard_cores = {CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(3,0)}});
         uint32_t num_workers = 2;
         uint32_t worker_index = 0;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -749,9 +749,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
     }
 
     {
-        std::vector<CoreCoord> all_shard_cores = {
-            CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0), CoreCoord(4,0), CoreCoord(5,0), CoreCoord(6,0), CoreCoord(7,0),
-            CoreCoord(0,1), CoreCoord(1,1), CoreCoord(2,1), CoreCoord(3,1), CoreCoord(4,1), CoreCoord(5,1), CoreCoord(6,1), CoreCoord(7,1)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(7,1)}});
         uint32_t num_workers = 4;
         uint32_t worker_index = 0;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -763,9 +761,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
         ASSERT_EQ(dest_cores.at(3), CoreCoord(3,0));
     }
     {
-        std::vector<CoreCoord> all_shard_cores = {
-            CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0), CoreCoord(4,0), CoreCoord(5,0), CoreCoord(6,0), CoreCoord(7,0),
-            CoreCoord(0,1), CoreCoord(1,1), CoreCoord(2,1), CoreCoord(3,1), CoreCoord(4,1), CoreCoord(5,1), CoreCoord(6,1), CoreCoord(7,1)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(7,1)}});
         uint32_t num_workers = 4;
         uint32_t worker_index = 1;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -777,9 +773,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
         ASSERT_EQ(dest_cores.at(3), CoreCoord(7,0));
     }
     {
-        std::vector<CoreCoord> all_shard_cores = {
-            CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0), CoreCoord(4,0), CoreCoord(5,0), CoreCoord(6,0), CoreCoord(7,0),
-            CoreCoord(0,1), CoreCoord(1,1), CoreCoord(2,1), CoreCoord(3,1), CoreCoord(4,1), CoreCoord(5,1), CoreCoord(6,1), CoreCoord(7,1)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(7,1)}});
         uint32_t num_workers = 4;
         uint32_t worker_index = 2;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(
@@ -791,9 +785,7 @@ TEST(AllGatherUtils, InputTensorShardAddrGenArgGenerator_CtorGenerateDestCoresWi
         ASSERT_EQ(dest_cores.at(3), CoreCoord(3,1));
     }
     {
-        std::vector<CoreCoord> all_shard_cores = {
-            CoreCoord(0,0), CoreCoord(1,0), CoreCoord(2,0), CoreCoord(3,0), CoreCoord(4,0), CoreCoord(5,0), CoreCoord(6,0), CoreCoord(7,0),
-            CoreCoord(0,1), CoreCoord(1,1), CoreCoord(2,1), CoreCoord(3,1), CoreCoord(4,1), CoreCoord(5,1), CoreCoord(6,1), CoreCoord(7,1)};
+        CoreRangeSet const& all_shard_cores = CoreRangeSet({CoreRange{CoreCoord(0,0), CoreCoord(7,1)}});
         uint32_t num_workers = 4;
         uint32_t worker_index = 3;
         auto const& dest_cores = InputTensorShardAddrGenArgGenerator::ctor_generate_dest_cores(

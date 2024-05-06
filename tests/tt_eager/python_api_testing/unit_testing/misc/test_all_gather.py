@@ -578,7 +578,6 @@ def test_all_gather_on_t3000_nightly(
     )
 
 
-@pytest.mark.skip("Re-enable with FD 2.0 and most recent all-gather updates/bug-fixes")
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize("num_devices", [4, 8])
 @pytest.mark.parametrize("dim", [3])

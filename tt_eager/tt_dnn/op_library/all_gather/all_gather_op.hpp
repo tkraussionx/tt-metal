@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include "common/core_coord.h"
 #include "impl/buffers/buffer.hpp"
 #include "tensor/tensor.hpp"
 #include "tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
@@ -388,11 +389,12 @@ struct ShardAddrGenArgGenerator {
 
 struct InputTensorShardAddrGenArgGenerator final : public ShardAddrGenArgGenerator {
     static std::vector<CoreCoord> ctor_generate_dest_cores(
-        std::vector<CoreCoord> const& all_shard_cores,
+        CoreRangeSet const& all_shard_cores,
         uint32_t worker_index,
         uint32_t num_workers
     ) {
-        uint32_t num_shard_cores = all_shard_cores.size();
+        auto const& all_shard_cores_vec = corerange_to_cores(all_shard_cores);
+        uint32_t num_shard_cores = all_shard_cores_vec.size();
         uint32_t num_dest_cores = num_shard_cores / num_workers;
         bool has_extra_worker = worker_index < num_shard_cores % num_workers;
         if (has_extra_worker) {
@@ -407,7 +409,7 @@ struct InputTensorShardAddrGenArgGenerator final : public ShardAddrGenArgGenerat
         std::vector<CoreCoord> dest_cores;
         dest_cores.reserve(num_shard_cores);
         for (uint32_t c = worker_cores_start; c < worker_cores_start + num_dest_cores; ++c) {
-            CoreCoord const& worker_core = all_shard_cores.at(c);
+            CoreCoord const& worker_core = all_shard_cores_vec.at(c);
             dest_cores.push_back(worker_core);
         }
         return dest_cores;
@@ -439,7 +441,7 @@ struct InputTensorShardAddrGenArgGenerator final : public ShardAddrGenArgGenerat
         this->args_struct.contiguous_chunks_before_stride = 1;
 
         std::vector<CoreCoord> const& dest_core_coords = ctor_generate_dest_cores(
-            input_tensor.buffer()->all_cores(),
+            input_tensor.buffer()->shard_spec().grid(),
             worker_index,
             num_workers
         );
