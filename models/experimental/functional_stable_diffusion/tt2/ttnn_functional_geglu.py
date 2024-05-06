@@ -100,9 +100,9 @@ class geglu:
             M, K, N, grid_size
         )
         # TODO: https://github.com/tenstorrent/tt-metal/issues/7560
-        if size == 512:
-            out_subblock_h = 1
-            out_subblock_w = 1
+        # if size == 512:
+        #     out_subblock_h = 1
+        #     out_subblock_w = 1
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
             in0_block_w=in0_block_w,
