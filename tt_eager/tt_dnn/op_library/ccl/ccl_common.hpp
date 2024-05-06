@@ -4,33 +4,42 @@
 
 #pragma once
 
+#include "tt_metal/host_api.hpp"
+#include "tt_metal/impl/program/program.hpp"
+#include "tt_eager/tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
+#include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include <cstdint>
-#include "debug/assert.h"
 
+
+namespace tt {
+namespace tt_metal {
 namespace ccl {
 
-// TODO(snijjar): Clean this up (mainly dependence on device ASSERT)
-// so I can include this from host side as well
-// template <typename ... Args>
-// class ArgListConstructible {
-//    public:
-//    void build_with_placement_new(Args &&... args) = 0;
-//    // do placement new construction with static build methods
-//     ArgListConstructible(uint16_t num_args_consumed) : num_args_consumed(num_args_consumed) {
-//         ASSERT(num_args_consumed >= 0);//, "num_args_consumed not set")
-//     }
+KernelHandle generate_edm_kernel(
+    tt_metal::Program &program,
+    Device const* device,
+    ccl::EriscDatamoverBuilder const& edm_builder,
+    CoreCoord const& eth_core,
+    NOC noc_id);
 
-//     int16_t get_num_args_consumed() const {
-//         ASSERT(num_args_consumed >= 0);//, "num_args_consumed not set")
-//         return num_args_consumed;
-//     }
+void generate_edm_kernels_for_ring_or_linear_topology(
+    tt_metal::Program &program,
+    Device const* device,
+    std::vector<ccl::EriscDatamoverBuilder> const& clockwise_edm_builders,
+    std::vector<ccl::EriscDatamoverBuilder> const& counter_clockwise_edm_builders,
+    std::optional<uint32_t> receiver_device_id,
+    std::optional<uint32_t> sender_device_id,
+    // TODO: move to linear/ring topology specific config
+    uint32_t num_links,
+    uint32_t ring_size,
+    uint32_t ring_index,
+    bool is_linear);
 
-//    protected:
-//     int16_t set_num_args_consumed(uint16_t num_args) {
-//         num_args_consumed = num_args;
-//     }
-
-//     int16_t num_args_consumed;
-// };
+ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
+    std::size_t num_channels,
+    uint32_t page_size,
+    ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode);
 
 } // namespace ccl
+} // namespace tt_metal
+} // namespace tt

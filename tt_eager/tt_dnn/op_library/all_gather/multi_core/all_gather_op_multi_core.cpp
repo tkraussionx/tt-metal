@@ -10,6 +10,8 @@
 #include "tensor/tensor_impl.hpp"
 #include "tt_dnn/op_library/all_gather/all_gather_op.hpp"
 #include "tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
+#include "tt_eager/tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
+#include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -162,7 +164,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     }
 
     // number of worker cores is 2x this since there is 1 worker for the sender buffer and 1 worker for the receiver buffer
-    uint32_t total_worker_core_pairs_used = num_links * all_gather_config.get_num_eth_buffers_per_edm(););
+    uint32_t total_worker_core_pairs_used = num_links * all_gather_config.get_num_eth_buffers_per_edm();
 
     std::vector<KernelHandle> worker_reader_sender_kernels;
     worker_reader_sender_kernels.reserve(total_worker_core_pairs_used);
@@ -213,9 +215,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         }
 
         clockwise_edm_builders.emplace_back(
-            all_gather_config, edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
         counter_clockwise_edm_builders.emplace_back(
-            all_gather_config, edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link));
     }
 
     for (uint32_t direction = 0; direction < num_full_send_directions; direction++) {
@@ -1233,7 +1235,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         }
     } // num_full_send_directions
 
-    generate_edm_kernels_for_ring_or_linear_topology(
+    ccl::generate_edm_kernels_for_ring_or_linear_topology(
         program,
         device,
         clockwise_edm_builders,

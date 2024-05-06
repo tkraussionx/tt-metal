@@ -5,9 +5,10 @@
 #include "dataflow_api.h"
 #include "debug/assert.h"
 #include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
-#include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
+#include "tt_eager/tt_dnn/op_library/ccl/kernel_common/worker_edm_utils.hpp"
 
-using ccl::ShardType;
+using tt::tt_metal::ccl::ShardType;
+using tt::tt_metal::ccl::WorkerXY;
 
 FORCE_INLINE void validate_sane_transaction_counters() {
 }
@@ -21,7 +22,7 @@ template <ShardType SHARD_TYPE>
 struct FullWorkerGridShardAddrGen {
     FullWorkerGridShardAddrGen()=default;
     FORCE_INLINE static void build_with_placement_new(FullWorkerGridShardAddrGen* placement_new_address, const uint32_t arg_index) {
-        ccl::FullWorkerGridShardAddrGenArgs<false> input_args;
+        tt::tt_metal::ccl::FullWorkerGridShardAddrGenArgs<false> input_args;
 
         uint32_t curr_arg_index = arg_index;
         input_args.tile_size_in_bytes = get_arg_val<uint32_t>(curr_arg_index++);
@@ -36,7 +37,7 @@ struct FullWorkerGridShardAddrGen {
         input_args.is_clockwise = get_arg_val<uint32_t>(curr_arg_index++) != 0;
         input_args.curr_core_index = static_cast<uint16_t>(get_arg_val<uint32_t>(curr_arg_index++));
         input_args.total_num_cores = static_cast<uint16_t>(get_arg_val<uint32_t>(curr_arg_index++));
-        input_args.dest_cores = reinterpret_cast<ccl::WorkerXY*>(get_arg_addr(curr_arg_index));
+        input_args.dest_cores = reinterpret_cast<WorkerXY*>(get_arg_addr(curr_arg_index));
         curr_arg_index += input_args.total_num_cores;
 
         ASSERT(input_args.tile_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32);
@@ -58,7 +59,7 @@ struct FullWorkerGridShardAddrGen {
 
     FullWorkerGridShardAddrGen(
         uint8_t num_args_consumed,
-        ccl::FullWorkerGridShardAddrGenArgs<false> const& input_args) :
+        tt::tt_metal::ccl::FullWorkerGridShardAddrGenArgs<false> const& input_args) :
         dest_cores(input_args.dest_cores),
         tile_size_in_bytes(input_args.tile_size_in_bytes),
         shards_start_address(input_args.shards_start_address),
@@ -79,7 +80,7 @@ struct FullWorkerGridShardAddrGen {
         ASSERT(total_shards_x > 0);
         ASSERT(total_num_cores > 0);
         ASSERT(curr_core_index < total_num_cores);
-        if constexpr (SHARD_TYPE == ccl::ShardType::Width) {
+        if constexpr (SHARD_TYPE == ShardType::Width) {
             ASSERT(curr_shard < total_shards_x);
             ASSERT(curr_tile_index = curr_shard_tile_x * input_shard_num_tiles_x + (curr_shard_tile_y * total_shards_x * input_shard_num_tiles_x));
         } else {
@@ -88,13 +89,13 @@ struct FullWorkerGridShardAddrGen {
     }
 
 
-    [[nodiscard]] FORCE_INLINE ccl::WorkerXY get_next_noc_xy_core() const {
+    [[nodiscard]] FORCE_INLINE WorkerXY get_next_noc_xy_core() const {
         ASSERT(this->curr_core_index < this->total_num_cores);
         return this->dest_cores[this->curr_core_index];
     }
 
     [[nodiscard]] FORCE_INLINE uint64_t get_next_noc_addr() const {
-        ccl::WorkerXY dest_worker = this->get_next_noc_xy_core();
+        WorkerXY dest_worker = this->get_next_noc_xy_core();
         uint32_t curr_address = this->shards_start_address + this->curr_tile_index * this->tile_size_in_bytes;
         ASSERT(curr_address + this->tile_size_in_bytes <= 1499136); // L1 wraparound - oops!
         ASSERT(this->shards_start_address <= curr_address);
@@ -106,7 +107,7 @@ struct FullWorkerGridShardAddrGen {
     }
 
     FORCE_INLINE void advance() {
-        ccl::all_gather::full_worker_grid_addr_gen_width_sharded_advance (
+        tt::tt_metal::ccl::all_gather::full_worker_grid_addr_gen_width_sharded_advance (
             this->curr_shard_tile_x,
             this->curr_shard_tile_y,
             this->curr_tile_index,
@@ -120,7 +121,7 @@ struct FullWorkerGridShardAddrGen {
     }
 
     FORCE_INLINE void advance_to_next_tile_row() {
-        ccl::all_gather::full_worker_grid_addr_gen_width_sharded_advance_full_tile_row(
+        tt::tt_metal::ccl::all_gather::full_worker_grid_addr_gen_width_sharded_advance_full_tile_row(
             this->curr_shard_tile_x,
             this->curr_shard_tile_y,
             this->curr_tile_index,
@@ -150,7 +151,7 @@ struct FullWorkerGridShardAddrGen {
 
     [[nodiscard]] FORCE_INLINE uint32_t get_num_args_consumed() const { return this->num_args_consumed; }
 
-    ccl::WorkerXY* dest_cores;
+    WorkerXY* dest_cores;
     uint32_t tile_size_in_bytes;
     uint32_t shards_start_address;
     uint16_t curr_core_index;
@@ -173,7 +174,7 @@ struct ShardAddrGen final {
     ShardAddrGen()=default;
 
     FORCE_INLINE static void build_with_placement_new(ShardAddrGen* placement_new_address, const uint32_t arg_index) {
-        ccl::ShardAddrGenArgs<false> input_args;
+        tt::tt_metal::ccl::ShardAddrGenArgs<false> input_args;
 
         uint32_t curr_arg_index = arg_index;
         input_args.is_clockwise = bool(get_arg_val<uint32_t>(curr_arg_index++) == 1);
@@ -188,7 +189,7 @@ struct ShardAddrGen final {
         input_args.contiguous_chunks_before_stride = get_arg_val<uint32_t>(curr_arg_index++);
 
         input_args.num_dest_cores = get_arg_val<uint32_t>(curr_arg_index++);
-        input_args.dest_cores = reinterpret_cast<ccl::WorkerXY*>(get_arg_addr(curr_arg_index));
+        input_args.dest_cores = reinterpret_cast<WorkerXY*>(get_arg_addr(curr_arg_index));
         curr_arg_index += input_args.num_dest_cores;
 
         ASSERT(input_args.shard_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32);
@@ -210,7 +211,7 @@ struct ShardAddrGen final {
     //
     ShardAddrGen(
         uint8_t num_args_consumed,
-        ccl::ShardAddrGenArgs<false> const& input_args) :
+        tt::tt_metal::ccl::ShardAddrGenArgs<false> const& input_args) :
         dest_cores(input_args.dest_cores),
         shards_start_address(input_args.shards_start_address),
         shard_size_in_bytes(input_args.shard_size_in_bytes),
@@ -231,15 +232,14 @@ struct ShardAddrGen final {
             ASSERT(input_args.starting_chunk_into_shard <= this->total_chunks_per_core);
         };
 
-    static_assert(
-        TYPE == ShardType::Width || TYPE == ShardType::Height || TYPE == ShardType::Block, "Invalid ShardType");
+    static_assert(TYPE == ShardType::Width || TYPE == ShardType::Height || TYPE == ShardType::Block, "Invalid ShardType");
 
     // Clockwise vs counter clockwise only affects worker core traversal order (relative to canonical order). Since the
     // dest core list is a configurable list, we will, for now, require the host side kernel config code to produce the
     // correc order per worker
     FORCE_INLINE void advance() {
         if constexpr (TYPE == ShardType::Width or TYPE == ShardType::Height) {
-            ccl::all_gather::addr_gen_advance_width_sharded(
+            tt::tt_metal::ccl::all_gather::addr_gen_advance_width_sharded(
                 this->curr_core_chunk_index,
                 this->curr_worker_index,
                 this->contiguous_chunk_count,
@@ -256,13 +256,13 @@ struct ShardAddrGen final {
         }
     }
 
-    [[nodiscard]] FORCE_INLINE ccl::WorkerXY get_next_noc_xy_core() const {
+    [[nodiscard]] FORCE_INLINE WorkerXY get_next_noc_xy_core() const {
         ASSERT(this->curr_worker_index < this->num_dest_cores);
         return this->dest_cores[this->curr_worker_index];
     }
 
     [[nodiscard]] FORCE_INLINE uint64_t get_next_noc_addr() const {
-        ccl::WorkerXY dest_worker = this->get_next_noc_xy_core();
+        WorkerXY dest_worker = this->get_next_noc_xy_core();
         uint32_t curr_address = this->shards_start_address + this->curr_core_chunk_index * this->shard_size_in_bytes;
         ASSERT(curr_address + this->shard_size_in_bytes <= 1499136); // L1 wraparound - oops!
         ASSERT(this->shards_start_address <= curr_address);
@@ -271,7 +271,7 @@ struct ShardAddrGen final {
 
     [[nodiscard]] FORCE_INLINE uint64_t get_next_noc_addr_and_advance() {
         if constexpr (TYPE == ShardType::Width) {
-            ccl::WorkerXY dest_worker = this->get_next_noc_xy_core();
+            WorkerXY dest_worker = this->get_next_noc_xy_core();
             uint32_t curr_address = this->shards_start_address + this->curr_core_chunk_index * this->shard_size_in_bytes;
             ASSERT(curr_address + this->shard_size_in_bytes <= 1499136); // L1 wraparound - oops!
             ASSERT(this->shards_start_address <= curr_address);
@@ -292,7 +292,7 @@ struct ShardAddrGen final {
     }
     [[nodiscard]] FORCE_INLINE uint32_t get_num_args_consumed() const { return this->num_args_consumed;}
 
-    ccl::WorkerXY* dest_cores;
+    WorkerXY* dest_cores;
     uint32_t shards_start_address;
     // This could be shared
     uint32_t shard_size_in_bytes;
@@ -309,55 +309,6 @@ struct ShardAddrGen final {
     uint8_t num_args_consumed;
     bool is_clockwise;
 };
-
-FORCE_INLINE void push_filler_pages_to_cb(const uint32_t& cb_id, uint32_t num_pages) {
-    ASSERT(num_pages < cb_interface[cb_id].fifo_num_pages);
-    cb_reserve_back(cb_id, num_pages);
-    cb_push_back(cb_id, num_pages);
-}
-FORCE_INLINE void pop_filler_pages_from_cb(const uint32_t& cb_id, uint32_t num_pages) {
-    ASSERT(num_pages < cb_interface[cb_id].fifo_num_pages);
-    cb_wait_front(cb_id, num_pages);
-    cb_pop_front(cb_id, num_pages);
-}
-
-
-FORCE_INLINE void fetch_chunk(
-    const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_read_addr) {
-    cb_reserve_back(cb_id, num_pages);
-    uint32_t l1_write_addr = get_write_ptr(cb_id);
-    noc_async_read(remote_l1_read_addr, l1_write_addr, page_size * num_pages);
-    noc_async_read_barrier();
-    cb_push_back(cb_id, num_pages);
-}
-FORCE_INLINE void fetch_chunk_sharded(
-    const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_read_addr) {
-    cb_reserve_back(cb_id, num_pages);
-    uint32_t l1_write_addr = get_write_ptr(cb_id);
-    noc_async_read(remote_l1_read_addr, l1_write_addr, num_pages * page_size);
-    validate_sane_transaction_counters();
-    noc_async_read_barrier();
-    cb_push_back(cb_id, num_pages);
-}
-
-FORCE_INLINE void send_chunk(
-    const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_write_addr) {
-    cb_wait_front(cb_id, num_pages);
-    uint32_t l1_read_addr = get_read_ptr(cb_id);
-    noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages);
-    noc_async_write_barrier();
-    cb_pop_front(cb_id, num_pages);
-}
-FORCE_INLINE void send_chunk_sharded(
-    const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_write_addr, uint64_t eth_l1_sender_semaphore_addr) {
-    cb_wait_front(cb_id, num_pages);
-    uint32_t l1_read_addr = get_read_ptr(cb_id);
-    noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages);
-    noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
-    validate_sane_transaction_counters();
-    noc_async_write_barrier();
-    cb_pop_front(cb_id, num_pages);
-}
 
 template <ShardType T>
 FORCE_INLINE void write_and_send_chunk_sharded(

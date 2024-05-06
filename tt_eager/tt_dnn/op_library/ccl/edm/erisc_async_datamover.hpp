@@ -12,17 +12,18 @@
 #include "ethernet/dataflow_api.h"
 #include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/hw/inc/wormhole/noc/noc.h"
-#include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
+
+using tt::tt_metal::ccl::EriscDataMoverBufferSharingMode
 
 namespace erisc {
 namespace datamover {
 
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 struct edm_worker_index {
 };
 
 template <>
-struct edm_worker_index<ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN> {
+struct edm_worker_index<EriscDataMoverBufferSharingMode::ROUND_ROBIN> {
     uint16_t worker_index = 0;
 };
 
@@ -33,11 +34,11 @@ struct edm_worker_index<ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN> {
  * state for the transaction channel, holds information such as buffer and semaphore addresses, and has helper
  * functions to more easily check semaphore and ack statuses and to send/receive data and/or semaphore updates.
  */
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 class ChannelBuffer final {
     static_assert(
-        BUFFER_SHARING_MODE == ccl::EriscDataMoverBufferSharingMode::NOT_SHARED ||
-        BUFFER_SHARING_MODE == ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN,
+        BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED ||
+        BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::ROUND_ROBIN,
         "The only BufferSharding modes supported are NOT_SHARED and ROUND_ROBIN");
    public:
     enum STATE : uint8_t {
@@ -117,7 +118,7 @@ class ChannelBuffer final {
 
     // Increment the semaphore in the remote L1s of every worker associated with this ChannelBuffer
     FORCE_INLINE void increment_worker_semaphores() {
-        if constexpr (BUFFER_SHARING_MODE == ccl::EriscDataMoverBufferSharingMode::NOT_SHARED) {
+        if constexpr (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED) {
             // We have to be careful that the worker x/y matches for the `noc_index`
             // active on the erisc
             for (std::size_t i = 0; i < this->num_workers; i++) {
@@ -127,7 +128,7 @@ class ChannelBuffer final {
 
                 noc_semaphore_inc(worker_semaphore_address, 1);
             }
-        } else if (BUFFER_SHARING_MODE == ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN) {
+        } else if (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::ROUND_ROBIN) {
                 ccl::WorkerXY worker_xy = this->worker_coords[this->worker_index.worker_index];
                 uint64_t worker_semaphore_address =
                     get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
@@ -291,7 +292,7 @@ FORCE_INLINE void initialize_transaction_buffer_addresses(
 //   SENDER SIDE HELPERS
 /////////////////////////////////////////////
 
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel) {
     bool did_something = false;
     if (sender_buffer_channel.eth_is_receiver_channel_send_done()) {
@@ -322,7 +323,7 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<BUFFER_SHARING_MOD
     return did_something;
 }
 
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel, uint32_t &num_senders_complete) {
 
@@ -338,7 +339,7 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     return true;
 }
 
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel, uint32_t &num_senders_complete) {
     bool did_something = false;
 
@@ -359,7 +360,7 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer<BUFFER_SH
 /*
  *
  */
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_channel_buffer) {
     bool did_something = false;
 
@@ -384,7 +385,7 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer<BU
 /*
  *
  */
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel) {
     buffer_channel.increment_worker_semaphores();
     buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::WAITING_FOR_WORKER);
@@ -398,7 +399,7 @@ FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(Channel
  * If payload received, notify (send ack to) sender so sender knows it can free up its local buffer
  *
  */
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel) {
     bool did_something = false;
 
@@ -424,7 +425,7 @@ FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer<BUFFER_SHAR
  * - notifies sender it is safe to send next payload
  * - clear local semaphore
  */
-template <ccl::EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
+template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
     ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel, uint32_t &num_receivers_complete) {
     bool did_something = false;

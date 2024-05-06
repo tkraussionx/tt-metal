@@ -9,8 +9,8 @@
 #include <vector>
 #include <limits>
 
-// #include "tt_dnn/op_library/ccl/ccl_common.hpp"
-
+namespace tt {
+namespace tt_metal {
 namespace ccl {
 
 enum EriscDataMoverBufferSharingMode: uint32_t {
@@ -280,3 +280,5 @@ inline void full_worker_grid_addr_gen_width_sharded_advance (
 }; // namespace all_gather
 
 }  // namespace ccl
+}  // namespace tt_metal
+}  // namespace tt
