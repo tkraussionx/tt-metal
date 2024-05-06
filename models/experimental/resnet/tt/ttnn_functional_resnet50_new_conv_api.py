@@ -201,7 +201,7 @@ class resnet50Bottleneck:
             in_channels=self.conv1_input_channels,
             out_channels=self.conv1_output_channels,
             device=device,
-            bias_tensor=self.conv1_bias_tensor,
+            bias_tensor=self.conv1_bias_tensor,  # on host, type - ttnn tensor, fp32
             kernel_size=(1, 1),
             stride=(1, 1),
             padding=(0, 0),
@@ -539,8 +539,17 @@ class resnet50:
 
         x = ttnn.reshape(x, (1, 1, 56 * 56 * self.batch_size, 64))
 
+        if is_wormhole_b0():
+            # check if the shard shape is already tile sized, or needs padding
+            shard_shape = ttnn.get_memory_config(x).shard_spec.shape
+            if shard_shape[0] % ttnn.TILE_SIZE != 0 or shard_shape[1] % ttnn.TILE_SIZE != 0:
+                ## use single core tilize after a sharded to interleaved
+                ## TODO: can we pad each shard to keep it multicore?
+                ## We do not do this in the optimized run as we reshard to layer1 optimal config before tilize
+                x = ttnn.to_memory_config(x, ttnn.DRAM_MEMORY_CONFIG)
+        breakpoint()
         x = ttnn.to_layout(x, ttnn.TILE_LAYOUT, dtype=self.model_config["ACTIVATIONS_DTYPE"])
-
+        breakpoint()
         if self.batch_size == 20 and not is_wormhole_b0():
             x = ttnn.reallocate(x)
 
@@ -574,11 +583,12 @@ class resnet50:
             x_memory_config.shard_spec.orientation,
             tile_layout=True,
         )
+        breakpoint()
         x, x_height, x_width = self.layer1_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
         x, x_height, x_width = self.layer1_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
         if self.batch_size == 20 and is_wormhole_b0():
             x = ttnn.reallocate(x)
-
+        breakpoint()
         layer2_module1_input_shape = [
             x.get_legacy_shape()[0],
             x.get_legacy_shape()[1],
@@ -824,6 +834,9 @@ class resnet50:
         #     # TODO: fix the need to do the reshard here
         #     x = ttnn.to_memory_config(x, self.layer1_module1.conv1.conv.input_sharded_memory_config)
 
+        if is_wormhole_b0() and batch_size == 20:
+            x = ttnn.to_memory_config(x, ops_parallel_config["layer1_module1_input"])
+
         x = ttnn.to_layout(x, ttnn.TILE_LAYOUT, dtype=self.model_config["ACTIVATIONS_DTYPE"])
 
         if self.batch_size == 20 and not is_wormhole_b0():
@@ -832,8 +845,6 @@ class resnet50:
         x_height = 56
         x_width = 56
 
-        if is_wormhole_b0() and batch_size == 20:
-            x = ttnn.to_memory_config(x, ops_parallel_config["layer1_module1_input"])
         x, x_height, x_width = self.layer1_module1(x, device, batch_size, x_height, x_width, conv_op_cache)
         x, x_height, x_width = self.layer1_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
         x, x_height, x_width = self.layer1_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
