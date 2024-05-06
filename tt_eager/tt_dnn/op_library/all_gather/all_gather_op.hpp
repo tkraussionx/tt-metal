@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include "impl/buffers/buffer.hpp"
 #include "tensor/tensor.hpp"
 #include "tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -34,6 +35,8 @@ enum Topology {
 };
 }; // namespace all_gather_op
 
+AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim);
+
 class AllGatherConfig {
    public:
     AllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim, uint32_t ring_size, uint32_t num_links, all_gather_op::Topology topology) :
@@ -43,10 +46,12 @@ class AllGatherConfig {
 
         erisc_handshake_address(eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE),
         topology(topology),
-        enable_bidirectional(false),
+        enable_bidirectional(*/false*/topology == all_gather_op::Topology::Ring && dim != 0 && dim != 1),
 
         input_is_dram(input_tensor.buffer()->buffer_type() == BufferType::DRAM),
-        output_is_dram(output_tensor.buffer()->buffer_type() == BufferType::DRAM)
+        output_is_dram(output_tensor.buffer()->buffer_type() == BufferType::DRAM),
+
+        mode(choose_all_gather_mode(input_tensor, output_tensor, dim))
     {
         // "duplicate" directions are a short hand to enable linear/mesh all-gather topologies with
         // less code-changes. Ideally a new concept is added amongst "num_eth_buffers", "num_workers_per_link", etc.
@@ -55,7 +60,7 @@ class AllGatherConfig {
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
         this->is_sharded = input_tensor.is_sharded();
-        this->num_eth_buffers = (this->enable_bidirectional ? 8 : (this->is_sharded && topology != all_gather_op::Topology::Linear? 8 : 4));
+        this->num_eth_buffers = (this->enable_bidirectional ? 8 : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
         if (this->is_sharded) {
             this->num_eth_buffers = std::min(this->num_eth_buffers, input_tensor.shard_spec()->num_cores());
             if ((input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) % (ring_size) != 0 &&
@@ -65,6 +70,7 @@ class AllGatherConfig {
             }
             log_trace(tt::LogOp, "this->num_buffers: {}", this->num_eth_buffers);
         }
+
         this->num_workers_per_link = this->num_eth_buffers;
         this->eth_sems_l1_base_byte_address = this->erisc_handshake_address + 16;
         this->semaphore_offset = this->semaphore_size * this->num_eth_buffers * num_duplicate_directions; // TODO: Remove this once dedicated semaphore space for user kernels are added
@@ -159,6 +165,28 @@ class AllGatherConfig {
     const bool enable_bidirectional;
     const bool input_is_dram;
     const bool output_is_dram;
+};
+
+struct RingInterleavedAllGatherVariantConfig : public AllGatherConfig {
+
+    std::string const& send_reader_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_send_reader.cpp";
+    std::string const& sender_writer_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_send_writer.cpp";
+    std::string const& receiver_reader_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_receive_reader.cpp";
+    std::string const& receiver_writer_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_receive_writer.cpp";
+};
+
+struct SingleTileHighWidthShardedAllGatherVariantConfig : public AllGatherConfig {
+
+    std::string const& send_reader_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_ring_gather_send_reader.cpp";
+    std::string const& sender_writer_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_ring_gather_send_writer.cpp";
+    std::string const& receiver_reader_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_ring_gather_receive_reader.cpp";
+    std::string const& receiver_writer_kernel_path = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_ring_gather_receive_writer.cpp";
+};
+
+struct FullWorkerGridShardedAllGatherVariantConfig : public AllGatherConfig {
+
+    std::string const& reader_kernel = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_all_shard_workers_ring_gather_reader.cpp";
+    std::string const& writer_kernel = "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_sharded_all_shard_workers_ring_gather_writer.cpp";
 };
 
 struct AllGather {
@@ -290,14 +318,14 @@ struct ShardAddrGenArgGenerator {
         std::vector<uint32_t> args;
         args.reserve(7 * this->args_struct.num_dest_cores * 2);
 
-        TT_ASSERT(this->args_struct.shard_size_in_bytes != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U32);
-        TT_ASSERT(this->args_struct.total_chunks_per_core != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
-        TT_ASSERT(this->args_struct.shards_start_address != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U32);
-        TT_ASSERT(this->args_struct.starting_core_index != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
-        TT_ASSERT(this->args_struct.starting_chunk_into_shard != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
-        TT_ASSERT(this->args_struct.intra_core_stride_in_shards != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
-        TT_ASSERT(this->args_struct.contiguous_chunks_before_stride != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
-        TT_ASSERT(this->args_struct.num_dest_cores != ccl::ShardAddrGenArgs<true>::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.shard_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32);
+        TT_ASSERT(this->args_struct.total_chunks_per_core != ccl::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.shards_start_address != ccl::UNINITIALIZED_VALUE_U32);
+        TT_ASSERT(this->args_struct.starting_core_index != ccl::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.starting_chunk_into_shard != ccl::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.intra_core_stride_in_shards != ccl::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.contiguous_chunks_before_stride != ccl::UNINITIALIZED_VALUE_U16);
+        TT_ASSERT(this->args_struct.num_dest_cores != ccl::UNINITIALIZED_VALUE_U16);
         TT_ASSERT(this->args_struct.dest_cores.size() != 0);
 
         args.push_back(this->args_struct.is_clockwise);
@@ -539,7 +567,7 @@ struct OutputTensorShardAddrGenArgGenerator final : ShardAddrGenArgGenerator {
         uint32_t ring_index,
         uint32_t serving_worker_index) {
         return get_first_output_shard_starting_location(
-            all_gather_config.get_num_eth_buffers_per_edm(),
+            all_gather_config.get_num_eth_buffers_per_edm(), // all_gather_config.get_num_workers(),
             input_tensor.shard_spec()->grid.num_cores(),
             ring_index,
             all_gather_config.get_ring_size(),
@@ -625,6 +653,92 @@ struct OutputTensorShardAddrGenArgGenerator final : ShardAddrGenArgGenerator {
 
 };
 
+struct FullWorkerGridShardAddrGenArgGenerator {
+
+    std::vector<uint32_t> generate() const {
+        TT_ASSERT(initialized, "Didn't initialize ShardAddrGenArgGenerator before use");
+        std::vector<uint32_t> args;
+        args.reserve(12 + args_struct.total_num_cores);
+
+        TT_ASSERT(args_struct.dest_cores.size() > 0, "dest_cores was uninitialized");
+        TT_ASSERT(args_struct.tile_size_in_bytes != ccl::UNINITIALIZED_VALUE_U32, "tile_size_in_bytes was uninitialized");
+        TT_ASSERT(args_struct.shards_start_address != ccl::UNINITIALIZED_VALUE_U32, "shards_start_address was uninitialized");
+        TT_ASSERT(args_struct.curr_core_index != ccl::UNINITIALIZED_VALUE_U16, "curr_core_index was uninitialized");
+        TT_ASSERT(args_struct.total_num_cores != ccl::UNINITIALIZED_VALUE_U16, "total_num_cores was uninitialized");
+        TT_ASSERT(args_struct.curr_shard_tile_x != ccl::UNINITIALIZED_VALUE_U16, "curr_shard_tile_x was uninitialized");
+        TT_ASSERT(args_struct.curr_shard_tile_y != ccl::UNINITIALIZED_VALUE_U16, "curr_shard_tile_y was uninitialized");
+        TT_ASSERT(args_struct.curr_tile_index != ccl::UNINITIALIZED_VALUE_U16, "curr_tile_index was uninitialized");
+        TT_ASSERT(args_struct.curr_shard != ccl::UNINITIALIZED_VALUE_U16, "curr_shard was uninitialized");
+        TT_ASSERT(args_struct.input_shard_num_tiles_x != ccl::UNINITIALIZED_VALUE_U16, "input_shard_num_tiles_x was uninitialized");
+        TT_ASSERT(args_struct.input_shard_num_tiles_y != ccl::UNINITIALIZED_VALUE_U16, "input_shard_num_tiles_y was uninitialized");
+        TT_ASSERT(args_struct.total_shards_x != ccl::UNINITIALIZED_VALUE_U16, "total_shards_x was uninitialized");
+
+        args.push_back(args_struct.tile_size_in_bytes);
+        args.push_back(args_struct.shards_start_address);
+        args.push_back(args_struct.curr_shard_tile_x);
+        args.push_back(args_struct.curr_shard_tile_y);
+        args.push_back(args_struct.curr_tile_index);
+        args.push_back(args_struct.curr_shard);
+        args.push_back(args_struct.input_shard_num_tiles_x);
+        args.push_back(args_struct.input_shard_num_tiles_y);
+        args.push_back(args_struct.total_shards_x);
+        args.push_back(args_struct.is_clockwise);
+        args.push_back(args_struct.curr_core_index);
+        args.push_back(args_struct.total_num_cores);
+        for (ccl::WorkerXY const& core : args_struct.dest_cores) {
+            args.push_back(core.to_uint32());
+        }
+
+        TT_ASSERT(args.size() == args_struct.get_expected_num_args(), "Generated args size doesn't match expected size");
+
+        return args;
+    }
+
+    FullWorkerGridShardAddrGenArgGenerator(
+        AllGatherConfig const& all_gather_config,
+        Device const* device,
+        Tensor const& input_tensor,
+        Tensor const& output_tensor,
+        uint32_t ring_index,
+        uint32_t ring_size,
+        uint32_t worker_index,
+        uint32_t starting_dest_core_index,
+        uint32_t starting_tile_index,
+        bool is_worker_in_clockwise_ring
+        ) {
+            bool is_shard_orientation_row_major = true;
+            auto *input_buffer = input_tensor.buffer();
+            this->args_struct.tile_size_in_bytes = input_buffer->page_size();
+            this->args_struct.shards_start_address = output_tensor.buffer()->address();
+            this->args_struct.curr_shard_tile_x = 0;
+            this->args_struct.curr_shard_tile_y = 0;
+            this->args_struct.curr_tile_index = starting_tile_index;
+            this->args_struct.curr_shard = ring_index;
+            this->args_struct.input_shard_num_tiles_x = input_buffer->shard_spec().tensor2d_shape[1];
+            this->args_struct.input_shard_num_tiles_y = input_buffer->shard_spec().tensor2d_shape[0];
+            this->args_struct.total_shards_x = ring_size;
+            this->args_struct.is_clockwise = is_worker_in_clockwise_ring;
+
+            this->args_struct.curr_core_index = starting_dest_core_index;
+
+            auto const& tensor_shard_grid = input_tensor.buffer()->shard_spec().grid();
+            this->args_struct.dest_cores = OutputTensorShardAddrGenArgGenerator::compute_worker_dest_cores (
+                    ccl::ShardType::Width,
+                    *device,
+                    tensor_shard_grid,
+                    tensor_shard_grid.num_cores(),
+                    ring_size * tensor_shard_grid.num_cores(),
+                    tensor_shard_grid.num_cores(),
+                    worker_index,
+                    is_shard_orientation_row_major);
+            this->args_struct.total_num_cores = this->args_struct.dest_cores.size();
+
+            this->initialized = true;
+        }
+
+    ccl::FullWorkerGridShardAddrGenArgs<true> args_struct;
+    bool initialized;
+};
 
 class EriscDatamoverBuilder {
    public:
@@ -633,12 +747,13 @@ class EriscDatamoverBuilder {
         uint32_t eth_semaphore_l1_address;
     };
 
-    EriscDatamoverBuilder(AllGatherConfig const& all_gather_config, std::vector<uint32_t> const& local_semaphore_addresses, std::vector<uint32_t> const& local_buffer_addresses) :
+    EriscDatamoverBuilder(AllGatherConfig const& all_gather_config, std::vector<uint32_t> const& local_semaphore_addresses, std::vector<uint32_t> const& local_buffer_addresses, ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode) :
         local_semaphore_addresses(local_semaphore_addresses),
         local_buffer_addresses(local_buffer_addresses),
         eth_buffer_size_bytes(all_gather_config.get_eth_buffer_size()),
         handshake_addr(all_gather_config.get_erisc_handshake_address()),
         num_channel_buffers(all_gather_config.get_num_eth_buffers_per_edm()),
+        buffer_sharing_mode(buffer_sharing_mode),
         enable_sender(false),
         enable_receiver(false),
         num_senders(0),
@@ -691,7 +806,8 @@ class EriscDatamoverBuilder {
             static_cast<uint32_t>(this->enable_sender ? 1 : 0),
             static_cast<uint32_t>(this->enable_receiver ? 1 : 0),
             this->num_senders,
-            this->num_receivers};
+            this->num_receivers,
+            this->buffer_sharing_mode};
     }
 
     [[nodiscard]]
@@ -779,6 +895,7 @@ class EriscDatamoverBuilder {
     uint32_t eth_buffer_size_bytes;
     uint32_t handshake_addr;
     uint32_t const num_channel_buffers;
+    ccl::EriscDataMoverBufferSharingMode const buffer_sharing_mode;
     uint32_t num_senders;
     uint32_t num_receivers;
 
