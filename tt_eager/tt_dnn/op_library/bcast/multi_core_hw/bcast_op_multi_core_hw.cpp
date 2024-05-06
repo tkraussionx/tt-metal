@@ -21,7 +21,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, const Tensor& output, BcastOpMath bcast_math, BcastOpDim bcast_dim) {
+operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, const Tensor& output, BcastOpMath bcast_math, BcastOpDim bcast_dim, bool inplace = false) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
 
     const auto ashape = a.get_legacy_shape();
@@ -212,7 +212,8 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
             compute_with_storage_grid_size,
             cb_src0,
             single_tile_size,
-            cb_output
+            cb_output,
+            inplace
         ]
     (
         const void* operation,
@@ -223,20 +224,21 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
     ) {
         uint32_t num_cores_x = compute_with_storage_grid_size.x;
         uint32_t num_cores_y = compute_with_storage_grid_size.y;
+        const auto& output_tensor = inplace ? input_tensors.at(0) : output_tensors.at(0);
 
         auto src_buffer_a = input_tensors.at(0).buffer();
         auto src_dram_buffer_b = input_tensors.at(1).buffer();
         std::optional<ShardSpec> shard_spec = std::nullopt;
         bool src0_sharded = input_tensors.at(0).memory_config().is_sharded();
-        bool out_sharded = output_tensors.at(0).memory_config().is_sharded();
+        bool out_sharded = output_tensor.memory_config().is_sharded();
 
         if (src0_sharded) {
             shard_spec = input_tensors.at(0).shard_spec().value();
         } else if (out_sharded) {
-            shard_spec = output_tensors.at(0).shard_spec().value();
+            shard_spec = output_tensor.shard_spec().value();
         }
 
-        auto dst_buffer= output_tensors.at(0).buffer();
+        auto dst_buffer= output_tensor.buffer();
 
         const auto ashape = input_tensors.at(0).get_legacy_shape();
         const auto bshape = input_tensors.at(1).get_legacy_shape();

@@ -171,7 +171,7 @@ operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
             return bcast_multi_core_w(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
         case BcastOpParallelizationStrategy::MULTI_CORE_HW:
-            return bcast_multi_core_hw(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
+            return bcast_multi_core_hw(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim, this->in_place);
         case BcastOpParallelizationStrategy::SINGLE_CORE:
         default:
             return bcast_single_core(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
