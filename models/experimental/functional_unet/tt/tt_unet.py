@@ -60,8 +60,10 @@ class TtUnet:
             parallel_config_override=max_pool_parallel_config_override,
             channels=32,
         )
+
         self.enc2_1 = parameters.encoder2_c1
         self.enc2_2 = parameters.encoder2_c2
+
         self.max_pool_reader_patterns_cache = {}
         max_pool_parallel_config_override = {}
         self.pool2 = ttnn.MaxPool2d(
@@ -79,8 +81,10 @@ class TtUnet:
             parallel_config_override=max_pool_parallel_config_override,
             channels=64,
         )
+
         self.enc3_1 = parameters.encoder3_c1
         self.enc3_2 = parameters.encoder3_c2
+
         self.max_pool_reader_patterns_cache = {}
         max_pool_parallel_config_override = {}
         self.pool3 = ttnn.MaxPool2d(
@@ -98,34 +102,20 @@ class TtUnet:
             parallel_config_override=max_pool_parallel_config_override,
             channels=128,
         )
+
         self.enc4_1 = parameters.encoder4_c1
         self.enc4_2 = parameters.encoder4_c2
-        self.max_pool_reader_patterns_cache = {}
-        max_pool_parallel_config_override = {}
-        self.pool4 = ttnn.MaxPool2d(
+
+        self.pool4 = tt_lib.fallback_ops.MaxPool2d(
             kernel_size=(2, 2),
             stride=(2, 2),
             padding=(0, 0),
             dilation=(1, 1),
-            dtype=ttnn.bfloat16,
-            device=device,
-            batch_size=1,
-            input_height=60,
-            input_width=80,
-            reader_patterns_cache=self.max_pool_reader_patterns_cache,
-            deallocate_activation=False,
-            parallel_config_override=max_pool_parallel_config_override,
-            channels=256,
         )
-        self.bnc1_1 = parameters.bottleneck_c1
-        # print("parameters",parameters["bottleneck_c2"])
 
-        # parameters["bottleneck_c2"]["bias"]=torch.reshape(parameters["bottleneck_c2"]["bias"],(1,1,1,-1))
+        self.bnc1_1 = parameters.bottleneck_c1
         self.bnc1_2_weight = torch_to_tt_tensor_rm(parameters["bottleneck_c2"]["weight"], device, put_on_device=False)
         self.bnc1_2_bias = torch_to_tt_tensor_rm(parameters["bottleneck_c2"]["bias"], device, put_on_device=False)
-
-        # print("bnc1_2_weight",self.bnc1_2_weight.shape)
-        # print("self.bnc1_2_bias",self.bnc1_2_bias.shape)
 
         self.bnc1_2 = tt_lib.fallback_ops.Conv2d(
             weights=self.bnc1_2_weight,
@@ -163,7 +153,6 @@ class TtUnet:
         self.upconv1.weight = torch.nn.Parameter(state_dict["upconv1.weight"])
         self.upconv1.bias = torch.nn.Parameter(state_dict["upconv1.bias"])
 
-        # self.dc1_1 = parameters.decoder1_c1
         self.dc1_1_weight = torch_to_tt_tensor_rm(parameters["decoder1_c1"]["weight"], device, put_on_device=False)
         self.dc1_1_bias = torch_to_tt_tensor_rm(parameters["decoder1_c1"]["bias"], device, put_on_device=False)
         self.dc1_1 = tt_lib.fallback_ops.Conv2d(
@@ -176,11 +165,8 @@ class TtUnet:
             padding=(1, 1),
             bias=False,
         )
-
         self.dc1_2 = parameters.decoder1_c2
 
-        # print("conv parameters: ", parameters.conv)
-        # self.conv = parameters.conv
         self.conv_weight = torch_to_tt_tensor_rm(parameters["conv"]["weight"], device, put_on_device=False)
         self.conv_bias = torch_to_tt_tensor_rm(parameters["conv"]["bias"], device, put_on_device=False)
         self.conv = tt_lib.fallback_ops.Conv2d(
@@ -196,50 +182,81 @@ class TtUnet:
 
     def __call__(self, device, input_tensor):
         input_tensor = input_tensor.to(device, self.enc1_1.conv.input_sharded_memory_config)
-        # print("input_tensor",input_tensor.memory_config())
         output_tensor_enc1_1 = self.enc1_1(input_tensor)
         output_tensor_enc1_2 = self.enc1_2(output_tensor_enc1_1)
 
         output_tensor_pool_1 = self.pool1(output_tensor_enc1_2)
+
         output_tensor_enc2_1 = self.enc2_1(output_tensor_pool_1)
         output_tensor_enc2_2 = self.enc2_2(output_tensor_enc2_1)
 
         output_tensor_pool_2 = self.pool2(output_tensor_enc2_2)
+
         output_tensor_enc3_1 = self.enc3_1(output_tensor_pool_2)
         output_tensor_enc3_2 = self.enc3_2(output_tensor_enc3_1)
 
         output_tensor_pool_3 = self.pool3(output_tensor_enc3_2)
-        output_tensor_enc4_1 = self.enc4_1(output_tensor_pool_3)
 
+        output_tensor_enc4_1 = self.enc4_1(output_tensor_pool_3)
         output_tensor_enc4_2 = self.enc4_2(output_tensor_enc4_1)
-        # print("self.enc4_2.conv.input_sharded_memory_config:", self.enc4_2.conv.input_sharded_memory_config)
-        # print("output_tensor_pool_4",output_tensor_enc4_2.shape)
-        # print("output_tensor_enc4_2",output_tensor_enc4_2.memory_config())
+
+        output_tensor_enc4_2 = ttnn_to_torch(output_tensor_enc4_2)
+        output_tensor_enc4_2 = output_tensor_enc4_2.reshape(1, 60, 80, 256)
+        output_tensor_enc4_2 = torch.permute(output_tensor_enc4_2, (0, 3, 1, 2))
+        output_tensor_enc4_2 = torch_to_tt_tensor_rm(output_tensor_enc4_2, device, put_on_device=True)
         output_tensor_pool_4 = self.pool4(output_tensor_enc4_2)
-        # print("output_tensor_enc4_2",output_tensor_enc4_2.memory_config())
+        output_tensor_pool_4 = tt_to_torch_tensor(output_tensor_pool_4)
+        output_tensor_pool_4 = torch.permute(output_tensor_pool_4, (0, 2, 3, 1))
+        output_tensor_pool_4 = output_tensor_pool_4.reshape(
+            output_tensor_pool_4.shape[0],
+            1,
+            output_tensor_pool_4.shape[1] * output_tensor_pool_4.shape[2],
+            output_tensor_pool_4.shape[3],
+        )
+        output_tensor_pool_4 = ttnn.from_torch(
+            output_tensor_pool_4, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+        )
+
+        output_tensor_enc4_2 = tt_to_torch_tensor(output_tensor_enc4_2)
+        output_tensor_enc4_2 = torch.permute(output_tensor_enc4_2, (0, 2, 3, 1))
+        output_tensor_enc4_2 = output_tensor_enc4_2.reshape(
+            output_tensor_enc4_2.shape[0],
+            1,
+            output_tensor_enc4_2.shape[1] * output_tensor_enc4_2.shape[2],
+            output_tensor_enc4_2.shape[3],
+        )
+        output_tensor_enc4_2 = ttnn.from_torch(
+            output_tensor_enc4_2, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+        )
+        output_tensor_pool_4 = tt_lib.tensor.interleaved_to_sharded(
+            output_tensor_pool_4, self.bnc1_1.conv.input_sharded_memory_config
+        )
 
         output_tensor_bnc1_1 = self.bnc1_1(output_tensor_pool_4)
         output_tensor_bnc1_1 = ttnn_to_torch(output_tensor_bnc1_1)
-
-        # print("device: ",device)
-
         output_tensor_bnc1_1 = output_tensor_bnc1_1.reshape(1, 30, 40, 512)
         output_tensor_bnc1_1 = torch.permute(output_tensor_bnc1_1, (0, 3, 1, 2))
         output_tensor_bnc1_1 = torch_to_tt_tensor_rm(output_tensor_bnc1_1, device, put_on_device=True)
         output_tensor_bnc1_2 = self.bnc1_2(output_tensor_bnc1_1)
         output_tensor_bnc1_2 = tt_to_torch_tensor(output_tensor_bnc1_2)
+        output_tensor_bnc1_2 = torch.permute(output_tensor_bnc1_2, (0, 2, 3, 1))
+        output_tensor_bnc1_2 = output_tensor_bnc1_2.reshape(
+            output_tensor_bnc1_2.shape[0],
+            1,
+            output_tensor_bnc1_2.shape[1] * output_tensor_bnc1_2.shape[2],
+            output_tensor_bnc1_2.shape[3],
+        )
         output_tensor_bnc1_2 = ttnn.from_torch(
             output_tensor_bnc1_2, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
         )
         output_tensor_bnc1_2 = ttnn.relu(output_tensor_bnc1_2)
+
         output_tensor_bnc1_2 = ttnn_to_torch(output_tensor_bnc1_2)
         output_tensor_bnc1_2 = output_tensor_bnc1_2.to(dtype=torch.float)
-
-        # print("BNC1_2 done! ")
+        output_tensor_bnc1_2 = output_tensor_bnc1_2.reshape(1, 30, 40, 512)
+        output_tensor_bnc1_2 = torch.permute(output_tensor_bnc1_2, (0, 3, 1, 2))
         output_tensor_dc_4 = self.upconv4(output_tensor_bnc1_2)
-
         output_tensor_dc_4 = torch.permute(output_tensor_dc_4, (0, 2, 3, 1))
-
         output_tensor_dc_4 = output_tensor_dc_4.reshape(
             output_tensor_dc_4.shape[0],
             1,
@@ -257,7 +274,6 @@ class TtUnet:
         )
         output_tensor_dc4_1 = self.dc4_1(output_tensor_dc_4)
         output_tensor_dc4_2 = self.dc4_2(output_tensor_dc4_1)
-        # output_tensor_dc4_2=ttnn.to_memory_config(output_tensor_dc4_2, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
         output_tensor_dc4_2_temp = ttnn_to_torch(output_tensor_dc4_2)
         ttnn.deallocate(output_tensor_dc4_2)
@@ -265,7 +281,6 @@ class TtUnet:
         output_tensor_dc4_2 = torch.permute(output_tensor_dc4_2, (0, 3, 1, 2))
         output_tensor_dc_3 = self.upconv3(output_tensor_dc4_2)
         output_tensor_dc_3 = torch.permute(output_tensor_dc_3, (0, 2, 3, 1))
-
         output_tensor_dc_3 = output_tensor_dc_3.reshape(
             output_tensor_dc_3.shape[0],
             1,
@@ -283,14 +298,12 @@ class TtUnet:
         )
         output_tensor_dc3_1 = self.dc3_1(output_tensor_dc_3)
         output_tensor_dc3_2 = self.dc3_2(output_tensor_dc3_1)
-        # ttnn.deallocate(output_tensor_dc3_1)
 
         output_tensor_dc3_2 = ttnn_to_torch(output_tensor_dc3_2)
         output_tensor_dc3_2 = output_tensor_dc3_2.reshape(1, 120, 160, 128)
         output_tensor_dc3_2 = torch.permute(output_tensor_dc3_2, (0, 3, 1, 2))
         output_tensor_dc_2 = self.upconv2(output_tensor_dc3_2)
         output_tensor_dc_2 = torch.permute(output_tensor_dc_2, (0, 2, 3, 1))
-
         output_tensor_dc_2 = output_tensor_dc_2.reshape(
             output_tensor_dc_2.shape[0],
             1,
@@ -300,6 +313,7 @@ class TtUnet:
         output_tensor_dc_2 = ttnn.from_torch(
             output_tensor_dc_2, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
         )
+
         output_tensor_dc_2 = ttnn.concat([output_tensor_dc_2, output_tensor_enc2_2], dim=3)
         ttnn.deallocate(output_tensor_enc2_2)
         output_tensor_dc_2 = tt_lib.tensor.interleaved_to_sharded(
@@ -314,7 +328,6 @@ class TtUnet:
         output_tensor_dc2_2 = torch.permute(output_tensor_dc2_2, (0, 3, 1, 2))
         output_tensor_dc_1 = self.upconv1(output_tensor_dc2_2)
         output_tensor_dc_1 = torch.permute(output_tensor_dc_1, (0, 2, 3, 1))
-
         output_tensor_dc_1 = output_tensor_dc_1.reshape(
             output_tensor_dc_1.shape[0],
             1,
@@ -327,19 +340,13 @@ class TtUnet:
 
         output_tensor_dc_1 = ttnn.concat([output_tensor_dc_1, output_tensor_enc1_2], dim=3)
         ttnn.deallocate(output_tensor_enc1_2)
-        # output_tensor_dc_1=ttnn.to_memory_config(output_tensor_dc_1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        # output_tensor_dc_1 = tt_lib.tensor.interleaved_to_sharded(output_tensor_dc_1, self.dc1_1.conv.input_sharded_memory_config)
-
         output_tensor_dc1_1 = ttnn.to_torch(output_tensor_dc_1)
         output_tensor_dc1_1 = output_tensor_dc1_1.reshape(1, 480, 640, 64)
         output_tensor_dc1_1 = torch.permute(output_tensor_dc1_1, (0, 3, 1, 2))
-        # print("shape of output_tensor_dc1_1:",output_tensor_dc1_1.shape)
         output_tensor_dc1_1 = torch_to_tt_tensor_rm(output_tensor_dc1_1, device, put_on_device=True)
         output_tensor_dc1_1 = self.dc1_1(output_tensor_dc1_1)
         output_tensor_dc1_1 = tt_to_torch_tensor(output_tensor_dc1_1)
-        # output_tensor_dc1_1=output_tensor_dc1_1.to(dtype=torch.float)
         output_tensor_dc1_1 = torch.permute(output_tensor_dc1_1, (0, 2, 3, 1))
-
         output_tensor_dc1_1 = output_tensor_dc1_1.reshape(
             output_tensor_dc1_1.shape[0],
             1,
@@ -350,35 +357,34 @@ class TtUnet:
             output_tensor_dc1_1, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
         )
         output_tensor_dc1_1 = ttnn.relu(output_tensor_dc1_1)
+
         output_tensor_dc1_1 = tt_lib.tensor.interleaved_to_sharded(
             output_tensor_dc1_1, self.dc1_2.conv.input_sharded_memory_config
         )
-
         output_tensor_dc1_2 = self.dc1_2(output_tensor_dc1_1)
-        # print("shape after dc1_2: ", output_tensor_dc1_2.shape)
+        decoder1_output = output_tensor_dc1_2
 
         output_tensor_dc1_2 = ttnn.to_torch(output_tensor_dc1_2)
         output_tensor_dc1_2 = output_tensor_dc1_2.reshape(1, 480, 640, 32)
         output_tensor_dc1_2 = torch.permute(output_tensor_dc1_2, (0, 3, 1, 2))
+        torch.save(output_tensor_dc1_2, "decoder1_2_output.pt")
         output_tensor_dc1_2 = torch_to_tt_tensor_rm(output_tensor_dc1_2, device, put_on_device=True)
         output_tensor_conv = self.conv(output_tensor_dc1_2)
-        # print("shape after last conv: ", output_tensor_conv.shape)
         output_tensor_conv = tt_to_torch_tensor(output_tensor_conv)
         output_tensor_conv = torch.permute(output_tensor_conv, (0, 2, 3, 1))
-
         output_tensor_conv = output_tensor_conv.reshape(
             output_tensor_conv.shape[0],
             1,
             output_tensor_conv.shape[1] * output_tensor_conv.shape[2],
             output_tensor_conv.shape[3],
         )
-        # output_tensor_conv = ttnn.from_torch(
-        #    output_tensor_conv, device=device, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT
-        # )
+        sigmoid_input = output_tensor_conv
 
-        # output_tensor_conv = tt_lib.tensor.sharded_to_interleaved(output_tensor_conv, ttnn.L1_MEMORY_CONFIG)
-        # output_tensor = ttnn.sigmoid(output_tensor_conv)
-        output_tensor = torch.sigmoid(output_tensor_conv)
+        output_tensor_conv = ttnn.from_torch(
+            output_tensor_conv, device=device, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT
+        )
+        conv_output = output_tensor_conv
+        output_tensor = torch.sigmoid(sigmoid_input)
         output_tensor = ttnn.from_torch(output_tensor, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
 
-        return ttnn.from_device(output_tensor)
+        return ttnn.from_device(decoder1_output), ttnn.from_device(conv_output), ttnn.from_device(output_tensor)
