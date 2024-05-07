@@ -15,7 +15,7 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_cross_a
     cross_attention as tt2_ttnn_cross_attention,
 )
 from ttnn.model_preprocessing import preprocess_model_parameters
-from tests.ttnn.utils_for_testing import assert_with_pcc
+from tests.ttnn.utils_for_testing import assert_with_pcc, comp_pcc
 from models.utility_functions import (
     skip_for_grayskull,
 )
@@ -259,9 +259,7 @@ def test_cross_attention_512x512(device, model_name, N, C, H, W, index, has_enco
         attention_mask=None,
         dim_head=W // 8,
     )
-
-    ttnn_output = ttnn.from_device(ttnn_output)
     ttnn_output = ttnn.to_torch(ttnn_output)
-    ttnn_output = ttnn_output.reshape(N, C, H, W)
-
-    assert_with_pcc(torch_output, ttnn_output, pcc=0.99)
+    passing, output = comp_pcc(torch_output, ttnn_output, pcc=0.99)
+    print(output)
+    assert passing

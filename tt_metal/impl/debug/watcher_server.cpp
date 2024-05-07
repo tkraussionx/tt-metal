@@ -121,6 +121,8 @@ static const char * get_riscv_name(CoreCoord core, uint32_t type)
         return "ncrisc";
     case DebugErisc:
         return "erisc";
+    case DebugIErisc:
+        return "ierisc";
     case DebugTrisc0:
         return "trisc0";
     case DebugTrisc1:
@@ -138,6 +140,7 @@ static string get_kernel_name(CoreCoord core, const launch_msg_t *launch_msg, ui
     switch (type) {
         case DebugBrisc:
         case DebugErisc:
+        case DebugIErisc:
             return kernel_names[launch_msg->brisc_watcher_kernel_id];
         case DebugNCrisc:
             return kernel_names[launch_msg->ncrisc_watcher_kernel_id];
@@ -185,13 +188,18 @@ static void log_waypoint(CoreCoord core, const launch_msg_t *launch_msg, const d
     log_info(out.c_str());
 }
 
-static string get_ring_buffer(Device *device, CoreCoord core) {
+static string get_ring_buffer(Device *device, CoreCoord phys_core) {
     uint64_t buf_addr = RING_BUFFER_ADDR;
-    if (tt::llrt::is_ethernet_core(core, device->id()))
-        buf_addr = eth_l1_mem::address_map::ERISC_RING_BUFFER_ADDR;
+    if (tt::llrt::is_ethernet_core(phys_core, device->id())) {
+        // Eth pcores have a different address, but only active ones.
+        CoreCoord logical_core = device->logical_core_from_ethernet_core(phys_core);
+        if (device->is_active_ethernet_core(logical_core)) {
+            buf_addr = eth_l1_mem::address_map::ERISC_RING_BUFFER_ADDR;
+        }
+    }
     auto from_dev = tt::llrt::read_hex_vec_from_core(
         device->id(),
-        core,
+        phys_core,
         buf_addr,
         RING_BUFFER_SIZE
     );
@@ -549,24 +557,26 @@ static void dump_sync_regs(FILE *f, Device *device, CoreCoord core) {
 
 static void validate_kernel_ids(FILE *f,
                                 std::map<int, bool>& used_kernel_names,
+                                chip_id_t device_id,
                                 CoreCoord core,
                                 const launch_msg_t *launch) {
 
     if (launch->brisc_watcher_kernel_id >= kernel_names.size()) {
-        TT_THROW("Watcher data corruption, unexpected brisc kernel id on core {}: {} (last valid {})",
-                  core.str(), launch->brisc_watcher_kernel_id, kernel_names.size());
+        TT_THROW("Watcher data corruption, unexpected brisc kernel id on Device {} core {}: {} (last valid {})",
+                  device_id, core.str(), launch->brisc_watcher_kernel_id, kernel_names.size());
+
     }
     used_kernel_names[launch->brisc_watcher_kernel_id] = true;
 
     if (launch->ncrisc_watcher_kernel_id >= kernel_names.size()) {
-        TT_THROW("Watcher data corruption, unexpected ncrisc kernel id on core {}: {} (last valid {})",
-                  core.str(), launch->ncrisc_watcher_kernel_id, kernel_names.size());
+        TT_THROW("Watcher data corruption, unexpected ncrisc kernel id on Device {} core {}: {} (last valid {})",
+                  device_id, core.str(), launch->ncrisc_watcher_kernel_id, kernel_names.size());
     }
     used_kernel_names[launch->ncrisc_watcher_kernel_id] = true;
 
     if (launch->triscs_watcher_kernel_id >= kernel_names.size()) {
-        TT_THROW("Watcher data corruption, unexpected trisc kernel id on core {}: {} (last valid {})",
-                  core.str(), launch->triscs_watcher_kernel_id, kernel_names.size());
+        TT_THROW("Watcher data corruption, unexpected trisc kernel id on Device {} core {}: {} (last valid {})",
+                  device_id, core.str(), launch->triscs_watcher_kernel_id, kernel_names.size());
     }
     used_kernel_names[launch->triscs_watcher_kernel_id] = true;
 }
@@ -577,6 +587,7 @@ static void dump_core(
     Device *device,
     CoreDescriptor logical_core,
     bool dump_all,
+    bool is_active_eth_core,
     std::set<std::pair<CoreCoord, riscv_id_t>> &paused_cores
 ) {
     // Watcher only treats ethernet + worker cores.
@@ -584,18 +595,20 @@ static void dump_core(
     CoreCoord core = device->physical_core_from_logical_core(logical_core.coord, logical_core.type);
 
     // Print device id, core coords (logical)
-    string core_type = is_eth_core ? "Ethnet Core" : "Worker Core";
+    string core_type = is_eth_core ? "ethnet" : "worker";
     string core_str = fmt::format(
-        "Device {}, {} {}[physical {}]",
-        device->id(), core_type, logical_core.coord, core.str()
+        "Device {} {} core(x={:2},y={:2}) phys(x={:2},y={:2})",
+        device->id(), core_type, logical_core.coord.x, logical_core.coord.y, core.x, core.y
     );
-    string pad(11 - core.str().length(), ' ');
-    fprintf(f, "%s:%s ", core_str.c_str(), pad.c_str());
+    fprintf(f, "%s: ", core_str.c_str());
 
     // Ethernet cores have a different mailbox base addr
     uint64_t mailbox_addr = MEM_MAILBOX_BASE;
     if (is_eth_core) {
-        mailbox_addr = eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE;
+        if (is_active_eth_core)
+            mailbox_addr = eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE;
+        else
+            mailbox_addr = MEM_IERISC_MAILBOX_BASE;
     }
 
     std::vector<uint32_t> data;
@@ -603,7 +616,7 @@ static void dump_core(
     mailboxes_t *mbox_data = (mailboxes_t *)(&data[0]);
 
     // Validate these first since they are used in diagnostic messages below.
-    validate_kernel_ids(f, used_kernel_names, core, &mbox_data->launch);
+    validate_kernel_ids(f, used_kernel_names, device->id(), core, &mbox_data->launch);
 
     if (watcher::enabled) {
         // Dump state only gathered if device is compiled w/ watcher
@@ -670,15 +683,21 @@ static void  __attribute__((noinline)) dump(FILE *f, bool dump_all) {
             for (uint32_t x = 0; x < grid_size.x; x++) {
                 CoreDescriptor logical_core = {{x, y}, CoreType::WORKER};
                 if (device->storage_only_cores().find(logical_core.coord) == device->storage_only_cores().end()) {
-                    dump_core(f, used_kernel_names, device, logical_core, dump_all, paused_cores);
+                    dump_core(f, used_kernel_names, device, logical_core, dump_all, false, paused_cores);
                 }
             }
         }
 
-        for (const CoreCoord &eth_core : device->get_active_ethernet_cores()) {
+        for (const CoreCoord &eth_core : device->ethernet_cores()) {
             CoreDescriptor logical_core = {eth_core, CoreType::ETH};
             CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
-            dump_core(f, used_kernel_names, device, logical_core, dump_all, paused_cores);
+            if (device->is_active_ethernet_core(eth_core)) {
+                dump_core(f, used_kernel_names, device, logical_core, dump_all, true, paused_cores);
+            } else if (device->is_inactive_ethernet_core(eth_core)) {
+                dump_core(f, used_kernel_names, device, logical_core, dump_all, false, paused_cores);
+            } else {
+                continue;
+            }
         }
 
         for (auto k_id : used_kernel_names) {
@@ -704,20 +723,29 @@ static void  __attribute__((noinline)) dump(FILE *f, bool dump_all) {
 
             // Clear all pause flags
             for (auto &core_and_risc : paused_cores) {
-                const CoreCoord &core = core_and_risc.first;
+                const CoreCoord &phys_core = core_and_risc.first;
                 riscv_id_t risc_id = core_and_risc.second;
-                uint64_t addr = tt::llrt::is_ethernet_core(core, device->id())?
-                    GET_ETH_MAILBOX_ADDRESS_HOST(pause_status) :
-                    GET_MAILBOX_ADDRESS_HOST(pause_status);
+
+                // Address depends on core type
+                uint64_t addr = GET_MAILBOX_ADDRESS_HOST(pause_status);
+                if (tt::llrt::is_ethernet_core(phys_core, device->id())) {
+                    CoreCoord logical_core = device->logical_core_from_ethernet_core(phys_core);
+                    if (device->is_active_ethernet_core(logical_core))
+                        addr = GET_ETH_MAILBOX_ADDRESS_HOST(pause_status);
+                    else
+                        addr = GET_IERISC_MAILBOX_ADDRESS_HOST(pause_status);
+                }
+
+                // Clear only the one flag that we saved, in case another one was raised on device
                 auto pause_data = tt::llrt::read_hex_vec_from_core(
                     device->id(),
-                    core,
+                    phys_core,
                     addr,
                     sizeof(debug_pause_msg_t)
                 );
                 auto pause_msg = reinterpret_cast<debug_pause_msg_t *>(&(pause_data[0]));
                 pause_msg->flags[risc_id] = 0;
-                tt::llrt::write_hex_vec_to_core(device->id(), core, pause_data, addr);
+                tt::llrt::write_hex_vec_to_core(device->id(), phys_core, pause_data, addr);
             }
         }
     }
@@ -852,37 +880,56 @@ void watcher_init(Device *device) {
     }
 
     // Initialize ethernet cores debug values
-    for (const CoreCoord &eth_core : device->get_active_ethernet_cores()) {
+    for (const CoreCoord &eth_core : device->ethernet_cores()) {
+        // Mailbox address is different depending on active vs inactive eth cores.
+        bool is_active_eth_core;
+        if (device->is_active_ethernet_core(eth_core)) {
+            is_active_eth_core = true;
+        } else if (device->is_inactive_ethernet_core(eth_core)) {
+            is_active_eth_core = false;
+        } else {
+            continue;
+        }
         CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
         tt::llrt::write_hex_vec_to_core(
             device->id(),
             physical_core,
             debug_status_init_val,
-            GET_ETH_MAILBOX_ADDRESS_HOST(debug_status)
+            is_active_eth_core ?
+                GET_ETH_MAILBOX_ADDRESS_HOST(debug_status) :
+                GET_IERISC_MAILBOX_ADDRESS_HOST(debug_status)
         );
         tt::llrt::write_hex_vec_to_core(
             device->id(),
             physical_core,
             debug_sanity_init_val,
-            GET_ETH_MAILBOX_ADDRESS_HOST(sanitize_noc)
+            is_active_eth_core ?
+                GET_ETH_MAILBOX_ADDRESS_HOST(sanitize_noc) :
+                GET_IERISC_MAILBOX_ADDRESS_HOST(sanitize_noc)
         );
         tt::llrt::write_hex_vec_to_core(
             device->id(),
             physical_core,
             debug_assert_init_val,
-            GET_ETH_MAILBOX_ADDRESS_HOST(assert_status)
+            is_active_eth_core ?
+                GET_ETH_MAILBOX_ADDRESS_HOST(assert_status) :
+                GET_IERISC_MAILBOX_ADDRESS_HOST(assert_status)
         );
         tt::llrt::write_hex_vec_to_core(
             device->id(),
             physical_core,
             debug_pause_init_val,
-            GET_ETH_MAILBOX_ADDRESS_HOST(pause_status)
+            is_active_eth_core ?
+                GET_ETH_MAILBOX_ADDRESS_HOST(pause_status) :
+                GET_IERISC_MAILBOX_ADDRESS_HOST(pause_status)
         );
         tt::llrt::write_hex_vec_to_core(
             device->id(),
             physical_core,
             debug_ring_buf_init_val,
-            eth_l1_mem::address_map::ERISC_RING_BUFFER_ADDR
+            is_active_eth_core ?
+                eth_l1_mem::address_map::ERISC_RING_BUFFER_ADDR :
+                RING_BUFFER_ADDR
         );
     }
 

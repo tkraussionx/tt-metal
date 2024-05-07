@@ -18,27 +18,25 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const Tensor &output, uint32_t dim, const CoreRange core_range, const MorehSoftmaxOp op) {
+operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const Tensor &output, uint32_t dim, const CoreRange core_range, const MorehSoftmaxOp op, const DeviceComputeKernelConfig compute_kernel_config) {
     log_info(LogTest, "Large tensor algorithm selected");
     // split work
     auto shape = input.get_legacy_shape();
-    auto N = shape[0];
-    auto C = shape[1];
-    auto H = shape[2];
-    auto W = shape[3];
+    auto H = shape[-2];
+    auto W = shape[-1];
     auto Ht = H / TILE_HEIGHT;
     auto Wt = W / TILE_WIDTH;
 
-    uint32_t num_tiles = N * Ht * Wt;
-    if (dim == 0) {
-        num_tiles = C * Ht * Wt;
-    }
+    uint32_t num_tiles = input.volume() / shape[dim] / H / W * Ht * Wt;
 
     uint32_t core_w = core_range.end.x - core_range.start.x + 1;
     uint32_t core_h = core_range.end.y - core_range.start.y + 1;
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
         split_work_to_cores(core_range, num_tiles);
+
+    auto arch = input.device()->arch();
+    auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] = get_compute_kernel_config_args(arch, compute_kernel_config);
 
     Program program = Program();
 
@@ -52,9 +50,9 @@ operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const
         {
             {CB::c_in0, 2},         // input
             {CB::c_out0, 2},        // output
-            {CB::c_intermed0, 1},   // exp(x)
-            {CB::c_intermed1, 1},   // recips
-            {CB::c_intermed2, 2},   // add
+            {CB::c_intermed0, 1, fp32_dest_acc_en ? tt::DataFormat::Float32 : data_format},   // exp(x)
+            {CB::c_intermed1, 1, fp32_dest_acc_en ? tt::DataFormat::Float32 : data_format},   // recips
+            {CB::c_intermed2, 2, fp32_dest_acc_en ? tt::DataFormat::Float32 : data_format},   // add
         });
 
     // create read/wrtie kernel
@@ -69,17 +67,12 @@ operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const
     auto writer_kernel_id = CreateWriteKernel(
         program, "tt_eager/tt_dnn/op_library/moreh_softmax/kernels/writer_moreh_softmax_c.cpp", all_cores, {dst_is_dram}, writer_defines);
 
-    // for C
-    uint32_t outer_stride = C * Ht * Wt;
-    uint32_t inner_size = Wt * Ht;
-    uint32_t dim_size = C;
-
-    // for N
-    if (dim == 0) {
-        outer_stride = N * C * Ht * Wt; // not used
-        inner_size = C * Wt * Ht;
-        dim_size = N;
+    auto outer_stride = Ht * Wt;
+    for(int i = dim ; i < shape.rank() - 2; i++ ) {
+        outer_stride *= shape[i];
     }
+    auto dim_size = shape[dim];
+    auto inner_size = outer_stride / dim_size;
 
     std::map<string, string> compute_defines;
     if (op == MorehSoftmaxOp::SOFTMAX || op == MorehSoftmaxOp::LOGSOFTMAX) compute_defines["SOFTMAX"] = "1";
@@ -87,6 +80,10 @@ operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const
 
     if (op == MorehSoftmaxOp::LOGSOFTMAX) {
         compute_defines["LOG"] = "1";
+    }
+
+    if (fp32_dest_acc_en) {
+        compute_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
     // create compute kernel
@@ -97,7 +94,10 @@ operation::ProgramWithCallbacks moreh_softmax_c_large(const Tensor &input, const
             {core_group_1, num_tiles_per_core_group_1, {num_tiles_per_core_group_1, dim_size}},
             {core_group_2, num_tiles_per_core_group_2, {num_tiles_per_core_group_2, dim_size}},
         },
-        compute_defines);
+        compute_defines,
+        math_fidelity,
+        fp32_dest_acc_en,
+        math_approx_mode);
 
     // Set Runtime Args
     auto core_x_offset = core_range.start.x;

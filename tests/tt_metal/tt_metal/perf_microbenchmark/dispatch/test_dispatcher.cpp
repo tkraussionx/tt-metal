@@ -10,7 +10,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
-#include "tt_metal/impl/dispatch/kernels/cq_cmds.hpp"
+#include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
 #include "common.h"
 
@@ -56,7 +56,6 @@ uint32_t min_paged_write_base_addr_g = MIN_PAGED_WRITE_ADDR;
 uint32_t num_pages_g = DEFAULT_PAGED_WRITE_PAGES;
 
 bool debug_g;
-bool lazy_g;
 bool fire_once_g;
 bool use_coherent_data_g;
 bool send_to_all_g;
@@ -89,7 +88,6 @@ void init(int argc, char **argv) {
         log_info(LogTest, "    -f: prefetcher fire once, use to measure dispatcher perf w/ prefetcher out of the way (default disabled)");
         log_info(LogTest, "    -d: wrap all commands in debug commands and clear DRAM to known state (default disabled)");
         log_info(LogTest, "    -c: use coherent data as payload (default false)");
-        log_info(LogTest, "    -z: enable dispatch lazy mode (default disabled)");
         log_info(LogTest, "   -np: paged-write number of pages (default {})", num_pages_g);
 
         log_info(LogTest, "Random Test args:");
@@ -113,6 +111,8 @@ void init(int argc, char **argv) {
     dispatch_buffer_block_size_pages_g = test_args::get_command_option_uint32(input_args, "-bs", DEFAULT_DISPATCH_BUFFER_BLOCK_SIZE_PAGES);
     dispatch_buffer_size_blocks_g = test_args::get_command_option_uint32(input_args, "-b", DEFAULT_DISPATCH_BUFFER_SIZE_BLOCKS);
     dispatch_buffer_size_g = dispatch_buffer_page_size_g * dispatch_buffer_block_size_pages_g * dispatch_buffer_size_blocks_g;
+    log_debug(tt::LogTest, "Computed dispatch_buffer_size_g: {} from page_size: {} block_size_pages: {} blocks: {}",
+        dispatch_buffer_size_g, dispatch_buffer_page_size_g, dispatch_buffer_block_size_pages_g, dispatch_buffer_size_blocks_g);
 
     prefetcher_page_batch_size_g = test_args::get_command_option_uint32(input_args, "-ppbs", DEFAULT_PREFETCHER_PAGE_BATCH_SIZE);
 
@@ -121,6 +121,8 @@ void init(int argc, char **argv) {
     // divide the batch size evenlly, one page for terminate
     pbs_pages = pbs_pages / prefetcher_page_batch_size_g * prefetcher_page_batch_size_g + terminate_cmd_pages;
     prefetcher_buffer_size_g = pbs_pages * dispatch_buffer_page_size_g;
+    log_debug(tt::LogTest, "Computed prefetcher_buffer_size_g: {} from page_size: {} prefetch_buffer_pages: {}",
+        prefetcher_buffer_size_g, dispatch_buffer_page_size_g, pbs_pages);
 
     max_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-max", max_xfer_size_bytes_g);
     min_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-min", min_xfer_size_bytes_g);
@@ -140,7 +142,6 @@ void init(int argc, char **argv) {
     use_coherent_data_g = test_args::has_command_option(input_args, "-c");
 
     debug_g = test_args::has_command_option(input_args, "-d");
-    lazy_g = test_args::has_command_option(input_args, "-z");
     num_pages_g = test_args::get_command_option_uint32(input_args, "-np", num_pages_g);
 
     perf_test_g = (send_to_all_g && iterations_g == 1); // XXXX find a better way?
@@ -293,7 +294,7 @@ void gen_cmds(Device *device,
 
     switch (test_type_g) {
     case 0:
-        if (all_workers_g.size() != 1) log_fatal("Should use single core for unicast write test. Other cores ignored.");
+        if (all_workers_g.size() != 1) TT_FATAL("Should use single core for unicast write test. Other cores ignored.");
         gen_linear_or_packed_write_test(cmd_count, true, false, device, dispatch_cmds, worker_cores, worker_data, worker_data_addr, page_size);
         break;
     case 1:
@@ -339,8 +340,12 @@ void initialize_dram_banks(Device *device)
 }
 
 int main(int argc, char **argv) {
+    log_info(tt::LogTest, "test_dispatcher.cpp - Test Start");
     init(argc, argv);
     std::srand(std::time(nullptr)); // Seed the RNG
+
+    auto slow_dispatch_mode = getenv("TT_METAL_SLOW_DISPATCH_MODE");
+    TT_FATAL(slow_dispatch_mode, "This test only supports TT_METAL_SLOW_DISPATCH_MODE");
 
     uint32_t dispatch_buffer_pages = dispatch_buffer_size_g / dispatch_buffer_page_size_g;
     bool paged_test = is_paged_test();
@@ -361,10 +366,17 @@ int main(int argc, char **argv) {
         CoreCoord phys_dispatch_core = device->worker_core_from_logical_core(dispatch_core);
 
         // Want different buffers on each core, instead use big buffer and self-manage it
-        uint32_t l1_buf_base = align(L1_UNRESERVED_BASE, dispatch_buffer_page_size_g);
+        uint32_t l1_buf_base = align(DISPATCH_L1_UNRESERVED_BASE, dispatch_buffer_page_size_g);
         TT_ASSERT((l1_buf_base & (dispatch_buffer_page_size_g - 1)) == 0);
-        if (prefetcher_buffer_size_g + l1_buf_base > 1024 * 1024) {
-            log_fatal(LogTest, "Error, prefetcher buffer size too large\n");
+
+        // Make sure user doesn't exceed available L1 space with cmd line arguments.
+        auto &soc_desc = tt::Cluster::instance().get_soc_desc(device->id());
+        if (prefetcher_buffer_size_g + l1_buf_base > soc_desc.worker_l1_size) {
+            log_fatal(LogTest, "Prefetcher buffer size too large. {} exceeds l1_worker_size: {}", dispatch_buffer_size_g, soc_desc.worker_l1_size);
+            exit(-1);
+        }
+        if (dispatch_buffer_size_g + l1_buf_base > soc_desc.worker_l1_size) {
+            log_fatal(LogTest, "Dispatcher buffer size too large. {} exceeds l1_worker_size: {}", dispatch_buffer_size_g, soc_desc.worker_l1_size);
             exit(-1);
         }
 
@@ -437,8 +449,16 @@ int main(int argc, char **argv) {
              dispatch_buffer_size_blocks_g,
              prefetch_sync_sem,
              // Hugepage compile args aren't used in this test since WriteHost is not tested here
-             0,
-             0,
+             0,    // command_queue_base_addr
+             0,    // completion_queue_base_addr
+             0,    // completion_queue_size
+             0,    // downstream_cb_base
+             0,    // downstream_cb_size
+             0,    // my_downstream_cb_sem_id
+             0,    // downstream_cb_sem_id
+             0,    // split_dispatch_page_preamble_size
+             true, // is_dram_variant
+             true, // is_host_variant
             };
         std::vector<uint32_t> spoof_prefetch_compile_args =
             {l1_buf_base,
@@ -476,24 +496,13 @@ int main(int argc, char **argv) {
         args.push_back(prefetcher_iterations_g);
         tt_metal::SetRuntimeArgs(program, sp1, spoof_prefetch_core, args);
 
-        std::map<string, string> dispatch_defines = {
-            {"PREFETCH_NOC_X", std::to_string(phys_spoof_prefetch_core.x)},
-            {"PREFETCH_NOC_Y", std::to_string(phys_spoof_prefetch_core.y)},
-            {"MY_NOC_X", std::to_string(phys_dispatch_core.x)},
-            {"MY_NOC_Y", std::to_string(phys_dispatch_core.y)},
-        };
-
-        auto d1 = tt_metal::CreateKernel(
-            program,
+        configure_kernel_variant<true, true>(program,
             "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp",
-            {dispatch_core},
-            tt_metal::DataMovementConfig{
-                .processor = tt_metal::DataMovementProcessor::RISCV_1,
-                .noc = tt_metal::NOC::RISCV_0_default,
-                .compile_args = dispatch_compile_args,
-                .defines = dispatch_defines
-            }
-        );
+            dispatch_compile_args,
+            dispatch_core,
+            phys_dispatch_core,
+            phys_spoof_prefetch_core,
+            {0, 0});
 
         log_info(LogTest, "Worker grid {}", all_workers_g.str());
         log_info(LogTest, "Dispatch buffer size blocks {}", std::to_string(dispatch_buffer_size_blocks_g));
@@ -509,22 +518,14 @@ int main(int argc, char **argv) {
 
         // Cache stuff
         for (int i = 0; i < warmup_iterations_g; i++) {
-            EnqueueProgram(cq, program, false);
-        }
-        Finish(cq);
-
-        if (lazy_g) {
-            tt_metal::detail::SetLazyCommandQueueMode(true);
+            tt_metal::detail::LaunchProgram(device, program);
         }
 
         auto start = std::chrono::system_clock::now();
         for (int i = 0; i < iterations_g; i++) {
-            EnqueueProgram(cq, program, false);
+            tt_metal::detail::LaunchProgram(device, program);
         }
-        if (lazy_g) {
-            start = std::chrono::system_clock::now();
-        }
-        Finish(cq);
+
         auto end = std::chrono::system_clock::now();
 
         if (paged_test) {
@@ -535,12 +536,13 @@ int main(int argc, char **argv) {
         }
 
         std::chrono::duration<double> elapsed_seconds = (end-start);
-        log_info(LogTest, "Ran in {}us", elapsed_seconds.count() * 1000 * 1000);
-        log_info(LogTest, "Ran in {}us per iteration", elapsed_seconds.count() * 1000 * 1000 / iterations_g);
+        uint32_t total_iterations = iterations_g * prefetcher_iterations_g;
+        log_info(LogTest, "Ran in {}us (for total iterations: {})", elapsed_seconds.count() * 1000 * 1000, total_iterations);
+        log_info(LogTest, "Ran in {}us per iteration", elapsed_seconds.count() * 1000 * 1000 /total_iterations);
         if (iterations_g > 0) {
             float total_words = 0;
             if (min_xfer_size_bytes_g != max_xfer_size_bytes_g) {
-                log_fatal("Set max/min xfer size to match for reliable perf data");
+                log_warning("Set max/min xfer size to match for reliable perf data");
             }
             switch (test_type_g) {
             case 0:
@@ -553,23 +555,23 @@ int main(int argc, char **argv) {
                 if (max_xfer_size_bytes_g == min_xfer_size_bytes_g) {
                     total_words = (num_pages_g * max_xfer_size_bytes_g) / sizeof(uint32_t);
                 } else {
-                    log_fatal("Set max_xfer_size_bytes_g to min_xfer_size_bytes_g to calculate perf accurately");
+                    log_warning("Set max_xfer_size_bytes_g to min_xfer_size_bytes_g to calculate perf accurately");
                 }
                 break;
             case 4:
                 if (!send_to_all_g) {
-                    log_fatal("Set send_to_all to true for reliable perf data");
+                    log_warning("Set send_to_all to true for reliable perf data");
                 }
                 total_words = worker_data_size(worker_data) * all_workers_g.size();
                 break;
             }
 
-            total_words *= iterations_g;
-            float bw = total_words * sizeof(uint32_t) * prefetcher_iterations_g / (elapsed_seconds.count() * 1024.0 * 1024.0 * 1024.0);
+            total_words *= total_iterations;
+            float bw = total_words * sizeof(uint32_t) / (elapsed_seconds.count() * 1024.0 * 1024.0 * 1024.0);
             std::stringstream ss;
             ss << std::fixed << std::setprecision(3) << bw;
-            log_info(LogTest, "BW: {} GB/s (from total_words: {} size: {} MB via host_iter: {} for num_cores: {})",
-                ss.str(), total_words, total_words * sizeof(uint32_t) / (1024.0 * 1024.0), iterations_g, all_workers_g.size());
+            log_info(LogTest, "BW: {} GB/s (from total_words: {} size: {} MB via host_iter: {} prefetcher_iter: {} for num_cores: {})",
+                ss.str(), total_words, total_words * sizeof(uint32_t) / (1024.0 * 1024.0), iterations_g, prefetcher_iterations_g, all_workers_g.size());
         } else {
             log_info(LogTest, "BW: -- GB/s (use -i 1 to report bandwidth)");
         }
@@ -582,10 +584,10 @@ int main(int argc, char **argv) {
     tt::llrt::OptionsG.set_kernels_nullified(false);
 
     if (pass) {
-        log_info(LogTest, "Test Passed");
+        log_info(LogTest, "test_dispatcher.cpp - Test Passed");
         return 0;
     } else {
-        log_fatal(LogTest, "Test Failed\n");
+        log_fatal(LogTest, "test_dispatcher.cpp - Test Failed\n");
         return 1;
     }
 }

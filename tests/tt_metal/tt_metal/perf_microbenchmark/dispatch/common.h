@@ -10,7 +10,7 @@
 #include "logger.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
-#include "tt_metal/impl/dispatch/kernels/cq_cmds.hpp"
+#include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "noc/noc_parameters.h"
 
 extern bool debug_g;
@@ -29,6 +29,40 @@ struct one_worker_data_t {
 };
 
 typedef unordered_map<CoreCoord, unordered_map<uint32_t, one_worker_data_t>> worker_data_t;
+
+template<bool is_dram_variant,
+         bool is_host_variant>
+void configure_kernel_variant(
+    Program& program,
+    string path,
+    std::vector<uint32_t> compile_args, // yes, copy
+    CoreCoord my_core,
+    CoreCoord phys_my_core,
+    CoreCoord phys_upstream_core,
+    CoreCoord phys_downstream_core) {
+
+    std::map<string, string> defines = {
+        {"MY_NOC_X", std::to_string(phys_my_core.x)},
+        {"MY_NOC_Y", std::to_string(phys_my_core.y)},
+        {"UPSTREAM_NOC_X", std::to_string(phys_upstream_core.x)},
+        {"UPSTREAM_NOC_Y", std::to_string(phys_upstream_core.y)},
+        {"DOWNSTREAM_NOC_X", std::to_string(phys_downstream_core.x)},
+        {"DOWNSTREAM_NOC_Y", std::to_string(phys_downstream_core.y)},
+    };
+    compile_args.push_back(is_dram_variant);
+    compile_args.push_back(is_host_variant);
+    tt::tt_metal::CreateKernel(
+        program,
+        path,
+        {my_core},
+        tt::tt_metal::DataMovementConfig {
+            .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
+            .noc = tt::tt_metal::NOC::RISCV_0_default,
+            .compile_args = compile_args,
+            .defines = defines
+        }
+    );
+}
 
 inline void reset_worker_data(worker_data_t& awd) {
     for (auto& it : awd) {
@@ -244,7 +278,14 @@ inline size_t debug_prologue(vector<uint32_t>& cmds) {
 
     if (debug_g) {
         CQDispatchCmd debug_cmd;
+        memset(&debug_cmd, 0, sizeof(CQDispatchCmd));
+
         debug_cmd.base.cmd_id = CQ_DISPATCH_CMD_DEBUG;
+        // compiler compains w/o these filled in later fields
+        debug_cmd.debug.key = 0;
+        debug_cmd.debug.checksum = 0;
+        debug_cmd.debug.size = 0;
+        debug_cmd.debug.stride = 0;
         add_bare_dispatcher_cmd(cmds, debug_cmd);
     }
 
@@ -346,6 +387,7 @@ inline void gen_bare_dispatcher_unicast_write_cmd(Device *device,
                                                   uint32_t length) {
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
 
     CoreCoord phys_worker_core = device->worker_core_from_logical_core(worker_core);
 
@@ -366,6 +408,7 @@ inline void gen_dispatcher_unicast_write_cmd(Device *device,
                                              uint32_t length) {
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
 
     CoreCoord phys_worker_core = device->worker_core_from_logical_core(worker_core);
     const uint32_t bank_id = 0; // No interleaved pages here.
@@ -387,6 +430,7 @@ inline void gen_dispatcher_multicast_write_cmd(Device *device,
                                              uint32_t length) {
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
 
     CoreCoord physical_start = device->physical_core_from_logical_core(worker_core_range.start, CoreType::WORKER);
     CoreCoord physical_end = device->physical_core_from_logical_core(worker_core_range.end, CoreType::WORKER);
@@ -438,9 +482,10 @@ inline void gen_dispatcher_paged_write_cmd(Device *device,
     // which assumes page size never changed between calls to this function (checked above).
     uint32_t bank_offset = align(page_size, page_size_alignment_bytes) * (start_page / num_banks);
     uint32_t base_addr = dst_addr + bank_offset;
-    uint8_t start_page_cmd = start_page % num_banks;
+    uint16_t start_page_cmd = start_page % num_banks;
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_PAGED;
     cmd.write_paged.is_dram = is_dram;
     cmd.write_paged.start_page = start_page_cmd;
@@ -463,6 +508,7 @@ inline void gen_dispatcher_packed_write_cmd(Device *device,
                                             uint32_t size_words) {
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
 
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_PACKED;
     cmd.write_packed.is_multicast = 0;
@@ -484,7 +530,7 @@ inline uint32_t gen_rnd_dispatcher_packed_write_cmd(Device *device,
     uint32_t xfer_size_words = (std::rand() % (dispatch_buffer_page_size_g / sizeof(uint32_t))) + 1;
     uint32_t xfer_size_bytes = xfer_size_words * sizeof(uint32_t);
     if (perf_test_g) {
-        TT_ASSERT(max_xfer_size_bytes_g < dispatch_buffer_page_size_g);
+        TT_ASSERT(max_xfer_size_bytes_g <= dispatch_buffer_page_size_g);
         if (xfer_size_bytes > max_xfer_size_bytes_g) xfer_size_bytes = max_xfer_size_bytes_g;
         if (xfer_size_bytes < min_xfer_size_bytes_g) xfer_size_bytes = min_xfer_size_bytes_g;
     }
@@ -510,7 +556,9 @@ inline uint32_t gen_rnd_dispatcher_packed_write_cmd(Device *device,
 inline void gen_dispatcher_host_write_cmd(vector<uint32_t>& cmds, uint32_t length) {
 
     CQDispatchCmd cmd;
-    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR_HOST;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
+
+    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST;
     // Include cmd in transfer
     cmd.write_linear_host.length = length + sizeof(CQDispatchCmd);
 
@@ -520,6 +568,8 @@ inline void gen_dispatcher_host_write_cmd(vector<uint32_t>& cmds, uint32_t lengt
 inline void gen_dispatcher_terminate_cmd(vector<uint32_t>& cmds) {
 
     CQDispatchCmd cmd;
+    memset(&cmd, 0, sizeof(CQDispatchCmd));
+
     cmd.base.cmd_id = CQ_DISPATCH_CMD_TERMINATE;
     add_dispatcher_cmd(cmds, cmd, 0);
 }

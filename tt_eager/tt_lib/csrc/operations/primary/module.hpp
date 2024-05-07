@@ -81,8 +81,7 @@ void py_module(py::module& m_primary) {
                 std::size_t,
                 std::size_t,
                 bool,
-                std::optional<UnaryWithParam>,
-                bool>(),
+                std::optional<UnaryWithParam>>(),
             py::kw_only(),
             py::arg("compute_with_storage_grid_size"),
             py::arg("in0_block_w").noconvert(),
@@ -91,8 +90,7 @@ void py_module(py::module& m_primary) {
             py::arg("per_core_M").noconvert(),
             py::arg("per_core_N").noconvert(),
             py::arg("transpose_mcast").noconvert(),
-            py::arg("fused_activation"),
-            py::arg("use_noc_vc") = false)
+            py::arg("fused_activation"))
         .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCastProgramConfig::fused_activation)
         .def("__repr__", [](const MatmulMultiCoreReuseMultiCastProgramConfig& config) {
             return fmt::format("{}", config);
@@ -134,7 +132,8 @@ void py_module(py::module& m_primary) {
         py::arg("fused_activation") = std::nullopt,
         py::arg("mcast_in0").noconvert() = true,
         py::arg("out_sharded").noconvert() = false,
-        py::arg("compute_with_storage_grid_size") = std::nullopt);
+        py::arg("compute_with_storage_grid_size") = std::nullopt,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt);
 
     // TODO(arakhmati):
     // delete
@@ -163,7 +162,7 @@ void py_module(py::module& m_primary) {
            std::optional<DeviceComputeKernelConfig> compute_kernel_config,
            const bool untilize_out
            ) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
+            return matmul(input_tensor_a, input_tensor_b, std::nullopt /*bias*/, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -196,7 +195,7 @@ void py_module(py::module& m_primary) {
            std::optional<DeviceComputeKernelConfig> compute_kernel_config,
            const bool untilize_out
            ) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
+            return matmul(input_tensor_a, input_tensor_b, std::nullopt /*bias*/, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -796,6 +795,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a softmax operation. Returns an output tensor.");
     m_primary.def(
         "moreh_softmax_backward",
@@ -806,6 +806,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_grad_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxBackwardOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a softmax backward operation. Returns an input grad tensor.");
     m_primary.def(
         "moreh_softmin",
@@ -815,6 +816,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a softmin operation. Returns an output tensor.");
     m_primary.def(
         "moreh_softmin_backward",
@@ -825,6 +827,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_grad_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxBackwardOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a softmin backward operation. Returns an input grad tensor.");
 
     m_primary.def(
@@ -835,6 +838,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a logsoftmax operation. Returns an output tensor.");
 
     m_primary.def(
@@ -846,6 +850,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_grad_tensor").noconvert() = std::nullopt,
         py::arg("strategy").noconvert() = MorehSoftmaxBackwardOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a logsoftmax backward operation. Returns an input grad tensor.");
 
     m_primary.def(

@@ -174,7 +174,16 @@ void DeviceModule(py::module &m_device) {
         +------------------+----------------------------------+-----------------------+-------------+----------+
     )doc");
 
-    m_device.def("Synchronize", &detail::Synchronize, R"doc(
+    m_device.def("Synchronize",
+        [] (Device* device) {
+            // Send finish command to issue queue through worker thread
+            // Worker thread will stall until the device is flushed.
+            device->push_work([device] () mutable {
+                detail::Synchronize(device);
+            });
+            // Main thread stalls until worker is complete (full device and worker queue flush).
+            device->synchronize();
+        }, R"doc(
         Wait for all kernels on TT device to complete.
     )doc");
     m_device.def("SetLazyCommandQueueMode", &detail::SetLazyCommandQueueMode, R"doc(
@@ -194,6 +203,18 @@ void DeviceModule(py::module &m_device) {
     )doc");
     m_device.def("DeallocateBuffers", &detail::DeallocateBuffers, R"doc(
         Deallocate all buffers associated with Device handle
+    )doc");
+    m_device.def("BeginTraceCapture", &detail::BeginTraceCapture, R"doc(
+        Begin trace capture on Device handle
+    )doc");
+    m_device.def("EndTraceCapture", &detail::EndTraceCapture, R"doc(
+        End trace capture on Device handle
+    )doc");
+    m_device.def("ExecuteLastTrace", &detail::ExecuteLastTrace, R"doc(
+        Execute last captured trace on Device handle
+    )doc");
+    m_device.def("ReleaseLastTrace", &detail::ReleaseLastTrace, R"doc(
+        Release last captured Trace on Device handle
     )doc");
 
     m_device.attr("DEFAULT_L1_SMALL_SIZE") = py::int_(DEFAULT_L1_SMALL_SIZE);

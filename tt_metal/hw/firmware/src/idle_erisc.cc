@@ -23,6 +23,7 @@
 #include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
 #include "dataflow_api.h"
+#include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 
 #include "debug/status.h"
 #include "debug/dprint.h"
@@ -30,6 +31,9 @@
 uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_nonposted_atomics_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_posted_writes_num_issued[NUM_NOCS] __attribute__((used));
+uint32_t atomic_ret_val __attribute__ ((section ("l1_data"))) __attribute__((used));
 
 uint8_t my_x[NUM_NOCS] __attribute__((used));
 uint8_t my_y[NUM_NOCS] __attribute__((used));
@@ -49,10 +53,10 @@ namespace kernel_profiler {
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
 }
 
-inline void RISC_POST_STATUS(uint32_t status) {
-  volatile uint32_t* ptr = (volatile uint32_t*)(NOC_CFG(ROUTER_CFG_2));
-  ptr[0] = status;
-}
+//inline void RISC_POST_STATUS(uint32_t status) {
+//  volatile uint32_t* ptr = (volatile uint32_t*)(NOC_CFG(ROUTER_CFG_2));
+//  ptr[0] = status;
+//}
 
 void init_sync_registers() {
     volatile tt_reg_ptr uint* tiles_received_ptr;
@@ -121,6 +125,10 @@ int main() {
             if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
                 uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
+            }
+
+            while (1) {
+                RISC_POST_HEARTBEAT(heartbeat);
             }
         }
     }

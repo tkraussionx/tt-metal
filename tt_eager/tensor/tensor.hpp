@@ -123,6 +123,9 @@ struct Tensor {
                 this->tensor_attributes->storage = DeviceStorage();
             } else if (workers.size() > 1) {
                 this->tensor_attributes->storage = MultiDeviceStorage();
+                std::transform(workers.cbegin(), workers.cend(),
+                    std::back_inserter(std::get<MultiDeviceStorage>(this->tensor_attributes->storage).ordered_device_ids),
+                    [](const Device* worker) { return worker->id(); });
             }
             this->tensor_attributes->tensor_populated = std::vector<bool>(workers.size(), false);
         } else if (num_buffers) {
@@ -312,9 +315,7 @@ struct Tensor {
     }
     const std::optional<ShardSpec> shard_spec() const { return this->memory_config().shard_spec; }
 
-    const bool is_sharded() const {
-        return this->storage_type() == StorageType::DEVICE ? this->memory_config().is_sharded() : false;
-    }
+    const bool is_sharded() const;
 
     // Size in bytes of a single element held in tensor
     uint32_t element_size() const;

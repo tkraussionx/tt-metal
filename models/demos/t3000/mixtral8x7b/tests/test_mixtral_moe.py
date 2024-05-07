@@ -15,6 +15,13 @@ from models.utility_functions import (
     comp_allclose,
 )
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+import os
+
+# Set Mixtral flags for CI, if CI environment is setup
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
 
 
 def test_mixtral_moe_inference(device_mesh, reset_seeds):
@@ -76,13 +83,12 @@ def test_mixtral_moe_inference(device_mesh, reset_seeds):
         tt_decode_input = ttnn.from_torch(
             pt_decode_input.clone().unsqueeze(1).view(1, 1, 32, 4096),
             device=device_mesh,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
         tt_decode_input = ttnn.to_device(tt_decode_input, device_mesh)
-        print("input created")
 
         # Run TT model
         tt_out = tt_model(tt_decode_input)
@@ -90,7 +96,6 @@ def test_mixtral_moe_inference(device_mesh, reset_seeds):
         tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].view(
             batch, 1, -1
         )
-        print("done tt model to torch")
         # Reference model
         ref_output = reference_model(pt_decode_input)
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)

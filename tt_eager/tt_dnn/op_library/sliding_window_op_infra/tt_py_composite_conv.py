@@ -29,7 +29,6 @@ from tt_lib.utils import (
 )
 
 import tt_lib as ttl
-import ttnn
 import torch
 import math
 import warnings
@@ -427,7 +426,7 @@ class TTPyCompositeConv(TTPyOp):
         self.input_tensor_shape = [batch_size, input_height, input_width, input_channels]
         self.is_1d_systolic = is_1d_systolic
         if is_1d_systolic:
-            assert (transpose_mcast, "With 1D systolic array, please set transpose_mcast=True")
+            assert transpose_mcast, "With 1D systolic array, please set transpose_mcast=True"
         self.device = device
         # determine conv op parallelization and blocking config
         self.opt_conv_parall_conf_auto = determine_parallel_config(
@@ -877,7 +876,6 @@ class TTPyCompositeConv(TTPyOp):
         if self.enable_auto_formatting and not activation.is_sharded():
             activation = self.conv_input_interleaved_to_sharded(activation)
         activation = self.conv(activation)
-        ttnn.synchronize_device(self.device)
         if self.enable_auto_formatting and activation.is_sharded():
             activation = self.conv_output_sharded_to_interleaved(activation)
         return activation

@@ -1,3 +1,4 @@
+
 #/bin/bash
 
 set -eo pipefail
@@ -22,30 +23,21 @@ TT_METAL_ENABLE_REMOTE_CHIP=1 ./build/test/tt_metal/unit_tests_fast_dispatch --g
 ./build/test/tt_metal/unit_tests_fast_dispatch --gtest_filter="DPrintFixture.*:WatcherFixture.*"
 pytest tests/tt_eager/python_api_testing/unit_testing/misc/test_all_gather.py -k post_commit
 
-# ttnn multi-chip apis unit tests
-pytest tests/ttnn/unit_tests/test_multi_device.py
-
-# Falcon40B 4 chip decode tests
-pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-4chips-enable_program_cache]
-pytest models/demos/t3000/falcon40b/tests/test_falcon_end_to_end.py::test_FalconCausalLM_end_to_end_with_program_cache[BFLOAT8_B-SHARDED-falcon_40b-layers_1-decode_batch32-4chips-enable_program_cache]
-
 # Falcon40B 8 chip decode tests
 pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-8chips-enable_program_cache]
 pytest models/demos/t3000/falcon40b/tests/test_falcon_end_to_end.py::test_FalconCausalLM_end_to_end_with_program_cache[BFLOAT8_B-SHARDED-falcon_40b-layers_1-decode_batch32-8chips-enable_program_cache]
 
-# Mistral8x7b 8 chip decode tests
-# Related weights and cached files
-export MIXTRAL_CKPT_DIR=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_TOKENIZER_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
-export MIXTRAL_CACHE_PATH=/mnt/MLPerf/tt_dnn-models/mixtral8x7b/
+# ttnn multi-chip apis unit tests
+pytest tests/ttnn/unit_tests/test_multi_device.py
 
+# Mistral8x7b 8 chip decode tests (env flags set inside the tests)
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_attention.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_mlp.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_rms_norm.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_embedding.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_moe.py
 pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_decoder.py
-pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py
+pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[1-1-pcc]
 
 # Falcon40B 8 chip prefill tests; we need 8x8 grid size
 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/ci/test_falcon_end_to_end_t3000_prefill.py

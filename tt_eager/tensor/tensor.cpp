@@ -41,7 +41,7 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
             else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_ASSERT(storage.buffer->device() != nullptr);
                 workers = {storage.buffer->device()};
-                tensor_impl::validate_on_device_dtype_and_layout(storage.buffer->device(), dtype, layout);
+                tensor_impl::validate_on_device_dtype_and_layout(storage.buffer->device(), shape.value(), dtype, layout);
                 // Increment main thread ref count for all tensors on device
                 this->tensor_attributes->increment_main_thread_ref_count(this->workers.at(0));
                 this->tensor_attributes->tensor_populated = {true};
@@ -50,11 +50,12 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                 this->tensor_attributes->tensor_populated = {true};
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
                 workers.reserve(storage.buffers.size());
-                for (const auto& device_buf_pair : storage.buffers) {
-                    auto [device_id, buffer] = device_buf_pair;
+                for (int i = 0; i < storage.ordered_device_ids.size(); i++) {
+                    auto device_id = storage.ordered_device_ids[i];
+                    auto buffer = storage.buffers.at(device_id);
                     TT_ASSERT(buffer->device() != nullptr);
                     TT_ASSERT(buffer->device()->id() == device_id);
-                    tensor_impl::validate_on_device_dtype_and_layout(buffer->device(), dtype, layout);
+                    tensor_impl::validate_on_device_dtype_and_layout(buffer->device(), shape.value(), dtype, layout);
                     workers.push_back(buffer->device());
                 }
                 // Increment main thread ref count for all tensors on cluster
@@ -301,9 +302,9 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
                 // Not populated - sync.
                 this->wait_for_tensor_data_populated();
                 workers.reserve(storage.buffers.size());
-                for (auto& device_buf_pair : storage.buffers) {
-                    // Already populated.
-                    workers.push_back(device_buf_pair.second->device());
+                for (int i = 0; i < storage.ordered_device_ids.size(); ++i) {
+                    auto device_id = storage.ordered_device_ids[i];
+                    workers.push_back(storage.buffers[device_id]->device());
                 }
             } else {
                 workers = this->workers;
@@ -354,7 +355,7 @@ Tensor Tensor::to(CommandQueue & queue, const MemoryConfig & mem_config) const {
             device_tensor.populate_buffers_and_metadata(async_safe_tensor);
         }
         else {
-            tensor_impl::validate_on_device_dtype_and_layout(target_device, async_safe_tensor.get_dtype(), async_safe_tensor.get_layout());
+            tensor_impl::validate_on_device_dtype_and_layout(target_device, async_safe_tensor.get_legacy_shape(), async_safe_tensor.get_dtype(), async_safe_tensor.get_layout());
             auto local_tensor = tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config);
             // Populate device tensor
             device_tensor.populate_buffers_and_metadata(local_tensor);
@@ -383,7 +384,7 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
             device_tensor.populate_buffers_and_metadata(async_safe_tensor);
         }
         else {
-            tensor_impl::validate_on_device_dtype_and_layout(target_device, async_safe_tensor.get_dtype(), async_safe_tensor.get_layout());
+            tensor_impl::validate_on_device_dtype_and_layout(target_device, async_safe_tensor.get_legacy_shape(), async_safe_tensor.get_dtype(), async_safe_tensor.get_layout());
             auto local_tensor = tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config);
             // Populate device tensor
             device_tensor.populate_buffers_and_metadata(local_tensor);
@@ -414,14 +415,15 @@ Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig &mem_c
     uint32_t device_tensor_ref_count = device_tensor.tensor_attributes->record_main_thread_ref_count();
     uint32_t original_tensor_ref_count = this->tensor_attributes->record_main_thread_ref_count();
     uint32_t num_workers = workers_to_use.size();
-    for (auto& worker : workers_to_use) {
+    for (int worker_index = 0; worker_index < workers_to_use.size(); ++worker_index) {
+        auto& worker = workers_to_use[worker_index];
         worker->push_work(
-            [worker, *this, device_tensor, mem_config, num_workers] () mutable {
-                auto shard = get_shard_for_device(*this, worker);
+            [worker, *this, device_tensor, mem_config, num_workers, worker_index] () mutable {
+                auto shard = get_shard_for_device(*this, worker, worker_index);
                 if (shard.storage_type() == StorageType::OWNED) {
                     shard = tensor_impl::to_device_wrapper(shard, worker, mem_config);
                 }
-                insert_buffer_and_shape_for_device(worker, shard, device_tensor);
+                insert_buffer_and_shape_for_device(worker, shard, device_tensor, worker_index);
                 if (not worker->id()) {
                     device_tensor.set_shape(this->get_shape());
                     device_tensor.set_dtype(this->get_dtype());
@@ -448,12 +450,13 @@ Tensor Tensor::cpu(bool blocking) const {
     TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
     Tensor host_tensor({}, workers.size());
     uint32_t original_tensor_ref_count = this->tensor_attributes->record_main_thread_ref_count();
-    for (auto target_device : workers) {
-        target_device->push_work([host_tensor, blocking, target_device, *this, workers] () mutable {
+    for (int worker_index = 0; worker_index < workers.size(); worker_index++) {
+        auto target_device = workers[worker_index];
+        target_device->push_work([host_tensor, blocking, target_device, *this, workers, worker_index] () mutable {
             TT_ASSERT(this->storage_type() == StorageType::DEVICE or this->storage_type() == StorageType::MULTI_DEVICE, "Can only use worker queue for cpu call if tensor is on device.");
             auto shard = get_shard_for_device(*this, target_device);
             shard = tensor_impl::to_host_wrapper(shard, blocking);
-            insert_buffer_and_shape_for_device(target_device, shard, host_tensor);
+            insert_buffer_and_shape_for_device(target_device, shard, host_tensor, worker_index);
             if (not target_device->id() or workers.size() == 1) {
                 host_tensor.set_shape(this->get_shape());
                 host_tensor.set_dtype(this->get_dtype());
@@ -549,17 +552,29 @@ Tensor Tensor::unpad(const Shape &output_tensor_start, const Shape &output_tenso
 
 Tensor Tensor::pad_to_tile(float pad_value) const {
     ZoneScoped;
-    uint32_t h = this->get_legacy_shape()[2];
-    uint32_t w = this->get_legacy_shape()[3];
-    uint32_t padded_h = round_up(h, TILE_HEIGHT);
-    uint32_t padded_w = round_up(w, TILE_WIDTH);
+    uint32_t height = this->get_legacy_shape()[-2];
+    uint32_t width = this->get_legacy_shape()[-1];
+    uint32_t padded_height = round_up(height, TILE_HEIGHT);
+    uint32_t padded_width = round_up(width, TILE_WIDTH);
 
-    auto padding = Padding({{0, 0}, {0, 0}, {0, padded_h - h}, {0, padded_w - w}}, Padding::PadValue::Any);
+    std::vector<uint32_t> shape;
+    std::vector<uint32_t> padded_shape;
+    std::vector<uint32_t> input_tensor_start;
 
-    Shape output_tensor_shape = Shape({this->get_legacy_shape()[0], this->get_legacy_shape()[1], padded_h, padded_w}, padding);
-    Shape input_tensor_start = {0, 0, 0, 0};
+    for (auto index = 0; index < this->get_legacy_shape().rank() - 2; index++) {
+        shape.push_back(this->get_legacy_shape().without_padding()[index]);
+        padded_shape.push_back(this->get_legacy_shape()[index]);
+        input_tensor_start.push_back(0);
+    }
 
-    return this->pad(output_tensor_shape, input_tensor_start, pad_value);
+    shape.push_back(height);
+    shape.push_back(width);
+    padded_shape.push_back(padded_height);
+    padded_shape.push_back(padded_width);
+    input_tensor_start.push_back(0);
+    input_tensor_start.push_back(0);
+
+    return this->pad(Shape(shape, padded_shape), Shape{input_tensor_start}, pad_value);
 }
 
 Tensor Tensor::unpad_from_tile(const Shape &output_tensor_shape) const {
@@ -571,6 +586,10 @@ Tensor Tensor::unpad_from_tile(const Shape &output_tensor_shape) const {
     Shape output_tensor_start = {0, 0, 0, 0};
     Shape output_tensor_end = {output_tensor_shape[0] - 1, output_tensor_shape[1] - 1, output_tensor_shape[2] - 1, output_tensor_shape[3] - 1};
     return this->unpad(output_tensor_start, output_tensor_end);
+}
+
+const bool Tensor::is_sharded() const {
+    return is_tensor_on_device_or_multidevice(*this) ? this->memory_config().is_sharded() : false;
 }
 
 uint32_t Tensor::element_size() const {
@@ -593,9 +612,33 @@ Tensor Tensor::reshape(const Shape& new_shape) const {
     if (this->get_layout() == Layout::TILE) {
         TT_ASSERT(new_shape[-2] % TILE_HEIGHT == 0 && new_shape[-1] % TILE_WIDTH == 0 && "Expected a multiple of 32 for H, W (or -1 evaluating to such) in Tensor::reshape()!");
     }
+    return std::visit(
+        [this, &new_shape](auto&& storage) -> Tensor
+        {
+            using T = std::decay_t<decltype(storage)>;
+            const auto& tensor = *this;
+            if constexpr (std::is_same_v<T, MultiDeviceHostStorage>) {
+                auto updated_storage = std::get<T>(tensor.get_storage());
+                for (int i = 0; i < updated_storage.shapes.size(); i++) {
+                    updated_storage.shapes[i] = new_shape;
+                }
+                return Tensor(updated_storage, new_shape, tensor.get_dtype(), tensor.get_layout());
+            }
+            if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                MultiDeviceStorage updated_storage = std::get<T>(tensor.get_storage());
+                std::unordered_map<int, Shape> new_shapes;
 
-    const auto& tensor = *this;
-    return Tensor(tensor.get_storage(), new_shape, tensor.get_dtype(), tensor.get_layout());
+                for (auto device_id : updated_storage.ordered_device_ids) {
+                    new_shapes.insert({device_id, new_shape});
+                }
+                updated_storage.shapes = new_shapes;
+                return Tensor(updated_storage, new_shape, tensor.get_dtype(), tensor.get_layout());
+            } else {
+                return Tensor(tensor.get_storage(), new_shape, tensor.get_dtype(), tensor.get_layout());
+            }
+        },
+        this->get_storage()
+    );
 }
 
 bool Tensor::is_allocated() const {
@@ -622,8 +665,9 @@ bool Tensor::is_allocated() const {
             }
             else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
                 bool is_allocated = true;
-                for (const auto& device_buf_pair : storage.buffers) {
-                    auto buffer = device_buf_pair.second;
+                for (int i = 0; i < storage.ordered_device_ids.size(); ++i) {
+                    auto device_id = storage.ordered_device_ids[i];
+                    const auto& buffer = storage.buffers.at(device_id);
                     is_allocated &= bool(buffer) and buffer->size() > 0;
                 }
                 return is_allocated;

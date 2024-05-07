@@ -56,22 +56,30 @@ void RunTestOnCore(WatcherFixture* fixture, Device* device, CoreCoord &core, boo
     // A DRAM copy kernel, we'll feed it incorrect inputs to test sanitization.
     KernelHandle dram_copy_kernel;
     if (is_eth_core) {
+        std::map<string, string> dram_copy_kernel_defines = {
+        {"SIGNAL_COMPLETION_TO_DISPATCHER", "1"},
+    };
     dram_copy_kernel = tt_metal::CreateKernel(
         program,
         "tests/tt_metal/tt_metal/test_kernels/dataflow/dram_copy.cpp",
         core,
         tt_metal::EthernetConfig{
-            .noc = tt_metal::NOC::NOC_0
+            .noc = tt_metal::NOC::NOC_0,
+            .defines=dram_copy_kernel_defines
         }
     );
     } else {
+    std::map<string, string> dram_copy_kernel_defines = {
+        {"SIGNAL_COMPLETION_TO_DISPATCHER", "1"},
+    };
     dram_copy_kernel = tt_metal::CreateKernel(
         program,
         "tests/tt_metal/tt_metal/test_kernels/dataflow/dram_copy.cpp",
         core,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
-            .noc = tt_metal::NOC::RISCV_0_default
+            .noc = tt_metal::NOC::RISCV_0_default,
+            .defines=dram_copy_kernel_defines
         }
     );
     }
@@ -129,10 +137,10 @@ void RunTestOnCore(WatcherFixture* fixture, Device* device, CoreCoord &core, boo
     switch(feature) {
         case SanitizeAddress:
             expected = fmt::format(
-                "Device {}, {} Core {}[physical {}]: {} using noc0 tried to access Unknown core w/ physical coords {} [addr=0x{:08x},len=102400]",
+                "Device {} {} core(x={:2},y={:2}) phys(x={:2},y={:2}): {} using noc0 tried to access Unknown core w/ physical coords {} [addr=0x{:08x},len=102400]",
                 device->id(),
-                (is_eth_core) ? "Ethnet" : "Worker",
-                core.str(), phys_core.str(),
+                (is_eth_core) ? "ethnet" : "worker",
+                core.x, core.y, phys_core.x, phys_core.y,
                 (is_eth_core) ? "erisc" : "brisc", output_dram_noc_xy.str(),
                 output_dram_buffer_addr
             );
@@ -140,10 +148,10 @@ void RunTestOnCore(WatcherFixture* fixture, Device* device, CoreCoord &core, boo
         case SanitizeAlignmentL1:
         case SanitizeAlignmentDRAM:
             expected = fmt::format(
-                "Device {}, {} Core {}[physical {}]: {} using noc0 tried to access DRAM core w/ physical coords {} DRAM[addr=0x{:08x},len=102400], misaligned with local L1[addr=0x{:08x}]",
+                "Device {} {} core(x={:2},y={:2}) phys(x={:2},y={:2}): {} using noc0 tried to access DRAM core w/ physical coords {} DRAM[addr=0x{:08x},len=102400], misaligned with local L1[addr=0x{:08x}]",
                 device->id(),
-                (is_eth_core) ? "Ethnet" : "Worker",
-                core.str(), phys_core.str(),
+                (is_eth_core) ? "ethnet" : "worker",
+                core.x, core.y, phys_core.x, phys_core.y,
                 (is_eth_core) ? "erisc" : "brisc", input_dram_noc_xy.str(),
                 input_dram_buffer_addr,
                 l1_buffer_addr
@@ -156,7 +164,11 @@ void RunTestOnCore(WatcherFixture* fixture, Device* device, CoreCoord &core, boo
     }
 
     log_info(LogTest, "Expected error: {}", expected);
-    log_info(LogTest, "Reported error: {}", watcher_server_get_exception_message());
+    std::string exception = "";
+    do {
+        exception = watcher_server_get_exception_message();
+    } while (exception == "");
+    log_info(LogTest, "Reported error: {}", exception);
     EXPECT_TRUE(watcher_server_get_exception_message() == expected);
 }
 
@@ -167,6 +179,16 @@ static void RunTestEth(WatcherFixture* fixture, Device* device) {
         GTEST_SKIP();
     }
     CoreCoord core = *(device->get_active_ethernet_cores(true).begin());
+    RunTestOnCore(fixture, device, core, true, SanitizeAddress);
+}
+
+static void RunTestIEth(WatcherFixture* fixture, Device* device) {
+    // Run on the first ethernet core (if there are any).
+    if (device->get_inactive_ethernet_cores().empty()) {
+        log_info(LogTest, "Skipping this test since device has no active ethernet cores.");
+        GTEST_SKIP();
+    }
+    CoreCoord core = *(device->get_inactive_ethernet_cores().begin());
     RunTestOnCore(fixture, device, core, true, SanitizeAddress);
 }
 
@@ -233,4 +255,14 @@ TEST_F(WatcherFixture, TestWatcherSanitizeEth) {
     if (this->slow_dispatch_)
         GTEST_SKIP();
     this->RunTestOnDevice(RunTestEth, this->devices_[0]);
+}
+
+TEST_F(WatcherFixture, TestWatcherSanitizeIEth) {
+    if (!this->IsSlowDispatch()) {
+        log_info(tt::LogTest, "Skip due to #7771");
+        GTEST_SKIP();
+    }
+    if (this->slow_dispatch_)
+        GTEST_SKIP();
+    this->RunTestOnDevice(RunTestIEth, this->devices_[0]);
 }

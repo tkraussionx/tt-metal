@@ -36,17 +36,26 @@ extern CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
-// valid write VC range is 0-3
-#define NOC_UNICAST_WRITE_VC_RANGE_MASK 0x3
 #define NOC_MULTICAST_WRITE_VC 4
 #define NOC_DISPATCH_MULTICAST_WRITE_VC 5 // Only to be used by the dispatch cores
-// TODO: change the read req default to 0 (ie different from write req)
-#define NOC_UNICAST_READ_REQ_VC 0
-// valid read req VC range is 0-3
-#define NOC_UNICAST_READ_REQ_VC_RANGE_MASK 0x3
+
+
+// JIT Build flow will set this as needed.
+#ifndef COMMON_RT_ARGS_OFFSET
+    #define COMMON_RT_ARGS_OFFSET 0
+#endif
 
 inline uint32_t align(uint32_t addr, uint32_t alignment) { return ((addr - 1) | (alignment - 1)) + 1; }
 
+/**
+ * Returns the address in L1 for a given runtime argument index for unique (per core) runtime arguments set via SetRuntimeArgs() API.
+ *
+ * Return value: Associated L1 address of given unique runtime argument index
+ *
+ * | Argument       | Description                                                             | Type     | Valid Range                                    | Required |
+ * |----------------|-------------------------------------------------------------------------|----------|------------------------------------------------|----------|
+ * | arg_idx        | Unique Runtime argument index                                           | uint32_t | 0 to 255                                       | True     |
+ */
 constexpr static uint32_t get_arg_addr(int arg_idx) {
     // args are 4B in size
     #if defined(COMPILE_FOR_ERISC)
@@ -57,13 +66,28 @@ constexpr static uint32_t get_arg_addr(int arg_idx) {
 }
 
 /**
- * Returns the value of an argument from kernel_args array provided during
- * kernel creation using CreateKernel calls.
+ * Returns the address in L1 for a given runtime argument index for common (all cores) runtime arguments set via SetCommonRuntimeArgs() API.
  *
- * | Argument              | Description                        | Type                  | Valid Range | Required |
- * |-----------------------|------------------------------------|-----------------------|-------------|----------|
- * | arg_idx               | The index of the argument          | uint32_t              | 0 to 255    | True     |
- * | T (template argument) | Data type of the returned argument | Any 4-byte sized type | N/A         | True     |
+ * Return value: Associated L1 address of given common runtime argument index
+ *
+ * | Argument       | Description                                                             | Type     | Valid Range                                    | Required |
+ * |----------------|-------------------------------------------------------------------------|----------|------------------------------------------------|----------|
+ * | arg_idx        | Common Runtime argument index                                           | uint32_t | 0 to 255                                       | True     |
+ */
+constexpr static uint32_t get_common_arg_addr(int arg_idx) {
+    // args are 4B in size
+    return L1_ARG_BASE + COMMON_RT_ARGS_OFFSET + (arg_idx << 2);
+}
+
+/**
+ * Returns the value at a given runtime argument index for unique (per-core) runtime arguments set via SetRuntimeArgs() API.
+ *
+ * Return value: The value associated with the unique runtime argument index
+ *
+ * | Argument              | Description                                    | Type                  | Valid Range               | Required |
+ * |-----------------------|------------------------------------------------|-----------------------|---------------------------|----------|
+ * | arg_idx               | Unique Runtime argument index                  | uint32_t              | 0 to 255                  | True     |
+ * | T (template argument) | Data type of the returned argument             | Any 4-byte sized type | N/A                       | True     |
  */
 template <typename T>
 FORCE_INLINE T get_arg_val(int arg_idx) {
@@ -71,6 +95,24 @@ FORCE_INLINE T get_arg_val(int arg_idx) {
     static_assert("Error: only 4B args are supported" && sizeof(T) == 4);
     return *((volatile tt_l1_ptr T*)(get_arg_addr(arg_idx)));
 }
+
+/**
+ * Returns the value at a given runtime argument index for common (all cores) runtime arguments set via SetCommonRuntimeArgs() API.
+ *
+ * Return value: The value associated with the common runtime argument index
+ *
+ * | Argument              | Description                                    | Type                  | Valid Range               | Required |
+ * |-----------------------|------------------------------------------------|-----------------------|---------------------------|----------|
+ * | arg_idx               | Common Runtime argument index                  | uint32_t              | 0 to 255                  | True     |
+ * | T (template argument) | Data type of the returned argument             | Any 4-byte sized type | N/A                       | True     |
+ */
+template <typename T>
+FORCE_INLINE T get_common_arg_val(int arg_idx) {
+    // only 4B args are supported (eg int32, uint32)
+    static_assert("Error: only 4B args are supported" && sizeof(T) == 4);
+    return *((volatile tt_l1_ptr T*)(get_common_arg_addr(arg_idx)));
+}
+
 
 /**
  * Returns the value of a constexpr argument from kernel_compile_time_args array provided during kernel creation using
@@ -634,7 +676,7 @@ void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t d
 
     DEBUG_STATUS('N', 'W', 'P', 'W');
     DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr, size);
-    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
     DEBUG_STATUS('N', 'W', 'P', 'D');
 
     uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
@@ -642,12 +684,12 @@ void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t d
                                 0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                 NOC_CMD_RESP_MARKED;
 
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_noc_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr >> 32);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE,  size);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_noc_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     noc_nonposted_writes_num_issued[noc_index] += 1;
     noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
  }
@@ -660,7 +702,7 @@ void noc_async_write_one_packet_set_state(std::uint64_t dst_noc_addr, std::uint3
 
     DEBUG_STATUS('N', 'W', 'P', 'W');
     DEBUG_SANITIZE_NOC_ADDR(dst_noc_addr, size);
-    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
     DEBUG_STATUS('N', 'W', 'P', 'D');
 
     uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
@@ -668,9 +710,9 @@ void noc_async_write_one_packet_set_state(std::uint64_t dst_noc_addr, std::uint3
                                 0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                 (non_posted ? NOC_CMD_RESP_MARKED : 0x0);
 
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr >> 32);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE,  size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  size);
  }
 
 // TODO: write docs
@@ -682,12 +724,12 @@ void noc_async_write_one_packet_with_state(std::uint32_t src_local_l1_addr, std:
     DEBUG_STATUS('N', 'W', 'P', 'W');
     // TODO: need a way sanitize size + addr w/o directly providing x/y here (grab x/y form state?)
     // DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr, size);
-    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
     DEBUG_STATUS('N', 'W', 'P', 'D');
 
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dst_noc_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, dst_noc_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
 
     if constexpr (non_posted) {
         noc_nonposted_writes_num_issued[noc_index] += 1;
@@ -784,7 +826,7 @@ struct InterleavedPow2AddrGen {
     }
 };
 
-template <bool DRAM, bool use_vc = false>
+template <bool DRAM>
 struct InterleavedAddrGenFast {
     uint32_t bank_base_address;  // Base address for the whole tensor.
     uint32_t page_size;          // Num bytes in bank unit.
@@ -827,7 +869,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, uint32_t vc = 0) const {
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
@@ -863,11 +905,6 @@ struct InterleavedAddrGenFast {
         while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
-        if constexpr(use_vc) {
-            uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
-            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
-        }
-
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
@@ -875,6 +912,8 @@ struct InterleavedAddrGenFast {
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
         noc_reads_num_issued[noc_index] += 1;
     }
+
+
 
     FORCE_INLINE
     void noc_async_write_tile(const uint32_t id, uint32_t src_addr) const {
@@ -910,7 +949,7 @@ struct InterleavedAddrGenFast {
 
         DEBUG_STATUS('N', 'W', 'T', 'W');
         DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(get_noc_addr_helper(dest_noc_xy, dest_addr), src_addr, this->page_size);
-        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
         DEBUG_STATUS('N', 'W', 'T', 'D');
 
         uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
@@ -918,12 +957,12 @@ struct InterleavedAddrGenFast {
                                  0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                  NOC_CMD_RESP_MARKED;
 
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
         noc_nonposted_writes_num_issued[noc_index] += 1;
         noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
     }
@@ -1047,7 +1086,7 @@ struct InterleavedPow2AddrGenFast {
 
         DEBUG_STATUS('N', 'W', 'P', 'W');
         DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(get_noc_addr_helper(dest_noc_xy, dest_addr), src_addr,write_size_bytes);
-        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
         DEBUG_STATUS('N', 'W', 'P', 'D');
 
         uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
@@ -1055,12 +1094,12 @@ struct InterleavedPow2AddrGenFast {
                                  0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                  NOC_CMD_RESP_MARKED;
 
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE,  write_size_bytes);  // len_bytes
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  write_size_bytes);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
         noc_nonposted_writes_num_issued[noc_index] += 1;
         noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
     }
@@ -1124,14 +1163,14 @@ FORCE_INLINE void noc_async_read_page(
     s.noc_async_read_page(id, dst_local_l1_addr, offset);
 }
 
-template <bool DRAM, bool use_vc = false>
+template <bool DRAM>
 FORCE_INLINE void noc_async_read_tile(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM, use_vc>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, uint32_t vc = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
-    s.noc_async_read_tile(id, dst_local_l1_addr, offset, vc);
+    s.noc_async_read_tile(id, dst_local_l1_addr, offset);
 }
 
 /**
@@ -1158,7 +1197,7 @@ void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr
     DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr,size);
     ncrisc_noc_fast_write_any_len(
         noc_index,
-        NCRISC_WR_REG_CMD_BUF,
+        NCRISC_WR_CMD_BUF,
         src_local_l1_addr,
         dst_noc_addr,
         size,
@@ -1247,7 +1286,7 @@ void noc_async_write_multicast(
     DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr,size);
     ncrisc_noc_fast_write_any_len(
         noc_index,
-        NCRISC_WR_REG_CMD_BUF,
+        NCRISC_WR_CMD_BUF,
         src_local_l1_addr,
         dst_noc_addr_multicast,
         size,
@@ -1328,7 +1367,7 @@ void noc_async_write_multicast_loopback_src(
     DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr, size);
     ncrisc_noc_fast_write_any_len_loopback_src(
         noc_index,
-        NCRISC_WR_REG_CMD_BUF,
+        NCRISC_WR_CMD_BUF,
         src_local_l1_addr,
         dst_noc_addr_multicast,
         size,
@@ -1383,6 +1422,22 @@ void noc_async_writes_flushed() {
     while (!ncrisc_noc_nonposted_writes_sent(noc_index))
         ;
     DEBUG_STATUS('N', 'W', 'B', 'D');
+}
+
+/**
+ * This blocking call waits for all the outstanding enqueued *noc_async_write*
+ * calls issued on the current Tensix core to complete. After returning from
+ * this call the *noc_async_write* queue will be empty for the current Tensix
+ * core.
+ *
+ * Return value: None
+ */
+FORCE_INLINE
+void noc_async_atomic_barrier() {
+    DEBUG_STATUS('N', 'A', 'B', 'W');
+    while (!ncrisc_noc_nonposted_atomics_flushed(noc_index))
+        ;
+    DEBUG_STATUS('N', 'A', 'B', 'D');
 }
 
 /**
@@ -1446,6 +1501,47 @@ void noc_semaphore_set(volatile tt_l1_ptr uint32_t* sem_addr, uint32_t val) {
     (*sem_addr) = val;
 }
 
+
+/**
+ * Initiates an asynchronous write of a 32-bit value to a NOC destination.
+ * Typically used for writing registers, but can be used for memory locations as well.
+ * The destination is specified as a 64-bit NOC address (see \a noc_async_write).
+ * The advantage over using \a noc_async_write is that we don't a Tensix L1
+ * memory source location; the write value is written directly into a register.
+ * Unlike using \a noc_async_write, there are also no address alignment concerns.
+ * Also, see \a noc_async_write_barrier.
+ *
+ * The destination node can be either a DRAM bank, Tensix core+L1 memory
+ * address or a PCIe controller.
+ *
+ * Return value: None
+ *
+ * | Argument  | Description                                                    | Type     | Valid Range                                                   | Required |
+ * |-----------|----------------------------------------------------------------|----------|---------------------------------------------------------------|----------|
+ * | addr      | Encoding of the destination location (x,y)+address             | uint64_t | DOX-TODO(insert a reference to what constitutes valid coords) | True     |
+ * | val       | The value to be written                                        | uint32_t | Any uint32_t value                                            | True     |
+ * | be        | Byte-enable                                                    | uint8_t  | 0x1-0xF                                                       | False    |
+ */
+FORCE_INLINE
+void noc_inline_dw_write(uint64_t addr, uint32_t val, uint8_t be = 0xF) {
+
+    DEBUG_STATUS('N', 'W', 'I', 'W');
+    DEBUG_SANITIZE_NOC_ADDR(addr, 4);
+    noc_fast_write_dw_inline(
+                noc_index,
+                NCRISC_WR_REG_CMD_BUF,
+                val,
+                addr,
+                be, // byte-enable
+                NOC_UNICAST_WRITE_VC,
+                false, // mcast
+                false // posted
+            );
+    DEBUG_STATUS('N', 'W', 'I', 'D');
+}
+
+
+
 /**
  * The Tensix core executing this function call initiates an atomic increment
  * (with 32-bit wrap) of a remote Tensix core L1 memory address. This L1 memory
@@ -1467,7 +1563,7 @@ void noc_semaphore_inc(uint64_t addr, uint32_t incr) {
   */
     DEBUG_STATUS('N', 'S', 'I', 'W');
     DEBUG_SANITIZE_NOC_ADDR(addr, 4);
-    noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/);
+    noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/, false /*posted*/);
     DEBUG_STATUS('N', 'S', 'I', 'D');
 }
 

@@ -31,6 +31,43 @@ ALWI void REL() { release_dst(tt::DstMode::Half); }
 
 namespace ckernel {
 
+ALWI void pack_tile_with_dt(uint32_t ifrom_dst, uint32_t icb)
+{
+    #if defined FP32_DEST_ACC_EN
+        PACK(( pack_reconfig_data_format(icb) ));
+    #endif
+    pack_tile(ifrom_dst, icb);
+}
+
+ALWI void copy_tile_init_with_dt(uint32_t icb)
+{
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format_srca(icb);
+    #endif
+    copy_tile_init();
+}
+
+ALWI void add_tiles_init_with_dt(uint32_t icb0 = 0, uint32_t icb1 = 1) {
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
+    add_tiles_init(icb0, icb1);
+}
+
+ALWI void sub_tiles_init_with_dt(uint32_t icb0 = 0, uint32_t icb1 = 1) {
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
+    sub_tiles_init(icb0, icb1);
+}
+
+ALWI void mul_tiles_init_with_dt(uint32_t icb0 = 0, uint32_t icb1 = 1) {
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
+    mul_tiles_init(icb0, icb1);
+}
+
 class ArgFetcher {
    private:
     int arg_idx = 0;
@@ -58,12 +95,12 @@ ALWI void mul_tiles_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
-    mul_tiles_init();
+    mul_tiles_init_with_dt(icb0, icb1);
     mul_tiles(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -90,7 +127,7 @@ ALWI void mul_tiles_and_negative_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
-    mul_tiles_init();
+    mul_tiles_init_with_dt(icb0, icb1);
     mul_tiles(icb0, icb1, itile0, itile1, dst0);
 
     negative_tile_init();
@@ -98,7 +135,7 @@ ALWI void mul_tiles_and_negative_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -129,11 +166,11 @@ ALWI void mul_tiles_and_mask_tile_to_cb(
     cb_wait_front(maskcb, mtile + 1);
 
     tile_regs_acquire();
-    mul_tiles_init();
+    mul_tiles_init_with_dt(icb0, icb1);
     mul_tiles(icb0, icb1, itile0, itile1, dst0);
 
     constexpr int dst_mask = 1;
-    copy_tile_init();
+    copy_tile_init_with_dt(maskcb);
     copy_tile(maskcb, mtile, dst_mask);
 
     mask_tile_init();
@@ -141,7 +178,7 @@ ALWI void mul_tiles_and_mask_tile_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -170,7 +207,7 @@ ALWI void mul_tiles_log_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
-    mul_tiles_init();
+    mul_tiles_init_with_dt(icb0, icb1);
     mul_tiles(icb0, icb1, itile0, itile1, dst0);
 
     log_tile_init();
@@ -178,7 +215,7 @@ ALWI void mul_tiles_log_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -206,12 +243,15 @@ ALWI void mul_tiles_bcast_rows_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     mul_bcast_rows_init_short();
     mul_tiles_bcast_rows(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -239,6 +279,9 @@ ALWI void mul_tiles_bcast_rows_log_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     mul_bcast_rows_init_short();
     mul_tiles_bcast_rows(icb0, icb1, itile0, itile1, dst0);
 
@@ -247,7 +290,7 @@ ALWI void mul_tiles_bcast_rows_log_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -275,12 +318,15 @@ ALWI void mul_tiles_bcast_cols_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     mul_bcast_cols_init_short();
     mul_tiles_bcast_cols(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -308,6 +354,9 @@ ALWI void mul_tiles_bcast_cols_log_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     mul_bcast_cols_init_short();
     mul_tiles_bcast_cols(icb0, icb1, itile0, itile1, dst0);
 
@@ -316,7 +365,7 @@ ALWI void mul_tiles_bcast_cols_log_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -335,12 +384,12 @@ ALWI void copy_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint32
     cb_wait_front(icb, itile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop)
@@ -364,12 +413,12 @@ ALWI void add_tiles_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
-    add_tiles_init();
+    add_tiles_init_with_dt(icb0, icb1);
     add_tiles(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -390,10 +439,10 @@ ALWI void mask_tile_to_cb(uint32_t icb, uint32_t maskcb, uint32_t ocb, uint32_t 
     cb_wait_front(maskcb, mtile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst0);
 
-    copy_tile_init();
+    copy_tile_init_with_dt(maskcb);
     copy_tile(maskcb, mtile, dst_mask);
 
     mask_tile_init();
@@ -402,7 +451,7 @@ ALWI void mask_tile_to_cb(uint32_t icb, uint32_t maskcb, uint32_t ocb, uint32_t 
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop)
@@ -430,6 +479,9 @@ ALWI void reduce_tile_to_cb(
     tile_regs_acquire();
     cb_wait_front(icb1, onetile);
 
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     reduce_init_delta<false>(reduce_op, dim);
     for (uint32_t x = 0; x < size; ++x) {
         cb_wait_front(icb0, x + 1);  // must be a cumulative wait for correctness
@@ -445,9 +497,8 @@ ALWI void reduce_tile_to_cb(
     if (pop1)
         cb_pop_front(icb1, pop1);
 
-
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);
@@ -470,12 +521,15 @@ ALWI void sub_tiles_bcast_cols_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     sub_bcast_cols_init_short();
     sub_tiles_bcast<BroadcastType::COL>(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -503,6 +557,9 @@ ALWI void sub_tiles_bcast_rows_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     // sub_bcast_rows_init_short();
     {
         MATH((llk_math_eltwise_binary_init<ELWSUB, BroadcastType::ROW, MATH_FIDELITY>()));
@@ -512,7 +569,7 @@ ALWI void sub_tiles_bcast_rows_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -539,12 +596,12 @@ ALWI void sub_tiles_to_cb(
     cb_wait_front(icb1, itile1 + 1);
 
     tile_regs_acquire();
-    sub_tiles_init();
+    sub_tiles_init_with_dt(icb0, icb1);
     sub_tiles(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop0)
@@ -562,7 +619,7 @@ ALWI void exp_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint32_
     cb_wait_front(icb, itile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst);
 
     exp_tile_init();
@@ -570,7 +627,7 @@ ALWI void exp_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint32_
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst, ocb);
+    pack_tile_with_dt(dst, ocb);
     tile_regs_release();
 
     if (pop)
@@ -585,7 +642,7 @@ ALWI void rexp_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint32
     cb_wait_front(icb, itile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst);
 
     negative_tile_init();
@@ -596,7 +653,7 @@ ALWI void rexp_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint32
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst, ocb);
+    pack_tile_with_dt(dst, ocb);
     tile_regs_release();
 
     if (pop)
@@ -621,7 +678,7 @@ ALWI void exp_tile_and_mask_tile_to_cb(
     cb_wait_front(maskcb, mtile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst);
 
     if (pop)
@@ -630,7 +687,7 @@ ALWI void exp_tile_and_mask_tile_to_cb(
     exp_tile_init();
     exp_tile(dst);
 
-    copy_tile_init();
+    copy_tile_init_with_dt(maskcb);
     copy_tile(maskcb, mtile, dst_mask);
 
     mask_tile_init();
@@ -641,7 +698,7 @@ ALWI void exp_tile_and_mask_tile_to_cb(
         cb_pop_front(maskcb, popm);
 
     tile_regs_wait();
-    pack_tile(dst, ocb);
+    pack_tile_with_dt(dst, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);
@@ -664,7 +721,7 @@ ALWI void rexp_tile_and_mask_tile_to_cb(
     cb_wait_front(maskcb, mtile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst);
 
     if (pop)
@@ -676,7 +733,7 @@ ALWI void rexp_tile_and_mask_tile_to_cb(
     exp_tile_init();
     exp_tile(dst);
 
-    copy_tile_init();
+    copy_tile_init_with_dt(maskcb);
     copy_tile(maskcb, mtile, dst_mask);
 
     mask_tile_init();
@@ -687,7 +744,7 @@ ALWI void rexp_tile_and_mask_tile_to_cb(
         cb_pop_front(maskcb, popm);
 
     tile_regs_wait();
-    pack_tile(dst, ocb);
+    pack_tile_with_dt(dst, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);
@@ -701,7 +758,7 @@ ALWI void recip_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint3
     cb_wait_front(icb, itile + 1);
 
     tile_regs_acquire();
-    copy_tile_init();
+    copy_tile_init_with_dt(icb);
     copy_tile(icb, itile, dst0);
 
     recip_tile_init();
@@ -709,7 +766,7 @@ ALWI void recip_tile_to_cb(uint32_t icb, uint32_t ocb, uint32_t itile = 0, uint3
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     if (pop)
@@ -733,6 +790,9 @@ ALWI void reduce_tile_and_recip_tile_to_cb(
     cb_wait_front(icb1, onetile);
 
     tile_regs_acquire();
+    #if defined FP32_DEST_ACC_EN
+        unpack_reconfig_data_format(icb0, icb1);
+    #endif
     reduce_init_delta<false>(reduce_op, dim);
     for (uint32_t x = 0; x < size; ++x) {
         cb_wait_front(icb0, x + 1);  // must be a cumulative wait for correctness
@@ -752,7 +812,7 @@ ALWI void reduce_tile_and_recip_tile_to_cb(
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile(dst0, ocb);
+    pack_tile_with_dt(dst0, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);

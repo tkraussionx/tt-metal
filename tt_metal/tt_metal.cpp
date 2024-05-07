@@ -81,15 +81,20 @@ std::optional<uint32_t> get_semaphore_address(const Program &program, const Core
 
 inline void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &c, const std::vector<uint32_t> &runtime_args)
 {
-    detail::GetKernel(program, kernel_id)->set_runtime_args(c, runtime_args);
+    if (runtime_args.size() != 0) {
+        detail::GetKernel(program, kernel_id)->set_runtime_args(c, runtime_args);
+    }
 }
 
 
 inline void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreRange &core_range, const std::vector<uint32_t> &runtime_args)
 {
-    for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
-        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
-            SetRuntimeArgs(program, kernel_id, CoreCoord(x,y), runtime_args);
+    if (runtime_args.size() != 0) {
+        for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+            for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                // TODO: maybe directly update command queue
+                SetRuntimeArgs(program, kernel_id, CoreCoord(x,y), runtime_args);
+            }
         }
     }
 }
@@ -132,6 +137,12 @@ inline void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kerne
 }  // namespace
 
 //#define DEBUG_PRINT_SHARD
+namespace device_pool {
+
+// Definition of the global device vector
+    std::vector<Device*> devices;
+
+} // device_pool
 
 namespace detail {
 
@@ -147,6 +158,9 @@ std::map<chip_id_t, Device *> CreateDevices(
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
             for (const auto &mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+                //if (mmio_controlled_device_id != mmio_device_id) {
+                //    continue;
+                //}
                 Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
                 active_devices.insert({mmio_controlled_device_id, dev});
                 detail::InitDeviceProfiler(dev);
@@ -483,11 +497,11 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
 
     }
 
-    void LaunchProgram(Device *device, std::shared_ptr<Program> program){
-        LaunchProgram(device, *program);
+    void LaunchProgram(Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done){
+        LaunchProgram(device, *program, wait_until_cores_done);
     }
 
-    void LaunchProgram(Device *device, Program &program) {
+    void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done) {
         {//Profiler scope start
         ZoneScoped;
         detail::DispatchStateCheck( false );
@@ -512,11 +526,31 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
                 tt::llrt::write_launch_msg_to_core(device->id(), physical_core, msg);
             }
         }
+        if (wait_until_cores_done) {
+            // Wait for all cores to be done
+            llrt::internal_::wait_until_cores_done(device_id, RUN_MSG_GO, not_done_cores);
+        }
+        }//Profiler scope end
+        if (wait_until_cores_done) {
+            DumpDeviceProfileResults(device, program);
+        }
+    }
+
+    void WaitProgramDone(Device *device, Program &program) {
+        auto device_id = device->id();
+        std::cout<<"Waiting for Program on Device "<<(uint32_t) device->id()<<std::endl;
+        std::unordered_map<CoreType, std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
+        std::unordered_set<CoreCoord> not_done_cores;
+        for (const auto &[core_type, logical_cores] : logical_cores_used_in_program) {
+            for (const auto &logical_core : logical_cores) {
+                auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
+                not_done_cores.insert(physical_core);
+            }
+        }
         // Wait for all cores to be done
         llrt::internal_::wait_until_cores_done(device_id, RUN_MSG_GO, not_done_cores);
-
-        }//Profiler scope end
         DumpDeviceProfileResults(device, program);
+
     }
 
     bool ConfigureDeviceWithProgram(Device *device, Program &program, bool fd_bootloader_mode) {
@@ -574,46 +608,71 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         return pass;
     }
 
+
+    // Return base address in L1 for Runtime Args given processor type (and eth mode in case of ERISC).
+    uint32_t GetL1ArgBaseAddr(std::shared_ptr<Kernel> kernel) {
+
+        const RISCV &riscv = kernel->processor();
+        uint32_t l1_arg_base = 0;
+
+        switch (riscv) {
+            case RISCV::BRISC: {
+                l1_arg_base = BRISC_L1_ARG_BASE;
+            } break;
+            case RISCV::NCRISC: {
+                l1_arg_base = NCRISC_L1_ARG_BASE;
+            } break;
+            case RISCV::ERISC: {
+                auto config = std::get<EthernetConfig>(kernel->config());
+                if (config.eth_mode == Eth::IDLE) {
+                    l1_arg_base = IDLE_ERISC_L1_ARG_BASE;
+                } else {
+                    l1_arg_base = eth_l1_mem::address_map::ERISC_L1_ARG_BASE;
+                }
+            } break;
+            case RISCV::COMPUTE: {
+                l1_arg_base = TRISC_L1_ARG_BASE;
+            }
+            break;
+            default: TT_THROW("Unsupported {} processor does not support runtime args", riscv);
+        }
+        return l1_arg_base;
+    }
+
     void WriteRuntimeArgsToDevice(Device *device, const Program &program) {
         ZoneScoped;
         auto device_id = device->id();
         detail::DispatchStateCheck( false );
 
-        auto get_l1_arg_base_addr = [](const RISCV &riscv) {
-            uint32_t l1_arg_base = 0;
-            switch (riscv) {
-                case RISCV::BRISC: {
-                    l1_arg_base = BRISC_L1_ARG_BASE;
-                } break;
-                case RISCV::NCRISC: {
-                    l1_arg_base = NCRISC_L1_ARG_BASE;
-                } break;
-                case RISCV::ERISC: {
-                    l1_arg_base = eth_l1_mem::address_map::ERISC_L1_ARG_BASE;
-                } break;
-                case RISCV::COMPUTE: {
-                    l1_arg_base = TRISC_L1_ARG_BASE;
-                }
-                break;
-                default: TT_THROW("Unsupported {} processor does not support runtime args", riscv);
-            }
-            return l1_arg_base;
-        };
-
         for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
             const auto kernel = detail::GetKernel(program, kernel_id);
-            auto processor = kernel->processor();
+            auto args_base_addr = detail::GetL1ArgBaseAddr(kernel);
+
             for (const auto &logical_core : kernel->cores_with_runtime_args()) {
                 auto physical_core = device->physical_core_from_logical_core(logical_core, kernel->get_kernel_core_type());
                 const auto & rt_args = kernel->runtime_args(logical_core);
-                auto arg_addr = get_l1_arg_base_addr(processor);
-                if (processor == RISCV::ERISC) {
-                    auto config = std::get<EthernetConfig>(kernel->config());
-                    if (config.eth_mode == Eth::IDLE) {
-                        arg_addr = IDLE_ERISC_L1_ARG_BASE;
+                log_trace(tt::LogMetal, "{} - Writing {} unique rtargs to core {} (physical: {}) addr 0x{:x} => args: {}",
+                    __FUNCTION__, rt_args.size(), logical_core.str(), physical_core.str(), args_base_addr, rt_args);
+                tt::llrt::write_hex_vec_to_core(device_id, physical_core, rt_args, args_base_addr);
+            }
+
+            // Unicast common runtime args to all cores for kernel. Fast-Dispatch will multicast as perf opt.
+            const auto &common_rt_args = kernel->common_runtime_args();
+            auto common_rt_args_offset = kernel->get_common_runtime_args_offset();
+
+            if (common_rt_args.size() > 0) {
+                for (auto &core_range : kernel->logical_coreranges()) {
+                    for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                            CoreCoord logical_core({x, y});
+                            auto physical_core = device->physical_core_from_logical_core(logical_core, kernel->get_kernel_core_type());
+                            const auto common_args_addr = args_base_addr + common_rt_args_offset;  // Common args are placed after unique args per core.
+                            log_trace(tt::LogMetal, "{} - Writing {} common rtargs to core {} (physical: {}) addr 0x{:x} => args: {}",
+                                __FUNCTION__, common_rt_args.size(), logical_core.str(), physical_core.str(), common_args_addr, common_rt_args);
+                            tt::llrt::write_hex_vec_to_core(device_id, physical_core, common_rt_args, common_args_addr);
+                        }
                     }
                 }
-                tt::llrt::write_hex_vec_to_core(device_id, physical_core, rt_args, arg_addr);
             }
         }
     }
@@ -638,6 +697,44 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
     }
 
+    void BeginTraceCapture(Device *device) {
+        device->begin_trace();
+    }
+
+    void EndTraceCapture(Device *device) {
+        device->end_trace();
+    }
+
+    void ExecuteLastTrace(Device *device, bool blocking) {
+        device->execute_last_trace(blocking);
+    }
+
+    void ReleaseLastTrace(Device *device) {
+        device->release_last_trace();
+    }
+
+    void BeginTraceCaptures(std::map<chip_id_t, Device *> devices) {
+        for (const auto &[device_id, dev] : devices) {
+            dev->begin_trace();
+        }
+    }
+    void EndTraceCaptures(std::map<chip_id_t, Device *> devices) {
+        for (const auto &[device_id, dev] : devices) {
+            dev->end_trace();
+        }
+    }
+    void ExecuteLastTraces(std::map<chip_id_t, Device *> devices, bool blocking) {
+        for (const auto &[device_id, dev] : devices) {
+            dev->execute_last_trace(blocking);
+        }
+    }
+
+    Device *GetDeviceHandle(chip_id_t device_id) {
+        ZoneScoped;
+        TT_ASSERT(device_id < device_pool::devices.size());
+        TT_ASSERT(device_pool::devices[device_id] != nullptr);
+        return device_pool::devices[device_id];
+    }
 }   // namespace detail
 
 size_t GetNumAvailableDevices() {
@@ -671,6 +768,11 @@ Device *CreateDevice(
 bool CloseDevice(Device *device) {
     ZoneScoped;
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+    auto device_id = device->id();
+    TT_ASSERT(device_id < device_pool::devices.size());
+    if (device_pool::devices[device_id] != nullptr) {
+        device_pool::devices[device_id] = nullptr;
+    }
     return device->close();
 }
 
@@ -829,6 +931,16 @@ void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const 
     detail::DispatchStateCheck(not device->using_slow_dispatch());
     SetRuntimeArgs(device->command_queue(), kernel, core_spec, runtime_args, false);
 }
+
+
+void SetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id, const std::vector<uint32_t> &runtime_args) {
+    ZoneScoped;
+    TT_FATAL( not CommandQueue::async_mode_set(), "This variant of SetCommonRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled for Fast Dispatch.");
+    if (runtime_args.size() != 0) {
+        detail::GetKernel(program, kernel_id)->set_common_runtime_args(runtime_args);
+    }
+}
+
 
 std::vector<uint32_t> & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
     TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled for Fast Dispatch.");

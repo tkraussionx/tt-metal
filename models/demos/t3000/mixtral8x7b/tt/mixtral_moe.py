@@ -10,6 +10,7 @@ from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1, compute_kernel):
     # get the highest value and position
     weights_ex0_1SB1 = ttnn.max(gate_logits_1SB8, dim=3)
+    print("done max")
     exp_0_repeated = ttnn.matmul(weights_ex0_1SB1, ones_1118, compute_kernel_config=compute_kernel)
     cond0 = ttnn.eq(gate_logits_1SB8, exp_0_repeated)
 
@@ -17,7 +18,7 @@ def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1, compu
     gate_logits_1SB8_masked = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
 
     # get the second highest value and position
-    weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8_masked, dim=3)
+    weights_ex1_1SB1 = ttnn.max(gate_logits_1SB8_masked, dim=3)
     exp_1_repeated = ttnn.matmul(weights_ex1_1SB1, ones_1118, compute_kernel_config=compute_kernel)
     cond1 = ttnn.eq(gate_logits_1SB8, exp_1_repeated)
 
@@ -126,15 +127,16 @@ class TtMoeLayer(torch.nn.Module):
         input_i_1SBH = inputs
         expert_i_HH = self.experts
         # get logits for the experts
+        print("gates linear start")
         gate_logits_1SB8 = ttnn.linear(
             input_i_1SBH,
             self.gates_H8,
-            core_grid=self.args.max_grid_size,
             memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
             use_1d_systolic_array=True,
         )
-        gate_logits_1SB8 = ttnn.to_device(gate_logits_1SB8, self.device_mesh)
+        print("gates linear end")
+        # gate_logits_1SB8 = ttnn.to_device(gate_logits_1SB8, self.device_mesh)
 
         # get weights for top-2 experts
         weights_1SB1 = top_2(
@@ -147,13 +149,10 @@ class TtMoeLayer(torch.nn.Module):
         )
 
         # MLP and masking
-        results_11BH = ttnn.multiply(
-            expert_i_HH(input_i_1SBH), weights_1SB1, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG
-        )
+        results_11BH = ttnn.multiply(expert_i_HH(input_i_1SBH), weights_1SB1, memory_config=ttnn.L1_MEMORY_CONFIG)
+        # results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
         # all gather
         output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
-        print("all gather")
         # sum on each device
         output_11BH_gathered = ttnn.matmul(self.reduce_mask, output_11BH_gathered)
-        print("last matmul")
         return output_11BH_gathered

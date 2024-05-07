@@ -9,6 +9,9 @@
 #include <memory>
 #include "tt_metal/common/assert.hpp"
 
+/*
+    Supports single writer, single reader
+*/
 template<typename T>
 class LockFreeQueue {
     private:
@@ -56,6 +59,12 @@ class LockFreeQueue {
             std::shared_ptr<T> result(oldHead->data);
             delete oldHead;
             return result;
+        }
+
+        void clear() {
+            while (!empty()) {
+                void(pop());
+            }
         }
 
         bool empty() const {

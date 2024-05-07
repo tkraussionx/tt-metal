@@ -15,10 +15,19 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_bw_and_latency \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_dispatcher \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_prefetcher \
+		 tests/tt_metal/perf_microbenchmark/dispatch/test_prefetcher_multichip \
 		 tests/tt_metal/perf_microbenchmark/ethernet/test_ethernet_read_and_send_data \
 		 tests/tt_metal/perf_microbenchmark/ethernet/test_workers_and_erisc_datamover_unidirectional \
  		 tests/tt_metal/perf_microbenchmark/ethernet/test_ethernet_bidirectional_bandwidth_no_edm \
 		 tests/tt_metal/perf_microbenchmark/ethernet/test_ethernet_hop_latencies_no_edm \
+		 tests/tt_metal/perf_microbenchmark/routing/test_tx_rx \
+		 tests/tt_metal/perf_microbenchmark/routing/test_mux_demux \
+		 tests/tt_metal/perf_microbenchmark/routing/test_mux_demux_2level \
+		 tests/tt_metal/perf_microbenchmark/routing/test_tunnel_1cq \
+		 tests/tt_metal/perf_microbenchmark/routing/test_tunnel_2cq \
+		 tests/tt_metal/perf_microbenchmark/routing/test_uni_tunnel \
+		 tests/tt_metal/perf_microbenchmark/routing/test_uni_tunnel_single_chip \
+		 tests/tt_metal/perf_microbenchmark/routing/test_bi_tunnel \
 		 tests/tt_metal/perf_microbenchmark/noc/test_noc_unicast_vs_multicast_to_single_core_latency \
 		 tests/tt_metal/perf_microbenchmark/old/matmul/matmul_global_l1 \
 		 tests/tt_metal/perf_microbenchmark/old/matmul/matmul_local_l1 \
@@ -32,8 +41,10 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/perf_microbenchmark/2_noc_adjacent/test_noc_adjacent \
 		 tests/tt_metal/perf_microbenchmark/2_noc_rtor/test_noc_rtor \
 		 tests/tt_metal/perf_microbenchmark/3_pcie_transfer/test_rw_buffer \
+		 tests/tt_metal/perf_microbenchmark/3_pcie_transfer/test_pull_from_pcie \
 		 tests/tt_metal/perf_microbenchmark/6_dram_offchip/test_dram_offchip \
 		 tests/tt_metal/perf_microbenchmark/7_kernel_launch/test_kernel_launch \
+		 tests/tt_metal/perf_microbenchmark/8_dram_adjacent_core_read/test_dram_read \
 		 tests/tt_metal/perf_microbenchmark/noc/test_noc_unicast_vs_multicast_to_single_core_latency \
 		 tests/tt_metal/test_add_two_ints \
 		 tests/tt_metal/test_compile_args \

@@ -5,6 +5,7 @@
 import os
 import ttnn
 from pathlib import Path
+from loguru import logger
 
 
 class TtModelArgs:
@@ -26,7 +27,7 @@ class TtModelArgs:
 
     DEFAULT_CKPT_DIR = os.getenv("MIXTRAL_CKPT_DIR", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1")
     DEFAULT_TOKENIZER_PATH = os.getenv("MIXTRAL_TOKENIZER_PATH", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1")
-    DEFAULT_CACHE_PATH = Path(os.getenv("MIXTRAL_CACHE_PATH", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1"))
+    DEFAULT_CACHE_PATH = os.getenv("MIXTRAL_CACHE_PATH", "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1")
 
     OP_KEYS = (
         # Embedding
@@ -62,8 +63,26 @@ class TtModelArgs:
     )
 
     def __init__(self, device=None, instruct=False):
+        # Assert if all folders and files exist
+        assert os.path.exists(
+            self.DEFAULT_CKPT_DIR
+        ), f"Checkpoint directory {self.DEFAULT_CKPT_DIR} does not exist, please use export MIXTRAL_CKPT_DIR=..."
+        assert os.path.isfile(
+            self.DEFAULT_CKPT_DIR + "/repack_weights.pt"
+        ), f"Repacked weights {self.DEFAULT_CKPT_DIR + '/repack_weights.pt'} does not exist, please use export MIXTRAL_CKPT_DIR=..."
+        assert os.path.isfile(
+            self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
+        ), f"Tokenizer file {self.DEFAULT_TOKENIZER_PATH + '/tokenizer.model'} does not exist, please use export MIXTRAL_TOKENIZER_PATH=..."
+        assert os.path.exists(
+            self.DEFAULT_CACHE_PATH
+        ), f"Cache directory {self.DEFAULT_CACHE_PATH} does not exist, please use export MIXTRAL_CACHE_PATH=..."
+
+        logger.info(f"Checkpoint directory: {self.DEFAULT_CKPT_DIR}")
+        logger.info(f"Tokenizer file: {self.DEFAULT_TOKENIZER_PATH + '/tokenizer.model'}")
+        logger.info(f"Cache directory: {self.DEFAULT_CACHE_PATH}")
+
         self.model_base_path = Path(self.DEFAULT_CKPT_DIR)
-        self.model_cache_path = self.DEFAULT_CACHE_PATH
+        self.model_cache_path = Path(self.DEFAULT_CACHE_PATH)
         self.consolidated_weights_path = lambda i: str(self.model_base_path / f"consolidated.{i:02d}.pt")
         self.tokenizer_path = self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
         self.state_dict_path = str(self.model_base_path / "repack_weights.pt")

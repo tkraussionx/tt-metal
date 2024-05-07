@@ -12,6 +12,7 @@
 #include <fstream>
 
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
+#include "tt_metal/impl/dispatch/device_command.hpp"
 #include "tt_metal/impl/dispatch/lock_free_queue.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
 #include "tt_metal/common/base.hpp"
@@ -43,9 +44,9 @@ enum class EnqueueCommandType {
     ENQUEUE_TRACE,
     ENQUEUE_RECORD_EVENT,
     ENQUEUE_WAIT_FOR_EVENT,
-    ENQUEUE_WRAP,
     FINISH,
     FLUSH,
+    TERMINATE,
     INVALID
 };
 
@@ -55,7 +56,8 @@ string EnqueueCommandTypeToString(EnqueueCommandType ctype);
 #define NOC_X(x) x
 #define NOC_Y(y) y
 
-uint32_t get_noc_unicast_encoding(CoreCoord coord);
+uint32_t get_noc_unicast_encoding(const CoreCoord &coord);
+uint32_t get_noc_multcast_encoding(const CoreCoord &start, const CoreCoord &end);
 
 class Trace;
 class CommandQueue;
@@ -64,29 +66,27 @@ class CommandInterface;
 using WorkerQueue = LockFreeQueue<CommandInterface>;
 
 class Command {
-    EnqueueCommandType type_ = EnqueueCommandType::INVALID;
 
    public:
     Command() {}
     virtual void process() {};
     virtual EnqueueCommandType type() = 0;
-    virtual const DeviceCommand assemble_device_command(uint32_t buffer_size) = 0;
 };
 
 class EnqueueReadBufferCommand : public Command {
    private:
     SystemMemoryManager& manager;
     void* dst;
-    uint32_t pages_to_read;
     uint32_t command_queue_id;
-    uint32_t event;
-    bool stall;
     CoreType dispatch_core_type;
 
-    virtual const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) = 0;
+    virtual void add_prefetch_relay(HugepageDeviceCommand &command) = 0;
+
    protected:
     Device* device;
+    uint32_t expected_num_workers_completed;
     uint32_t src_page_index;
+    uint32_t pages_to_read;
    public:
     Buffer& buffer;
     EnqueueReadBufferCommand(
@@ -94,13 +94,10 @@ class EnqueueReadBufferCommand : public Command {
         Device* device,
         Buffer& buffer,
         void* dst,
-        bool stall,
         SystemMemoryManager& manager,
-        uint32_t event,
+        uint32_t expected_num_workers_completed,
         uint32_t src_page_index = 0,
         std::optional<uint32_t> pages_to_read = std::nullopt);
-
-    const DeviceCommand assemble_device_command(uint32_t dst);
 
     void process();
 
@@ -111,7 +108,7 @@ class EnqueueReadBufferCommand : public Command {
 
 class EnqueueReadInterleavedBufferCommand : public EnqueueReadBufferCommand {
    private:
-    const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) override;
+    void add_prefetch_relay(HugepageDeviceCommand &command) override;
 
    public:
     EnqueueReadInterleavedBufferCommand(
@@ -119,18 +116,16 @@ class EnqueueReadInterleavedBufferCommand : public EnqueueReadBufferCommand {
         Device* device,
         Buffer& buffer,
         void* dst,
-        bool stall,
         SystemMemoryManager& manager,
-        uint32_t event,
+        uint32_t expected_num_workers_completed,
         uint32_t src_page_index = 0,
         std::optional<uint32_t> pages_to_read = std::nullopt)
             :EnqueueReadBufferCommand(command_queue_id,
                                 device,
                                 buffer,
                                 dst,
-                                stall,
                                 manager,
-                                event,
+                                expected_num_workers_completed,
                                 src_page_index,
                                 pages_to_read) {}
 };
@@ -138,7 +133,8 @@ class EnqueueReadInterleavedBufferCommand : public EnqueueReadBufferCommand {
 
 class EnqueueReadShardedBufferCommand : public EnqueueReadBufferCommand {
    private:
-    const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) override;
+    void add_prefetch_relay(HugepageDeviceCommand &command) override;
+    BufferPageMapping buffer_page_mapping;
 
    public:
     EnqueueReadShardedBufferCommand(
@@ -146,39 +142,43 @@ class EnqueueReadShardedBufferCommand : public EnqueueReadBufferCommand {
         Device* device,
         Buffer& buffer,
         void* dst,
-        bool stall,
         SystemMemoryManager& manager,
-        uint32_t event,
+        uint32_t expected_num_workers_completed,
+        const BufferPageMapping &buffer_page_mapping,
         uint32_t src_page_index = 0,
         std::optional<uint32_t> pages_to_read = std::nullopt)
             :EnqueueReadBufferCommand(command_queue_id,
                                 device,
                                 buffer,
                                 dst,
-                                stall,
                                 manager,
-                                event,
+                                expected_num_workers_completed,
                                 src_page_index,
-                                pages_to_read) {}
+                                pages_to_read), buffer_page_mapping(buffer_page_mapping) {}
 };
 
 class EnqueueWriteShardedBufferCommand;
 class EnqueueWriteInterleavedBufferCommand;
 class EnqueueWriteBufferCommand : public Command {
    private:
-
     SystemMemoryManager& manager;
-    uint32_t event;
-    const void* src;
-    uint32_t pages_to_write;
     uint32_t command_queue_id;
     CoreType dispatch_core_type;
 
-    virtual const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) = 0;
+    virtual void add_dispatch_write(HugepageDeviceCommand &command) = 0;
+    virtual void add_buffer_data(HugepageDeviceCommand &command) = 0;
+
    protected:
     Device* device;
+    const void* src;
     const Buffer& buffer;
+    uint32_t expected_num_workers_completed;
+    uint32_t bank_base_address;
+    uint32_t padded_page_size;
     uint32_t dst_page_index;
+    uint32_t pages_to_write;
+    bool issue_wait;
+
    public:
     EnqueueWriteBufferCommand(
         uint32_t command_queue_id,
@@ -186,11 +186,12 @@ class EnqueueWriteBufferCommand : public Command {
         const Buffer& buffer,
         const void* src,
         SystemMemoryManager& manager,
-        uint32_t event,
+        bool issue_wait,
+        uint32_t expected_num_workers_completed,
+        uint32_t bank_base_address,
+        uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
         std::optional<uint32_t> pages_to_write = std::nullopt);
-
-    const DeviceCommand assemble_device_command(uint32_t src_address);
 
     void process();
 
@@ -201,7 +202,9 @@ class EnqueueWriteBufferCommand : public Command {
 
 class EnqueueWriteInterleavedBufferCommand : public EnqueueWriteBufferCommand {
    private:
-    const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) override;
+    void add_dispatch_write(HugepageDeviceCommand &command) override;
+    void add_buffer_data(HugepageDeviceCommand &command) override;
+
    public:
     EnqueueWriteInterleavedBufferCommand(
         uint32_t command_queue_id,
@@ -209,7 +212,10 @@ class EnqueueWriteInterleavedBufferCommand : public EnqueueWriteBufferCommand {
         const Buffer& buffer,
         const void* src,
         SystemMemoryManager& manager,
-        uint32_t event,
+        bool issue_wait,
+        uint32_t expected_num_workers_completed,
+        uint32_t bank_base_address,
+        uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
         std::optional<uint32_t> pages_to_write = std::nullopt)
         : EnqueueWriteBufferCommand(
@@ -218,17 +224,23 @@ class EnqueueWriteInterleavedBufferCommand : public EnqueueWriteBufferCommand {
             buffer,
             src,
             manager,
-            event,
+            issue_wait,
+            expected_num_workers_completed,
+            bank_base_address,
+            padded_page_size,
             dst_page_index,
             pages_to_write){;}
-
-
 };
 
 
 class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
    private:
-    const DeviceCommand create_buffer_transfer_instruction(uint32_t dst_address, uint32_t padded_page_size, uint32_t num_pages) override;
+    void add_dispatch_write(HugepageDeviceCommand &command) override;
+    void add_buffer_data(HugepageDeviceCommand &command) override;
+
+    const BufferPageMapping& buffer_page_mapping;
+    const bool width_split;
+
    public:
     EnqueueWriteShardedBufferCommand(
         uint32_t command_queue_id,
@@ -236,7 +248,12 @@ class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
         const Buffer& buffer,
         const void* src,
         SystemMemoryManager& manager,
-        uint32_t event,
+        bool issue_wait,
+        uint32_t expected_num_workers_completed,
+        uint32_t bank_base_address,
+        const BufferPageMapping &buffer_page_mapping,
+        bool width_split,
+        uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
         std::optional<uint32_t> pages_to_write = std::nullopt)
         : EnqueueWriteBufferCommand(
@@ -245,28 +262,32 @@ class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
             buffer,
             src,
             manager,
-            event,
+            issue_wait,
+            expected_num_workers_completed,
+            bank_base_address,
+            padded_page_size,
             dst_page_index,
-            pages_to_write){;}
-
-
+            pages_to_write), buffer_page_mapping(buffer_page_mapping), width_split(width_split) {;}
 };
 
 class EnqueueProgramCommand : public Command {
    private:
     uint32_t command_queue_id;
     Device* device;
-    const Program& program;
+    Program& program;
     SystemMemoryManager& manager;
-    uint32_t event;
-    bool stall;
     CoreType dispatch_core_type;
-    std::optional<std::reference_wrapper<Trace>> trace = {};
+    uint32_t expected_num_workers_completed;
+    HostMemDeviceCommand preamble_command_sequence;
+    thread_local static std::unordered_map<uint64_t, std::vector<HostMemDeviceCommand>> runtime_args_command_sequences;
+    HostMemDeviceCommand program_command_sequence;
 
    public:
-    EnqueueProgramCommand(uint32_t command_queue_id, Device* device, const Program& program, SystemMemoryManager& manager, uint32_t event, bool stall, std::optional<std::reference_wrapper<Trace>> trace);
+    EnqueueProgramCommand(uint32_t command_queue_id, Device* device, Program& program, SystemMemoryManager& manager, uint32_t expected_num_workers_completed);
 
-    const DeviceCommand assemble_device_command(uint32_t src_address);
+    void assemble_preamble_commands();
+    void assemble_device_commands();
+    void assemble_runtime_args_commands();
 
     void process();
 
@@ -275,61 +296,23 @@ class EnqueueProgramCommand : public Command {
     constexpr bool has_side_effects() { return true; }
 };
 
-class EnqueueWrapCommand : public Command {
-   protected:
-    Device* device;
-    SystemMemoryManager& manager;
-    uint32_t command_queue_id;
-
-   public:
-    EnqueueWrapCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager);
-
-    virtual const DeviceCommand assemble_device_command(uint32_t) = 0;
-
-    virtual void process() = 0;
-
-    EnqueueCommandType type() { return EnqueueCommandType::ENQUEUE_WRAP; }
-};
-
-class EnqueueIssueWrapCommand : public EnqueueWrapCommand {
-    public:
-     EnqueueIssueWrapCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager);
-
-     const DeviceCommand assemble_device_command(uint32_t);
-
-     void process();
-
-     constexpr bool has_side_effects() {
-        // This command does not make it to dispatch core, and pre-fetcher can get the next command while dispatcher is still running.
-        return true;
-     }
-};
-
-class EnqueueCompletionWrapCommand : public EnqueueWrapCommand {
-    private:
-     uint32_t event;
-
-    public:
-     EnqueueCompletionWrapCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event);
-
-     const DeviceCommand assemble_device_command(uint32_t);
-
-     void process();
-
-     constexpr bool has_side_effects() { return false; }
-};
-
 class EnqueueRecordEventCommand : public Command {
    private:
     uint32_t command_queue_id;
     Device* device;
     SystemMemoryManager& manager;
-    uint32_t event;
+    uint32_t event_id;
+    uint32_t expected_num_workers_completed;
+    bool clear_count;
 
    public:
-    EnqueueRecordEventCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event);
-
-    const DeviceCommand assemble_device_command(uint32_t);
+    EnqueueRecordEventCommand(
+        uint32_t command_queue_id,
+        Device* device,
+        SystemMemoryManager& manager,
+        uint32_t event_id,
+        uint32_t expected_num_workers_completed,
+        bool clear_count = false);
 
     void process();
 
@@ -343,14 +326,17 @@ class EnqueueWaitForEventCommand : public Command {
     uint32_t command_queue_id;
     Device* device;
     SystemMemoryManager& manager;
-    uint32_t event;
     const Event& sync_event;
     CoreType dispatch_core_type;
+    bool clear_count;
 
    public:
-    EnqueueWaitForEventCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event, const Event& sync_event);
-
-    const DeviceCommand assemble_device_command(uint32_t);
+    EnqueueWaitForEventCommand(
+        uint32_t command_queue_id,
+        Device* device,
+        SystemMemoryManager& manager,
+        const Event& sync_event,
+        bool clear_count = false);
 
     void process();
 
@@ -359,78 +345,89 @@ class EnqueueWaitForEventCommand : public Command {
     constexpr bool has_side_effects() { return false; }
 };
 
+class EnqueueTraceCommand : public Command {
+   private:
+    uint32_t command_queue_id;
+    Buffer& buffer;
+    Device* device;
+    SystemMemoryManager& manager;
+    uint32_t& expected_num_workers_completed;
+    bool clear_count;
+
+   public:
+    EnqueueTraceCommand(
+        uint32_t command_queue_id,
+        Device* device,
+        SystemMemoryManager& manager,
+        Buffer& buffer,
+        uint32_t& expected_num_workers_completed);
+
+    void process();
+
+    EnqueueCommandType type() { return EnqueueCommandType::ENQUEUE_TRACE; }
+
+    constexpr bool has_side_effects() { return true; }
+};
+
+class EnqueueTerminateCommand : public Command {
+   private:
+    uint32_t command_queue_id;
+    Device* device;
+    SystemMemoryManager& manager;
+
+   public:
+    EnqueueTerminateCommand(
+        uint32_t command_queue_id,
+        Device* device,
+        SystemMemoryManager& manager);
+
+    void process();
+
+    EnqueueCommandType type() { return EnqueueCommandType::TERMINATE; }
+
+    constexpr bool has_side_effects() { return false; }
+};
+
 namespace detail {
+class TraceDescriptor;
 inline bool LAZY_COMMAND_QUEUE_MODE = false;
 
 /*
  Used so the host knows how to properly copy data into user space from the completion queue (in hugepages)
 */
-struct IssuedReadData {
+struct ReadBufferDescriptor {
     TensorMemoryLayout buffer_layout;
     uint32_t page_size;
     uint32_t padded_page_size;
+    bool linear_page_copy;
     vector<std::optional<uint32_t> > dev_page_to_host_page_mapping;
     void* dst;
     uint32_t dst_offset;
     uint32_t num_pages_read;
-    uint32_t cur_host_page_id;
+    uint32_t cur_dev_page_id;
 
-    IssuedReadData(Buffer& buffer, uint32_t padded_page_size, void* dst, uint32_t dst_offset, uint32_t num_pages_read, uint32_t cur_host_page_id) {
-        this->buffer_layout = buffer.buffer_layout();
-        this->page_size = buffer.page_size();
-        this->padded_page_size = padded_page_size;
-        if (this->buffer_layout == TensorMemoryLayout::WIDTH_SHARDED or this->buffer_layout == TensorMemoryLayout::BLOCK_SHARDED) {
-            auto buffer_page_mapping = generate_buffer_page_mapping(buffer);
-            this->dev_page_to_host_page_mapping = buffer_page_mapping.dev_page_to_host_page_mapping_;
+    ReadBufferDescriptor(Buffer& buffer, uint32_t padded_page_size, void* dst, uint32_t dst_offset, uint32_t num_pages_read, uint32_t cur_dev_page_id, bool linear_page_copy = true) :
+    buffer_layout(buffer.buffer_layout()), page_size(this->page_size = buffer.page_size()), padded_page_size(padded_page_size), dst(dst), dst_offset(dst_offset), num_pages_read(num_pages_read), cur_dev_page_id(cur_dev_page_id), linear_page_copy(linear_page_copy) {
+        if (!linear_page_copy and is_sharded(this->buffer_layout)) {
+            this->dev_page_to_host_page_mapping = generate_buffer_page_mapping(buffer).dev_page_to_host_page_mapping_;
         }
-        this->dst = dst;
-        this->dst_offset = dst_offset;
-        this->num_pages_read = num_pages_read;
-        this->cur_host_page_id = cur_host_page_id;
     }
 };
 
-inline std::mutex issued_read_mutex;
-inline std::mutex completion_wrap_mutex;
+/*
+ Used so host knows data in completion queue is just an event ID
+*/
+struct ReadEventDescriptor {
+    uint32_t event_id;
+    uint32_t global_offset;
 
-template <typename T, std::mutex& my_mutex>
-class thread_safe_map {
-    /*
-        Required for maps that are shared between the issue and completion
-        queue threads.
-    */
-    private:
-     std::unordered_map<uint32_t, T> issued_events;
-    public:
-     thread_safe_map<T, my_mutex>() {}
+    ReadEventDescriptor(uint32_t event) : event_id(event), global_offset(0) {}
 
-     const T& at(uint32_t event) const {
-        std::lock_guard lock(my_mutex);
-        return this->issued_events.at(event);
-     }
-
-     void emplace(uint32_t event, const T& issued_read_data) {
-        std::lock_guard lock(my_mutex);
-        this->issued_events.emplace(event, issued_read_data);
-     }
-
-     void erase(uint32_t event) {
-        std::lock_guard lock(my_mutex);
-        this->issued_events.erase(event);
-     }
-
-     size_t count(uint32_t event) const {
-        std::lock_guard lock(my_mutex);
-        return this->issued_events.count(event);
-     }
-
-     size_t size() const {
-        std::lock_guard lock(my_mutex);
-        return this->issued_events.size();
-     }
+    void set_global_offset(uint32_t offset) { global_offset = offset; }
+    uint32_t get_global_event_id() { return global_offset + event_id; }
 };
 
-typedef thread_safe_map<IssuedReadData, issued_read_mutex> IssuedReadMap;
+typedef LockFreeQueue<std::variant<ReadBufferDescriptor, ReadEventDescriptor>> CompletionReaderQueue;
 }
 
 struct AllocBufferMetadata {
@@ -454,32 +451,53 @@ class HWCommandQueue {
 
     ~HWCommandQueue();
 
-    CoreCoord issue_queue_reader_core;
     CoreCoord completion_queue_writer_core;
     volatile bool is_dprint_server_hung();
     volatile bool is_noc_hung();
 
+    void record_begin(std::shared_ptr<detail::TraceDescriptor> ctx);
+    void record_end();
+
+    // Record all commands and metadata from run_commands function
+    template <typename Func>
+    inline std::vector<uint32_t> record_commands(std::shared_ptr<detail::TraceDescriptor> ctx, Func run_commands) {
+        this->record_begin(ctx);
+        run_commands();
+        this->record_end();
+        return std::move(this->manager.get_bypass_data());
+    }
+
+    // Force commands to be issued, overrides tracing if this called within record_commands
+    template <typename Func>
+    inline void force_commands(Func run_commands) {
+        bool bypass = this->manager.get_bypass_mode();
+        this->manager.set_bypass_mode(false, false);  // pause
+        run_commands();
+        this->manager.set_bypass_mode(bypass, false);  // resume
+    }
+
    private:
     uint32_t id;
     uint32_t size_B;
-    std::optional<uint32_t> last_event_id;
+    std::shared_ptr<detail::TraceDescriptor> trace_ctx;
     std::thread completion_queue_thread;
     SystemMemoryManager& manager;
-    bool stall_before_read;
+    // Expected value of DISPATCH_MESSAGE_ADDR in dispatch core L1
+    //  Value in L1 incremented by worker to signal completion to dispatch. Value on host is set on each enqueue program call
+    uint32_t expected_num_workers_completed;
 
     volatile bool exit_condition;
     volatile bool dprint_server_hang = false;
     volatile bool illegal_noc_txn_hang = false;
-    volatile uint32_t num_issued_commands;
-    volatile uint32_t num_completed_commands;
-    detail::IssuedReadMap issued_reads;
-    detail::thread_safe_map<uint32_t, detail::completion_wrap_mutex> issued_completion_wraps;
+    volatile uint32_t num_entries_in_completion_q;  // issue queue writer thread increments this when an issued command is expected back in the completion queue
+    volatile uint32_t num_completed_completion_q_reads; // completion queue reader thread increments this after reading an entry out of the completion queue
+    detail::CompletionReaderQueue issued_completion_q_reads;
 
     Device* device;
 
     CoreType get_dispatch_core_type();
 
-    void copy_into_user_space(uint32_t event, uint32_t read_ptr, chip_id_t mmio_device_id, uint16_t channel);
+    void copy_into_user_space(const detail::ReadBufferDescriptor &read_buffer_descriptor, chip_id_t mmio_device_id, uint16_t channel);
     void read_completion_queue();
 
     template <typename T>
@@ -489,16 +507,13 @@ class HWCommandQueue {
     void enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking);
     void enqueue_write_buffer(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<const Buffer>> buffer, HostDataType src, bool blocking);
     void enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking);
-    void enqueue_program(Program& program, std::optional<std::reference_wrapper<Trace>> trace, bool blocking);
-    void enqueue_record_event(std::shared_ptr<Event> event);
-    void populate_record_event(std::shared_ptr<Event> event);
-    void enqueue_wait_for_event(std::shared_ptr<Event> event);
-    void enqueue_trace();
+    void enqueue_program(Program& program, bool blocking);
+    void enqueue_record_event(std::shared_ptr<Event> event, bool clear_count = false);
+    void enqueue_wait_for_event(std::shared_ptr<Event> sync_event, bool clear_count = false);
+    void enqueue_trace(const uint32_t trace_id, bool blocking);
     void finish();
-    void issue_wrap();
-    void completion_wrap(uint32_t event);
-    void launch(launch_msg_t& msg);
-    friend void EnqueueTraceImpl(CommandQueue& cq);
+    void terminate();
+    friend void EnqueueTraceImpl(CommandQueue& cq, uint32_t trace_id, bool blocking);
     friend void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking);
     friend void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking);
     friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, HostDataType src, bool blocking);
@@ -509,7 +524,8 @@ class HWCommandQueue {
     friend void EnqueueWaitForEventImpl(CommandQueue& cq, std::shared_ptr<Event> event);
     friend void FinishImpl(CommandQueue & cq);
     friend void EnqueueRecordEvent(CommandQueue& cq, std::shared_ptr<Event> event);
-    friend class Trace;
+    friend class CommandQueue;
+    friend class Device;
 };
 
 // Common interface for all command queue types
@@ -524,30 +540,33 @@ struct CommandInterface {
     std::optional<HostDataType> src;
     std::optional<void*> dst;
     std::optional<std::shared_ptr<Event>> event;
+    std::optional<uint32_t> trace_id;
 };
 
 class CommandQueue {
    friend class Device;
+   friend class Trace;
+
    public:
     enum class CommandQueueMode {
         PASSTHROUGH = 0,
         ASYNC = 1,
         TRACE = 2,
     };
+    enum class CommandQueueState {
+        IDLE = 0,
+        RUNNING = 1,
+        TERMINATE = 2,
+    };
+
     CommandQueue() = delete;
     ~CommandQueue();
 
-    // Command queue constructor
-    private:
-    CommandQueue(Device* device, uint32_t id, CommandQueueMode mode = CommandQueue::default_mode());
-
     // Trace queue constructor
-    public:
-    CommandQueue(Trace* trace);
+    CommandQueue(Trace& trace);
 
     // Getters for private members
     Device* device() const { return this->device_ptr; }
-    Trace* trace() const { return this->trace_ptr; }
     uint32_t id() const { return this->cq_id; }
 
     // Blocking method to wait for all commands to drain from the queue
@@ -568,6 +587,10 @@ class CommandQueue {
     // The empty state of the worker queue
     bool empty() const { return this->worker_queue.empty(); }
 
+    // Dump methods for name and pending commands in the queue
+    void dump();
+    std::string name();
+
     static CommandQueueMode default_mode() {
         // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
         static int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
@@ -575,16 +598,10 @@ class CommandQueue {
     }
     // Determine if any CQ is using Async mode
     static bool async_mode_set() { return num_async_cqs > 0; }
-   private:
-    enum class CommandQueueState {
-        IDLE = 0,
-        RUNNING = 1,
-        TERMINATE = 2,
-    };
 
-    friend class Trace;
-    friend void EnqueueTraceImpl(CommandQueue& cq);
-    friend uint32_t InstantiateTrace(Trace& trace, CommandQueue& cq);
+   private:
+    // Command queue constructor
+    CommandQueue(Device* device, uint32_t id, CommandQueueMode mode = CommandQueue::default_mode());
 
     // Initialize Command Queue Mode based on the env-var. This will be default, unless the user excplictly sets the mode using set_mode.
     CommandQueueMode mode;

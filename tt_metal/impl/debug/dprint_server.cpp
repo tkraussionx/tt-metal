@@ -47,13 +47,19 @@ static inline float bfloat16_to_float(uint16_t bfloat_val) {
     return f;
 }
 
-static inline uint32_t GetBaseAddr(int chip_id, const CoreCoord &core, int hart_id) {
+static inline uint32_t GetBaseAddr(Device *device, const CoreCoord &phys_core, int hart_id) {
     // For tensix cores, compute the buffer address for the requested hart.
-    uint32_t base_addr = PRINT_BUFFER_NC + hart_id*PRINT_BUFFER_SIZE;
+    uint32_t base_addr = PRINT_BUFFER_START + hart_id*PRINT_BUFFER_SIZE;
 
-    // Ethernet cores have a different address mapping
-    if (tt::llrt::is_ethernet_core(core, chip_id))
-        base_addr = eth_l1_mem::address_map::PRINT_BUFFER_ER;
+    // Ethernet cores have a different address mapping.
+    if (tt::llrt::is_ethernet_core(phys_core, device->id())) {
+        CoreCoord logical_core = device->logical_core_from_ethernet_core(phys_core);
+        if (device->is_active_ethernet_core(logical_core)) {
+            base_addr = eth_l1_mem::address_map::PRINT_BUFFER_ER;
+        } else {
+            base_addr = PRINT_BUFFER_IDLE_ER;
+        }
+    }
 
     return base_addr;
 }
@@ -148,7 +154,7 @@ private:
     // buffer on the device is only flushed  up to the WAIT, even if more print data is available
     // after it.
     bool PeekOneHartNonBlocking(
-        int chip_id,
+        Device *device,
         const CoreCoord& core,
         int hart_index,
         bool new_data_this_iter
@@ -281,26 +287,26 @@ static void PrintTypedUint32Array(ostream& stream, int setwidth, uint32_t raw_el
 
 // Writes a magic value at wpos ptr address for dprint buffer for a specific hart/core/chip
 // Used for debug print server startup sequence.
-void WriteInitMagic(chip_id_t chip_id, const CoreCoord& core, int hart_id, bool enabled) {
+void WriteInitMagic(Device *device, const CoreCoord& core, int hart_id, bool enabled) {
     // compute the buffer address for the requested hart
-    uint32_t base_addr = GetBaseAddr(chip_id, core, hart_id);
+    uint32_t base_addr = GetBaseAddr(device, core, hart_id);
 
     // TODO(AP): this could use a cleanup - need a different mechanism to know if a kernel is running on device.
     // Force wait for first kernel launch by first writing a non-zero and waiting for a zero.
     vector<uint32_t> initbuf = { uint32_t(enabled ? DEBUG_PRINT_SERVER_STARTING_MAGIC : DEBUG_PRINT_SERVER_DISABLED_MAGIC) };
-    tt::llrt::write_hex_vec_to_core(chip_id, core, initbuf, base_addr);
+    tt::llrt::write_hex_vec_to_core(device->id(), core, initbuf, base_addr);
 } // WriteInitMagic
 
 // Checks if our magic value was cleared by the device code
 // The assumption is that if our magic number was cleared,
 // it means there is a write in the queue and wpos/rpos are now valid
 // Note that this is not a bulletproof way to bootstrap the print server (TODO(AP))
-bool CheckInitMagicCleared(chip_id_t chip_id, const CoreCoord& core, int hart_id) {
+bool CheckInitMagicCleared(Device *device, const CoreCoord& core, int hart_id) {
     // compute the buffer address for the requested hart
-    uint32_t base_addr = GetBaseAddr(chip_id, core, hart_id);
+    uint32_t base_addr = GetBaseAddr(device, core, hart_id);
 
     vector<uint32_t> initbuf = { DEBUG_PRINT_SERVER_STARTING_MAGIC };
-    auto result = tt::llrt::read_hex_vec_from_core(chip_id, core, base_addr, 4);
+    auto result = tt::llrt::read_hex_vec_from_core(device->id(), core, base_addr, 4);
     return (result[0] != initbuf[0]);
 } // CheckInitMagicCleared
 
@@ -384,7 +390,11 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
             all_physical_printable_cores[CoreType::WORKER].insert(worker_core);
         }
     }
-    for (const auto& eth_core : device->ethernet_cores()) {
+    for (const auto& eth_core : device->get_active_ethernet_cores()) {
+        CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
+        all_physical_printable_cores[CoreType::ETH].insert(physical_core);
+    }
+    for (const auto& eth_core : device->get_inactive_ethernet_cores()) {
         CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
         all_physical_printable_cores[CoreType::ETH].insert(physical_core);
     }
@@ -398,7 +408,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
         for (auto &core : type_and_cores.second) {
             int hart_count = GetNumRiscs(device_id, core);
             for (int hart_index = 0; hart_index < hart_count; hart_index++) {
-                WriteInitMagic(device_id, core, hart_index, false);
+                WriteInitMagic(device, core, hart_index, false);
             }
         }
     }
@@ -422,13 +432,26 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
         }
     };
 
+    // Handle specifically disabled cores
+    std::unordered_set<CoreCoord> disabled_phys_cores;
+    for (auto &type_and_cores : tt::llrt::OptionsG.get_dprint_disabled_cores()) {
+        for (auto &core : type_and_cores.second) {
+            CoreCoord physical_core = device->physical_core_from_logical_core(core, type_and_cores.first);
+            disabled_phys_cores.insert(physical_core);
+        }
+    }
+
     // Core range depends on whether dprint_all_cores flag is set.
     vector<CoreCoord> print_cores_sanitized;
     for (CoreType core_type : {CoreType::WORKER, CoreType::ETH}) {
         if (tt::llrt::OptionsG.get_dprint_all_cores(core_type)) {
             // Print from all cores of the given type, cores returned here are guaranteed to be valid.
-            for (CoreCoord phys_core: all_physical_printable_cores[core_type])
+            for (CoreCoord phys_core: all_physical_printable_cores[core_type]) {
+                // Don't print on specifically disabled cores.
+                if (disabled_phys_cores.find(phys_core) != disabled_phys_cores.end())
+                    continue;
                 print_cores_sanitized.push_back(phys_core);
+            }
             log_info(
                 tt::LogMetal,
                 "DPRINT enabled on device {}, all {} cores.",
@@ -451,6 +474,9 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
                     valid_logical_core = false;
                 }
                 if (valid_logical_core && all_physical_printable_cores[core_type].count(phys_core) > 0) {
+                    // Don't print on specifically disabled cores.
+                    if (disabled_phys_cores.find(phys_core) != disabled_phys_cores.end())
+                        continue;
                     print_cores_sanitized.push_back(phys_core);
                     log_info(
                         tt::LogMetal,
@@ -480,7 +506,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
         int hart_count = GetNumRiscs(device_id, core);
         for (int hart_index = 0; hart_index < hart_count; hart_index++) {
             if (hart_mask & (1<<hart_index)) {
-                WriteInitMagic(device_id, core, hart_index, true);
+                WriteInitMagic(device, core, hart_index, true);
             }
         }
     }
@@ -514,12 +540,12 @@ void DebugPrintServerContext::DetachDevice(Device* device) {
             for (int risc_id = 0; risc_id < GetNumRiscs(chip_id, core); risc_id++) {
                 if (risc_mask & (1<<risc_id)) {
                     // No need to check if risc is not dprint-enabled.
-                    if (!CheckInitMagicCleared(chip_id, core, risc_id))
+                    if (!CheckInitMagicCleared(device, core, risc_id))
                     continue;
 
                     // Check if rpos < wpos, indicating unprocessed prints.
                     constexpr int eightbytes = 8;
-                    uint32_t base_addr = GetBaseAddr(chip_id, core, risc_id);
+                    uint32_t base_addr = GetBaseAddr(device, core, risc_id);
                     auto from_dev = tt::llrt::read_hex_vec_from_core(chip_id, core, base_addr, eightbytes);
                     uint32_t wpos = from_dev[0], rpos = from_dev[1];
                     if (rpos < wpos) {
@@ -561,13 +587,14 @@ void DebugPrintServerContext::ClearSignals() {
 } // ClearSignals
 
 bool DebugPrintServerContext::PeekOneHartNonBlocking(
-    int chip_id,
+    Device *device,
     const CoreCoord& core,
     int hart_id,
     bool new_data_this_iter
 ) {
     // compute the buffer address for the requested hart
-    uint32_t base_addr = GetBaseAddr(chip_id, core, hart_id);
+    uint32_t base_addr = GetBaseAddr(device, core, hart_id);
+    chip_id_t chip_id = device->id();
 
     // Device is incrementing wpos
     // Host is reading wpos and incrementing local rpos up to wpos
@@ -576,7 +603,7 @@ bool DebugPrintServerContext::PeekOneHartNonBlocking(
     // TODO(AP) - compare 8-bytes transfer and full buffer transfer latency
     // First probe only 8 bytes to see if there's anything to read
     constexpr int eightbytes = 8;
-    auto from_dev = tt::llrt::read_hex_vec_from_core(chip_id, core, base_addr, eightbytes);
+    auto from_dev = tt::llrt::read_hex_vec_from_core(device->id(), core, base_addr, eightbytes);
     uint32_t wpos = from_dev[0], rpos = from_dev[1];
     uint32_t counter = 0;
     uint32_t sigval = 0;
@@ -839,12 +866,12 @@ void DebugPrintServerContext::PollPrintData(uint32_t hart_mask) {
                 int hart_count = GetNumRiscs(chip_id, core);
                 for (int hart_index = 0; hart_index < hart_count; hart_index++) {
                     if (hart_mask & (1<<hart_index)) {
-                        if (!CheckInitMagicCleared(chip_id, core, hart_index))
+                        if (!CheckInitMagicCleared(device_and_cores.first, core, hart_index))
                             continue;
 
                         try {
                             new_data_this_iter |= PeekOneHartNonBlocking(
-                                chip_id,
+                                device_and_cores.first,
                                 core,
                                 hart_index,
                                 new_data_this_iter

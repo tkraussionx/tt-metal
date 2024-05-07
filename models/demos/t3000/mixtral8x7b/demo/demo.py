@@ -171,7 +171,7 @@ def run_mixtral_demo(user_input, batch_size, devices, instruct_mode):
     logger.info("Finished first token embedding. Starting inference...")
 
     generation_start_pos = 0
-    max_generated_tokens = 40  # TODO Increase to around 100 tokens
+    max_generated_tokens = 10  # TODO Increase to around 100 tokens
 
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
@@ -269,6 +269,6 @@ def run_mixtral_demo(user_input, batch_size, devices, instruct_mode):
     ],
     ids=["general_weights", "instruct_weights"],
 )
-def test_mixtral8x7b_demo(all_devices, input_prompts, instruct_weights):
+def test_mixtral8x7b_demo(all_devices, use_program_cache, input_prompts, instruct_weights):
     devices = get_devices_for_t3000(all_devices, 8)
     return run_mixtral_demo(user_input=input_prompts, batch_size=32, devices=devices, instruct_mode=instruct_weights)

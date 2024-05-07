@@ -23,6 +23,13 @@ using std::mutex;
 
 namespace tt::tt_metal{
 
+    namespace device_pool {
+
+    // Definition of the global device vector
+        extern std::vector<Device*> devices;
+
+    } // device_pool
+
     namespace detail {
 
         inline static bool DispatchStateCheck( bool isFastDispatch){
@@ -38,6 +45,16 @@ namespace tt::tt_metal{
             const std::vector<uint32_t> &l1_bank_remap = {});
 
         void CloseDevices(std::map<chip_id_t, Device *> devices);
+        Device *GetDeviceHandle(chip_id_t device_id);
+
+        void BeginTraceCapture(Device *device);
+        void EndTraceCapture(Device *device);
+        void ExecuteLastTrace(Device *device, bool blocking);
+        void ReleaseLastTrace(Device *device);
+
+        void BeginTraceCaptures(std::map<chip_id_t, Device *> devices);
+        void EndTraceCaptures(std::map<chip_id_t, Device *> devices);
+        void ExecuteLastTraces(std::map<chip_id_t, Device *> devices, bool blocking);
 
         /**
         * Copies data from a host buffer into the specified buffer
@@ -82,8 +99,9 @@ namespace tt::tt_metal{
 
         // Launches all kernels on cores specified with kernels in the program.
         // All kernels on a given Tensix core must be launched.
-        void LaunchProgram(Device *device, Program &program);
-        void LaunchProgram(Device *device, std::shared_ptr<Program> program);
+        void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done = true);
+        void LaunchProgram(Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done = true);
+        void WaitProgramDone(Device *device, Program &program);
 
         /**
          *  Compiles all kernels within the program, and generates binaries that are written to `$TT_METAL_HOME/built/<device>/kernels/<kernel name>/<kernel hash>`
@@ -103,6 +121,19 @@ namespace tt::tt_metal{
          * | program        | The program to compile                                           | Program & |                                                    | Yes      |
          */
         void CompileProgram(Device *device, Program &program);
+
+
+        /**
+         * Get the base address in L1 of the runtime args for a given processor used by the kernel.
+         *
+         * Return value: uint32_t (base address)
+         *
+         * | Argument     | Description                                                            | Type                          | Valid Range                        | Required |
+         * |--------------|------------------------------------------------------------------------|-------------------------------|------------------------------------|----------|
+         * | kernel       | The kernel that the runtime args are for                               | std::shared_ptr<Kernel>       |                                    | Yes      |
+         */
+
+        uint32_t GetL1ArgBaseAddr(std::shared_ptr<Kernel> kernel);
 
         /**
          * Writes runtime args that are saved in the program to device
@@ -385,7 +416,13 @@ namespace tt::tt_metal{
 
             uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());
             const uint8_t cq_id = 0; // Currently, only the first command queue is responsible for enqueuing programs
-            tt_cxy_pair enqueue_program_dispatch_core = dispatch_core_manager::get(device->num_hw_cqs()).command_dispatcher_core(device->id(), channel, cq_id);
+            tt_cxy_pair enqueue_program_dispatch_core;
+            if (device->is_mmio_capable()) {
+                enqueue_program_dispatch_core = dispatch_core_manager::get(device->num_hw_cqs()).dispatcher_core(device->id(), channel, cq_id);
+            } else {
+                enqueue_program_dispatch_core = dispatch_core_manager::get(device->num_hw_cqs()).dispatcher_d_core(device->id(), channel, cq_id);
+            }
+
             CoreType core_type = dispatch_core_manager::get(device->num_hw_cqs()).get_dispatch_core_type(device->id());
             CoreCoord physical_enqueue_program_dispatch_core = get_physical_core_coordinate(enqueue_program_dispatch_core, core_type);
 

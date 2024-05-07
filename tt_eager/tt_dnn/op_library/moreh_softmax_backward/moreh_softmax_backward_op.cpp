@@ -68,21 +68,21 @@ operation::ProgramWithCallbacks MorehSoftmaxBackward::create_program(
 
     switch (parallelization_strategy) {
         case MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_W:
-            return {moreh_softmax_backward_w_small(output, output_grad, input_grad, this->core_range, this->op)};
+            return {moreh_softmax_backward_w_small(output, output_grad, input_grad, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_H:
-            return {moreh_softmax_backward_h_small(output, output_grad, input_grad, this->core_range, this->op)};
+            return {moreh_softmax_backward_h_small(output, output_grad, input_grad, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_W:
-            return {moreh_softmax_backward_w_large(output, output_grad, input_grad, this->core_range, this->op)};
+            return {moreh_softmax_backward_w_large(output, output_grad, input_grad, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_H:
-            return {moreh_softmax_backward_h_large(output, output_grad, input_grad, this->core_range, this->op)};
+            return {moreh_softmax_backward_h_large(output, output_grad, input_grad, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_C:
             return {
-                moreh_softmax_backward_c_large(output, output_grad, input_grad, this->dim, this->core_range, this->op)};
+                moreh_softmax_backward_c_large(output, output_grad, input_grad, this->dim, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxBackwardOpParallelizationStrategy::NONE:
         default: break;
     }
 
-    return {moreh_softmax_backward_h_large(output, output_grad, input_grad, this->core_range, this->op)};
+    return {moreh_softmax_backward_h_large(output, output_grad, input_grad, this->core_range, this->op, this->compute_kernel_config)};
 }
 
 MorehSoftmaxBackwardOpParallelizationStrategy MorehSoftmaxBackward::get_parallelization_strategy(
@@ -111,7 +111,7 @@ MorehSoftmaxBackwardOpParallelizationStrategy MorehSoftmaxBackward::get_parallel
         TT_ASSERT(
             this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_H ||
                 this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_H,
-            fmt::format("Invalid parallelization strategy. {} is not for dim 2", this->strategy));
+            fmt::format("Invalid parallelization strategy. {} is not for dim H", this->strategy));
 
         if (this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_H) {
             TT_ASSERT(
@@ -122,7 +122,7 @@ MorehSoftmaxBackwardOpParallelizationStrategy MorehSoftmaxBackward::get_parallel
         TT_ASSERT(
             this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_W ||
                 this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_W,
-            fmt::format("Invalid parallelization strategy. {} is not for dim 3", this->strategy));
+            fmt::format("Invalid parallelization strategy. {} is not for dim W", this->strategy));
 
         if (this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_W) {
             TT_ASSERT(
@@ -132,7 +132,7 @@ MorehSoftmaxBackwardOpParallelizationStrategy MorehSoftmaxBackward::get_parallel
     } else {
         TT_ASSERT(
             this->strategy == MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_C,
-            "Invalid parallelization strategy. large c is for dim 0, 1");
+            "Invalid parallelization strategy. large c is for dim 0 - (rank - 3)");
     }
 
     return this->strategy;
@@ -144,19 +144,22 @@ Tensor moreh_softmax_backward(
     uint32_t dim,
     std::optional<Tensor> input_grad_tensor,
     const MorehSoftmaxBackwardOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = output_grad_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     input_grad_tensor = operation::run(
                MorehSoftmaxBackward{
                    .dim = dim,
                    .core_range = all_cores,
                    .op = MorehSoftmaxBackwardOp::SOFTMAX,
                    .strategy = strategy,
-                   .output_mem_config = output_mem_config},
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
                {output_tensor, output_grad_tensor},
                {},
                {input_grad_tensor}).at(0);
@@ -170,19 +173,22 @@ Tensor moreh_softmin_backward(
     uint32_t dim,
     std::optional<Tensor> input_grad_tensor,
     const MorehSoftmaxBackwardOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = output_grad_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     input_grad_tensor = operation::run(
                MorehSoftmaxBackward{
                    .dim = dim,
                    .core_range = all_cores,
                    .op = MorehSoftmaxBackwardOp::SOFTMIN,
                    .strategy = strategy,
-                   .output_mem_config = output_mem_config},
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
                {output_tensor, output_grad_tensor},
                {},
                {input_grad_tensor}).at(0);
@@ -196,19 +202,22 @@ Tensor moreh_logsoftmax_backward(
     uint32_t dim,
     std::optional<Tensor> input_grad_tensor,
     const MorehSoftmaxBackwardOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = output_grad_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     input_grad_tensor = operation::run(
                MorehSoftmaxBackward{
                    .dim = dim,
                    .core_range = all_cores,
                    .op = MorehSoftmaxBackwardOp::LOGSOFTMAX,
                    .strategy = strategy,
-                   .output_mem_config = output_mem_config},
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
                {output_tensor, output_grad_tensor},
                {},
                {input_grad_tensor}).at(0);

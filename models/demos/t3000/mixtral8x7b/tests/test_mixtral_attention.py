@@ -17,6 +17,12 @@ from models.utility_functions import (
     comp_allclose,
 )
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+import os
+
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
 
 
 def test_mixtral_attention_inference(device_mesh, reset_seeds):

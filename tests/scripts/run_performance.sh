@@ -42,7 +42,7 @@ run_perf_models_llm_javelin() {
         env pytest models/demos/mamba/tests -m $test_marker
     fi
 
-    env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/mistral7b/tests -m $test_marker  # -> hanging: issue #7540
+    env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/wormhole/mistral7b/tests -m $test_marker  # -> hanging: issue #7540
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
@@ -53,6 +53,9 @@ run_perf_models_llm_javelin_multi_device() {
     local test_marker=$2
 
     env pytest models/demos/falcon7b/tests -m $test_marker
+
+    # Mistral8x7b env flags are set inside the tests
+    env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
@@ -98,7 +101,7 @@ run_device_perf_models() {
 
         env pytest models/demos/bert/tests -m $test_marker
 
-        env pytest models/demos/mistral7b/tests -m $test_marker
+        env pytest models/demos/wormhole/mistral7b/tests -m $test_marker
 
         env pytest "tests/ttnn/integration_tests/resnet/test_performance.py" -m $test_marker
 

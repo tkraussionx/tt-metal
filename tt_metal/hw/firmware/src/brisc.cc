@@ -24,6 +24,7 @@
 #include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
 #include "dataflow_api.h"
+#include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 
 #include "debug/status.h"
 #include "debug/dprint.h"
@@ -53,6 +54,9 @@ uint8_t my_y[NUM_NOCS] __attribute__((used));
 uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_nonposted_atomics_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_posted_writes_num_issued[NUM_NOCS] __attribute__((used));
+uint32_t atomic_ret_val __attribute__ ((section ("l1_data"))) __attribute__((used));
 
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 

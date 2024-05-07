@@ -28,7 +28,9 @@ void MorehSoftmax::validate_with_output_tensors(const std::vector<Tensor> &input
     TT_ASSERT(input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::BFLOAT8_B);
 
     // validate parameters
-    TT_ASSERT(this->dim >= 0 || this->dim <= 3, "Only dim [0,1,2,3] supported");
+    auto rank = input_tensor.get_legacy_shape().rank();
+
+    TT_ASSERT(this->dim >= 0 && this->dim < rank, fmt::format("dim {} should be less than output tensor rank {}", this->dim, rank));
 
     if(output_tensors.empty() || !output_tensors.at(0).has_value()){
         // If the user decided to not use any optional output tensors, then this would be empty or would be a nullptr.
@@ -60,54 +62,48 @@ operation::ProgramWithCallbacks MorehSoftmax::create_program(const std::vector<T
 
     switch (parallelization_strategy) {
         case MorehSoftmaxOpParallelizationStrategy::SMALL_W:
-            return {moreh_softmax_w_small(input, output, this->core_range, this->op)};
+            return {moreh_softmax_w_small(input, output, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxOpParallelizationStrategy::SMALL_H:
-            return {moreh_softmax_h_small(input, output, this->core_range, this->op)};
+            return {moreh_softmax_h_small(input, output, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxOpParallelizationStrategy::LARGE_W:
-            return {moreh_softmax_w_large(input, output, this->core_range, this->op)};
+            return {moreh_softmax_w_large(input, output, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxOpParallelizationStrategy::LARGE_H:
-            return {moreh_softmax_h_large(input, output, this->core_range, this->op)};
+            return {moreh_softmax_h_large(input, output, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxOpParallelizationStrategy::LARGE_C:
-            return {moreh_softmax_c_large(input, output, this->dim, this->core_range, this->op)};
+            return {moreh_softmax_c_large(input, output, this->dim, this->core_range, this->op, this->compute_kernel_config)};
         case MorehSoftmaxOpParallelizationStrategy::NONE:
         default: break;
     }
 
-    return {moreh_softmax_h_large(input, output, this->core_range, this->op)};
+    return {moreh_softmax_h_large(input, output, this->core_range, this->op, this->compute_kernel_config)};
 }
 
 MorehSoftmaxOpParallelizationStrategy MorehSoftmax::get_parallelization_strategy(
     const std::vector<Tensor>& input_tensors) const {
     const auto& input = input_tensors.at(0);
 
+    auto rank = input.get_legacy_shape().rank();
     if (this->strategy == MorehSoftmaxOpParallelizationStrategy::NONE) {
-        if (this->dim == 0 || this->dim == 1) {
-            return MorehSoftmaxOpParallelizationStrategy::LARGE_C;
-        }
-        if (is_moreh_softmax_w_small_available(input) && this->dim == 3) {
-            return MorehSoftmaxOpParallelizationStrategy::SMALL_W;
-        }
-        if (is_moreh_softmax_h_small_available(input) && this->dim == 2) {
-            return MorehSoftmaxOpParallelizationStrategy::SMALL_H;
-        }
-
-        if (this->dim == 3) {
+        if (rank - 1 == this->dim) {
+            if (is_moreh_softmax_w_small_available(input)) {
+                return MorehSoftmaxOpParallelizationStrategy::SMALL_W;
+            }
             return MorehSoftmaxOpParallelizationStrategy::LARGE_W;
-        } else {
+        }
+        if (rank - 2 == this->dim) {
+            if (is_moreh_softmax_h_small_available(input)) {
+                return MorehSoftmaxOpParallelizationStrategy::SMALL_H;
+            }
             return MorehSoftmaxOpParallelizationStrategy::LARGE_H;
         }
+        return MorehSoftmaxOpParallelizationStrategy::LARGE_C;
     }
 
-    if (this->dim == 0 || this->dim == 1) {
-        TT_ASSERT(
-            this->strategy == MorehSoftmaxOpParallelizationStrategy::LARGE_C,
-            "Invalid parallelization strategy. large c is for dim 0, 1");
-    }
-    if (this->dim == 2) {
+    if (rank - 2 == this->dim) {
         TT_ASSERT(
             this->strategy == MorehSoftmaxOpParallelizationStrategy::SMALL_H ||
                 this->strategy == MorehSoftmaxOpParallelizationStrategy::LARGE_H,
-            fmt::format("Invalid parallelization strategy. {} is not for dim 2", this->strategy));
+            fmt::format("Invalid parallelization strategy. {} is not for dim H", this->strategy));
 
         if (this->strategy == MorehSoftmaxOpParallelizationStrategy::SMALL_H) {
             TT_ASSERT(
@@ -115,17 +111,22 @@ MorehSoftmaxOpParallelizationStrategy MorehSoftmax::get_parallelization_strategy
                 fmt::format("not enough circular buffer memory for {}", this->strategy));
         }
     }
-    if (this->dim == 3) {
+    else if (rank - 1 == this->dim) {
         TT_ASSERT(
             this->strategy == MorehSoftmaxOpParallelizationStrategy::SMALL_W ||
                 this->strategy == MorehSoftmaxOpParallelizationStrategy::LARGE_W,
-            fmt::format("Invalid parallelization strategy. {} is not for dim 3", this->strategy));
+            fmt::format("Invalid parallelization strategy. {} is not for dim W", this->strategy));
 
         if (this->strategy == MorehSoftmaxOpParallelizationStrategy::SMALL_W) {
             TT_ASSERT(
                 is_moreh_softmax_w_small_available(input),
                 fmt::format("not enough circular buffer memory for {}", this->strategy));
         }
+    } else {
+        TT_ASSERT(
+            this->strategy == MorehSoftmaxOpParallelizationStrategy::LARGE_C,
+            "Invalid parallelization strategy. large c is for dim 0 to (rank - 3)");
+
     }
 
     return this->strategy;
@@ -137,19 +138,22 @@ Tensor moreh_softmax(
     uint32_t dim,
     std::optional<Tensor> output_tensor,
     const MorehSoftmaxOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = input_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     output_tensor = operation::run(
                MorehSoftmax{
                    .dim = dim,
                    .core_range = all_cores,
                    .op = MorehSoftmaxOp::SOFTMAX,
                    .strategy = strategy,
-                   .output_mem_config = output_mem_config},
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
                {input_tensor},
                {},
                {output_tensor}).at(0);
@@ -162,19 +166,22 @@ Tensor moreh_softmin(
     uint32_t dim,
     std::optional<Tensor> output_tensor,
     const MorehSoftmaxOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = input_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     output_tensor = operation::run(
                MorehSoftmax{
                    .dim = dim,
                    .core_range = all_cores,
                    .op = MorehSoftmaxOp::SOFTMIN,
                    .strategy = strategy,
-                   .output_mem_config = output_mem_config},
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
                {input_tensor},
                {},
                {output_tensor}).at(0);
@@ -187,19 +194,22 @@ Tensor moreh_logsoftmax(
     uint32_t dim,
     std::optional<Tensor> output_tensor,
     const MorehSoftmaxOpParallelizationStrategy strategy,
-    const MemoryConfig &output_mem_config) {
+    const MemoryConfig &output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
     auto device = input_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
     output_tensor = operation::run(
         MorehSoftmax{
             .dim = dim,
             .core_range = all_cores,
             .op = MorehSoftmaxOp::LOGSOFTMAX,
             .strategy = strategy,
-            .output_mem_config = output_mem_config},
+            .output_mem_config = output_mem_config,
+            .compute_kernel_config = kernel_config_val},
         {input_tensor},
         {},
         {output_tensor}).at(0);

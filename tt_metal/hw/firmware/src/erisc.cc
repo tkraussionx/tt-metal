@@ -38,6 +38,9 @@ uint8_t my_y[NUM_NOCS] __attribute__((used));
 uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_nonposted_atomics_acked[NUM_NOCS] __attribute__((used));
+uint32_t noc_posted_writes_num_issued[NUM_NOCS] __attribute__((used));
+uint32_t atomic_ret_val __attribute__ ((section ("l1_data"))) __attribute__((used));
 
 void __attribute__((section("code_l1"))) risc_init() {
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
@@ -47,7 +50,7 @@ void __attribute__((section("code_l1"))) risc_init() {
     }
 }
 
-void __attribute__((section("erisc_l1_code"))) Application(void) {
+void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     DEBUG_STATUS('I');
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
@@ -86,7 +89,7 @@ void __attribute__((section("erisc_l1_code"))) Application(void) {
     }
     internal_::disable_erisc_app();
 }
-void __attribute__((section("erisc_l1_code"), naked)) ApplicationHandler(void) {
+void __attribute__((section("erisc_l1_code.0"), naked)) ApplicationHandler(void) {
     // Save the registers, stack pointer, return address so that we can early exit in the case of
     // an error.
     __asm__(
