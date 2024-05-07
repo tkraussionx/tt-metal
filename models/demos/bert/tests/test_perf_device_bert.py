@@ -16,7 +16,7 @@ from models.perf.device_perf_utils import run_device_perf, check_device_perf, pr
 )
 def test_perf_device_bare_metal(batch_size, test, expected_perf):
     subdir = "ttnn_bert"
-    num_iterations = 3
+    num_iterations = 100
     margin = 0.03
     # command = f"pytest models/demos/bert/demo/demo.py::test_demo_squadv2[{test}]"
     command = f"pytest models/demos/bert/tests/test_ttnn_optimized_bert.py::test_bert_for_question_answering[{test}]"

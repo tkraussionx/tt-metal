@@ -53,6 +53,7 @@ bool _get_use_same_noc(const Tensor& input_tensor_a, const Tensor& input_tensor_
             use_same_noc = check_thresholds(fp16_bfp8_lofi_threshold);
         }
     }
+    use_same_noc = true;
 
     tt::log_info("per_core_M: {}, per_core_K: {}, per_core_N: {}, a_df: {}, b_df: {}, mf: {}, Use same noc: {}", per_core_M, in0_block_w, per_core_N, in_a_dtype, in_b_dtype, math_fidelity, use_same_noc);
 
