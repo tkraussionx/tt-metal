@@ -18,6 +18,9 @@ namespace tt_metal {
     // Returns a new tensor with layout=Tile
     Tensor convert_conv_weight_tensor_to_special_padding_tiled_layout(Tensor conv_weight_tensor, uint32_t in1_block_h, uint32_t in1_block_w, std::optional<DataType> output_dtype = std::nullopt);
 
+    // Converts convolution weights to grouped layout with padded zeros
+    Tensor convert_conv_weight_tensor_to_grouped_layout(Tensor conv_weight_tensor, uint32_t num_groups, DataType output_dtype);
+
     const Shape infer_dims_for_reshape(int N, int C, int H, int W, uint32_t old_volume);
 
     const Shape infer_dims_for_reshape_RM(int N, int C, int H, int W, uint32_t old_volume);

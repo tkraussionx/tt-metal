@@ -702,6 +702,7 @@ class TTPyCompositeConv(TTPyOp):
             conv_reader_patterns_cache[sliding_window_op_params_hash] = conv_reader_indices_sharded_tensor
 
     # TODO: Maybe need to have this be more general to settting up conv
+    # taps
     def set_op_weights_biases(
         self,
         weight: ttl.tensor.Tensor,
@@ -727,21 +728,61 @@ class TTPyCompositeConv(TTPyOp):
         assert len(conv_params) == 10
         K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
 
+        # Constraint checking
         assert dilation == 1
         assert padded_input_channels >= C
+
+        # If we are not using paramters cache, need to fix shapes and padding for weight and bias
         if not using_parameters_cache:
-            weights_shape = [K, C // groups, R, S]
+            # Weight tensor manipulations
+            if weights_dtype is None:
+                weights_dtype = weight.get_dtype()
+
+            weights_untiled_dtype = (
+                weights_dtype if weights_dtype != ttl.tensor.DataType.BFLOAT8_B else ttl.tensor.DataType.FLOAT32
+            )
+
+            # Need to add padding based on number of groups
+            print("--------------------------------------------------------------------------")
+            print(f"num_groups={groups}")
+            print(f"weight tensor shape={weight.shape}")
+            print(weight)
+            print("--------------------------------------------------------------------------")
+
+            grouped_weight = ttl.tensor.convert_conv_weight_tensor_to_grouped_layout(
+                weight, groups, output_dtype=weights_dtype
+            )
+
+            print("--------------------------------------------------------------------------")
+            print(f"num_groups={groups}")
+            print(f"grouped_weight tensor shape={grouped_weight.shape}")
+            print(grouped_weight)
+            print("--------------------------------------------------------------------------")
+
+            # convert original weight tensor
+            weight_copy = weight
+            torch_weight_tensor = weight_copy.to_torch()
+            tensor1, tensor2 = torch.chunk(torch_weight_tensor, 2, dim=0)
+            zero_tensor = torch.zeros_like(tensor1)
+            tensor1_resized = torch.cat((tensor1, zero_tensor), dim=1)
+            tensor2_resized = torch.cat((zero_tensor, tensor2), dim=1)
+            torch_weight_tensor = torch.cat((tensor1_resized, tensor2_resized), dim=0)
+
+            print("--------------------------------------------------------------------------")
+            print(f"num_groups={groups}")
+            print(f"torch grouped_weight tensor shape={torch_weight_tensor.shape}")
+            print(torch_weight_tensor)
+            print("--------------------------------------------------------------------------")
+
+            # Add additional padding for weight tensor
+            weights_shape = [K, C, R, S]
             weights_channels_padded_shape = [
                 _nearest_32(K),
                 padded_input_channels,
                 R,
                 S,
             ]
-            if weights_dtype is None:
-                weights_dtype = weight.get_dtype()
-            weights_untiled_dtype = (
-                weights_dtype if weights_dtype != ttl.tensor.DataType.BFLOAT8_B else ttl.tensor.DataType.FLOAT32
-            )
+
             assert weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
             assert weight.get_dtype() == weights_untiled_dtype
             assert weight.get_legacy_shape() == weights_shape
@@ -762,6 +803,8 @@ class TTPyCompositeConv(TTPyOp):
                     output_dtype=weights_dtype,
                 )
             weight_on_device = weight_tiled_.to(device) if move_weights_to_device else weight_tiled_
+
+            # Bias tensor manipulations
             bias_on_device = None
             self.weight = weight_on_device
             if bias is not None:

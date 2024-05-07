@@ -78,7 +78,9 @@ class Conv2d:
 
         assert dilation_h == 1, f"Only convs with dilation == 1 supported. Found dilation_h={dilation_h}"
         assert dilation_w == 1, f"Only convs with dilation == 1 supported. Found dilation_w={dilation_w}"
-        # assert groups == 1, "Only convs with groups == 1 supported"
+        assert (
+            in_channels % groups == 0 and out_channels % groups == 0
+        ), f"Number of input channels={in_channels} and output channels={out_channels} must be divisible by number of groups={groups}"
         sliding_window_op_params = SlidingWindowOpParams(
             stride_h=stride_h,
             stride_w=stride_w,

@@ -354,3 +354,123 @@ def test_pytorch_ttnn_conv_grouped(
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=0.999)
     logger.info(pcc_msg)
     assert passing
+
+
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+def test_ttnn_groups(
+    device,
+):
+    # torch implementation
+    # Test parameters
+    batch_size = 1
+    in_channels = 64
+    input_height = 8
+    input_width = 8
+    out_channels = 64
+    kernel_size = (3, 3)
+    stride = (1, 1)
+    padding = (1, 1)
+    num_groups = 2
+    math_fidelity = ttnn.MathFidelity.HiFi4
+
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=math_fidelity,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    # Define original tensors and shapes
+    input_shape = [batch_size, in_channels, input_height, input_width]
+    weight_shape = [
+        out_channels,
+        in_channels // num_groups,
+        kernel_size[0],
+        kernel_size[1],
+    ]
+    bias_shape = [1, 1, 1, out_channels]
+
+    torch_input_tensor_nchw = torch.randn(input_shape, dtype=torch.bfloat16).float()
+    torch_input_tensor_nhwc = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
+    torch_weight_tensor = torch.randn(weight_shape, dtype=torch.bfloat16).float()
+    torch_bias_tensor = torch.randn(bias_shape, dtype=torch.bfloat16).float()
+
+    # Define pytorch convolutional layer
+    torch_conv_layer = nn.Conv2d(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        groups=num_groups,
+    )
+    torch_conv_layer.weight = nn.Parameter(torch_weight_tensor)
+    torch_conv_layer.bias = nn.Parameter(torch_bias_tensor.reshape(-1))
+
+    # Apply convolution operation
+    torch_output_tensor_nchw = torch_conv_layer(torch_input_tensor_nchw)
+
+    # ttnn implementation
+    # Define ttnn tensors and shapes
+    ttnn_weight_tensor = ttnn.from_torch(torch_weight_tensor, ttnn.bfloat16)
+    ttnn_bias_tensor = ttnn.from_torch(torch_bias_tensor, ttnn.bfloat16)
+
+    # Define ttnn convolution operation
+    ttnn_conv_layer = ttnn.Conv2d(
+        device=device,
+        batch_size=batch_size,
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        input_height=input_height,
+        input_width=input_width,
+        math_fidelity=math_fidelity,
+        dtype=ttnn.bfloat16,
+        weights_dtype=ttnn.bfloat16,
+        deallocate_activation=False,
+        use_shallow_conv_variant=False,
+        use_1d_systolic_array=True,
+        reader_patterns_cache={},
+        weight=ttnn_weight_tensor,
+        bias=ttnn_bias_tensor,
+        conv_blocking_and_parallelization_config_override=None,
+        enable_auto_formatting=False,
+        padded_input_channels=None,
+        compute_kernel_config=compute_kernel_config,
+        output_layout=ttnn.TILE_LAYOUT,
+        groups=num_groups,
+    )
+
+    # Convert torch input tensor to ttnn tensor
+    ttnn_input_tensor = ttnn.from_torch(torch_input_tensor_nchw, ttnn.bfloat16)
+
+    # Move input tensor to device
+    ttnn_input_tensor_on_device = ttnn_conv_layer.copy_input_to_device(ttnn_input_tensor)
+
+    # Apply convolution operation on device
+    ttnn_output_tensor_on_device_tile_layout = ttnn_conv_layer(ttnn_input_tensor_on_device)
+
+    # Convert output and get output from device
+    ttnn_output_tensor_on_device_row_layout = ttnn.to_layout(
+        ttnn_output_tensor_on_device_tile_layout, ttnn.ROW_MAJOR_LAYOUT
+    )
+    ttnn_output_tensor = ttnn.from_device(ttnn_output_tensor_on_device_row_layout)
+    torch_ttnn_output_tensor = ttnn.to_torch(ttnn_output_tensor)
+
+    # Shape manipulations
+    output_shape_nhwc = [
+        torch_output_tensor_nchw.shape[0],
+        torch_output_tensor_nchw.shape[2],
+        torch_output_tensor_nchw.shape[3],
+        torch_output_tensor_nchw.shape[1],
+    ]
+    torch_ttnn_output_tensor_nhwc = torch.reshape(torch_ttnn_output_tensor, output_shape_nhwc)
+    torch_ttnn_output_tensor_nchw = torch.permute(torch_ttnn_output_tensor, (0, 3, 1, 2))
+
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(
+        torch_output_tensor_nchw, torch_ttnn_output_tensor_nchw, pcc=0.999
+    )
+    logger.info(pcc_msg)
+    assert passing

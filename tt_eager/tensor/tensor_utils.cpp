@@ -5,11 +5,30 @@
 #include "tensor/tensor_utils.hpp"
 #include "tensor/owned_buffer.hpp"
 #include "tensor/owned_buffer_functions.hpp"
+#include "tensor/borrowed_buffer.hpp"
+#include "tensor/borrowed_buffer_functions.hpp"
 
 namespace tt {
 
 namespace tt_metal {
 
+    std::vector<int> compute_strides(Shape shape) {
+            auto num_elements = compute_volume(shape);
+            std::vector<int> strides;
+            for (std::int32_t index = 0; index < shape.rank(); index++) {
+                num_elements /= shape[index];
+                strides.push_back(num_elements);
+            }
+            return strides;
+        }
+
+    int compute_flat_input_index(vector<int> indices, vector<int> strides) {
+            int flat_index = 0;
+            for (auto i = 0; i < indices.size(); i++) {
+                flat_index += indices[i] * strides[i];
+            }
+            return flat_index;
+        };
 
     template <typename T>
     Tensor to_weight_special_padding_tile_layout(const Tensor& conv_weight_tensor, uint32_t in1_block_h, uint32_t in1_block_w, DataType output_dtype) {
@@ -149,6 +168,107 @@ namespace tt_metal {
             }
         }
         return to_w_tile_layout_map.at(conv_weight_tensor.get_dtype())(conv_weight_tensor, in1_block_h, in1_block_w, output_dtype.value_or(conv_weight_tensor.get_dtype()));
+    }
+
+    // Converts convolution weights to grouped layout with padded zeros
+    // taps
+    Tensor convert_conv_weight_tensor_to_grouped_layout(Tensor conv_weight_tensor, uint32_t num_groups, DataType output_dtype) {
+
+        std::cout << "DEBUG: " << "num_groups=" << num_groups << std::endl;
+
+        TT_ASSERT(conv_weight_tensor.get_layout() == Layout::ROW_MAJOR && "Convolution weights should be in row major layout for adding the required padding");
+
+        // Define output tensor shape. This is going to be channel dimension of weight tensor * num_groups - this value should match number of input channels being convolved with the weight tensor
+        auto original_conv_weight_tensor_shape_test = conv_weight_tensor.get_shape();
+        Shape original_conv_weight_tensor_shape = {original_conv_weight_tensor_shape_test[0], original_conv_weight_tensor_shape_test[1], original_conv_weight_tensor_shape_test[2], original_conv_weight_tensor_shape_test[3]};
+        Shape output_conv_weight_tensor_shape = {original_conv_weight_tensor_shape[0], original_conv_weight_tensor_shape[1] * num_groups, original_conv_weight_tensor_shape[2], original_conv_weight_tensor_shape[3]};
+
+        std::cout << "DEBUG: original weight shape=" << original_conv_weight_tensor_shape[0] << "," << original_conv_weight_tensor_shape[1] << "," << original_conv_weight_tensor_shape[2] << "," << original_conv_weight_tensor_shape[3] << num_groups << std::endl;
+        std::cout << "DEBUG: output weight shape=" << output_conv_weight_tensor_shape[0] << "," << output_conv_weight_tensor_shape[1] << "," << output_conv_weight_tensor_shape[2] << "," << output_conv_weight_tensor_shape[3] << num_groups << std::endl;
+
+
+        // Create newly allocated buffer all initialized to 0
+        int num_filters_per_group = original_conv_weight_tensor_shape[0] / num_groups;
+
+        std::cout << "DEBUG: num filters per group=" << num_filters_per_group << std::endl;
+
+        if (output_dtype == DataType::INT32) {
+            std::cout << "DEBUG: int32" << std::endl;
+            owned_buffer::Buffer<int32_t> output_buffer = owned_buffer::create<int32_t>(compute_volume(output_conv_weight_tensor_shape));
+            std::cout << "DEBUG: create output buffer" << std::endl;
+            const auto conv_weight_tensor_buffer = owned_buffer::get_as<int32_t>(conv_weight_tensor);
+            std::cout << "DEBUG: got original weight buffer" << std::endl;
+        } else if (output_dtype == DataType::FLOAT32) {
+            std::cout << "DEBUG: float32" << std::endl;
+            owned_buffer::Buffer<float> output_buffer = owned_buffer::create<float>(compute_volume(output_conv_weight_tensor_shape));
+            std::cout << "DEBUG: create output buffer" << std::endl;
+            const auto conv_weight_tensor_buffer = owned_buffer::get_as<float>(conv_weight_tensor);
+            std::cout << "DEBUG: got original weight buffer" << std::endl;
+        } else if (output_dtype == DataType::BFLOAT16) {
+            // taps
+            std::cout << "DEBUG: bfloat16" << std::endl;
+            owned_buffer::Buffer<bfloat16> output_buffer = owned_buffer::create<bfloat16>(compute_volume(output_conv_weight_tensor_shape));
+            std::cout << "DEBUG: create output buffer" << std::endl;
+            auto conv_weight_tensor_buffer = borrowed_buffer::get_as<bfloat16>(conv_weight_tensor);
+            std::cout << "DEBUG: got original weight buffer" << std::endl;
+
+            int input_weight_n = original_conv_weight_tensor_shape[0];
+            int input_weight_c = original_conv_weight_tensor_shape[1];
+            int input_weight_h = original_conv_weight_tensor_shape[2];
+            int input_weight_w = original_conv_weight_tensor_shape[3];
+
+            for (int curr_batch_idx = 0; curr_batch_idx < input_weight_n; curr_batch_idx++) {
+                int new_batch_idx = curr_batch_idx;
+                int new_channel_start_idx = curr_batch_idx * input_weight_c;
+
+                for (int i = 0; i < input_weight_n; i++) {
+                    for (int j = 0; j < input_weight_c; j++) {
+                        for (int k = 0; k < input_weight_h; k++) {
+                            for (int m = 0; m < input_weight_w; m++) {
+                                auto value_flat_input_index = compute_flat_input_index({i, j, k, m}, compute_strides(original_conv_weight_tensor_shape));
+                                auto value = conv_weight_tensor_buffer[value_flat_input_index];
+
+                                auto new_channel_idx = new_channel_start_idx + j;
+                                auto output_flat_input_index = compute_flat_input_index({new_batch_idx, new_channel_idx, k, m}, compute_strides(output_conv_weight_tensor_shape));
+                                output_buffer[output_flat_input_index] = value;
+                            }
+                        }
+                    }
+                }
+            }
+
+            std::cout << "DEBUG: creating return tensor" << std::endl;
+            auto output_tensor = Tensor(std::move(OwnedStorage{std::move(output_buffer)}), output_conv_weight_tensor_shape, output_dtype, Layout::ROW_MAJOR);
+            std::cout << "DEBUG: yay success!" << std::endl;
+            return output_tensor;
+        } else if (output_dtype == DataType::UINT16) {
+            std::cout << "DEBUG: uint16" << std::endl;
+            owned_buffer::Buffer<uint16_t> output_buffer = owned_buffer::create<uint16_t>(compute_volume(output_conv_weight_tensor_shape));
+            std::cout << "DEBUG: create output buffer" << std::endl;
+            const auto conv_weight_tensor_buffer = owned_buffer::get_as<uint16_t>(conv_weight_tensor);
+            std::cout << "DEBUG: got original weight buffer" << std::endl;
+        } else {
+            std::cout << "DEBUG: uint32" << std::endl;
+            owned_buffer::Buffer<uint32_t> output_buffer = owned_buffer::create<uint32_t>(compute_volume(output_conv_weight_tensor_shape));
+            std::cout << "DEBUG: create output buffer" << std::endl;
+            const auto conv_weight_tensor_buffer = owned_buffer::get_as<uint32_t>(conv_weight_tensor);
+            std::cout << "DEBUG: got original weight buffer" << std::endl;
+        }
+
+        // Loop through the newly allocated tensor and slot in the original weight tensor values. The remaining values will be defaulted to 0
+        //int group_idx = 0;
+        //for (int i = 0; i < compute_volume(original_conv_weight_tensor_shape); i++) {
+        //    std::cout << conv_weight_tensor.get_storage();
+        //}
+
+        // Move buffer ownership in tensor and return
+        std::cout << "DEBUG: before creating a random output buffer" << std::endl;
+        owned_buffer::Buffer<int32_t> output_buffer = owned_buffer::create<int32_t>(compute_volume(output_conv_weight_tensor_shape));
+        std::cout << "DEBUG: before creating a random tensor" << std::endl;
+        auto output_tensor = Tensor(std::move(OwnedStorage{std::move(output_buffer)}), output_conv_weight_tensor_shape, output_dtype, Layout::ROW_MAJOR);
+
+        std::cout << "DEBUG: success!" << std::endl;
+        return output_tensor;
     }
 
 const Shape infer_dims_for_reshape(int N, int C, int H, int W, uint32_t old_volume) {
