@@ -67,6 +67,7 @@ class transformer_2d_model:
             use_shallow_conv_variant=False,
             deallocate_activation=True,
             compute_kernel_config=compute_kernel_config,
+            transpose_mcast=False,
         )
 
         norm_num_groups = 32
@@ -79,6 +80,7 @@ class transformer_2d_model:
             num_groups=norm_num_groups,
             input_nhw=batch_size * input_height * input_width,
             is_height_sharded=False,
+            is_row_major=True,
         )
 
         if not self.fallback_on_groupnorm:
@@ -158,6 +160,7 @@ class transformer_2d_model:
             use_shallow_conv_variant=False,
             deallocate_activation=True,
             compute_kernel_config=compute_kernel_config,
+            transpose_mcast=False,
         )
 
         self.output_height = self.proj_out.output_height
@@ -261,8 +264,14 @@ class transformer_2d_model:
             )
             if ttnn.get_memory_config(hidden_states) != self.gn_expected_input_sharded_memory_config:
                 # hidden_states = ttnn.experimental.tensor.reshard(hidden_states, self.gn_expected_input_sharded_memory_config)
+                print(
+                    f"input shape: {hidden_states.shape}, layout: {hidden_states.layout}, memory config: {hidden_states.memory_config()}"
+                )
                 hidden_states = ttnn.to_memory_config(hidden_states, ttnn.L1_MEMORY_CONFIG)
                 hidden_states = ttnn.to_memory_config(hidden_states, self.gn_expected_input_sharded_memory_config)
+                print(
+                    f"output shape: {hidden_states.shape}, layout: {hidden_states.layout}, memory config: {hidden_states.memory_config()}"
+                )
             hidden_states = ttnn.group_norm(
                 input_tensor=hidden_states,
                 num_groups=norm_num_groups,
@@ -276,6 +285,9 @@ class transformer_2d_model:
         hidden_states = ttnn.reshape(
             hidden_states, (1, 1, self.batch_size * self.input_height * self.input_width, in_channels)
         )
+        print(
+            f"input shape: {hidden_states.shape}, layout: {hidden_states.layout}, memory config: {hidden_states.memory_config()}"
+        )
         hidden_states = ttnn.to_memory_config(
             hidden_states, ttnn.L1_MEMORY_CONFIG
         )  # sharded to interleaved since we can't tilize block sharded
@@ -285,6 +297,9 @@ class transformer_2d_model:
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
         )
         hidden_states = ttnn.to_memory_config(hidden_states, self.proj_in.conv.input_sharded_memory_config)
+        print(
+            f"output shape: {hidden_states.shape}, layout: {hidden_states.layout}, memory config: {hidden_states.memory_config()}"
+        )
 
         hidden_states = self.proj_in(hidden_states)
 
@@ -317,7 +332,13 @@ class transformer_2d_model:
                 # hidden_states = ttnn.to_memory_config(hidden_states, self.proj_out.conv.input_sharded_memory_config)
                 hidden_states = self.proj_out(hidden_states)
                 if ttnn.get_memory_config(residual) != self.proj_out.conv.input_sharded_memory_config:
+                    print(
+                        f"input shape: {residual.shape}, layout: {residual.layout}, memory config: {residual.memory_config()}"
+                    )
                     residual = ttnn.to_memory_config(residual, self.proj_out.conv.input_sharded_memory_config)
+                    print(
+                        f"output shape: {residual.shape}, layout: {residual.layout}, memory config: {residual.memory_config()}"
+                    )
                 if output_bfloat16:
                     hidden_states = dealloc_input(
                         ttnn.add,

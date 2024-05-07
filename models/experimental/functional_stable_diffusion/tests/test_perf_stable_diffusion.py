@@ -86,6 +86,7 @@ def test_stable_diffusion_perf(
     device, num_prompts, num_inference_steps, image_size, expected_compile_time, expected_inference_time
 ):
     disable_persistent_kernel_cache()
+    ttnn.CONFIG.throw_exception_on_fallback = True
 
     # Clear global profiler state before starting measurements
     profiler.clear()
@@ -240,6 +241,7 @@ def test_stable_diffusion_perf(
                 )
                 profiler.end(f"model_run_for_inference_{i}")
 
+            ttnn_noise_pred = ttnn.to_layout(ttnn_noise_pred, ttnn.ROW_MAJOR_LAYOUT)
             # perform guidance
             noise_pred = tt_guide(ttnn_noise_pred, guidance_scale)
 
