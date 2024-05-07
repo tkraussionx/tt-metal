@@ -21,7 +21,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, const Tensor& output, BcastOpMath bcast_math, BcastOpDim bcast_dim, bool inplace = false) {
+operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, const Tensor& output, BcastOpMath bcast_math, BcastOpDim bcast_dim, bool inplace) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
 
     const auto ashape = a.get_legacy_shape();

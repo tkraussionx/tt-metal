@@ -44,7 +44,8 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(
     const Tensor &input_tensor_b,
     const Tensor &output_tensor,
     BcastOpMath bcast_op,
-    BcastOpDim bcast_dim);
+    BcastOpDim bcast_dim,
+    bool inplace);
 
 struct EltwiseBinaryBroadcast {
     const BcastOpMath math_op;
