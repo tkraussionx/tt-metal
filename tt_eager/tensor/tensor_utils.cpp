@@ -224,7 +224,16 @@ namespace tt_metal {
 
             for (int curr_batch_idx = 0; curr_batch_idx < input_weight_n; curr_batch_idx++) {
                 int new_batch_idx = curr_batch_idx;
-                int new_channel_start_idx = curr_batch_idx * input_weight_c;
+
+                // Find which group_id that batch belongs to
+                // compute offset : new_channel_start_idx = (group_id * input_weight_c)
+                auto group_size = input_weight_n / num_groups;
+                auto group_index = curr_batch_idx / group_size;
+                auto group_id = std::min(group_index, num_groups - 1);
+                int new_channel_start_idx = group_id * input_weight_c;
+
+                std::cout << "DEBUG: group_id=" << group_id << std::endl;
+                std::cout << "DEBUG: new_channel_start_idx=" << new_channel_start_idx << std::endl;
 
                 for (int j = 0; j < input_weight_c; j++) {
                     for (int k = 0; k < input_weight_h; k++) {

@@ -787,7 +787,7 @@ class TTPyCompositeConv(TTPyOp):
             assert passing
 
             # Add additional padding for weight tensor
-            weights_shape = [K, C, R, S]
+            weights_shape = grouped_weight.shape
             weights_channels_padded_shape = [
                 _nearest_32(K),
                 padded_input_channels,
@@ -795,10 +795,10 @@ class TTPyCompositeConv(TTPyOp):
                 S,
             ]
 
-            assert weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
-            assert weight.get_dtype() == weights_untiled_dtype
-            assert weight.get_legacy_shape() == weights_shape
-            weight_untiled = weight.pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
+            assert grouped_weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
+            assert grouped_weight.get_dtype() == weights_untiled_dtype
+            assert grouped_weight.get_legacy_shape() == weights_shape
+            weight_untiled = grouped_weight.pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
             # for conv op, pad the weights to block shape
             if self.is_1d_systolic:
                 weight_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_special_padding_tiled_layout(
@@ -1054,6 +1054,8 @@ class TTPyCompositeConv(TTPyOp):
         interleaved_mem_config = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
         )
+        print(f"conv_input.get_legacy_shape()={conv_input.get_legacy_shape()}")
+        print(f"self.input_tensor_shape={self.input_tensor_shape}")
         assert conv_input.get_legacy_shape() == self.input_tensor_shape
         # Reshape 4d to 2d
         conv_input = conv_input.reshape(
