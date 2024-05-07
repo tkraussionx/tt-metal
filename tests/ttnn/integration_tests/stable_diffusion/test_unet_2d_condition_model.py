@@ -144,6 +144,8 @@ def test_unet_2d_condition_model_256x256(device, batch_size, in_channels, input_
     ],
 )
 def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_height, input_width):
+    device.enable_program_cache()
+
     # setup envvar if testing on N300
     wh_arch_yaml_org = None
     if device.core_grid.y == 7:
@@ -217,6 +219,8 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
         use_signpost = False
     if use_signpost:
         signpost(header="start")
+    # ttnn.CONFIG.enable_logging = True
+    # ttnn.CONFIG.enable_comparison_mode = True
     ttnn_output = model(
         input,
         timestep=ttnn_timestep,
@@ -232,6 +236,7 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
     first_iter = time.time() - first_iter
     ttnn_output = ttnn_to_torch(ttnn_output)
     print(f"First iteration took {first_iter} seconds")
+
     # times = []
     # for i in range(50):
     #     start = time.time()

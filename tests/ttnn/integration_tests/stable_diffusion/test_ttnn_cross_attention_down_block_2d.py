@@ -154,7 +154,8 @@ def test_cross_attn_down_block_2d_256x256(device, model_name, N, C, H, W, index,
 )
 def test_cross_attn_down_block_2d_512x512(device, model_name, N, C, H, W, index, in_channels):
     # TODO
-    pytest.skip()
+    # pytest.skip()
+    device.enable_program_cache()
     torch.manual_seed(0)
 
     pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)
@@ -199,6 +200,7 @@ def test_cross_attn_down_block_2d_512x512(device, model_name, N, C, H, W, index,
 
     hidden_states = ttnn.from_torch(hidden_states, ttnn.bfloat16)
     hidden_states = ttnn.to_device(hidden_states, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    hidden_states = pre_process_input(device, hidden_states)
     hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT, ttnn.bfloat8_b)
 
     encoder_hidden_states = torch.nn.functional.pad(encoder_hidden_states, (0, 0, 0, 19))
@@ -209,7 +211,8 @@ def test_cross_attn_down_block_2d_512x512(device, model_name, N, C, H, W, index,
     temb = ttnn.from_torch(temb, ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
     temb = ttnn.to_device(temb, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
-    hidden_states = pre_process_input(device, hidden_states)
+    # ttnn.CONFIG.enable_logging = True
+    # ttnn.CONFIG.enable_comparison_mode = True
     ttnn_output, _ = model(
         hidden_states,
         encoder_hidden_states,
@@ -222,6 +225,7 @@ def test_cross_attn_down_block_2d_512x512(device, model_name, N, C, H, W, index,
         config=config,
     )
     ttnn_output = post_process_output(device, ttnn_output, N, H // 2, W // 2, in_channels)
+    # ttnn_output = post_process_output(device, ttnn_output, N, H, W, in_channels)
     ttnn_output = ttnn.to_torch(ttnn_output)
 
     assert_with_pcc(torch_output, ttnn_output, 0.96)
