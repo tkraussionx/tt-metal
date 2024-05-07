@@ -217,21 +217,31 @@ namespace tt_metal {
             int input_weight_h = original_conv_weight_tensor_shape[2];
             int input_weight_w = original_conv_weight_tensor_shape[3];
 
+            std::cout << "DEBUG: input_weight_n=" << input_weight_n << std::endl;
+            std::cout << "DEBUG: input_weight_c=" << input_weight_c << std::endl;
+            std::cout << "DEBUG: input_weight_h=" << input_weight_h << std::endl;
+            std::cout << "DEBUG: input_weight_w=" << input_weight_w << std::endl;
+
             for (int curr_batch_idx = 0; curr_batch_idx < input_weight_n; curr_batch_idx++) {
                 int new_batch_idx = curr_batch_idx;
                 int new_channel_start_idx = curr_batch_idx * input_weight_c;
 
-                for (int i = 0; i < input_weight_n; i++) {
-                    for (int j = 0; j < input_weight_c; j++) {
-                        for (int k = 0; k < input_weight_h; k++) {
-                            for (int m = 0; m < input_weight_w; m++) {
-                                auto value_flat_input_index = compute_flat_input_index({i, j, k, m}, compute_strides(original_conv_weight_tensor_shape));
-                                auto value = conv_weight_tensor_buffer[value_flat_input_index];
+                for (int j = 0; j < input_weight_c; j++) {
+                    for (int k = 0; k < input_weight_h; k++) {
+                        for (int m = 0; m < input_weight_w; m++) {
+                            auto value_flat_input_index = compute_flat_input_index({curr_batch_idx, j, k, m}, compute_strides(original_conv_weight_tensor_shape));
+                            auto value = conv_weight_tensor_buffer[value_flat_input_index];
 
-                                auto new_channel_idx = new_channel_start_idx + j;
-                                auto output_flat_input_index = compute_flat_input_index({new_batch_idx, new_channel_idx, k, m}, compute_strides(output_conv_weight_tensor_shape));
-                                output_buffer[output_flat_input_index] = value;
-                            }
+                            auto new_channel_idx = new_channel_start_idx + j;
+                            auto output_flat_input_index = compute_flat_input_index({new_batch_idx, new_channel_idx, k, m}, compute_strides(output_conv_weight_tensor_shape));
+                            output_buffer[output_flat_input_index] = value;
+
+                            std::cout << "DEBUG: i=" << curr_batch_idx << std::endl;
+                            std::cout << "DEBUG: j=" << j << std::endl;
+                            std::cout << "DEBUG: k=" << k << std::endl;
+                            std::cout << "DEBUG: m=" << m << std::endl;
+                            std::cout << "DEBUG: value_flat_input_index=" << value_flat_input_index << std::endl;
+                            std::cout << "DEBUG: output_flat_input_index=" << output_flat_input_index << std::endl;
                         }
                     }
                 }

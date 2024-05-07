@@ -774,6 +774,18 @@ class TTPyCompositeConv(TTPyOp):
             print(torch_weight_tensor)
             print("--------------------------------------------------------------------------")
 
+            from tests.ttnn.utils_for_testing import (
+                assert_with_pcc,
+                check_with_pcc,
+                check_with_pcc_without_tensor_printout,
+            )
+
+            passing, pcc_msg = check_with_pcc_without_tensor_printout(
+                torch_weight_tensor, grouped_weight.to_torch(), pcc=0.999999
+            )
+            logger.info(pcc_msg)
+            assert passing
+
             # Add additional padding for weight tensor
             weights_shape = [K, C, R, S]
             weights_channels_padded_shape = [
