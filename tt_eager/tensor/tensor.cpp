@@ -834,7 +834,9 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
 }
 
 void memcpy(CommandQueue& queue, void* dst, const Tensor& src, const std::optional<std::size_t> transfer_size) {
-    TT_ASSERT(not transfer_size.has_value(), "transfer_size is not supported for memcpy right now!");
+    if (not transfer_size.has_value()) {
+        TT_ASSERT("transfer_size is not supported for memcpy right now!");
+    }
     if (not is_device_tensor(src)) {
         TT_THROW("memcpy: src tensor must be on device");
     }
@@ -851,7 +853,9 @@ void memcpy(void* dst, const Tensor& src, const std::optional<std::size_t> trans
 }
 
 void memcpy(CommandQueue& queue, Tensor& dst, const void* src, const std::optional<std::size_t> transfer_size) {
-    TT_ASSERT(not transfer_size.has_value(), "transfer_size is not supported for memcpy right now!");
+    if (not transfer_size.has_value()) {
+        TT_ASSERT("transfer_size is not supported for memcpy right now!");
+    }
     if (not is_device_tensor(dst)) {
         TT_THROW("memcpy: memcpy to non-device tensor is not supported!");
     }

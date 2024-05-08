@@ -196,41 +196,25 @@ Tensor moreh_logsoftmax(
     const MorehSoftmaxOpParallelizationStrategy strategy,
     const MemoryConfig &output_mem_config,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
-    // Output tensor to be populated and returned if output_tensor is not specified by reference
-    std::vector<Tensor> op_created_output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
-    operation::launch_op(
-        [dim, strategy, output_mem_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
-            auto device = input_tensors.at(0).device();
-            auto grid_coord = device->compute_with_storage_grid_size();
-            const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
-            auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
-            auto softmax_op = MorehSoftmax{
-                                    .dim = dim,
-                                    .core_range = all_cores,
-                                    .op = MorehSoftmaxOp::LOGSOFTMAX,
-                                    .strategy = strategy,
-                                    .output_mem_config = output_mem_config,
-                                    .compute_kernel_config = kernel_config_val};
-            // Preallocated optional output tensor passed in. Populate it and return an empty output.
-            if (optional_output_tensors.at(0).has_value()) {
-                operation::run(softmax_op,
-                               input_tensors,
-                               {},
-                               optional_output_tensors);
-                return {};
-            }
-            // Preallocated optional output not specified. Create and return an actual output through
-            // op_created_output_tensors
-            return operation::run(softmax_op,
-                                  input_tensors,
-                                  {},
-                                  optional_output_tensors);
-        }, {input_tensor}, op_created_output_tensors, {}, {output_tensor});
-    if (output_tensor.has_value()) {
-        return output_tensor.value();
-    }
-    return op_created_output_tensors.at(0);
+    auto device = input_tensor.device();
+    auto grid_coord = device->compute_with_storage_grid_size();
+    const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
+
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
+    output_tensor = operation::run(
+        MorehSoftmax{
+            .dim = dim,
+            .core_range = all_cores,
+            .op = MorehSoftmaxOp::LOGSOFTMAX,
+            .strategy = strategy,
+            .output_mem_config = output_mem_config,
+            .compute_kernel_config = kernel_config_val},
+        {input_tensor},
+        {},
+        {output_tensor}).at(0);
+
+    return output_tensor.value();
 }
 
 }  // namespace primary

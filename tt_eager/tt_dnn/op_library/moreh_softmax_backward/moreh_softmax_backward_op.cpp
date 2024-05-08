@@ -204,40 +204,25 @@ Tensor moreh_logsoftmax_backward(
     const MorehSoftmaxBackwardOpParallelizationStrategy strategy,
     const MemoryConfig &output_mem_config,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
-    std::vector<Tensor> op_created_bw_inputs = {Tensor(operation::get_workers_for_op_output({output_tensor, output_grad_tensor}))};
-    operation::launch_op(
-        [dim, strategy, output_mem_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
-            auto device = input_tensors.at(1).device();
-            auto grid_coord = device->compute_with_storage_grid_size();
-            const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
-            auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
-            auto bw_softmax_op = MorehSoftmaxBackward{
-                                    .dim = dim,
-                                    .core_range = all_cores,
-                                    .op = MorehSoftmaxBackwardOp::LOGSOFTMAX,
-                                    .strategy = strategy,
-                                    .output_mem_config = output_mem_config,
-                                    .compute_kernel_config = kernel_config_val};
-            if (optional_output_tensors.at(0).has_value()) {
-                operation::run(
-                    bw_softmax_op,
-                    input_tensors,
-                    {},
-                    optional_output_tensors);
-                return {};
-            }
-            return operation::run(
-                        bw_softmax_op,
-                        input_tensors,
-                        {},
-                        optional_output_tensors);
+    auto device = output_grad_tensor.device();
+    auto grid_coord = device->compute_with_storage_grid_size();
+    const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
 
-        }, {output_tensor, output_grad_tensor}, op_created_bw_inputs, {}, {input_grad_tensor});
-    if (input_grad_tensor.has_value()) {
-        return input_grad_tensor.value();
-    }
-    return op_created_bw_inputs.at(0);
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config, MathFidelity::HiFi4);
+    input_grad_tensor = operation::run(
+               MorehSoftmaxBackward{
+                   .dim = dim,
+                   .core_range = all_cores,
+                   .op = MorehSoftmaxBackwardOp::LOGSOFTMAX,
+                   .strategy = strategy,
+                   .output_mem_config = output_mem_config,
+                   .compute_kernel_config = kernel_config_val},
+               {output_tensor, output_grad_tensor},
+               {},
+               {input_grad_tensor}).at(0);
+
+    return input_grad_tensor.value();
 }
 
 }  // namespace primary

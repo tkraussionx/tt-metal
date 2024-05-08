@@ -211,7 +211,7 @@ Tensor unpad(const Tensor &input_tensor_a, const Shape &output_tensor_start, con
     // TODO: We need to run asserts before this
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a}))};
     operation::launch_op(
-        [output_tensor_start, output_tensor_end, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+        [output_tensor_start, output_tensor_end, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
                 auto& input_tensor_a = input_tensors.at(0);
                 auto input_tensor_shape = input_tensor_a.get_legacy_shape();
                 const Shape output_tensor_shape = {
