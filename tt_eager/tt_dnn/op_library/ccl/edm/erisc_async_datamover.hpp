@@ -12,22 +12,11 @@
 #include "ethernet/dataflow_api.h"
 #include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/hw/inc/wormhole/noc/noc.h"
-
-using tt::tt_metal::ccl::EriscDataMoverBufferSharingMode;
+#include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
 
 namespace erisc {
 namespace datamover {
 
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-struct edm_worker_index {
-};
-
-template <>
-struct edm_worker_index<EriscDataMoverBufferSharingMode::ROUND_ROBIN> {
-    uint16_t worker_index = 0;
-};
-
-using tt::tt_metal::ccl::WorkerXY;
 
 /*
  * The `ChannelBuffer` is a building block of the Erisc Data Mover (EDM). For every concurrent transaction
@@ -35,12 +24,7 @@ using tt::tt_metal::ccl::WorkerXY;
  * state for the transaction channel, holds information such as buffer and semaphore addresses, and has helper
  * functions to more easily check semaphore and ack statuses and to send/receive data and/or semaphore updates.
  */
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 class ChannelBuffer final {
-    static_assert(
-        BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED ||
-        BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::ROUND_ROBIN,
-        "The only BufferSharding modes supported are NOT_SHARED and ROUND_ROBIN");
    public:
     enum STATE : uint8_t {
         DONE = 0,
@@ -86,7 +70,7 @@ class ChannelBuffer final {
         uint32_t num_workers,
         uint32_t total_num_messages_to_move,
         volatile tt_l1_ptr uint32_t *const local_semaphore_address,
-        tt_l1_ptr const WorkerXY *worker_coords,
+        tt_l1_ptr const ccl::WorkerXY *worker_coords,
         bool is_sender_side) :
         eth_transaction_channel(eth_transaction_channel),
         local_semaphore_address(local_semaphore_address),
@@ -119,28 +103,14 @@ class ChannelBuffer final {
 
     // Increment the semaphore in the remote L1s of every worker associated with this ChannelBuffer
     FORCE_INLINE void increment_worker_semaphores() {
-        if constexpr (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED) {
-            // We have to be careful that the worker x/y matches for the `noc_index`
-            // active on the erisc
-            for (std::size_t i = 0; i < this->num_workers; i++) {
-                WorkerXY worker_xy = this->worker_coords[i];
-                uint64_t worker_semaphore_address =
-                    get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
+        // We have to be careful that the worker x/y matches for the `noc_index`
+        // active on the erisc
+        for (std::size_t i = 0; i < this->num_workers; i++) {
+            ccl::WorkerXY worker_xy = this->worker_coords[i];
+            uint64_t worker_semaphore_address =
+                get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
 
-                noc_semaphore_inc(worker_semaphore_address, 1);
-            }
-        } else if (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::ROUND_ROBIN) {
-                WorkerXY worker_xy = this->worker_coords[this->worker_index.worker_index];
-                uint64_t worker_semaphore_address =
-                    get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
-
-                noc_semaphore_inc(worker_semaphore_address, 1);
-                this->worker_index.worker_index++;
-                if (this->worker_index.worker_index >= this->num_workers) {
-                    this->worker_index.worker_index = 0;
-                }
-        } else {
-            ASSERT(false); // Not implemented
+            noc_semaphore_inc(worker_semaphore_address, 1);
         }
     }
 
@@ -200,7 +170,7 @@ class ChannelBuffer final {
    public:
     uint32_t eth_transaction_channel;  //
     volatile tt_l1_ptr uint32_t *const local_semaphore_address;
-    WorkerXY const *const worker_coords;
+    ccl::WorkerXY const *const worker_coords;
     std::size_t const address;
     std::size_t const size_in_bytes;
     // Even for multiple workers, this address will be the same
@@ -211,7 +181,6 @@ class ChannelBuffer final {
     volatile tt_l1_ptr uint32_t *const channel_bytes_acked_address;
     const uint32_t total_num_messages_to_move;
     STATE state;
-    edm_worker_index<BUFFER_SHARING_MODE> worker_index;
     bool is_sender_completion_pending;
 };
 
@@ -293,8 +262,7 @@ FORCE_INLINE void initialize_transaction_buffer_addresses(
 //   SENDER SIDE HELPERS
 /////////////////////////////////////////////
 
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel) {
+FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer &sender_buffer_channel) {
     bool did_something = false;
     if (sender_buffer_channel.eth_is_receiver_channel_send_done()) {
         bool need_to_send_completion = sender_buffer_channel.is_send_completion_pending();
@@ -316,7 +284,7 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<BUFFER_SHARING_MOD
         if (need_to_send_completion && !eth_txq_is_busy()) {
             eth_send_payload_complete_signal_over_channel(sender_buffer_channel.get_eth_transaction_channel(), sender_buffer_channel.get_current_payload_size());
             sender_buffer_channel.set_send_completion_pending(false);
-            sender_buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::WAITING_FOR_ETH);
+            sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
             did_something = true;
         }
     }
@@ -324,24 +292,22 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<BUFFER_SHARING_MOD
     return did_something;
 }
 
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
-    ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel, uint32_t &num_senders_complete) {
+    ChannelBuffer &sender_buffer_channel, uint32_t &num_senders_complete) {
 
     sender_buffer_channel.increment_worker_semaphores();
 
     if (!sender_buffer_channel.all_messages_moved()) {
-        sender_buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::WAITING_FOR_WORKER);
+        sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
     } else {
-        sender_buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::DONE);
+        sender_buffer_channel.goto_state(ChannelBuffer::DONE);
         num_senders_complete++;
     }
 
     return true;
 }
 
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_buffer_channel, uint32_t &num_senders_complete) {
+FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer &sender_buffer_channel, uint32_t &num_senders_complete) {
     bool did_something = false;
 
     bool transimission_acked_by_receiver =
@@ -350,7 +316,7 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer<BUFFER_SH
     if (transimission_acked_by_receiver) {
         eth_clear_sender_channel_ack(sender_buffer_channel.get_eth_transaction_channel());
         sender_buffer_channel.increment_messages_moved();
-        sender_buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::SIGNALING_WORKER);
+        sender_buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
         sender_notify_workers_if_buffer_available_sequence(sender_buffer_channel, num_senders_complete);
         did_something = true;
     }
@@ -361,15 +327,14 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer<BUFFER_SH
 /*
  *
  */
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &sender_channel_buffer) {
+FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer &sender_channel_buffer) {
     bool did_something = false;
 
     bool read_finished = sender_channel_buffer.is_local_semaphore_full();
     if (read_finished) {
         // We can clear the semaphore, and wait for space on receiver
         sender_channel_buffer.clear_local_semaphore();
-        sender_channel_buffer.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::READY_FOR_ETH_TRANSFER);
+        sender_channel_buffer.goto_state(ChannelBuffer::READY_FOR_ETH_TRANSFER);
         did_something = true;
 
         erisc::datamover::sender_eth_send_data_sequence(sender_channel_buffer);
@@ -386,10 +351,9 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer<BU
 /*
  *
  */
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel) {
+FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer &buffer_channel) {
     buffer_channel.increment_worker_semaphores();
-    buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::WAITING_FOR_WORKER);
+    buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
 
     return true;
 }
@@ -400,14 +364,13 @@ FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(Channel
  * If payload received, notify (send ack to) sender so sender knows it can free up its local buffer
  *
  */
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
-FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel) {
+FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
     bool did_something = false;
 
     if (buffer_channel.eth_bytes_are_available_on_channel()) {
         if (!eth_txq_is_busy()) {
             eth_receiver_channel_ack(buffer_channel.get_eth_transaction_channel());
-            buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::SIGNALING_WORKER);
+            buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
             did_something = true;
 
             // FIXME: Decouple these so we can still signal workers even if eth command queue is busy
@@ -426,9 +389,8 @@ FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer<BUFFER_SHAR
  * - notifies sender it is safe to send next payload
  * - clear local semaphore
  */
-template <EriscDataMoverBufferSharingMode BUFFER_SHARING_MODE>
 FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
-    ChannelBuffer<BUFFER_SHARING_MODE> &buffer_channel, uint32_t &num_receivers_complete) {
+    ChannelBuffer &buffer_channel, uint32_t &num_receivers_complete) {
     bool did_something = false;
 
     bool workers_are_finished_reading = buffer_channel.is_local_semaphore_full();
@@ -441,9 +403,9 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
             buffer_channel.clear_local_semaphore();
 
             if (!buffer_channel.all_messages_moved()) {
-                buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::WAITING_FOR_ETH);
+                buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
             } else {
-                buffer_channel.goto_state(ChannelBuffer<BUFFER_SHARING_MODE>::DONE);
+                buffer_channel.goto_state(ChannelBuffer::DONE);
                 num_receivers_complete++;
             }
 
