@@ -267,18 +267,30 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
 
 @pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
 @pytest.mark.parametrize(
-    "batch_size, act_dtype, weight_dtype, math_fidelity",
-    (
-        (8, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
-        (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
-        (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
-        (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
-        (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
-    ),
+    "batch_size",
+    (8, 16, 20),
+)
+@pytest.mark.parametrize(
+    "act_dtype",
+    (ttnn.bfloat8_b, ttnn.bfloat16),
+)
+@pytest.mark.parametrize(
+    "weight_dtype",
+    (ttnn.bfloat8_b, ttnn.bfloat16),
+)
+@pytest.mark.parametrize(
+    "math_fidelity",
+    (ttnn.MathFidelity.HiFi4, ttnn.MathFidelity.HiFi2, ttnn.MathFidelity.LoFi),
 )
 def test_resnet_50(device, batch_size, act_dtype, weight_dtype, math_fidelity):
-    if batch_size == 8:
-        pytest.skip("Skipping batch_size=8 until 7599 is resolved.")
+    # if batch_size == 8:
+    #     pytest.skip("Skipping batch_size=8 until 7599 is resolved.")
+
+    ## skip cases which are not expected to work:
+    if batch_size > 8 and (
+        act_dtype == ttnn.bfloat16 or weight_dtype == ttnn.bfloat16
+    ):  ## or math_fidelity == ttnn.MathFidelity.HiFi4):
+        pytest.skip("Skipping batch_size > 8 with bfloat16")
 
     ttnn.CONFIG.enable_logging = True
     ttnn.CONFIG.enable_detailed_buffer_report = True
