@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 void kernel_main() {
@@ -14,6 +15,10 @@ void kernel_main() {
     ShardAddrGen<shard_type> addr_gen;
     const uint32_t eth_sender_l1_base_addr = get_arg_val<uint32_t>(arg_index++);
     const uint32_t eth_sender_l1_sem_addr = get_arg_val<uint32_t>(arg_index++);
+    // if (my_coords() == ((1 << 16) | 2)) {
+    //     DPRINT << "eth_sender_l1_base_addr = " << eth_sender_l1_base_addr << "\n";
+    //     DPRINT << "eth_sender_l1_sem_addr = " << eth_sender_l1_sem_addr << "\n";
+    // }
     const uint32_t eth_sender_noc_x = get_arg_val<uint32_t>(arg_index++);
     const uint32_t eth_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t shards_per_eth_l1_buffer = get_arg_val<uint32_t>(arg_index++);
@@ -24,6 +29,14 @@ void kernel_main() {
 
     ShardAddrGen<shard_type>::build_with_placement_new(&addr_gen, arg_index);
     arg_index += addr_gen.get_num_args_consumed();
+
+    // if (my_coords() == ((1 << 16) | 2)) {
+        DPRINT << "eth_sender_l1_base_addr = " << eth_sender_l1_base_addr << "\n";
+        DPRINT << "eth_sender_l1_sem_addr = " << eth_sender_l1_sem_addr << "\n";
+        DPRINT << "eth_sender_noc_x = " << eth_sender_noc_x << "\n";
+        DPRINT << "eth_sender_noc_y = " << eth_sender_noc_y << "\n";
+        DPRINT << "shards_per_eth_l1_buffer = " << shards_per_eth_l1_buffer << "\n";
+    // }
 
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 

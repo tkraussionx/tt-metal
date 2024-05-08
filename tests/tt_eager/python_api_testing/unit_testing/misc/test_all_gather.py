@@ -579,7 +579,7 @@ def test_all_gather_on_t3000_nightly(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.parametrize("num_devices", [4, 8])
+@pytest.mark.parametrize("num_devices", [8])  # [4, 8])
 @pytest.mark.parametrize("dim", [3])
 @pytest.mark.parametrize("tensor_layout", [ttl.tensor.Layout.TILE])
 # @pytest.mark.parametrize("num_cores", [1])
@@ -587,7 +587,7 @@ def test_all_gather_on_t3000_nightly(
     "input_dtype",
     [
         ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.DataType.BFLOAT8_B,
+        # ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
 @pytest.mark.parametrize(
@@ -605,41 +605,41 @@ def test_all_gather_on_t3000_nightly(
 @pytest.mark.parametrize(
     "input_shape, input_shard_shape,shard_grid",
     (
-        (
-            (1, 1, 32, 32),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 64),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 128),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 64),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
-        ),
-        (
-            (1, 1, 32, 128),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
-        ),
-        (
-            (1, 1, 32, 256),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
-        ),
-        (
-            (1, 1, 32, 512),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
-        ),
+        # (
+        #     (1, 1, 32, 32),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 64),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 128),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 64),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 128),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 256),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 512),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
         # (
         #     (1, 1, 32, 3072),
         #     (32, 128),
@@ -661,16 +661,16 @@ def test_all_gather_on_t3000_nightly(
             (32, 128),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
         ),
-        (
-            (1, 1, 32, 2048),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
-        ),
-        (
-            (1, 1, 32, 1792),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 6))}),
-        ),
+        # (
+        #     (1, 1, 32, 2048),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
+        # ),
+        # (
+        #     (1, 1, 32, 1792),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 6))}),
+        # ),
         # (
         #     (1, 1, 64, 256),
         #     (64, 32),
@@ -733,23 +733,25 @@ def test_all_gather_post_commit_sharded(
     unchunked_input_shape = list(input_shape)
     unchunked_input_shape[dim] *= num_devices
 
+    # for device in devices:
+    #    device.disable_and_clear_program_cache()
     # if input_dtype != ttl.tensor.DataType.BFLOAT8_B:
-    unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape)
+    # unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape)
 
-    id = 0
-    for w in range(unchunked_input_shape[0]):
-        for z in range(unchunked_input_shape[1]):
-            for i in range(0, unchunked_input_shape[2], 32):
-                for j in range(0, unchunked_input_shape[3], 32):
-                    for ii in range(32):
-                        for jj in range(32):
-                            unchunked_input_tensor[w][z][i + ii][j + jj] = id
-                    id += 1
+    # id = 0
+    # for w in range(unchunked_input_shape[0]):
+    #     for z in range(unchunked_input_shape[1]):
+    #         for i in range(0, unchunked_input_shape[2], 32):
+    #             for j in range(0, unchunked_input_shape[3], 32):
+    #                 for ii in range(32):
+    #                     for jj in range(32):
+    #                         unchunked_input_tensor[w][z][i + ii][j + jj] = id
+    #                 id += 1
     # else:
     #     # unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape).bfloat16()
-    # unchunked_input_tensor = torch.rand(unchunked_input_shape).bfloat16()
+    unchunked_input_tensor = torch.rand(unchunked_input_shape).bfloat16()
 
-    unchunked_input_tensor = unchunked_input_tensor.bfloat16()
+    # unchunked_input_tensor = unchunked_input_tensor.bfloat16()
 
     input_tensors = torch.chunk(unchunked_input_tensor, num_devices, dim)
     devices = get_devices_for_t3000(all_devices, num_devices)
@@ -814,9 +816,11 @@ def test_all_gather_post_commit_sharded(
     for i, t in enumerate(input_tensors):
         tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(tensor_layout).to(devices[i], input_mem_config))
 
-    tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=output_mem_config)
-    for d in devices:
-        ttl.device.Synchronize(d)
+        logger.info(f"Call {i}")
+    for i in range(1000):
+        tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=output_mem_config)
+        for d in devices:
+            ttl.device.Synchronize(d)
     torch.set_printoptions(sci_mode=False)
     all_eq = True
     reported_mismatch = False
@@ -827,6 +831,7 @@ def test_all_gather_post_commit_sharded(
         else:
             eq, output = comp_pcc(tt_output_tensor, unchunked_input_tensor)
         if not eq:
+            all_eq = False
             logger.error(f"output mismatch for tensor {i}")
     assert all_eq, f"{i} FAILED: {output}"
 

@@ -4,6 +4,7 @@
 
 #include "dataflow_api.h"
 #include "debug/assert.h"
+#include "debug/dprint.h"
 #include "tt_eager/tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_eager/tt_dnn/op_library/ccl/kernel_common/worker_edm_utils.hpp"
 
@@ -17,6 +18,9 @@ FORCE_INLINE void validate_sane_transaction_counters() {
 FORCE_INLINE void validate_sane_transaction_counters_rw() {
 }
 
+FORCE_INLINE uint32_t my_coords() {
+    return my_x[0] << 16 | my_y[0];
+}
 
 // Only workers on local worker core, hence no uint64_t noc addresses
 template <ShardType SHARD_TYPE>
@@ -193,6 +197,17 @@ struct ShardAddrGen final {
         input_args.dest_cores = reinterpret_cast<WorkerXY*>(get_arg_addr(curr_arg_index));
         curr_arg_index += input_args.num_dest_cores;
 
+        // if (my_coords() == ((1 << 16) | 2)) {
+            DPRINT << "input_args.shard_size_in_bytes=" << input_args.shard_size_in_bytes << "\n";
+            DPRINT << "input_args.total_chunks_per_core=" << input_args.total_chunks_per_core << "\n";
+            DPRINT << "input_args.shards_start_address=" << input_args.shards_start_address << "\n";
+            DPRINT << "input_args.starting_core_index=" << input_args.starting_core_index << "\n";
+            DPRINT << "input_args.starting_chunk_into_shard=" << input_args.starting_chunk_into_shard << "\n";
+            DPRINT << "input_args.intra_core_stride_in_shards=" << input_args.intra_core_stride_in_shards << "\n";
+            DPRINT << "input_args.contiguous_chunks_before_stride=" << input_args.contiguous_chunks_before_stride << "\n";
+            DPRINT << "input_args.num_dest_cores=" << input_args.num_dest_cores << "\n";
+        // }
+
         ASSERT(input_args.shard_size_in_bytes != UNINITIALIZED_VALUE_U32);
         ASSERT(input_args.total_chunks_per_core != UNINITIALIZED_VALUE_U16);
         ASSERT(input_args.shards_start_address != UNINITIALIZED_VALUE_U32);
@@ -317,11 +332,17 @@ FORCE_INLINE void write_and_send_chunk_sharded(
     cb_wait_front(cb_id, num_pages);
     uint32_t l1_read_addr = get_read_ptr(cb_id);
     uint32_t num_pages_remaining = num_pages;
+    if (my_coords() == ((1 << 16) | 2)) {
+        DPRINT << "write_and_send_chunk_sharded " << my_coords() << ": " << (uint32_t)(remote_eth_l1_write_addr & 0xffffffff) << "\n";
+    }
     noc_async_write(l1_read_addr, remote_eth_l1_write_addr, num_pages * addr_gen.get_shard_size_in_bytes());
     noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
     while (num_pages_remaining > 0) {
         uint64_t dest_worker_noc_addr = addr_gen.get_next_noc_addr();
         uint32_t num_shards_to_write = std::min<uint32_t>(num_pages_remaining, addr_gen.contiguous_chunks_before_stride);
+        if (my_coords() == ((1 << 16) | 2)) {
+            DPRINT << "write_and_send_chunk_sharded " << my_coords() << ": " << (uint32_t)(remote_eth_l1_write_addr & 0xffffffff) << "\n";
+        }
         noc_async_write(l1_read_addr, dest_worker_noc_addr, num_shards_to_write * addr_gen.get_shard_size_in_bytes());
         for (uint32_t i = 0; i < num_shards_to_write; i++) {
             addr_gen.advance();
