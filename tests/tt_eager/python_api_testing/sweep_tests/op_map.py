@@ -1730,7 +1730,7 @@ op_map = {
     },
     "ttnn-pow": {
         "tt_lib_op": ttnn_ops.pow,
-        "pytorch_op": pytorch_ops.power,
+        "pytorch_op": pytorch_ops.ttnn_power,
     },
     "ttnn-logaddexp2": {
         "tt_lib_op": ttnn_ops.logaddexp2,

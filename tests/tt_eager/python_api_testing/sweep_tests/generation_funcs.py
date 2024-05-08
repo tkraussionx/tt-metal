@@ -1853,3 +1853,19 @@ def gen_dim_args(
 
         input_info.update({"dim": dims})
         yield input_info
+
+
+def gen_power_fp_8b_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    mem_configs,
+    low=0,
+    high=10,
+    dtype=ttl.tensor.DataType.BFLOAT8_B,
+    do_sanitize_args=True,
+):
+    for input_info in gen_scalar_args(
+        input_shapes, dtypes, layouts, mem_configs, "exponent", low, high, dtype, do_sanitize_args=do_sanitize_args
+    ):
+        yield input_info
