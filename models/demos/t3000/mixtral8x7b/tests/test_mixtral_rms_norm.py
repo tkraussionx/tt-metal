@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 import torch
+import os
 import pytest
 from loguru import logger
 import ttnn
@@ -13,6 +14,12 @@ from models.utility_functions import (
     comp_allclose,
 )
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+
+# Set Mixtral flags for CI, if CI environment is setup
+if os.getenv("CI") == "true":
+    os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
 
 
 def test_mistral_rms_norm_inference(device_mesh, reset_seeds):
@@ -31,10 +38,10 @@ def test_mistral_rms_norm_inference(device_mesh, reset_seeds):
         state_dict=state_dict,
         args=model_args,
         dtype=dtype,
-        layer_num=0,
+        layer_num=4,
         weight_key="attention_norm",
     )
-    input = torch.rand(1, 32, 4096)
+    input = torch.rand(1, 1, 32, 4096)
     reference_output = reference_model(input)[0]
 
     tt_input = ttnn.from_torch(

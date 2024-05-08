@@ -240,7 +240,7 @@ class TtMixtralAttention(torch.nn.Module):
         ttnn.kv_cache.update_cache_for_token_(values_1BPD, v_heads_1B1D, current_pos)
         self.layer_past = [keys_1BPD, values_1BPD]
         keys_1BPD = keys_1BPD[:, :, :padded_layer_past_len, :]
-        values_1BPD = values_1BPD[:, :, :layer_slice, :]
+        values_1BPD = values_1BPD[:, :, :padded_layer_past_len, :]
 
         ###
         # Attention
@@ -269,7 +269,7 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel_attn,
         )
         # scores slice and softmax
-        attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
+        # attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
         attn_1B4P = ttnn.softmax(attn_1B4P, dim=-1)  # , memory_config=attn_output_memcfg_post_sm)
         print(attn_1B4P)
         # values matmul

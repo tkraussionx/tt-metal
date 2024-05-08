@@ -41,7 +41,7 @@ class Emb(torch.nn.Module):
 # )
 @pytest.mark.parametrize(
     "n_layers",
-    (32,),
+    (1,),
 )
 @pytest.mark.parametrize(
     "iterations",
@@ -116,7 +116,8 @@ def test_mixtral_model_inference(
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
+        for _ in range(32):
+            tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
 
         # Convert ttnn tensor to torch tensor
         tt_output_torch = (

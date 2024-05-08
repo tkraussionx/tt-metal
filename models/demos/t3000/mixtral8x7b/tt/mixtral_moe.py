@@ -134,6 +134,7 @@ class TtMoeLayer(torch.nn.Module):
             memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
             use_1d_systolic_array=True,
+            core_grid=ttnn.CoreGrid(y=1, x=8),
         )
         print("gates linear end")
         # gate_logits_1SB8 = ttnn.to_device(gate_logits_1SB8, self.device_mesh)
@@ -150,7 +151,7 @@ class TtMoeLayer(torch.nn.Module):
 
         # MLP and masking
         results_11BH = ttnn.multiply(expert_i_HH(input_i_1SBH), weights_1SB1, memory_config=ttnn.L1_MEMORY_CONFIG)
-        # results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
+        results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
         # all gather
         output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
         # sum on each device
