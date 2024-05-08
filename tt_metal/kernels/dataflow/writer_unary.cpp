@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t dst_addr  = get_arg_val<uint32_t>(0);
@@ -20,6 +21,7 @@ void kernel_main() {
         uint64_t dst_noc_addr = get_noc_addr(dst_noc_x, dst_noc_y, dst_addr);
 
         cb_wait_front(cb_id_out0, ublock_size_tiles);
+        DPRINT << "output tile slice writer" << ENDL();
         uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
         noc_async_write(l1_read_addr, dst_noc_addr, ublock_size_bytes);
 

@@ -18,7 +18,21 @@ struct SliceRange {
     // [0:32:4, 0:32:4]
     static inline SliceRange hw0_32_4() { return SliceRange{ .h0 = 0, .h1 = 32, .hs = 4, .w0 = 0, .w1 = 32, .ws = 4 }; }
     // [0, 0:32]
-    static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 1, .h1 = 2, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 2, .h1 = 3, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 3, .h1 = 4, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 4, .h1 = 5, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 14, .h1 = 15, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 15, .h1 = 16, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 16, .h1 = 17, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 17, .h1 = 18, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 18, .h1 = 19, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 20, .h1 = 21, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 29, .h1 = 30, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 16, .h1 = 17, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 30, .h1 = 31, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
+    // static inline SliceRange h0_w0_32() { return SliceRange{ .h0 = 31, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }; }
     // [0:32, 0]
     static inline SliceRange h0_32_w0() { return SliceRange{ .h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 1, .ws = 1 }; }
     // [0:32:1, 1]

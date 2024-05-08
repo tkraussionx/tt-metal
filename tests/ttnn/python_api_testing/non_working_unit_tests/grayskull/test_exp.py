@@ -24,8 +24,8 @@ def run_eltwise_exp_tests(
 ):
     torch.manual_seed(data_seed)
     x = torch.Tensor(size=input_shape[0]).uniform_(-88, 88).to(torch.bfloat16)
-    # x = torch.ones(size=input_shape[0]).to(torch.bfloat16)
-    # x = x * -88.1
+    # x = torch.ones(size=input_shape[0]).to(torch.bfloat16) * 82.6
+    ttnn.set_printoptions(profile="full")
     torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
     tensor_str = str(x)
     with open("../torch_inp_100.txt", "w") as file:
@@ -34,17 +34,25 @@ def run_eltwise_exp_tests(
     try:
         # get ref result
         ref_value = torch.exp(x)
-        torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
+
+        torch.set_printoptions(linewidth=200, threshold=10000, precision=15, sci_mode=False, edgeitems=17)
         # print("ref value", ref_value)
         tensor_str = str(ref_value)
         with open("../torch_tensor_exp.txt", "w") as file:
             file.write(tensor_str)
+
+        tensor_str = str(x)
+        with open("../ttnn_inp_exp.txt", "w") as file:
+            file.write(tensor_str)
+
         x = ttnn_ops.setup_ttnn_tensor(x, device, dlayout[0], in_mem_config[0], dtype[0])
 
+        # print("ttnn input", x)
+
         tt_result = ttnn.exp(x)
-        ttnn.set_printoptions(profile="full")
         tt_result_rm = ttnn.to_layout(tt_result, ttnn.ROW_MAJOR_LAYOUT)
-        print("ttnn value", tt_result_rm)
+
+        # print("ttnn value", tt_result_rm)
         tensor_str = str(tt_result_rm)
         with open("../ttnn_tensor_exp.txt", "w") as file:
             file.write(tensor_str)
@@ -55,6 +63,7 @@ def run_eltwise_exp_tests(
         tensor_str = str(tt_result)
         with open("../tt_tensor_exp.txt", "w") as file:
             file.write(tensor_str)
+
     except Exception as e:
         logger.warning(f"Test execution crashed: {e}")
         print(traceback.format_exc())
@@ -68,7 +77,8 @@ def run_eltwise_exp_tests(
 test_sweep_args = [
     (
         [(1, 1, 32, 32)],
-        [ttnn.bfloat8_b],
+        # [(3, 2, 192, 32)],
+        [ttnn.bfloat16],
         [ttnn.TILE_LAYOUT],
         [ttnn.DRAM_MEMORY_CONFIG],
         ttnn.L1_MEMORY_CONFIG,
