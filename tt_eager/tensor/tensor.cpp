@@ -507,16 +507,45 @@ Tensor Tensor::to(Layout target_layout, Device* worker) const {
         Tensor async_safe_tensor = copy_borrowed_tensor_in_async_mode(worker, *this);
         Tensor tensor_modified_layout = Tensor({}, 1);
         worker->push_work([async_safe_tensor, tensor_modified_layout, target_layout] () mutable {
-            TT_ASSERT(async_safe_tensor.storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
+            TT_ASSERT(async_safe_tensor.storage_type() == StorageType::OWNED or async_safe_tensor.storage_type() == StorageType::BORROWED && "to(layout) must be called on host tensors with a single buffer when a single worker is specified");
             auto local_tensor = tensor_impl::to_layout_wrapper(async_safe_tensor, target_layout);
             // Populate modified layout tensor
             tensor_modified_layout.populate_buffers_and_metadata(local_tensor);
         });
         return tensor_modified_layout;
-    } else {
-        TT_ASSERT(this->storage_type() != StorageType::DEVICE && "Bring tensor to host before converting to target layout");
-        return tensor_impl::to_layout_wrapper(*this, target_layout);
     }
+    // Running without worker threads (non-async)
+    TT_ASSERT(this->storage_type() != StorageType::DEVICE or this->storage_type() != StorageType::MULTI_DEVICE && "Bring tensor to host before converting to target layout");
+    return tensor_impl::to_layout_wrapper(*this, target_layout);
+}
+
+Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
+    ZoneScoped;
+    if (device_mesh) {
+        auto all_workers = device_mesh->get_devices();
+        auto workers = std::vector<Device*>(all_workers.begin(), all_workers.begin() + num_buffers_in_tensor(*this));
+        TT_FATAL(validate_worker_modes(workers), "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
+        Tensor tensor_modified_layout = Tensor({}, workers.size());
+        for (int worker_index = 0; worker_index < workers.size(); ++worker_index) {
+            auto& worker = workers[worker_index];
+            worker->push_work([*this, tensor_modified_layout, target_layout, worker, worker_index] () mutable {
+                TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST && "to(layout) must be called on host tensors with MULTI_DEVICE_HOST_STORAGE when multiple workers are specified");;
+                auto shard = get_shard_for_device(*this, worker, worker_index);
+                shard = tensor_impl::to_layout_wrapper(shard, target_layout);
+                insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout, worker_index);
+                if (not (worker->id())) {
+                    tensor_modified_layout.set_shape(this->get_shape());
+                    tensor_modified_layout.set_dtype(this->get_dtype());
+                    tensor_modified_layout.set_layout(target_layout);
+                }
+                tensor_modified_layout.set_populated(worker);
+            });
+        }
+        return tensor_modified_layout;
+    }
+    // Running without worker threads (non-async)
+    TT_ASSERT(this->storage_type() != StorageType::DEVICE or this->storage_type() != StorageType::MULTI_DEVICE && "Bring tensor to host before converting to target layout");
+    return tensor_impl::to_layout_wrapper(*this, target_layout);
 }
 
 const std::string Tensor::write_to_string() const { return tensor_impl::to_string_wrapper(*this); }
@@ -580,11 +609,24 @@ Tensor Tensor::pad_to_tile(float pad_value) const {
 Tensor Tensor::unpad_from_tile(const Shape &output_tensor_shape) const {
     ZoneScoped;
 
-    TT_ASSERT(this->get_legacy_shape()[0] == output_tensor_shape[0] && this->get_legacy_shape()[1] == output_tensor_shape[1], "Input shape must match output shape apart from last 2 dims");
-    TT_ASSERT(this->get_legacy_shape()[2] % TILE_HEIGHT == 0 && this->get_legacy_shape()[3] % TILE_WIDTH==0, "Last 2 dims of input shape must be multiples of 32");
-    TT_ASSERT(this->get_legacy_shape()[2] - TILE_HEIGHT < output_tensor_shape[2] && this->get_legacy_shape()[3] - TILE_WIDTH < output_tensor_shape[3], "Last 2 dims of output must be within range to have been padded to input");
-    Shape output_tensor_start = {0, 0, 0, 0};
-    Shape output_tensor_end = {output_tensor_shape[0] - 1, output_tensor_shape[1] - 1, output_tensor_shape[2] - 1, output_tensor_shape[3] - 1};
+    for (auto index = 0; index < this->get_legacy_shape().rank() - 2; index++) {
+        TT_ASSERT(
+            this->get_legacy_shape().without_padding()[index] == output_tensor_shape[index],
+            "Input shape must match output shape apart from last 2 dims");
+    }
+    TT_ASSERT(
+        this->get_legacy_shape()[-2] % TILE_HEIGHT == 0 && this->get_legacy_shape()[-1] % TILE_WIDTH == 0,
+        "Last 2 dims of input shape must be multiples of 32");
+    TT_ASSERT(
+        this->get_legacy_shape()[-2] - TILE_HEIGHT < output_tensor_shape[-2] &&
+            this->get_legacy_shape()[-1] - TILE_WIDTH < output_tensor_shape[-1],
+        "Last 2 dims of output must be within range to have been padded to input");
+    std::vector<uint32_t> output_tensor_start{};
+    std::vector<uint32_t> output_tensor_end{};
+    for (auto index = 0; index < this->get_legacy_shape().rank(); index++) {
+        output_tensor_start.push_back(0);
+        output_tensor_end.push_back(output_tensor_shape[index] - 1);
+    }
     return this->unpad(output_tensor_start, output_tensor_end);
 }
 

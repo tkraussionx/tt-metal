@@ -56,6 +56,7 @@ def test_mixtral_model_inference(
     model_args = TtModelArgs(device_mesh.get_device(0))
     model_args.n_layers = n_layers
 
+    print(model_args.state_dict_path)
     state_dict = torch.load(model_args.state_dict_path)
     keys_dict = list(state_dict.keys())[:]
     remv = [f"layers.{i}" for i in range(n_layers, 32)]
@@ -148,8 +149,9 @@ def test_mixtral_model_inference(
             logger.info(f"Mean Top-5: {top5_acc}")
 
             ref_token_batch = ref_output.squeeze().argmax(axis=-1)
-            ref_tokens.append(ref_token_batch[0].item())
-            logger.info(f'ref_output: {"".join(tokenizer.decode(ref_tokens))}')
+            tt_token_batch = tt_output_torch.squeeze().argmax(axis=-1)
+            logger.info(f"ref_output: {tokenizer.decode(ref_token_batch[0].item())}")
+            logger.info(f"tt_output: {tokenizer.decode(tt_token_batch[0].item())}")
             pt_decode_input = embd(ref_token_batch).view(batch, seqlen, -1)
 
         tt_token_batch = tt_output_torch.squeeze().argmax(axis=-1)

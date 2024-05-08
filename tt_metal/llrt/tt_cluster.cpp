@@ -427,7 +427,7 @@ void Cluster::write_dram_vec(vector<uint32_t> &vec, tt_target_dram dram, uint64_
     int chip_id, d_chan, d_subchannel;
     std::tie(chip_id, d_chan, d_subchannel) = dram;
     const metal_SocDescriptor &desc_to_use = get_soc_desc(chip_id);
-    TT_ASSERT(
+    TT_FATAL(
         d_chan < desc_to_use.dram_cores.size(),
         "Bounds-Error -- dram_channel={} is outside of num_dram_channels={}",
         d_chan,
@@ -445,7 +445,7 @@ void Cluster::read_dram_vec(
     int chip_id, d_chan, d_subchannel;
     std::tie(chip_id, d_chan, d_subchannel) = dram;
     const metal_SocDescriptor &desc_to_use = get_soc_desc(chip_id);
-    TT_ASSERT(
+    TT_FATAL(
         d_chan < desc_to_use.dram_cores.size(),
         "Bounds-Error -- dram_channel={} is outside of num_dram_channels={}",
         d_chan,
@@ -710,7 +710,7 @@ std::tuple<chip_id_t, CoreCoord> Cluster::get_connected_ethernet_core(std::tuple
 
 std::vector<CoreCoord> Cluster::get_ethernet_sockets(chip_id_t local_chip, chip_id_t remote_chip) const {
     const auto &local_ethernet_sockets = this->ethernet_sockets_.at(local_chip);
-    TT_ASSERT(
+    TT_FATAL(
         local_ethernet_sockets.find(remote_chip) != local_ethernet_sockets.end(),
         "Device {} is not connected to Device {}",
         local_chip,
@@ -788,6 +788,7 @@ tt_cxy_pair Cluster::get_eth_core_for_dispatch_core(
 
 // TODO: ALLAN Can change to write one bit
 void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_routing) const {
+    log_debug(tt::LogDevice, "Set internal routing bit {}", enable_internal_routing);
     const uint32_t routing_info_addr = eth_l1_mem::address_map::ERISC_APP_ROUTING_INFO_BASE;
     // TODO: initialize devices if user does not
     // Must initialize remote chips first, then mmio chips since once mmio chips are doing fd routing

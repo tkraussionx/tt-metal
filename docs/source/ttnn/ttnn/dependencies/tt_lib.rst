@@ -305,6 +305,8 @@ Tensor elementwise operations
 
 .. autofunction:: tt_lib.tensor.div
 
+.. autofunction:: tt_lib.tensor.div_no_nan
+
 .. autofunction:: tt_lib.tensor.add_unary
 
 .. autofunction:: tt_lib.tensor.sub_unary
@@ -771,18 +773,6 @@ Other Operations
 
 .. autofunction:: tt_lib.tensor.conv
 
-.. autofunction:: tt_lib.tensor.bert_large_fused_qkv_matmul
-
-.. autofunction:: tt_lib.tensor.bert_large_ff1_matmul
-
-.. autofunction:: tt_lib.tensor.bert_large_ff2_matmul
-
-.. autofunction:: tt_lib.tensor.bert_large_selfout_matmul
-
-.. autofunction:: tt_lib.tensor.bert_large_pre_softmax_bmm
-
-.. autofunction:: tt_lib.tensor.bert_large_post_softmax_bmm
-
 .. autofunction:: tt_lib.tensor.layernorm
 
 .. autofunction:: tt_lib.tensor.groupnorm
@@ -1077,7 +1067,7 @@ Backward Operations
 .. autofunction:: tt_lib.tensor.imag_bw
 
 .. autofunction:: tt_lib.tensor.real_bw
-    
+
 .. autofunction:: tt_lib.tensor.complex_mul_bw
 
 .. autofunction:: tt_lib.tensor.complex_div_bw

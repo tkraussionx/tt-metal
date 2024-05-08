@@ -39,6 +39,10 @@ def test_multi_device_subset_mesh(silicon_arch_name, silicon_arch_wormhole_b0):
     assert multi_device.get_num_devices() == 2
     ttnn.close_device_mesh(multi_device)
 
+    multi_device = ttnn.open_device_mesh(device_grid, device_ids)
+    assert multi_device.get_num_devices() == 2
+    ttnn.close_device_mesh(multi_device)
+
 
 def test_multi_device_open_close_full_device_mesh_fixture(device_mesh):
     """Using `device_mesh` pytest fixture defined in conftest.py"""
@@ -253,9 +257,10 @@ def test_multi_device_data_parallel_matmul_op(device_mesh):
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG])
-@pytest.mark.parametrize("dtype", [ttnn.bfloat8_b])
+@pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat4_b])
 def test_multi_device_as_tensor_api(device_mesh, layout, memory_config, dtype):
     """Multidevice API: Data Parallel on matmul using cached tensor"""
+    torch.manual_seed(0)
     torch_input_a_tensor = torch.rand((device_mesh.get_num_devices(), 1, 32, 32), dtype=torch.bfloat16)
     torch_input_b_tensor = torch.rand((1, 1, 32, 32), dtype=torch.bfloat16)
     torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
@@ -295,7 +300,41 @@ def test_multi_device_as_tensor_api(device_mesh, layout, memory_config, dtype):
         ttnn_torch_output_tensor = ttnn.to_torch(
             ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)
         )
-        assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.991)
+        if dtype == ttnn.bfloat4_b:
+            assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.87)
+        else:
+            assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.991)
+
+
+@pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG])
+@pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat4_b])
+def test_multi_device_as_tensor_api_sharded_tensor(device_mesh, layout, memory_config, dtype):
+    """Multidevice API: Data Parallel on matmul using cached tensor"""
+    input_tensor = torch.rand((device_mesh.get_num_devices(), 1, 32, 32), dtype=torch.bfloat16)
+
+    with tempfile.NamedTemporaryFile() as temp_file:
+        save_tensor = ttnn.as_tensor(
+            input_tensor,
+            dtype=dtype,
+            layout=layout,
+            device=device_mesh,
+            memory_config=memory_config,
+            cache_file_name=f"{temp_file.name}.weight",
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        )
+        load_tensor = ttnn.as_tensor(
+            input_tensor,
+            dtype=dtype,
+            layout=layout,
+            device=device_mesh,
+            memory_config=memory_config,
+            cache_file_name=f"{temp_file.name}.weight",
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        )
+        torch_loaded_tensor = ttnn.to_torch(load_tensor, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))
+        expected_pcc = 0.98 if dtype == ttnn.bfloat4_b else 0.99
+        assert_with_pcc(input_tensor, torch_loaded_tensor, pcc=expected_pcc)
 
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT])

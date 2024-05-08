@@ -180,6 +180,7 @@ class Shape {
     }
 
     std::size_t rank() const;
+    std::size_t size() const;
 
     uint32_t &operator[](const std::int64_t index);
     const uint32_t operator[](const std::int64_t index) const;
@@ -369,6 +370,7 @@ struct MultiDeviceHostStorage {
         MultiDeviceHostStorage() = default;
         MultiDeviceHostStorage(DistributedTensorConfig strategy_, std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : strategy(strategy_), buffers(buffers_), shapes(shapes_) {}
         MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
+            strategy = other.strategy;
             buffers = other.buffers;
             shapes = other.shapes;
         }
@@ -676,6 +678,8 @@ struct Shape {
             []<std::size_t Rank>(const RankedShape<Rank> &shape) -> const auto { return Rank; }, this->ranked_shape);
     }
 
+    const auto size() const { return this->rank(); }
+
     Shape with_tile_padding() const {
         return std::visit(
             [](const auto &shape) -> Shape { return Shape(shape.with_tile_padding()); }, this->ranked_shape);
@@ -762,6 +766,7 @@ struct TensorSchema {
     const std::set<Layout> layouts;
     const bool can_be_on_device;
     const bool can_be_on_cpu;
+    const bool can_be_scalar;
     const bool is_optional;
 };
 

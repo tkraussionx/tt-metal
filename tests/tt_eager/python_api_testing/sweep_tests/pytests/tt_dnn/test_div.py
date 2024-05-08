@@ -36,7 +36,7 @@ mem_configs = [
     "dst_mem_config",
     mem_configs,
 )
-class TestProd:
+class TestDiv:
     def test_run_div(
         self,
         accurate_mode,
