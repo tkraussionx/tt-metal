@@ -22,7 +22,7 @@ class TtMixtralMLP(torch.nn.Module):
             [self.state_dict[f"{base_name(expert_num)}.{name}.weight"].permute(1, 0) for expert_num in range(8)], dim=0
         )
         cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (
-            f"layers.{layer_num}.feed_forward_mesh.experts.{name}"
+            f"layers.{layer_num}.feed_forward_mesh_.experts.{name}"
         )
         as_tensor = lambda name: ttnn.as_tensor(
             torch_weight(name),
@@ -74,6 +74,7 @@ class TtMixtralMLP(torch.nn.Module):
             use_1d_systolic_array=True,
             memory_config=self.model_config["FF2_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            dtype=ttnn.bfloat16,
         )
 
         return w2_out

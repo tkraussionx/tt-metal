@@ -62,11 +62,11 @@ def test_mixtral_decoder_inference(device_mesh, reset_seeds):
         current_pos = start_pos % model_args.sliding_window
 
         decode_input_b1sh, rot_mat = prepare_inputs_ttnn(
-            pt_decode_input_bsh.clone(),
-            tt_model.hidden_size,
-            tt_model.head_dim,
-            tt_model.max_seq_len,
-            tt_model.devices,
+            pt_decode_input_bsh,
+            model_args.dim,
+            model_args.head_dim,
+            model_args.max_seq_len,
+            tt_model.device_mesh,
         )
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)

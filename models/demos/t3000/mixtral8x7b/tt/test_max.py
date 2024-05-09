@@ -339,3 +339,77 @@ def test_cond(device_mesh):
     cond0 = ttnn.matmul(cond0, expert_mask)
 
     print(ttnn.to_torch(cond0, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
+
+
+def test_where(device_mesh):
+    gate_logits_1SB8_torch = torch.randn(1, 1, 32, 8)
+    cond0_torch = torch.randint(0, 2, size=(1, 1, 32, 8))
+    mask_torch = torch.full((1, 1, 32, 8), fill_value=torch.finfo(torch.float).min)
+    gate_logits_1SB8 = ttnn.from_torch(
+        gate_logits_1SB8_torch,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    gate_logits_1SB8 = ttnn.to_device(gate_logits_1SB8, device_mesh)
+    # cond0 = ttnn.from_torch(
+    #     cond0_torch,
+    #     dtype=ttnn.bfloat16,
+    #     layout=ttnn.TILE_LAYOUT,
+    #     device=device_mesh,
+    #     mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    # )
+    # cond0 = ttnn.to_device(cond0, device_mesh)
+    ones_1118 = ttnn.from_torch(
+        torch.ones(1, 1, 1, 8),
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    ones_1118 = ttnn.to_device(ones_1118, device_mesh)
+
+    top_2_mask = ttnn.from_torch(
+        mask_torch,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    top_2_mask = ttnn.to_device(top_2_mask, device_mesh)
+    weights_ex0_1SB1 = ttnn.max(gate_logits_1SB8, dim=3)
+    exp_0_repeated = ttnn.matmul(
+        weights_ex0_1SB1, ones_1118, core_grid=ttnn.CoreGrid(y=1, x=8), use_1d_systolic_array=True
+    )  # , compute_kernel_config=compute_kernel)
+    cond0 = ttnn.eq(gate_logits_1SB8, exp_0_repeated)
+    gate_logits_1SB8_masked = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
+    print(gate_logits_1SB8_torch, cond0_torch)
+    print(ttnn.to_torch(gate_logits_1SB8_masked, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
+
+
+def test_mul(device_mesh):
+    input_i_1SBH_torch = torch.randn(1, 1, 32, 4096)
+    input_i_1SBH = ttnn.from_torch(
+        input_i_1SBH_torch,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    input_i_1SBH = ttnn.to_device(input_i_1SBH, device_mesh)
+    weights_1SB1_torch = torch.randn(1, 1, 32, 1)
+    weights_1SB1 = ttnn.from_torch(
+        weights_1SB1_torch,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    weights_1SB1 = ttnn.to_device(weights_1SB1, device_mesh)
+    results_11BH = ttnn.mul(input_i_1SBH, weights_1SB1)
+    results_11BH = ttnn.to_torch(results_11BH, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0, 0]
+    res = input_i_1SBH_torch * weights_1SB1_torch
+    # assert torch.allclose
+    passing, msg = comp_pcc(results_11BH.to(torch.float), res[0, 0].to(torch.float), 0.99)
+    print(passing, msg)

@@ -102,7 +102,6 @@ def test_mixtral_model_inference(
     ref_tokens = []
     tt_tokens = []
     for i in range(generation_length):
-        start_time = time.time()
         logger.info(f"[Decode] Generating token {i}")
 
         start_pos = generation_start_pos  # + i
@@ -115,7 +114,7 @@ def test_mixtral_model_inference(
             model_args.max_seq_len,
             tt_model.device_mesh,
         )
-
+        start_time = time.time()
         # Run TT model
         for _ in range(32):
             tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)

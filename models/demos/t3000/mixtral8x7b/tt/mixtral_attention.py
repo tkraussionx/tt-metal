@@ -80,7 +80,6 @@ class TtMixtralAttention(torch.nn.Module):
             cache_file_name=cache_name(f"wqkv_mesh_cat"),
         )
         self.wqkv = ttnn.to_device(self.wqkv, self.device_mesh)
-        print("WQKV", self.wqkv)
         self.wo = ttnn.as_tensor(
             torch.transpose(
                 self.state_dict[wo_str],
@@ -95,13 +94,7 @@ class TtMixtralAttention(torch.nn.Module):
             cache_file_name=cache_name(f"wo_mesh_tmp"),
         )
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
-        print(
-            torch.transpose(
-                self.state_dict[wo_str],
-                -2,
-                -1,
-            ).shape
-        )
+
         cache_k = torch.zeros(
             (
                 self.n_kv_heads,
@@ -198,8 +191,6 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel,
         )
 
-        print("xkqv,", ttnn.to_torch(xqkv_fused, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=0)))
-
         # split qkv into heads
         (
             q_heads_14BD,
@@ -280,7 +271,6 @@ class TtMixtralAttention(torch.nn.Module):
         # scores slice and softmax
         attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
         attn_1B4P = ttnn.softmax(attn_1B4P, dim=-1)  # , memory_config=attn_output_memcfg_post_sm)
-        print(attn_1B4P)
         # values matmul
         attn_output_1B4D = ttnn.matmul(
             attn_1B4P,
@@ -300,7 +290,6 @@ class TtMixtralAttention(torch.nn.Module):
             attn_output_14BD,
             output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
         )
-        print(attn_output_11BH)
 
         ###
         # Output matmul
