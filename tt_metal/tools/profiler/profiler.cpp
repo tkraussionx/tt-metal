@@ -66,8 +66,8 @@ void DeviceProfiler::readRiscProfilerResults(
         riscEndIndices.push_back(kernel_profiler::HOST_BUFFER_END_INDEX_ER);
     }
 
-
     if ((control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_BR] == 0) &&
+        (control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_NC] == 0) &&
         (control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_ER] == 0))
     {
         return;
@@ -181,11 +181,13 @@ void DeviceProfiler::readRiscProfilerResults(
         riscNum ++;
     }
 
-    std::vector<uint32_t> zero_buffer(PROFILER_L1_CONTROL_VECTOR_SIZE, 0);
+    std::vector<uint32_t> control_buffer_reset(PROFILER_L1_CONTROL_VECTOR_SIZE, 0);
+    control_buffer_reset[kernel_profiler::DRAM_PROFILER_ADDRESS] = output_dram_buffer->address();
+
     tt::llrt::write_hex_vec_to_core(
             device_id,
             worker_core,
-            zero_buffer,
+            control_buffer_reset,
             PROFILER_L1_BUFFER_CONTROL);
 }
 
@@ -237,7 +239,9 @@ void DeviceProfiler::dumpResultToFile(
 
     tracy::TTDeviceEvent event = tracy::TTDeviceEvent(run_id, device_id, core.x, core.y, risc_num, timer_id, timestamp, source_line, source_file, zone_name, zone_phase);
 
-    device_events.push_back(event);
+    auto ret = device_events.insert(event);
+
+    if (!ret.second) return;
 
     firstTimestamp(timestamp);
 
@@ -378,6 +382,26 @@ void DeviceProfiler::dumpResults (
                 worker_core);
 
         }
+
+        for (const auto &worker_core : worker_cores) {
+            std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
+            if (device_tracy_contexts.find(device_core) == device_tracy_contexts.end())
+            {
+                auto tracyCtx = TracyTTContext();
+                std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
+                TracyTTContextPopulate(tracyCtx, smallest_timestamp, 1000.f / (float)device_core_frequency);
+                TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
+
+                device_tracy_contexts.emplace(
+                        device_core,
+                        tracyCtx
+                    );
+            }
+        }
+
+        //std::sort (device_events.begin(), device_events.end());
+
+        pushTracyDeviceResults();
     }
     else
     {
@@ -389,6 +413,10 @@ void DeviceProfiler::dumpResults (
 void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(PROFILER) && defined(TRACY_ENABLE)
+<<<<<<< HEAD
+=======
+    ZoneScoped;
+>>>>>>> #8223: Working guaranteed markers on FULL DRAM
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)

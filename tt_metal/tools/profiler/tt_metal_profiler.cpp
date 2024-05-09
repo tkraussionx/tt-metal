@@ -321,11 +321,11 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
     ZoneScoped;
     if (getDeviceProfilerState())
     {
-        const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
-        if (USE_FAST_DISPATCH)
-        {
-            Finish(device->command_queue());
-        }
+        //const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
+        //if (USE_FAST_DISPATCH)
+        //{
+            //Finish(device->command_queue());
+        //}
         //TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())

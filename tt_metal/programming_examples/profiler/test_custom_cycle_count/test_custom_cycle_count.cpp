@@ -10,7 +10,7 @@
 
 using namespace tt;
 
-bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool lastCall = false)
+bool RunCustomCycle(tt_metal::Device *device, int loop_count)
 {
     bool pass = true;
 
@@ -47,7 +47,11 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool lastCall = fa
     );
 
     EnqueueProgram(device->command_queue(), program, false);
+<<<<<<< HEAD
     tt_metal::detail::DumpDeviceProfileResults(device, lastCall);
+=======
+    //tt_metal::detail::DumpDeviceProfileResults(device);
+>>>>>>> #8223: Working guaranteed markers on FULL DRAM
 
     return pass;
 }

@@ -72,6 +72,7 @@ uint32_t sums[SUM_COUNT] __attribute__((used));
 uint32_t sumIDs[SUM_COUNT] __attribute__((used));
 bool resultsPushed __attribute__((used));
 uint16_t core_flat_id __attribute__((used));
+uint32_t nocWriteSize __attribute__((used));
 }  // namespace kernel_profiler
 
 void enable_power_management() {
@@ -308,6 +309,10 @@ int main() {
         DEBUG_STATUS("GD");
 
         {
+            static int k = 0;
+            int i = my_x[0];
+            int j = my_y[0];
+            DPRINT << i  << "START" << j << "," << k <<ENDL();
             DeviceZoneScopedMainN("BRISC-FW");
 
             // Always copy ncrisc even if its size is 0 (save branch)...
@@ -344,6 +349,8 @@ int main() {
 
             // Notify dispatcher core that it has completed
             if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
+                DPRINT << i  << "DONE" << j << "," << k <<ENDL();
+                k++;
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
                 DEBUG_SANITIZE_NOC_ADDR(dispatch_addr, 4);

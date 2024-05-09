@@ -46,7 +46,7 @@ RunTimeOptions::RunTimeOptions() {
         profiler_sync_enabled = true;
     }
 #endif
-    TT_FATAL(!(get_dprint_enabled() && get_profiler_enabled()), "Cannot enable both debug printing and profiling");
+    //TT_FATAL(!(get_dprint_enabled() && get_profiler_enabled()), "Cannot enable both debug printing and profiling");
 
     null_kernels = (std::getenv("TT_METAL_NULL_KERNELS") != nullptr);
 
