@@ -34,7 +34,7 @@ struct AllGather {
         const uint32_t dim,
         const uint32_t num_links = 1,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt) {
-        return tt::tt_metal::ring_all_gather(input_tensor, dim, num_links, memory_config.value_or(input_tensor.memory_config()));
+        return tt::operations::ccl::all_gather(input_tensor, dim, num_links, memory_config);
     }
 };
 
