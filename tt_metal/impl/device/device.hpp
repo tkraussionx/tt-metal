@@ -198,7 +198,7 @@ class Device {
     CommandQueue& command_queue(size_t cq_id = 0);
 
     // Metal trace device capture mode
-    void begin_trace();
+    void begin_trace(uint32_t trace_buff_size);
     void end_trace();
     void execute_last_trace(bool blocking);
     void release_last_trace();

@@ -25,7 +25,7 @@ namespace tt::tt_metal{
 
     namespace device_pool {
 
-    // Definition of the global device vector
+        // Definition of the global device vector
         extern std::vector<Device*> devices;
 
     } // device_pool
@@ -47,12 +47,12 @@ namespace tt::tt_metal{
         void CloseDevices(std::map<chip_id_t, Device *> devices);
         Device *GetDeviceHandle(chip_id_t device_id);
 
-        void BeginTraceCapture(Device *device);
+        void BeginTraceCapture(Device *device, uint32_t trace_buff_size);
         void EndTraceCapture(Device *device);
         void ExecuteLastTrace(Device *device, bool blocking);
         void ReleaseLastTrace(Device *device);
 
-        void BeginTraceCaptures(std::map<chip_id_t, Device *> devices);
+        void BeginTraceCaptures(std::map<chip_id_t, Device *> devices, uint32_t trace_buff_size);
         void EndTraceCaptures(std::map<chip_id_t, Device *> devices);
         void ExecuteLastTraces(std::map<chip_id_t, Device *> devices, bool blocking);
 

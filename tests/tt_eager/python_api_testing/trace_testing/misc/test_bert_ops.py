@@ -7,12 +7,8 @@ import torch
 import math
 
 import tt_lib as ttl
-from tests.tt_eager.python_api_testing.sweep_tests import (
-    pytorch_ops,
-    tt_lib_ops,
-)
+
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_equal,
     comp_pcc,
 )
 from models.utility_functions import is_wormhole_b0, is_grayskull, skip_for_wormhole_b0
@@ -40,12 +36,23 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
     ],
 )
 def test_bert_linear(
-    device, fidelity, in0_sharded, out_sharded, in1_in_dram, M, K, N, activation, function_level_defaults
+    device,
+    fidelity,
+    in0_sharded,
+    out_sharded,
+    in1_in_dram,
+    M,
+    K,
+    N,
+    activation,
+    use_program_cache,
+    function_level_defaults,
 ):
     has_bias = False
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
     bias_shape = [1, 1, N]
+    out_shape = [1, 1, M, N]
     grid_size = (12, 8)
     # grid_size = (2, 2)
     shard_shape = [M // grid_size[0], K // grid_size[1]]  # shard height, width
@@ -90,14 +97,9 @@ def test_bert_linear(
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
 
-    if in0_sharded:
-        in0_t = torch2tt_tensor(
-            in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-        )
-    else:
-        in0_t = torch2tt_tensor(
-            in0, device, tt_memory_config=interleaved_mem_config_L1, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-        )
+    in0_t_res = torch2tt_tensor(
+        in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+    )
 
     if in1_in_dram:
         in1_t = torch2tt_tensor(
@@ -109,67 +111,79 @@ def test_bert_linear(
         )
 
     output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config_L1
+
     bias_t = pad_by_zero(
         bias, device, tt_memory_config=interleaved_mem_config_L1, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
     )[0]
+    output_t_res = ttl.tensor.empty(
+        out_shape, ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.Layout.TILE, device, interleaved_mem_config_DRAM
+    )
 
-    trace_captured = False
+    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=True,
+        # transpose_mcast=False,
+        fused_activation=activation,
+    )
+
+    compute_kernel_config = ttl.tensor.GrayskullComputeKernelConfig(math_fidelity=fidelity, math_approx_mode=True)
+
     trace_loops = 4
 
+    def run_ops(in0_t_res, output_t_res):
+        if in0_sharded:
+            in0_t = ttl.tensor.interleaved_to_sharded(
+                in0_t_res,
+                grid_size,
+                [M // grid_size[0], K // grid_size[1]],
+                ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                ttl.tensor.ShardOrientation.COL_MAJOR,
+            )
+        else:
+            in0_t = ttl.tensor.clone(in0_t_res, interleaved_mem_config_L1)
+
+        if has_bias:
+            output_t = ttl.operations.primary.matmul(
+                in0_t,
+                in1_t,
+                bias=bias_t,
+                program_config=program_config,
+                output_mem_config=output_mem_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            output_t = ttl.operations.primary.matmul(
+                in0_t,
+                in1_t,
+                program_config=program_config,
+                output_mem_config=output_mem_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+        if out_sharded:
+            output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
+
+        ttl.tensor.copy(output_t, output_t_res)
+
+    # Compile
+    run_ops(in0_t_res, output_t_res)
+    # Capture
+    logger.info("Start Trace capture")
+    ttl.device.BeginTraceCapture(device, 34816)
+    run_ops(in0_t_res, output_t_res)
+    ttl.device.EndTraceCapture(device)
+    logger.info("Trace captured")
+
     for iter in range(trace_loops):
-        if not trace_captured:
-            ttl.device.BeginTraceCapture(device)
-
-            if in0_sharded:
-                in0_t = ttl.tensor.interleaved_to_sharded(
-                    in0_t,
-                    grid_size,
-                    [M // grid_size[0], K // grid_size[1]],
-                    ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-                    ttl.tensor.ShardOrientation.COL_MAJOR,
-                )
-
-            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                in0_block_w=in0_block_w,
-                out_subblock_h=out_subblock_h,
-                out_subblock_w=out_subblock_w,
-                per_core_M=out_block_h,
-                per_core_N=out_block_w,
-                transpose_mcast=True,
-                # transpose_mcast=False,
-                fused_activation=activation,
-            )
-
-            compute_kernel_config = ttl.tensor.GrayskullComputeKernelConfig(
-                math_fidelity=fidelity, math_approx_mode=True
-            )
-
-            if has_bias:
-                output_t = ttl.operations.primary.matmul(
-                    in0_t,
-                    in1_t,
-                    bias=bias_t,
-                    program_config=program_config,
-                    output_mem_config=output_mem_config,
-                    compute_kernel_config=compute_kernel_config,
-                )
-            else:
-                output_t = ttl.operations.primary.matmul(
-                    in0_t,
-                    in1_t,
-                    program_config=program_config,
-                    output_mem_config=output_mem_config,
-                    compute_kernel_config=compute_kernel_config,
-                )
-
-            if out_sharded:
-                output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
-
-            ttl.device.EndTraceCapture(device)
-            trace_captured = True
-            logger.info("Trace captured")
-
+        in0 = torch.randn(in0_shape).bfloat16().float()
+        in0_t_updated = torch2tt_tensor(
+            in0, None, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+        )
+        ttl.tensor.write_tensor(in0_t_updated, in0_t_res)
         logger.info(f"Running iteration {iter}")
         ttl.device.ExecuteLastTrace(device, True)
 
@@ -180,11 +194,14 @@ def test_bert_linear(
 
         if activation != None:
             pt_out = torch.nn.functional.gelu(pt_out)
-        tt_out = tt2torch_tensor(output_t)
+        tt_out = tt2torch_tensor(output_t_res)
 
         passing, output = comp_pcc(pt_out, tt_out)
         logger.info(output)
         assert passing
+
+    # Done with the trace, can deallocate the buffers now.
+    ttl.device.ReleaseLastTrace(device)
 
 
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")

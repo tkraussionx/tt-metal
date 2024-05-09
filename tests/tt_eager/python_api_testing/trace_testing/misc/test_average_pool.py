@@ -11,6 +11,7 @@ import tt_lib as ttl
 
 from tt_lib.utils import _nearest_32
 from models.utility_functions import comp_pcc
+import ttnn
 
 TILE_HEIGHT = TILE_WIDTH = 32
 
@@ -34,13 +35,21 @@ def shape_padded(shape):
         "BFLOAT16",
     ],
 )
-def test_run_average_pool(act_shape, dtype, device):
+def test_run_average_pool(act_shape, dtype, device, use_program_cache):
     batch_size, _, _, channels = act_shape
 
     torch.manual_seed(0)
 
-    trace_captured = False
+    interleaved_mem_config_L1 = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+
     trace_loops = 10
+
+    out_shape = [1] * len(act_shape)
+    out_shape[-1] = act_shape[-1]
+    out_shape_padded = shape_padded(out_shape)
 
     act = torch.randn(act_shape, dtype=torch.bfloat16).float()
     ttact = ttl.tensor.Tensor(act, ttl.tensor.DataType.BFLOAT16)
@@ -48,20 +57,34 @@ def test_run_average_pool(act_shape, dtype, device):
     if act_shape != act_shape_padded:
         ttact = ttact.pad_to_tile(0.0)
 
-    for iter in range(trace_loops):
-        ttact = ttact.to(device)
+    ttact_res = ttact.to(device)
+    out_res = ttl.tensor.empty(out_shape_padded, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
-        if not trace_captured:
-            ttl.device.BeginTraceCapture(device)
-            out = ttl.tensor.average_pool_2d(ttact)
-            ttl.device.EndTraceCapture(device)
-            trace_captured = True
-            logger.info("Trace captured")
+    def run_ops(ttact_res, out_res):
+        out = ttl.tensor.average_pool_2d(ttact_res)
+        ttl.tensor.copy(out, out_res)
+
+    # Compile
+    run_ops(ttact_res, out_res)
+    # Trace
+    logger.info("Start Trace capture")
+    ttl.device.BeginTraceCapture(device, 11264)
+    run_ops(ttact_res, out_res)
+    ttl.device.EndTraceCapture(device)
+    logger.info("Trace captured")
+
+    for iter in range(trace_loops):
+        act = torch.randn(act_shape, dtype=torch.bfloat16).float()
+        ttact_updated = ttl.tensor.Tensor(act, ttl.tensor.DataType.BFLOAT16)
+        act_shape_padded = shape_padded(act_shape)
+        if act_shape != act_shape_padded:
+            ttact_updated = ttact_updated.pad_to_tile(0.0)
+        ttl.tensor.write_tensor(ttact_updated, ttact_res)
 
         logger.info(f"Running iteration {iter}")
         ttl.device.ExecuteLastTrace(device, True)
 
-        out = out.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
+        out = out_res.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
         out_shape = [batch_size, 1, 1, channels]
         out_shape_padded = shape_padded(out_shape)
         if out_shape != out_shape_padded:
@@ -76,8 +99,8 @@ def test_run_average_pool(act_shape, dtype, device):
 
         ## test for equivalance
         passing_pcc, output_pcc = comp_pcc(golden_pytorch, out_pytorch)
-        print(f"Passing PCC = {passing_pcc}")
-        print(f"Output PCC = {output_pcc}")
+        logger.debug(f"Passing PCC = {passing_pcc}")
+        logger.debug(f"Output PCC = {output_pcc}")
 
         assert passing_pcc
 

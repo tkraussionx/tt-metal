@@ -37,8 +37,6 @@ struct TraceDescriptor {
     uint32_t num_completion_worker_cores;
     std::vector<uint32_t> data;
 
-    std::vector<std::shared_ptr<Buffer>> owned_buffer_pool;
-
     TraceDescriptor() {
         this->reset();
     }
@@ -48,7 +46,6 @@ struct TraceDescriptor {
         this->traced_completion_q_reads.clear();
         this->num_completion_q_reads = 0;
         this->num_completion_worker_cores = 0;
-        this->owned_buffer_pool.clear();
     }
 
     // Calculate relative offset to the initial event ID of the trace
@@ -97,6 +94,7 @@ class Trace {
         return func();
     }
 
+    static uint32_t global_trace_id;
     static uint32_t next_id();
 
    public :
@@ -125,7 +123,8 @@ class Trace {
     static void validate_instance(const uint32_t tid);
     static void release_all();  // note all instances across all devices are released
     static TraceBuffer get_instance(const uint32_t tid);
-    static uint32_t instantiate(CommandQueue& cq, shared_ptr<detail::TraceDescriptor> desc);
+    static uint32_t initialize_buffer(CommandQueue& cq);
+    static void create_trace_buffer(const CommandQueue& cq, shared_ptr<detail::TraceDescriptor> desc, uint32_t unpadded_size);
 };
 
 }  // namespace tt::tt_metal
