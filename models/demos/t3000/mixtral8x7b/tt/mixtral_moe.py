@@ -7,29 +7,35 @@ import ttnn
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 
 
-def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1, compute_kernel):
+def top_2(gate_logits_1SB8, top_2_mask, expert_mask, ones_1118, ones_11B1, compute_kernel, device_mesh):
     # get the highest value and position
     weights_ex0_1SB1 = ttnn.max(gate_logits_1SB8, dim=3)
-    print("done max")
-    exp_0_repeated = ttnn.matmul(weights_ex0_1SB1, ones_1118, compute_kernel_config=compute_kernel)
+    print("done max", ttnn.to_torch(weights_ex0_1SB1, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
+    exp_0_repeated = ttnn.matmul(weights_ex0_1SB1, ones_1118)  # , compute_kernel_config=compute_kernel)
+    print("done matmul", ttnn.to_torch(exp_0_repeated, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
     cond0 = ttnn.eq(gate_logits_1SB8, exp_0_repeated)
+    print("done eq", ttnn.to_torch(cond0, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
 
     # mask out the maximum value
     gate_logits_1SB8_masked = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
+    # print("done where", ttnn.to_torch(gate_logits_1SB8_masked, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
 
     # get the second highest value and position
     weights_ex1_1SB1 = ttnn.max(gate_logits_1SB8_masked, dim=3)
-    exp_1_repeated = ttnn.matmul(weights_ex1_1SB1, ones_1118, compute_kernel_config=compute_kernel)
+    exp_1_repeated = ttnn.matmul(weights_ex1_1SB1, ones_1118)  # , compute_kernel_config=compute_kernel)
     cond1 = ttnn.eq(gate_logits_1SB8, exp_1_repeated)
 
     # calculate the softmax
     weights_exp = ttnn.exp(weights_ex1_1SB1 - weights_ex0_1SB1)
+    # print("done exp", ttnn.to_torch(weights_exp, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
     weights_1SB1_pre_softmax = ttnn.reciprocal(ones_11B1 + weights_exp)
+    # print("done reciprocal", ttnn.to_torch(weights_1SB1_pre_softmax, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
 
     # select whether a batch for was selected first or second for the i-th head
-    cond0 = ttnn.matmul(cond0, expert_mask, compute_kernel_config=compute_kernel)
-    cond1 = ttnn.matmul(cond1, expert_mask, compute_kernel_config=compute_kernel)
+    cond0 = ttnn.matmul(cond0, expert_mask)  # , compute_kernel_config=compute_kernel)
+    cond1 = ttnn.matmul(cond1, expert_mask)  # , compute_kernel_config=compute_kernel)
 
+    print("done cond", ttnn.to_torch(cond0, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)))
     # calculate the weight
     weights_1SB1 = cond0 * weights_1SB1_pre_softmax - cond1 * (weights_1SB1_pre_softmax - ones_11B1)
 
@@ -136,7 +142,6 @@ class TtMoeLayer(torch.nn.Module):
             use_1d_systolic_array=True,
             core_grid=ttnn.CoreGrid(y=1, x=8),
         )
-        print("gates linear end")
         # gate_logits_1SB8 = ttnn.to_device(gate_logits_1SB8, self.device_mesh)
 
         # get weights for top-2 experts
@@ -147,7 +152,9 @@ class TtMoeLayer(torch.nn.Module):
             self.ones_1118,
             self.ones_11B1,
             self.compute_kernel,
+            self.device_mesh,
         )
+        print("tt weights", [ttnn.to_torch(ttnn.get_device_tensors(weights_1SB1)[i]) for i in range(8)])
 
         # MLP and masking
         results_11BH = ttnn.multiply(expert_i_HH(input_i_1SBH), weights_1SB1, memory_config=ttnn.L1_MEMORY_CONFIG)

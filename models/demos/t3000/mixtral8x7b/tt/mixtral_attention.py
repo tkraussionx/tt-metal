@@ -5,7 +5,7 @@
 import torch
 import ttnn
 from models.utility_functions import nearest_32
-from ttnn import ShardTensorToMesh, ReplicateTensorToMesh
+from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor
 
 
 class TtMixtralAttention(torch.nn.Module):
@@ -29,6 +29,7 @@ class TtMixtralAttention(torch.nn.Module):
         # self.n_local_kv_heads = self.n_kv_heads // self.num_devices
 
         self.dtype = dtype
+        self.num_devices = 8
 
         self.model_config = self.model_args.get_model_config()
 
@@ -47,21 +48,27 @@ class TtMixtralAttention(torch.nn.Module):
         self.wqkv = ttnn.as_tensor(
             torch.concat(
                 [
-                    torch.transpose(
-                        self.state_dict[wq_str],
-                        -2,
-                        -1,
-                    ),
-                    torch.transpose(
-                        self.state_dict[wk_str],
-                        -2,
-                        -1,
-                    ),
-                    torch.transpose(
-                        self.state_dict[wv_str],
-                        -2,
-                        -1,
-                    ),
+                    torch.concat(
+                        [
+                            torch.transpose(
+                                torch.chunk(self.state_dict[wq_str], self.num_devices)[i],
+                                -2,
+                                -1,
+                            ),
+                            torch.transpose(
+                                torch.chunk(self.state_dict[wk_str], self.num_devices)[i],
+                                -2,
+                                -1,
+                            ),
+                            torch.transpose(
+                                torch.chunk(self.state_dict[wv_str], self.num_devices)[i],
+                                -2,
+                                -1,
+                            ),
+                        ],
+                        dim=-1,
+                    )
+                    for i in range(8)
                 ],
                 dim=-1,
             ),
@@ -70,10 +77,10 @@ class TtMixtralAttention(torch.nn.Module):
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wqkv_mesh"),
+            cache_file_name=cache_name(f"wqkv_mesh_cat"),
         )
         self.wqkv = ttnn.to_device(self.wqkv, self.device_mesh)
-
+        print("WQKV", self.wqkv)
         self.wo = ttnn.as_tensor(
             torch.transpose(
                 self.state_dict[wo_str],
@@ -85,7 +92,7 @@ class TtMixtralAttention(torch.nn.Module):
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wo_mesh"),
+            cache_file_name=cache_name(f"wo_mesh_tmp"),
         )
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
         print(
@@ -191,6 +198,8 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel,
         )
 
+        print("xkqv,", ttnn.to_torch(xqkv_fused, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=0)))
+
         # split qkv into heads
         (
             q_heads_14BD,
@@ -240,7 +249,7 @@ class TtMixtralAttention(torch.nn.Module):
         ttnn.kv_cache.update_cache_for_token_(values_1BPD, v_heads_1B1D, current_pos)
         self.layer_past = [keys_1BPD, values_1BPD]
         keys_1BPD = keys_1BPD[:, :, :padded_layer_past_len, :]
-        values_1BPD = values_1BPD[:, :, :padded_layer_past_len, :]
+        values_1BPD = values_1BPD[:, :, :layer_slice, :]
 
         ###
         # Attention
@@ -269,7 +278,7 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel_attn,
         )
         # scores slice and softmax
-        # attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
+        attn_1B4P = attn_1B4P[:, :, :, :layer_slice]
         attn_1B4P = ttnn.softmax(attn_1B4P, dim=-1)  # , memory_config=attn_output_memcfg_post_sm)
         print(attn_1B4P)
         # values matmul
