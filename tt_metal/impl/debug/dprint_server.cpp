@@ -919,10 +919,10 @@ void DprintServerAttach(Device* device) {
     // Skip if DPRINT not enabled, and make sure profiler is not running.
     if (!tt::llrt::OptionsG.get_dprint_enabled())
         return;
-    TT_FATAL(
-       DebugPrintServerContext::ProfilerIsRunning == false,
-       "Device side profiler is running, cannot start print server"
-    );
+    //TT_FATAL(
+       //DebugPrintServerContext::ProfilerIsRunning == false,
+       //"Device side profiler is running, cannot start print server"
+    //);
 
     // If no server is running, create one
     if (!DprintServerIsRunning())
@@ -945,7 +945,7 @@ void DprintServerDetach(Device* device) {
 }
 
 void DprintServerSetProfilerState(bool profile_device) {
-    DebugPrintServerContext::ProfilerIsRunning = profile_device;
+    //DebugPrintServerContext::ProfilerIsRunning = profile_device;
 }
 
 bool DprintServerIsRunning() {

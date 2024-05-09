@@ -841,6 +841,7 @@ void kernel_main() {
     }
     bool done = false;
     while (!done) {
+        DeviceZoneScopedMainN("CQ-DISPATCH");
         if (cmd_ptr == cb_fence) {
             get_cb_page<
                 dispatch_cb_base,
@@ -868,6 +869,9 @@ void kernel_main() {
                                dispatch_cb_blocks,
                                dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
                                                             wr_block_idx);
+        //int i = my_x[0];
+        //int j = my_y[0];
+        //DPRINT << i  << "DONE" << j << ENDL();
     }
 
     noc_async_write_barrier();

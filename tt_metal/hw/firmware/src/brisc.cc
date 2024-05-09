@@ -332,6 +332,8 @@ int main() {
 
             setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
             finish_ncrisc_copy_and_run();
+            int i = my_x[0];
+            int j = my_y[0];
 
             // Run the BRISC kernel
             DEBUG_STATUS("R");
