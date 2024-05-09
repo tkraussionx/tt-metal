@@ -8,6 +8,8 @@
 
 #include "jit_build/settings.hpp"
 
+#include <chrono>
+#include <thread>
 #include <unordered_set>
 #include <mutex>
 #include <fmt/ranges.h>
@@ -363,6 +365,7 @@ void wait_until_cores_done(chip_id_t device_id,
             const auto &phys_core = *it;
 
             bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
             if (is_done) {
                 log_debug(tt::LogMetal, "Phys cores just done: {}", phys_core.str());

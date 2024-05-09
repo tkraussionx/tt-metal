@@ -871,7 +871,7 @@ void kernel_main() {
                                                             wr_block_idx);
         int i = my_x[0];
         int j = my_y[0];
-        DPRINT << i  << "DONE" << j << ENDL();
+        DPRINT << i  << "CQ-DONE" << j << ENDL();
     }
 
     noc_async_write_barrier();

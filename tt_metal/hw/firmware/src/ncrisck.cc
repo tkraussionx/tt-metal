@@ -44,5 +44,6 @@ void kernel_launch() {
     noc_local_state_init(noc_index);
 
     kernel_main();
+    DPRINT << "NC" << ENDL();
 #endif
 }

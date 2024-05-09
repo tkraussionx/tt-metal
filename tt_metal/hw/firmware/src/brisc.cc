@@ -332,8 +332,6 @@ int main() {
 
             setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
             finish_ncrisc_copy_and_run();
-            int i = my_x[0];
-            int j = my_y[0];
 
             // Run the BRISC kernel
             DEBUG_STATUS("R");
@@ -346,7 +344,14 @@ int main() {
             }
             DEBUG_STATUS("D");
 
+            int i = my_x[0];
+            int j = my_y[0];
+            DPRINT << i  << "NC WAIT" << j << ENDL();
             wait_ncrisc_trisc();
+            DPRINT << i  << "NC DONE" << j << ENDL();
+            DPRINT << i  << "NC DONE" << j << ENDL();
+            DPRINT << i  << "NC DONE" << j << ENDL();
+            DPRINT << i  << "NC DONE" << j << ENDL();
 
             mailboxes->launch.run = RUN_MSG_DONE;
 
