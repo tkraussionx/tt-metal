@@ -663,44 +663,45 @@ void launch_op(
     // Assert to ensure that worker threads are specified.
     ZoneScopedN("LaunchOp");
     auto& workers = output_tensors.at(0).workers;
+    std::size_t workers_size = workers.size();
     for (auto& output_tensor : output_tensors) {
         TT_FATAL(output_tensor.workers.size(), "Worker threads must be specified for outputs populated by launch_op. This API can only be used for creating output tensors on device.");
         TT_FATAL(output_tensor.workers == workers, "Worker threads must be consistent across all outputs populated by launch_op.");
     }
     validate_worker_modes(workers);
     // Record ref counts for all tensors before pushing to worker queue.
-    std::vector<uint32_t> input_tensor_ref_count = {};
-    std::vector<uint32_t> optional_input_tensor_ref_count = {};
-    std::vector<uint32_t> output_tensor_ref_count = {};
+    std::vector<uint32_t> input_tensor_ref_count = std::vector<uint32_t>(input_tensors.size());
+    std::vector<uint32_t> optional_input_tensor_ref_count = std::vector<uint32_t>(optional_input_tensors.size());
+    std::vector<uint32_t> output_tensor_ref_count = std::vector<uint32_t>(output_tensors.size());
 
-    std::vector<Tensor> async_safe_input_tensors = {};
+    std::vector<Tensor> async_safe_input_tensors = std::vector<Tensor>(input_tensors.size());
     std::vector<std::optional<const Tensor>> async_safe_optional_input_tensors = {};
     std::unordered_set<uint32_t> cross_worker_input_tensor_idx = {};
     std::unordered_set<uint32_t> cross_worker_optional_input_tensor_idx = {};
     // When running on a single device, input tensors can be using borrowed storage. If so, when running in async mode,
     // copy borrowed tensors to owned storage.
     for (int i = 0; i < input_tensors.size(); i++) {
-        async_safe_input_tensors.push_back(copy_borrowed_tensor_in_async_mode(workers.at(0), input_tensors.at(i)));
-        input_tensor_ref_count.push_back(async_safe_input_tensors[i].tensor_attributes->record_main_thread_ref_count());
+        async_safe_input_tensors[i] = copy_borrowed_tensor_in_async_mode(workers.at(0), input_tensors.at(i));
+        input_tensor_ref_count[i] = async_safe_input_tensors[i].tensor_attributes->record_main_thread_ref_count();
     }
     for (int i = 0; i < optional_input_tensors.size(); i++) {
         if (optional_input_tensors[i].has_value()) {
             async_safe_optional_input_tensors.push_back(copy_borrowed_tensor_in_async_mode(workers.at(0), optional_input_tensors[i].value()));
-            optional_input_tensor_ref_count.push_back(async_safe_optional_input_tensors[i].value().tensor_attributes->record_main_thread_ref_count());
+            optional_input_tensor_ref_count[i] = async_safe_optional_input_tensors[i].value().tensor_attributes->record_main_thread_ref_count();
         }
         else {
             async_safe_optional_input_tensors.push_back(std::nullopt);
-            optional_input_tensor_ref_count.push_back(0);
+            optional_input_tensor_ref_count[i] = 0;
         }
     }
     for (int i = 0; i < output_tensors.size(); i++) {
-        output_tensor_ref_count.push_back(output_tensors[i].tensor_attributes->record_main_thread_ref_count());
+        output_tensor_ref_count[i] = output_tensors[i].tensor_attributes->record_main_thread_ref_count();
     }
     // Check if this op dispatch step relies on tensors from other workers.
     // If so, mark them in use by current worker. Tensors shared across workers
     // are only supported when each tensor is tied to a single device/worker
     // (example all-gather).
-    if (workers.size() == 1) {
+    if (workers_size == 1) {
         // Single worker per tensor and.
         for (int i = 0; i < async_safe_input_tensors.size(); i++) {
             if (async_safe_input_tensors.at(i).get_workers().size() and async_safe_input_tensors.at(i).get_workers().at(0) != workers.at(0)) {
@@ -720,55 +721,61 @@ void launch_op(
     {
         ZoneScopedN("PushOpToWorkers");
         for (auto target_device : workers) {
-            target_device->push_work([target_device, workers, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors, shared_input_idx = cross_worker_input_tensor_idx, shared_optional_input_idx = cross_worker_optional_input_tensor_idx] () mutable {
-                std::vector<Tensor> input_shards = {};
+            target_device->push_work(std::make_shared<std::function<void()>>([target_device, workers_size, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors, shared_input_idx = cross_worker_input_tensor_idx, shared_optional_input_idx = cross_worker_optional_input_tensor_idx] () mutable {
+                std::vector<Tensor> input_shards = std::vector<Tensor>(inputs.size(), Tensor());
                 std::vector<std::optional<const Tensor>> optional_input_shards = {};
 
-                for (const auto& input : inputs) {
-                    input_shards.push_back(get_shard_for_device(input, target_device));
-                }
-                for (auto& input : async_safe_optional_input_tensors) {
-                    if (input.has_value()) {
-                        optional_input_shards.push_back(get_shard_for_device(input.value(), target_device));
+                {
+                    ZoneScopedN("CreateShards");
+                    for (int i = 0; i < input_shards.size(); i++) {
+                        input_shards[i] = get_shard_for_device(inputs[i], target_device);
                     }
-                    else {
-                        optional_input_shards.push_back(std::nullopt);
+                    for (auto& input : async_safe_optional_input_tensors) {
+                        if (input.has_value()) {
+                            optional_input_shards.push_back(get_shard_for_device(input.value(), target_device));
+                        }
+                        else {
+                            optional_input_shards.push_back(std::nullopt);
+                        }
                     }
                 }
                 auto local_tensors = op_func(input_shards, optional_input_shards);
-                // Release shared ownership of tensors belonging to other workers.
-                // If the workers for this tensor are stalled to deallocate
-                for (auto& shared_input : shared_input_idx) {
-                    inputs.at(shared_input).tensor_attributes->num_sibling_workers_sharing_tensor--;
+
+                {
+                    ZoneScopedN("OpPostProcess");
+                    // Release shared ownership of tensors belonging to other workers.
+                    // If the workers for this tensor are stalled to deallocate
+                    for (auto& shared_input : shared_input_idx) {
+                        inputs.at(shared_input).tensor_attributes->num_sibling_workers_sharing_tensor--;
+                    }
+                    for (auto& shared_optional_input : shared_optional_input_idx) {
+                        async_safe_optional_input_tensors.at(shared_optional_input).value().tensor_attributes->num_sibling_workers_sharing_tensor--;
+                    }
+                    for (int i = 0; i < local_tensors.size(); i++) {
+                        if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
+                            TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
+                            // Make this a host side tensor - Set storage = Owned and clear workers
+                            outputs.at(i).tensor_attributes->storage = OwnedStorage();
+                            outputs.at(i).workers = {};
+                        }
+                        else {
+                            outputs.at(i).tensor_attributes->dynamic_storage = false;
+                        }
+                        insert_buffer_and_shape_for_device(target_device, local_tensors.at(i), outputs.at(i));
+                        if (not target_device->id() or workers_size == 1) {
+                            outputs.at(i).set_shape(local_tensors.at(i).get_shape());
+                            outputs.at(i).set_dtype(local_tensors.at(i).get_dtype());
+                            outputs.at(i).set_layout(local_tensors.at(i).get_layout());
+                        }
+                        if (workers_size == 1) {
+                            outputs.at(i).set_populated();
+                        }
+                        else {
+                            outputs.at(i).set_populated(target_device);
+                        }
+                    }
                 }
-                for (auto& shared_optional_input : shared_optional_input_idx) {
-                    async_safe_optional_input_tensors.at(shared_optional_input).value().tensor_attributes->num_sibling_workers_sharing_tensor--;
-                }
-                for (int i = 0; i < local_tensors.size(); i++) {
-                    if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
-                        TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
-                        TT_ASSERT(std::holds_alternative<DeviceStorage>(outputs.at(i).tensor_attributes->storage), "All inputs and outputs to an op must be on device for multi-device tensors.");
-                        // Make this a host side tensor - Set storage = Owned and clear workers
-                        outputs.at(i).tensor_attributes->storage = OwnedStorage();
-                        outputs.at(i).workers = {};
-                    }
-                    else {
-                        outputs.at(i).tensor_attributes->dynamic_storage = false;
-                    }
-                    insert_buffer_and_shape_for_device(target_device, local_tensors.at(i), outputs.at(i));
-                    if (not target_device->id() or workers.size() == 1) {
-                        outputs.at(i).set_shape(local_tensors.at(i).get_shape());
-                        outputs.at(i).set_dtype(local_tensors.at(i).get_dtype());
-                        outputs.at(i).set_layout(local_tensors.at(i).get_layout());
-                    }
-                    if (workers.size() == 1) {
-                        outputs.at(i).set_populated();
-                    }
-                    else {
-                        outputs.at(i).set_populated(target_device);
-                    }
-                }
-            });
+            }));
         }
     }
 

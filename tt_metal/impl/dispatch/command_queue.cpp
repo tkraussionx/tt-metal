@@ -1205,6 +1205,15 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id) :
     this->exit_condition = false;
     std::thread completion_queue_thread = std::thread(&HWCommandQueue::read_completion_queue, this);
     this->completion_queue_thread = std::move(completion_queue_thread);
+    // Set the affinity of the completion queue reader.
+    static int num_online_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(device->id() % num_online_cores, &cpuset);
+    int rc = pthread_setaffinity_np(this->completion_queue_thread.native_handle(), sizeof(cpu_set_t), &cpuset);
+    if (rc) {
+        log_warning(tt::LogMetal, "Unable to bind completion queue reader thread to CPU Core. May see performance degradation. Error Code: {}", rc);
+    }
     this->expected_num_workers_completed = 0;
 }
 
@@ -1219,8 +1228,26 @@ HWCommandQueue::~HWCommandQueue() {
         TT_ASSERT(
             this->num_entries_in_completion_q == this->num_completed_completion_q_reads,
             "There shouldn't be any commands in flight after closing our completion queue thread. Num uncompleted commands: {}", this->num_entries_in_completion_q - this->num_completed_completion_q_reads);
-        this->exit_condition = true;
+        this->set_exit_condition();
         this->completion_queue_thread.join();
+    }
+}
+
+void HWCommandQueue::increment_num_entries_in_completion_q() {
+    // Increment num_entries_in_completion_q and inform reader thread
+    // that there is work in the completion queue to process
+    this->num_entries_in_completion_q++;
+    {
+        std::lock_guard lock(this->reader_thread_cv_mutex);
+        this->reader_thread_cv.notify_one();
+    }
+}
+
+void HWCommandQueue::set_exit_condition() {
+    this->exit_condition = true;
+    {
+        std::lock_guard lock(this->reader_thread_cv_mutex);
+        this->reader_thread_cv.notify_one();
     }
 }
 
@@ -1239,7 +1266,6 @@ void HWCommandQueue::enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* d
 // Read buffer command is enqueued in the issue region and device writes requested buffer data into the completion region
 void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking) {
     ZoneScopedN("HWCommandQueue_read_buffer");
-
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
     CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
@@ -1269,9 +1295,8 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
                 this->issued_completion_q_reads.push(
                     detail::ReadBufferDescriptor(buffer, padded_page_size, dst, unpadded_dst_offset, num_pages_to_read, src_page_index, linear_page_copy)
                 );
-                this->num_entries_in_completion_q++;
-
                 this->enqueue_command(command, false);
+                this->increment_num_entries_in_completion_q();
             }
         }
         if (blocking) {
@@ -1288,9 +1313,8 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
         this->issued_completion_q_reads.push(
             detail::ReadBufferDescriptor(buffer, padded_page_size, dst, unpadded_dst_offset, pages_to_read, src_page_index)
         );
-        this->num_entries_in_completion_q++;
-
         this->enqueue_command(command, blocking);
+        this->increment_num_entries_in_completion_q();
         if (not blocking) { // should this be unconditional?
             std::shared_ptr<Event> event = std::make_shared<Event>();
             this->enqueue_record_event(event);
@@ -1512,7 +1536,7 @@ void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool cle
         this->trace_ctx->num_completion_q_reads++;
     } else {
         this->issued_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
-        this->num_entries_in_completion_q++;
+        this->increment_num_entries_in_completion_q();
     }
 }
 
@@ -1548,7 +1572,7 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
                 } else if constexpr (std::is_same_v<T, detail::ReadEventDescriptor>) {
                     read_descriptor.set_global_offset(event_id);
                     this->issued_completion_q_reads.push(read_descriptor);
-                    this->num_entries_in_completion_q++;
+                    this->increment_num_entries_in_completion_q();
                     num_events++;
                 }
             },
@@ -1745,6 +1769,10 @@ void HWCommandQueue::read_completion_queue() {
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
     while (true) {
+        {
+            std::unique_lock<std::mutex> lock(this->reader_thread_cv_mutex);
+            this->reader_thread_cv.wait(lock, [this] {return this->num_entries_in_completion_q > this->num_completed_completion_q_reads or this->exit_condition;});
+        }
         if (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             uint32_t num_events_to_read = this->num_entries_in_completion_q - this->num_completed_completion_q_reads;
             for (uint32_t i = 0; i < num_events_to_read; i++) {
@@ -1783,7 +1811,6 @@ void HWCommandQueue::read_completion_queue() {
         } else if (this->exit_condition) {
             return;
         }
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 }
 
@@ -1797,13 +1824,13 @@ void HWCommandQueue::finish() {
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             if (DPrintServerHangDetected()) {
                 // DPrint Server hang. Mark state and early exit. Assert in main thread.
-                this->exit_condition = true;
                 this->dprint_server_hang = true;
+                this->set_exit_condition();
                 return;
             } else if (tt::watcher_server_killed_due_to_error()) {
                 // Illegal NOC txn killed watcher. Mark state and early exit. Assert in main thread.
-                this->exit_condition = true;
                 this->illegal_noc_txn_hang = true;
+                this->set_exit_condition();
                 return;
             }
         }
