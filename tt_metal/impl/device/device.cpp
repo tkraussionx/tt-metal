@@ -1869,11 +1869,13 @@ bool Device::using_slow_dispatch() const {
     return not (this->using_fast_dispatch);
 }
 
-void Device::begin_trace() {
+void Device::begin_trace(uint32_t trace_buff_size) {
     this->trace_contexts_.clear();
     for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        trace_contexts_.push_back(std::make_shared<detail::TraceDescriptor>());
-        hw_command_queues_[cq_id]->record_begin(trace_contexts_.at(cq_id));
+        auto desc = std::make_shared<detail::TraceDescriptor>();
+        trace_contexts_.push_back(desc);
+        Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size);
+        hw_command_queues_[cq_id]->record_begin(desc);
     }
 }
 
@@ -1886,7 +1888,13 @@ void Device::end_trace() {
     for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
         hw_command_queues_[cq_id]->record_end();
         trace_contexts_.at(cq_id)->data = std::move(this->sysmem_manager().get_bypass_data());
-        uint32_t tid = Trace::instantiate(this->command_queue(cq_id), trace_contexts_.at(cq_id));
+        // Add command to terminate the trace buffer
+        DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+        command_sequence.add_prefetch_exec_buf_end();
+        for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
+            trace_contexts_.at(cq_id)->data.push_back(((uint32_t*)command_sequence.data())[i]);
+        }
+        uint32_t tid = Trace::initialize_buffer(this->command_queue(cq_id));
         trace_insts_.push_back(tid);
     }
 }

@@ -57,6 +57,8 @@ namespace tt::tt_metal {
 unordered_map<uint32_t, TraceBuffer> Trace::buffer_pool;
 std::mutex Trace::pool_mutex;
 
+uint32_t Trace::global_trace_id = 0;
+
 Trace::Trace() {
     this->reset();
 }
@@ -89,7 +91,6 @@ void Trace::validate() {
 }
 
 uint32_t Trace::next_id() {
-    static uint32_t global_trace_id = 0;
     return global_trace_id++;
 }
 
@@ -106,46 +107,55 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
         cq.wait_until_empty();
     });
 
-    uint32_t tid = Trace::instantiate(cq, desc);
-    this->state = TraceState::READY;
-    return tid;
-}
-
-uint32_t Trace::instantiate(CommandQueue& cq, shared_ptr<detail::TraceDescriptor> desc) {
-    uint32_t tid = Trace::next_id();
-    TT_FATAL(Trace::has_instance(tid) == false, "Trace ID " + std::to_string(tid) + " already exists");
-
-    vector<uint32_t>& data = desc->data;
-
     // Add command to terminate the trace buffer
     DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
     command_sequence.add_prefetch_exec_buf_end();
     for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
-        data.push_back(((uint32_t*)command_sequence.data())[i]);
+        desc->data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
+
+    Trace::create_trace_buffer(cq, desc, desc->data.size());
+
+    uint32_t tid = Trace::initialize_buffer(cq);
+    this->state = TraceState::READY;
+    return tid;
+}
+
+void Trace::create_trace_buffer(const CommandQueue& cq, shared_ptr<detail::TraceDescriptor> desc, uint32_t unpadded_size) {
+    size_t page_size = interleaved_page_size(
+        unpadded_size, cq.device()->num_banks(BufferType::DRAM), kExecBufPageMin, kExecBufPageMax);
+    uint64_t padded_size = round_up(unpadded_size, page_size);
+
+    // Commit the trace buffer to device DRAM
+    auto buffer = std::make_shared<Buffer>(cq.device(), padded_size, page_size, BufferType::DRAM, TensorMemoryLayout::INTERLEAVED);
+
+    // Pin the trace buffer in memory until explicitly released by the user
+    uint32_t tid = Trace::next_id();
+    Trace::add_instance(tid, {desc, buffer});
+}
+
+uint32_t Trace::initialize_buffer(CommandQueue& cq) {
+    uint32_t tid = Trace::global_trace_id - 1;
+    const auto& trace_buffer = Trace::get_instance(tid);
+    vector<uint32_t>& data = trace_buffer.desc->data;
 
     // Pad the trace buffer to the next fully banked page
     uint64_t unpadded_size = data.size() * sizeof(uint32_t);
-    size_t page_size = interleaved_page_size(
-        unpadded_size, cq.device()->num_banks(BufferType::DRAM), kExecBufPageMin, kExecBufPageMax);
+    size_t page_size = trace_buffer.buffer->page_size();
     size_t numel_page = page_size / sizeof(uint32_t);
     size_t numel_padding = numel_page - data.size() % numel_page;
     if (numel_padding > 0) {
         data.resize(data.size() + numel_padding, 0/*padding value*/);
     }
     uint64_t padded_size = data.size() * sizeof(uint32_t);
+    TT_FATAL(padded_size <= trace_buffer.buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", padded_size, trace_buffer.buffer->size());
 
-    // Commit the trace buffer to device DRAM
-    auto buffer = std::make_shared<Buffer>(cq.device(), padded_size, page_size, BufferType::DRAM, TensorMemoryLayout::INTERLEAVED);
-
-    EnqueueWriteBuffer(cq, buffer, data, kBlocking);
+    EnqueueWriteBuffer(cq, trace_buffer.buffer, data, kBlocking);
     Finish(cq);  // clear side effects flag
 
-    // Pin the trace buffer in memory until explicitly released by the user
-    Trace::add_instance(tid, {desc, buffer});
     log_trace(LogMetalTrace,
         "Trace {} instantiated with completion buffer num_entries={}, issue buffer unpadded size={}, padded size={}, num_pages={}",
-        tid, desc->num_completion_q_reads, unpadded_size, padded_size, padded_size / page_size);
+        tid, trace_buffer.desc->num_completion_q_reads, unpadded_size, padded_size, padded_size / page_size);
     return tid;
 }
 

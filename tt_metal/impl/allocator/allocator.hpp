@@ -109,6 +109,8 @@ void clear(Allocator &allocatator);
 struct Allocator {
     Allocator(const AllocatorConfig &alloc_config, const allocator::AllocDescriptor &alloc_descriptor);
 
+    bool disabled_allocs = false;
+
     allocator::BankManager dram_manager;
     allocator::BankManager l1_manager;
     allocator::BankManager l1_small_manager;

@@ -697,8 +697,8 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
     }
 
-    void BeginTraceCapture(Device *device) {
-        device->begin_trace();
+    void BeginTraceCapture(Device *device, uint32_t trace_buff_size) {
+        device->begin_trace(trace_buff_size);
     }
 
     void EndTraceCapture(Device *device) {
@@ -713,9 +713,9 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         device->release_last_trace();
     }
 
-    void BeginTraceCaptures(std::map<chip_id_t, Device *> devices) {
+    void BeginTraceCaptures(std::map<chip_id_t, Device *> devices, uint32_t trace_buff_size) {
         for (const auto &[device_id, dev] : devices) {
-            dev->begin_trace();
+            dev->begin_trace(trace_buff_size);
         }
     }
     void EndTraceCaptures(std::map<chip_id_t, Device *> devices) {

@@ -467,15 +467,6 @@ class HWCommandQueue {
         return std::move(this->manager.get_bypass_data());
     }
 
-    // Force commands to be issued, overrides tracing if this called within record_commands
-    template <typename Func>
-    inline void force_commands(Func run_commands) {
-        bool bypass = this->manager.get_bypass_mode();
-        this->manager.set_bypass_mode(false, false);  // pause
-        run_commands();
-        this->manager.set_bypass_mode(bypass, false);  // resume
-    }
-
    private:
     uint32_t id;
     uint32_t size_B;
