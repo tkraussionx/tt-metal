@@ -23,7 +23,7 @@ class LockFreeQueue {
         std::atomic<Node*> head;
         std::atomic<Node*> tail;
 
-        Node* pop_head() {
+        inline Node* pop_head() {
             Node* oldHead = head.load();
             if (oldHead == tail.load()) {
                 return nullptr; // Queue is empty
@@ -31,33 +31,44 @@ class LockFreeQueue {
             head.store(oldHead->next);
             return oldHead;
         }
-
+        Node nodes[50000];
     public:
         // Optional - Set these if the worker and parent thread state needs to be tracked
         std::atomic<uint64_t> worker_thread_id = 0;
         std::atomic<uint64_t> parent_thread_id = 0;
-        LockFreeQueue() : head(new Node), tail(head.load()) {}
+        LockFreeQueue()
+        {
+            for (int i = 0; i < 50000; i++) {
+                if (i < 49999) nodes[i].next = &(nodes[i+1]);
+                else nodes[i].next = &(nodes[0]);
+            }
+            this->head = nodes;
+            this->tail = nodes;
+        }
+
         LockFreeQueue(LockFreeQueue&& other) {
+            Node nodes = other.nodes;
             head.store(other.head.load());
             tail.store(other.tail.load());
             worker_thread_id.store(other.worker_thread_id.load());
             parent_thread_id.store(other.parent_thread_id.load());
         }
-        void push(const T& value) {
-            std::shared_ptr<T> newData(std::make_shared<T>(value));
-            Node* newNode = new Node;
-            tail.load()->data = newData;
-            tail.load()->next = newNode;
-            tail.store(newNode);
+        inline void push(const T& value) {
+            while(tail.load()->data != nullptr);
+            tail.load()->data = std::make_shared<T>(value);
+            tail.store(tail.load()->next);
         }
 
-        std::shared_ptr<T> pop() {
+        inline void push(std::shared_ptr<T> value) {
+            while(tail.load()->data != nullptr);
+            tail.load()->data = value;
+            tail.store(tail.load()->next);
+        }
+
+        inline std::shared_ptr<T> pop() {
             Node* oldHead = pop_head();
-            if (!oldHead) {
-                TT_THROW("Queue is empty");
-            }
             std::shared_ptr<T> result(oldHead->data);
-            delete oldHead;
+            (oldHead->data).reset();
             return result;
         }
 

@@ -155,32 +155,21 @@ void Tensor::deallocate(bool force) {
                         }
                     } else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
                         if (this->workers.at(0)->in_main_thread() or not this->tensor_attributes->main_thread_tensor) {
-                            if (not this->tensor_attributes->main_thread_tensor) {
-                                TT_ASSERT(not this->tensor_attributes->main_thread_ref_count, "main_thread_ref_count for tensors created inside a worker thread must be 0");
-                            }
                             // If owned by the main thread, deallocate this tensor only from the main thread. If owned by worker thread, allow deallocation in worker and use shared_ptr ref count, since this is a thread_local tensor
                             uint32_t ref_count_to_use = (this->workers.at(0)->get_worker_mode() == WorkExecutorMode::SYNCHRONOUS or not this->tensor_attributes->main_thread_tensor) ? this->tensor_attributes.use_count() : this->tensor_attributes->main_thread_ref_count;
                             if ((force or ref_count_to_use == 1) and not this->tensor_attributes->deallocated) {
                                 this->tensor_attributes->deallocated = true;
-                                // Record ref count before sending to workers
-                                uint32_t device_tensor_ref_count = this->tensor_attributes->record_main_thread_ref_count();
                                 for (auto worker : this->workers) {
-                                    worker->push_work([force, *this, worker] () mutable {
-                                        std::visit([force, worker] (auto&& s) {
-                                            using type = std::decay_t<decltype(s)>;
-                                            if constexpr (std::is_same_v<type, MultiDeviceStorage>) {
-                                                if (s.buffers.find(worker->id()) != s.buffers.end()) {
-                                                    if (force or s.buffers.at(worker->id()).use_count() == 1) {
-                                                        DeallocateBuffer(*(s.buffers.at(worker->id())));
-                                                    }
-                                                    s.buffers.at(worker->id()).reset();
-                                                }
+                                    worker->push_work(std::make_shared<std::function<void()>>([force, attr = this->tensor_attributes, worker] () mutable {
+                                        auto& s = std::get<MultiDeviceStorage>(attr->storage);
+                                        if (s.buffers.find(worker->id()) != s.buffers.end()) {
+                                            if ((force or s.buffers.at(worker->id()).use_count() == 1)) {
+                                                DeallocateBuffer(*(s.buffers.at(worker->id())));
                                             }
-                                        }, this->tensor_attributes->storage);
-                                    });
+                                            s.buffers.at(worker->id()).reset();
+                                        }
+                                    }));
                                 }
-                                // Update ref count after sending to workers
-                                this->tensor_attributes->update_main_thread_ref_count(this->workers.at(0), device_tensor_ref_count);
                             }
                         } else {
                             TT_FATAL(this->deallocate_through_destructor, "Device tensors created in the main thread cannot be explictly deallocated in worker threads.");
