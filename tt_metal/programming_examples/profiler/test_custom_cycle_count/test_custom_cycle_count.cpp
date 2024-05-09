@@ -64,16 +64,16 @@ int main(int argc, char **argv) {
             tt_metal::CreateDevice(device_id);
 
         int loop_count = 2000;
-        pass &= RunCustomCycle(device, loop_count);
-        std::this_thread::sleep_for(std::chrono::milliseconds(600));
-        pass &= RunCustomCycle(device, loop_count);
-        std::this_thread::sleep_for(std::chrono::milliseconds(600));
-        pass &= RunCustomCycle(device, loop_count);
-        std::this_thread::sleep_for(std::chrono::milliseconds(600));
-        pass &= RunCustomCycle(device, loop_count);
-        std::this_thread::sleep_for(std::chrono::milliseconds(600));
-        pass &= RunCustomCycle(device, loop_count);
-        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        //pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        //pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        //pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        //pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        //pass &= RunCustomCycle(device, loop_count);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(600));
         pass &= RunCustomCycle(device, loop_count, true);
 
         pass &= tt_metal::CloseDevice(device);

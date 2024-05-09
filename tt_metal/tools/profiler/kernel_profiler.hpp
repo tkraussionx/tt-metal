@@ -8,7 +8,7 @@
 
 #include <climits>
 
-#if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC) | defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_ERISC)
 #include "risc_common.h"
 #include "dataflow_api.h"
 #else
@@ -18,6 +18,7 @@
 #include "hostdevcommon/profiler_common.h"
 #include "risc_attribs.h"
 
+#include "dprint.h"
 #ifdef PROFILER_KERNEL_FORCE_INLINE
 #define PROFILER_INLINE inline __attribute__((always_inline))
 #else
@@ -33,7 +34,8 @@
 #define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
 #define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
 
-#ifdef PROFILE_KERNEL
+#define  PROFILE_KERNEL 1
+#ifdef  PROFILE_KERNEL
 namespace kernel_profiler{
 
     extern uint32_t wIndex;
@@ -61,6 +63,8 @@ namespace kernel_profiler{
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_NC;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_NC;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
+    extern uint16_t core_flat_id;
+    extern bool resultsPushed;
 #elif COMPILE_FOR_TRISC == 0
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_T0;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T0;
@@ -77,6 +81,7 @@ namespace kernel_profiler{
 
     inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
+        while (!profiler_control_buffer[DRAM_PROFILER_ADDRESS]);
         wIndex = CUSTOM_MARKERS;
         stackSize = 0;
 
@@ -86,7 +91,7 @@ namespace kernel_profiler{
             sums[i] = 0;
         }
 
-#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC)
+#if defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         uint32_t runCounter = profiler_control_buffer[RUN_COUNTER];
         resultsPushed = false;
 
@@ -120,14 +125,14 @@ namespace kernel_profiler{
         eriscBuffer [ID_LL] = runCounter;
 
 #endif //ERISC_INIT
-#if defined(COMPILE_FOR_BRISC)
+#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
         volatile tt_l1_ptr uint32_t *ncriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_NC);
         volatile tt_l1_ptr uint32_t *trisc0Buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_T0);
         volatile tt_l1_ptr uint32_t *trisc1Buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_T1);
         volatile tt_l1_ptr uint32_t *trisc2Buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_T2);
 
-        if (runCounter == 0)
+        //if (runCounter == 0)
         {
             core_flat_id = noc_xy_to_profiler_flat_id[my_x[0]][my_y[0]];
 
@@ -231,8 +236,7 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void finish_profiler()
     {
         risc_finished_profiling();
-#if (defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC))
-
+#if (defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
         if (resultsPushed) return;
         uint32_t pageSize =
             PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC * PROFILER_RISC_COUNT * profiler_core_count_per_dram;
@@ -271,7 +275,7 @@ namespace kernel_profiler{
             profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
         }
 #endif
-#if defined(COMPILE_FOR_BRISC)
+#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         int hostIndex;
         int deviceIndex;
         for (hostIndex = kernel_profiler::HOST_BUFFER_END_INDEX_BR, deviceIndex = kernel_profiler::DEVICE_BUFFER_END_INDEX_BR;
@@ -368,6 +372,8 @@ namespace kernel_profiler{
 
         inline __attribute__((always_inline)) profileScopeGuaranteed ()
         {
+#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+#endif
             if constexpr  (index == 0)
             {
                 init_profiler();

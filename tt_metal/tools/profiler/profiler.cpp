@@ -66,8 +66,17 @@ void DeviceProfiler::readRiscProfilerResults(
         riscEndIndices.push_back(kernel_profiler::HOST_BUFFER_END_INDEX_ER);
     }
 
+    //if ((worker_core.x == 1 or worker_core.x == 7) and worker_core.y == 11)
+    //{
+        //for (int i = 0; i <= kernel_profiler::FLAT_ID; i ++)
+        //{
+            //std::cout << fmt::format("{} : {}", magic_enum::enum_name((kernel_profiler::ControlBuffer)i), control_buffer[i]) << std::endl;
+        //}
+    //}
+
 
     if ((control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_BR] == 0) &&
+        (control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_NC] == 0) &&
         (control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_ER] == 0))
     {
         return;
@@ -95,6 +104,7 @@ void DeviceProfiler::readRiscProfilerResults(
             uint32_t opTime_L = 0;
             for (int index = bufferRiscShift; index < (bufferRiscShift + bufferEndIndex); index += PROFILER_L1_MARKER_UINT32_SIZE)
             {
+                //std::cout << fmt::format("{}: {}, {},{}", riscEndIndex, riscNum, profile_buffer[index], profile_buffer[index+1]) << std::endl;
                 if (!newRunStart && profile_buffer[index] == 0 && profile_buffer[index + 1] == 0)
                 {
                     newRunStart = true;
@@ -287,7 +297,7 @@ DeviceProfiler::~DeviceProfiler()
 {
 #if defined(PROFILER)
     ZoneScoped;
-    pushTracyDeviceResults();
+    //pushTracyDeviceResults();
     for (auto tracyCtx : device_tracy_contexts)
     {
         TracyTTDestroy(tracyCtx.second);
@@ -359,6 +369,7 @@ void DeviceProfiler::dumpResults (
         const vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
     ZoneScoped;
+    static int count = 1;
 
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
@@ -378,6 +389,8 @@ void DeviceProfiler::dumpResults (
                 worker_core);
 
         }
+        if (count == 1) pushTracyDeviceResults();
+        count ++;
     }
     else
     {
@@ -389,6 +402,7 @@ void DeviceProfiler::dumpResults (
 void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(PROFILER) && defined(TRACY_ENABLE)
+    ZoneScoped;
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)

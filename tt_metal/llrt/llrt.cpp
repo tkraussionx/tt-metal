@@ -8,6 +8,8 @@
 
 #include "jit_build/settings.hpp"
 
+#include <chrono>
+#include <thread>
 #include <unordered_set>
 #include <mutex>
 #include <fmt/ranges.h>
@@ -305,6 +307,9 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     bool is_active_eth_core = false;
     bool is_inactive_eth_core = false;
 
+    //if (core.x == 7 && core.y ==11 ) return true;
+    //log_info("checking: chip {}, device {} {}", chip_id, core.x, core.y);
+
         // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
     if (is_eth_core) {
         auto active_eth_cores =  tt::Cluster::instance().get_active_ethernet_cores(chip_id);
@@ -360,6 +365,7 @@ void wait_until_cores_done(chip_id_t device_id,
             const auto &phys_core = *it;
 
             bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
             if (is_done) {
                 log_debug(tt::LogMetal, "Phys cores just done: {}", phys_core.str());

@@ -15,6 +15,7 @@
 
 #include "debug/status.h"
 
+uint8_t noc_index;
 uint32_t halt_stack_ptr_save;
 
 tt_l1_ptr mailboxes_t * const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);
@@ -36,6 +37,8 @@ namespace kernel_profiler {
     uint32_t stackSize __attribute__((used));
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    bool resultsPushed __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
 }
 
 extern "C" void ncrisc_resume(void);

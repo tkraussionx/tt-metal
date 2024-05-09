@@ -398,6 +398,7 @@ void Device::compile_command_queue_programs() {
                 {"UPSTREAM_NOC_Y", std::to_string(0)},
                 {"DOWNSTREAM_NOC_X", std::to_string(dispatch_physical_core.x)},
                 {"DOWNSTREAM_NOC_Y", std::to_string(dispatch_physical_core.y)},
+                {"PROFILE_KERNEL", "1"},
             };
 
             std::vector<uint32_t> prefetch_compile_args = {
@@ -456,6 +457,7 @@ void Device::compile_command_queue_programs() {
                 {"UPSTREAM_NOC_Y", std::to_string(prefetch_physical_core.y)},
                 {"DOWNSTREAM_NOC_X", std::to_string(0)},
                 {"DOWNSTREAM_NOC_Y", std::to_string(0)},
+                {"PROFILE_KERNEL", "1"},
             };
             std::vector<uint32_t> dispatch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -583,6 +585,7 @@ void Device::compile_command_queue_programs() {
             {"UPSTREAM_NOC_Y", std::to_string(0)},
             {"DOWNSTREAM_NOC_X", std::to_string(mux_physical_core.x)},
             {"DOWNSTREAM_NOC_Y", std::to_string(mux_physical_core.y)},
+            {"PROFILE_KERNEL", "1"},
         };
 
         std::vector<uint32_t> prefetch_compile_args = {
@@ -862,6 +865,7 @@ void Device::compile_command_queue_programs() {
             {"UPSTREAM_NOC_Y", std::to_string(demux_physical_core.y)},
             {"DOWNSTREAM_NOC_X", std::to_string(0xffffffff)},
             {"DOWNSTREAM_NOC_Y", std::to_string(0xffffffff)},
+            {"PROFILE_KERNEL", "1"},
         };
 
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_location.str());
@@ -1100,6 +1104,7 @@ void Device::compile_command_queue_programs() {
             {"UPSTREAM_NOC_Y", std::to_string(demux_d_physical_core.y)},
             {"DOWNSTREAM_NOC_X", std::to_string(dispatch_physical_core.x)},
             {"DOWNSTREAM_NOC_Y", std::to_string(dispatch_physical_core.y)},
+            {"PROFILE_KERNEL", "1"},
         };
 
         std::vector<uint32_t> prefetch_d_compile_args = {
@@ -1163,6 +1168,7 @@ void Device::compile_command_queue_programs() {
             {"UPSTREAM_NOC_Y", std::to_string(prefetch_d_physical_core.y)},
             {"DOWNSTREAM_NOC_X", std::to_string(mux_d_physical_core.x)},
             {"DOWNSTREAM_NOC_Y", std::to_string(mux_d_physical_core.y)},
+            {"PROFILE_KERNEL", "1"},
         };
         std::vector<uint32_t> dispatch_d_compile_args = {
             dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1425,6 +1431,8 @@ bool Device::initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_ba
     log_info(tt::LogMetal, "Initializing device {}. Program cache is {}enabled", this->id_, this->program_cache.is_enabled() ? "": "NOT ");
     this->initialize_cluster();
     this->initialize_allocator(l1_small_size, l1_bank_remap);
+    if (minimal) return true;
+    log_info(tt::LogMetal, "Initializing device {}. Program cache is NOT enabled", this->id_);
     this->initialize_build();
     auto num_devices = tt::tt_metal::GetNumAvailableDevices();
     tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
