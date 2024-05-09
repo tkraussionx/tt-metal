@@ -366,7 +366,7 @@ struct MultiDeviceHostStorage {
         DistributedTensorConfig strategy;
         std::vector<OwnedBuffer> buffers;
         std::vector<Shape> shapes;
-        std::mutex mtx;
+        mutable std::mutex mtx;
         MultiDeviceHostStorage() = default;
         MultiDeviceHostStorage(DistributedTensorConfig strategy_, std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : strategy(strategy_), buffers(buffers_), shapes(shapes_) {}
         MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
@@ -410,13 +410,13 @@ struct MultiDeviceHostStorage {
             shapes[buffer_index] = shape;
         }
 
-        OwnedBuffer get_buffer(int buffer_index) {
+        OwnedBuffer get_buffer(int buffer_index) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(buffer_index < buffers.size(), "Buffer not found for buffer_index " + std::to_string(buffer_index));
             return buffers[buffer_index];;
         }
 
-        Shape get_tensor_shape(int shape_index) {
+        Shape get_tensor_shape(int shape_index) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(shape_index < shapes.size(), "Buffer not found for device " + std::to_string(shape_index));
             return shapes[shape_index];
@@ -449,6 +449,7 @@ struct MultiDeviceHostStorage {
             shapes = other.shapes;
         }
         MultiDeviceStorage(const MultiDeviceStorage &other) {
+            std::lock_guard<std::mutex> lock(other.mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
@@ -456,6 +457,7 @@ struct MultiDeviceHostStorage {
         }
 
         MultiDeviceStorage &operator=(const MultiDeviceStorage &other) {
+            std::lock_guard<std::mutex> lock(other.mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
@@ -497,18 +499,20 @@ struct MultiDeviceHostStorage {
         // Helper Functions - Getters and setters to get/modify storage attributes. These are needed to
         // preinitialize empty tensor handles and use/populate them in the worker threads.
         void insert_buffer_and_shape_for_device(Device* device, const DeviceBuffer buffer, const Shape shape) {
+            TT_FATAL(device == buffer->device(), "Mismatch between device derived from buffer and device derived from MultiDeviceStorage.");
             std::lock_guard<std::mutex> lock(mtx);
             buffers.insert({device->id(), buffer});
             shapes.insert({device->id(), shape});
         }
 
-        DeviceBuffer get_buffer_for_device(Device* device) {
+        DeviceBuffer get_buffer_for_device(Device* device) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(buffers.find(device->id()) != buffers.end(), "Buffer not found for device " + std::to_string(device->id()));
+            TT_FATAL(buffers.at(device->id())->device() == device, "Mismatch between device derived from buffer and device derived from MultiDeviceStorage.");
             return buffers.at(device->id());
         }
 
-        Shape get_tensor_shape_for_device(Device* device) {
+        Shape get_tensor_shape_for_device(Device* device) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(shapes.find(device->id()) != shapes.end(), "Shape not found for device " + std::to_string(device->id()));
             return shapes.at(device->id());
