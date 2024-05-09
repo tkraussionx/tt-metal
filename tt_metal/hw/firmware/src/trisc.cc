@@ -19,6 +19,7 @@ namespace kernel_profiler {
     uint32_t stackSize __attribute__((used));
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    uint32_t nocWriteSize __attribute__((used));
 }
 
 namespace ckernel

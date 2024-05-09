@@ -563,17 +563,6 @@ void Device::compile_command_queue_programs() {
         constexpr uint32_t src_endpoint_start_id = 0xaa;
         constexpr uint32_t dest_endpoint_start_id = 0xbb;
 
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages(), dispatch_core_type); // prefetch_sem
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
-
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_core, 0, dispatch_core_type); // mux_sem
-
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_core, 0, dispatch_core_type); //demux_sem
-
-        constexpr uint32_t dispatch_h_cb_sem = 0; // remove it.
-        constexpr uint32_t dispatch_sem = 0;
-        tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
 
         std::vector<uint32_t> prefetch_compile_args = {
             dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1247,6 +1236,8 @@ bool Device::initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_ba
     log_info(tt::LogMetal, "Initializing device {}. Program cache is {}enabled", this->id_, this->program_cache.is_enabled() ? "": "NOT ");
     this->initialize_cluster();
     this->initialize_allocator(l1_small_size, l1_bank_remap);
+    if (minimal) return true;
+    log_info(tt::LogMetal, "Initializing device {}. Program cache is NOT enabled", this->id_);
     this->initialize_build();
     auto num_devices = tt::tt_metal::GetNumAvailableDevices();
     tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
@@ -1289,8 +1280,6 @@ bool Device::close() {
     if (not this->initialized_) {
         TT_THROW("Cannot close device {} that has not been initialized!", this->id_);
     }
-    this->deallocate_buffers();
-    watcher_detach(this);
 
     for (const std::unique_ptr<HWCommandQueue> &hw_command_queue : hw_command_queues_) {
         if (hw_command_queue->manager.get_bypass_mode()) {
@@ -1300,6 +1289,12 @@ bool Device::close() {
     }
     this->trace_buffer_pool_.clear();
     detail::EnableAllocs(this);
+
+    tt_metal::detail::DumpDeviceProfileResults(this);
+
+    this->deallocate_buffers();
+    watcher_detach(this);
+
 
     std::unordered_set<CoreCoord> not_done_dispatch_cores;
     std::unordered_set<CoreCoord> cores_to_skip;

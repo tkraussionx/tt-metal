@@ -458,6 +458,7 @@ void configure_kernel_variant(
     CoreCoord phys_downstream_core) {
 
     std::map<string, string> defines = {
+        {"DISPATCH_KERNEL", "1"},
         {"MY_NOC_X", std::to_string(phys_my_core.x)},
         {"MY_NOC_Y", std::to_string(phys_my_core.y)},
         {"UPSTREAM_NOC_X", std::to_string(phys_upstream_core.x)},

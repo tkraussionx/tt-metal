@@ -145,7 +145,7 @@ void read_from_pcie(volatile tt_l1_ptr uint32_t *& prefetch_q_rd_ptr,
     }
 
     uint64_t host_src_addr = get_noc_addr_helper(NOC_XY_ENCODING(PCIE_NOC_X, PCIE_NOC_Y), pcie_read_ptr);
-    DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
+    //DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
     noc_async_read(host_src_addr, fence + preamble_size, size);
     pending_read_size = size + preamble_size;
     pcie_read_ptr += size;
@@ -195,7 +195,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
          return;
     }
 
-    DPRINT << "fetch_q_get_cmds: " << cmd_ptr << " " << fence << ENDL();
+    //DPRINT << "fetch_q_get_cmds: " << cmd_ptr << " " << fence << ENDL();
     if (fence < cmd_ptr) {
         DPRINT << "fetch_q_get_cmds wrap cmd" << ENDL();
         cmd_ptr = fence;
@@ -217,7 +217,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
     }
     if (!cmd_ready) {
         if (pending_read_size != 0) {
-            DPRINT << "fetch_q_get_cmds barrier" << ENDL();
+            //DPRINT << "fetch_q_get_cmds barrier" << ENDL();
             noc_async_read_barrier();
 
             // wrap the cmddat_q
@@ -246,7 +246,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // By here, prefetch_q_ready must be false
             // Nothing to fetch, nothing pending, nothing available, stall on host
             DEBUG_STATUS("HQW");
-            DPRINT << "fetch_q_get_cmds stall" << ENDL();
+            //DPRINT << "fetch_q_get_cmds stall" << ENDL();
             while ((fetch_size = *prefetch_q_rd_ptr) == 0);
             fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
             DEBUG_STATUS("HQD");
@@ -286,6 +286,7 @@ template<bool cmddat_wrap_enable>
 static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
                                          uint32_t& downstream_data_ptr) {
 
+    DeviceZoneScopedN("process_relay_inline_cmd");
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
 
     uint32_t length = cmd->relay_inline.length;
@@ -295,7 +296,11 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
 
     // Assume the downstream buffer is big relative to cmddat command size that we can
     // grab what we need in one chunk
+
+    {
+    DeviceZoneScopedN("cb_acquire_pages");
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
+    }
 
     uint32_t remaining = cmddat_q_end - data_ptr;
     if (cmddat_wrap_enable && length > remaining) {
@@ -772,6 +777,7 @@ uint32_t process_exec_buf_cmd(uint32_t cmd_ptr_outer,
 
     bool done = false;
     while (!done) {
+        //DeviceZoneScopedMainN("PROC-MAIN");
         uint32_t cmd_ptr = cmddat_q_base;
 
         paged_read_into_cmddat_q(cmd_ptr);
@@ -804,6 +810,7 @@ bool process_cmd(uint32_t& cmd_ptr,
                  uint32_t& downstream_data_ptr,
                  uint32_t& stride) {
 
+    DeviceZoneScopedN("PROCESS-CMD");
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
     bool done = false;
 
@@ -830,7 +837,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_RELAY_INLINE:
-        DPRINT << "relay inline" << ENDL();
+        //DPRINT << "relay inline" << ENDL();
         if (exec_buf) {
             stride = process_relay_inline_exec_buf_cmd(cmd_ptr, downstream_data_ptr);
         } else {
@@ -860,7 +867,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_STALL:
-        DPRINT << "stall" << ENDL();
+        //DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
         break;
 
@@ -1006,6 +1013,7 @@ void kernel_main_h() {
 
     bool done = false;
     while (!done) {
+        //DeviceZoneScopedMainN("KERNEL-MAIN-H");
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);
 
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
@@ -1018,7 +1026,7 @@ void kernel_main_h() {
             process_exec_buf_cmd_h();
             stall_state = NOT_STALLED; // Stall is no longer required after ExecBuf finished
         } else if (cmd_id == CQ_PREFETCH_CMD_TERMINATE) {
-            DPRINT << "prefetch terminating_" << is_h_variant << is_d_variant << ENDL();;
+            DPRINT << "prefetch 2 terminating_" << is_h_variant << is_d_variant << ENDL();;
             done = true;
         }
 #if defined(COMPILE_FOR_IDLE_ERISC)
@@ -1044,6 +1052,7 @@ void kernel_main_d() {
 
     bool done = false;
     while (!done) {
+        //DeviceZoneScopedMainN("KERNEL-MAIN-D");
         // cmds come in packed batches based on HostQ reads in prefetch_h
         // once a packed batch ends, we need to jump to the next page
         uint32_t length = relay_cb_get_cmds(fence, cmd_ptr);
@@ -1093,9 +1102,9 @@ void kernel_main_hd() {
 
     uint32_t cmd_ptr = cmddat_q_base;
     uint32_t fence = cmddat_q_base;
-
     bool done = false;
     while (!done) {
+        DeviceZoneScopedN("KERNEL-MAIN-HD");
         constexpr uint32_t preamble_size = 0;
         fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
 
