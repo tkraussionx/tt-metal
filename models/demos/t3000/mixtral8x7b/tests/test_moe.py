@@ -175,8 +175,9 @@ class TtMoeLayer(torch.nn.Module):
                 input_i_1SBH,
                 self.gates_H8[i],
                 memory_config=ttnn.L1_MEMORY_CONFIG,
-                # compute_kernel_config=self.compute_kernel,
+                compute_kernel_config=self.compute_kernel,
                 use_1d_systolic_array=True,
+                core_grid=ttnn.CoreGrid(y=1, x=8),
             )
 
             # get weights for top-2 experts
@@ -197,13 +198,7 @@ from models.utility_functions import get_devices_for_t3000
 def test_moe(all_devices):
     devices = get_devices_for_t3000(all_devices, 8)
     # [0, 7, 6, 1, 2, 5, 4, 3]
-
-    # all_devices = [devices[-1], devices[4]]
-    # devices = [devices[0], devices[1], devices[2],  devices[3], devices[5], devices[6], devices[7]]
-    devices = [devices[4]]
-
-    # for d in all_devices:
-    #     devices = [d]
+    # devices = [devices[4]]
     model = TtMoeLayer(devices, dtype=ttnn.bfloat8_b)
     inputs = [
         ttnn.from_torch(
