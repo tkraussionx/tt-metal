@@ -98,7 +98,7 @@ void EnqueueReadBufferCommand::process() {
         CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH + CQ_DISPATCH_CMD_WRITE_LINEAR_HOST
         CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_RELAY_LINEAR or CQ_PREFETCH_CMD_RELAY_PAGED
 
-
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
@@ -112,8 +112,6 @@ void EnqueueReadBufferCommand::process() {
     this->add_prefetch_relay(command_sequence);
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
-
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
@@ -236,6 +234,7 @@ void EnqueueWriteBufferCommand::process() {
         cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE; // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
     }
 
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
@@ -252,8 +251,6 @@ void EnqueueWriteBufferCommand::process() {
     this->add_buffer_data(command_sequence);
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
-
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
@@ -956,8 +953,8 @@ void EnqueueProgramCommand::process() {
     CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
     if (total_fetch_size_bytes <= dispatch_constants::get(dispatch_core_type).max_prefetch_command_size()) {
 
-        this->manager.issue_queue_reserve(total_fetch_size_bytes, this->command_queue_id);
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
+        this->manager.issue_queue_reserve(total_fetch_size_bytes, this->command_queue_id);
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
 
         this->manager.cq_write(this->preamble_command_sequence.data(), preamble_fetch_size_bytes, write_ptr);
@@ -976,8 +973,8 @@ void EnqueueProgramCommand::process() {
         // One fetch queue entry for entire program
         this->manager.fetch_queue_write(total_fetch_size_bytes, this->command_queue_id);
     } else {
-        this->manager.issue_queue_reserve(preamble_fetch_size_bytes, this->command_queue_id);
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
+        this->manager.issue_queue_reserve(preamble_fetch_size_bytes, this->command_queue_id);
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
         this->manager.cq_write(this->preamble_command_sequence.data(), preamble_fetch_size_bytes, write_ptr);
         this->manager.issue_queue_push_back(preamble_fetch_size_bytes, this->command_queue_id);
@@ -986,8 +983,8 @@ void EnqueueProgramCommand::process() {
 
         for (const auto& cmds : this->runtime_args_command_sequences[this->program.id]) {
             uint32_t fetch_size_bytes = cmds.size_bytes();
-            this->manager.issue_queue_reserve(fetch_size_bytes, this->command_queue_id);
             this->manager.fetch_queue_reserve_back(this->command_queue_id);
+            this->manager.issue_queue_reserve(fetch_size_bytes, this->command_queue_id);
             uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
             this->manager.cq_write(cmds.data(), fetch_size_bytes, write_ptr);
             this->manager.issue_queue_push_back(fetch_size_bytes, this->command_queue_id);
@@ -995,8 +992,8 @@ void EnqueueProgramCommand::process() {
             this->manager.fetch_queue_write(fetch_size_bytes, this->command_queue_id);
         }
 
-        this->manager.issue_queue_reserve(program_fetch_size_bytes, this->command_queue_id);
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
+        this->manager.issue_queue_reserve(program_fetch_size_bytes, this->command_queue_id);
         write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
         this->manager.cq_write(this->program_command_sequence.data(), program_fetch_size_bytes, write_ptr);
         this->manager.issue_queue_push_back(program_fetch_size_bytes, this->command_queue_id);
@@ -1031,6 +1028,8 @@ void EnqueueRecordEventCommand::process() {
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         packed_write_sizeB + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_PACKED + unicast subcmds + event payload
         align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + dispatch_constants::EVENT_PADDED_SIZE, PCIE_ALIGNMENT); // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_LINEAR_HOST + event ID
+
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
@@ -1072,8 +1071,6 @@ void EnqueueRecordEventCommand::process() {
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
@@ -1098,6 +1095,8 @@ EnqueueWaitForEventCommand::EnqueueWaitForEventCommand(
 void EnqueueWaitForEventCommand::process() {
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE; // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
 
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
+
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
@@ -1106,8 +1105,6 @@ void EnqueueWaitForEventCommand::process() {
     command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
-
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
@@ -1130,6 +1127,8 @@ void EnqueueTraceCommand::process() {
         CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_EXEC_BUF
 
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
+
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
@@ -1149,10 +1148,7 @@ void EnqueueTraceCommand::process() {
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
-    // log_trace(LogDispatch, "EnqueueTraceCommand issued write_ptr={}, fetch_size={}, commands={}", write_ptr, fetch_size_bytes, this->commands);
 }
 
 EnqueueTerminateCommand::EnqueueTerminateCommand(
@@ -1162,25 +1158,25 @@ EnqueueTerminateCommand::EnqueueTerminateCommand(
     command_queue_id(command_queue_id), device(device), manager(manager) {}
 
 void EnqueueTerminateCommand::process() {
-    uint32_t cmd_sequence_sizeB =
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_TERMINATE
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_TERMINATE
+    // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_TERMINATE
+    // CQ_PREFETCH_CMD_TERMINATE
+    uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
+    // dispatch and prefetch terminate commands each needs to be a separate fetch queue entry
+
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
     void *cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
-
-    HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
-    command_sequence.add_dispatch_terminate();
-    command_sequence.add_prefetch_terminate();
-
+    HugepageDeviceCommand dispatch_command_sequence(cmd_region, cmd_sequence_sizeB);
+    dispatch_command_sequence.add_dispatch_terminate();
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 
-    // Command sequence has dispatch and prefetch terminate commands but each needs to be a separate fetch queue entry
-    TT_ASSERT(cmd_sequence_sizeB % CQ_PREFETCH_CMD_BARE_MIN_SIZE == 0);
-    uint32_t num_terminate_cmds = cmd_sequence_sizeB / CQ_PREFETCH_CMD_BARE_MIN_SIZE;
-    for (int terminate_cmd_idx = 0; terminate_cmd_idx < num_terminate_cmds; terminate_cmd_idx++) {
-        this->manager.fetch_queue_reserve_back(this->command_queue_id);
-        this->manager.fetch_queue_write(CQ_PREFETCH_CMD_BARE_MIN_SIZE, this->command_queue_id);
-    }
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
+    cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
+    HugepageDeviceCommand prefetch_command_sequence(cmd_region, cmd_sequence_sizeB);
+    prefetch_command_sequence.add_prefetch_terminate();
+    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
 
