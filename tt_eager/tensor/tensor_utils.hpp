@@ -34,6 +34,24 @@ namespace tt_metal {
         return volume;
     }
 
+    static std::vector<std::size_t> compute_strides(Shape shape) {
+            auto num_elements = compute_volume(shape);
+            std::vector<std::size_t> strides;
+            for (std::int32_t index = 0; index < shape.rank(); index++) {
+                num_elements /= shape[index];
+                strides.push_back(num_elements);
+            }
+            return strides;
+        }
+
+    static int compute_flat_input_index(vector<int> indices, vector<std::size_t> strides) {
+            int flat_index = 0;
+            for (auto i = 0; i < indices.size(); i++) {
+                flat_index += indices[i] * strides[i];
+            }
+            return flat_index;
+        };
+
     template<typename T>
     static std::size_t compute_buffer_size(const T& shape, DataType data_type) {
         const auto volume = compute_volume(shape);
