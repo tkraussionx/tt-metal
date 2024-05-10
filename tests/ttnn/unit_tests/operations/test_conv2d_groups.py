@@ -472,4 +472,3 @@ def test_ttnn_groups(
     passing, pcc_msg = assert_with_pcc(torch_output_tensor_nchw, torch_ttnn_output_tensor_nchw, pcc=0.99)
     logger.info(pcc_msg)
     assert passing
-    print("SUCCESSS")

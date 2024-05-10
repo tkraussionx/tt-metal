@@ -737,56 +737,19 @@ class TTPyCompositeConv(TTPyOp):
             # Weight tensor manipulations
             if weights_dtype is None:
                 weights_dtype = weight.get_dtype()
-
             weights_untiled_dtype = (
                 weights_dtype if weights_dtype != ttl.tensor.DataType.BFLOAT8_B else ttl.tensor.DataType.FLOAT32
             )
 
-            # Need to add padding based on number of groups
-            print("--------------------------------------------------------------------------")
-            print(f"num_groups={groups}")
-            print(f"weight tensor shape={weight.shape}")
-            print(weight)
-            print("--------------------------------------------------------------------------")
+            # Need to add padding based on number of groups (num_groups = 1 will leave tensor unchanged)
+            if groups > 1:
+                grouped_weight = ttl.tensor.convert_conv_weight_tensor_to_grouped_layout(
+                    weight, groups, output_dtype=weights_dtype
+                )
+            else:
+                grouped_weight = weight
 
-            grouped_weight = ttl.tensor.convert_conv_weight_tensor_to_grouped_layout(
-                weight, groups, output_dtype=weights_dtype
-            )
-
-            print("--------------------------------------------------------------------------")
-            print(f"num_groups={groups}")
-            print(f"grouped_weight tensor shape={grouped_weight.shape}")
-            print(grouped_weight)
-            print("--------------------------------------------------------------------------")
-
-            # convert original weight tensor
-            weight_copy = weight
-            torch_weight_tensor = weight_copy.to_torch()
-            tensor1, tensor2 = torch.chunk(torch_weight_tensor, 2, dim=0)
-            zero_tensor = torch.zeros_like(tensor1)
-            tensor1_resized = torch.cat((tensor1, zero_tensor), dim=1)
-            tensor2_resized = torch.cat((zero_tensor, tensor2), dim=1)
-            torch_weight_tensor = torch.cat((tensor1_resized, tensor2_resized), dim=0)
-
-            print("--------------------------------------------------------------------------")
-            print(f"num_groups={groups}")
-            print(f"torch grouped_weight tensor shape={torch_weight_tensor.shape}")
-            print(torch_weight_tensor)
-            print("--------------------------------------------------------------------------")
-
-            from tests.ttnn.utils_for_testing import (
-                assert_with_pcc,
-                check_with_pcc,
-                check_with_pcc_without_tensor_printout,
-            )
-
-            passing, pcc_msg = check_with_pcc_without_tensor_printout(
-                torch_weight_tensor, grouped_weight.to_torch(), pcc=0.999999
-            )
-            logger.info(pcc_msg)
-            assert passing
-
-            # Add additional padding for weight tensor
+            # Add additional padding for weight tensor to match number of padded input channels
             weights_shape = grouped_weight.shape
             weights_channels_padded_shape = [
                 _nearest_32(K),
