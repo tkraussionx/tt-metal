@@ -257,22 +257,37 @@ std::map<chip_id_t, Device *> CreateDevices(
     std::unordered_set<uint32_t> free_cores = {};
     auto cpu_cores_per_numa_node = device_cpu_allocator::get_cpu_cores_per_numa_node(free_cores);
 
+    bool tg_remote_chip_found = false;
+    bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
     for (const auto &device_id : device_ids) {
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
             for (const auto &mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+                //if (mmio_controlled_device_id != mmio_device_id) {
+                //    continue;
+                //}
+                //For galaxy only proceed for directly connected remote chip.
+                //Currently we only have 1 deep tunnel. So we can only handle 1 chip on galaxy. Like R chip on N300.
+                //Remove when 4 deep tunnel gets implemented.
+                if ((mmio_controlled_device_id != mmio_device_id) && is_galaxy) {
+                    log_info(tt::LogMetal, " Checking Device {}", mmio_controlled_device_id);
+                    auto one_deep_remote_chips = tt::Cluster::instance().get_ethernet_connected_device_ids(mmio_device_id);
+                    log_info(tt::LogMetal, " Device  {} is connected to {} chips.", mmio_device_id, one_deep_remote_chips.size());
+                    if (one_deep_remote_chips.find(mmio_controlled_device_id) == one_deep_remote_chips.end()) {
+                        continue;
+                    }
+                    tg_remote_chip_found = true;
+                }
                 int core_assigned_to_device = device_cpu_allocator::get_cpu_core_for_device_worker_thread(
                     mmio_controlled_device_id, cpu_cores_per_numa_node, free_cores);
-                Device *dev = new Device(
-                    mmio_controlled_device_id,
-                    num_hw_cqs,
-                    l1_small_size,
-                    l1_bank_remap,
-                    false,
-                    core_assigned_to_device);
+                Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, core_assigned_to_device);
                 active_devices.insert({mmio_controlled_device_id, dev});
                 detail::InitDeviceProfiler(dev);
+
+                if (tg_remote_chip_found) {
+                    break;
+                }
             }
         }
     }
