@@ -11,6 +11,7 @@
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
+#include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
@@ -132,6 +133,8 @@ template OptionalTensors run_host_operation(const HostOperation<OptionalTensors>
 
 inline const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
 
+
+
 template<typename OutputTensors>
 OutputTensors run_device_operation(
     std::optional<std::reference_wrapper<CommandQueue>> queue,
@@ -162,7 +165,17 @@ OutputTensors run_device_operation(
             auto program_ptr = program_cache.find(program_hash);
 
             bool cache_hit = program_ptr.has_value();
-            log_debug(tt::LogOp, "Program Hash: {} ({})", program_hash, cache_hit ? "HIT" : "MISS");
+            log_debug(tt::LogOp, "Program Hash (typename {}): {} ({})", operation.get_type_name(), program_hash, cache_hit ? "HIT" : "MISS");
+
+            // TEMP skip
+            if (cache_hit && operation.get_type_name() == "tt::operations::primary::Matmul"){ // TODO
+                const tt::operations::primary::MatmulProgramConfig &program_config = ((tt::operations::primary::Matmul*)(&operation))->program_config;
+                if (program_config.index() > 3) {
+                    log_debug(tt::LogOp, "\tcache is disabled for this op");
+                    cache_hit = false;
+                }
+            }
+
             if (not cache_hit) {
                 program_ptr = std::make_shared<operation::CacheableProgram<OutputTensors>>(operation.create_program(input_tensors, optional_input_tensors, output_tensors));
                 program_cache.insert(program_hash, program_ptr.value());
