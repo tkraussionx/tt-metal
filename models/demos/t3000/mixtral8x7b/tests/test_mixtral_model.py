@@ -8,11 +8,13 @@ import numpy as np
 from loguru import logger
 from sklearn.metrics import top_k_accuracy_score
 import ttnn
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, prepare_rotation_mat_ttnn
 from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
 from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
-from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
+from models.utility_functions import comp_pcc, comp_allclose
 
 # Set Mixtral flags for CI, if CI environment is setup
 if os.getenv("CI") == "true":
@@ -44,16 +46,11 @@ class Emb(torch.nn.Module):
     "iterations",
     (1, 10, 127),
 )
-def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_type, use_program_cache, reset_seeds):
+def test_mixtral_model_inference(device_mesh, iterations, n_layers, validation_type, use_program_cache, reset_seeds):
     pcc = 0.97
     dtype = ttnn.bfloat8_b
 
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, "This test requires a T3000 (8 devices)"
-    devices = get_devices_for_t3000(devices, num_devices)
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(device_mesh.get_device(0))
     model_args.n_layers = n_layers
 
     state_dict = torch.load(model_args.state_dict_path)
@@ -80,7 +77,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
 
     # Load TTNN model
     tt_model = TtTransformer(
-        devices=devices,
+        device_mesh=device_mesh,
         state_dict=state_dict,
         args=model_args,
         layers=list(range(model_args.n_layers)),
@@ -90,7 +87,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
     rot_mat = prepare_rotation_mat_ttnn(
         model_args.head_dim,
         model_args.max_seq_len,
-        tt_model.devices,
+        tt_model.device_mesh,
     )
 
     generation_start_pos = 0
@@ -117,14 +114,20 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
         decode_input = prepare_inputs_ttnn(
             tt_decode_input,
             model_args.dim,
-            tt_model.devices,
+            tt_model.device_mesh,
         )
 
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
 
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1).detach().float()
+        tt_output_torch = (
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
+            .squeeze(1)
+            .view(batch, seqlen, -1)
+            .detach()
+            .float()
+        )
 
         # Measure PCC
         if validation_type == "pcc":

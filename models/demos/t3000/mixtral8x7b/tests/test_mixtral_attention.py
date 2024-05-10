@@ -14,7 +14,8 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
-from models.utility_functions import get_devices_for_t3000
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+
 
 # Set Mixtral flags for CI, if CI environment is setup
 if os.getenv("CI") == "true":
@@ -25,15 +26,10 @@ if os.getenv("CI") == "true":
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
-def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds):
+def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, f"This test requires a T3000 (8 devices), found {num_devices} devices."
-    devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(device_mesh.get_device(0))
     state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -45,12 +41,12 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
     batch = 32
     seq_len = 1  # length to generate
 
-    tt_model = TtMixtralAttention(devices, state_dict, args=model_args, layer_num=0, dtype=dtype)
+    tt_model = TtMixtralAttention(device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
 
     rot_mat = prepare_rotation_mat_ttnn(
         model_args.head_dim,
         model_args.max_seq_len,
-        tt_model.devices,
+        tt_model.device_mesh,
     )
 
     generation_start_pos = 0
@@ -64,7 +60,7 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
         attention_input = prepare_inputs_ttnn(
             tt_attention_input,
             tt_model.hidden_size,
-            tt_model.devices,
+            tt_model.device_mesh,
         )
         current_pos = start_pos % model_args.sliding_window
         tt_out = tt_model(
@@ -73,9 +69,9 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
             current_pos,
             rot_mat,
         )
-        assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
-        tt_out = tt_out[0]
-        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2).view(batch, 1, -1)  # [ batch, seq, hidden_dim]
+        tt_output_torch = (
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].squeeze(2).view(batch, 1, -1)
+        )  # [ batch, seq, hidden_dim]
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
@@ -101,12 +97,9 @@ def test_mixtral_attention_inference(all_devices, use_program_cache, reset_seeds
         for layer_past in tt_model.layer_past_list:
             tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
         # concat the pasts by heads
-        if len(devices) > 1:
-            tt_layer_present = [
-                torch.cat([tt_cache for tt_cache in tt_cache_head], dim=0) for tt_cache_head in zip(*tt_layer_present)
-            ]
-        else:
-            tt_layer_present = tt_layer_present[0]
+        tt_layer_present = [
+            torch.cat([tt_cache for tt_cache in tt_cache_head], dim=0) for tt_cache_head in zip(*tt_layer_present)
+        ]
 
         for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
             cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
