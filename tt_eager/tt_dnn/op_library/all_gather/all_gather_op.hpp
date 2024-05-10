@@ -217,13 +217,6 @@ std::vector<Tensor> line_all_gather(
     const uint32_t num_links = 1,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
-std::vector<Tensor> ring_all_gather(
-    const std::vector<Tensor>& input_tensors,
-    const uint32_t dim,
-    const uint32_t num_links,
-    const MemoryConfig& output_mem_config);
-
-Tensor ring_all_gather(const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const MemoryConfig& output_mem_config);
 
 struct ShardedAllGatherConfig {
     ShardedAllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim)

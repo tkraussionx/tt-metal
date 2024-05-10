@@ -7,7 +7,6 @@
 
 #include "tt_metal/host_api.hpp"
 
-#include "tensor/tensor_utils.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 
 #include "eth_l1_address_map.h"
@@ -121,31 +120,6 @@ std::vector<Tensor> all_gather_impl(const std::vector<Tensor>& input_tensors, co
     }
     return output_tensors;
 }
-
-Tensor ring_all_gather(const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const MemoryConfig& output_mem_config) {
-
-    TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
-
-    auto devices = get_devices(input_tensor);
-    std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
-    uint32_t num_inputs = devices.size();
-    std::unordered_map<chip_id_t, std::tuple<uint32_t, chip_id_t, chip_id_t>> recv_send_chip_id_lookup;
-    for (uint32_t i = 0; i < num_inputs; ++i) {
-        chip_id_t receiver_device_id = devices[(i + 1) % num_inputs]->id();
-        chip_id_t sender_device_id = devices[i == 0 ? num_inputs - 1 : i - 1]->id();
-        recv_send_chip_id_lookup[devices[i]->id()] = std::tuple<size_t, chip_id_t, chip_id_t>(i, receiver_device_id, sender_device_id);
-    }
-
-    operation::launch_op(
-        [dim, num_links, num_inputs, output_mem_config, recv_send_chip_id_lookup] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
-            const auto& input_tensor = input_tensors.at(0);
-            auto [i, receiver_device_id, sender_device_id] = recv_send_chip_id_lookup.at(input_tensor.device()->id());
-            return operation::run(AllGather{dim, num_links, num_inputs, i, receiver_device_id, sender_device_id, output_mem_config}, {input_tensor});
-        },
-    {input_tensor}, output_tensors);
-    return output_tensors.at(0);
-}
-
 
 std::vector<Tensor> all_gather(const std::vector<Tensor>& input_tensors, const uint32_t dim, const uint32_t num_links, const MemoryConfig& output_mem_config) {
     return all_gather_impl(input_tensors, dim, num_links, output_mem_config, all_gather_op::Topology::Ring);
