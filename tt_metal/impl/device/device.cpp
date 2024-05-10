@@ -70,7 +70,7 @@ bool ActiveDevices::is_device_active(chip_id_t id) {
 
 Device::Device(
     chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) :
-    id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id) {
+    id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id), trace_insts_(num_hw_cqs, std::nullopt), trace_contexts_(num_hw_cqs, nullptr) {
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->initialize(l1_small_size, l1_bank_remap, minimal);
@@ -1869,66 +1869,56 @@ bool Device::using_slow_dispatch() const {
     return not (this->using_fast_dispatch);
 }
 
-void Device::begin_trace(uint32_t trace_buff_size) {
-    this->trace_contexts_.clear();
-    for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        auto desc = std::make_shared<detail::TraceDescriptor>();
-        trace_contexts_.push_back(desc);
-        Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size);
-        hw_command_queues_[cq_id]->record_begin(desc);
-    }
+void Device::begin_trace(const uint8_t cq_id, const uint32_t trace_buff_size) {
+    trace_contexts_[cq_id].reset();
+    auto desc = std::make_shared<detail::TraceDescriptor>();
+    trace_contexts_[cq_id] = desc;
+    Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size);
+    hw_command_queues_[cq_id]->record_begin(desc);
 }
 
-void Device::end_trace() {
+void Device::end_trace(const uint8_t cq_id) {
 
     // Currently only supports one trace at a time per CQ, so release last trace
     // before instantiating new ones.
-    this->release_last_trace();
+    this->release_last_trace(cq_id);
 
-    for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        hw_command_queues_[cq_id]->record_end();
-        trace_contexts_.at(cq_id)->data = std::move(this->sysmem_manager().get_bypass_data());
-        // Add command to terminate the trace buffer
-        DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
-        command_sequence.add_prefetch_exec_buf_end();
-        for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
-            trace_contexts_.at(cq_id)->data.push_back(((uint32_t*)command_sequence.data())[i]);
-        }
-        uint32_t tid = Trace::initialize_buffer(this->command_queue(cq_id));
-        trace_insts_.push_back(tid);
+    hw_command_queues_[cq_id]->record_end();
+    trace_contexts_.at(cq_id)->data = std::move(this->sysmem_manager().get_bypass_data());
+    // Add command to terminate the trace buffer
+    DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+    command_sequence.add_prefetch_exec_buf_end();
+    for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
+        trace_contexts_[cq_id]->data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
+    uint32_t tid = Trace::initialize_buffer(this->command_queue(cq_id));
+    trace_insts_[cq_id] = tid;
 }
 
-void Device::execute_last_trace(bool blocking) {
+void Device::replay_last_trace(const uint8_t cq_id, bool blocking) {
     constexpr bool check = false;
-    for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        if (this->trace_insts_.at(cq_id).has_value()) {
-            uint32_t tid = this->trace_insts_.at(cq_id).value();
-            TT_FATAL(Trace::has_instance(tid), "Trace instance " + std::to_string(tid) + " must exist on device");
-            if constexpr (check) {
-                Trace::validate_instance(tid);
-            }
-            this->command_queue(cq_id).run_command(CommandInterface{
-                .type = EnqueueCommandType::ENQUEUE_TRACE,
-                .blocking = blocking,
-                .trace_id = tid
-            });
+    if (this->trace_insts_.at(cq_id).has_value()) {
+        uint32_t tid = this->trace_insts_[cq_id].value();
+        TT_FATAL(Trace::has_instance(tid), "Trace instance " + std::to_string(tid) + " must exist on device");
+        if constexpr (check) {
+            Trace::validate_instance(tid);
         }
+        this->command_queue(cq_id).run_command(CommandInterface{
+            .type = EnqueueCommandType::ENQUEUE_TRACE,
+            .blocking = blocking,
+            .trace_id = tid
+        });
     }
 }
 
-void Device::release_last_trace() {
-    for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        if (this->trace_insts_.size() > cq_id) {
-            if (this->trace_insts_.at(cq_id).has_value()) {
-                uint32_t tid = this->trace_insts_.at(cq_id).value();
-                if (Trace::has_instance(tid)) {
-                    Trace::remove_instance(tid);
-                }
-            }
+void Device::release_last_trace(const uint8_t cq_id) {
+    if (this->trace_insts_.at(cq_id).has_value()) {
+        uint32_t tid = this->trace_insts_[cq_id].value();
+        if (Trace::has_instance(tid)) {
+            Trace::remove_instance(tid);
         }
+        this->trace_insts_[cq_id].reset();
     }
-    this->trace_insts_.clear();
 }
 
 }  // namespace tt_metal

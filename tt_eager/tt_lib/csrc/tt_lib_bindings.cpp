@@ -210,8 +210,8 @@ void DeviceModule(py::module &m_device) {
     m_device.def("EndTraceCapture", &detail::EndTraceCapture, R"doc(
         End trace capture on Device handle
     )doc");
-    m_device.def("ExecuteLastTrace", &detail::ExecuteLastTrace, R"doc(
-        Execute last captured trace on Device handle
+    m_device.def("ReplayLastTrace", &detail::ReplayLastTrace, R"doc(
+        Replay last captured trace on Device handle
     )doc");
     m_device.def("ReleaseLastTrace", &detail::ReleaseLastTrace, R"doc(
         Release last captured Trace on Device handle

@@ -697,36 +697,20 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
     }
 
-    void BeginTraceCapture(Device *device, uint32_t trace_buff_size) {
-        device->begin_trace(trace_buff_size);
+    void BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
+        device->begin_trace(cq_id, trace_buff_size);
     }
 
-    void EndTraceCapture(Device *device) {
-        device->end_trace();
+    void EndTraceCapture(Device *device, const uint8_t cq_id) {
+        device->end_trace(cq_id);
     }
 
-    void ExecuteLastTrace(Device *device, bool blocking) {
-        device->execute_last_trace(blocking);
+    void ReplayLastTrace(Device *device, const uint8_t cq_id, bool blocking) {
+        device->replay_last_trace(cq_id, blocking);
     }
 
-    void ReleaseLastTrace(Device *device) {
-        device->release_last_trace();
-    }
-
-    void BeginTraceCaptures(std::map<chip_id_t, Device *> devices, uint32_t trace_buff_size) {
-        for (const auto &[device_id, dev] : devices) {
-            dev->begin_trace(trace_buff_size);
-        }
-    }
-    void EndTraceCaptures(std::map<chip_id_t, Device *> devices) {
-        for (const auto &[device_id, dev] : devices) {
-            dev->end_trace();
-        }
-    }
-    void ExecuteLastTraces(std::map<chip_id_t, Device *> devices, bool blocking) {
-        for (const auto &[device_id, dev] : devices) {
-            dev->execute_last_trace(blocking);
-        }
+    void ReleaseLastTrace(Device *device, const uint8_t cq_id) {
+        device->release_last_trace(cq_id);
     }
 
     Device *GetDeviceHandle(chip_id_t device_id) {

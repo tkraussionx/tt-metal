@@ -19,15 +19,16 @@ public:
         if (this->slow_dispatch_) {
             tt::tt_metal::detail::LaunchProgram(device, program);
         } else if (this->metal_trace_) {
+            CommandQueue& cq = device->command_queue();
             if (trace_caputured.find(program_id) == trace_caputured.end()) {
-                tt::tt_metal::detail::BeginTraceCapture(device);
-                EnqueueProgram(device->command_queue(), program, false);
-                tt::tt_metal::detail::EndTraceCapture(device);
+                tt::tt_metal::detail::BeginTraceCapture(device, cq.id(), 0);
+                EnqueueProgram(cq, program, false);
+                tt::tt_metal::detail::EndTraceCapture(device, cq.id());
                 trace_caputured.insert(program_id);
             }
             log_debug(tt::LogTest, "Executing trace for program {}", program_id);
-            tt::tt_metal::detail::ExecuteLastTrace(device, false);
-            Finish(device->command_queue());
+            tt::tt_metal::detail::ReplayLastTrace(device, cq.id(), false);
+            Finish(cq);
         } else {
             CommandQueue& cq = device->command_queue();
             EnqueueProgram(cq, program, false);
