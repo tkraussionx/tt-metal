@@ -626,7 +626,7 @@ def test_unet(device, loop, perf_mode, groups):
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
 @pytest.mark.parametrize("loop", [0])
-@pytest.mark.parametrize("perf_mode, groups", [(False, 1), (True, 1)])  # , (True, 2)])
+@pytest.mark.parametrize("perf_mode, groups", [(False, 1), (True, 1), (True, 2)])
 def test_unet_512x256(device, loop, perf_mode, groups):
     if perf_mode and device.arch() == ttl.device.Arch.GRAYSKULL:
         pytest.skip("Perf mode is not supported on Grayskull")
