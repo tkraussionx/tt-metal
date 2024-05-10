@@ -114,7 +114,7 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
         desc->data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
 
-    Trace::create_trace_buffer(cq, desc, desc->data.size());
+    Trace::create_trace_buffer(cq, desc, desc->data.size() * sizeof(uint32_t));
 
     uint32_t tid = Trace::initialize_buffer(cq);
     this->state = TraceState::READY;

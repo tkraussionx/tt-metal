@@ -173,9 +173,9 @@ def test_bert_linear(
     run_ops(in0_t_res, output_t_res)
     # Capture
     logger.info("Start Trace capture")
-    ttl.device.BeginTraceCapture(device, 34816)
+    ttl.device.BeginTraceCapture(device, 0, 34816)
     run_ops(in0_t_res, output_t_res)
-    ttl.device.EndTraceCapture(device)
+    ttl.device.EndTraceCapture(device, 0)
     logger.info("Trace captured")
 
     for iter in range(trace_loops):
@@ -185,7 +185,7 @@ def test_bert_linear(
         )
         ttl.tensor.write_tensor(in0_t_updated, in0_t_res)
         logger.info(f"Running iteration {iter}")
-        ttl.device.ExecuteLastTrace(device, True)
+        ttl.device.ReplayLastTrace(device, 0, True)
 
         pt_out = in0 @ in1
 
@@ -201,7 +201,7 @@ def test_bert_linear(
         assert passing
 
     # Done with the trace, can deallocate the buffers now.
-    ttl.device.ReleaseLastTrace(device)
+    ttl.device.ReleaseLastTrace(device, 0)
 
 
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")

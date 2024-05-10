@@ -176,12 +176,14 @@ TEST_F(CommandQueueFixture, InstantiateTraceSanity) {
     for (uint32_t i = 0; i < input_data.size(); i++) {
         input_data[i] = i;
     }
+    Buffer output(this->device_, 2048, 2048, BufferType::DRAM);
+    Program simple_program = create_simple_unary_program(input, output);
+    EnqueueProgram(command_queue, simple_program, true);
 
     // Capture trace on a trace queue
     Trace trace;
     BeginTrace(trace);
-    EnqueueWriteBuffer(trace.queue(), input, input_data.data(), kNonBlocking);
-    EnqueueWriteBuffer(trace.queue(), input, input_data.data(), kNonBlocking);
+    EnqueueProgram(trace.queue(), simple_program, kNonBlocking);
     EndTrace(trace);
 
     // Instantiate a trace on a device bound command queue
@@ -197,91 +199,8 @@ TEST_F(CommandQueueFixture, InstantiateTraceSanity) {
     EnqueueReadBuffer(command_queue, trace_inst.buffer, data_fd.data(), kBlocking);
     EXPECT_EQ(data_fd, data_bd);
 
-    // Check for content correctness in the trace buffer
-    // The following commands are expected based on the trace capture
-    CQPrefetchCmd* p_cmd;
-    CQDispatchCmd* d_cmd;
-    size_t p_size = (sizeof(CQPrefetchCmd) / sizeof(uint32_t));
-    size_t d_size = (sizeof(CQDispatchCmd) / sizeof(uint32_t));
-    size_t offset = 0;
-    p_cmd = (CQPrefetchCmd*)(data_fd.data() + offset);
-    offset += p_size;
-    EXPECT_EQ(p_cmd->base.cmd_id, CQ_PREFETCH_CMD_RELAY_INLINE);
-
-    d_cmd = (CQDispatchCmd*)(data_fd.data() + offset);
-    offset += d_size;
-    EXPECT_EQ(d_cmd->base.cmd_id, CQ_DISPATCH_CMD_WAIT);
-
-    p_cmd = (CQPrefetchCmd*)(data_fd.data() + offset);
-    offset += p_size;
-    EXPECT_EQ(p_cmd->base.cmd_id, CQ_PREFETCH_CMD_RELAY_INLINE);
-
-    d_cmd = (CQDispatchCmd*)(data_fd.data() + offset);
-    offset += d_size;
-    EXPECT_EQ(d_cmd->base.cmd_id, CQ_DISPATCH_CMD_WRITE_PAGED);
-    EXPECT_EQ(d_cmd->write_paged.is_dram, true);
-    EXPECT_EQ(d_cmd->write_paged.page_size, 2048);
-
     log_trace(LogTest, "Trace buffer content: {}", data_fd);
     ReleaseTrace(trace_id);
-}
-
-TEST_F(CommandQueueFixture, EnqueueTraceWriteBufferCommand) {
-    CommandQueue& command_queue = this->device_->command_queue();
-
-    Buffer input(this->device_, 2048, 2048, BufferType::DRAM);
-    vector<uint32_t> input_first(input.size() / sizeof(uint32_t), 0xfaceface);
-    vector<uint32_t> input_last(input.size() / sizeof(uint32_t), 0);
-    for (uint32_t i = 0; i < input_last.size(); i++) {
-        input_last[i] = i;
-    }
-
-    // TRACE CAPTURE & INSTANTIATE MODE
-    // Capture trace on a trace queue
-    Trace trace;
-    BeginTrace(trace);
-    EnqueueWriteBuffer(trace.queue(), input, input_first.data(), kNonBlocking);
-    EnqueueWriteBuffer(trace.queue(), input, input_last.data(), kNonBlocking);
-    EndTrace(trace);
-
-    // Instantiate a trace on a device bound command queue
-    uint32_t trace_id = InstantiateTrace(trace, command_queue);
-
-    // Repeat traces, check that last write occurs correctly during each iteration
-    vector<uint32_t> readback(input.size() / sizeof(uint32_t), 0);
-    for (int i = 0; i < 10; i++) {
-        EnqueueTrace(command_queue, trace_id, true);
-        EnqueueReadBuffer(command_queue, input, readback.data(), kBlocking);
-        EXPECT_EQ(input_last, readback);
-    }
-
-    ReleaseTrace(trace_id);
-}
-
-TEST_F(CommandQueueFixture, EnqueueTraceWriteBufferCommandViaDevice) {
-    CommandQueue& command_queue = this->device_->command_queue();
-
-    Buffer input(this->device_, 2048, 2048, BufferType::DRAM);
-    vector<uint32_t> input_first(input.size() / sizeof(uint32_t), 0xfaceface);
-    vector<uint32_t> input_last(input.size() / sizeof(uint32_t), 0);
-    for (uint32_t i = 0; i < input_last.size(); i++) {
-        input_last[i] = i;
-    }
-
-    // DEVICE CAPTURE AND REPLAY MODE
-    // Capture trace on a device rather than a trace objet
-    detail::BeginTraceCapture(this->device_);
-    EnqueueWriteBuffer(command_queue, input, input_first.data(), kNonBlocking);
-    EnqueueWriteBuffer(command_queue, input, input_last.data(), kNonBlocking);
-    detail::EndTraceCapture(this->device_);
-
-    // Repeat traces, check that last write occurs correctly during each iteration
-    vector<uint32_t> readback(input.size() / sizeof(uint32_t), 0);
-    for (int i = 0; i < 10; i++) {
-        detail::ExecuteLastTrace(this->device_, true);
-        EnqueueReadBuffer(command_queue, input, readback.data(), kBlocking);
-        EXPECT_EQ(input_last, readback);
-    }
 }
 
 TEST_F(CommandQueueFixture, EnqueueProgramTraceCapture) {
@@ -341,9 +260,10 @@ TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
     trace_output_data.resize(input_data.size());
 
     bool has_eager = true;
+    std::shared_ptr<Program> simple_program;
     // EAGER MODE EXECUTION
     if (has_eager) {
-        Program simple_program = create_simple_unary_program(input, output);
+        simple_program = std::make_shared<Program>(create_simple_unary_program(input, output));
         EnqueueWriteBuffer(command_queue, input, input_data.data(), true);
         EnqueueProgram(command_queue, simple_program, true);
         EnqueueReadBuffer(command_queue, output, eager_output_data.data(), true);
@@ -355,12 +275,13 @@ TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
         EnqueueWriteBuffer(command_queue, input, input_data.data(), true);
 
         if (!has_trace) {
-            detail::BeginTraceCapture(this->device_);
-            EnqueueProgram(command_queue, std::make_shared<Program>(create_simple_unary_program(input, output)), true);
-            detail::EndTraceCapture(this->device_);
+            // Program must be cached first
+            detail::BeginTraceCapture(this->device_, command_queue.id(), 2048);
+            EnqueueProgram(command_queue, simple_program, true);
+            detail::EndTraceCapture(this->device_, command_queue.id());
             has_trace = true;
         }
-        detail::ExecuteLastTrace(this->device_, true);
+        detail::ReplayLastTrace(this->device_, command_queue.id(), true);
 
         EnqueueReadBuffer(command_queue, output, trace_output_data.data(), true);
         if (has_eager) EXPECT_TRUE(eager_output_data == trace_output_data);

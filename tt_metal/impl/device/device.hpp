@@ -198,10 +198,10 @@ class Device {
     CommandQueue& command_queue(size_t cq_id = 0);
 
     // Metal trace device capture mode
-    void begin_trace(uint32_t trace_buff_size);
-    void end_trace();
-    void execute_last_trace(bool blocking);
-    void release_last_trace();
+    void begin_trace(const uint8_t cq_id, const uint32_t trace_buff_size);
+    void end_trace(const uint8_t cq_id);
+    void replay_last_trace(const uint8_t cq_id, bool blocking);
+    void release_last_trace(const uint8_t cq_id);
 
     bool using_slow_dispatch() const;
     void check_allocator_is_initialized() const;
