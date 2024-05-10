@@ -44,13 +44,13 @@ class TtMoeLayer(torch.nn.Module):
         self.dtype = dtype
         self.model_config = args.get_model_config()
 
-        gate_name = f"layers.{layer_num}.feed_forward_multidevice.gate.weight"
+        gate_name = f"layers.{layer_num}.feed_forward.gate.weight"
         self.gates_H8 = ttnn.as_tensor(
             state_dict[gate_name].permute(1, 0),
             dtype=ttnn.bfloat16,
             layout=self.model_config["GATE_W_LAYOUT_TILE"],
             memory_config=self.model_config["GATE_WEIGHTS_MEMCFG"],
-            cache_file_name=args.weight_cache_path(dtype) / gate_name,
+            cache_file_name=args.weight_cache_path(dtype) / (gate_name + "_multidevice"),
             device=self.device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
