@@ -152,6 +152,9 @@ namespace tt_metal {
         return to_w_tile_layout_map.at(conv_weight_tensor.get_dtype())(conv_weight_tensor, in1_block_h, in1_block_w, output_dtype.value_or(conv_weight_tensor.get_dtype()));
     }
 
+    /*
+    Helper function to aid in converting grouped weight tensor to ungrouped weight tensor with padded zero channels
+    */
     template<typename T>
     static Tensor conv_group_weight_zero_pad_helper(Tensor& conv_weight_tensor, Shape& original_weight_shape, Shape &output_weight_shape, uint32_t num_groups, DataType output_dtype) {
         owned_buffer::Buffer<T> output_buffer = owned_buffer::create<T>(compute_volume(output_weight_shape));

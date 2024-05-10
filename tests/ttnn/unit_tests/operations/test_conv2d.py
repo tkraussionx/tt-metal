@@ -5,6 +5,7 @@
 from loguru import logger
 
 import torch
+import torch.nn as nn
 import pytest
 from models.utility_functions import skip_for_wormhole_b0, skip_for_grayskull, is_grayskull, is_wormhole_b0
 from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc, check_with_pcc_without_tensor_printout
@@ -1267,3 +1268,177 @@ def test_conv_core_nondivis(
         use_1d_systolic_array,
         config_override,
     )
+
+
+# The following test takes various shape sizes from resnet50, unet and stable diffusion and tests for different number of groups - all the way to num_groups = num_in_channels (depthwise conv)
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, in_channels, out_channels, input_height, input_width, kernel_height, kernel_width, stride_h, stride_w, pad_h, pad_w, num_groups, use_1d_systolic_array",
+    (
+        (1, 64, 64, 8, 8, 3, 3, 1, 1, 1, 1, 1, True),
+        (1, 64, 64, 16, 16, 3, 3, 1, 1, 1, 1, 2, True),
+        (1, 64, 64, 4, 4, 3, 3, 1, 1, 1, 1, 4, True),
+        (1, 64, 64, 8, 8, 3, 3, 1, 1, 1, 1, 8, True),
+        (1, 64, 64, 8, 8, 3, 3, 1, 1, 1, 1, 16, True),
+        (1, 64, 64, 2, 2, 3, 3, 1, 1, 1, 1, 32, True),
+        (1, 64, 64, 32, 32, 3, 3, 1, 1, 1, 1, 64, True),
+        (2, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, 1, True),
+        (2, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, 2, True),
+        (2, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, 8, True),
+        (1, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, 1, True),
+        (8, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, 64, True),
+        (4, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, 128, True),
+        (8, 256, 256, 28, 28, 3, 3, 2, 2, 1, 1, 128, True),
+        (8, 256, 256, 28, 28, 3, 3, 2, 2, 1, 1, 256, False),
+        # (16, 512, 512, 14, 14, 3, 3, 2, 2, 1, 1, 256, False), # doesn't fit with bfloat16 weights
+        # (32, 512, 512, 14, 14, 3, 3, 2, 2, 1, 1, 512, False), # doesn't fit with bfloat16 weights
+        (32, 160, 160, 7, 7, 3, 3, 1, 1, 1, 1, 40, False),
+        (32, 160, 160, 7, 7, 3, 3, 1, 1, 1, 1, 10, False),
+        (1, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, 8, True),
+        (1, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, 16, True),
+        (8, 64, 64, 56, 56, 3, 3, 1, 1, 1, 1, 32, True),
+        (8, 256, 256, 14, 14, 3, 3, 1, 1, 1, 1, 2, False),
+        (8, 256, 256, 14, 14, 3, 3, 1, 1, 1, 1, 4, False),
+        # (1, 512, 512, 7, 7, 3, 3, 1, 1, 1, 1, 8, False),
+        (1, 320, 320, 32, 32, 3, 3, 1, 1, 1, 1, 2, False),
+        (1, 640, 640, 16, 16, 3, 3, 1, 1, 1, 1, 320, False),
+        # (1, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, 1, False), # doesn't fit with bfloat16 weights
+        (2, 64, 32, 66, 10, 3, 3, 1, 1, 1, 1, 32, True),
+        (2, 32, 96, 132, 20, 3, 3, 1, 1, 1, 1, 2, True),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16],
+)
+def test_conv_groups(
+    device,
+    use_program_cache,
+    batch_size,
+    in_channels,
+    out_channels,
+    input_height,
+    input_width,
+    kernel_height,
+    kernel_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    num_groups,
+    use_1d_systolic_array,
+    weights_dtype,
+):
+    # Test parameters
+    kernel_size = (kernel_height, kernel_width)
+    stride = (stride_h, stride_w)
+    padding = (pad_h, pad_w)
+    math_fidelity = ttnn.MathFidelity.HiFi4
+
+    # Create wormhole kernel configuration
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=math_fidelity,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    # Torch implementation - run the nn.Conv2d version as the golden tensor
+    # Define original tensors and shapes
+    input_shape = [batch_size, in_channels, input_height, input_width]
+    weight_shape = [
+        out_channels,
+        in_channels // num_groups,
+        kernel_size[0],
+        kernel_size[1],
+    ]
+    bias_shape = [1, 1, 1, out_channels]
+
+    # Define various tensors
+    torch_input_tensor_nchw = torch.randn(input_shape, dtype=torch.bfloat16).float()
+    torch_input_tensor_nhwc = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
+    torch_weight_tensor = torch.randn(weight_shape, dtype=torch.bfloat16).float()
+    torch_bias_tensor = torch.randn(bias_shape, dtype=torch.bfloat16).float()
+
+    # Define pytorch convolutional layer
+    torch_conv_layer = nn.Conv2d(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        groups=num_groups,
+    )
+    torch_conv_layer.weight = nn.Parameter(torch_weight_tensor)
+    torch_conv_layer.bias = nn.Parameter(torch_bias_tensor.reshape(-1))
+
+    # Apply convolution operation
+    torch_output_tensor_nchw = torch_conv_layer(torch_input_tensor_nchw)
+
+    # TTNN implementation - run the ttnn.Conv2d version as the experimental tensor
+    # Define ttnn tensors and shapes
+    ttnn_weight_tensor = ttnn.from_torch(
+        torch_weight_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
+    )
+    ttnn_bias_tensor = ttnn.from_torch(
+        torch_bias_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
+    )
+
+    # Define ttnn convolution operation
+    ttnn_conv_layer = ttnn.Conv2d(
+        device=device,
+        batch_size=batch_size,
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        input_height=input_height,
+        input_width=input_width,
+        math_fidelity=math_fidelity,
+        dtype=ttnn.bfloat16,
+        weights_dtype=weights_dtype,
+        deallocate_activation=False,
+        use_shallow_conv_variant=False,
+        use_1d_systolic_array=use_1d_systolic_array,
+        reader_patterns_cache={},
+        weight=ttnn_weight_tensor,
+        bias=ttnn_bias_tensor,
+        conv_blocking_and_parallelization_config_override=None,
+        enable_auto_formatting=False,
+        padded_input_channels=None,
+        compute_kernel_config=compute_kernel_config,
+        output_layout=ttnn.TILE_LAYOUT,
+        groups=num_groups,
+    )
+
+    # Convert torch input tensor to ttnn tensor
+    ttnn_input_tensor = ttnn.from_torch(torch_input_tensor_nhwc, ttnn.bfloat16)
+
+    # Move input tensor to device
+    ttnn_input_tensor_on_device = ttnn_conv_layer.copy_input_to_device(ttnn_input_tensor)
+
+    # Apply convolution operation on device
+    ttnn_output_tensor_on_device_tile_layout = ttnn_conv_layer(ttnn_input_tensor_on_device)
+
+    # Convert output and get output from device
+    ttnn_output_tensor_on_device_row_layout = ttnn.to_layout(
+        ttnn_output_tensor_on_device_tile_layout, ttnn.ROW_MAJOR_LAYOUT
+    )
+    ttnn_output_tensor = ttnn.from_device(ttnn_output_tensor_on_device_row_layout)
+    torch_ttnn_output_tensor = ttnn.to_torch(ttnn_output_tensor)
+
+    # Shape manipulations to ensure golden and experimental tensor are of the same shape
+    output_shape_nhwc = [
+        torch_output_tensor_nchw.shape[0],
+        torch_output_tensor_nchw.shape[2],
+        torch_output_tensor_nchw.shape[3],
+        torch_output_tensor_nchw.shape[1],
+    ]
+    torch_ttnn_output_tensor_nhwc = torch.reshape(torch_ttnn_output_tensor, output_shape_nhwc)
+    torch_ttnn_output_tensor_nchw = torch.permute(torch_ttnn_output_tensor_nhwc, (0, 3, 1, 2))
+
+    passing, pcc_msg = assert_with_pcc(torch_output_tensor_nchw, torch_ttnn_output_tensor_nchw, pcc=0.99)
+    logger.info(pcc_msg)
+    assert passing
