@@ -204,17 +204,38 @@ void DeviceModule(py::module &m_device) {
     m_device.def("DeallocateBuffers", &detail::DeallocateBuffers, R"doc(
         Deallocate all buffers associated with Device handle
     )doc");
-    m_device.def("BeginTraceCapture", &BeginTraceCapture, R"doc(
+    m_device.def("BeginTraceCapture",
+        [] (Device* device, const uint8_t cq_id, const uint32_t trace_buff_size) {
+            uint32_t tid = Trace::next_id();
+            device->push_work([device, cq_id, tid, trace_buff_size] () mutable {
+                device->begin_trace(cq_id, tid, trace_buff_size)
+            });
+        }, R"doc(
         Begin trace capture on Device handle
     )doc");
-    m_device.def("EndTraceCapture", &EndTraceCapture, R"doc(
+    m_device.def("EndTraceCapture",
+        [] (Device* device, const uint8_t cq_id, const uint32_t tid) {
+            device->push_work([device, cq_id, tid] () mutable {
+                device->end_trace(cq_id, tid);
+            });
+        }, R"doc(
         End trace capture on Device handle
     )doc");
-    m_device.def("ReplayTrace", &ReplayTrace, R"doc(
-        Replay last captured trace on Device handle
+    m_device.def("ReplayTrace",
+        [] (Device* device, const uint8_t cq_id, const uint32_t tid, bool blocking) {
+            device->push_work([device, cq_id, tid, blocking] {
+                device->replay_trace(cq_id, tid, blocking);
+            });
+        }, R"doc(
+        Replay captured trace on Device handle
     )doc");
-    m_device.def("ReleaseTrace", &ReleaseTrace, R"doc(
-        Release last captured Trace on Device handle
+    m_device.def("ReleaseTrace",
+        [] (Device* device, const uint8_t cq_id, const uint32_t tid) {
+            device->push_work([device, cq_id, tid] {
+                device->release_trace(device, cq_id, tid);
+            });
+        }, R"doc(
+        Release captured Trace on Device handle
     )doc");
 
     m_device.attr("DEFAULT_L1_SMALL_SIZE") = py::int_(DEFAULT_L1_SMALL_SIZE);

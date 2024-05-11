@@ -96,9 +96,14 @@ def test_bert_linear(
     in0 = torch.randn(in0_shape).bfloat16().float()
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
-
-    in0_t_res = torch2tt_tensor(
-        in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+    in0_t_res = ttl.tensor.allocate_tensor_on_device(
+        in0_shape, ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.Layout.TILE, device, interleaved_mem_config_DRAM
+    )
+    ttl.tensor.write_tensor(
+        torch2tt_tensor(
+            in0, None, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+        ),
+        in0_t_res,
     )
 
     if in1_in_dram:
