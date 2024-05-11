@@ -82,7 +82,14 @@ tt::stl::reflection::Attributes Copy::attributes() const {
 }
 
 Tensor copy(const Tensor& src_tensor, const Tensor& dst_tensor) {
-    operation::run(Copy{dst_tensor.memory_config(), dst_tensor.get_dtype()}, {src_tensor, dst_tensor});
+    std::vector<Tensor> dummy_outputs = {Tensor(operation::get_workers_for_op_output({src_tensor}))};
+    operation::launch_op(
+        [] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            auto& src_tensor = input_tensors.at(0);
+            auto& dst_tensor = optional_output_tensors.at(0).value();
+            operation::run(Copy{dst_tensor.memory_config(), dst_tensor.get_dtype()}, {src_tensor, dst_tensor});
+            return {};
+        }, {src_tensor}, dummy_outputs, {}, {dst_tensor});
     return dst_tensor;
 }
 

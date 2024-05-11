@@ -58,7 +58,13 @@ def test_run_average_pool(act_shape, dtype, device, use_program_cache):
         ttact = ttact.pad_to_tile(0.0)
 
     ttact_res = ttact.to(device)
-    out_res = ttl.tensor.empty(out_shape_padded, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+    tt_act_res = ttl.tensor.allocate_tensor_on_device(
+        act_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
+    )
+    ttl.tensor.write_tensor(ttact, ttact_res)
+    out_res = ttl.tensor.allocate_tensor_on_device(
+        out_shape_padded, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device
+    )
 
     def run_ops(ttact_res, out_res):
         out = ttl.tensor.average_pool_2d(ttact_res)
