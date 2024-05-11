@@ -23,8 +23,12 @@ TT_METAL_ENABLE_REMOTE_CHIP=1 ./build/test/tt_metal/unit_tests_fast_dispatch --g
 ./build/test/tt_metal/unit_tests_fast_dispatch --gtest_filter="DPrintFixture.*:WatcherFixture.*"
 pytest tests/tt_eager/python_api_testing/unit_testing/misc/test_all_gather.py -k post_commit
 
+# ttnn multi-device trace tests
+pytest tests/ttnn/unit_tests/test_multi_device_trace.py
+
 # ttnn multi-chip apis unit tests
 pytest tests/ttnn/unit_tests/test_multi_device.py
+pytest tests/ttnn/unit_tests/test_multi_device_async.py
 
 # Falcon40b unit tests; prefill required 8x8 grids
 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_mlp.py
