@@ -227,6 +227,7 @@ class TtFalconModelShared(torch.nn.Module):
                     output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
                     output_dtype=self.model_config["ATTN_MASK_DTYPE"],
                 )
+                print(f"tt_attention_mask[i].shape: {tt_attention_mask[i].shape}")
 
             if self.model_config["l1_sharded"]:
                 for i, device in enumerate(self.devices):

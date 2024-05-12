@@ -6,6 +6,7 @@ import torch
 import math
 from torch import nn
 from typing import List, Optional, Tuple
+import pdb
 
 import tt_lib
 
@@ -656,6 +657,18 @@ class TtFalconAttentionDecode(nn.Module):
         assert layer_past is not None
         assert layer_past_len > 0 and layer_past_len <= self.max_position_embeddings
 
+        key_layer_transposed_early_allocation = torch_tensors_to_tt_tensors(
+            torch.randn((1, 32, 64, 2048)),
+            tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
+            self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](self.head_dim, padded_layer_past_len),
+            self.devices,
+        )
+
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0], "0")
+        tt_lib.device.Synchronize(self.devices[0])
+        # pdb.set_trace()
+
         #################
         ### FUSED QKV ###
         #################
@@ -669,6 +682,11 @@ class TtFalconAttentionDecode(nn.Module):
                     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
                 )
             )
+            hidden_states[i].deallocate(True)
+
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0], "1")
+        tt_lib.device.Synchronize(self.devices[0])
+        # pdb.set_trace()
 
         ###########
         ### TMs ###
@@ -690,12 +708,15 @@ class TtFalconAttentionDecode(nn.Module):
         query_layer = self.rotary_embedding(query_layer, layer_past_len)
         key_layer = self.rotary_embedding(key_layer, layer_past_len)
 
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0], "2")
+
         ######################
         ### K CACHE UPDATE ###
         ######################
         for i in range(self.num_devices):
             # Update kv_cache in place
             tt_lib.tensor.update_cache(layer_past[i][0], key_layer[i], layer_past_len)
+            key_layer[i].deallocate(True)
         for i in range(self.num_devices):
             # key and value layers will have kv_seq_len padded to nearest 32
             key_layer[i] = tt_lib.tensor.unpad(
@@ -705,6 +726,8 @@ class TtFalconAttentionDecode(nn.Module):
                 output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0], "3")
+
         if self.model_config["l1_sharded"]:
             for i in range(self.num_devices):
                 key_layer[i] = tt_lib.tensor.interleaved_to_sharded(
@@ -713,6 +736,8 @@ class TtFalconAttentionDecode(nn.Module):
                         padded_layer_past_len, self.head_dim
                     ),
                 )
+
+            tt_lib.device.DumpDeviceMemoryState(self.devices[0], "4")
 
             # Pad and transpose Q for batched matmul
             for i in range(self.num_devices):
@@ -744,9 +769,12 @@ class TtFalconAttentionDecode(nn.Module):
                     ),
                 )
 
+            tt_lib.device.DumpDeviceMemoryState(self.devices[0], "5")
+
         ######################
         ### PRE-SOFTMAX MM ###
         ######################
+        key_layer_transposed_early_allocation[0].deallocate(True)
         key_layer_transposed = []
         for i in range(self.num_devices):
             key_layer_transposed.append(
@@ -765,9 +793,16 @@ class TtFalconAttentionDecode(nn.Module):
             )
             key_layer[i].deallocate()
 
+        tt_lib.device.Synchronize(self.devices[0])
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0], "6")
+        # pdb.set_trace()
+
         attn_weights = []
         if self.model_config["l1_sharded"]:
             for i, device in enumerate(self.devices):
+                print(f"query_layer[i]:{query_layer[i].get_legacy_shape()}")
+                print(f"key_layer_transposed[i]:{key_layer_transposed[i].get_legacy_shape()}")
+                print(f"compute_kernel_config:{self.model_config['COMPUTE_KERNEL_CONFIG']}")
                 attn_weights.append(
                     tt_lib.operations.primary.matmul(
                         query_layer[i],
@@ -782,6 +817,8 @@ class TtFalconAttentionDecode(nn.Module):
                         compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                     )
                 )
+                tt_lib.device.Synchronize(self.devices[0])
+                tt_lib.device.DumpDeviceMemoryState(self.devices[0], "7")
                 query_layer[i].deallocate()
                 key_layer_transposed[i].deallocate(True)
         elif is_wormhole_b0():
@@ -810,6 +847,9 @@ class TtFalconAttentionDecode(nn.Module):
                 )
                 query_layer[i].deallocate()
                 key_layer_transposed[i].deallocate(True)
+
+        tt_lib.device.Synchronize(self.devices[0])
+        # pdb.set_trace()
 
         if self.model_config["l1_sharded"] == False:
             for i in range(self.num_devices):
