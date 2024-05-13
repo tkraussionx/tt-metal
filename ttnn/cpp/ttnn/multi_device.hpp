@@ -28,6 +28,46 @@ inline void close_device_mesh(DeviceMesh &multi_device) {
     multi_device.close_devices();
 }
 
+inline void begin_trace_capture(DeviceMesh* device, const uint32_t trace_buff_size, const uint8_t cq_id = 0) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, trace_buff_size, cq_id] () mutable {
+                tt::tt_metal::detail::BeginTraceCapture(worker, cq_id, trace_buff_size);
+            });
+    }
+}
+
+void end_trace_capture(DeviceMesh* device, const uint8_t cq_id = 0) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, cq_id] () mutable {
+                tt::tt_metal::detail::EndTraceCapture(worker, cq_id);
+            });
+    }
+}
+
+inline void execute_trace(DeviceMesh* device, const uint8_t cq_id = 0, bool blocking = true) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, cq_id, blocking] () mutable {
+                tt::tt_metal::detail::ReplayLastTrace(worker, cq_id, blocking);
+            });
+    }
+}
+
+inline void release_trace(DeviceMesh* device, const uint8_t cq_id) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, cq_id] () mutable {
+                tt::tt_metal::detail::ReleaseLastTrace(worker, cq_id);
+            });
+    }
+}
+
 std::vector<ttnn::Tensor> get_device_tensors(const ttnn::Tensor& tensor) {
     if (std::holds_alternative<tt::tt_metal::MultiDeviceHostStorage>(tensor.get_storage())) {
         std::vector<ttnn::Tensor> tensors;

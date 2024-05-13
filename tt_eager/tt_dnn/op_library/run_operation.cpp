@@ -726,7 +726,7 @@ void launch_op(
         ZoneScopedN("PushOpToWorkers");
         for (auto target_device : workers) {
             target_device->push_work([target_device, workers, op_func, optional_output_tensors, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors, shared_input_idx = cross_worker_input_tensor_idx, shared_optional_input_idx = cross_worker_optional_input_tensor_idx] () mutable {
-
+                // Todo: Pass arround ptrs for storage objects, instead of
                 std::vector<Tensor> input_shards = {};
                 std::vector<std::optional<const Tensor>> optional_input_shards = {};
                 std::vector<std::optional<Tensor>> optional_output_shards = {};

@@ -174,70 +174,80 @@ def test_ttnn_multi_device_all_gather(pcie_device_mesh):
 
 def test_multi_device_single_op_unary(device_mesh):
     """Multidevice API test: Running tensor-parallel multi-device single-op unary"""
-    device = device_mesh.get_device(0)
-    device.enable_program_cache()
+    for device_id in device_mesh.get_device_ids():
+        device_mesh.get_device(device_id).enable_program_cache()
 
-    torch_input_tensor_0 = torch.rand((1, 1, 1024, 1024), dtype=torch.bfloat16)
-    torch_input_tensor_1 = torch.rand((1, 1, 1024, 1024), dtype=torch.bfloat16)
-    # torch_output_golden = torch.matmul(
-    #                         torch.neg(torch.add(torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))), torch.relu(torch_input_tensor_1))),
-    #                         torch_input_tensor_0)
-    torch_output_golden = torch.add(
-        torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
-        torch.relu(torch_input_tensor_1),
+    torch_input_tensor_0 = torch.rand((1, 1, 32, 32 * device_mesh.get_num_devices()), dtype=torch.bfloat16)
+    torch_input_tensor_1 = torch.rand((1, 1, 32, 32 * device_mesh.get_num_devices()), dtype=torch.bfloat16)
+    torch_output_golden = torch.matmul(
+        torch.neg(
+            torch.add(
+                torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
+                torch.relu(torch_input_tensor_1),
+            )
+        ),
+        torch_input_tensor_0,
     )
+
     dev_input_0 = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 1024, 1024)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device
+        ttnn.Shape((1, 1, 32, 32)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device_mesh.get_device(0)
     )
     dev_input_1 = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 1024, 1024)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device
-    )
-    output_tensor = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 1024, 1024)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device
+        ttnn.Shape((1, 1, 32, 32)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device_mesh.get_device(0)
     )
 
-    ttnn_input_tensor_0 = ttnn.from_torch(torch_input_tensor_0, layout=ttnn.TILE_LAYOUT)
-    ttnn_input_tensor_1 = ttnn.from_torch(torch_input_tensor_1, layout=ttnn.TILE_LAYOUT)
+    ttnn_input_tensor_0 = ttnn.from_torch(
+        torch_input_tensor_0, layout=ttnn.TILE_LAYOUT
+    )  # , mesh_mapper=ShardTensorToMesh(device_mesh, dim=3))
+    ttnn_input_tensor_1 = ttnn.from_torch(
+        torch_input_tensor_1, layout=ttnn.TILE_LAYOUT
+    )  # , mesh_mapper=ShardTensorToMesh(device_mesh, dim=3))
 
-    def run_ops(input_0, input_1, output):
-        # out = ttnn.matmul(
-        #             ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1))),
-        #             input_0)
-        out = ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1))
-        ttl.tensor.copy(out, output)
+    def run_ops(input_0, input_1):
+        return ttnn.matmul(
+            ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1))), input_0
+        )
 
     ttnn.copy_host_to_device_tensor(ttnn_input_tensor_0, dev_input_0)
     ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, dev_input_1)
     # Compile
-    print("Compile")
-    run_ops(dev_input_0, dev_input_1, output_tensor)
-    print("Done Compile")
-    ttnn.begin_trace_capture(device, 53248, 0)
-    print("Trace capture started")
-    run_ops(dev_input_0, dev_input_1, output_tensor)
-    ttnn.end_trace_capture(device, 0)
-    print("Trace capture completed")
-    ttnn_torch_output_tensor = ttnn.to_torch(output_tensor)
-    print("Have Torch tensor")
-    assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.95)
-    print("PCC Check Done")
-    for i in range(5):
+    run_ops(dev_input_0, dev_input_1)
+    # Capture Trace
+    ttnn.begin_trace_capture(device_mesh.get_device(0), 53248, 0)
+    output_tensor = run_ops(dev_input_0, dev_input_1)
+    ttnn.end_trace_capture(device_mesh.get_device(0), 0)
+
+    for i in range(50):
         print("Running trace iter: " + str(i))
-        torch_input_tensor_0 = torch.rand((1, 1, 1024, 1024), dtype=torch.bfloat16)
-        torch_input_tensor_1 = torch.rand((1, 1, 1024, 1024), dtype=torch.bfloat16)
-        torch_output_golden = torch.add(
-            torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
-            torch.relu(torch_input_tensor_1),
+        torch_input_tensor_0 = torch.rand((1, 1, 32, 32 * device_mesh.get_num_devices()), dtype=torch.bfloat16)
+        torch_input_tensor_1 = torch.rand((1, 1, 32, 32 * device_mesh.get_num_devices()), dtype=torch.bfloat16)
+        torch_output_golden = torch.matmul(
+            torch.neg(
+                torch.add(
+                    torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
+                    torch.relu(torch_input_tensor_1),
+                )
+            ),
+            torch_input_tensor_0,
         )
 
-        ttnn_input_tensor_0 = ttnn.from_torch(torch_input_tensor_0, layout=ttnn.TILE_LAYOUT)
-        ttnn_input_tensor_1 = ttnn.from_torch(torch_input_tensor_1, layout=ttnn.TILE_LAYOUT)
+        ttnn_input_tensor_0 = ttnn.from_torch(
+            torch_input_tensor_0, layout=ttnn.TILE_LAYOUT
+        )  # , mesh_mapper=ShardTensorToMesh(device_mesh, dim=3))
+        ttnn_input_tensor_1 = ttnn.from_torch(
+            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT
+        )  # , mesh_mapper=ShardTensorToMesh(device_mesh, dim=3))
+        print("Send data to device")
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_0, dev_input_0)
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, dev_input_1)
-        ttnn.execute_trace(device, 0)
-        ttnn_torch_output_tensor = ttnn.to_torch(output_tensor)
+        print("Data sent to device")
+        ttnn.execute_trace(device_mesh.get_device(0), 0, True)
+        print("Trace cmd sent")
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            output_tensor
+        )  # , mesh_composer=ConcatMeshToTensor(device_mesh, dim=3))
         assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.95)
-    ttnn.release_trace(device)
+    ttnn.release_trace(device_mesh.get_device(0))
 
 
 def test_multi_device_single_op_binary(device_mesh):

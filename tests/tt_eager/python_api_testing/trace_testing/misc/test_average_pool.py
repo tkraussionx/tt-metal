@@ -56,8 +56,8 @@ def test_run_average_pool(act_shape, dtype, device, use_program_cache):
     if act_shape != act_shape_padded:
         ttact = ttact.pad_to_tile(0.0)
 
-    tt_actres = ttl.tensor.allocate_tensor_on_device(
-        act_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
+    ttact_res = ttl.tensor.allocate_tensor_on_device(
+        ttact.shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
     )
     ttl.tensor.write_tensor(ttact, ttact_res)
 

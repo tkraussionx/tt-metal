@@ -7,7 +7,7 @@ import torch
 from torchvision import models
 import pytest
 import tt_lib
-
+import ttnn
 from models.utility_functions import is_e75, skip_for_wormhole_b0
 
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck

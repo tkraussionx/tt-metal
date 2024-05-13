@@ -7,7 +7,7 @@ import torch
 import math
 
 import tt_lib as ttl
-
+import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
@@ -97,7 +97,11 @@ def test_bert_linear(
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
     in0_t_res = ttl.tensor.allocate_tensor_on_device(
-        in0_shape, ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.Layout.TILE, device, interleaved_mem_config_DRAM
+        ttnn.Shape(in0_shape),
+        ttl.tensor.DataType.BFLOAT8_B,
+        ttl.tensor.Layout.TILE,
+        device,
+        interleaved_mem_config_DRAM,
     )
     ttl.tensor.write_tensor(
         torch2tt_tensor(

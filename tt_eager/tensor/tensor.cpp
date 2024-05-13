@@ -911,17 +911,17 @@ void memcpy(Tensor& dst, const Tensor& src, const std::optional<std::size_t> tra
     }
 }
 
-Tensor allocate_tensor_on_device(const Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config) {
+Tensor allocate_tensor_on_device(const ttnn::Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config) {
     // Top level wrapper to asynchronously create a device tensor (single device)
     Tensor device_tensor = Tensor({device});
     uint32_t device_tensor_ref_count = device_tensor.tensor_attributes->record_main_thread_ref_count();
     device->push_work(
         [shape, data_type, layout, device, memory_config, device_tensor] () mutable {
             if (memory_config.is_sharded()) {
-                auto local_tensor = create_device_tensor(shape, data_type, layout, device, memory_config);
+                auto local_tensor = create_device_tensor(shape.value(), data_type, layout, device, memory_config);
                 device_tensor.populate_buffers_and_metadata(local_tensor);
             } else {
-                auto local_tensor = create_device_tensor(shape, data_type, layout, device, memory_config);
+                auto local_tensor = create_device_tensor(shape.value(), data_type, layout, device, memory_config);
                 device_tensor.populate_buffers_and_metadata(local_tensor);
             }
         }
@@ -930,7 +930,7 @@ Tensor allocate_tensor_on_device(const Shape& shape, DataType data_type, Layout 
     return device_tensor;
 }
 
-Tensor allocate_tensor_on_device(const Shape& shape, DataType data_type, Layout layout, DeviceMesh *device_mesh, const MemoryConfig& memory_config) {
+Tensor allocate_tensor_on_device(const ttnn::Shape& shape, DataType data_type, Layout layout, DeviceMesh *device_mesh, const MemoryConfig& memory_config) {
     // Top level wrapper to asynchronously create a device tensor (multi-device)
     Tensor device_tensor = Tensor(device_mesh->get_devices());
     uint32_t device_tensor_ref_count = device_tensor.tensor_attributes->record_main_thread_ref_count();
@@ -942,10 +942,10 @@ Tensor allocate_tensor_on_device(const Shape& shape, DataType data_type, Layout 
         worker->push_work(
             [shape, data_type, layout, worker, memory_config, device_tensor, worker_index] () mutable {
                 if (memory_config.is_sharded()) {
-                    auto local_tensor = create_device_tensor(shape, data_type, layout, worker, memory_config);
+                    auto local_tensor = create_device_tensor(shape.value(), data_type, layout, worker, memory_config);
                     insert_buffer_and_shape_for_device(worker, local_tensor, device_tensor, worker_index);
                 } else {
-                    auto local_tensor = create_device_tensor(shape, data_type, layout, worker, memory_config);
+                    auto local_tensor = create_device_tensor(shape.value(), data_type, layout, worker, memory_config);
                     insert_buffer_and_shape_for_device(worker, local_tensor, device_tensor, worker_index);
                 }
                 if (not worker->id()) {
