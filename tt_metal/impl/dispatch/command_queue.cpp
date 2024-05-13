@@ -1238,7 +1238,7 @@ void HWCommandQueue::enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* d
 // Read buffer command is enqueued in the issue region and device writes requested buffer data into the completion region
 void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking) {
     ZoneScopedN("HWCommandQueue_read_buffer");
-    TT_ASSERT(!this->manager.get_bypass_mode(), "Enqueue Read Buffer cannot be used with tracing");
+    TT_FATAL(!this->manager.get_bypass_mode(), "Enqueue Read Buffer cannot be used with tracing");
 
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
@@ -1328,7 +1328,7 @@ CoreType HWCommandQueue::get_dispatch_core_type() {
 
 void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking) {
     ZoneScopedN("HWCommandQueue_write_buffer");
-    TT_ASSERT(!this->manager.get_bypass_mode(), "Enqueue Write Buffer cannot be used with tracing");
+    TT_FATAL(!this->manager.get_bypass_mode(), "Enqueue Write Buffer cannot be used with tracing");
 
     uint32_t padded_page_size = align(buffer.page_size(), ADDRESS_ALIGNMENT);
 
@@ -1461,7 +1461,7 @@ void HWCommandQueue::enqueue_program(
     Program& program, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_program");
     if (not program.loaded_onto_device) {
-        TT_ASSERT(!this->manager.get_bypass_mode(), "Tracing should only be used when programs have been cached");
+        TT_FATAL(!this->manager.get_bypass_mode(), "Tracing should only be used when programs have been cached");
         TT_ASSERT(program.program_transfer_info.kernel_bins.size() == program.kg_buffers.size());
         for (int buffer_idx = 0; buffer_idx < program.program_transfer_info.kernel_bins.size(); buffer_idx++) {
             this->enqueue_write_buffer(*program.kg_buffers[buffer_idx], program.program_transfer_info.kernel_bins[buffer_idx].data.data(), false);
@@ -1834,6 +1834,7 @@ void HWCommandQueue::record_end() {
 
 void HWCommandQueue::terminate() {
     ZoneScopedN("HWCommandQueue_terminate");
+    TT_FATAL(!this->manager.get_bypass_mode(), "Terminate cannot be used with tracing");
     tt::log_debug(tt::LogDispatch, "Terminating dispatch kernels for command queue {}", this->id);
     auto command = EnqueueTerminateCommand(this->id, this->device, this->manager);
     this->enqueue_command(command, false);

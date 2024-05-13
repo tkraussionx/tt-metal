@@ -1471,6 +1471,9 @@ bool Device::close() {
     watcher_detach(this);
 
     for (const std::unique_ptr<HWCommandQueue> &hw_command_queue : hw_command_queues_) {
+        if (hw_command_queue->manager.get_bypass_mode()) {
+            hw_command_queue->record_end();
+        }
         hw_command_queue->terminate();
     }
 
