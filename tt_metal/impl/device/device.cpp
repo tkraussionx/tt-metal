@@ -1891,7 +1891,9 @@ void Device::end_trace(const uint8_t cq_id) {
     for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
         trace_contexts_[cq_id]->data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
+    std::cout << "initialize data: " << cq_id << std::endl;
     uint32_t tid = Trace::initialize_buffer(this->command_queue(cq_id));
+    std:;cout << "Done initialize data" << std::endl;
     trace_insts_[cq_id] = tid;
 }
 

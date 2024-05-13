@@ -204,6 +204,7 @@ static inline void memcpy_to_device(void *__restrict dst, const void * __restric
 
     for (size_t i = 0; i < num_lines; i++) {
         for (size_t j = 0; j < inner_loop; j++) {
+            std::cout << "src: " << reinterpret_cast<uint64_t>(src8) << " dst: " << reinterpret_cast<uint64_t>(dst8) << std::endl;
             __m128i blk = _mm_loadu_si128((const __m128i *)src8);
             _mm_stream_si128((__m128i *)dst8, blk);
             src8 += sizeof(__m128i);

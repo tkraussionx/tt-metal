@@ -58,6 +58,38 @@ void close_device(Device &device) {
     }
 }
 
+void begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id) {
+    device->push_work(
+        [device, trace_buff_size, cq_id] () mutable {
+            tt::tt_metal::detail::BeginTraceCapture(device, cq_id, trace_buff_size);
+        });
+}
+
+void end_trace_capture(Device* device, const uint8_t cq_id) {
+    device->push_work(
+        [device, cq_id] () mutable {
+            tt::tt_metal::detail::EndTraceCapture(device, cq_id);
+        }
+    );
+}
+
+void execute_trace(Device* device, const uint8_t cq_id, bool blocking) {
+    device->push_work(
+        [device, cq_id, blocking] () mutable {
+            tt::tt_metal::detail::ReplayLastTrace(device, cq_id, blocking);
+        }
+    );
+}
+
+void release_trace(Device* device, const uint8_t cq_id) {
+    device->push_work(
+        [device, cq_id] () mutable {
+            tt::tt_metal::detail::ReleaseLastTrace(device, cq_id);
+        }
+    );
+}
+
+
 }  // namespace device
 
 using namespace device;

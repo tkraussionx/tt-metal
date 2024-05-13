@@ -197,6 +197,10 @@ from ttnn.device import (
     manage_device,
     synchronize_device,
     dump_device_memory_state,
+    begin_trace_capture,
+    end_trace_capture,
+    execute_trace,
+    release_trace,
 )
 
 from ttnn.multi_device import (
@@ -260,6 +264,8 @@ from ttnn.operations.core import (
     squeeze,
     clone,
     as_tensor,
+    allocate_tensor_on_device,
+    copy_host_to_device_tensor,
 )
 
 from ttnn.operations.matmul import (

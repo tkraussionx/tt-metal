@@ -149,8 +149,9 @@ uint32_t Trace::initialize_buffer(CommandQueue& cq) {
     }
     uint64_t padded_size = data.size() * sizeof(uint32_t);
     TT_FATAL(padded_size <= trace_buffer.buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", padded_size, trace_buffer.buffer->size());
-
+    std::cout << "Write to: " << trace_buffer.buffer->address() << std::endl;
     EnqueueWriteBuffer(cq, trace_buffer.buffer, data, kBlocking);
+    std::cout << "Done writing to: " << trace_buffer.buffer->address() << std::endl;
     Finish(cq);  // clear side effects flag
 
     log_trace(LogMetalTrace,
