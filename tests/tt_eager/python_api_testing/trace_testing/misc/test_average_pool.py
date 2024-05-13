@@ -58,18 +58,16 @@ def test_run_average_pool(act_shape, dtype, device, use_program_cache):
         ttact = ttact.pad_to_tile(0.0)
 
     ttact_res = ttact.to(device)
-    out_res = ttl.tensor.empty(out_shape_padded, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
-    def run_ops(ttact_res, out_res):
-        out = ttl.tensor.average_pool_2d(ttact_res)
-        ttl.tensor.copy(out, out_res)
+    def run_ops(ttact_res):
+        return ttl.tensor.average_pool_2d(ttact_res)
 
     # Compile
-    run_ops(ttact_res, out_res)
+    run_ops(ttact_res)
     # Trace
     logger.info("Start Trace capture")
     ttl.device.BeginTraceCapture(device, 0, 11264)
-    run_ops(ttact_res, out_res)
+    out_res = run_ops(ttact_res)
     ttl.device.EndTraceCapture(device, 0)
     logger.info("Trace captured")
 

@@ -302,15 +302,14 @@ def test_run_resnet50_trace_inference(
             interleaved_mem_config_DRAM,
         )
 
-        def run_model(tt_resnet50, tt_image_res, tt_output_res):
-            tt_output = tt_resnet50(tt_image_res)
-            tt_lib.tensor.copy(tt_output, tt_output_res)
+        def run_model(tt_resnet50, tt_image_res):
+            return tt_resnet50(tt_image_res)
 
         # Compile
-        run_model(tt_resnet50, tt_image_res, tt_output_res)
+        run_model(tt_resnet50, tt_image_res)
         # Trace
         tt_lib.device.BeginTraceCapture(device, 0, 1304576)
-        run_model(tt_resnet50, tt_image_res, tt_output_res)
+        tt_output_res = run_model(tt_resnet50, tt_image_res)
         tt_lib.device.EndTraceCapture(device, 0)
 
         tt_lib.device.ReplayLastTrace(device, 0, True)
