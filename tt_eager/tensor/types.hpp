@@ -366,7 +366,7 @@ struct MultiDeviceHostStorage {
         DistributedTensorConfig strategy;
         std::vector<OwnedBuffer> buffers;
         std::vector<Shape> shapes;
-        std::mutex mtx;
+        mutable std::mutex mtx;
         MultiDeviceHostStorage() = default;
         MultiDeviceHostStorage(DistributedTensorConfig strategy_, std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : strategy(strategy_), buffers(buffers_), shapes(shapes_) {}
         MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
@@ -410,19 +410,19 @@ struct MultiDeviceHostStorage {
             shapes[buffer_index] = shape;
         }
 
-        OwnedBuffer get_buffer(int buffer_index) {
+        OwnedBuffer get_buffer(int buffer_index) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(buffer_index < buffers.size(), "Buffer not found for buffer_index " + std::to_string(buffer_index));
             return buffers[buffer_index];;
         }
 
-        Shape get_tensor_shape(int shape_index) {
+        Shape get_tensor_shape(int shape_index) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(shape_index < shapes.size(), "Buffer not found for device " + std::to_string(shape_index));
             return shapes[shape_index];
         }
 
-        uint32_t num_buffers() {
+        uint32_t num_buffers() const {
             std::lock_guard<std::mutex> lock(mtx);
             return buffers.size();
         }
@@ -502,19 +502,19 @@ struct MultiDeviceHostStorage {
             shapes.insert({device->id(), shape});
         }
 
-        DeviceBuffer get_buffer_for_device(Device* device) {
+        DeviceBuffer get_buffer_for_device(Device* device) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(buffers.find(device->id()) != buffers.end(), "Buffer not found for device " + std::to_string(device->id()));
             return buffers.at(device->id());
         }
 
-        Shape get_tensor_shape_for_device(Device* device) {
+        Shape get_tensor_shape_for_device(Device* device) const {
             std::lock_guard<std::mutex> lock(mtx);
             TT_FATAL(shapes.find(device->id()) != shapes.end(), "Shape not found for device " + std::to_string(device->id()));
             return shapes.at(device->id());
         }
 
-        uint32_t num_buffers() {
+        uint32_t num_buffers() const {
             std::lock_guard<std::mutex> lock(mtx);
             return buffers.size();
         }

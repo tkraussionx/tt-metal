@@ -130,6 +130,28 @@ Args:
     * :attr:`input_tensor`: Input Tensor
     )doc");
 
+    module.def(
+        "allocate_tensor_on_device",
+        py::overload_cast<const ttnn::Shape&, ttnn::DataType, ttnn::Layout, Device*, const std::optional<ttnn::MemoryConfig>&>(
+            &ttnn::operations::core::allocate_tensor_on_device),
+        py::arg("shape"),
+        py::arg("dtype"),
+        py::arg("layout"),
+        py::arg("device"),
+        py::arg("memory_config") = std::nullopt);
+
+    module.def(
+        "allocate_tensor_on_device",
+        py::overload_cast<const ttnn::Shape&, ttnn::DataType, ttnn::Layout, DeviceMesh*, const std::optional<ttnn::MemoryConfig>&>(
+            &ttnn::operations::core::allocate_tensor_on_device),
+        py::arg("shape"),
+        py::arg("dtype"),
+        py::arg("layout"),
+        py::arg("device_mesh"),
+        py::arg("memory_config") = std::nullopt);
+
+    module.def("copy_host_to_device_tensor", &ttnn::operations::core::copy_host_to_device_tensor, py::arg("host_tensor"), py::arg("device_tensor"), py::arg("cq_id") = 0);
+
     bind_registered_operation(
         module,
         ttnn::to_layout,

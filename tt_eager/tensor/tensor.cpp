@@ -991,10 +991,10 @@ void write_tensor(Tensor host_tensor, Tensor device_tensor, uint8_t cq_id) {
                                 std::visit([&host_data] (auto&& b) { host_data = b.begin(); }, host_storage.get_buffer());
                             }
                             EnqueueWriteBuffer(worker->command_queue(cq_id), s.get_buffer(), host_data, false);
-                        } else if constexpr (std::is_same_v<DeviceStorage, StorageType>) {
+                        } else if constexpr (std::is_same_v<MultiDeviceStorage, StorageType>) {
                             auto host_storage = std::get<MultiDeviceHostStorage>(async_safe_tensor.get_storage());
                             std::visit([worker_index, &host_data] (auto&& b) { host_data = b.begin(); }, host_storage.get_buffer(worker_index));
-                            EnqueueWriteBuffer(worker->command_queue(cq_id), s.get_buffer(worker), host_data, false);
+                            EnqueueWriteBuffer(worker->command_queue(cq_id), s.get_buffer_for_device(worker), host_data, false);
                         }
                     }, device_tensor.get_storage());
             }

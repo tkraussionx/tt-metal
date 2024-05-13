@@ -165,6 +165,20 @@ inline ttnn::Tensor to_device(
     return tensor.to(device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
 }
 
+inline ttnn::Tensor allocate_tensor_on_device(
+    const Shape& shape, DataType data_type, Layout layout, Device *device, const std::optional<MemoryConfig>& memory_config) {
+    return tt::tt_metal::allocate_tensor_on_device(shape.value(), data_type, layout, device, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+}
+
+inline ttnn::Tensor allocate_tensor_on_device(
+    const Shape& shape, DataType data_type, Layout layout, DeviceMesh *device_mesh, const std::optional<MemoryConfig>& memory_config) {
+    return tt::tt_metal::allocate_tensor_on_device(shape.value(), data_type, layout, device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+}
+
+inline void copy_host_to_device_tensor(ttnn::Tensor host_tensor, ttnn::Tensor device_tensor, uint8_t cq_id = 0) {
+    tt::tt_metal::write_tensor(host_tensor, device_tensor, cq_id);
+}
+
 inline ttnn::Tensor from_device(const ttnn::Tensor& tensor, bool blocking = true) { return tensor.cpu(blocking); }
 
 inline void deallocate(Tensor& tensor, bool force = true) { tensor.deallocate(force); }

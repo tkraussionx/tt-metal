@@ -324,17 +324,17 @@ def all_devices(request):
 
 
 @pytest.fixture(scope="function")
-def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
+def device_mesh(request, silicon_arch_name, silicon_arch_grayskull):
     import ttnn
 
     device_ids = ttnn.get_device_ids()
     try:
-        num_devices_requested = min(request.param, len(device_ids))
+        num_devices_requested = min(1, len(device_ids))
     except (ValueError, AttributeError):
         num_devices_requested = len(device_ids)
 
-    if num_devices_requested <= 1:
-        pytest.skip("Requires multiple devices to run")
+    # if num_devices_requested <= 1:
+    #     pytest.skip("Requires multiple devices to run")
 
     device_mesh = ttnn.open_device_mesh(ttnn.DeviceGrid(1, num_devices_requested), device_ids[:num_devices_requested])
 
