@@ -297,7 +297,7 @@ DeviceProfiler::~DeviceProfiler()
 {
 #if defined(PROFILER)
     ZoneScoped;
-    pushTracyDeviceResults();
+    //pushTracyDeviceResults();
     for (auto tracyCtx : device_tracy_contexts)
     {
         TracyTTDestroy(tracyCtx.second);
@@ -369,6 +369,7 @@ void DeviceProfiler::dumpResults (
         const vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
     ZoneScoped;
+    static int count = 1;
 
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
@@ -388,6 +389,8 @@ void DeviceProfiler::dumpResults (
                 worker_core);
 
         }
+        if (count == 1) pushTracyDeviceResults();
+        count ++;
     }
     else
     {
@@ -399,6 +402,7 @@ void DeviceProfiler::dumpResults (
 void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(PROFILER) && defined(TRACY_ENABLE)
+    ZoneScoped;
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)

@@ -372,6 +372,8 @@ namespace kernel_profiler{
 
         inline __attribute__((always_inline)) profileScopeGuaranteed ()
         {
+#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+#endif
             if constexpr  (index == 0)
             {
                 init_profiler();
