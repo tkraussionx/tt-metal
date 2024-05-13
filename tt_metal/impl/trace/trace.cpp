@@ -139,16 +139,13 @@ uint32_t Trace::initialize_buffer(CommandQueue& cq) {
     const auto& trace_buffer = Trace::get_instance(tid);
     vector<uint32_t>& data = trace_buffer.desc->data;
 
-    // Pad the trace buffer to the next fully banked page
     uint64_t unpadded_size = data.size() * sizeof(uint32_t);
-    size_t page_size = trace_buffer.buffer->page_size();
-    size_t numel_page = page_size / sizeof(uint32_t);
-    size_t numel_padding = numel_page - data.size() % numel_page;
+    TT_FATAL(unpadded_size <= trace_buffer.buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", unpadded_size, trace_buffer.buffer->size());
+    size_t numel_padding = (trace_buffer.buffer->size() - unpadded_size) / sizeof(uint32_t);
     if (numel_padding > 0) {
         data.resize(data.size() + numel_padding, 0/*padding value*/);
     }
     uint64_t padded_size = data.size() * sizeof(uint32_t);
-    TT_FATAL(padded_size <= trace_buffer.buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", padded_size, trace_buffer.buffer->size());
 
     EnqueueWriteBuffer(cq, trace_buffer.buffer, data, kBlocking);
     Finish(cq);  // clear side effects flag
