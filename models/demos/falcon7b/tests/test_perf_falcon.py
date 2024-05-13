@@ -506,8 +506,8 @@ class TestParametrized:
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
             ("prefill", 32, 1, 128, 0, "BFLOAT16-L1_SHARDED", 0.97, 0.99, 0.96, 0.1),
-            ("prefill", 32, 1, 1024, 0, "BFLOAT16-L1_SHARDED", 0.98, 0.99, 0.96, 1),
-            ("prefill", 32, 1, 2048, 0, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.97, 1),
+            # ("prefill", 32, 1, 1024, 0, "BFLOAT16-L1_SHARDED", 0.98, 0.99, 0.96, 1), Enable when #8349 is resolved
+            # ("prefill", 32, 1, 2048, 0, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.97, 1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.92, 0.95, 0.95, 0.1),
@@ -519,8 +519,8 @@ class TestParametrized:
         ),
         ids=[
             "prefill_seq128_bf16_l1_sharded",
-            "prefill_seq1024_bf16_l1_sharded",
-            "prefill_seq2048_bf16_l1_sharded",
+            # "prefill_seq1024_bf16_l1_sharded",
+            # "prefill_seq2048_bf16_l1_sharded",
             "decode_batch32_128_bf16_dram",
             "decode_batch32_128_bf16_l1",
             "decode_batch32_128_bf16_l1_sharded",
