@@ -33,7 +33,7 @@ uint32_t atomic_ret_val __attribute__ ((section ("l1_data")));
 tt_l1_ptr mailboxes_t * const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);
 void kernel_launch() {
 
-  DeviceZoneScopedMainChildN("NCRISC-KERNEL");
+  //DeviceZoneScopedMainChildN("NCRISC-KERNEL");
 #if defined(DEBUG_NULL_KERNELS) && !defined(DISPATCH_KERNEL)
 #ifdef KERNEL_RUN_TIME
     uint64_t end_time = c_tensix_core::read_wall_clock() + KERNEL_RUN_TIME;

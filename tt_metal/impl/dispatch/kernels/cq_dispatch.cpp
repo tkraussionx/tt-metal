@@ -14,9 +14,18 @@
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "tools/profiler/kernel_profiler.hpp"
 #include "debug/dprint.h"
 #include "debug/assert.h"
 
+namespace kernel_profiler {
+    uint32_t wIndex __attribute__((used));
+    uint32_t stackSize __attribute__((used));
+    uint32_t sums[SUM_COUNT] __attribute__((used));
+    uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    bool resultsPushed __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
+}
 // The command queue write interface controls writes to the completion region, host owns the completion region read interface
 // Data requests from device and event states are written to the completion region
 

@@ -13,6 +13,14 @@
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
 #include "debug/dprint.h"
+namespace kernel_profiler {
+    uint32_t wIndex __attribute__((used));
+    uint32_t stackSize __attribute__((used));
+    uint32_t sums[SUM_COUNT] __attribute__((used));
+    uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    bool resultsPushed __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
+}
 
 constexpr uint32_t downstream_cb_base = get_compile_time_arg_val(0);
 constexpr uint32_t downstream_cb_log_page_size = get_compile_time_arg_val(1);
@@ -742,7 +750,7 @@ uint32_t process_exec_buf_cmd(uint32_t cmd_ptr_outer,
 
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("PROC-MAIN");
+        //DeviceZoneScopedMainN("PROC-MAIN");
         uint32_t cmd_ptr = cmddat_q_base;
 
         paged_read_into_cmddat_q(cmd_ptr);
@@ -973,7 +981,7 @@ void kernel_main_h() {
 
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("KERNEL-MAIN-H");
+        //DeviceZoneScopedMainN("KERNEL-MAIN-H");
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);
 
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
@@ -1011,7 +1019,7 @@ void kernel_main_d() {
 
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("KERNEL-MAIN-D");
+        //DeviceZoneScopedMainN("KERNEL-MAIN-D");
         // cmds come in packed batches based on HostQ reads in prefetch_h
         // once a packed batch ends, we need to jump to the next page
         uint32_t length = relay_cb_get_cmds(fence, cmd_ptr);

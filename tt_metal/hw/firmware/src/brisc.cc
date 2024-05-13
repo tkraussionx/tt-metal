@@ -278,7 +278,11 @@ inline void finish_ncrisc_copy_and_run()
 inline void wait_ncrisc_trisc()
 {
     DEBUG_STATUS("NTW");
-    while (mailboxes->slave_sync.all != RUN_SYNC_MSG_ALL_SLAVES_DONE);
+    while (mailboxes->slave_sync.all != RUN_SYNC_MSG_ALL_SLAVES_DONE)
+    {
+        //DPRINT << mailboxes->slave_sync.all <<  "," << RUN_SYNC_MSG_ALL_SLAVES_DONE  << ENDL();
+    }
+    DPRINT << mailboxes->slave_sync.all <<  "," << RUN_SYNC_MSG_ALL_SLAVES_DONE  << ENDL();
     DEBUG_STATUS("NTD");
 }
 
@@ -346,12 +350,12 @@ int main() {
 
             int i = my_x[0];
             int j = my_y[0];
-            DPRINT << i  << "NC WAIT" << j << ENDL();
+            DPRINT << i <<  "," << j << " NC WAIT" << ENDL();
             wait_ncrisc_trisc();
-            DPRINT << i  << "NC DONE" << j << ENDL();
-            DPRINT << i  << "NC DONE" << j << ENDL();
-            DPRINT << i  << "NC DONE" << j << ENDL();
-            DPRINT << i  << "NC DONE" << j << ENDL();
+            DPRINT << i <<  "," << j << " NC DONE" << ENDL();
+            DPRINT << i <<  "," << j << " NC DONE" << ENDL();
+            DPRINT << i <<  "," << j << " NC DONE" << ENDL();
+            DPRINT << i <<  "," << j << " NC DONE" << ENDL();
 
             mailboxes->launch.run = RUN_MSG_DONE;
 

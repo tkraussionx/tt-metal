@@ -8,7 +8,6 @@
 #include "dev_msgs.h"
 #include "stream_io_map.h"
 #include "firmware_common.h"
-#include "tools/profiler/kernel_profiler.hpp"
 #include "risc_attribs.h"
 #include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
@@ -32,14 +31,6 @@ uint32_t atomic_ret_val __attribute__ ((section ("l1_data"))) __attribute__((use
 
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
-namespace kernel_profiler {
-    uint32_t wIndex __attribute__((used));
-    uint32_t stackSize __attribute__((used));
-    uint32_t sums[SUM_COUNT] __attribute__((used));
-    uint32_t sumIDs[SUM_COUNT] __attribute__((used));
-    bool resultsPushed __attribute__((used));
-    uint16_t core_flat_id __attribute__((used));
-}
 
 extern "C" void ncrisc_resume(void);
 extern "C" void notify_brisc_and_halt(uint32_t status);
@@ -58,8 +49,9 @@ int main(int argc, char *argv[]) {
   // Cleanup profiler buffer incase we never get the go message
   while (1) {
       DEBUG_STATUS("W");
+
       notify_brisc_and_halt(RUN_SYNC_MSG_DONE);
-      DeviceZoneScopedMainN("NCRISC-FW");
+      //DeviceZoneScopedMainN("NCRISC-FW");
 
 
       setup_cb_read_write_interfaces(0, mailboxes->launch.max_cb_index, true, true);
