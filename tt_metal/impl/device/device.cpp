@@ -1661,8 +1661,22 @@ CoreCoord Device::compute_with_storage_grid_size() const {
 }
 
 CoreCoord Device::physical_core_from_logical_core(const CoreCoord &logical_coord, const CoreType &core_type) const {
+    ZoneScopedN("Device::physical_core_from_logical_core");
     const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
     return soc_desc.get_physical_core_from_logical_core(logical_coord, core_type);
+}
+
+std::vector<CoreCoord> Device::physical_core_from_logical_cores(const std::vector<CoreCoord> &logical_cores, const CoreType &core_type) const {
+    ZoneScopedN("Device::physical_core_from_logical_core");
+    std::vector<CoreCoord> physical_cores(logical_cores.size());
+    const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
+    int idx = 0;
+    for (const auto &logical_core : logical_cores) {
+        physical_cores[idx] = soc_desc.get_physical_core_from_logical_core(logical_core, core_type);
+        ++idx;
+    }
+    // return soc_desc.get_physical_core_from_logical_core(logical_coord, core_type);
+    return physical_cores;
 }
 
 CoreType Device::core_type_from_physical_core(const CoreCoord &physical_coord) const {

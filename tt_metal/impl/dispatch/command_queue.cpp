@@ -376,6 +376,7 @@ void generate_dispatch_write_packed(
 
 // Generate command sequence for unique (unicast) and common (multicast) runtime args
 void EnqueueProgramCommand::assemble_runtime_args_commands() {
+    ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands");
     // Maps to enum class RISCV, tt_backend_api_types.h
     thread_local static const std::vector<uint32_t> unique_processor_to_l1_arg_base_addr = {
         BRISC_L1_ARG_BASE,
@@ -387,6 +388,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
         TRISC_L1_ARG_BASE,
     };
     if (this->runtime_args_command_sequences.count(program.id) == 0) {
+        ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::generate_runtime_args_commands");
         CoreType dispatch_core_type =
             dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
         const uint32_t max_prefetch_command_size =
@@ -429,14 +431,15 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
         std::vector<uint32_t> common_max_runtime_args_len(program.num_kernels(), 0);
         std::vector<uint32_t> common_processor_to_l1_arg_base_addr(program.num_kernels());
 
-        std::set<uint32_t> unique_processors;
-        std::set<uint32_t> common_kernels;
+        std::unordered_set<uint32_t> unique_processors;
+        std::unordered_set<uint32_t> common_kernels;
 
         // Unique Runtime Args (Unicast)
         // TODO: If we need to break apart cmds if they exceed the max prefetch cmd size
         // would potentially be more optimal to sort the data by size and have a max rt arg size
         // to pad to per split. Currently we take the max of all rt args before splitting
         for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
+            ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::generate_runtime_args_commands::unique_runtime_args");
             auto kernel = detail::GetKernel(program, kernel_id);
 
             uint32_t processor_idx = static_cast<typename std::underlying_type<tt::RISCV>::type>(kernel->processor());
@@ -540,28 +543,42 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
                 common_sub_cmds[kernel_id]);
         }
     } else {
+        ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::update_runtime_args_commands");
         for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
             auto kernel = detail::GetKernel(program, kernel_id);
+            auto kernel_core_type = kernel->get_kernel_core_type();
 
             if (!kernel->cores_with_runtime_args().empty()) {
+                ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::update_runtime_args_commands::unique_runtime_args");
                 uint32_t processor_idx =
                     static_cast<typename std::underlying_type<tt::RISCV>::type>(kernel->processor());
+                    std::vector<CoreCoord> kernel_physical_cores = this->device->physical_core_from_logical_cores(
+                        kernel->cores_with_runtime_args(), kernel_core_type);
+                const auto& runtime_args_by_core = kernel->runtime_args();
+                int core_idx = 0;
                 for (const auto& core_coord : kernel->cores_with_runtime_args()) {
                     uint32_t noc_xy_encoding = get_noc_unicast_encoding(
-                        this->device->physical_core_from_logical_core(core_coord, kernel->get_kernel_core_type()));
+                        // this->device->physical_core_from_logical_core(core_coord, kernel_core_type)
+                        kernel_physical_cores[core_idx]
+                        );
                     const auto& data_loc =
                         program.command_indices
                             .processor_to_cmd_mapping[(uint64_t)processor_idx << 32 | noc_xy_encoding];
-                    const auto& runtime_args_data = kernel->runtime_args(core_coord);
+                    // const auto& runtime_args_data = kernel->runtime_args(core_coord);
+                    const auto& runtime_args_data = runtime_args_by_core[core_coord.x][core_coord.y];
                     this->runtime_args_command_sequences[program.id][data_loc.first].update_cmd_sequence(
                         data_loc.second, runtime_args_data.data(), runtime_args_data.size() * sizeof(uint32_t));
+                    ++core_idx;
                 }
             }
 
             const auto& common_rt_args = kernel->common_runtime_args();
             if (common_rt_args.size() > 0) {
-                if (kernel->get_kernel_core_type() == CoreType::ETH) {
+                ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::update_runtime_args_commands::common_runtime_args");
+                if (kernel_core_type == CoreType::ETH) {
+                    ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::update_runtime_args_commands::common_runtime_args::eth");
                     for (const auto& core_coord : kernel->logical_cores()) {
+
                         uint32_t noc_xy_encoding =
                             get_noc_unicast_encoding(this->device->ethernet_core_from_logical_core(core_coord));
                         const auto& data_loc =
@@ -571,6 +588,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
                             data_loc.second, runtime_args_data.data(), runtime_args_data.size() * sizeof(uint32_t));
                     }
                 } else {
+                    ZoneScopedN("EnqueueProgramCommand::assemble_runtime_args_commands::update_runtime_args_commands::common_runtime_args::riscv");
                     for (const auto& core_range : kernel->logical_coreranges()) {
                         CoreCoord physical_start = device->worker_core_from_logical_core(core_range.start);
                         CoreCoord physical_end = device->worker_core_from_logical_core(core_range.end);
@@ -930,6 +948,7 @@ void EnqueueProgramCommand::assemble_device_commands() {
 }
 
 void EnqueueProgramCommand::process() {
+    ZoneScopedN("EnqueueProgramCommand::process");
     // Calculate all commands size and determine how many fetch q entries to use
 
     // Preamble, some waits and stalls

@@ -229,7 +229,11 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
     auto &set_rt_args = this->core_to_runtime_args_[logical_core.x][logical_core.y];
     TT_FATAL(set_rt_args.empty() or set_rt_args.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
     set_rt_args = runtime_args;
-    this->core_with_runtime_args_.insert( logical_core );
+    // Insert only if it doesn't exist in the vector
+    if (std::find(this->core_with_runtime_args_.begin(), this->core_with_runtime_args_.end(), logical_core) == this->core_with_runtime_args_.end()) {
+        this->core_with_runtime_args_.push_back(logical_core);
+    }
+    // this->core_with_runtime_args_.insert( logical_core );
 }
 
 void Kernel::set_common_runtime_args(const std::vector<uint32_t> &common_runtime_args) {
