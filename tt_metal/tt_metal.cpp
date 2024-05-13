@@ -719,6 +719,15 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         TT_ASSERT(device_pool::devices[device_id] != nullptr);
         return device_pool::devices[device_id];
     }
+
+    void DisableAllocs(Device *device) {
+        tt::tt_metal::allocator::disable_allocs(*(device->allocator_));
+    }
+
+    void EnableAllocs(Device *device) {
+        tt::tt_metal::allocator::enable_allocs(*(device->allocator_));
+    }
+
 }   // namespace detail
 
 size_t GetNumAvailableDevices() {

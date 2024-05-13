@@ -62,6 +62,15 @@ struct TraceDescriptor {
 struct TraceBuffer {
     shared_ptr<detail::TraceDescriptor> desc;
     shared_ptr<Buffer> buffer;
+    bool disabled_alloc = false;
+
+    TraceBuffer(shared_ptr<detail::TraceDescriptor> desc, shared_ptr<Buffer> buffer);
+
+    TraceBuffer(const TraceBuffer &t);
+
+    ~TraceBuffer();
+
+    void disable_alloc();
 };
 
 enum class TraceState {
@@ -84,7 +93,7 @@ class Trace {
 
     // Trace instance id to buffer mapping mananged via instantiate and release calls
     // a static map keeps trace buffers alive until explicitly released by the user
-    static unordered_map<uint32_t, TraceBuffer> buffer_pool;
+    static unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> buffer_pool;
 
     // Thread safe accessor to trace::buffer_pool
     static std::mutex pool_mutex;
@@ -118,11 +127,11 @@ class Trace {
 
     // Thread-safe accessors to manage trace instances
     static bool has_instance(const uint32_t tid);
-    static void add_instance(const uint32_t tid, TraceBuffer buf);
+    static void add_instance(const uint32_t tid, std::shared_ptr<TraceBuffer> buf);
     static void remove_instance(const uint32_t tid);
     static void validate_instance(const uint32_t tid);
     static void release_all();  // note all instances across all devices are released
-    static TraceBuffer get_instance(const uint32_t tid);
+    static std::shared_ptr<TraceBuffer> get_instance(const uint32_t tid);
     static uint32_t initialize_buffer(CommandQueue& cq);
     static void create_trace_buffer(const CommandQueue& cq, shared_ptr<detail::TraceDescriptor> desc, uint32_t unpadded_size);
 };

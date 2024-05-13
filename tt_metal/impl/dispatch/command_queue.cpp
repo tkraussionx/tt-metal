@@ -1531,10 +1531,10 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_trace");
 
     auto trace_inst = Trace::get_instance(trace_id);
-    auto command = EnqueueTraceCommand(this->id, this->device, this->manager, *trace_inst.buffer, this->expected_num_workers_completed);
+    auto command = EnqueueTraceCommand(this->id, this->device, this->manager, *trace_inst->buffer, this->expected_num_workers_completed);
 
     // Emit the completion queue entries from the trace
-    auto& cmpl_q = trace_inst.desc->traced_completion_q_reads;
+    auto& cmpl_q = trace_inst->desc->traced_completion_q_reads;
     uint32_t num_events = 0;
     uint32_t event_id = this->manager.get_next_event(this->id);
     for (auto read_descriptor : cmpl_q) {
@@ -1559,7 +1559,7 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     this->manager.increment_event_id(this->id, num_events);
 
     // Increment the exepected worker cores counter due to trace programs completions
-    this->expected_num_workers_completed += trace_inst.desc->num_completion_worker_cores;
+    this->expected_num_workers_completed += trace_inst->desc->num_completion_worker_cores;
 
     if (blocking) {
         this->finish();

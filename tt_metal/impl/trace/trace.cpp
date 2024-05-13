@@ -54,7 +54,28 @@ size_t interleaved_page_size(const uint32_t buf_size, const uint32_t num_banks, 
 
 namespace tt::tt_metal {
 
-unordered_map<uint32_t, TraceBuffer> Trace::buffer_pool;
+TraceBuffer::TraceBuffer(shared_ptr<detail::TraceDescriptor> desc, shared_ptr<Buffer> buffer) : desc(desc), buffer(buffer) {
+}
+
+TraceBuffer::TraceBuffer(const TraceBuffer &t) : desc(t.desc), buffer(t.buffer), disabled_alloc(t.disabled_alloc) {
+    if (this->disabled_alloc) {
+        detail::DisableAllocs(this->buffer->device());
+    }
+}
+
+TraceBuffer::~TraceBuffer() {
+    if (this->disabled_alloc) {
+        detail::EnableAllocs(this->buffer->device());
+    }
+}
+
+void TraceBuffer::disable_alloc() {
+    if (!this->disabled_alloc) {
+        this->disabled_alloc = true;
+        detail::DisableAllocs(this->buffer->device());
+    }
+}
+unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> Trace::buffer_pool;
 std::mutex Trace::pool_mutex;
 
 uint32_t Trace::global_trace_id = 0;
@@ -131,28 +152,30 @@ void Trace::create_trace_buffer(const CommandQueue& cq, shared_ptr<detail::Trace
 
     // Pin the trace buffer in memory until explicitly released by the user
     uint32_t tid = Trace::next_id();
-    Trace::add_instance(tid, {desc, buffer});
+    Trace::add_instance(tid, std::make_shared<TraceBuffer>(desc, buffer));
 }
 
 uint32_t Trace::initialize_buffer(CommandQueue& cq) {
     uint32_t tid = Trace::global_trace_id - 1;
-    const auto& trace_buffer = Trace::get_instance(tid);
-    vector<uint32_t>& data = trace_buffer.desc->data;
+    auto trace_buffer = Trace::get_instance(tid);
+    vector<uint32_t>& data = trace_buffer->desc->data;
 
     uint64_t unpadded_size = data.size() * sizeof(uint32_t);
-    TT_FATAL(unpadded_size <= trace_buffer.buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", unpadded_size, trace_buffer.buffer->size());
-    size_t numel_padding = (trace_buffer.buffer->size() - unpadded_size) / sizeof(uint32_t);
+    TT_FATAL(unpadded_size <= trace_buffer->buffer->size(), "Trace data size {} is larger than specified trace buffer size {}. Increase specified buffer size.", unpadded_size, trace_buffer->buffer->size());
+    size_t numel_padding = (trace_buffer->buffer->size() - unpadded_size) / sizeof(uint32_t);
     if (numel_padding > 0) {
         data.resize(data.size() + numel_padding, 0/*padding value*/);
     }
     uint64_t padded_size = data.size() * sizeof(uint32_t);
 
-    EnqueueWriteBuffer(cq, trace_buffer.buffer, data, kBlocking);
+    EnqueueWriteBuffer(cq, trace_buffer->buffer, data, kBlocking);
     Finish(cq);  // clear side effects flag
+
+    trace_buffer->disable_alloc();
 
     log_trace(LogMetalTrace,
         "Trace {} instantiated with completion buffer num_entries={}, issue buffer unpadded size={}, padded size={}, num_pages={}",
-        tid, trace_buffer.desc->num_completion_q_reads, unpadded_size, padded_size, padded_size / page_size);
+        tid, trace_buffer->desc->num_completion_q_reads, unpadded_size, padded_size, trace_buffer->buffer->num_pages());
     return tid;
 }
 
@@ -162,7 +185,7 @@ bool Trace::has_instance(const uint32_t tid) {
     });
 }
 
-void Trace::add_instance(const uint32_t tid, TraceBuffer buf) {
+void Trace::add_instance(const uint32_t tid, std::shared_ptr<TraceBuffer> buf) {
     _safe_pool([&] {
         TT_FATAL(Trace::buffer_pool.find(tid) == Trace::buffer_pool.end());
         Trace::buffer_pool.insert({tid, buf});
@@ -186,19 +209,19 @@ void Trace::release_all() {
 void Trace::validate_instance(const uint32_t tid) {
     vector<uint32_t> backdoor_data;
     auto trace_inst = Trace::get_instance(tid);
-    detail::ReadFromBuffer(trace_inst.buffer, backdoor_data);
-    if (backdoor_data != trace_inst.desc->data) {
-        log_info(LogMetalTrace, "Trace buffer expected: {}", trace_inst.desc->data);
+    detail::ReadFromBuffer(trace_inst->buffer, backdoor_data);
+    if (backdoor_data != trace_inst->desc->data) {
+        log_info(LogMetalTrace, "Trace buffer expected: {}", trace_inst->desc->data);
         log_info(LogMetalTrace, "Trace buffer observed: {}", backdoor_data);
         TT_THROW("Trace buffer data mismatch for instance {}", tid);
     }
     // add more checks
 }
 
-TraceBuffer Trace::get_instance(const uint32_t tid) {
+std::shared_ptr<TraceBuffer> Trace::get_instance(const uint32_t tid) {
     return _safe_pool([&] {
         TT_FATAL(Trace::buffer_pool.find(tid) != Trace::buffer_pool.end());
-        return Trace::buffer_pool[tid];
+        return Trace::buffer_pool.at(tid);
     });
 }
 

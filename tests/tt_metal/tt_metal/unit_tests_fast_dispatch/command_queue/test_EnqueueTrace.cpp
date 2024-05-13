@@ -112,10 +112,10 @@ TEST_F(CommandQueueFixture, TraceInstanceManagement) {
 
     // Add instances scope, trace buffers go out of scope yet remain cached in memory
     {
-        TraceBuffer trace_buffer0 = {{}, std::make_shared<Buffer>(
-            cq.device(), trace_size.at(0), page_size.at(0), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED)};
-        TraceBuffer trace_buffer1 = {{}, std::make_shared<Buffer>(
-            cq.device(), trace_size.at(1), page_size.at(1), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED)};
+        std::shared_ptr<TraceBuffer> trace_buffer0 = std::make_shared<TraceBuffer>(nullptr, std::make_shared<Buffer>(
+            cq.device(), trace_size.at(0), page_size.at(0), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED));
+        std::shared_ptr<TraceBuffer> trace_buffer1 = std::make_shared<TraceBuffer>(nullptr, std::make_shared<Buffer>(
+            cq.device(), trace_size.at(1), page_size.at(1), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED));
         auto mem_multi_trace = cq.device()->get_memory_allocation_statistics(BufferType::DRAM);
         log_debug(
             LogTest,
@@ -150,10 +150,10 @@ TEST_F(CommandQueueFixture, TraceInstanceManagement) {
 
     // Add instances scope, trace buffers go out of scope yet remain cached in memory
     {
-        TraceBuffer trace_buffer0 = {{}, std::make_shared<Buffer>(
-            cq.device(), trace_size.at(0), page_size.at(0), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED)};
-        TraceBuffer trace_buffer1 = {{}, std::make_shared<Buffer>(
-            cq.device(), trace_size.at(1), page_size.at(1), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED)};
+        std::shared_ptr<TraceBuffer> trace_buffer0 = std::make_shared<TraceBuffer>(nullptr, std::make_shared<Buffer>(
+            cq.device(), trace_size.at(0), page_size.at(0), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED));
+        std::shared_ptr<TraceBuffer> trace_buffer1 = std::make_shared<TraceBuffer>(nullptr, std::make_shared<Buffer>(
+            cq.device(), trace_size.at(1), page_size.at(1), BufferType::DRAM, TensorMemoryLayout::INTERLEAVED));
         auto mem_multi_trace = cq.device()->get_memory_allocation_statistics(BufferType::DRAM);
 
         // Cache the trace buffer in memory via instance pinning calls
@@ -192,11 +192,11 @@ TEST_F(CommandQueueFixture, InstantiateTraceSanity) {
     vector<uint32_t> data_fd, data_bd;
 
     // Backdoor read the trace buffer
-    ::detail::ReadFromBuffer(trace_inst.buffer, data_bd);
+    ::detail::ReadFromBuffer(trace_inst->buffer, data_bd);
 
     // Frontdoor reaad the trace buffer
-    data_fd.resize(trace_inst.buffer->size() / sizeof(uint32_t));
-    EnqueueReadBuffer(command_queue, trace_inst.buffer, data_fd.data(), kBlocking);
+    data_fd.resize(trace_inst->buffer->size() / sizeof(uint32_t));
+    EnqueueReadBuffer(command_queue, trace_inst->buffer, data_fd.data(), kBlocking);
     EXPECT_EQ(data_fd, data_bd);
 
     log_trace(LogTest, "Trace buffer content: {}", data_fd);

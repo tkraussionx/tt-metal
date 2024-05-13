@@ -159,7 +159,7 @@ namespace tt::tt_metal{
          * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
          * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
          * */
-	void InitDeviceProfiler(Device *device);
+	    void InitDeviceProfiler(Device *device);
 
         /**
          * Read device side profiler data and dump results into device side CSV log
@@ -353,6 +353,9 @@ namespace tt::tt_metal{
         {
             device->deallocate_buffers();
         }
+
+        void DisableAllocs(Device *device);
+        void EnableAllocs(Device *device);
 
         inline void GenerateDeviceHeaders(Device *device,
                                           const std::string &path)
