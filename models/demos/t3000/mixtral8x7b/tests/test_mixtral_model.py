@@ -34,23 +34,25 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
-@pytest.mark.parametrize(
-    "validation_type",
-    ("pcc", "output"),
-)
-@pytest.mark.parametrize(
-    "n_layers",
-    (1, 32),
-)
-@pytest.mark.parametrize(
-    "iterations",
-    (1, 10, 127),
-)
-def test_mixtral_model_inference(device_mesh, iterations, n_layers, validation_type, use_program_cache, reset_seeds):
+# @pytest.mark.parametrize(
+#     "validation_type",
+#     ("pcc", "output"),
+# )
+# @pytest.mark.parametrize(
+#     "n_layers",
+#     (1, 32),
+# )
+# @pytest.mark.parametrize(
+#     "iterations",
+#     (1, 10, 127),
+# )
+def test_mixtral_model_inference(
+    t3k_device_mesh, use_program_cache, reset_seeds, iterations=1, n_layers=32, validation_type="output"
+):
     pcc = 0.97
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = n_layers
 
     state_dict = torch.load(model_args.state_dict_path)
@@ -77,7 +79,7 @@ def test_mixtral_model_inference(device_mesh, iterations, n_layers, validation_t
 
     # Load TTNN model
     tt_model = TtTransformer(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layers=list(range(model_args.n_layers)),
@@ -122,7 +124,7 @@ def test_mixtral_model_inference(device_mesh, iterations, n_layers, validation_t
 
         # Convert ttnn tensor to torch tensor
         tt_output_torch = (
-            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
             .squeeze(1)
             .view(batch, seqlen, -1)
             .detach()

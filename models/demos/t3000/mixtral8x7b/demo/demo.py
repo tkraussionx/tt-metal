@@ -274,7 +274,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     ],
     ids=["general_weights", "instruct_weights"],
 )
-def test_mixtral8x7b_demo(device_mesh, use_program_cache, input_prompts, instruct_weights):
+def test_mixtral8x7b_demo(t3k_device_mesh, use_program_cache, input_prompts, instruct_weights):
     return run_mixtral_demo(
-        user_input=input_prompts, batch_size=32, device_mesh=device_mesh, instruct_mode=instruct_weights
+        user_input=input_prompts, batch_size=32, device_mesh=t3k_device_mesh, instruct_mode=instruct_weights
     )
