@@ -841,37 +841,40 @@ void kernel_main() {
     }
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("CQ-DISPATCH");
-        if (cmd_ptr == cb_fence) {
-            get_cb_page<
-                dispatch_cb_base,
-                dispatch_cb_blocks,
-                dispatch_cb_log_page_size,
-                my_noc_xy,
-                my_dispatch_cb_sem_id>(cmd_ptr,
-                                          cb_fence,
-                                          block_noc_writes_to_clear,
-                                          block_next_start_addr,
-                                          rd_block_idx);
+        {
+            DeviceZoneScopedMainN("CQ-DISPATCH");
+            if (cmd_ptr == cb_fence) {
+                get_cb_page<
+                    dispatch_cb_base,
+                    dispatch_cb_blocks,
+                    dispatch_cb_log_page_size,
+                    my_noc_xy,
+                    my_dispatch_cb_sem_id>(cmd_ptr,
+                                              cb_fence,
+                                              block_noc_writes_to_clear,
+                                              block_next_start_addr,
+                                              rd_block_idx);
+            }
+
+            done = is_d_variant ?
+                process_cmd_d(cmd_ptr) :
+                process_cmd_h(cmd_ptr);
+
+            // Move to next page
+            cmd_ptr = round_up_pow2(cmd_ptr, dispatch_cb_page_size);
+
+            // XXXXX move this inside while loop waiting for get_dispatch_cb_page above
+            // XXXXX can potentially clear a partial block when stalled w/ some more bookkeeping
+            cb_block_release_pages<upstream_noc_xy,
+                                   upstream_dispatch_cb_sem_id,
+                                   dispatch_cb_blocks,
+                                   dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
+                                                                wr_block_idx);
+            int i = my_x[0];
+            int j = my_y[0];
+            DPRINT << i  << "CQ-DONE" << j << ENDL();
         }
-
-        done = is_d_variant ?
-            process_cmd_d(cmd_ptr) :
-            process_cmd_h(cmd_ptr);
-
-        // Move to next page
-        cmd_ptr = round_up_pow2(cmd_ptr, dispatch_cb_page_size);
-
-        // XXXXX move this inside while loop waiting for get_dispatch_cb_page above
-        // XXXXX can potentially clear a partial block when stalled w/ some more bookkeeping
-        cb_block_release_pages<upstream_noc_xy,
-                               upstream_dispatch_cb_sem_id,
-                               dispatch_cb_blocks,
-                               dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
-                                                            wr_block_idx);
-        int i = my_x[0];
-        int j = my_y[0];
-        DPRINT << i  << "CQ-DONE" << j << ENDL();
+        block_noc_writes_to_clear[rd_block_idx]++;
     }
 
     noc_async_write_barrier();

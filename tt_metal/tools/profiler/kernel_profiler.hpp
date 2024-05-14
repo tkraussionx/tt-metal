@@ -34,7 +34,6 @@
 #define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
 #define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
 
-#define  PROFILE_KERNEL 1
 #ifdef  PROFILE_KERNEL
 namespace kernel_profiler{
 
@@ -91,7 +90,7 @@ namespace kernel_profiler{
             sums[i] = 0;
         }
 
-#if defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
+#if defined(COMPILE_FOR_ERISC) ||  defined(COMPILE_FOR_BRISC) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         uint32_t runCounter = profiler_control_buffer[RUN_COUNTER];
         resultsPushed = false;
 
@@ -125,7 +124,7 @@ namespace kernel_profiler{
         eriscBuffer [ID_LL] = runCounter;
 
 #endif //ERISC_INIT
-#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
+#if  defined(COMPILE_FOR_BRISC) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
         volatile tt_l1_ptr uint32_t *ncriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_NC);
         volatile tt_l1_ptr uint32_t *trisc0Buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_T0);
@@ -236,7 +235,7 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void finish_profiler()
     {
         risc_finished_profiling();
-#if (defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+#if (defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
         if (resultsPushed) return;
         uint32_t pageSize =
             PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC * PROFILER_RISC_COUNT * profiler_core_count_per_dram;
@@ -275,46 +274,54 @@ namespace kernel_profiler{
             profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
         }
 #endif
-#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
+#if  defined(COMPILE_FOR_BRISC) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         int hostIndex;
         int deviceIndex;
-        for (hostIndex = kernel_profiler::HOST_BUFFER_END_INDEX_BR, deviceIndex = kernel_profiler::DEVICE_BUFFER_END_INDEX_BR;
-                (hostIndex <= kernel_profiler::HOST_BUFFER_END_INDEX_T2) && (deviceIndex <= kernel_profiler::DEVICE_BUFFER_END_INDEX_T2);
-                hostIndex++, deviceIndex++)
+#if  defined(COMPILE_FOR_BRISC)
+        volatile tt_l1_ptr uint32_t *buffer =\
+            reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE);
+        if (buffer[kernel_profiler::GUARANTEED_MARKER_1_L] != 0x80000000)
+#endif
         {
-            if (profiler_control_buffer[deviceIndex])
+            for (hostIndex = kernel_profiler::HOST_BUFFER_END_INDEX_BR, deviceIndex = kernel_profiler::DEVICE_BUFFER_END_INDEX_BR;
+                    (hostIndex <= kernel_profiler::HOST_BUFFER_END_INDEX_T2) && (deviceIndex <= kernel_profiler::DEVICE_BUFFER_END_INDEX_T2);
+                    hostIndex++, deviceIndex++)
             {
-                uint32_t currEndIndex =
-                    profiler_control_buffer[deviceIndex] +
-                    profiler_control_buffer[hostIndex];
 
-                uint32_t dram_offset =
-                    (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-                    hostIndex * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-                    profiler_control_buffer[hostIndex] * sizeof(uint32_t);
-
-                const InterleavedAddrGen<true> s = {
-                    .bank_base_address = dram_profiler_address,
-                    .page_size = pageSize
-                };
-
-                if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
+                if (profiler_control_buffer[deviceIndex])
                 {
-                    uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
+                    uint32_t currEndIndex =
+                        profiler_control_buffer[deviceIndex] +
+                        profiler_control_buffer[hostIndex];
 
-                    noc_async_write(
-                            PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
-                            dram_bank_dst_noc_addr,
-                            profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+                    uint32_t dram_offset =
+                        (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+                        hostIndex * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+                        profiler_control_buffer[hostIndex] * sizeof(uint32_t);
 
-                    profiler_control_buffer[hostIndex] = currEndIndex;
+                    const InterleavedAddrGen<true> s = {
+                        .bank_base_address = dram_profiler_address,
+                        .page_size = pageSize
+                    };
+
+                    if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
+                    {
+                        uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
+
+                        noc_async_write(
+                                PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
+                                dram_bank_dst_noc_addr,
+                                profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+
+                        profiler_control_buffer[hostIndex] = currEndIndex;
+                    }
+                    else
+                    {
+                        profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
+                    }
+
+                    profiler_control_buffer[deviceIndex] = 0;
                 }
-                else
-                {
-                    profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
-                }
-
-                profiler_control_buffer[deviceIndex] = 0;
             }
         }
 #endif
@@ -372,8 +379,6 @@ namespace kernel_profiler{
 
         inline __attribute__((always_inline)) profileScopeGuaranteed ()
         {
-#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
-#endif
             if constexpr  (index == 0)
             {
                 init_profiler();
