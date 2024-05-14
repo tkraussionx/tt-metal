@@ -47,11 +47,6 @@ namespace tt::tt_metal{
         void CloseDevices(std::map<chip_id_t, Device *> devices);
         Device *GetDeviceHandle(chip_id_t device_id);
 
-        void BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size);
-        void EndTraceCapture(Device *device, const uint8_t cq_id);
-        void ReplayLastTrace(Device *device, const uint8_t cq_id, bool blocking);
-        void ReleaseLastTrace(Device *device, const uint8_t cq_id);
-
         /**
         * Copies data from a host buffer into the specified buffer
         *

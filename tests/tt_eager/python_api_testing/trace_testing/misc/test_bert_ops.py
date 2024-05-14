@@ -169,9 +169,9 @@ def test_bert_linear(
     run_ops(in0_t_res)
     # Capture
     logger.info("Start Trace capture")
-    ttl.device.BeginTraceCapture(device, 0, 34816)
+    tid = ttl.device.BeginTraceCapture(device, 0, 34816)
     output_t_res = run_ops(in0_t_res)
-    ttl.device.EndTraceCapture(device, 0)
+    ttl.device.EndTraceCapture(device, 0, tid)
     logger.info("Trace captured")
 
     for iter in range(trace_loops):
@@ -181,7 +181,7 @@ def test_bert_linear(
         )
         ttl.tensor.write_tensor(in0_t_updated, in0_t_res)
         logger.info(f"Running iteration {iter}")
-        ttl.device.ReplayLastTrace(device, 0, True)
+        ttl.device.ReplayTrace(device, 0, tid, True)
 
         pt_out = in0 @ in1
 
@@ -197,4 +197,4 @@ def test_bert_linear(
         assert passing
 
     # Done with the trace, can deallocate the buffers now.
-    ttl.device.ReleaseLastTrace(device, 0)
+    ttl.device.ReleaseTrace(device, 0, tid)

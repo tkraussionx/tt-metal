@@ -697,22 +697,6 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
     }
 
-    void BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
-        device->begin_trace(cq_id, trace_buff_size);
-    }
-
-    void EndTraceCapture(Device *device, const uint8_t cq_id) {
-        device->end_trace(cq_id);
-    }
-
-    void ReplayLastTrace(Device *device, const uint8_t cq_id, bool blocking) {
-        device->replay_last_trace(cq_id, blocking);
-    }
-
-    void ReleaseLastTrace(Device *device, const uint8_t cq_id) {
-        device->release_last_trace(cq_id);
-    }
-
     Device *GetDeviceHandle(chip_id_t device_id) {
         ZoneScoped;
         TT_ASSERT(device_id < device_pool::devices.size());
@@ -962,6 +946,22 @@ std::vector<uint32_t> & GetCommonRuntimeArgs(const Program &program, KernelHandl
 void UpdateRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args) {
     detail::DispatchStateCheck(not device->using_slow_dispatch());
     EnqueueUpdateRuntimeArgs(device->command_queue(), kernel, core_coord, update_idx, runtime_args, false);
+}
+
+uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
+    return device->begin_trace(cq_id, trace_buff_size, true);
+}
+
+void EndTraceCapture(Device *device, const uint8_t cq_id, const uint32_t tid) {
+    device->end_trace(cq_id, tid);
+}
+
+void ReplayTrace(Device *device, const uint8_t cq_id, const uint32_t tid, const bool blocking) {
+    device->replay_trace(cq_id, tid, blocking);
+}
+
+void ReleaseTrace(Device *device, const uint8_t cq_id, const uint32_t tid) {
+    device->release_trace(cq_id, tid);
 }
 
 }  // namespace tt_metal

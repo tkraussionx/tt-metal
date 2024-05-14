@@ -302,17 +302,14 @@ def test_run_resnet50_trace_inference(
             interleaved_mem_config_DRAM,
         )
 
-        def run_model(tt_resnet50, tt_image_res):
-            return tt_resnet50(tt_image_res)
-
         # Compile
-        run_model(tt_resnet50, tt_image_res)
+        tt_resnet50(tt_image_res)
         # Trace
-        tt_lib.device.BeginTraceCapture(device, 0, 1304576)
-        tt_output_res = run_model(tt_resnet50, tt_image_res)
-        tt_lib.device.EndTraceCapture(device, 0)
+        tid = tt_lib.device.BeginTraceCapture(device, 0, 1304576)
+        tt_output_res = tt_resnet50(tt_image_res)
+        tt_lib.device.EndTraceCapture(device, 0, tid)
 
-        tt_lib.device.ReplayLastTrace(device, 0, True)
+        tt_lib.device.ReplayTrace(device, 0, tid, True)
 
         tt_output = tt_output_res.cpu().to_torch().to(torch.float)
 
@@ -348,4 +345,4 @@ def test_run_resnet50_trace_inference(
         assert passing_pcc
         # assert passing # fails because of torch.allclose
     # Done with the trace, can deallocate the buffers now.
-    tt_lib.device.ReleaseLastTrace(device, 0)
+    tt_lib.device.ReleaseTrace(device, 0, tid)

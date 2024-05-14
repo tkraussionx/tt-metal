@@ -1152,7 +1152,6 @@ void EnqueueTraceCommand::process() {
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
-    // log_trace(LogDispatch, "EnqueueTraceCommand issued write_ptr={}, fetch_size={}, commands={}", write_ptr, fetch_size_bytes, this->commands);
 }
 
 EnqueueTerminateCommand::EnqueueTerminateCommand(
@@ -1487,6 +1486,8 @@ void HWCommandQueue::enqueue_program(
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool clear_count) {
     ZoneScopedN("HWCommandQueue_enqueue_record_event");
 
+    TT_FATAL(!this->manager.get_bypass_mode(), "Enqueue Record Event cannot be used with tracing");
+
     // Populate event struct for caller. When async queues are enabled, this is in child thread, so consumers
     // of the event must wait for it to be ready (ie. populated) here. Set ready flag last. This couldn't be
     // in main thread otherwise event_id selection would get out of order due to main/worker thread timing.
@@ -1495,23 +1496,14 @@ void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool cle
     event->device = this->device;
     event->ready = true; // what does this mean???
 
-    if (this->manager.get_bypass_mode()) {
-        TT_FATAL(this->trace_ctx != nullptr, "A trace context must be present in bypass mode!");
-        event->event_id = this->trace_ctx->relative_event_id(event->event_id);
-    }
     auto command = EnqueueRecordEventCommand(this->id, this->device, this->manager, event->event_id, this->expected_num_workers_completed, clear_count);
     this->enqueue_command(command, false);
 
     if (clear_count) {
         this->expected_num_workers_completed = 0;
     }
-    if (this->manager.get_bypass_mode()) {
-        this->trace_ctx->traced_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
-        this->trace_ctx->num_completion_q_reads++;
-    } else {
-        this->issued_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
-        this->num_entries_in_completion_q++;
-    }
+    this->issued_completion_q_reads.push(detail::ReadEventDescriptor(event->event_id));
+    this->num_entries_in_completion_q++;
 }
 
 void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> sync_event, bool clear_count) {
@@ -1530,33 +1522,10 @@ void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> sync_event, b
 void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_trace");
 
-    auto trace_inst = Trace::get_instance(trace_id);
+    auto trace_inst = this->device->get_trace(this->id, trace_id);
     auto command = EnqueueTraceCommand(this->id, this->device, this->manager, *trace_inst->buffer, this->expected_num_workers_completed);
 
-    // Emit the completion queue entries from the trace
-    auto& cmpl_q = trace_inst->desc->traced_completion_q_reads;
-    uint32_t num_events = 0;
-    uint32_t event_id = this->manager.get_next_event(this->id);
-    for (auto read_descriptor : cmpl_q) {
-        std::visit(
-            [&](auto&& read_descriptor) {
-                using T = std::decay_t<decltype(read_descriptor)>;
-                if constexpr (std::is_same_v<T, detail::ReadBufferDescriptor>) {
-                    TT_THROW("Device trace does not support ReadBuffer commands, please perform on Host instead!");
-                } else if constexpr (std::is_same_v<T, detail::ReadEventDescriptor>) {
-                    read_descriptor.set_global_offset(event_id);
-                    this->issued_completion_q_reads.push(read_descriptor);
-                    this->num_entries_in_completion_q++;
-                    num_events++;
-                }
-            },
-            read_descriptor);
-
-    }
     this->enqueue_command(command, false);
-
-    // Increment the global event counter due to trace emitting events in a batch
-    this->manager.increment_event_id(this->id, num_events);
 
     // Increment the exepected worker cores counter due to trace programs completions
     this->expected_num_workers_completed += trace_inst->desc->num_completion_worker_cores;
@@ -1790,7 +1759,6 @@ void HWCommandQueue::finish() {
     tt::log_debug(tt::LogDispatch, "Finish for command queue {}", this->id);
     std::shared_ptr<Event> event = std::make_shared<Event>();
     this->enqueue_record_event(event);
-
     if (tt::llrt::OptionsG.get_test_mode_enabled()) {
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             if (DPrintServerHangDetected()) {
@@ -2162,33 +2130,10 @@ void FinishImpl(CommandQueue& cq) {
     cq.hw_command_queue().finish();
 }
 
-CommandQueue& BeginTrace(Trace& trace) {
-    log_debug(LogMetalTrace, "Begin trace capture");
-    trace.begin_capture();
-    return trace.queue();
-}
-
-void EndTrace(Trace& trace) {
-    trace.end_capture();
-    log_debug(LogMetalTrace, "End trace capture");
-}
-
-uint32_t InstantiateTrace(Trace& trace, CommandQueue& cq) {
-    uint32_t trace_id = trace.instantiate(cq);
-    return trace_id;
-}
-
-void ReleaseTrace(uint32_t trace_id) {
-    if (trace_id == -1) {
-        Trace::release_all();
-    } else if (Trace::has_instance(trace_id)) {
-        Trace::remove_instance(trace_id);
-    }
-}
 
 void EnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocking) {
     detail::DispatchStateCheck(true);
-    TT_FATAL(Trace::has_instance(trace_id), "Trace instance " + std::to_string(trace_id) + " must exist on device");
+    TT_FATAL(cq.device()->get_trace(cq.id(), trace_id) != nullptr, "Trace instance " + std::to_string(trace_id) + " must exist on device");
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_TRACE,
         .blocking = blocking,
