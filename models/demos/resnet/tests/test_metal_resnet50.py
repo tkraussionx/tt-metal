@@ -294,13 +294,6 @@ def test_run_resnet50_trace_inference(
         )
 
         tt_image_res = tt_resnet50.preprocessing(image).to(device, interleaved_mem_config_DRAM)
-        tt_output_res = tt_lib.tensor.allocate_tensor_on_device(
-            [batch_size, 1, 1, 1000],
-            tt_lib.tensor.DataType.BFLOAT16,
-            tt_lib.tensor.Layout.ROW_MAJOR,
-            device,
-            interleaved_mem_config_DRAM,
-        )
 
         # Compile
         tt_resnet50(tt_image_res)
