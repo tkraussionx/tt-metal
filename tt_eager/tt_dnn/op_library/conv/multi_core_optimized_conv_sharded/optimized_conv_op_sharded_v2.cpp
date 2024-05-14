@@ -984,6 +984,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     for(uint32_t core_i = 0; core_i < total_num_cores; core_i++) {
         uint32_t core_x_i = core_i % num_cores_x;
         uint32_t core_y_i = core_i / num_cores_x;
+        /*if(core_x_i == 7 && core_y_i == 3)
+            continue;*/
+
         CoreRange core(CoreCoord(core_x_i, core_y_i), CoreCoord(core_x_i, core_y_i));
         bool noop_core = false;
         for (const auto & noop_core_range : noop_cores.ranges()) {

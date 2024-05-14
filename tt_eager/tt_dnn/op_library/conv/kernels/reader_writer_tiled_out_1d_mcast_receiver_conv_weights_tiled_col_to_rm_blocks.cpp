@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 #include "firmware_common.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // This writer is for output tensor in tile format
@@ -68,6 +68,8 @@ void kernel_main() {
         return;
     }
 
+    DPRINT << "reader 1" << ENDL();
+
     // mcast args
     uint32_t weights_mcast_sender_noc_x           = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_sender_noc_y           = get_arg_val<uint32_t>(i); i+=1;
@@ -104,6 +106,7 @@ void kernel_main() {
     bool load_bias = true;
     #endif
 
+    DPRINT << "reader 2" << ENDL();
 
     // OUTER most loop is looping over out blocks in width dim because blocks from compute are in col major order.
     // Write out col major blocks in row major layout to output
@@ -291,7 +294,10 @@ void kernel_main() {
         weight_start_tile_id += weight_next_block_stride_w;
     } // out_num_blocks_w
 
+    DPRINT << "reader 3" << ENDL();
     #ifdef SHARDED_OUT
+    DPRINT << "reader 4" << ENDL();
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    DPRINT << "reader 5" << ENDL();
     #endif
 }

@@ -9,7 +9,7 @@
 #include "compute_kernel_api/pack_untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
-//#include "debug/dprint.h"
+#include "debug/dprint.h"
 
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
@@ -134,15 +134,18 @@ void MAIN {
     #else
     constexpr uint32_t in0_num_subblocks_read = in0_num_subblocks;
     #endif
-
+    //DPRINT << "compute 1 " << ENDL();
+    //uint32_t shwetank=1;
     mm_block_init(mm_in0_cb_id, in1_cb_id, out_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
     #ifdef SFPU_OP_INIT_ACTIVATION
     SFPU_OP_INIT_ACTIVATION
     #endif
+    //DPRINT << "compute initialization " << in1_num_blocks_w << "    " << in0_num_blocks_h << ENDL();
     // in1 num blocks w is the outer loop. Output blocks are computed in col major order.
     for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
 
         for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
+            //DPRINT << "compute_148 " << in1_block_w_i << "  " <<  in0_block_h_i << ENDL();
             #ifdef PRE_TILIZE
             unpack_reconfig_data_format_srca(in1_cb_id, in0_pretilize_cb_id);
 
@@ -162,6 +165,7 @@ void MAIN {
             PACK( const uint32_t partials_cb_write_ptr = cb_interface[matmul_partials_cb].fifo_wr_ptr );
             uint32_t curr_matmul_out_cb = matmul_partials_cb;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
+                //DPRINT << "compute_168 " << in1_block_w_i << "  " << in0_block_h_i << " " << in0_block_w_i << ENDL();
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 if constexpr (tilize_in0) {
                     #if defined PACK_RELU and not defined FUSE_BIAS
@@ -186,7 +190,7 @@ void MAIN {
                 }
                 cb_wait_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
-
+                //DPRINT << "compute test 1" << ENDL();
                 if (last_out) {
                     #if defined PACK_RELU and not defined FUSE_BIAS
                     // if last block we pack the final result with relu enabled
@@ -197,13 +201,16 @@ void MAIN {
                     #endif
                 }
 
+                //DPRINT << "compute test 2" << ENDL();
                 #ifdef PACKER_L1_ACC
                 pack_reconfig_data_format(curr_matmul_out_cb);
                 #endif
                 uint32_t in0_index_subblock_offset = 0;
+                //DPRINT << "compute_212 " << in0_num_subblocks << " " <<  in1_num_subblocks << ENDL();
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     uint32_t in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
+                        //DPRINT << "compute_212 " << in0_subblock_i << " " << in1_subblock_i << "    " << in0_num_subblocks << " " <<  in1_num_subblocks << ENDL();
                         if (enable_reload) {
                             // Reconfigure input
                             copy_tile_to_dst_init_short_with_dt(in1_cb_id, matmul_partials_cb);
@@ -276,6 +283,7 @@ void MAIN {
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
 
+                //DPRINT << "compute_test_284" << ENDL();
                 #ifdef PACKER_L1_ACC
                     #ifdef FUSE_BIAS
                         if (in0_block_w_i < in0_num_blocks_w  - 1) {
@@ -308,6 +316,7 @@ void MAIN {
                 cb_pop_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w
+            //DPRINT << " compute_test_321 " << in0_block_h_i << "    " << in1_block_w_i << ENDL();
             if constexpr(matmul_partials_cb == mm_out_cb_id) {
                 UNPACK( cb_interface[matmul_partials_cb].fifo_rd_ptr = partials_cb_read_ptr );
             }
@@ -325,14 +334,18 @@ void MAIN {
 
             cb_wait_front(bias_cb_id, bias_ntiles_w);
             cb_wait_front(matmul_partials_cb, out_block_num_tiles);
+            //DPRINT << "conv_compute_336 " << in0_num_subblocks << "    " << in1_num_subblocks << ENDL();
             for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                 uint32_t in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
-                    tile_regs_acquire();
+                    DPRINT << "conv_compute_339 " << in0_subblock_i << " " << in1_subblock_i << ENDL();
+                    tile_regs_acquire(); //--> error here
                     uint32_t i = 0;
+                    //DPRINT << "conv_compute_349 " << ENDL();
                     for (uint32_t h = 0; h < out_subblock_h; ++ h) {
                         uint32_t bcast_tile_i = bias_block_offset + in1_index_subblock_offset;
                         for (uint32_t w = 0; w < out_subblock_w; ++ w) {
+                            //DPRINT << "conv_compute_345 " << h << " " << w << ENDL();
                             add_tiles_bcast_rows(matmul_partials_cb, bias_cb_id, i, bcast_tile_i, i);
                             ++ bcast_tile_i;
                             ++ i;
@@ -346,21 +359,30 @@ void MAIN {
                     #endif
                     tile_regs_commit();
                     // do not pop front bias as it may be used again for subsequent blocks
+                    //DPRINT << "conv_compute_369 " << ENDL();
                     cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
 
                     cb_reserve_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
+                    DPRINT << "conv_compute_373 " << ENDL();
                     tile_regs_wait();
+                    DPRINT << "conv_compute_373.2 " << ENDL();
                     for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
                         pack_tile(i, untilize_mode_out_cb_id);
+                        DPRINT << "conv_compute_373.3  " << i << ENDL();
                     }
+                    DPRINT << "conv_compute_380 " << ENDL();
                     tile_regs_release();
+                    //DPRINT << "conv_compute_382 " << ENDL();
                     cb_push_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
 
                     in1_index_subblock_offset += out_subblock_w;
+                    DPRINT << "conv_compute_386 " << ENDL();
+
                 } // for in1_num_subblocks
             } // in0_num_subblocks
             #endif
             if constexpr(untilize_out) {
+                //DPRINT << "conv_compute_388 " << ENDL();
                 #if defined PACKER_L1_ACC and not defined FUSE_BIAS
                 pack_reconfig_l1_acc(0);
                 pack_reconfig_data_format(matmul_partials_cb, out_cb_id);
@@ -374,6 +396,7 @@ void MAIN {
                 pack_untilize_dst_init_short<out_subblock_w, out_block_w>(out_cb_id);
                 copy_tile_to_dst_init_short();
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
+                    //DPRINT << "conv_compute_387 " << in0_subblock_i << ENDL();
                     reblock_and_untilize<out_subblock_w,out_block_w> (
                         in1_num_subblocks,
                         out_subblock_num_tiles,
@@ -385,8 +408,10 @@ void MAIN {
             }
             if constexpr((in1_num_blocks_w > 1 || in0_num_blocks_h > 1)) {
                 #ifdef FUSE_BIAS
+                //DPRINT << "FUSE_BIAS_399 " << ENDL();
                 unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, bias_cb_id, mm_in0_cb_id);
                 #else
+                //DPRINT << "FUSE_BIAS_402 " << ENDL();
                 unpack_reconfig_data_format_srca(matmul_partials_cb, in1_cb_id);
                 #endif
 
@@ -396,8 +421,11 @@ void MAIN {
             }
         } // for in0_num_blocks_h
         #ifdef FUSE_BIAS
+            //DPRINT << "FUSE_BIAS_412 " << ENDL();
             bias_block_offset += in1_block_w;
         #endif
     } // for in1_num_blocks_w
+
+    //DPRINT << "compute complete " << ENDL();
 } // MAIN
 } // NAMESPACE

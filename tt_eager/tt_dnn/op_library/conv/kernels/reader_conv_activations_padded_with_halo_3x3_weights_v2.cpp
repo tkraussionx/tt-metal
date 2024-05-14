@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "firmware_common.h"
+#include "debug/dprint.h"
 
 
 void kernel_main() {
@@ -37,7 +38,7 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_act = 0;
     constexpr uint32_t cb_id_sharded_act = 3;
-
+    DPRINT << "reader conv 1" << ENDL();
     // LOOP TO FILL READER OFFSETS
     /* We can add another loop to read chunks of a stick as well.
      * - Duplicate reader_offset for same stick X times (window_inner must be 1)
@@ -57,6 +58,7 @@ void kernel_main() {
         reader_offset += conv_act_size_w_padded;
     }
 
+    DPRINT << "reader conv 2" << ENDL();
     #ifdef SPLIT_READER
     constexpr uint32_t act_block_h_datums_read = act_block_h_datums / 4; // Extra /2 because of packed uint16 reads
     constexpr uint32_t act_block_num_tiles_read = act_block_num_tiles / 2;
@@ -84,8 +86,10 @@ void kernel_main() {
     // the conditional selecting between coalescing and no-colescing must be constexpr to that compiler can optimized the other path away
     // this has shown to be a big perf win
     static_assert(act_block_h_datums % 2 == 0); // need to be even to read 2 in the body, due to packing of 2 indices in 1 uint32_t word
+    DPRINT << "reader conv 3" << ENDL();
     if constexpr (coalesce_window_inner_reads and window_inner == num_coalesced_reads) {
         // coalesce reads along weight_size_w
+        DPRINT << "reader conv if" << ENDL();
         reader_offset_idx = 0;
         uint32_t act_l1_offset = 0;
         uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
@@ -149,6 +153,7 @@ void kernel_main() {
         // TODO: We could probably just remove this block is no convs use it
 
         // no coalescing of reads
+        DPRINT << "reader conv else" << ENDL();
         reader_offset_idx = 0;
         uint32_t act_l1_offset = 0;
         uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
@@ -218,4 +223,5 @@ void kernel_main() {
             start_reader_idx = reader_idx;
         }
     }
+     DPRINT << "reader conv end" << ENDL();
 }
