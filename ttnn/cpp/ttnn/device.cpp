@@ -74,11 +74,16 @@ void end_trace_capture(Device* device, const uint8_t cq_id) {
 }
 
 void execute_trace(Device* device, const uint8_t cq_id, bool blocking) {
+    // If blocking, ensure that worker thread blocks until trace is completed
     device->push_work(
         [device, cq_id, blocking] () mutable {
             tt::tt_metal::detail::ReplayLastTrace(device, cq_id, blocking);
         }
     );
+    // If blocking, wait until worker threads have completed
+    if (blocking) {
+        device->synchronize();
+    }
 }
 
 void release_trace(Device* device, const uint8_t cq_id) {

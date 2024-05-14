@@ -50,11 +50,18 @@ void end_trace_capture(DeviceMesh* device, const uint8_t cq_id = 0) {
 
 inline void execute_trace(DeviceMesh* device, const uint8_t cq_id = 0, bool blocking = true) {
     auto workers = device->get_devices();
+    // If blocking, ensure that each worker thread blocks until device-local trace is completed
     for (auto& worker : workers) {
         worker->push_work(
             [worker, cq_id, blocking] () mutable {
                 tt::tt_metal::detail::ReplayLastTrace(worker, cq_id, blocking);
             });
+    }
+    // If blocking, wait until worker threads have completed
+    if (blocking) {
+        for (auto& worker : workers) {
+            worker->synchronize();
+        }
     }
 }
 

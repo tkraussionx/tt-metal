@@ -218,10 +218,10 @@ from ttnn.multi_device import (
     MeshToTensor,
     ConcatMeshToTensor,
     ListMeshToTensor,
-    # begin_trace_capture,
-    # end_trace_capture,
-    # execute_trace,
-    # release_trace,
+    begin_multi_device_trace_capture,
+    end_multi_device_trace_capture,
+    execute_multi_device_trace,
+    release_multi_device_trace,
 )
 
 from ttnn.core import (

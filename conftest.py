@@ -329,7 +329,7 @@ def device_mesh(request, silicon_arch_name, silicon_arch_grayskull):
 
     device_ids = ttnn.get_device_ids()
     try:
-        num_devices_requested = min(1, len(device_ids))
+        num_devices_requested = min(8, len(device_ids))
     except (ValueError, AttributeError):
         num_devices_requested = len(device_ids)
 
