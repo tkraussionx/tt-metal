@@ -18,6 +18,7 @@
 #include "tools/profiler/profiler.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/detail/program.hpp"
+#include "tt_metal/impl/trace/trace.hpp"
 
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
@@ -949,7 +950,8 @@ void UpdateRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, con
 }
 
 uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
-    return device->begin_trace(cq_id, trace_buff_size, true);
+    uint32_t tid = Trace::next_id();
+    return device->begin_trace(cq_id, tid, trace_buff_size);
 }
 
 void EndTraceCapture(Device *device, const uint8_t cq_id, const uint32_t tid) {

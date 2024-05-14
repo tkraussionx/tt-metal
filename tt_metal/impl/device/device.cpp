@@ -1874,9 +1874,8 @@ bool Device::using_slow_dispatch() const {
     return not (this->using_fast_dispatch);
 }
 
-uint32_t Device::begin_trace(const uint8_t cq_id, const uint32_t trace_buff_size, const bool inc_trace_id) {
+uint32_t Device::begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t trace_buff_size) {
     auto desc = std::make_shared<detail::TraceDescriptor>();
-    uint32_t tid = Trace::next_id(inc_trace_id);
     TT_ASSERT(this->trace_buffer_pool_.at(cq_id).count(tid) == 0, "Trace already exists for tid {} on device", tid);
     detail::EnableAllocs(this);
     this->trace_buffer_pool_[cq_id][tid] = Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size);

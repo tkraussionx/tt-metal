@@ -58,12 +58,8 @@ namespace tt::tt_metal {
 
 std::atomic<uint32_t> Trace::global_trace_id = 0;
 
-uint32_t Trace::next_id(bool inc_id) {
-    if (inc_id) {
-        return global_trace_id++;
-    } else {
-        return global_trace_id;
-    }
+uint32_t Trace::next_id() {
+    return global_trace_id++;
 }
 
 std::shared_ptr<TraceBuffer> Trace::create_trace_buffer(

@@ -23,7 +23,7 @@ class Trace {
    public:
     Trace() = delete;
 
-    static uint32_t next_id(bool inc_id);
+    static uint32_t next_id();
 
     // Thread-safe accessors to manage trace instances
     static void validate_instance(const TraceBuffer& trace_buffer);
