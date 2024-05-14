@@ -82,7 +82,7 @@ class AllGatherConfig {
                 // Currently don't support misalignment here
                 this->num_eth_buffers = 1;
             }
-            log_trace(tt::LogOp, "this->num_buffers: {}", this->num_eth_buffers);
+
         }
 
         this->num_workers_per_link = this->num_eth_buffers;
@@ -148,18 +148,18 @@ class AllGatherConfig {
     AllGatherMode get_mode() const { return mode; }
 
     void print() const {
-        log_trace(tt::LogOp, "AllGatherConfig: (");
-        log_trace(tt::LogOp, "\tis_sharded: {}", is_sharded);
-        log_trace(tt::LogOp, "\terisc_handshake_address: {}", erisc_handshake_address);
-        log_trace(tt::LogOp, "\tnum_buffers: {}", num_eth_buffers);
-        log_trace(tt::LogOp, "\tnum_workers_per_link: {}", num_workers_per_link);
-        log_trace(tt::LogOp, "\teth_buffer_size: {}", eth_buffer_size);
-        log_trace(tt::LogOp, "\tsemaphore_size: {}", semaphore_size);
-        log_trace(tt::LogOp, "\tsemaphore_offset: {}", semaphore_offset);
-        log_trace(tt::LogOp, "\teth_buffers_l1_base_byte_address: {}", eth_buffers_l1_base_byte_address);
-        log_trace(tt::LogOp, "\teth_sems_l1_base_byte_address: {}", eth_sems_l1_base_byte_address);
-        log_trace(tt::LogOp, "\tenable_bidirectional: {}", enable_bidirectional);
-        log_trace(tt::LogOp, ")");
+
+
+
+
+
+
+
+
+
+
+
+
     }
 
    private:
@@ -350,12 +350,12 @@ class AllGatherOpInterleavedTensorConfig final : public virtual AllGatherOpTenso
         AllGatherOpTensorConfig(input_tensor) {
         if (input_tensor.get_layout() == Layout::TILE) {
             this->page_size = tt_metal::detail::TileSize(this->df);
-            tt::log_trace(tt::LogOp, "page_size: {}", this->page_size);
-            tt::log_trace(tt::LogOp, "unit_size: {}", this->page_size);
+
+
         } else {
             this->page_size = input_tensor.buffer()->page_size();
-            tt::log_trace(tt::LogOp, "page_size: {}", this->page_size);
-            tt::log_trace(tt::LogOp, "unit_size: {}", this->page_size);
+
+
         }
     }
     virtual uint32_t get_page_size() const override {
@@ -380,18 +380,18 @@ class AllGatherOpShardedTensorConfig final : public virtual AllGatherOpTensorCon
             this->page_size = tt_metal::detail::TileSize(this->df);
             TT_ASSERT(this->shard_spec.shape.at(0) * this->shard_spec.shape.at(1) % (TILE_HEIGHT * TILE_WIDTH) == 0);
             this->unit_size = (this->shard_spec.shape.at(0) * this->shard_spec.shape.at(1) / (TILE_HEIGHT * TILE_WIDTH)) * this->page_size;
-            tt::log_trace(tt::LogOp, "this->shard_spec.shape.at(0): {}", this->shard_spec.shape.at(0));
-            tt::log_trace(tt::LogOp, "this->shard_spec.shape.at(1): {}", this->shard_spec.shape.at(1));
-            tt::log_trace(tt::LogOp, "n_tiles: {}", (this->shard_spec.shape.at(0) * this->shard_spec.shape.at(1)) / (TILE_HEIGHT * TILE_WIDTH));
-            tt::log_trace(tt::LogOp, "tensor.shard_spec()->num_cores(): {}", tensor.shard_spec()->num_cores());
-            tt::log_trace(tt::LogOp, "final result: {}", (this->page_size * this->shard_spec.shape.at(0) * this->shard_spec.shape.at(1)) / tensor.shard_spec()->num_cores());
-            tt::log_trace(tt::LogOp, "page_size: {}", this->page_size);
-            tt::log_trace(tt::LogOp, "unit_size: {}", this->unit_size);
+
+
+
+
+
+
+
         } else {
             this->page_size = tensor.get_legacy_shape()[-1] * tensor.element_size();
             this->unit_size = (this->page_size * this->shard_spec.shape.at(0) * this->shard_spec.shape.at(1)) / tensor.shard_spec()->num_cores();
-            tt::log_trace(tt::LogOp, "page_size: {}", this->page_size);
-            tt::log_trace(tt::LogOp, "unit_size: {}", this->unit_size);
+
+
         }
     }
 
@@ -459,18 +459,18 @@ struct ShardAddrGenArgGenerator {
     }
 
     void dump_to_log() const {
-        log_trace(tt::LogOp, "ShardAddrGenArgGenerator:");
-        log_trace(tt::LogOp, "\tis_clockwise: {}", this->args_struct.is_clockwise);
-        log_trace(tt::LogOp, "\tshard_size_in_bytes: {}", this->args_struct.shard_size_in_bytes);
-        log_trace(tt::LogOp, "\ttotal_chunks_per_core: {}", this->args_struct.total_chunks_per_core);
-        log_trace(tt::LogOp, "\tshards_start_address: {}", this->args_struct.shards_start_address);
-        log_trace(tt::LogOp, "\tstarting_core_index: {}", this->args_struct.starting_core_index);
-        log_trace(tt::LogOp, "\tstarting_chunk_into_shard: {}", this->args_struct.starting_chunk_into_shard);
-        log_trace(tt::LogOp, "\tintra_core_stride_in_shards: {}", this->args_struct.intra_core_stride_in_shards);
-        log_trace(tt::LogOp, "\tcontiguous_chunks_before_stride: {}", this->args_struct.contiguous_chunks_before_stride);
-        log_trace(tt::LogOp, "\tnum_dest_cores: {}", this->args_struct.num_dest_cores);
+
+
+
+
+
+
+
+
+
+
         for (auto n = 0; n < this->args_struct.num_dest_cores; ++n) {
-            log_trace(tt::LogOp, "\t\tdest_core[{}]: x={},y={}", n, this->args_struct.dest_cores.at(n).x, this->args_struct.dest_cores.at(n).y);
+
         }
 
         TT_ASSERT(this->args_struct.dest_cores.size() == this->args_struct.num_dest_cores);
