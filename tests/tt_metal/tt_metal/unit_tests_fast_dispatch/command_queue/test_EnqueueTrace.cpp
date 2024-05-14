@@ -193,7 +193,7 @@ TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
         if (!has_trace) {
             // Program must be cached first
             tid = BeginTraceCapture(this->device_, command_queue.id(), 2048);
-            EnqueueProgram(command_queue, simple_program, true);
+            EnqueueProgram(command_queue, simple_program, false);
             EndTraceCapture(this->device_, command_queue.id(), tid);
             has_trace = true;
         }
