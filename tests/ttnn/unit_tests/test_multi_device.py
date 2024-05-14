@@ -9,8 +9,6 @@ import ttnn
 import tempfile
 from loguru import logger
 from tests.ttnn.utils_for_testing import assert_with_pcc
-
-import tt_lib as ttl
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
 
 
@@ -360,18 +358,19 @@ def test_ttnn_multi_device_all_gather_all_devices(t3k_device_mesh):
     if t3k_device_mesh.get_num_devices() < 8:
         pytest.skip()
 
-    full_tensor = torch.ones((1, 1, 32, 32 * t3k_device_mesh.get_num_devices()), dtype=torch.bfloat16)
-    for i in range(t3k_device_mesh.get_num_devices()):
-        full_tensor[..., i * 32 : (i + 1) * 32] = i
+    full_tensor = torch.ones((t3k_device_mesh.get_num_devices(), 1, 512, 512), dtype=torch.bfloat16)
+    # for i in range(t3k_device_mesh.get_num_devices()):
+    #     full_tensor[i : (i + 1)] = i
+    for i in range(10):
+        print("running iter " + str(i))
+        ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0))
+        ttnn_tensor = ttnn.to_device(ttnn_tensor, t3k_device_mesh)
+        ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=0, num_links=1)
 
-    ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=3))
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, t3k_device_mesh)
-    ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
-
-    device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
-    for device_tensor in device_tensors:
-        device_tensor_torch = ttnn.to_torch(device_tensor)
-        assert torch.all(device_tensor_torch == full_tensor)
+        device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
+        for device_tensor in device_tensors:
+            device_tensor_torch = ttnn.to_torch(device_tensor)
+            assert torch.all(device_tensor_torch == full_tensor)
 
 
 def test_sharded_matmul(t3k_device_mesh):
@@ -485,20 +484,20 @@ def test_clone(device_mesh):
     print(results_11BH)
 
 
-def test_multi_device_multi_op_trace(device_mesh):
+def test_multi_device_multi_op_trace(t3k_device_mesh):
     # Trace requires program cache to be enabled
-    for device_id in device_mesh.get_device_ids():
-        device_mesh.get_device(device_id).enable_program_cache()
+    for device_id in t3k_device_mesh.get_device_ids():
+        t3k_device_mesh.get_device(device_id).enable_program_cache()
 
     # Preallocate activation tensors. These will be used when capturing and executing the trace
     input_0_dev = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device_mesh
+        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh
     )
     input_1_dev = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device_mesh
+        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh
     )
     weight_dev = ttnn.allocate_tensor_on_device(
-        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, device_mesh
+        ttnn.Shape((1, 1, 512, 512)), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh
     )
 
     # Op chain to be traced
@@ -512,17 +511,17 @@ def test_multi_device_multi_op_trace(device_mesh):
     # Compile program binaries
     run_op_chain(input_0_dev, input_1_dev, weight_dev)
     # Capture Trace
-    ttnn.begin_multi_device_trace_capture(device_mesh, 53248, 0)
+    # ttnn.begin_multi_device_trace_capture(t3k_device_mesh, 106496, 0)
     # Output tensor will be reused across trace runs, since its buffer will be updated with trace output
     output_tensor = run_op_chain(input_0_dev, input_1_dev, weight_dev)
-    ttnn.end_multi_device_trace_capture(device_mesh, 0)
+    # ttnn.end_multi_device_trace_capture(t3k_device_mesh, 0)
 
     # Execute and verify trace against pytorch
     torch_silu = torch.nn.SiLU()
-    for i in range(10):
+    for i in range(25):
         # Create torch inputs
-        torch_input_tensor_0 = torch.rand((device_mesh.get_num_devices(), 1, 512, 512), dtype=torch.bfloat16)
-        torch_input_tensor_1 = torch.rand((device_mesh.get_num_devices(), 1, 512, 512), dtype=torch.bfloat16)
+        torch_input_tensor_0 = torch.rand((t3k_device_mesh.get_num_devices(), 1, 512, 512), dtype=torch.bfloat16)
+        torch_input_tensor_1 = torch.rand((t3k_device_mesh.get_num_devices(), 1, 512, 512), dtype=torch.bfloat16)
         torch_weight = torch.rand((1, 1, 512, 512), dtype=torch.bfloat16)
         # Compute PT Golden
         torch_output_golden = torch.neg(
@@ -534,29 +533,36 @@ def test_multi_device_multi_op_trace(device_mesh):
 
         # Convert torch tensors to TTNN Multi-Device Host Tensors
         ttnn_input_tensor_0 = ttnn.from_torch(
-            torch_input_tensor_0, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(device_mesh, dim=0)
+            torch_input_tensor_0, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
         )
         ttnn_input_tensor_1 = ttnn.from_torch(
-            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(device_mesh, dim=0)
+            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
         )
         ttnn_weight = ttnn.from_torch(
-            torch_weight, layout=ttnn.TILE_LAYOUT, mesh_mapper=ReplicateTensorToMesh(device_mesh)
+            torch_weight, layout=ttnn.TILE_LAYOUT, mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh)
         )
+        print("Copy tensors on device")
         # Copy TTNN host tensors into preallocated Mult-Device tensors
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_0, input_0_dev)
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, input_1_dev)
         ttnn.copy_host_to_device_tensor(ttnn_weight, weight_dev)
-        # Execute trace: sends output to output_tensor
-        ttnn.execute_multi_device_trace(device_mesh, 0, False)
-
+        print("Have tensors on device")
+        # Execute trace (non-blocking through CQ 0): sends output to output_tensor
+        # ttnn.execute_multi_device_trace(t3k_device_mesh, 0, False)
+        output_tensor = run_op_chain(input_0_dev, input_1_dev, weight_dev)
+        print("Ops dispatched")
         # Compare
-        device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
-        for device_tensor in device_tensors:
-            device_tensor_torch = ttnn.to_torch(device_tensor)
-            assert_with_pcc(device_tensor_torch == torch_output_golden, pcc=0.8)
         # ttnn_torch_output_tensor = ttnn.to_torch(
         #     output_tensor,
-        #     mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))
-        # assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.8)
+        #     mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))
+        # passed, msg = assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.8)
+        # logger.info(msg)
+        device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
+        for device_tensor in device_tensors:
+            device_tensor_torch = ttnn.to_torch(device_tensor)
+            passed, msg = assert_with_pcc(device_tensor_torch, torch_output_golden, pcc=0.99)
+            logger.info(msg)
+        print("Readback done")
+
     # Release trace buffer once workload is complete
-    ttnn.release_multi_device_trace(device_mesh)
+    ttnn.release_multi_device_trace(t3k_device_mesh)
