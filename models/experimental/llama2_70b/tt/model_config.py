@@ -620,6 +620,11 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             False,
         ),
     )
+    model_config["SDPA_PROGCFG"] = ttl.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=(8, 8),
+        q_chunk_size=128 if seq_len == 128 else 256,
+        k_chunk_size=128 if seq_len == 128 else 256,
+    )
     if num_devices == 8:
         model_config["Q_TRANSPOSE_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,

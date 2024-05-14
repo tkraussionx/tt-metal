@@ -259,12 +259,6 @@ class TtLlamaAttention_optimized(torch.nn.Module):
                     )
                 )
 
-            repeat_shape = (1, self.n_local_heads, 1, 1)
-            for i in range(self.num_devices):
-                attn_masks[i] = tt_lib.tensor.repeat(
-                    attn_masks[i], repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
-                )
-
         elif self.model_config["LLM_MODE"] == "decode":
             assert seq_len == 1, "Only supporting decode mode"
             x = x.transpose(0, 1).unsqueeze(1)
@@ -795,106 +789,26 @@ class TtLlamaAttention_optimized(torch.nn.Module):
                 values, tt_lib.tensor.typecast(value_layer[i], self.model_config["BFP8_DTYPE"]), user_id
             )
 
-        # PRE-SOFTMAX MM
-        key_layer_transposed = []
-        for i in range(len(key_layer)):
-            key_layer_transposed.append(
-                tt_lib.tensor.transpose(
+        attn_output = []
+        for i in range(len(query_layer)):
+            attn_output.append(
+                tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+                    query_layer[i],
                     key_layer[i],
-                    -2,
-                    -1,
-                    output_mem_config=self.model_config["DRAM_MEMCFG"],
+                    value_layer[i],
+                    attn_masks[i],
+                    is_causal=True,
+                    program_config=self.model_config["SDPA_PROGCFG"],
                 )
             )
-            key_layer[i].deallocate(True)
-
-        for slice_i in range(num_slices):
-            q_slices = []
-            attn_mask_slices = []
-            for i in range(len(query_layer)):
-                q_slices.append(
-                    tt_lib.tensor.interleaved_to_sharded_partial(
-                        query_layer[i],
-                        (8, cores_y),
-                        [32, self.head_dim],  # each slice is [1,8,128,128], we use 32 cores
-                        num_slices,  # num_slices
-                        slice_i,  # slice_index
-                        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-                    )
-                )
-                attn_mask_slices.append(
-                    tt_lib.tensor.interleaved_to_sharded_partial(
-                        attn_masks[i],
-                        (8, cores_y),
-                        [32, seq_len],  # each slice is [1,8,128,128], we use 32 cores
-                        num_slices,  # num_slices
-                        slice_i,  # slice_index
-                        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-                    )
-                )
-
-            attn_weights = []
-            for i in range(len(query_layer)):
-                attn_weights.append(
-                    tt_lib.operations.primary.matmul(
-                        q_slices[i],
-                        key_layer_transposed[i],
-                        program_config=self.model_config["ATTN_BATCHED_MM_PROGCFG"],
-                        output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-                        output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
-                        compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-                    )
-                )
-                q_slices[i].deallocate(True)
-
-            # SOFTMAX
-            softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
-            softmax_progcfg.block_w = seq_len // 32
-            for i in range(len(attn_weights)):
-                attn_weights[i] = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-                    attn_weights[i],
-                    self.scale,
-                    attn_mask_slices[i],
-                    program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
-                    is_causal_mask=True,
-                )
-                attn_mask_slices[i].deallocate(True)
-
-            # POST-SOFTMAX MM
-            attn_output = []
-            for i in range(len(attn_weights)):
-                attn_output.append(
-                    tt_lib.operations.primary.matmul(
-                        attn_weights[i],
-                        value_layer[i],
-                        program_config=self.model_config["SCORES_BATCHED_MM_PROGCFG"],
-                        output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-                        output_dtype=self.model_config["BFP8_DTYPE"],
-                        compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-                    )
-                )
-                attn_weights[i].deallocate(True)
-
-            # write output to attn_output_cat
-            for i in range(len(attn_output)):
-                tt_lib.tensor.sharded_to_interleaved_partial(
-                    attn_output[i],
-                    attn_output_cat[i],
-                    num_slices,
-                    slice_i,
-                    self.model_config["DRAM_MEMCFG"],
-                )
-                attn_output[i].deallocate(True)
 
         # deallocate keys and values
         for i in range(len(query_layer)):
             query_layer[i].deallocate(True)
-            key_layer_transposed[i].deallocate(True)
+            key_layer[i].deallocate(True)
             value_layer[i].deallocate(True)
 
-        return attn_output_cat
+        return attn_output
 
     def prefill_attn_selfout(self, attn_output: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         # ATTENTION SELFOUT
