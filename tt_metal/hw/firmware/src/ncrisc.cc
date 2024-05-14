@@ -12,6 +12,7 @@
 #include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
 
+#include "debug/dprint.h"
 #include "debug/status.h"
 
 uint8_t noc_index;
@@ -57,7 +58,11 @@ int main(int argc, char *argv[]) {
       setup_cb_read_write_interfaces(0, mailboxes->launch.max_cb_index, true, true);
 
       DEBUG_STATUS("R");
+      //int i = my_x[0];
+      //int j = my_y[0];
+      //DPRINT << i << "," << j << "MOOO-NC-start"  << ENDL();
       kernel_init();
+      //DPRINT << i << "," << j << "MOOO-NC-end" << ENDL();
       DEBUG_STATUS("D");
   }
 

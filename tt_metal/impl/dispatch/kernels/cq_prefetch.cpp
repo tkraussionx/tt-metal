@@ -13,14 +13,14 @@
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
 #include "debug/dprint.h"
-namespace kernel_profiler {
-    uint32_t wIndex __attribute__((used));
-    uint32_t stackSize __attribute__((used));
-    uint32_t sums[SUM_COUNT] __attribute__((used));
-    uint32_t sumIDs[SUM_COUNT] __attribute__((used));
-    bool resultsPushed __attribute__((used));
-    uint16_t core_flat_id __attribute__((used));
-}
+//namespace kernel_profiler {
+    //uint32_t wIndex __attribute__((used));
+    //uint32_t stackSize __attribute__((used));
+    //uint32_t sums[SUM_COUNT] __attribute__((used));
+    //uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    //bool resultsPushed __attribute__((used));
+    //uint16_t core_flat_id __attribute__((used));
+//}
 
 constexpr uint32_t downstream_cb_base = get_compile_time_arg_val(0);
 constexpr uint32_t downstream_cb_log_page_size = get_compile_time_arg_val(1);
@@ -1071,7 +1071,8 @@ void kernel_main_hd() {
     uint32_t fence = cmddat_q_base;
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("KERNEL-MAIN-HD");
+        DPRINT<< "MOOO-hd-start" << ENDL();
+        //DeviceZoneScopedMainN("KERNEL-MAIN-HD");
         constexpr uint32_t preamble_size = 0;
         fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
 
@@ -1084,6 +1085,7 @@ void kernel_main_hd() {
         uint32_t heartbeat = 0;
         RISC_POST_HEARTBEAT(heartbeat);
 #endif
+        DPRINT<< "MOOO-hd-end" << ENDL();
     }
 }
 
@@ -1100,8 +1102,11 @@ void kernel_main() {
         ASSERT(0);
     }
 
+    DPRINT<< "MOOO-hd-super-end" << ENDL();
+    DPRINT<< my_downstream_cb_sem_id << " MOOO " << downstream_cb_pages << ENDL();
     // Confirm expected number of pages, spinning here is a leak
     cb_wait_all_pages<my_downstream_cb_sem_id>(downstream_cb_pages);
+    DPRINT<< "MOOO-hd-super-super-end" << ENDL();
 
     DPRINT << "prefetcher_" << is_h_variant << is_d_variant << ": out" << ENDL();
 }

@@ -18,14 +18,14 @@
 #include "debug/dprint.h"
 #include "debug/assert.h"
 
-namespace kernel_profiler {
-    uint32_t wIndex __attribute__((used));
-    uint32_t stackSize __attribute__((used));
-    uint32_t sums[SUM_COUNT] __attribute__((used));
-    uint32_t sumIDs[SUM_COUNT] __attribute__((used));
-    bool resultsPushed __attribute__((used));
-    uint16_t core_flat_id __attribute__((used));
-}
+//namespace kernel_profiler {
+    //uint32_t wIndex __attribute__((used));
+    //uint32_t stackSize __attribute__((used));
+    //uint32_t sums[SUM_COUNT] __attribute__((used));
+    //uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    //bool resultsPushed __attribute__((used));
+    //uint16_t core_flat_id __attribute__((used));
+//}
 // The command queue write interface controls writes to the completion region, host owns the completion region read interface
 // Data requests from device and event states are written to the completion region
 
@@ -850,7 +850,7 @@ void kernel_main() {
     }
     bool done = false;
     while (!done) {
-        DeviceZoneScopedMainN("CQ-DISPATCH");
+        //DeviceZoneScopedMainN("CQ-DISPATCH");
         if (cmd_ptr == cb_fence) {
             get_cb_page<
                 dispatch_cb_base,
@@ -880,7 +880,14 @@ void kernel_main() {
                                                             wr_block_idx);
         int i = my_x[0];
         int j = my_y[0];
-        DPRINT << i  << "CQ-DONE" << j << ENDL();
+        static bool dopush = true;
+        if (dopush)
+        {
+            //DPRINT << i  << "MOOOOCQ-DONE" << j << ENDL();
+            noc_async_write(PROFILER_L1_BUFFER_BR + PROFILER_L1_BUFFER_SIZE, 3070904496640, 64);
+            block_noc_writes_to_clear[rd_block_idx]++;
+            dopush = false;
+        }
     }
 
     noc_async_write_barrier();
@@ -910,5 +917,4 @@ void kernel_main() {
     cb_wait_all_pages<my_dispatch_cb_sem_id>(0);
 
     DPRINT << "dispatch_" << is_h_variant << is_d_variant << ": out" << ENDL();
-    DPRINT << "LOCCUT_3" << ENDL();
 }

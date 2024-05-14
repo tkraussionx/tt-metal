@@ -35,15 +35,17 @@
 #define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
 #define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
 
+#define  profiler_core_count_per_dram 15
+
 #define  PROFILE_KERNEL 1
-#ifdef  PROFILE_KERNEL
+#if  (defined(PROFILE_KERNEL_) && (defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_BRISC)))
 namespace kernel_profiler{
 
-    extern uint32_t wIndex;
-    extern uint32_t stackSize;
+    //extern uint32_t wIndex;
+    //extern uint32_t stackSize;
 
-    extern uint32_t sums[SUM_COUNT];
-    extern uint32_t sumIDs[SUM_COUNT];
+    //extern uint32_t sums[SUM_COUNT];
+    //extern uint32_t sumIDs[SUM_COUNT];
 
     constexpr int WALL_CLOCK_HIGH_INDEX = 1;
     constexpr int WALL_CLOCK_LOW_INDEX = 0;
@@ -52,20 +54,20 @@ namespace kernel_profiler{
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_BR;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_BR;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
-    extern uint16_t core_flat_id;
-    extern bool resultsPushed;
+    //extern uint16_t core_flat_id;
+    //extern bool resultsPushed;
 #elif defined(COMPILE_FOR_ERISC)
     constexpr uint32_t profilerBuffer = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_ER;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL);
-    extern uint16_t core_flat_id;
-    extern bool resultsPushed;
+    //extern uint16_t core_flat_id;
+    //extern bool resultsPushed;
 #elif defined(COMPILE_FOR_NCRISC)
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_NC;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_NC;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
-    extern uint16_t core_flat_id;
-    extern bool resultsPushed;
+    //extern uint16_t core_flat_id;
+    //extern bool resultsPushed;
 #elif COMPILE_FOR_TRISC == 0
     constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_T0;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T0;
@@ -83,18 +85,18 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
         while (!profiler_control_buffer[DRAM_PROFILER_ADDRESS]);
-        wIndex = CUSTOM_MARKERS;
-        stackSize = 0;
+        //wIndex = CUSTOM_MARKERS;
+        //stackSize = 0;
 
-        for (int i = 0; i < SUM_COUNT; i ++)
-        {
-            sumIDs[i] = 0;
-            sums[i] = 0;
-        }
+        //for (int i = 0; i < SUM_COUNT; i ++)
+        //{
+            //sumIDs[i] = 0;
+            //sums[i] = 0;
+        //}
 
 #if defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         uint32_t runCounter = profiler_control_buffer[RUN_COUNTER];
-        resultsPushed = false;
+        //resultsPushed = false;
 
 #if defined(COMPILE_FOR_ERISC)
         volatile tt_l1_ptr uint32_t *eriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER);
@@ -102,6 +104,7 @@ namespace kernel_profiler{
         if (runCounter == 0)
         {
             core_flat_id = noc_xy_to_profiler_flat_id[my_x[0]][my_y[0]];
+
 
 #pragma GCC unroll 65534
             for (int i = ID_HH; i < GUARANTEED_MARKER_1_H; i ++)
@@ -135,8 +138,20 @@ namespace kernel_profiler{
 
         //if (runCounter == 0)
         {
-            core_flat_id = noc_xy_to_profiler_flat_id[my_x[0]][my_y[0]];
+            //core_flat_id = noc_xy_to_profiler_flat_id[my_x[0]][my_y[0]];
 
+            uint16_t core_flat_id = 0;
+            int i = my_x[0];
+            int j = my_y[0];
+            if (j == 11)
+            {
+                if (i == 1) core_flat_id = 9;
+                if (i == 7) core_flat_id = 69;
+            }
+            else
+            {
+                core_flat_id = 0;
+            }
 #pragma GCC unroll 65534
             for (int i = ID_HH; i < GUARANTEED_MARKER_1_H; i ++)
             {
@@ -191,60 +206,60 @@ namespace kernel_profiler{
         return ((sum_id & 0xFFFF) | ((1<<17) & 0x7FFFF));
     }
 
-    PROFILER_INLINE void mark_time_at_index_inlined(uint32_t index, uint32_t timer_id)
+    inline __attribute__((always_inline)) void mark_time_at_index_inlined(uint32_t index, uint32_t timer_id)
     {
         volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
-#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+//#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
         volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
         buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
         buffer[index+1] = p_reg[WALL_CLOCK_LOW_INDEX];
-#endif
+//#endif
 
-#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
-        volatile tt_l1_ptr uint32_t *test = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
-        //buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
-        //uint32_t i = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
-            int i = my_x[0];
-            int j = my_y[0];
-            DPRINT << i <<  "," << j << " L1 write" << ENDL();
-        test[index] = 5;
-        //profiler_control_buffer[FW_RESET_L] = 5;
-#endif
+//#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
+        //volatile tt_l1_ptr uint32_t *test = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
+        ////buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
+        ////uint32_t i = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[WALL_CLOCK_HIGH_INDEX] & 0xFFF);
+            //int i = my_x[0];
+            //int j = my_y[0];
+            //DPRINT << i <<  "," << j << " L1 write" << ENDL();
+        //test[index] = 5;
+        ////profiler_control_buffer[FW_RESET_L] = 5;
+//#endif
 //#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
     }
 
-    PROFILER_INLINE void mark_padding()
-    {
-        if (wIndex < PROFILER_L1_VECTOR_SIZE)
-        {
-            volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
-            buffer[wIndex] = 0x80000000;
-            buffer[wIndex+1] = 0;
-            wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-        }
-    }
+    //PROFILER_INLINE void mark_padding()
+    //{
+        //if (wIndex < PROFILER_L1_VECTOR_SIZE)
+        //{
+            //volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
+            //buffer[wIndex] = 0x80000000;
+            //buffer[wIndex+1] = 0;
+            //wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+        //}
+    //}
 
     inline __attribute__((always_inline)) void risc_finished_profiling()
     {
         for (int i = 0; i < SUM_COUNT; i ++)
         {
-            if (sums[i] > 0)
-            {
-                if (wIndex < PROFILER_L1_VECTOR_SIZE)
-                {
-                    volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
-                    buffer[wIndex] = 0x80000000 | ((get_sum_id(sumIDs[i]) & 0x7FFFF) << 12);
-                    buffer[wIndex + 1] = sums[i];
-                    wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-                }
-            }
+            //if (sums[i] > 0)
+            //{
+                //if (wIndex < PROFILER_L1_VECTOR_SIZE)
+                //{
+                    //volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
+                    //buffer[wIndex] = 0x80000000 | ((get_sum_id(sumIDs[i]) & 0x7FFFF) << 12);
+                    //buffer[wIndex + 1] = sums[i];
+                    //wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+                //}
+            //}
         }
 
-        for (uint32_t i = 0; i < (wIndex % NOC_ALIGNMENT_FACTOR); i++)
-        {
-            mark_padding();
-        }
-        profiler_control_buffer[kernel_profiler::deviceBufferEndIndex] = wIndex;
+        //for (uint32_t i = 0; i < (wIndex % NOC_ALIGNMENT_FACTOR); i++)
+        //{
+            ////mark_padding();
+        //}
+        profiler_control_buffer[kernel_profiler::deviceBufferEndIndex] = kernel_profiler::CUSTOM_MARKERS;
 
     }
 
@@ -252,7 +267,7 @@ namespace kernel_profiler{
     {
         risc_finished_profiling();
 #if (defined(COMPILE_FOR_ERISC) || (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
-        if (resultsPushed) return;
+        //if (resultsPushed) return;
         uint32_t pageSize =
             PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC * PROFILER_RISC_COUNT * profiler_core_count_per_dram;
 
@@ -293,6 +308,18 @@ namespace kernel_profiler{
 #if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC)) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC))
         int hostIndex;
         int deviceIndex;
+            uint16_t core_flat_id = 0;
+            int i = my_x[0];
+            int j = my_y[0];
+            if (j == 11)
+            {
+                if (i == 1) core_flat_id = 9;
+                if (i == 7) core_flat_id = 69;
+            }
+            else
+            {
+                core_flat_id = 0;
+            }
         for (hostIndex = kernel_profiler::HOST_BUFFER_END_INDEX_BR, deviceIndex = kernel_profiler::DEVICE_BUFFER_END_INDEX_BR;
                 (hostIndex <= kernel_profiler::HOST_BUFFER_END_INDEX_T2) && (deviceIndex <= kernel_profiler::DEVICE_BUFFER_END_INDEX_T2);
                 hostIndex++, deviceIndex++)
@@ -318,10 +345,25 @@ namespace kernel_profiler{
                     uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
 
 //#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
+static bool count = true;
+if (count)
+{
+    int i = my_x[0];
+    int j = my_y[0];
+    //if (hostIndex == 0 && j == 11 && i == 1)
+    //{
+        //DPRINT << j << "MOOON" << i << "NOC" << hostIndex << ENDL();
+    //}
+    //else
+    {
+        DPRINT << j << "MOOO" << i << "NOC" << dram_bank_dst_noc_addr << "G" << ENDL();
                     noc_async_write(
                             PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
                             dram_bank_dst_noc_addr,
                             profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+    }
+}
+count = false;
 //#endif
 
                     profiler_control_buffer[hostIndex] = currEndIndex;
@@ -337,7 +379,7 @@ namespace kernel_profiler{
 #endif
         noc_async_write_barrier();
         profiler_control_buffer[RUN_COUNTER] ++;
-        resultsPushed = true;
+        //resultsPushed = true;
 #endif
     }
 
@@ -357,24 +399,24 @@ namespace kernel_profiler{
         bool start_marked = false;
         PROFILER_INLINE profileScope ()
         {
-            if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
-            {
-                stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
-                start_marked = true;
-                //mark_time_at_index_inlined(wIndex, timer_id);
-                wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-            }
+            //if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
+            //{
+                //stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
+                //start_marked = true;
+                ////mark_time_at_index_inlined(wIndex, timer_id);
+                //wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+            //}
         }
 
         PROFILER_INLINE ~profileScope ()
         {
-            if (start_marked)
-            {
-                //mark_time_at_index_inlined(wIndex, get_end_timer_id(timer_id));
-                wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-                start_marked = false;
-                stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
-            }
+            //if (start_marked)
+            //{
+                ////mark_time_at_index_inlined(wIndex, get_end_timer_id(timer_id));
+                //wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+                //start_marked = false;
+                //stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
+            //}
         }
     };
 
@@ -389,23 +431,25 @@ namespace kernel_profiler{
 
         inline __attribute__((always_inline)) profileScopeGuaranteed ()
         {
-#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+//#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+//#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
             if constexpr  (index == 0)
             {
                 init_profiler();
             }
-#endif
+//#endif
             mark_time_at_index_inlined(start_index, timer_id);
         }
         inline __attribute__((always_inline))  ~profileScopeGuaranteed ()
         {
-#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+//#if ((defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC)))
+//#if (!defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_BRISC))
             mark_time_at_index_inlined(end_index, get_end_timer_id(timer_id));
             if constexpr  (index == 0)
             {
                 finish_profiler();
             }
-#endif
+//#endif
         }
     };
 
@@ -421,8 +465,8 @@ namespace kernel_profiler{
         }
         inline __attribute__((always_inline))  ~profileScopeAccumulate ()
         {
-            sumIDs[index] = timer_id;
-            sums[index] += (((uint64_t)p_reg[WALL_CLOCK_HIGH_INDEX] << 32) | p_reg[WALL_CLOCK_LOW_INDEX]) - start_time;
+            //sumIDs[index] = timer_id;
+            //sums[index] += (((uint64_t)p_reg[WALL_CLOCK_HIGH_INDEX] << 32) | p_reg[WALL_CLOCK_LOW_INDEX]) - start_time;
         }
     };
 }
