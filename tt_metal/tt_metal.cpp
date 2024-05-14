@@ -950,6 +950,14 @@ void SetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id, const 
     }
 }
 
+void SetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id, const RuntimeArgsData &runtime_args) {
+    ZoneScoped;
+    TT_FATAL( not CommandQueue::async_mode_set(), "This variant of SetCommonRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
+    if (runtime_args.size() != 0) {
+        detail::GetKernel(program, kernel_id)->set_common_runtime_args(runtime_args);
+    }
+}
+
 
 RuntimeArgsData  & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
     TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
