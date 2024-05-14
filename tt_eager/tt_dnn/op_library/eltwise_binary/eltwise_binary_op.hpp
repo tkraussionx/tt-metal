@@ -136,7 +136,7 @@ struct make_eltwise_binary {
                     (in_a.get_legacy_shape() == in_b.get_legacy_shape()) or
                     (in_a.get_legacy_shape().without_padding() == in_b.get_legacy_shape().without_padding()),
                     "Input shapes must be the same!");
-                return operation::run_with_autoformat(
+                return operation::run(
                         EltwiseBinary{
                             binary_op_type,
                             fused_activations,
