@@ -81,6 +81,10 @@ static struct PrefetchExecBufState {
     uint32_t length;
 } exec_buf_state;
 
+namespace kernel_profiler {
+    uint32_t nocWriteSize __attribute__((used));
+}
+
 static_assert((downstream_cb_base & (downstream_cb_page_size - 1)) == 0);
 
 template<bool cmddat_wrap_enable,
@@ -1063,7 +1067,7 @@ void kernel_main_hd() {
     uint32_t fence = cmddat_q_base;
     bool done = false;
     while (!done) {
-        //DeviceZoneScopedMainN("KERNEL-MAIN-HD");
+        DeviceZoneScopedMainN("KERNEL-MAIN-HD");
         constexpr uint32_t preamble_size = 0;
         fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
 

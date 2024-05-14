@@ -39,6 +39,9 @@ namespace kernel_profiler{
 
     extern uint32_t wIndex;
     extern uint32_t stackSize;
+#if defined(DISPATCH_KERNEL)
+    extern uint32_t nocWriteSize;
+#endif
 
     extern uint32_t sums[SUM_COUNT];
     extern uint32_t sumIDs[SUM_COUNT];
@@ -83,6 +86,9 @@ namespace kernel_profiler{
         while (!profiler_control_buffer[DRAM_PROFILER_ADDRESS]);
         wIndex = CUSTOM_MARKERS;
         stackSize = 0;
+#if defined(DISPATCH_KERNEL)
+        nocWriteSize = 0;
+#endif
 
         for (int i = 0; i < SUM_COUNT; i ++)
         {
@@ -312,8 +318,17 @@ namespace kernel_profiler{
                                 PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
                                 dram_bank_dst_noc_addr,
                                 profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+#if defined(DISPATCH_KERNEL)
+                        nocWriteSize += profiler_control_buffer[deviceIndex] * sizeof(uint32_t);
+#endif
 
+                        //int x = my_x[0];
+                        //int y = my_y[0];
+                        //DPRINT << x << "," << y << "," << hostIndex << "MOOO" << ENDL();
+                        DPRINT << "MOOO " << hostIndex << ENDL();
+#if defined(COMPILE_FOR_BRISC)
                         profiler_control_buffer[hostIndex] = currEndIndex;
+#endif
                     }
                     else
                     {
@@ -325,7 +340,9 @@ namespace kernel_profiler{
             }
         }
 #endif
+#if defined(COMPILE_FOR_BRISC)
         noc_async_write_barrier();
+#endif
         profiler_control_buffer[RUN_COUNTER] ++;
         resultsPushed = true;
 #endif
@@ -411,7 +428,17 @@ namespace kernel_profiler{
             sums[index] += (((uint64_t)p_reg[WALL_CLOCK_HIGH_INDEX] << 32) | p_reg[WALL_CLOCK_LOW_INDEX]) - start_time;
         }
     };
+    uint32_t get_and_reset_noc_write_size()
+    {
+        uint32_t ret = 0;
+#if defined(DISPATCH_KERNEL)
+        ret = kernel_profiler::nocWriteSize;
+        kernel_profiler::nocWriteSize = 0;
+#endif
+        return ret;
+    }
 }
+
 
 
 #define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash> zone = kernel_profiler::profileScope<hash>();
@@ -424,6 +451,8 @@ namespace kernel_profiler{
 
 #define DeviceZoneScopedSumN2( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScopeAccumulate<hash, 1> zone = kernel_profiler::profileScopeAccumulate<hash, 1>();
 
+#define DeviceProfilerNOCWriteBlockCount() (kernel_profiler::get_and_reset_noc_write_size()/(8*1024) + 1);
+
 #else
 
 #define DeviceZoneScopedMainN( name )
@@ -435,5 +464,7 @@ namespace kernel_profiler{
 #define DeviceZoneScopedSumN1( name )
 
 #define DeviceZoneScopedSumN2( name )
+
+#define DeviceProfilerNOCWriteBlockCount() 0
 
 #endif

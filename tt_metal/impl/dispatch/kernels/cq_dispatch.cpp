@@ -74,6 +74,10 @@ static uint32_t cmd_ptr;  // walks through pages in cb cmd by cmd
 
 static uint32_t downstream_cb_data_ptr = downstream_cb_base;
 
+namespace kernel_profiler {
+    uint32_t nocWriteSize __attribute__((used));
+}
+
 FORCE_INLINE volatile uint32_t* get_cq_completion_read_ptr() {
     return reinterpret_cast<volatile uint32_t*>(CQ_COMPLETION_READ_PTR);
 }
@@ -850,10 +854,10 @@ void kernel_main() {
                     dispatch_cb_log_page_size,
                     my_noc_xy,
                     my_dispatch_cb_sem_id>(cmd_ptr,
-                                              cb_fence,
-                                              block_noc_writes_to_clear,
-                                              block_next_start_addr,
-                                              rd_block_idx);
+                            cb_fence,
+                            block_noc_writes_to_clear,
+                            block_next_start_addr,
+                            rd_block_idx);
             }
 
             done = is_d_variant ?
@@ -866,15 +870,12 @@ void kernel_main() {
             // XXXXX move this inside while loop waiting for get_dispatch_cb_page above
             // XXXXX can potentially clear a partial block when stalled w/ some more bookkeeping
             cb_block_release_pages<upstream_noc_xy,
-                                   upstream_dispatch_cb_sem_id,
-                                   dispatch_cb_blocks,
-                                   dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
-                                                                wr_block_idx);
-            int i = my_x[0];
-            int j = my_y[0];
-            DPRINT << i  << "CQ-DONE" << j << ENDL();
+                upstream_dispatch_cb_sem_id,
+                dispatch_cb_blocks,
+                dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
+                        wr_block_idx);
         }
-        block_noc_writes_to_clear[rd_block_idx]++;
+        block_noc_writes_to_clear[rd_block_idx] += DeviceProfilerNOCWriteBlockCount();
     }
 
     noc_async_write_barrier();
@@ -904,5 +905,4 @@ void kernel_main() {
     cb_wait_all_pages<my_dispatch_cb_sem_id>(0);
 
     DPRINT << "dispatch_" << is_h_variant << is_d_variant << ": out" << ENDL();
-    DPRINT << "LOCCUT_3" << ENDL();
 }

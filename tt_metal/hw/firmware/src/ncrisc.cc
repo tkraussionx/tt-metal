@@ -15,7 +15,6 @@
 
 #include "debug/status.h"
 
-uint8_t noc_index;
 uint32_t halt_stack_ptr_save;
 
 tt_l1_ptr mailboxes_t * const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);

@@ -30,7 +30,6 @@ uint32_t noc_posted_writes_num_issued[NUM_NOCS];
 uint32_t atomic_ret_val __attribute__ ((section ("l1_data")));
 
 
-tt_l1_ptr mailboxes_t * const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);
 void kernel_launch() {
 
   DeviceZoneScopedMainChildN("NCRISC-KERNEL");
@@ -45,7 +44,5 @@ void kernel_launch() {
     noc_local_state_init(noc_index);
 
     kernel_main();
-    DPRINT << "NC" << ENDL();
-    mailboxes->slave_sync.all = RUN_SYNC_MSG_ALL_SLAVES_DONE;
 #endif
 }
