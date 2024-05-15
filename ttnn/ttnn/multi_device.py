@@ -69,8 +69,8 @@ def execute_multi_device_trace(device_mesh, trace_id, cq_id=0, blocking=True):
     ttnn._ttnn.multi_device.execute_trace(device_mesh, trace_id, cq_id, blocking)
 
 
-def release_multi_device_trace(device_mesh, trace_id, cq_id=0):
-    ttnn._ttnn.multi_device.release_trace(device_mesh, trace_id, cq_id)
+def release_multi_device_trace(device_mesh, trace_id):
+    ttnn._ttnn.multi_device.release_trace(device_mesh, trace_id)
 
 
 @contextlib.contextmanager

@@ -19,7 +19,7 @@ void disable_and_clear_program_cache(Device &device);
 uint32_t begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id = 0);
 void end_trace_capture(Device *device, const uint32_t tid, const uint8_t cq_id = 0);
 void execute_trace(Device *device, const uint32_t tid, const uint8_t cq_id = 0, bool blocking = true);
-void release_trace(Device* device, const uint32_t tid, const uint8_t cq_id = 0);
+void release_trace(Device* device, const uint32_t tid);
 
 }  // namespace device
 

@@ -34,7 +34,7 @@ void py_module(py::module& module) {
 
     module.def("execute_trace", &ttnn::execute_trace, py::arg("device"), py::arg("trace_id"), py::arg("cq_id") = 0, py::arg("blocking") = true);
 
-    module.def("release_trace", &ttnn::release_trace, py::arg("device"), py::arg("trace_id"), py::arg("cq_id") = 0);
+    module.def("release_trace", &ttnn::release_trace, py::arg("device"), py::arg("trace_id"));
 
 }
 

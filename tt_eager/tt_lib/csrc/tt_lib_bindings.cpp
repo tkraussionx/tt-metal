@@ -232,9 +232,9 @@ void DeviceModule(py::module &m_device) {
         Replay captured trace on Device handle
     )doc");
     m_device.def("ReleaseTrace",
-        [] (Device* device, const uint8_t cq_id, const uint32_t tid) {
-            device->push_work([device, cq_id, tid] {
-                device->release_trace(cq_id, tid);
+        [] (Device* device, const uint32_t tid) {
+            device->push_work([device, tid] {
+                device->release_trace(tid);
             });
         }, R"doc(
         Release captured Trace on Device handle

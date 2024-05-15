@@ -66,8 +66,8 @@ def execute_trace(device, trace_id, cq_id=0, blocking=True):
     ttnn._ttnn.device.execute_trace(device, trace_id, cq_id, blocking)
 
 
-def release_trace(device, trace_id, cq_id=0):
-    ttnn._ttnn.device.release_trace(device, trace_id, cq_id)
+def release_trace(device, trace_id):
+    ttnn._ttnn.device.release_trace(device, trace_id)
 
 
 @contextlib.contextmanager

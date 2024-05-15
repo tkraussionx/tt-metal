@@ -331,13 +331,11 @@ def test_multi_device_multi_op_trace(pcie_device_mesh):
 
     # Op chain to be traced
     def run_op_chain(input_0, input_1, weight):
-        # return ttnn.all_gather(
-        return ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1))) @ ttnn.silu(
-            weight
+        return ttnn.all_gather(
+            ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1))) @ ttnn.silu(weight),
+            dim=0,
+            num_links=1,
         )
-        #     dim=0,
-        #     num_links=1,
-        # )
 
     # Compile program binaries
     run_op_chain(input_0_dev, input_1_dev, weight_dev)
@@ -380,17 +378,17 @@ def test_multi_device_multi_op_trace(pcie_device_mesh):
         # output_tensor = run_op_chain(input_0_dev, input_1_dev, weight_dev)
         ttnn.execute_multi_device_trace(pcie_device_mesh, tid, 0, False)
         # Compare
-        ttnn_torch_output_tensor = ttnn.to_torch(
-            output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
-        )
-        print("Readback done")
-        passed, msg = assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.8)
-        logger.info(msg)
-        # device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
-        # for device_tensor in device_tensors:
-        #     device_tensor_torch = ttnn.to_torch(device_tensor)
-        #     passed, msg = assert_with_pcc(device_tensor_torch, torch_output_golden, pcc=0.99)
-        #     logger.info(msg)
+        # ttnn_torch_output_tensor = ttnn.to_torch(
+        #     output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
+        # )
+        # print("Readback done")
+        # passed, msg = assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.8)
+        # logger.info(msg)
+        device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
+        for device_tensor in device_tensors:
+            device_tensor_torch = ttnn.to_torch(device_tensor)
+            passed, msg = assert_with_pcc(device_tensor_torch, torch_output_golden, pcc=0.99)
+            logger.info(msg)
 
     # Release trace buffer once workload is complete
     ttnn.release_multi_device_trace(pcie_device_mesh, tid)

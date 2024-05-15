@@ -67,12 +67,12 @@ inline void execute_trace(DeviceMesh* device, const uint32_t tid, const uint8_t 
     }
 }
 
-inline void release_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id) {
+inline void release_trace(DeviceMesh* device, const uint32_t tid) {
     auto workers = device->get_devices();
     for (auto& worker : workers) {
         worker->push_work(
-            [worker, cq_id, tid] () mutable {
-                worker->release_trace(cq_id, tid);
+            [worker, tid] () mutable {
+                worker->release_trace(tid);
             });
     }
 }

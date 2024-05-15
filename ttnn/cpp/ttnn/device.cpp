@@ -88,10 +88,10 @@ void execute_trace(Device* device, const uint32_t tid, const uint8_t cq_id, bool
     }
 }
 
-void release_trace(Device* device, const uint32_t tid, const uint8_t cq_id) {
+void release_trace(Device* device, const uint32_t tid) {
     device->push_work(
-        [device, cq_id, tid] () mutable {
-            device->release_trace(cq_id, tid);
+        [device, tid] () mutable {
+            device->release_trace(tid);
         }
     );
 }
