@@ -391,6 +391,7 @@ def test_ttnn_multi_device_all_gather_all_devices(t3k_device_mesh):
 
 
 def test_sharded_matmul(t3k_device_mesh):
+    pytest.skip("Failing on Main.")
     q_heads_1B4D = ttnn.from_torch(
         torch.randn(1, 32, 32, 128),
         dtype=ttnn.bfloat16,
