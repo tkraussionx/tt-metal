@@ -132,6 +132,7 @@ void py_module(py::module& m_primary) {
                 std::size_t,
                 std::size_t,
                 std::size_t,
+                std::size_t,
                 bool,
                 std::optional<UnaryWithParam>>(),
             py::kw_only(),
@@ -139,6 +140,7 @@ void py_module(py::module& m_primary) {
             py::arg("out_subblock_h").noconvert(),
             py::arg("out_subblock_w").noconvert(),
             py::arg("per_core_M").noconvert(),
+            py::arg("per_core_K").noconvert(),
             py::arg("per_core_N").noconvert(),
             py::arg("fuse_batch").noconvert(),
             py::arg("fused_activation"))

@@ -69,10 +69,8 @@ def unpad_to_dram_banks(num, lcm=32 * 12):
 )
 @pytest.mark.parametrize(
     "has_bias",
-    [
-        False,
-    ],
-    ids=["no_bias"],
+    [False, True],
+    ids=["no_bias", "bias"],
 )
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation, grid_size",
@@ -101,7 +99,8 @@ def test_matmul_in1_dram_sharded(
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
     in1_shape_padded = [1, 1, K, N_padded]
-    bias_shape = [1, 1, N]
+    bias_shape = [1, 1, 1, N]
+    bias_shape_padded = [1, 1, 32, N_padded]
     num_cores = grid_size[0] * grid_size[1]
 
     logger.debug("N_padded " + str(N_padded))
@@ -134,26 +133,28 @@ def test_matmul_in1_dram_sharded(
 
     # in0 = torch.randn(in0_shape).bfloat16().float()
     step = K // num_cores
-    in0 = torch.ones(in0_shape).bfloat16().float()
-    for i in range(num_cores):  # since 32768 / 16 = 2048
-        in0[:, :, :, i * step : (i + 1) * step] = i + 1
-
+    in0 = torch.randn(in0_shape).bfloat16().float()
+    # for i in range(num_cores):  # since 32768 / 16 = 2048
+    #     in0[:, :, :, i * step : (i + 1) * step] = i + 1
     # in1 = torch.randn(in1_shape).bfloat16().float()
     in1 = torch.ones(in1_shape).bfloat16().float()
-    bias = torch.randn(bias_shape).bfloat16().float()
+    bias = torch.ones(bias_shape).bfloat16().float() * 10
 
     output_mem_config = sharded_mem_config
 
     in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT16)
-    # in1_t = torch2tt_tensor(
-    #     in1, device, tt_memory_config=interleaved_mem_config_in1, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
-    # )
-
     in1_t = ttl.tensor.Tensor(
         in1.flatten().tolist(), in1_shape, ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.Layout.ROW_MAJOR
     )
     in1_t = in1_t.pad(in1_shape_padded, (0, 0, 0, 0), 1).to(ttl.tensor.Layout.TILE)
     in1_t = in1_t.to(device)
+
+    if has_bias:
+        bias_t = ttl.tensor.Tensor(
+            bias.flatten().tolist(), bias_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR
+        )
+        bias_t = bias_t.pad(bias_shape_padded, (0, 0, 0, 0), 10).to(ttl.tensor.Layout.TILE)
+        bias_t = bias_t.to(device)
 
     in0_t = ttl.tensor.interleaved_to_sharded(
         in0_t,
@@ -168,6 +169,7 @@ def test_matmul_in1_dram_sharded(
         out_subblock_h=out_subblock_h,
         out_subblock_w=out_subblock_w,
         per_core_M=out_block_h,
+        per_core_K=K // 32,
         per_core_N=out_block_w,
         fuse_batch=True,
         fused_activation=None,
@@ -180,14 +182,23 @@ def test_matmul_in1_dram_sharded(
         packer_l1_acc=True,
     )
 
-    output_t = ttl.operations.primary.matmul_dram_sharded(
-        in0_t,
-        in1_t,
-        program_config=program_config,
-        output_mem_config=output_mem_config,
-        compute_kernel_config=compute_kernel_config,
-    )
-
+    if has_bias:
+        output_t = ttl.operations.primary.matmul_dram_sharded(
+            in0_t,
+            in1_t,
+            bias=bias_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
+    else:
+        output_t = ttl.operations.primary.matmul_dram_sharded(
+            in0_t,
+            in1_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
     output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
 
     pt_out = in0 @ in1

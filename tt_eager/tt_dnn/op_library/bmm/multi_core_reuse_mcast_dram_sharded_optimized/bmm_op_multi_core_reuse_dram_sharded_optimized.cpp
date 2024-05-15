@@ -22,7 +22,6 @@ using namespace tt::constants;
 using namespace tt;
 using namespace tt_metal;
 
-// void get_dram_reader_core_coords(tt_metal::Device *device, CoreRange storage_core_range, CoreRangeSet& all_cores, std::vector<CoreCoord>& all_cores_ordered) {
 void get_dram_reader_core_coords(tt_metal::Device *device, CoreRangeSet& all_cores, std::vector<CoreCoord>& all_cores_ordered) {
     uint32_t eth_coord_y_phy = 6;
     uint32_t adj_core_y_left_phy = 1;
@@ -277,7 +276,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     bool bcast_batch,
     uint32_t in0_block_w,
     uint32_t out_subblock_h_storage, uint32_t out_subblock_w_storage,
-    uint32_t per_core_M, uint32_t per_core_N_storage,
+    uint32_t per_core_M, uint32_t per_core_K, uint32_t per_core_N_storage,
     std::optional<UnaryWithParam> fused_activation,
     tt_metal::Buffer* in0_buffer, tt_metal::Buffer* in1_buffer, tt_metal::Buffer* bias_buffer, tt_metal::Buffer* out_buffer,
     tt::DataFormat in0_data_format, tt::DataFormat in1_data_format, tt::DataFormat bias_data_format, tt::DataFormat output_data_format,
@@ -288,20 +287,14 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     log_info("fp32_dest_acc_en: {}", fp32_dest_acc_en);
     log_info("math_approx_mode: {}", math_approx_mode);
     log_info("packer_l1_acc: {}", packer_l1_acc);
-
     log_info("M: {}, K: {}, N: {}", M, K, N);
-
     log_info("per_core_M: {}, per_core_N_storage: {}", per_core_M, per_core_N_storage);
-
-
 
     tt_metal::Program program{};
 
     // get the dram readers
-    // CoreRange bbox_storage = all_storage_cores.bounding_box();
     CoreRangeSet all_worker_cores = CoreRangeSet{{}};
     std::vector<CoreCoord> all_worker_cores_ordered;
-    // get_dram_reader_core_coords(device, bbox_storage, all_worker_cores, all_worker_cores_ordered);
     get_dram_reader_core_coords(device, all_worker_cores, all_worker_cores_ordered);
 
     // dram banks
@@ -474,7 +467,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     };
 
     std::vector<uint32_t> in1_sender_writer_compile_time_args = {
-        (std::uint32_t)  in1_buffer->address(),
+        // (std::uint32_t)  in1_buffer->address(),
         (std::uint32_t)  in1_buffer_page_size,
         (std::uint32_t)  in1_buffer_num_pages,
         // in1 block args
@@ -488,7 +481,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         (std::uint32_t)  per_core_M
     };
     if (bias_buffer != nullptr) {
-        in1_sender_writer_compile_time_args.push_back(bias_buffer->address());
+        // in1_sender_writer_compile_time_args.push_back(bias_buffer->address());
         in1_sender_writer_compile_time_args.push_back(bias_buffer_page_size);
         in1_sender_writer_compile_time_args.push_back(bias_buffer_num_pages);
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  1);
@@ -515,7 +508,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         if (fused_activation.value().op_type == UnaryOpType::RELU) {
             mm_kernel_defines["PACK_RELU"] = "1";
         } else {
-            mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
+            mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().params, "ACTIVATION", "i"));
         }
     }
     if (packer_l1_acc_en) {
@@ -682,6 +675,13 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     std::vector<uint32_t> in0_mcast_sender_noc_x;
     std::vector<uint32_t> in0_mcast_sender_noc_y;
     std::vector<CoreCoord> mcast_senders_coords = corerange_to_cores(mcast_senders);
+    std::sort(mcast_senders_coords.begin(), mcast_senders_coords.end(),
+        [](const CoreCoord& a, const CoreCoord& b) {
+            if (a.y != b.y) {
+                return a.y < b.y;
+            }
+            return a.x < b.x;
+        });
     for(auto core : mcast_senders_coords) {
         in0_mcast_sender_noc_x.push_back((std::uint32_t) device->worker_core_from_logical_core(core).x);
     }
@@ -737,6 +737,14 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         auto core = all_worker_cores_ordered[i];
 
         // in1 reader rt args
+        std::vector<uint32_t> mm_in1_sender_writer_args;
+        mm_in1_sender_writer_args.push_back(in1_buffer->address());
+        if (bias_buffer != nullptr) {
+            mm_in1_sender_writer_args.push_back(bias_buffer->address());
+        } else {
+            mm_in1_sender_writer_args.push_back(0);
+        }
+
         uint32_t vc = bank_id & 0x3;
         bank_ids.push_back(bank_id);
         for (uint32_t j = 0; j < i; ++j) {
@@ -747,12 +755,10 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
                 break;
             }
         }
-        std::vector<uint32_t> mm_in1_sender_writer_args = {
-            (std::uint32_t) bank_id,
-            (std::uint32_t) vc
-        };
-        bank_id = (bank_id + 1) % num_dram_banks;
+        mm_in1_sender_writer_args.push_back((std::uint32_t) bank_id);
+        mm_in1_sender_writer_args.push_back((std::uint32_t) vc);
 
+        bank_id = (bank_id + 1) % num_dram_banks;
 
         if (per_core_N < per_core_N_storage) {
 
@@ -784,34 +790,6 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
                 curr_storage_core_idx += (per_core_N_storage_curr_stride + per_core_N) / per_core_N_storage;
                 per_core_N_storage_curr_stride = (per_core_N_storage_curr_stride + per_core_N) % per_core_N_storage;
             }
-
-            // uint32_t remaining_per_core_N_storage = (per_core_N_storage - per_core_N_storage_curr_stride);
-            // uint32_t per_core_N_reshard_1 = (remaining_per_core_N_storage > per_core_N) ? per_core_N : remaining_per_core_N_storage;
-            // uint32_t per_core_N_reshard_2 = per_core_N - per_core_N_reshard_1;
-
-            // if (per_core_N_reshard_2 != 0) {
-            //     mm_in1_sender_writer_args.push_back(2);
-            //     // mm_in1_sender_writer_args.push_back(true); // split output tensor to two shards
-            // } else {
-            //     mm_in1_sender_writer_args.push_back(1);
-            //     // mm_in1_sender_writer_args.push_back(false);
-            // }
-
-            // mm_in1_sender_writer_args.push_back(per_core_N_storage_curr_stride * output_single_tile_size); // reshard_tensor_start_offset
-            // mm_in1_sender_writer_args.push_back(per_core_N_reshard_1 * output_single_tile_size); // per_core_N_reshard_bytes_1
-            // mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_x[curr_storage_core_idx]); // in0_mcast_sender_noc_x
-            // mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_y[curr_storage_core_idx]); // in0_mcast_sender_noc_y
-
-
-            // if (per_core_N_reshard_2 != 0) {
-            //     mm_in1_sender_writer_args.push_back(per_core_N_reshard_2 * output_single_tile_size); // per_core_N_reshard_bytes_2
-            //     mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_x[curr_storage_core_idx + 1]); // in0_mcast_sender_noc_x
-            //     mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_y[curr_storage_core_idx + 1]); // in0_mcast_sender_noc_y
-            // }
-
-            // curr_storage_core_idx += (per_core_N_storage_curr_stride + per_core_N) / per_core_N_storage;
-            // per_core_N_storage_curr_stride = (per_core_N_storage_curr_stride + per_core_N) % per_core_N_storage;
-
         } else {
             // uint32_t num_iter = (per_core_N + per_core_N_storage - 1) / per_core_N_storage;
             uint32_t num_iter = 0;
@@ -858,46 +836,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
                 }
             }
 
-            mm_in1_sender_writer_args.insert(mm_in1_sender_writer_args.begin() + 2, num_iter);
-
-            // log_info("curr worker core: {}, send back to storage core: {}, coord: {}", curr_worker_core, curr_storage_core, mcast_senders_coords[curr_storage_core]);
-
-            // worker_core_stride = per_core_N_storage - storage_core_stride;
-
-            // mm_in1_sender_writer_args.push_back(storage_core_stride * output_single_tile_size); // reshard_tensor_start_offset
-            // mm_in1_sender_writer_args.push_back(worker_core_stride * output_single_tile_size); // per_core_N_reshard
-            // mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_x[curr_storage_core]); // in0_mcast_sender_noc_x
-            // mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_y[curr_storage_core]); // in0_mcast_sender_noc_y
-
-
-            // curr_storage_core += (storage_core_stride + worker_core_stride) / per_core_N_storage;
-            // storage_core_stride = (storage_core_stride + worker_core_stride) % per_core_N_storage;
-
-
-            // if (worker_core_stride >= per_core_N) {
-            //     curr_worker_core += 1;
-            // }
-
-            // while(curr_worker_core <= i) {
-
-            //     log_info("curr worker core: {}, send back to storage core: {}, coord: {}", curr_worker_core, curr_storage_core, mcast_senders_coords[curr_storage_core]);
-
-            //     uint32_t stride = worker_core_stride + per_core_N_storage;
-            //     if (stride >= per_core_N) {
-            //         stride = per_core_N;
-            //         curr_worker_core += 1;
-            //     }
-
-            //     mm_in1_sender_writer_args.push_back((stride - worker_core_stride) * output_single_tile_size); // per_core_N_reshard
-            //     mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_x[curr_storage_core]); // in0_mcast_sender_noc_x
-            //     mm_in1_sender_writer_args.push_back(in0_mcast_sender_noc_y[curr_storage_core]); // in0_mcast_sender_noc_y
-
-            //     storage_core_stride = (stride - worker_core_stride) % per_core_N_storage;
-            //     curr_storage_core += (stride - worker_core_stride) / per_core_N_storage;
-            //     worker_core_stride = stride;
-
-            // }
-
+            mm_in1_sender_writer_args.insert(mm_in1_sender_writer_args.begin() + 4, num_iter);
         }
 
         tt_metal::SetRuntimeArgs(program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args);
@@ -905,12 +844,10 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     }
 
     auto override_runtime_arguments_callback = [
-            reader_kernel_ids,
             writer_kernel_ids,
+            all_worker_cores_ordered,
             cb_src2,
-            cb_output,
-            start_core_x,
-            start_core_y
+            cb_output
         ]
     (
         const void* operation,
@@ -930,6 +867,18 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
 
         UpdateDynamicCircularBufferAddress(program, cb_src2, *src_buffer_a);
         UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
+
+        for(uint32_t i=0; i < all_worker_cores_ordered.size(); ++i) {
+            auto core = all_worker_cores_ordered[i];
+            auto writer_kernel_id = writer_kernel_ids[i];
+            auto &writer_runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+            writer_runtime_args[0] = src_buffer_b->address();
+            if (bias_tensor.has_value()) {
+                writer_runtime_args[1] = bias_tensor.value().buffer()->address();
+            } else {
+                writer_runtime_args[1] = 0;
+            }
+        }
     };
 
     return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
@@ -941,7 +890,7 @@ namespace tt {
 namespace tt_metal {
 
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized_(const Tensor &a, const Tensor &b, const std::optional<const Tensor> bias, Tensor& output, bool bcast_batch, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool untilize_out) {
+operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized_(const Tensor &a, const Tensor &b, const std::optional<const Tensor> bias, Tensor& output, bool bcast_batch, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_K, uint32_t per_core_N, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool untilize_out) {
 
     const auto& ashape = a.get_legacy_shape(), bshape = b.get_legacy_shape();
 
@@ -1046,7 +995,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized_(
         bcast_batch,
         in0_block_w,
         out_subblock_h, out_subblock_w,
-        per_core_M, per_core_N,
+        per_core_M, per_core_K, per_core_N,
         fused_activation,
         in0_buffer, in1_buffer, bias_buffer, out_buffer,
         in0_data_format, in1_data_format, bias_data_format, output_data_format,
@@ -1054,8 +1003,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized_(
     );
 }
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized(const Tensor& a, const Tensor& b, const std::optional<const Tensor> bias, Tensor& output_tensor, bool broadcast_batch, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool untilize_out) {
-    return matmul_multi_core_reuse_dram_sharded_optimized_(a, b, bias, output_tensor, broadcast_batch, compute_kernel_config, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, fused_activation, untilize_out);
+operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized(const Tensor& a, const Tensor& b, const std::optional<const Tensor> bias, Tensor& output_tensor, bool broadcast_batch, DeviceComputeKernelConfig compute_kernel_config, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_K, uint32_t per_core_N, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool untilize_out) {
+    return matmul_multi_core_reuse_dram_sharded_optimized_(a, b, bias, output_tensor, broadcast_batch, compute_kernel_config, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_K, per_core_N, fuse_batch, fused_activation, untilize_out);
 }
 
 }  // namespace tt_metal
