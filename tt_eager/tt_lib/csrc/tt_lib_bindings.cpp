@@ -209,8 +209,9 @@ void DeviceModule(py::module &m_device) {
         [] (Device* device, const uint8_t cq_id, const uint32_t trace_buff_size) {
             uint32_t tid = Trace::next_id();
             device->push_work([device, cq_id, tid, trace_buff_size] () mutable {
-                device->begin_trace(cq_id, tid, trace_buff_size)
+                device->begin_trace(cq_id, tid, trace_buff_size);
             });
+            return tid;
         }, R"doc(
         Begin trace capture on Device handle
     )doc");
@@ -233,7 +234,7 @@ void DeviceModule(py::module &m_device) {
     m_device.def("ReleaseTrace",
         [] (Device* device, const uint8_t cq_id, const uint32_t tid) {
             device->push_work([device, cq_id, tid] {
-                device->release_trace(device, cq_id, tid);
+                device->release_trace(cq_id, tid);
             });
         }, R"doc(
         Release captured Trace on Device handle

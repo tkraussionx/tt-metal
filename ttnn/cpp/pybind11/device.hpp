@@ -30,11 +30,11 @@ void py_module(py::module& module) {
 
     module.def("begin_trace_capture", &ttnn::begin_trace_capture, py::arg("device"), py::arg("trace_buffer_size"), py::arg("cq_id") = 0);
 
-    module.def("end_trace_capture", &ttnn::end_trace_capture, py::arg("device"), py::arg("cq_id") = 0);
+    module.def("end_trace_capture", &ttnn::end_trace_capture, py::arg("device"), py::arg("trace_id"), py::arg("cq_id") = 0);
 
-    module.def("execute_trace", &ttnn::execute_trace, py::arg("device"), py::arg("cq_id") = 0, py::arg("blocking") = true);
+    module.def("execute_trace", &ttnn::execute_trace, py::arg("device"), py::arg("trace_id"), py::arg("cq_id") = 0, py::arg("blocking") = true);
 
-    module.def("release_trace", &ttnn::release_trace, py::arg("device"), py::arg("cq_id") = 0);
+    module.def("release_trace", &ttnn::release_trace, py::arg("device"), py::arg("trace_id"), py::arg("cq_id") = 0);
 
 }
 

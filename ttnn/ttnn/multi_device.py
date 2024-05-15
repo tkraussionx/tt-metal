@@ -58,19 +58,19 @@ def close_device_mesh(device_mesh):
 
 
 def begin_multi_device_trace_capture(device_mesh, trace_buffer_size, cq_id=0):
-    ttnn._ttnn.multi_device.begin_trace_capture(device_mesh, trace_buffer_size, cq_id)
+    return ttnn._ttnn.multi_device.begin_trace_capture(device_mesh, trace_buffer_size, cq_id)
 
 
-def end_multi_device_trace_capture(device_mesh, cq_id=0):
-    ttnn._ttnn.multi_device.end_trace_capture(device_mesh, cq_id)
+def end_multi_device_trace_capture(device_mesh, trace_id, cq_id=0):
+    ttnn._ttnn.multi_device.end_trace_capture(device_mesh, trace_id, cq_id)
 
 
-def execute_multi_device_trace(device_mesh, cq_id=0, blocking=True):
-    ttnn._ttnn.multi_device.execute_trace(device_mesh, cq_id, blocking)
+def execute_multi_device_trace(device_mesh, trace_id, cq_id=0, blocking=True):
+    ttnn._ttnn.multi_device.execute_trace(device_mesh, trace_id, cq_id, blocking)
 
 
-def release_multi_device_trace(device_mesh, cq_id=0):
-    ttnn._ttnn.multi_device.release_trace(device_mesh, cq_id)
+def release_multi_device_trace(device_mesh, trace_id, cq_id=0):
+    ttnn._ttnn.multi_device.release_trace(device_mesh, trace_id, cq_id)
 
 
 @contextlib.contextmanager

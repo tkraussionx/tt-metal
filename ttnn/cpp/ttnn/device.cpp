@@ -58,28 +58,28 @@ void close_device(Device &device) {
     }
 }
 
-void begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id) {
-    // increment trace id
+uint32_t begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id) {
     uint32_t tid = Trace::next_id();
     device->push_work(
         [device, trace_buff_size, cq_id, tid] () mutable {
-            device->begin_trace(cq_id, tid, trace_buff_size)
+            device->begin_trace(cq_id, tid, trace_buff_size);
         });
+    return tid;
 }
 
-void end_trace_capture(Device* device, const uint8_t cq_id) {
+void end_trace_capture(Device* device, const uint32_t tid, const uint8_t cq_id) {
     device->push_work(
-        [device, cq_id] () mutable {
-            tt::tt_metal::detail::EndTraceCapture(device, cq_id);
+        [device, cq_id, tid] () mutable {
+            device->end_trace(cq_id, tid);
         }
     );
 }
 
-void execute_trace(Device* device, const uint8_t cq_id, bool blocking) {
+void execute_trace(Device* device, const uint32_t tid, const uint8_t cq_id, bool blocking) {
     // If blocking, ensure that worker thread blocks until trace is completed
     device->push_work(
-        [device, cq_id, blocking] () mutable {
-            tt::tt_metal::detail::ReplayLastTrace(device, cq_id, blocking);
+        [device, cq_id, tid, blocking] () mutable {
+            device->replay_trace(cq_id, tid, blocking);
         }
     );
     // If blocking, wait until worker threads have completed
@@ -88,10 +88,10 @@ void execute_trace(Device* device, const uint8_t cq_id, bool blocking) {
     }
 }
 
-void release_trace(Device* device, const uint8_t cq_id) {
+void release_trace(Device* device, const uint32_t tid, const uint8_t cq_id) {
     device->push_work(
-        [device, cq_id] () mutable {
-            tt::tt_metal::detail::ReleaseLastTrace(device, cq_id);
+        [device, cq_id, tid] () mutable {
+            device->release_trace(cq_id, tid);
         }
     );
 }

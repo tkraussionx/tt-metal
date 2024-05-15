@@ -8,7 +8,7 @@
 
 #include "tt_eager/tensor/tensor.hpp"
 #include "tt_metal/impl/device/multi_device.hpp"
-
+#include "tt_metal/impl/trace/trace.hpp"
 using Device = ttnn::Device;
 
 
@@ -28,33 +28,35 @@ inline void close_device_mesh(DeviceMesh &multi_device) {
     multi_device.close_devices();
 }
 
-inline void begin_trace_capture(DeviceMesh* device, const uint32_t trace_buff_size, const uint8_t cq_id = 0) {
+inline uint32_t begin_trace_capture(DeviceMesh* device, const uint32_t trace_buff_size, const uint8_t cq_id = 0) {
+    auto workers = device->get_devices();
+    uint32_t tid = Trace::next_id();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, trace_buff_size, cq_id, tid] () mutable {
+                worker->begin_trace(cq_id, tid, trace_buff_size);
+            });
+    }
+    return tid;
+}
+
+void end_trace_capture(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id = 0) {
     auto workers = device->get_devices();
     for (auto& worker : workers) {
         worker->push_work(
-            [worker, trace_buff_size, cq_id] () mutable {
-                tt::tt_metal::detail::BeginTraceCapture(worker, cq_id, trace_buff_size);
+            [worker, cq_id, tid] () mutable {
+                worker->end_trace(cq_id, tid);
             });
     }
 }
 
-void end_trace_capture(DeviceMesh* device, const uint8_t cq_id = 0) {
-    auto workers = device->get_devices();
-    for (auto& worker : workers) {
-        worker->push_work(
-            [worker, cq_id] () mutable {
-                tt::tt_metal::detail::EndTraceCapture(worker, cq_id);
-            });
-    }
-}
-
-inline void execute_trace(DeviceMesh* device, const uint8_t cq_id = 0, bool blocking = true) {
+inline void execute_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id = 0, bool blocking = true) {
     auto workers = device->get_devices();
     // If blocking, ensure that each worker thread blocks until device-local trace is completed
     for (auto& worker : workers) {
         worker->push_work(
-            [worker, cq_id, blocking] () mutable {
-                tt::tt_metal::detail::ReplayLastTrace(worker, cq_id, blocking);
+            [worker, cq_id, tid, blocking] () mutable {
+                worker->replay_trace(cq_id, tid, blocking);
             });
     }
     // If blocking, wait until worker threads have completed
@@ -65,12 +67,12 @@ inline void execute_trace(DeviceMesh* device, const uint8_t cq_id = 0, bool bloc
     }
 }
 
-inline void release_trace(DeviceMesh* device, const uint8_t cq_id) {
+inline void release_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id) {
     auto workers = device->get_devices();
     for (auto& worker : workers) {
         worker->push_work(
-            [worker, cq_id] () mutable {
-                tt::tt_metal::detail::ReleaseLastTrace(worker, cq_id);
+            [worker, cq_id, tid] () mutable {
+                worker->release_trace(cq_id, tid);
             });
     }
 }

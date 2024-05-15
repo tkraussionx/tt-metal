@@ -37,9 +37,9 @@ void py_module(py::module& module) {
 
     module.def("close_device_mesh", &close_device_mesh, py::arg("device_mesh"), py::kw_only());
     module.def("begin_trace_capture", &begin_trace_capture, py::arg("device_mesh"), py::arg("trace_buffer_size"), py::arg("cq_id") = 0);
-    module.def("end_trace_capture", &end_trace_capture, py::arg("device_mesh"), py::arg("cq_id") = 0);
-    module.def("execute_trace", &execute_trace, py::arg("device_mesh"), py::arg("cq_id") = 0, py::arg("blocking") = true);
-    module.def("release_trace", &release_trace, py::arg("device_mesh"), py::arg("cq_id") = 0);
+    module.def("end_trace_capture", &end_trace_capture, py::arg("device_mesh"), py::arg("trace_id"), py::arg("cq_id") = 0);
+    module.def("execute_trace", &execute_trace, py::arg("device_mesh"), py::arg("trace_id"), py::arg("cq_id") = 0, py::arg("blocking") = true);
+    module.def("release_trace", &release_trace, py::arg("device_mesh"), py::arg("trace_id"), py::arg("cq_id") = 0);
     module.def("get_device_tensors", &get_device_tensors, py::arg("tensor"), py::kw_only());
     module.def("aggregate_as_tensor", &aggregate_as_tensor, py::arg("tensors"), py::kw_only());
 }

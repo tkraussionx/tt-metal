@@ -55,19 +55,19 @@ def synchronize_device(device):
 
 
 def begin_trace_capture(device, trace_buff_size, cq_id=0):
-    ttnn._ttnn.device.begin_trace_capture(device, trace_buff_size, cq_id)
+    return ttnn._ttnn.device.begin_trace_capture(device, trace_buff_size, cq_id)
 
 
-def end_trace_capture(device, cq_id=0):
-    ttnn._ttnn.device.end_trace_capture(device, cq_id)
+def end_trace_capture(device, trace_id, cq_id=0):
+    ttnn._ttnn.device.end_trace_capture(device, trace_id, cq_id)
 
 
-def execute_trace(device, cq_id=0, blocking=True):
-    ttnn._ttnn.device.execute_trace(device, cq_id, blocking)
+def execute_trace(device, trace_id, cq_id=0, blocking=True):
+    ttnn._ttnn.device.execute_trace(device, trace_id, cq_id, blocking)
 
 
-def release_trace(device, cq_id=0):
-    ttnn._ttnn.device.release_trace(device, cq_id)
+def release_trace(device, trace_id, cq_id=0):
+    ttnn._ttnn.device.release_trace(device, trace_id, cq_id)
 
 
 @contextlib.contextmanager
