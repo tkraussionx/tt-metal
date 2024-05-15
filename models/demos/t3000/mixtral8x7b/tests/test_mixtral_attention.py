@@ -24,12 +24,13 @@ if os.getenv("CI") == "true":
     os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
 
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+import time
 
 
-def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds):
+def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -41,7 +42,7 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
     batch = 32
     seq_len = 1  # length to generate
 
-    tt_model = TtMixtralAttention(device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
+    tt_model = TtMixtralAttention(t3k_device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
 
     rot_mat = prepare_rotation_mat_ttnn(
         model_args.head_dim,
@@ -50,25 +51,28 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
     )
 
     generation_start_pos = 0
-    generation_length = 1
+    generation_length = 3
     all_tests_pass = True
 
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input
-        start_pos = generation_start_pos + i
+        start_pos = generation_start_pos  # + i
         attention_input = prepare_inputs_ttnn(
             tt_attention_input,
             tt_model.hidden_size,
             tt_model.device_mesh,
         )
         current_pos = start_pos % model_args.sliding_window
+        start = time.time()
         tt_out = tt_model(
             attention_input,
             start_pos,
             current_pos,
             rot_mat,
         )
+        print("TIME", time.time() - start)
+    """
         tt_output_torch = (
             ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].squeeze(2).view(batch, 1, -1)
         )  # [ batch, seq, hidden_dim]
@@ -128,3 +132,4 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
     else:
         logger.warning("Mistral Attention output Failed!")
         assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+    """

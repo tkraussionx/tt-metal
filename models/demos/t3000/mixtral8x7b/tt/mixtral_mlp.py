@@ -19,10 +19,14 @@ class TtMixtralMLP(torch.nn.Module):
 
         base_name = lambda expert_num: f"layers.{layer_num}.feed_forward.experts.{expert_num}"
         torch_weight = lambda name: torch.concat(
-            [self.state_dict[f"{base_name(expert_num)}.{name}.weight"].permute(1, 0) for expert_num in range(8)], dim=0
+            [
+                self.state_dict[f"{base_name(expert_num)}.{name}.weight"].permute(1, 0).unsqueeze(0).unsqueeze(0)
+                for expert_num in range(8)
+            ],
+            dim=0,
         )
         cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (
-            f"layers.{layer_num}.feed_forward_multidevice.experts.{name}"
+            f"layers.{layer_num}.feed_forward_multidevice_unsqueezed.experts.{name}"
         )
         as_tensor = lambda name: ttnn.as_tensor(
             torch_weight(name),
@@ -41,6 +45,32 @@ class TtMixtralMLP(torch.nn.Module):
         self.w3 = as_tensor("w3")
         self.w3 = ttnn.to_device(self.w3, device_mesh)
 
+        x_shape = ttnn.Shape([1, 1, args.max_batch_size, args.dim])
+        h_shape = ttnn.Shape([1, 1, args.max_batch_size, args.hidden_dim])
+        # self.w1_program_config = ttnn.experimental.operations.primary.create_matmul_1d_systolic_array_program_config(
+        #     input_shape_a=x_shape,
+        #     input_shape_b=self.w1.shape,
+        #     core_grid=self.model_args.max_grid_size,
+        #     fused_activation="silu",
+        #     fp32_dst=self.model_args.get_compute_kernel_config().fp32_dest_acc_en,
+        # )
+        # self.w1_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        #     compute_with_storage_grid_size=(8, 1),
+        #     fused_activation="silu",
+        # )
+        # self.w2_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
+        #     input_shape_a=h_shape,
+        #     input_shape_b=self.w2.shape,
+        #     core_grid=self.model_args.max_grid_size,
+        #     fp32_dst=self.model_args.get_compute_kernel_config().fp32_dest_acc_en,
+        # )
+        # self.w3_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
+        #     input_shape_a=x_shape,
+        #     input_shape_b=self.w3.shape,
+        #     core_grid=self.model_args.max_grid_size,
+        #     fp32_dst=self.model_args.get_compute_kernel_config().fp32_dest_acc_en,
+        # )
+
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         """
         w1 -> gate_proj
@@ -51,30 +81,34 @@ class TtMixtralMLP(torch.nn.Module):
         w1_out = ttnn.linear(
             x,
             self.w1,
-            activation="silu",
             core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=self.model_config["FF1_OUTPUT_MEMCFG"],
+            # program_config=self.w1_program_config,
+            activation="silu",
+            # compute_with_storage_grid_size=(7, 6),
+            output_mem_config=self.model_config["FF1_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
         )
 
-        w3_out = ttnn.matmul(
+        w3_out = ttnn.matmul(  # experimental.operations.primary.matmul_1d(
             x,
             self.w3,
             core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=self.model_config["FF3_OUTPUT_MEMCFG"],
+            # program_config=self.w3_program_config,
+            output_mem_config=self.model_config["FF3_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
         )
         w2_in = ttnn.mul(w1_out, w3_out)
-        w2_out = ttnn.matmul(
+        w2_out = ttnn.matmul(  # .experimental.operations.primary.matmul_1d(
             w2_in,
             self.w2,
             core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=self.model_config["FF2_OUTPUT_MEMCFG"],
+            # program_config=self.w2_program_config,
+            output_mem_config=self.model_config["FF2_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
-            dtype=ttnn.bfloat16,
+            output_dtype=ttnn.bfloat16,
         )
 
         return w2_out

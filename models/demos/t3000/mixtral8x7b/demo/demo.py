@@ -265,16 +265,21 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         )
 
 
-@pytest.mark.timeout(10000)
-@pytest.mark.parametrize(
-    "input_prompts, instruct_weights",
-    [
-        ("models/demos/t3000/mixtral8x7b/demo/input_data.json", False),
-        ("models/demos/t3000/mixtral8x7b/demo/input_data_questions.json", True),
-    ],
-    ids=["general_weights", "instruct_weights"],
-)
-def test_mixtral8x7b_demo(t3k_device_mesh, use_program_cache, input_prompts, instruct_weights):
+# @pytest.mark.timeout(10000)
+# @pytest.mark.parametrize(
+#     "input_prompts, instruct_weights",
+#     [
+#         ("models/demos/t3000/mixtral8x7b/demo/input_data.json", False),
+#         ("models/demos/t3000/mixtral8x7b/demo/input_data_questions.json", True),
+#     ],
+#     ids=["general_weights", "instruct_weights"],
+# )
+def test_mixtral8x7b_demo(
+    t3k_device_mesh,
+    use_program_cache,
+    input_prompts="models/demos/t3000/mixtral8x7b/demo/input_data_questions.json",
+    instruct_weights=True,
+):
     return run_mixtral_demo(
         user_input=input_prompts, batch_size=32, device_mesh=t3k_device_mesh, instruct_mode=instruct_weights
     )

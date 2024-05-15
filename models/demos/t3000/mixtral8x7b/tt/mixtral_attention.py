@@ -180,51 +180,67 @@ class TtMixtralAttention(torch.nn.Module):
             x_11BH,
             self.wqkv,
             dtype=ttnn.bfloat16,
-            memory_config=self.model_config["XQKV_MM_OUTPUT_MEMCFG"],
+            memory_config=ttnn.experimental.tensor.MemoryConfig(
+                ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttnn.experimental.tensor.BufferType.L1
+            ),  # self.model_config["XQKV_MM_OUTPUT_MEMCFG"],
             core_grid=self.core_grid,
             compute_kernel_config=self.compute_kernel,
         )
+        xqkv_fused = ttnn.to_device(xqkv_fused, self.device_mesh)
 
         # split qkv into heads
+        # (
+        #     q_heads_14BD,
+        #     k_heads_11BD,
+        #     v_heads_11BD,
+        # ) = ttnn.experimental.tensor.nlp_create_qkv_heads(
+        #     xqkv_fused,
+        #     num_heads=self.n_local_heads,
+        #     num_kv_heads=self.n_local_kv_heads,
+        #     transpose_k_heads=False,
+        #     output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
+        # )
         (
-            q_heads_14BD,
-            k_heads_11BD,
-            v_heads_11BD,
-        ) = ttnn.experimental.tensor.nlp_create_qkv_heads(
+            q_heads_1B4D,
+            k_heads_1B1D,
+            v_heads_1B1D,
+        ) = ttnn.experimental.tensor.nlp_create_qkv_heads_decode(
             xqkv_fused,
             num_heads=self.n_local_heads,
             num_kv_heads=self.n_local_kv_heads,
-            transpose_k_heads=False,
-            output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
+            output_mem_config=ttnn.experimental.tensor.MemoryConfig(
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.experimental.tensor.BufferType.L1
+            ),
+            # self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
         )
-
         ###
         # Rotary embeddings
         ###
-        q_heads_14BD = ttnn.linear(
-            q_heads_14BD,
+        q_heads_1B4D = ttnn.experimental.operations.primary.matmul(
+            q_heads_1B4D,
             rot_mat,
-            core_grid=self.core_grid,
-            use_1d_systolic_array=True,
-            memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            # core_grid=self.core_grid,
+            # use_1d_systolic_array=True,
+            output_mem_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
         )
-        k_heads_11BD = ttnn.linear(
-            k_heads_11BD,
+        k_heads_1B1D = ttnn.experimental.operations.primary.matmul(
+            k_heads_1B1D,
             rot_mat,
-            core_grid=self.core_grid,
-            use_1d_systolic_array=True,
-            memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            # core_grid=self.core_grid,
+            # use_1d_systolic_array=True,
+            output_mem_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
         )
 
-        q_heads_14BD = q_heads_14BD * head_dim_14BD  # Scale q_heads
-        q_heads_14BD = ttnn.pad(
-            q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
-        )
-        q_heads_1B4D = ttnn.permute(q_heads_14BD, (0, 2, 1, 3))
-        k_heads_11BD = ttnn.pad(k_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
-        k_heads_1B1D = ttnn.permute(k_heads_11BD, (0, 2, 1, 3))
-        v_heads_11BD = ttnn.pad(v_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
-        v_heads_1B1D = ttnn.permute(v_heads_11BD, (0, 2, 1, 3))
+        # q_heads_1B4D = q_heads_1B4D * head_dim_1B4D  # Scale q_heads
+
+        # q_heads_14BD = ttnn.pad(
+        #     q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
+        # )
+        # q_heads_1B4D = ttnn.permute(q_heads_14BD, (0, 2, 1, 3))
+        # k_heads_11BD = ttnn.pad(k_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
+        # k_heads_1B1D = ttnn.permute(k_heads_11BD, (0, 2, 1, 3))
+        # v_heads_11BD = ttnn.pad(v_heads_11BD, ((0, 0), (0, self.max_batch_size - 1), (0, 0), (0, 0)), value=0)
+        # v_heads_1B1D = ttnn.permute(v_heads_11BD, (0, 2, 1, 3))
         ###
         # KV update
         ###
@@ -275,13 +291,13 @@ class TtMixtralAttention(torch.nn.Module):
             compute_kernel_config=self.compute_kernel_attn,
         )
 
-        # transpose attn
-        attn_output_14BD = ttnn.permute(attn_output_1B4D, (0, 2, 1, 3))
-        # unpad attn
-        attn_output_14BD = attn_output_14BD[:, : self.n_local_heads, :, :]
+        # # transpose attn
+        # attn_output_14BD = ttnn.permute(attn_output_1B4D, (0, 2, 1, 3))
+        # # unpad attn
+        # attn_output_14BD = attn_output_14BD[:, : self.n_local_heads, :, :]
 
-        attn_output_11BH = ttnn.experimental.tensor.nlp_concat_heads(
-            attn_output_14BD,
+        attn_output_11BH = ttnn.experimental.tensor.nlp_concat_heads_decode(
+            attn_output_1B4D,
             output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
         )
 

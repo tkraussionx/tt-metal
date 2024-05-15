@@ -168,7 +168,7 @@ class TtModelArgs:
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
             # TODO Lower max grid size (used by MLP) to avoid hangs
-            self.max_grid_size = ttnn.CoreGrid(y=7, x=6)  # (y,x)  (y=7, x=8)
+            self.max_grid_size = ttnn.CoreGrid(y=6, x=7)  # (y,x)  (y=7, x=8)
             # self.max_grid_size = ttnn.CoreGrid(y=grid_size.y, x=grid_size.x)  # (y,x)  (y=7, x=8)
             self.core_grid_attention = (
                 ttnn.CoreGrid(y=4, x=8) if (4 <= grid_size.y and 8 <= grid_size.x) else self.max_grid_size

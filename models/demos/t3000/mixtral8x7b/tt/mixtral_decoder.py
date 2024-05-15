@@ -5,7 +5,7 @@ import torch
 import ttnn
 from models.demos.t3000.mixtral8x7b.tt.mixtral_attention import TtMixtralAttention
 from models.demos.t3000.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
-from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
+from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
 from models.demos.t3000.mixtral8x7b.tt.mixtral_moe import TtMoeLayer
 
 
@@ -52,7 +52,7 @@ class TtTransformerBlock(torch.nn.Module):
             layer_num=layer_num,
             dtype=dtype,
         )
-        self.attention_norm = TtRMSNormSharded(
+        self.attention_norm = TtRMSNorm(
             device_mesh=device_mesh,
             state_dict=state_dict,
             args=args,
@@ -61,7 +61,7 @@ class TtTransformerBlock(torch.nn.Module):
             weight_key="attention_norm",
         )
 
-        self.ffn_norm = TtRMSNormSharded(
+        self.ffn_norm = TtRMSNorm(
             device_mesh=device_mesh,
             state_dict=state_dict,
             args=args,
@@ -84,16 +84,16 @@ class TtTransformerBlock(torch.nn.Module):
         1: unary dim
         H: hidden dim (4096)
         """
-        attn_norm_1SBH = self.attention_norm(xs_1SBH)
+        # attn_norm_1SBH = self.attention_norm(xs_1SBH)
 
-        attn_1SBH = self.attention(
-            attn_norm_1SBH,
-            start_pos,
-            current_pos,
-            rot_mats,
-        )
-        hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH)
-        ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
-        ffn_1SBH = self.feed_forward(ffn_norm_1SBH)
-        out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH)
-        return out_1SBH
+        # attn_1SBH = self.attention(
+        #     xs_1SBH,
+        #     start_pos,
+        #     current_pos,
+        #     rot_mats,
+        # )
+        # hs_1SBH = ttnn.add(xs_1SBH, xs_1SBH)
+        # fn_norm_1SBH = self.ffn_norm(hs_1SBH)
+        ffn_1SBH = self.feed_forward(xs_1SBH)
+        # out_1SBH = ttnn.add(hs_1SBH, xs_1SBH)
+        # return out_1SBH
