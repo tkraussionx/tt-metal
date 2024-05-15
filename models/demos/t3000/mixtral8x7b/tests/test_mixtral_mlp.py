@@ -23,7 +23,7 @@ if os.getenv("CI") == "true":
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
-def test_mixtral_mlp_inference(device_mesh, use_program_cache, reset_seeds):
+def test_mixtral_mlp_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     # Specify different dtypes for each feedForward weights
     dtypes = {
         "w1": ttnn.bfloat4_b,
@@ -31,11 +31,11 @@ def test_mixtral_mlp_inference(device_mesh, use_program_cache, reset_seeds):
         "w3": ttnn.bfloat4_b,
     }
 
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
 
     tt_model = TtMixtralMLP(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layer_num=0,
@@ -61,16 +61,16 @@ def test_mixtral_mlp_inference(device_mesh, use_program_cache, reset_seeds):
     reference_output = reference_model(torch_input)
     tt_input = ttnn.from_torch(
         torch_input,
-        device=device_mesh,
+        device=t3k_device_mesh,
         dtype=ttnn.bfloat16,
         memory_config=ttnn.L1_MEMORY_CONFIG,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
     )
-    tt_input = ttnn.to_device(tt_input, device_mesh)
+    tt_input = ttnn.to_device(tt_input, t3k_device_mesh)
 
     tt_output = tt_model(tt_input)
-    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
+    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
 
     pcc_required = 0.99
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc_required)

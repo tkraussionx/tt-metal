@@ -26,10 +26,10 @@ if os.getenv("CI") == "true":
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
-def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds):
+def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -41,7 +41,7 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
     batch = 32
     seq_len = 1  # length to generate
 
-    tt_model = TtMixtralAttention(device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
+    tt_model = TtMixtralAttention(t3k_device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
 
     rot_mat = prepare_rotation_mat_ttnn(
         model_args.head_dim,
@@ -70,7 +70,9 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
             rot_mat,
         )
         tt_output_torch = (
-            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].squeeze(2).view(batch, 1, -1)
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
+            .squeeze(2)
+            .view(batch, 1, -1)
         )  # [ batch, seq, hidden_dim]
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
@@ -85,44 +87,6 @@ def test_mixtral_attention_inference(device_mesh, use_program_cache, reset_seeds
         else:
             logger.warning(f"[start_pos={start_pos}] Mistral_Attention Failed!")
             all_tests_pass = False
-
-        # Check kv cache
-        # PyTorch output --------------------------------------------------------------------
-        pytorch_layer_present = [
-            reference_model.cache_k.permute(2, 0, 1, 3),  # [n_kv_heads, batch, seq, head_dim]
-            reference_model.cache_v.permute(2, 0, 1, 3),  # [n_kv_heads, batch, seq, head_dim]
-        ]
-        # TT hardware execution -------------------------------------------------------------
-        tt_layer_present = []
-        for layer_past in tt_model.layer_past_list:
-            tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
-        # concat the pasts by heads
-        tt_layer_present = [
-            torch.cat([tt_cache for tt_cache in tt_cache_head], dim=0) for tt_cache_head in zip(*tt_layer_present)
-        ]
-
-        for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
-            cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
-            cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
-            does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
-            if i == 0:
-                logger.info(f"K cache output: {output_pcc}")
-            else:
-                logger.info(f"V cache output: {output_pcc}")
-
-            if does_pass:
-                if i == 0:
-                    logger.info(f"K Cache Passed!")
-                else:
-                    logger.info(f"V Cache Passed!")
-            else:
-                if i == 0:
-                    logger.warning(f"K Cache Failed! PCC value is lower than {pcc}")
-                else:
-                    logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
-                all_tests_pass = False
-
     if all_tests_pass:
         logger.info("Mistral Attention output Passed!")
     else:

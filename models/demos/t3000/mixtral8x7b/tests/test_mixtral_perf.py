@@ -46,10 +46,15 @@ class Emb(torch.nn.Module):
     ),
 )
 def test_mixtral_model_perf(
-    device_mesh, generation_start_pos, expected_compile_time, expected_inference_time, use_program_cache, reset_seeds
+    t3k_device_mesh,
+    generation_start_pos,
+    expected_compile_time,
+    expected_inference_time,
+    use_program_cache,
+    reset_seeds,
 ):
     dtype = ttnn.bfloat8_b
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = 1
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
@@ -80,7 +85,7 @@ def test_mixtral_model_perf(
 
     # Load TTNN model
     tt_model = TtTransformer(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layers=list(range(model_args.n_layers)),

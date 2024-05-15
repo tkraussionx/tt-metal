@@ -21,7 +21,7 @@ if os.getenv("CI") == "true":
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
-def test_mixtral_decoder_inference(device_mesh, use_program_cache, reset_seeds):
+def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     """
     b: batch
     s: sequence length
@@ -30,7 +30,7 @@ def test_mixtral_decoder_inference(device_mesh, use_program_cache, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
     reference_model = TransformerBlock(args=model_args)
@@ -38,7 +38,7 @@ def test_mixtral_decoder_inference(device_mesh, use_program_cache, reset_seeds):
 
     # Initialize TT model
     tt_model = TtTransformerBlock(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layer_num=0,
@@ -68,13 +68,13 @@ def test_mixtral_decoder_inference(device_mesh, use_program_cache, reset_seeds):
 
         decode_input_b1sh = prepare_inputs_ttnn(
             pt_decode_input_bsh,
-            tt_model.hidden_size,
+            model_args.dim,
             tt_model.device_mesh,
         )
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)
         tt_output_torch_b1h = (
-            ttnn.to_torch(tt_out_b1sh, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
+            ttnn.to_torch(tt_out_b1sh, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
             .squeeze(1)
             .view(batch, 1, -1)
         )

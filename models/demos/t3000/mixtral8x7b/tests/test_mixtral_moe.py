@@ -25,12 +25,12 @@ if os.getenv("CI") == "true":
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
-def test_mixtral_moe_inference(device_mesh, use_program_cache, reset_seeds):
+def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     pcc = 0.99
     iterations = 1
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs(device_mesh.get_device(0))
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -50,11 +50,10 @@ def test_mixtral_moe_inference(device_mesh, use_program_cache, reset_seeds):
     # Initialize TT models
 
     experts = TtMixtralMLP(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layer_num=0,
-        expert_num=i,
         dtypes={
             "w1": ttnn.bfloat4_b,
             "w2": ttnn.bfloat8_b,
@@ -63,7 +62,7 @@ def test_mixtral_moe_inference(device_mesh, use_program_cache, reset_seeds):
     )
 
     tt_model = TtMoeLayer(
-        device_mesh=device_mesh,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         experts=experts,
         args=model_args,
@@ -84,17 +83,19 @@ def test_mixtral_moe_inference(device_mesh, use_program_cache, reset_seeds):
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         tt_decode_input = ttnn.from_torch(
             pt_decode_input.clone().unsqueeze(1).view(1, 1, 32, 4096),
-            device=device_mesh,
+            device=t3k_device_mesh,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
-            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
         )
 
         # Run TT model
         tt_out = tt_model(tt_decode_input)
         tt_output_torch = (
-            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0].squeeze(2).view(batch, 1, -1)
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
+            .squeeze(2)
+            .view(batch, 1, -1)
         )
 
         # Reference model
