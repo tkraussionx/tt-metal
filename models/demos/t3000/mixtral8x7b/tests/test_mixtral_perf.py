@@ -121,13 +121,6 @@ def test_mixtral_model_perf(
 
     comment = f"kv_cache_len={generation_start_pos}_num_layers={model_args.n_layers}"
 
-    "generation_start_pos, expected_compile_time, expected_inference_time",
-    (
-        (32, 30, 8.5),
-        (128, 30, 8.5),
-        (1024, 30, 8.5),
-        (2048, 30, 8.5),
-    ),
     prep_perf_report(
         model_name=f"Mixtral8x7B_{comment}",
         batch_size=model_args.max_batch_size,
