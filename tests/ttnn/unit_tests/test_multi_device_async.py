@@ -309,6 +309,8 @@ def test_add_1D_tensor_and_scalar(pcie_device_mesh, scalar, size):
         assert output_tensor.shape == (1, size)
 
 
+# Async mode trace test: hang with all-gather enabled
+# Event ID assert without all-gather. This is with pcie mapped devices.
 def test_multi_device_multi_op_trace(pcie_device_mesh):
     # Trace requires program cache to be enabled
     for device_id in pcie_device_mesh.get_device_ids():
