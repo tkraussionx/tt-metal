@@ -1522,7 +1522,7 @@ void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> sync_event, b
 void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_trace");
 
-    auto trace_inst = this->device->get_trace(this->id, trace_id);
+    auto trace_inst = this->device->get_trace(trace_id);
     auto command = EnqueueTraceCommand(this->id, this->device, this->manager, *trace_inst->buffer, this->expected_num_workers_completed);
 
     this->enqueue_command(command, false);
@@ -1786,16 +1786,18 @@ volatile bool HWCommandQueue::is_noc_hung() {
     return illegal_noc_txn_hang;
 }
 
-void HWCommandQueue::record_begin(std::shared_ptr<detail::TraceDescriptor> ctx) {
+void HWCommandQueue::record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx) {
     // Issue event as a barrier and a counter reset
     std::shared_ptr<Event> event = std::make_shared<Event>();
     this->enqueue_record_event(event, true);
     // Record commands using bypass mode
+    this->tid = tid;
     this->trace_ctx = ctx;
     this->manager.set_bypass_mode(true, true);  // start
 }
 
 void HWCommandQueue::record_end() {
+    this->tid = std::nullopt;
     this->trace_ctx = nullptr;
     this->manager.set_bypass_mode(false, false);  // stop
 }
@@ -2133,7 +2135,7 @@ void FinishImpl(CommandQueue& cq) {
 
 void EnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocking) {
     detail::DispatchStateCheck(true);
-    TT_FATAL(cq.device()->get_trace(cq.id(), trace_id) != nullptr, "Trace instance " + std::to_string(trace_id) + " must exist on device");
+    TT_FATAL(cq.device()->get_trace(trace_id) != nullptr, "Trace instance " + std::to_string(trace_id) + " must exist on device");
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_TRACE,
         .blocking = blocking,

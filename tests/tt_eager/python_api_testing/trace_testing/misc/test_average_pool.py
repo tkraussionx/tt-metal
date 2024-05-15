@@ -102,4 +102,4 @@ def test_run_average_pool(act_shape, dtype, device, use_program_cache):
         assert passing_pcc
 
     # Done with the trace, can deallocate the buffers now.
-    ttl.device.ReleaseTrace(device, 0, tid)
+    ttl.device.ReleaseTrace(device, tid)

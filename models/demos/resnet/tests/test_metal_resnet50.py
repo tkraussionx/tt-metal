@@ -338,4 +338,4 @@ def test_run_resnet50_trace_inference(
         assert passing_pcc
         # assert passing # fails because of torch.allclose
     # Done with the trace, can deallocate the buffers now.
-    tt_lib.device.ReleaseTrace(device, 0, tid)
+    tt_lib.device.ReleaseTrace(device, tid)

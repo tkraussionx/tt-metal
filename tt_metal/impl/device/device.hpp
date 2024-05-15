@@ -198,11 +198,11 @@ class Device {
     CommandQueue& command_queue(size_t cq_id = 0);
 
     // Metal trace device capture mode
-    uint32_t begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t trace_buff_size);
+    void begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t trace_buff_size);
     void end_trace(const uint8_t cq_id, const uint32_t tid);
     void replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking);
-    void release_trace(const uint8_t cq_id, const uint32_t tid);
-    std::shared_ptr<TraceBuffer> get_trace(const uint8_t cq_id, const uint32_t tid);
+    void release_trace(const uint32_t tid);
+    std::shared_ptr<TraceBuffer> get_trace(const uint32_t tid);
 
     bool using_slow_dispatch() const;
     void check_allocator_is_initialized() const;
@@ -294,7 +294,7 @@ class Device {
     }
 
    private:
-    std::vector<std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>>> trace_buffer_pool_;
+    std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };
 
 }  // namespace tt_metal

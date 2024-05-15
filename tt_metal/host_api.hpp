@@ -514,10 +514,9 @@ void ReplayTrace(Device *device, const uint8_t cq_id, const uint32_t tid, const 
  * | Argument     | Description                                                            | Type                          | Valid Range                        | Required |
  * |--------------|------------------------------------------------------------------------|-------------------------------|------------------------------------|----------|
  * | device       | The device holding the trace.                                          | Device *                      |                                    | Yes      |
- * | cq_id        | The command queue id associated with the trace.                        | uint8_t                       |                                    | Yes      |
  * | trace_id     | A unique id representing an existing captured trace.                   | uint32_t                      |                                    | Yes      |
  */
-void ReleaseTrace(Device *device, const uint8_t cq_id, const uint32_t tid);
+void ReleaseTrace(Device *device, const uint32_t tid);
 
 /**
  * Enqueues a trace of previously generated commands and data.

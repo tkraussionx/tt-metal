@@ -453,12 +453,13 @@ class HWCommandQueue {
     volatile bool is_dprint_server_hung();
     volatile bool is_noc_hung();
 
-    void record_begin(std::shared_ptr<detail::TraceDescriptor> ctx);
+    void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
 
    private:
     uint32_t id;
     uint32_t size_B;
+    std::optional<uint32_t> tid;
     std::shared_ptr<detail::TraceDescriptor> trace_ctx;
     std::thread completion_queue_thread;
     SystemMemoryManager& manager;

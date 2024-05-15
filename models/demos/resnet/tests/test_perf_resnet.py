@@ -267,7 +267,7 @@ def run_perf_resnet_trace(
     logger.info(f"resnet50 {comments} inference time (avg): {inference_time_avg}")
     logger.info(f"resnet50 compile time: {compile_time}")
 
-    tt_lib.device.ReleaseTrace(device, 0, tid)
+    tt_lib.device.ReleaseTrace(device, tid)
 
     assert inference_time_avg < expected_inference_time, f"resnet50 {comments} inference is too slow"
     assert compile_time < expected_compile_time, f"resnet50 {comments} compilation is too slow"

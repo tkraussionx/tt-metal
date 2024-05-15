@@ -197,4 +197,4 @@ def test_bert_linear(
         assert passing
 
     # Done with the trace, can deallocate the buffers now.
-    ttl.device.ReleaseTrace(device, 0, tid)
+    ttl.device.ReleaseTrace(device, tid)

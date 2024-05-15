@@ -950,8 +950,9 @@ void UpdateRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, con
 }
 
 uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
-    uint32_t tid = Trace::next_id();
-    return device->begin_trace(cq_id, tid, trace_buff_size);
+    const uint32_t tid = Trace::next_id();
+    device->begin_trace(cq_id, tid, trace_buff_size);
+    return tid;
 }
 
 void EndTraceCapture(Device *device, const uint8_t cq_id, const uint32_t tid) {
@@ -962,8 +963,8 @@ void ReplayTrace(Device *device, const uint8_t cq_id, const uint32_t tid, const 
     device->replay_trace(cq_id, tid, blocking);
 }
 
-void ReleaseTrace(Device *device, const uint8_t cq_id, const uint32_t tid) {
-    device->release_trace(cq_id, tid);
+void ReleaseTrace(Device *device, const uint32_t tid) {
+    device->release_trace(tid);
 }
 
 }  // namespace tt_metal

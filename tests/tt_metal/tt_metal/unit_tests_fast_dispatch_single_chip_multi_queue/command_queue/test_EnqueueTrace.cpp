@@ -113,7 +113,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, EnqueueOneProgramTrace) {
 
     // Done
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 TEST_F(MultiCommandQueueSingleDeviceFixture, EnqueueOneProgramTraceLoops) {
@@ -164,7 +164,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, EnqueueOneProgramTraceLoops) {
 
     // Done
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), trace_id);
+    ReleaseTrace(this->device_, trace_id);
 }
 
 TEST_F(MultiCommandQueueSingleDeviceFixture, EnqueueOneProgramTraceBenchmark) {
@@ -240,7 +240,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, EnqueueOneProgramTraceBenchmark) {
     for (auto i = 0; i < num_loops; i++) {
         EXPECT_TRUE(trace_outputs[i] == trace_outputs[0]);
     }
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 } // end namespace basic_tests

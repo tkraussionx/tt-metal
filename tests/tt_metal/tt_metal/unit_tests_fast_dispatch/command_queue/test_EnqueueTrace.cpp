@@ -107,7 +107,7 @@ TEST_F(CommandQueueFixture, InstantiateTraceSanity) {
     EndTraceCapture(this->device_, command_queue.id(), tid);
 
     // Instantiate a trace on a device bound command queue
-    auto trace_inst = this->device_->get_trace(command_queue.id(), tid);
+    auto trace_inst = this->device_->get_trace(tid);
     vector<uint32_t> data_fd, data_bd;
 
     // Backdoor read the trace buffer
@@ -119,7 +119,7 @@ TEST_F(CommandQueueFixture, InstantiateTraceSanity) {
     EXPECT_EQ(data_fd, data_bd);
 
     log_trace(LogTest, "Trace buffer content: {}", data_fd);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 TEST_F(CommandQueueFixture, EnqueueProgramTraceCapture) {
@@ -155,7 +155,7 @@ TEST_F(CommandQueueFixture, EnqueueProgramTraceCapture) {
 
     // Done
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
@@ -205,7 +205,7 @@ TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
 
     // Done
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 TEST_F(CommandQueueFixture, EnqueueTwoProgramTrace) {
@@ -275,7 +275,7 @@ TEST_F(CommandQueueFixture, EnqueueTwoProgramTrace) {
         EnqueueReadBuffer(command_queue, output, trace_outputs[i].data(), kNonBlocking);
     }
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 
     // Expect same output across all loops
     for (auto i = 0; i < num_loops; i++) {
@@ -354,7 +354,7 @@ TEST_F(CommandQueueFixture, EnqueueMultiProgramTraceBenchmark) {
         EnqueueReadBuffer(command_queue, output, trace_outputs[i].data(), kNonBlocking);
     }
     Finish(command_queue);
-    ReleaseTrace(this->device_, command_queue.id(), tid);
+    ReleaseTrace(this->device_, tid);
 }
 
 } // end namespace basic_tests
