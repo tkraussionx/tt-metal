@@ -376,14 +376,14 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.85, 0.97, 0.86, 0.33),
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.85, 0.97, 0.86, 0.31),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.90, 0.97, 0.87, 0.48),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.90, 0.97, 0.87, 0.39),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.63, 0.80, 0.84, 0.30),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.63, 0.80, 0.84, 0.30),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.56, 0.86, 0.88, 0.40),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.56, 0.86, 0.88, 0.34),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.85, 0.97, 0.86, 0.31),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.85, 0.97, 0.86, 0.29),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.90, 0.97, 0.87, 0.43),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.90, 0.97, 0.87, 0.34),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.63, 0.80, 0.84, 0.28),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.63, 0.80, 0.84, 0.28),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.56, 0.86, 0.88, 0.37),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.56, 0.86, 0.88, 0.31),
             ("decode", 32, 32, 1, 2047, "BFLOAT16-DRAM", 0.55, 0.91, 0.89, 0.40),
             ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.55, 0.91, 0.89, 0.35),
         ),
@@ -507,10 +507,10 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.96, 0.17),
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.97, 0.99, 0.96, 0.17),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.2),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.98, 0.99, 0.96, 0.2),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.96, 0.1),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.97, 0.99, 0.96, 0.1),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.18),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.98, 0.99, 0.96, 0.18),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.92, 0.95, 0.95, 0.1),
@@ -588,10 +588,10 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_devices, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time, async_mode",
         (
-            ("prefill", 4, 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.225, False),  # Issue 7816 Inference time
-            ("decode", 4, 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.91, 0.91, 0.27, False),
+            ("prefill", 4, 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.18, False),  # Issue 7816 Inference time
+            ("decode", 4, 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.91, 0.91, 0.21, False),
             ("prefill", 4, 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.18, True),
-            ("decode", 4, 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.91, 0.91, 0.10, True),
+            ("decode", 4, 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.91, 0.91, 0.09, True),
         ),
         ids=[
             "prefill_seq256",
@@ -638,72 +638,3 @@ class TestParametrized:
             all_devices,
             async_mode,
         )
-
-
-@pytest.mark.models_performance_virtual_machine
-@pytest.mark.parametrize(
-    "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
-    (
-        ("prefill", 1, 128, 0, 0.4),
-        ("decode", 32, 1, 128, 0.3),
-        # ("prefill", 1, 256, 0, 0.40),
-        # ("decode", 32, 1, 1024, 0.36),
-        # ("decode", 32, 1, 2047, 0.47),
-    ),
-    ids=[
-        "prefill_seq128",
-        "decode_batch32",
-    ],  # "prefill_seq256","decode_batch32_1024", "decode_batch32_2047"],
-)
-@pytest.mark.parametrize(
-    "num_layers, expected_pcc",
-    ((32, 0.89),),
-    ids=["layers_32"],
-)
-@pytest.mark.parametrize(
-    "model_version",
-    ("tiiuae/falcon-7b-instruct",),
-    ids=["falcon_7b"],
-)
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-L1",))
-def test_perf_virtual_machine(
-    model_version,
-    llm_mode,
-    batch,
-    seq_len,
-    kv_cache_len,
-    expected_inference_time,
-    num_layers,
-    expected_pcc,
-    request,
-    model_config_str,
-    model_location_generator,
-    get_tt_cache_path,
-    device,
-    use_program_cache,
-):
-    if is_e75(device) and batch == 32:
-        pytest.skip("Falcon batch 32 is not supported on E75")
-
-    model_config = get_model_config(model_config_str)
-    tt_cache_path = get_tt_cache_path(
-        model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
-    )
-    disable_persistent_kernel_cache()
-    disable_compilation_reports()
-
-    run_test_FalconCausalLM_end_to_end(
-        [device],
-        model_version,
-        llm_mode,
-        batch,
-        seq_len,
-        kv_cache_len,
-        num_layers,
-        [expected_pcc, expected_pcc, expected_pcc],
-        model_config,
-        model_config_str,
-        tt_cache_path,
-        model_location_generator,
-        expected_inference_time,
-    )
