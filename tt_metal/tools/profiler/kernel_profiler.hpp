@@ -322,13 +322,12 @@ namespace kernel_profiler{
                         nocWriteSize += profiler_control_buffer[deviceIndex] * sizeof(uint32_t);
 #endif
 
-                        //int x = my_x[0];
-                        //int y = my_y[0];
-                        //DPRINT << x << "," << y << "," << hostIndex << "MOOO" << ENDL();
-                        DPRINT << "MOOO " << hostIndex << ENDL();
-#if defined(COMPILE_FOR_BRISC)
-                        profiler_control_buffer[hostIndex] = currEndIndex;
-#endif
+                        int x = my_x[0];
+                        int y = my_y[0];
+                        DPRINT << x << "," << y << "," << hostIndex << "," << currEndIndex << "MOOO" << ENDL();
+//#if defined(COMPILE_FOR_BRISC)
+                        profiler_control_buffer[hostIndex] = 0;
+//#endif
                     }
                     else
                     {
