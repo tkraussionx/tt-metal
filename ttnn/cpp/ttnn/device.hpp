@@ -5,6 +5,7 @@
 #pragma once
 
 #include "tt_metal/detail/tt_metal.hpp"
+#include "tt_metal/impl/trace/trace.hpp"
 #include "ttnn/types.hpp"
 #include "ttnn/device_pool.hpp"
 namespace ttnn {

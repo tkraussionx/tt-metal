@@ -59,9 +59,11 @@ void close_device(Device &device) {
 }
 
 void begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id) {
+    // increment trace id
+    uint32_t tid = Trace::next_id();
     device->push_work(
-        [device, trace_buff_size, cq_id] () mutable {
-            tt::tt_metal::detail::BeginTraceCapture(device, cq_id, trace_buff_size);
+        [device, trace_buff_size, cq_id, tid] () mutable {
+            device->begin_trace(cq_id, tid, trace_buff_size)
         });
 }
 
