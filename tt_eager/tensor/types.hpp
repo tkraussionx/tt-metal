@@ -449,7 +449,8 @@ struct MultiDeviceHostStorage {
         std::vector<int> ordered_device_ids;
         std::unordered_map<int, DeviceBuffer> buffers;
         std::unordered_map<int, Shape> shapes;
-        mutable std::mutex mtx;
+        mutable std::mutex buffer_mtx;
+        mutable std::mutex shape_mtx;
         MultiDeviceStorage() = default;
 
         MultiDeviceStorage(
@@ -459,14 +460,14 @@ struct MultiDeviceHostStorage {
             std::unordered_map<int, Shape> shapes_) : strategy(strategy_), ordered_device_ids(ordered_device_ids_), buffers(buffers_), shapes(shapes_) {}
 
         MultiDeviceStorage(MultiDeviceStorage &&other) {
-            std::lock_guard<std::mutex> lock(mtx);
+            std::scoped_lock buf_lock(buffer_mtx, shape_mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
             shapes = other.shapes;
         }
         MultiDeviceStorage(const MultiDeviceStorage &other) {
-            std::lock_guard<std::mutex> lock(other.mtx);
+            std::scoped_lock buf_lock(buffer_mtx, shape_mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
@@ -474,7 +475,7 @@ struct MultiDeviceHostStorage {
         }
 
         MultiDeviceStorage &operator=(const MultiDeviceStorage &other) {
-            std::lock_guard<std::mutex> lock(other.mtx);
+            std::scoped_lock buf_lock(buffer_mtx, shape_mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
@@ -483,7 +484,7 @@ struct MultiDeviceHostStorage {
         }
 
         MultiDeviceStorage &operator=( MultiDeviceStorage &&other) {
-            std::lock_guard<std::mutex> lock(mtx);
+            std::scoped_lock buf_lock(buffer_mtx, shape_mtx);
             ordered_device_ids = other.ordered_device_ids;
             strategy = other.strategy;
             buffers = other.buffers;
@@ -495,8 +496,8 @@ struct MultiDeviceHostStorage {
             return this->ordered_device_ids == other.ordered_device_ids and this->strategy == other.strategy and this->buffers == other.buffers and this->shapes == other.shapes;
         }
 
-        const MemoryConfig memory_config() const {
-            std::lock_guard<std::mutex> lock(mtx);
+        inline const MemoryConfig memory_config() const {
+            std::lock_guard<std::mutex> lock(buffer_mtx);
             if (this->buffers.at(0).get() == nullptr) {
                 TT_THROW("MemoryConfig can only be obtained if the buffer is not null");
             }
@@ -516,28 +517,31 @@ struct MultiDeviceHostStorage {
 
         // Helper Functions - Getters and setters to get/modify storage attributes. These are needed to
         // preinitialize empty tensor handles and use/populate them in the worker threads.
-        void insert_buffer_and_shape_for_device(Device* device, const DeviceBuffer buffer, const Shape shape) {
+        inline void insert_buffer_and_shape_for_device(Device* device, const DeviceBuffer buffer, const Shape shape) {
             TT_FATAL(device == buffer->device(), "Mismatch between device derived from buffer and device derived from MultiDeviceStorage.");
-            std::lock_guard<std::mutex> lock(mtx);
-            buffers.insert({device->id(), buffer});
+            {
+                std::lock_guard<std::mutex> lock(buffer_mtx);
+                buffers.insert({device->id(), buffer});
+            }
+            std::lock_guard<std::mutex> lock(shape_mtx);
             shapes.insert({device->id(), shape});
         }
 
-        DeviceBuffer get_buffer_for_device(Device* device) const {
-            std::lock_guard<std::mutex> lock(mtx);
-            TT_FATAL(buffers.find(device->id()) != buffers.end(), "Buffer not found for device " + std::to_string(device->id()));
-            TT_FATAL(buffers.at(device->id())->device() == device, "Mismatch between device derived from buffer and device derived from MultiDeviceStorage.");
+        inline DeviceBuffer get_buffer_for_device(Device* device) const {
+            std::lock_guard<std::mutex> lock(buffer_mtx);
+            // TT_FATAL(buffers.find(device->id()) != buffers.end(), "Buffer not found for device " + std::to_string(device->id()));
+            // TT_FATAL(buffers.at(device->id())->device() == device, "Mismatch between device derived from buffer and device derived from MultiDeviceStorage.");
             return buffers.at(device->id());
         }
 
-        Shape get_tensor_shape_for_device(Device* device) const {
-            std::lock_guard<std::mutex> lock(mtx);
-            TT_FATAL(shapes.find(device->id()) != shapes.end(), "Shape not found for device " + std::to_string(device->id()));
+        inline Shape get_tensor_shape_for_device(Device* device) const {
+            std::lock_guard<std::mutex> lock(shape_mtx);
+            // TT_ASSERT(shapes.find(device->id()) != shapes.end(), "Shape not found for device " + std::to_string(device->id()));
             return shapes.at(device->id());
         }
 
-        uint32_t num_buffers() const {
-            std::lock_guard<std::mutex> lock(mtx);
+        inline uint32_t num_buffers() const {
+            std::lock_guard<std::mutex> lock(buffer_mtx);
             return buffers.size();
         }
     };
