@@ -27,6 +27,20 @@ def run_activation_unary_test(device, h, w, ttnn_function, torch_function, pcc=0
 
     assert_with_pcc(torch_output_tensor, output_tensor, pcc)
 
+def run_activation_unary_test_nchw(device, n, c, h, w, ttnn_function, torch_function, pcc=0.99):
+    torch.manual_seed(0)
+
+    torch_input_tensor = torch.randn((h, w), dtype=torch.bfloat16)
+    torch_output_tensor = torch_function(torch_input_tensor)
+
+    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+    output_tensor = ttnn_function(input_tensor)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+
 
 @pytest.mark.parametrize("h", [64])
 @pytest.mark.parametrize("w", [128])
@@ -58,6 +72,29 @@ def test_mish(device, h, w):
     run_activation_unary_test(device, h, w, ttnn.mish, lambda _x: F.mish(_x.to(torch.float)))
 
 
+@pytest.mark.parametrize(
+    "n, c, h, w",
+    (
+        (6, 64, 128, 352),
+        (6, 64, 64, 176),
+        (6, 256, 64, 176),
+        (6, 512, 1, 1),
+        (6, 512, 1, 1),
+        (6, 128, 64, 176),
+        (6, 128, 16, 44),
+        (6, 128, 32, 88),
+        (6, 512, 32, 88),
+        (6, 256, 32, 88),
+        (6, 256, 16, 44),
+        (6, 1024, 16, 44),
+        (6, 512, 16, 44),
+        (6, 512, 8, 22),
+        (6, 2048, 8, 22),
+    ),
+)
+def test_relu_bevdepth(device, n, c, h, w):
+    run_activation_unary_test_nchw(device, n, c, h, w, ttnn.relu, F.relu)
+
 @pytest.mark.parametrize("h", [64])
 @pytest.mark.parametrize("w", [128])
 def test_relu6(device, h, w):
@@ -81,6 +118,14 @@ def test_hardsigmoid(device, h, w):
 def test_sigmoid(device, h, w):
     run_activation_unary_test(device, h, w, ttnn.sigmoid, torch.sigmoid)
 
+@pytest.mark.parametrize(
+    "n, c, h, w",
+    (
+        (6, 512, 1, 1),
+    ),
+)
+def test_sigmoid_bevdepth(device, n, c, h, w):
+    run_activation_unary_test(device, n, c, h, w, ttnn.sigmoid, torch.sigmoid)
 
 @pytest.mark.parametrize("h", [64])
 @pytest.mark.parametrize("w", [128])

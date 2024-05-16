@@ -627,3 +627,37 @@ def test_sd_matmul(device, batch_size, channel_a, channel_b, m_size, k_size, n_s
 
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=pcc)
+
+@pytest.mark.parametrize("shape_a", 
+                [
+                    (1,6,1,1,1,4,4),
+                    (1,6,4,4),
+                    (1, 6, 1, 1, 1, 4, 4),
+                ]
+            )
+
+@pytest.mark.parametrize("shape_b", 
+                [
+                    (112,16,44,4,1),
+                    (1,6,4,4),
+                    (1, 6, 1, 1, 1, 4, 1),
+                ]
+            )
+def test_matmul_bevdepth(device, shape_a, shape_b):
+    torch.manual_seed(0)
+
+    torch_input_tensor_a = torch.randn(shape_a, dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.randn(shape_b, dtype=torch.bfloat16)
+    torch_output_tensor = torch_input_tensor_a @ torch_input_tensor_b
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    output_tensor = ttnn.matmul(
+        input_tensor_a,
+        input_tensor_b,
+        use_1d_systolic_array=True,
+    )
+
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.997)

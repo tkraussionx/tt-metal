@@ -88,3 +88,20 @@ def test_sub_4D(device, n, c, h, w):
     output = ttnn.to_torch(output)
 
     assert_with_pcc(torch_output_tensor, output, 0.9999)
+
+
+@pytest.mark.parametrize("shape_a", [(1, 6, 1, 1, 1, 3),])
+@pytest.mark.parametrize("shape_b", [(1, 6, 1, 1, 1, 3),])
+
+def test_sub_bevdepth(device, shape_a, shape_b):
+    torch_input_tensor_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand(shape_b, dtype=torch.bfloat16)
+    torch_output_tensor = torch.sub(torch_input_tensor_a, torch_input_tensor_b)
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    output = ttnn.sub(input_tensor_a, input_tensor_b)
+    output = ttnn.to_torch(output)
+
+    assert_with_pcc(torch_output_tensor, output, 0.9999)

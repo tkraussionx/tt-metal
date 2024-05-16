@@ -73,3 +73,29 @@ def test_multiply_int32_with_scalar(device, input_a, scalar):
     output = ttnn.to_torch(output)
 
     assert_with_pcc(torch_output_tensor, output, 0.9999)
+
+@pytest.mark.parametrize("shape_a", 
+                [
+                    (1, 6, 1, 1, 1, 2, 1),
+                    (7),
+                    (6, 512, 16, 44),
+                ]
+)
+@pytest.mark.parametrize("shape_b", 
+                [
+                    (1, 6, 1, 1, 1, 1, 1),
+                    (7),
+                    (6, 512, 1, 1),
+                ]
+)
+def test_mul_bevdepth(device, shape_a, shape_b):
+    torch_input_tensor_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand(shape_b, dtype=torch.bfloat16)
+    torch_output_tensor = torch.mul(torch_input_tensor_a, torch_input_tensor_b)
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+    output = ttnn.mul(input_tensor_a, input_tensor_b)
+    output = ttnn.to_torch(output)
+
+    assert_with_pcc(torch_output_tensor, output, 0.9999)

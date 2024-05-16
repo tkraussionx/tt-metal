@@ -233,3 +233,40 @@ def test_in_place_add_and_apply_activations(device, shape, activations):
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, 0.99988)
     assert output_tensor.shape == shape
+
+@pytest.mark.parametrize("shape_a", 
+                [
+                    (6, 256, 64, 176),
+                    (6, 512, 32, 88),
+                    (6, 1024, 16, 44),
+                    (6, 2048, 8, 22),
+                    (6, 512, 16, 44),
+                ]
+            )
+@pytest.mark.parametrize("shape_b", 
+                [
+                    (6, 256, 64, 176),
+                    (6, 512, 32, 88),
+                    (6, 1024, 16, 44),
+                    (6, 2048, 8, 22),
+                    (6, 512, 16, 44),
+                ]
+            )
+def test_add_bevdepth(device, shape_a, shape_b):
+    torch.manual_seed(0)
+
+    torch_input_tensor_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand(shape_b, dtype=torch.bfloat16)
+    torch_output_tensor = torch_input_tensor_a + torch_input_tensor_b
+
+    input_tensor_a = ttnn.from_torch(
+        torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+    )
+    input_tensor_b = ttnn.from_torch(
+        torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+    )
+    output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=ttnn.L1_MEMORY_CONFIG)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert ttnn.pearson_correlation_coefficient(torch_output_tensor, output_tensor) >= 0.99988
+    assert output_tensor.shape == shape_a
