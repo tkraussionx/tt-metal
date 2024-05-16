@@ -91,6 +91,8 @@ class Device {
 
     chip_id_t id() const { return id_; }
 
+    uint32_t build_key() const { return build_key_; }
+
     uint8_t num_hw_cqs() const { return num_hw_cqs_; }
 
     bool is_initialized() const { return this->initialized_; }
@@ -228,6 +230,7 @@ class Device {
 
     // APIs to access this device's work executor
     void push_work(std::function<void()>&& work, bool blocking = false);
+    void push_work(std::shared_ptr<std::function<void()>> work, bool blocking = false);
     void synchronize();
     void set_worker_mode(const WorkExecutorMode& mode);
     void enable_async(bool enable);
@@ -241,6 +244,7 @@ class Device {
     static constexpr MemoryAllocator allocator_scheme_ = MemoryAllocator::L1_BANKING;
     static ActiveDevices active_devices_;
     chip_id_t id_;
+    uint32_t build_key_;
     std::unique_ptr<Allocator> allocator_ = nullptr;
     bool initialized_ = false;
 
@@ -259,7 +263,6 @@ class Device {
     // all tasks scheduled on this device
     WorkExecutor work_executor;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
-    vector<std::unique_ptr<Program, detail::ProgramDeleter>> command_queue_programs_;
     uint8_t num_hw_cqs_;
 
     vector<std::unique_ptr<Program, tt::tt_metal::detail::ProgramDeleter>> command_queue_programs;

@@ -538,7 +538,6 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
 
     void WaitProgramDone(Device *device, Program &program) {
         auto device_id = device->id();
-        std::cout<<"Waiting for Program on Device "<<(uint32_t) device->id()<<std::endl;
         std::unordered_map<CoreType, std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
         std::unordered_set<CoreCoord> not_done_cores;
         for (const auto &[core_type, logical_cores] : logical_cores_used_in_program) {
@@ -950,25 +949,28 @@ void SetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id, const 
     }
 }
 
-
-std::vector<uint32_t> & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
-    TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
-    return detail::GetKernel(program, kernel_id)->runtime_args(logical_core);
+void SetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id, const RuntimeArgsData &runtime_args) {
+    ZoneScoped;
+    TT_FATAL( not CommandQueue::async_mode_set(), "This variant of SetCommonRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
+    if (runtime_args.size() != 0) {
+        detail::GetKernel(program, kernel_id)->set_common_runtime_args(runtime_args);
+    }
 }
 
-std::vector< std::vector< std::vector<uint32_t>> > & GetRuntimeArgs(const Program &program, KernelHandle kernel_id) {
+
+RuntimeArgsData & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
     TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
-    return detail::GetKernel(program, kernel_id)->runtime_args();
+    return detail::GetKernel(program, kernel_id)->runtime_args_data(logical_core);
 }
 
-std::vector<uint32_t> & GetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id) {
+std::vector< std::vector< RuntimeArgsData> >& GetRuntimeArgs(const Program &program, KernelHandle kernel_id) {
     TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
-    return detail::GetKernel(program, kernel_id)->common_runtime_args();
+    return detail::GetKernel(program, kernel_id)->runtime_args_data();
 }
 
-void UpdateRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args) {
-    detail::DispatchStateCheck(not device->using_slow_dispatch());
-    EnqueueUpdateRuntimeArgs(device->command_queue(), kernel, core_coord, update_idx, runtime_args, false);
+RuntimeArgsData & GetCommonRuntimeArgs(const Program &program, KernelHandle kernel_id) {
+    TT_FATAL( not CommandQueue::async_mode_set(), "GetRuntimeArgs can only be called when Asynchronous SW Command Queues are disabled for Fast Dispatch.");
+    return detail::GetKernel(program, kernel_id)->common_runtime_args_data().at(0);
 }
 
 }  // namespace tt_metal

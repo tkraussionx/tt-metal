@@ -211,6 +211,8 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_getitem/moreh_getitem_rm/moreh_getitem_rm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_getitem/moreh_getitem_tilized/moreh_getitem_tilized.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/scan/scan_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/topk/topk_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/topk/single_core/single_core_topk.cpp
 )
 
 add_library(tt_dnn OBJECT ${TT_DNN_SRCS})
@@ -223,4 +225,14 @@ target_include_directories(tt_dnn PUBLIC
     ${CMAKE_SOURCE_DIR}/tt_eager
     ${CMAKE_SOURCE_DIR}/ttnn/cpp
     ${CMAKE_SOURCE_DIR}/tt_metal/third_party/fmt
+)
+
+target_precompile_headers(tt_dnn PUBLIC
+    ${CMAKE_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
+    ${CMAKE_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
 )

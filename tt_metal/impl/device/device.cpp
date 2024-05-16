@@ -11,7 +11,6 @@
 #include "tt_metal/detail/tt_metal.hpp"
 #include "impl/debug/dprint_server.hpp"
 #include "impl/debug/watcher_server.hpp"
-#include "tt_metal/third_party/umd/device/util.hpp"
 #include "common/env_lib.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 #include "common/utils.hpp"
@@ -73,6 +72,7 @@ Device::Device(
     id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id) {
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
+    this->build_key_ = tt::Cluster::instance().get_harvesting_mask(device_id);
     this->initialize(l1_small_size, l1_bank_remap, minimal);
 }
 
@@ -146,7 +146,7 @@ void Device::initialize_allocator(size_t l1_small_size, const std::vector<uint32
 void Device::initialize_build() {
     ZoneScoped;
 
-    this->build_env_.init(this->id(), this->arch());
+    this->build_env_.init(this->build_key(), this->arch());
 
     auto init_helper = [this] (bool is_fw) -> JitBuildStateSet {
         std::vector<std::shared_ptr<JitBuildState>> build_states;
@@ -692,7 +692,7 @@ void Device::compile_command_queue_programs() {
                     .eth_mode = Eth::IDLE,
                     .noc = NOC::NOC_0,
                     .compile_args = mux_compile_args,
-                    .defines = {}
+                    .defines = {{"SKIP_NOC_LOGGING", "1"}}
                 }
             );
         } else {
@@ -704,7 +704,7 @@ void Device::compile_command_queue_programs() {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = mux_compile_args,
-                .defines = {}
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         }
@@ -746,7 +746,10 @@ void Device::compile_command_queue_programs() {
             tunneler_logical_core,
             tt_metal::EthernetConfig{
                 .noc = tt_metal::NOC::NOC_0,
-                .compile_args = tunneler_l_compile_args
+                .compile_args = tunneler_l_compile_args,
+                // Skip noc logging for tunneling cores, since stopping the print server can hang
+                // the chip in this case.
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         log_debug(LogDevice, "run tunneler at {}", tunneler_location.str());
@@ -817,7 +820,7 @@ void Device::compile_command_queue_programs() {
                     .eth_mode = Eth::IDLE,
                     .noc = NOC::NOC_0,
                     .compile_args = demux_compile_args,
-                    .defines = {}
+                    .defines = {{"SKIP_NOC_LOGGING", "1"}}
                 }
             );
         } else {
@@ -829,7 +832,7 @@ void Device::compile_command_queue_programs() {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = demux_compile_args,
-                .defines = {}
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         }
@@ -999,7 +1002,10 @@ void Device::compile_command_queue_programs() {
             r_tunneler_logical_core,
             tt_metal::EthernetConfig{
                 .noc = tt_metal::NOC::NOC_0,
-                .compile_args = tunneler_r_compile_args
+                .compile_args = tunneler_r_compile_args,
+                // Skip noc logging for tunneling cores, since stopping the print server can hang
+                // the chip in this case.
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         log_debug(LogDevice, "run tunneler at device {} Core {}", this->id(), r_tunneler_logical_core.str());
@@ -1067,7 +1073,7 @@ void Device::compile_command_queue_programs() {
                     .eth_mode = Eth::IDLE,
                     .noc = NOC::NOC_0,
                     .compile_args = demux_d_compile_args,
-                    .defines = {}
+                    .defines = {{"SKIP_NOC_LOGGING", "1"}}
                 }
             );
         } else {
@@ -1079,7 +1085,7 @@ void Device::compile_command_queue_programs() {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = demux_d_compile_args,
-                .defines = {}
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         }
@@ -1266,7 +1272,7 @@ void Device::compile_command_queue_programs() {
                     .eth_mode = Eth::IDLE,
                     .noc = NOC::NOC_0,
                     .compile_args = mux_d_compile_args,
-                    .defines = {}
+                    .defines = {{"SKIP_NOC_LOGGING", "1"}}
                 }
             );
         } else {
@@ -1278,7 +1284,7 @@ void Device::compile_command_queue_programs() {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = mux_d_compile_args,
-                .defines = {}
+                .defines = {{"SKIP_NOC_LOGGING", "1"}}
             }
         );
         }
@@ -1627,6 +1633,7 @@ bool Device::close() {
 
     this->active_devices_.deactivate_device(this->id_);
     this->disable_and_clear_program_cache();
+    this->command_queue_programs.clear();
     this->sw_command_queues_.clear();
     this->hw_command_queues_.clear();
 
@@ -1849,6 +1856,10 @@ CommandQueue &Device::command_queue(size_t cq_id) {
 }
 
 void Device::push_work(std::function<void()>&& work, bool blocking) {
+    this->work_executor.push_work(work, blocking);
+}
+
+void Device::push_work(std::shared_ptr<std::function<void()>> work, bool blocking) {
     this->work_executor.push_work(work, blocking);
 }
 
