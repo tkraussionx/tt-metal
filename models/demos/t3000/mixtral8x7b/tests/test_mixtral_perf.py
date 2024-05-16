@@ -54,8 +54,9 @@ def test_mixtral_model_perf(
     reset_seeds,
 ):
     dtype = ttnn.bfloat8_b
+
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
-    model_args.n_layers = 1
+    model_args.n_layers = 32
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     # Clear global profiler state before starting measurements
