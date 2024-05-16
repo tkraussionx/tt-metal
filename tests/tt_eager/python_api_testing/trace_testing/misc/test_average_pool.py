@@ -8,7 +8,6 @@ from loguru import logger
 import torch
 
 import tt_lib as ttl
-import ttnn
 
 from tt_lib.utils import _nearest_32
 from models.utility_functions import comp_pcc
@@ -35,7 +34,10 @@ def shape_padded(shape):
         "BFLOAT16",
     ],
 )
-def test_run_average_pool(act_shape, dtype, device, use_program_cache):
+@pytest.mark.parametrize("enable_async", [True, False])
+def test_run_average_pool(act_shape, dtype, device, use_program_cache, enable_async):
+    device.enable_async(enable_async)
+
     batch_size, _, _, channels = act_shape
 
     torch.manual_seed(0)
@@ -107,3 +109,4 @@ def test_run_average_pool(act_shape, dtype, device, use_program_cache):
 
     # Done with the trace, can deallocate the buffers now.
     ttl.device.ReleaseTrace(device, tid)
+    device.enable_async(False)

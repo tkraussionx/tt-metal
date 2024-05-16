@@ -225,9 +225,14 @@ void DeviceModule(py::module &m_device) {
     )doc");
     m_device.def("ReplayTrace",
         [] (Device* device, const uint8_t cq_id, const uint32_t tid, bool blocking) {
+            // If blocking, ensure that worker thread blocks until trace is completed
             device->push_work([device, cq_id, tid, blocking] {
                 device->replay_trace(cq_id, tid, blocking);
             });
+            // If blocking, wait until worker threads have completed
+            if (blocking) {
+                device->synchronize();
+            }
         }, R"doc(
         Replay captured trace on Device handle
     )doc");
