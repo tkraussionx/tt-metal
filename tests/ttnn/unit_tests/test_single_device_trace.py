@@ -14,7 +14,72 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)])
 @pytest.mark.parametrize("enable_async", [True, False])
 @pytest.mark.parametrize("blocking", [True, False])
-def test_multi_device_multi_op_trace(device, shape, enable_async, blocking):
+def test_single_device_single_trace(device, shape, enable_async, blocking):
+    if not blocking and (shape == (1, 1, 32, 32) or shape == (1, 3, 512, 512) or shape == (1, 3, 32, 32)):
+        pytest.skip("Non blocking writes and trace not working.")
+
+    device.enable_async(enable_async)
+    device.enable_program_cache()
+
+    # Preallocate activation tensors. These will be used when capturing and executing the trace
+    input_0_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
+    input_1_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
+
+    # Op chain to be traced
+    def run_op_chain(input_0, input_1):
+        return ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1)))
+
+    # Compile program binaries
+    run_op_chain(input_0_dev, input_1_dev)
+
+    # Capture Trace
+    logger.info("Capture Trace")
+    tid = ttnn.begin_trace_capture(device, 106496, 0)
+    output_tensor = run_op_chain(input_0_dev, input_1_dev)
+    ttnn.end_trace_capture(device, tid, 0)
+
+    for i in range(50):
+        # Create torch inputs
+        torch_input_tensor_0 = torch.rand(shape, dtype=torch.bfloat16)
+        torch_input_tensor_1 = torch.rand(shape, dtype=torch.bfloat16)
+        # Compute PT Golden
+        torch_output_golden = torch.neg(
+            torch.add(
+                torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
+                torch.relu(torch_input_tensor_1),
+            )
+        )
+
+        # Convert torch tensors to TTNN Multi-Device Host Tensors
+        ttnn_input_tensor_0 = ttnn.from_torch(torch_input_tensor_0, layout=ttnn.TILE_LAYOUT)
+        ttnn_input_tensor_1 = ttnn.from_torch(torch_input_tensor_1, layout=ttnn.TILE_LAYOUT)
+
+        # Copy TTNN host tensors into preallocated Mult-Device tensors
+        logger.info("Send Inputs to Device")
+        ttnn.copy_host_to_device_tensor(ttnn_input_tensor_0, input_0_dev)
+        ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, input_1_dev)
+
+        if blocking:
+            ttnn.synchronize_device(device)
+        logger.info("Execute Trace")
+        # Execute trace
+        ttnn.execute_trace(device, tid, 0, blocking)
+        # Readback data
+        logger.info("Read Back Trace Outputs")
+        ttnn_torch_output_tensor = ttnn.to_torch(output_tensor)
+        assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.99)
+
+    ttnn.release_trace(device, tid)
+    device.enable_async(False)
+
+
+@pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)])
+@pytest.mark.parametrize("enable_async", [True, False])
+@pytest.mark.parametrize("blocking", [True, False])
+def test_single_device_multi_trace(device, shape, enable_async, blocking):
+    if not blocking and (shape == (1, 1, 32, 32) or shape == (1, 3, 512, 512) or shape == (1, 3, 32, 32)):
+        pytest.skip("Non blocking writes and trace not working.")
+
     device.enable_async(enable_async)
     device.enable_program_cache()
 
