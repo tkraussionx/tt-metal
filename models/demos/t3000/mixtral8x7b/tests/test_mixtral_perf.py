@@ -55,12 +55,7 @@ def test_mixtral_model_perf(
 ):
     dtype = ttnn.bfloat8_b
 
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, "This test requires a T3000 (8 devices)"
-    devices = get_devices_for_t3000(devices, num_devices)
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = 32
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
