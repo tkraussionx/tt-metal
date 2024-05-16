@@ -277,6 +277,7 @@ def test_Llama_perf_host(
     for i in t3k_device_mesh.get_device_ids():
         device = t3k_device_mesh.get_device(i)
         device.enable_program_cache()
+        device.enable_async(True)
     disable_compilation_reports()
 
     run_test_LlamaModel_end_to_end(
