@@ -296,10 +296,10 @@ const operation::Hash Binary::compute_program_hash(const std::vector<Tensor>& in
         typeid(*this).hash_code(),
         this->program_config,
         program_type,
-        input_tensor_a.get_dtype(),
-        input_tensor_a.memory_config(),
-        input_tensor_b.get_dtype(),
-        input_tensor_b.memory_config());
+        input_tensor_a.tensor_attributes->dtype,
+        std::get<DeviceStorage>(input_tensor_a.tensor_attributes->storage).memory_config(),
+        input_tensor_b.tensor_attributes->dtype,
+        std::get<DeviceStorage>(input_tensor_b.tensor_attributes->storage).memory_config());
     return hash;
 }
 
