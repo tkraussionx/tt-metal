@@ -12,6 +12,7 @@
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
 // #include "tt_metal/impl/trace/trace.hpp"
+//#include "tt_metal/impl/device/device_pool.hpp"
 #include "tt_metal/jit_build/build.hpp"
 #include "llrt/tt_cluster.hpp"
 #include "dev_msgs.h"
@@ -47,23 +48,10 @@ using on_close_device_callback = std::function<void ()>;
 static constexpr float  EPS_GS = 0.001953125f;
 static constexpr float  EPS_WHB0 = 1.19209e-7f;
 
-class ActiveDevices {
-    enum class ActiveState {
-        UNINITIALIZED = 0,
-        INACTIVE = 1,
-        ACTIVE = 2,
-    };
-
-    std::mutex lock_;
-    std::vector<enum ActiveState>active_devices_;
-
-public:
-    ActiveDevices();
-    ~ActiveDevices();
-
-    bool activate_device(chip_id_t id);
-    void deactivate_device(chip_id_t id);
-    bool is_device_active(chip_id_t id);
+enum class ActiveState {
+    UNINITIALIZED = 0,
+    INACTIVE = 1,
+    ACTIVE = 2,
 };
 
 // A physical PCIexpress Tenstorrent device
@@ -88,6 +76,8 @@ class Device {
     Device& operator=(Device &&other) = default;
 
     tt::ARCH arch() const;
+
+    ActiveState state() const { return state_; }
 
     chip_id_t id() const { return id_; }
 
@@ -242,7 +232,7 @@ class Device {
     friend class SystemMemoryManager;
 
     static constexpr MemoryAllocator allocator_scheme_ = MemoryAllocator::L1_BANKING;
-    static ActiveDevices active_devices_;
+    ActiveState state_;
     chip_id_t id_;
     uint32_t build_key_;
     std::unique_ptr<Allocator> allocator_ = nullptr;

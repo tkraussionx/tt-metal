@@ -20,6 +20,7 @@ Device &open_device(int device_id, size_t l1_small_size) {
     device_pool::devices.resize(num_devices, nullptr);
     TT_ASSERT(device_id < num_devices);
     if (device_pool::devices[device_id] == nullptr) {
+      std::cout <<" TTNN open device " << std::endl;
         device_pool::devices[device_id] = CreateDevice(device_id, 1, l1_small_size);
     }
     TT_FATAL(

@@ -25,48 +25,6 @@ void ::detail::ProgramDeleter::operator()(Program *p) {
     delete p;
 }
 
-ActiveDevices Device::active_devices_;
-
-ActiveDevices::ActiveDevices() {
-}
-
-ActiveDevices::~ActiveDevices() {
-    for (size_t i = 0; i < active_devices_.size(); i++) {
-        if (active_devices_[i] == ActiveState::ACTIVE) {
-            TT_THROW("Process tear down with device {} still active", i);
-        }
-    }
-}
-
-bool ActiveDevices::activate_device(chip_id_t id) {
-    bool already_initialized;
-    const std::lock_guard<std::mutex> lock(lock_);
-    if (this->active_devices_.size() < id + 1) {
-        this->active_devices_.resize(id + 1);
-        already_initialized = false;
-    } else if (this->active_devices_[id] == ActiveState::ACTIVE) {
-        TT_THROW("Cannot re-initialize device {}, must first call close()", id);
-    } else {
-        already_initialized = (this->active_devices_[id] == ActiveState::INACTIVE) ? true : false;
-    }
-    this->active_devices_[id] = ActiveState::ACTIVE;
-
-    return already_initialized;
-}
-
-void ActiveDevices::deactivate_device(chip_id_t id) {
-    const std::lock_guard<std::mutex> lock(lock_);
-    this->active_devices_[id] = ActiveState::INACTIVE;
-}
-
-bool ActiveDevices::is_device_active(chip_id_t id) {
-    if (this->active_devices_.size() < id + 1) {
-        return false;
-    } else {
-        return this->active_devices_[id] == ActiveState::ACTIVE;
-    }
-}
-
 Device::Device(
     chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) :
     id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id) {
@@ -179,6 +137,7 @@ void Device::initialize_build() {
 }
 
 void Device::build_firmware() {
+  std::cout << " BUILDING FIRMWARE " << this->id() << std::endl;
     ZoneScoped;
 
     detail::GenerateDeviceHeaders(this, this->build_env_.get_out_firmware_root_path());
@@ -1440,7 +1399,8 @@ bool Device::initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_ba
     if (minimal)
         return true;
 
-    bool already_initialized = this->active_devices_.activate_device(this->id_);
+   // bool already_initialized = this->active_devices_.activate_device(this->id_);
+    bool already_initialized = false;
     if (!already_initialized) {
         this->build_firmware();
     }
@@ -1504,7 +1464,8 @@ bool Device::close() {
                         not_done_dispatch_cores.insert(phys_core);
                         log_debug(tt::LogMetal, "MMIO Device Prefetch core: Logical: {} - Physical: {}", prefetch_location.str(), phys_core.str());
                     }
-                } else if (this->active_devices_.is_device_active(device_id)) {
+                } else  {
+                    // Assume that R chip is always open
                     //non mmio devices serviced by this mmio capable device.
                     //skip remote dispatch cores only if respective remote device is active.
                     if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
@@ -1593,7 +1554,9 @@ bool Device::close() {
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     std::unordered_set<CoreCoord> wait_for_cores = not_done_dispatch_cores;
 
+    std::cout << " close: wait for done " << std::endl;
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
+    std::cout << " close: done for done " << std::endl;
 
     DprintServerDetach(this);
 
@@ -1631,7 +1594,7 @@ bool Device::close() {
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
 
-    this->active_devices_.deactivate_device(this->id_);
+    this->state_ = ActiveState::INACTIVE;
     this->disable_and_clear_program_cache();
     this->command_queue_programs.clear();
     this->sw_command_queues_.clear();
@@ -1643,6 +1606,7 @@ bool Device::close() {
 }
 
 Device::~Device() {
+  std::cout << " device dtor " << std::endl;
     if (this->initialized_) {
         this->close();
     }
