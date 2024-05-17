@@ -220,15 +220,15 @@ class TtFalconAttentionPrefill(nn.Module):
 
         seq_len = hidden_states[0].get_legacy_shape()[2]
 
-        if not self.is_grayskull and seq_len in [128, 1024, 2048]:
-            attn_output, layer_present = self._optimized_forward(
-                hidden_states,
-                attention_mask,
-                user_id,
-                layer_past,
-                use_cache,
-            )
-            return attn_output, layer_present
+        # if not self.is_grayskull and seq_len in [128, 1024, 2048]:
+        #     attn_output, layer_present = self._optimized_forward(
+        #         hidden_states,
+        #         attention_mask,
+        #         user_id,
+        #         layer_past,
+        #         use_cache,
+        #     )
+        #     return attn_output, layer_present
 
         #################
         ### FUSED QKV ###

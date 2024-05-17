@@ -117,59 +117,59 @@ class TtFalconModelShared(torch.nn.Module):
                 dim=-1,
             )
 
-            if not is_grayskull() and num_input_tokens in [128, 1024, 2048]:
-                attention_mask_ = create_prefill_attn_mask_for_sharded_softmax(
-                    attention_mask_bool_padded * -1e5,
-                    self.config.num_attention_heads,
-                    num_input_tokens,
+            # if not is_grayskull() and num_input_tokens in [128, 1024, 2048]:
+            #     attention_mask_ = create_prefill_attn_mask_for_sharded_softmax(
+            #         attention_mask_bool_padded * -1e5,
+            #         self.config.num_attention_heads,
+            #         num_input_tokens,
+            #     )
+            #     # Send attn masks to device
+            #     attn_masks_unordered = [
+            #         torch_tensors_to_tt_tensors(
+            #             [attention_mask_slice for _ in self.devices],
+            #             tt_lib.tensor.Layout.ROW_MAJOR,
+            #             tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
+            #             self.model_config["ATTN_MASK_MEMCFG"],
+            #             self.devices,
+            #         )
+            #         for attention_mask_slice in attention_mask_
+            #     ]
+            #     # Tilize attn masks
+            #     for tt_attention_mask_slice in attn_masks_unordered:
+            #         for i in range(self.num_devices):
+            #             tt_attention_mask_slice[i] = tt_lib.tensor.tilize(
+            #                 tt_attention_mask_slice[i],
+            #                 output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
+            #                 output_dtype=self.model_config["ATTN_MASK_DTYPE"],
+            #             )
+            #     # Expected output attention_masks
+            #     # [dev0: [slice0, slice1, ...], dev1: [slice0, slice1, ...], ...]
+            #     tt_attention_mask = [list(x) for x in zip(*attn_masks_unordered)]
+            # else:
+            attention_mask_ = attention_mask_bool_padded * -1e3
+            attention_masks = [attention_mask_.clone() for _ in self.devices]
+            # Send attn masks to device
+            tt_attention_mask = torch_tensors_to_tt_tensors(
+                attention_masks,
+                tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
+                self.model_config["ATTN_MASK_MEMCFG"],
+                self.devices,
+            )
+            # Repeat attn masks for all heads
+            for i in range(self.num_devices):
+                tt_attention_mask[i] = tt_lib.tensor.repeat(
+                    tt_attention_mask[i],
+                    [1, self.config.num_attention_heads, 1, 1],
+                    output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
                 )
-                # Send attn masks to device
-                attn_masks_unordered = [
-                    torch_tensors_to_tt_tensors(
-                        [attention_mask_slice for _ in self.devices],
-                        tt_lib.tensor.Layout.ROW_MAJOR,
-                        tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
-                        self.model_config["ATTN_MASK_MEMCFG"],
-                        self.devices,
-                    )
-                    for attention_mask_slice in attention_mask_
-                ]
-                # Tilize attn masks
-                for tt_attention_mask_slice in attn_masks_unordered:
-                    for i in range(self.num_devices):
-                        tt_attention_mask_slice[i] = tt_lib.tensor.tilize(
-                            tt_attention_mask_slice[i],
-                            output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
-                            output_dtype=self.model_config["ATTN_MASK_DTYPE"],
-                        )
-                # Expected output attention_masks
-                # [dev0: [slice0, slice1, ...], dev1: [slice0, slice1, ...], ...]
-                tt_attention_mask = [list(x) for x in zip(*attn_masks_unordered)]
-            else:
-                attention_mask_ = attention_mask_bool_padded * -1e3
-                attention_masks = [attention_mask_.clone() for _ in self.devices]
-                # Send attn masks to device
-                tt_attention_mask = torch_tensors_to_tt_tensors(
-                    attention_masks,
-                    tt_lib.tensor.Layout.ROW_MAJOR,
-                    tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
-                    self.model_config["ATTN_MASK_MEMCFG"],
-                    self.devices,
+            # Tilize attn masks
+            for i in range(self.num_devices):
+                tt_attention_mask[i] = tt_lib.tensor.tilize(
+                    tt_attention_mask[i],
+                    output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
+                    output_dtype=self.model_config["ATTN_MASK_DTYPE"],
                 )
-                # Repeat attn masks for all heads
-                for i in range(self.num_devices):
-                    tt_attention_mask[i] = tt_lib.tensor.repeat(
-                        tt_attention_mask[i],
-                        [1, self.config.num_attention_heads, 1, 1],
-                        output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
-                    )
-                # Tilize attn masks
-                for i in range(self.num_devices):
-                    tt_attention_mask[i] = tt_lib.tensor.tilize(
-                        tt_attention_mask[i],
-                        output_mem_config=self.model_config["ATTN_MASK_MEMCFG"],
-                        output_dtype=self.model_config["ATTN_MASK_DTYPE"],
-                    )
 
             tt_input_ids = []
             for i, device in enumerate(self.devices):
