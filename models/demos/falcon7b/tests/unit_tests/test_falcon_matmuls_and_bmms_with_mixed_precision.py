@@ -945,7 +945,6 @@ def test_falcon7b_crash(
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
     grid_size = (8, 8)
 
-    num_heads = 64
     print("Running with: ", num_devices, " devices and loops: ", loops)
 
     if seq_len == 1024:
@@ -957,16 +956,11 @@ def test_falcon7b_crash(
 
     query_layer_shape = [1, 71, seq_len, 64]
     key_layer_transposed_shape = [1, 1, 64, seq_len]
-    attention_mask_proper_dim_shape = [1, 1, seq_len, seq_len]
-    scalar_shape = [1, 1, 32, 32]
     value_layer_shape = [1, 1, seq_len, 64]
     attention_output_shape = [1, 71, seq_len, 64]
 
     torch_query_layer = torch.randn(query_layer_shape).bfloat16().float()
     torch_key_layer_transposed = torch.randn(key_layer_transposed_shape).bfloat16().float()
-    torch_attention_mask_proper_dim = torch.randn(attention_mask_proper_dim_shape).bfloat16().float()
-    scalar_value = 1 / math.sqrt(num_heads)
-    torch_scalar = (torch.ones(scalar_shape) * scalar_value).bfloat16().float()
     torch_value_layer = torch.randn(value_layer_shape).bfloat16().float()
     torch_attention_output = torch.randn(attention_output_shape).bfloat16().float()
 
@@ -1007,29 +1001,9 @@ def test_falcon7b_crash(
         packer_l1_acc=True,
     )
 
-    attention_masks_per_device = []
-    for device_idx in range(num_devices):
-        attention_masks_per_device.append(
-            torch2tt_tensor(
-                torch_attention_mask_proper_dim,
-                devices[device_idx],
-                tt_memory_config=dram_interleaved_memory_config,
-                tt_dtype=ttl.tensor.DataType.BFLOAT16,
-            )
-        )
-
-    reference_scalar_per_device = []
     reference_value_layer_per_device = []
     attention_output_concatenated_per_device = []
     for device_idx in range(num_devices):
-        reference_scalar_per_device.append(
-            torch2tt_tensor(
-                torch_scalar,
-                devices[device_idx],
-                tt_memory_config=dram_interleaved_memory_config,
-                tt_dtype=ttl.tensor.DataType.BFLOAT16,
-            )
-        )
         reference_value_layer_per_device.append(
             torch2tt_tensor(
                 torch_value_layer,
@@ -1049,7 +1023,6 @@ def test_falcon7b_crash(
 
     tiles_per_shard = math.ceil((((71 * seq_len) / num_cores) / num_slices) / 32)
     mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
-    mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
     for l in range(loops):
         for i in range(num_slices):
