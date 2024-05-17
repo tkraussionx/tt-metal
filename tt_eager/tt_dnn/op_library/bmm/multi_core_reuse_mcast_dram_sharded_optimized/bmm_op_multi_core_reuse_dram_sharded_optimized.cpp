@@ -586,12 +586,20 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     // auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_worker_cores, src0_cb_config);
     log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src0_cb_index, in0_single_tile_size, in0_CB_size / in0_single_tile_size, in0_CB_size);
 
-    uint32_t src1_cb_index = 1;
-    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
-		.set_page_size(src1_cb_index, in1_single_tile_size);
+
+    std::map<uint8_t, tt::DataFormat> in1_cb_data_format_spec {
+        {1, in1_data_format},
+        {4, in1_data_format}
+    };
+    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, in1_cb_data_format_spec)
+        .set_page_size(1, in1_single_tile_size)
+        .set_page_size(4, in1_single_tile_size);
+    // uint32_t src1_cb_index = 1;
+    // tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
+	// 	.set_page_size(src1_cb_index, in1_single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src1_cb_config);
     // auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_worker_cores, src1_cb_config);
-    log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src1_cb_index, in1_single_tile_size, in1_CB_size / in1_single_tile_size, in1_CB_size);
+    // log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src1_cb_index, in1_single_tile_size, in1_CB_size / in1_single_tile_size, in1_CB_size);
 
     uint32_t src2_cb_index = 2;
     tt_metal::CircularBufferConfig src2_cb_config = tt_metal::CircularBufferConfig(in2_CB_size, {{src2_cb_index, in0_data_format}})

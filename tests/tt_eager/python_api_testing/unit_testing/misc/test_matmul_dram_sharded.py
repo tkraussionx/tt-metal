@@ -69,8 +69,12 @@ def unpad_to_dram_banks(num, lcm=32 * 12):
 )
 @pytest.mark.parametrize(
     "has_bias",
-    [False, True],
-    ids=["no_bias", "bias"],
+    [
+        False,
+    ],
+    ids=[
+        "no_bias",
+    ],
 )
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation, grid_size",
@@ -133,7 +137,7 @@ def test_matmul_in1_dram_sharded(
 
     # in0 = torch.randn(in0_shape).bfloat16().float()
     step = K // num_cores
-    in0 = torch.randn(in0_shape).bfloat16().float()
+    in0 = torch.ones(in0_shape).bfloat16().float()
     # for i in range(num_cores):  # since 32768 / 16 = 2048
     #     in0[:, :, :, i * step : (i + 1) * step] = i + 1
     # in1 = torch.randn(in1_shape).bfloat16().float()

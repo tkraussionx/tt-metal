@@ -35,13 +35,22 @@ uint32_t noc_async_read_tile_dram_sharded_set_state(uint32_t bank_base_address, 
 }
 
 FORCE_INLINE
-void noc_async_read_tile_dram_sharded_with_state(uint32_t src_base_addr, uint32_t src_addr, uint32_t dest_addr) {
+void noc_async_read_tile_dram_sharded_set_trid(uint32_t trid = 0) {
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(trid));
+}
+
+template <uint32_t use_trid = false>
+FORCE_INLINE
+void noc_async_read_tile_dram_sharded_with_state(uint32_t src_base_addr, uint32_t src_addr, uint32_t dest_addr, uint32_t trid = 0) {
     uint32_t src_addr_;
 
     src_addr_ = src_base_addr + src_addr;
 
     DEBUG_STATUS("NRTW");
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+    if constexpr(use_trid) {
+        while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
+    }
     DEBUG_STATUS("NRTD");
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
@@ -76,6 +85,14 @@ void noc_async_read_tile_dram_sharded(uint32_t bank_base_address, uint32_t src_a
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, page_size);  // len_bytes
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     noc_reads_num_issued[noc_index] += 1;
+}
+
+FORCE_INLINE
+void noc_async_read_barrier_with_trid(uint32_t trid) {
+    DEBUG_STATUS("NRBW");
+    while (!ncrisc_noc_read_tiles_flushed(noc_index, trid))
+        ;
+    DEBUG_STATUS("NRBD");
 }
 
 
@@ -117,6 +134,7 @@ void kernel_main() {
     #endif
 
     constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t cb_id_in1_inplace[2] = {1, 4};
     constexpr uint32_t cb_id_out = 16;
     constexpr uint32_t cb_id_out_reshard = 17;
     constexpr uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
@@ -134,16 +152,26 @@ void kernel_main() {
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
         // Copy in1 block into CB, as the default kernel
-        for(uint32_t h = 0; h < in1_num_pages; ++h) {
-            // noc_async_read_tile_dram_sharded<in1_page_size, true>(in1_tensor_addr, l1_read_addr_in1, l1_write_addr_in1, dram_bank_id, vc);
-            noc_async_read_tile_dram_sharded_with_state(in1_base_addr, l1_read_addr_in1, l1_write_addr_in1);
-            l1_read_addr_in1 += in1_page_size;
-            l1_write_addr_in1 += in1_page_size;
+        for(uint32_t i = 0; i < 2; ++i) {
+
+            noc_async_read_tile_dram_sharded_set_trid(i);
+
+            for(uint32_t h = 0; h < in1_num_pages / 2; ++h) {
+                // noc_async_read_tile_dram_sharded<in1_page_size, true>(in1_tensor_addr, l1_read_addr_in1, l1_write_addr_in1, dram_bank_id, vc);
+                noc_async_read_tile_dram_sharded_with_state<true>(in1_base_addr, l1_read_addr_in1, l1_write_addr_in1);
+                l1_read_addr_in1 += in1_page_size;
+                l1_write_addr_in1 += in1_page_size;
+            }
+        }
+
+        for(uint32_t i = 0; i < 2; ++i) {
+            noc_async_read_barrier_with_trid(i);
+            cb_push_back(cb_id_in1_inplace[i], in1_block_num_tiles);
         }
 
         // Barrier! make sure the reads are done
-        noc_async_read_barrier();
-        cb_push_back(cb_id_in1, in1_block_num_tiles);
+        // noc_async_read_barrier();
+        // cb_push_back(cb_id_in1, in1_block_num_tiles);
     }
     #ifdef FUSE_BIAS
         // Operand 1
