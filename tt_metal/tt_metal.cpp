@@ -153,58 +153,31 @@ std::map<chip_id_t, Device *> CreateDevices(
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
     std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
-    bool tg_remote_chip_found = false;
     bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
     for (const auto &device_id : device_ids) {
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
-        if (device_id == mmio_device_id) {
-            std::cout << " MMIO Device " << device_id
-                      << " Tunnel Count: " << tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id)
-                      << std::endl;
-            std::cout << " MMIO Device " << device_id
-                      << " Tunnel Depth: " << tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_device_id)
-                      << std::endl;
-        } else {
-            std::cout << " Device " << device_id
-                      << " Tunnel Depth: " << tt::Cluster::instance().get_device_tunnel_depth(device_id) << std::endl;
-        }
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
-            for (const auto &mmio_controlled_device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                uint32_t tunnel_stop = tt::Cluster::instance().get_device_tunnel_depth(mmio_controlled_device_id);
-                if (mmio_controlled_device_id == mmio_device_id) {
-                    log_info(tt::LogMetal, " MMIO Device {} Tunnel Count: {}", mmio_controlled_device_id, tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_controlled_device_id));
-                    log_info(tt::LogMetal, " MMIO Device {} Tunnel Depth: {}", mmio_controlled_device_id, tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_controlled_device_id));
-                    log_info(tt::LogMetal, " MMIO Device {} Tunnel Stop: {}", mmio_controlled_device_id, tunnel_stop);
+            log_debug(tt::LogMetal, "MMIO Device {} Tunnel Count: {}", mmio_device_id, tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id));
+            log_debug(tt::LogMetal, "MMIO Device {} Tunnel Depth: {}", mmio_device_id, tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_device_id));
+            log_debug(tt::LogMetal, "MMIO Device {} Tunnel Stop: {}", mmio_device_id, tt::Cluster::instance().get_device_tunnel_depth(mmio_device_id));
+            Device *mmio_device = new Device(mmio_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
+            //Only include the mmio device in the active devices set returned to the caller if we are not running
+            //on a Galaxy cluster.
+            //On Galaxy, gateway (mmio devices) cannot run compute workloads.
+            if (!is_galaxy) {
+                active_devices.insert({mmio_device_id, mmio_device});
+                detail::InitDeviceProfiler(mmio_device);
+            }
 
-                } else {
-                    log_info(tt::LogMetal, " Device {} Tunnel Stop: {}", mmio_controlled_device_id, tunnel_stop);
-                }
-                //if (mmio_controlled_device_id != mmio_device_id) {
-                //    continue;
-                //}
-                //For galaxy only proceed for directly connected remote chip.
-                //Currently we only have 1 deep tunnel. So we can only handle 1 chip on galaxy. Like R chip on N300.
-                //Remove when 4 deep tunnel gets implemented.
-                if ((mmio_controlled_device_id != mmio_device_id) && is_galaxy) {
-                    log_debug(tt::LogMetal, " Checking Device {}", mmio_controlled_device_id);
-                    std::unordered_set<chip_id_t> one_deep_remote_chips;
-                    auto active_eth_cores =  tt::Cluster::instance().get_active_ethernet_cores(mmio_device_id);
-                    for (auto eth_core : active_eth_cores) {
-                        one_deep_remote_chips.insert(std::get<0>(tt::Cluster::instance().get_connected_ethernet_core(std::make_tuple(mmio_device_id, eth_core))));
-                    }
-
-                    log_debug(tt::LogMetal, " Device  {} is connected to {} chips.", mmio_device_id, one_deep_remote_chips.size());
-                    if (one_deep_remote_chips.find(mmio_controlled_device_id) == one_deep_remote_chips.end()) {
-                        continue;
-                    }
-                    tg_remote_chip_found = true;
-                }
-                Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
-                active_devices.insert({mmio_controlled_device_id, dev});
-                detail::InitDeviceProfiler(dev);
-
-                if (tg_remote_chip_found) {
-                    break;
+            auto tunnels_from_mmio = mmio_device->tunnels_from_mmio_;
+            for (uint32_t t = 0; t < tunnels_from_mmio.size(); t++) {
+                //Need to create devices from farthest to the closest.
+                for (uint32_t ts = tunnels_from_mmio[t].size() - 1; ts > 0 ; ts--) {
+                    uint32_t mmio_controlled_device_id = tunnels_from_mmio[t][ts];
+                    log_debug(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
+                    Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
+                    active_devices.insert({mmio_controlled_device_id, dev});
+                    detail::InitDeviceProfiler(dev);
                 }
             }
         }
@@ -216,7 +189,45 @@ std::map<chip_id_t, Device *> CreateDevices(
 
 void CloseDevices(std::map<chip_id_t, Device *> devices) {
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-    for (const auto &[device_id, dev] : devices) {
+    std::map<chip_id_t, Device *> mmio_devices = {};
+    bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
+
+    if (is_galaxy) {
+        //On Galaxy, gateway wormhole devices (mmio devices) are not included in the set of devices
+        //created by CreateDevices(). So when closing devices, we need to find the corresponding
+        //gateway chips for all the tunneled devcies.
+        for (const auto &[device_id, dev] : devices) {
+            const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
+            if (mmio_devices.find(mmio_device_id) == mmio_devices.end()) {
+                auto dev_handle = tt::tt_metal::detail::GetDeviceHandle(mmio_device_id);
+                mmio_devices.insert({mmio_device_id, dev_handle});
+            }
+        }
+    } else {
+        for (const auto &[device_id, dev] : devices) {
+            if(dev->is_mmio_capable()) {
+                mmio_devices.insert({device_id, dev});
+            }
+        }
+        for (const auto &[device_id, dev] : mmio_devices) {
+            devices.erase(device_id);
+        }
+    }
+
+    for (const auto &[device_id, dev] : mmio_devices) {
+        //For each mmio device, first close all the remote tunneled devices.
+        //Close the farthest tunneled device first.
+        auto tunnels_from_mmio = dev->tunnels_from_mmio_;
+        //iterate over all tunnels origination from this mmio device
+        for (auto t : tunnels_from_mmio) {
+            //iterate over all tunneled devices (tunnel stops) in this tunnel and close them.
+            for (uint32_t ts = t.size() - 1; ts > 0; ts--) {
+                if (devices.find(t[ts]) != devices.end()) {
+                    devices[t[ts]]->close();
+                }
+            }
+        }
+        //finally close the mmio device
         dev->close();
     }
 }

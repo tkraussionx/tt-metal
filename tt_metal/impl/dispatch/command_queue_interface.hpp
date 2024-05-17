@@ -18,6 +18,9 @@ using namespace tt::tt_metal;
 // todo consider moving these to dispatch_addr_map
 static constexpr uint32_t PCIE_ALIGNMENT = 32;
 static constexpr uint32_t MAX_HUGEPAGE_SIZE = 1 << 30; // 1GB;
+static constexpr uint32_t MAX_DEV_CHANNEL_SIZE = 1 << 28; // 256 MB;
+static constexpr uint32_t DEVICES_PER_UMD_CHANNEL = MAX_HUGEPAGE_SIZE / MAX_DEV_CHANNEL_SIZE; // 256 MB;
+
 
 static constexpr uint32_t MEMCPY_ALIGNMENT = sizeof(__m128i);
 
@@ -134,13 +137,17 @@ inline uint32_t get_relative_cq_offset(uint8_t cq_id, uint32_t cq_size) {
     return cq_id * cq_size;
 }
 
+inline uint16_t get_umd_channel(uint16_t channel) {
+    return channel & 0x3;
+}
+
 /// @brief Get absolute offset of the command queue
 /// @param channel uint16_t channel ID (hugepage)
 /// @param cq_id uint8_t ID the command queue
 /// @param cq_size uint32_t size of the command queue
 /// @return uint32_t absolute offset
 inline uint32_t get_absolute_cq_offset(uint16_t channel, uint8_t cq_id, uint32_t cq_size) {
-    return (MAX_HUGEPAGE_SIZE * channel) + get_relative_cq_offset(cq_id, cq_size);
+    return (MAX_HUGEPAGE_SIZE * get_umd_channel(channel)) + ((channel >> 2) * MAX_DEV_CHANNEL_SIZE) + get_relative_cq_offset(cq_id, cq_size);
 }
 
 template <bool addr_16B>
@@ -148,7 +155,8 @@ inline uint32_t get_cq_issue_rd_ptr(chip_id_t chip_id, uint8_t cq_id, uint32_t c
     uint32_t recv;
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(chip_id);
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(chip_id);
-    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_ISSUE_READ_PTR + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
+    uint32_t channel_offset = (channel >> 2) * MAX_DEV_CHANNEL_SIZE;
+    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_ISSUE_READ_PTR + channel_offset + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
     if (not addr_16B) {
         return recv << 4;
     }
@@ -160,7 +168,8 @@ inline uint32_t get_cq_completion_wr_ptr(chip_id_t chip_id, uint8_t cq_id, uint3
     uint32_t recv;
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(chip_id);
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(chip_id);
-    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_COMPLETION_WRITE_PTR + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
+    uint32_t channel_offset = (channel >> 2) * MAX_DEV_CHANNEL_SIZE;
+    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_COMPLETION_WRITE_PTR + channel_offset + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
     if (not addr_16B) {
         return recv << 4;
     }
@@ -258,6 +267,8 @@ struct SystemMemoryCQInterface {
 
         this->completion_fifo_rd_ptr = this->issue_fifo_limit;
         this->completion_fifo_rd_toggle = 0;
+        //log_info(tt::LogMetal, "SystemMemoryCQInterface : Offset: {} - issue_fifo_wr_ptr: {} - completion_fifo_rd_ptr: {}", this->offset, this->issue_fifo_wr_ptr, this->completion_fifo_rd_ptr);
+
     }
 
     // Percentage of the command queue that is dedicated for issuing commands. Issue queue size is rounded to be 32B aligned and remaining space is dedicated for completion queue
@@ -317,7 +328,12 @@ class SystemMemoryManager {
         chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
         char* hugepage_start = (char*) tt::Cluster::instance().host_dma_address(0, mmio_device_id, channel);
+
+        //log_info(tt::LogMetal, "Device: {} - Channel: {} - Huge Page Start: {}. SizeOf Char* = {}", device_id, channel, (uint64_t)hugepage_start, sizeof(char *));
+        hugepage_start += (channel >> 2) * MAX_DEV_CHANNEL_SIZE;
         this->cq_sysmem_start = hugepage_start;
+
+        //log_info(tt::LogMetal, "Device: {} - Channel: {} - CQ Mem Start: {}", device_id, channel, (uint64_t)this->cq_sysmem_start);
 
         // TODO(abhullar): Remove env var and expose sizing at the API level
         char* cq_size_override_env = std::getenv("TT_METAL_CQ_SIZE_OVERRIDE");
@@ -326,8 +342,12 @@ class SystemMemoryManager {
             this->cq_size = cq_size_override;
         } else {
             this->cq_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel) / num_hw_cqs;
+            if (tt::Cluster::instance().is_galaxy_cluster()) {
+                //We put 4 galaxy devices per huge page since number of hugepages available is less than number of devices.
+                this->cq_size = this->cq_size / DEVICES_PER_UMD_CHANNEL;
+            }
         }
-        this->channel_offset = MAX_HUGEPAGE_SIZE * channel;
+        this->channel_offset = MAX_HUGEPAGE_SIZE * get_umd_channel(channel) + (channel >> 2) * MAX_DEV_CHANNEL_SIZE;
 
         CoreType core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(device_id);
         for (uint8_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -528,6 +548,8 @@ class SystemMemoryManager {
             write_ptr = write_ptr_and_toggle & 0x7fffffff;
             write_toggle = write_ptr_and_toggle >> 31;
         } while (cq_interface.completion_fifo_rd_ptr == write_ptr and cq_interface.completion_fifo_rd_toggle == write_toggle and not exit_condition);
+        //std::cout<<"Host write_ptr_and_toggle = 0x"<<std::hex<<write_ptr_and_toggle<<std::dec<<std::endl;
+        //std::cout<<"Host cq_interface.completion_fifo_rd_ptr = 0x"<<std::hex<<cq_interface.completion_fifo_rd_ptr<<std::dec<<std::endl;
     }
 
     void send_completion_queue_read_ptr(const uint8_t cq_id) const {
