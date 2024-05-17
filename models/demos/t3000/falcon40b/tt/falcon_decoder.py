@@ -215,10 +215,11 @@ class TtFalconDecoderLayer:
         """Input shape: [batch, 1, seq_len, hidden_size]"""
 
         assert not output_attentions
+        num_devices = len(hidden_states)
 
         if self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"].is_sharded():
             replicated_hidden_states = []
-            for i in range(len(hidden_states)):
+            for i in range(num_devices):
                 replicated_hidden_states.append(
                     tt_lib.tensor.sharded_to_interleaved(
                         hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
@@ -226,7 +227,7 @@ class TtFalconDecoderLayer:
                 )
         else:
             replicated_hidden_states = []
-            for i in range(len(hidden_states)):
+            for i in range(num_devices):
                 replicated_hidden_states.append(
                     tt_lib.tensor.clone(hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"])
                 )
@@ -238,6 +239,12 @@ class TtFalconDecoderLayer:
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],
         )
 
+        replicated_hidden_states_for_mlp = []
+        for i in range(num_devices):
+            replicated_hidden_states_for_mlp.append(
+                tt_lib.tensor.clone(replicated_hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"])
+            )
+
         attn_ln_output = partial_layernorm(
             replicated_hidden_states,
             self.ln_attn_gamma,
@@ -245,14 +252,16 @@ class TtFalconDecoderLayer:
             self.layernorm_eps,
             self.model_config["layernorm_params"],
             self.model_config["PARTIAL_LN_MEMCFG"],
-            self.model_config["PARTIAL_LN_PROGCFG"],
+            self.model_config["PARTIAL_LN_INPLACE_PROGCFG"],
             self.model_config["LN_MLP_OUTPUT_DTYPE"],
             self.hidden_size,
             self.devices,
         )
+        for i in range(num_devices):
+            replicated_hidden_states[i].deallocate(True)
 
         mlp_ln_output = partial_layernorm(
-            replicated_hidden_states,
+            replicated_hidden_states_for_mlp,
             self.ln_mlp_gamma,
             self.ln_mlp_beta,
             self.layernorm_eps,
@@ -263,6 +272,8 @@ class TtFalconDecoderLayer:
             self.hidden_size,
             self.devices,
         )
+        for i in range(num_devices):
+            replicated_hidden_states_for_mlp[i].deallocate(True)
 
         residual = hidden_states
 
@@ -284,7 +295,7 @@ class TtFalconDecoderLayer:
 
         # Add attn output to residiual first in place to save memory
         # Note that this is only correct in inference when dropout is disabled
-        for i in range(len(residual)):
+        for i in range(num_devices):
             output.append(
                 tt_lib.operations.primary.add(
                     residual[i],
@@ -301,7 +312,7 @@ class TtFalconDecoderLayer:
 
         # dropout_add
         # For inference, this is just add
-        for i in range(len(output)):
+        for i in range(num_devices):
             output[i] = tt_lib.operations.primary.add(
                 output[i],
                 mlp_output[i],
