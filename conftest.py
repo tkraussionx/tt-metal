@@ -273,6 +273,7 @@ def device_l1_small_size(request):
 
     yield device
 
+    # TODO: can we remove this
     ttl.device.Synchronize(device)
     ttl.device.CloseDevice(device)
 

@@ -322,6 +322,7 @@ TEST_F(CommandQueueFixture, EnqueueProgramTraceCapture) {
 
     // Done
     Finish(command_queue);
+    ReleaseTrace(trace_id);
 }
 
 TEST_F(CommandQueueFixture, EnqueueProgramDeviceCapture) {
