@@ -178,7 +178,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     )
 
     generation_start_pos = 0
-    max_generated_tokens = 200  # TODO Increase to around 100 tokens
+    max_generated_tokens = 120
 
     cache_attention(device_mesh, state_dict, model_args, rot_mats, generation_start_pos, max_generated_tokens, dtype)
 
@@ -198,14 +198,16 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         current_pos = start_pos % model_args.sliding_window
 
         if embed_on_host:
-            decode_input_11BH = prepare_inputs_ttnn(
+            decode_input_11BH, attn_mask = prepare_inputs_ttnn(
                 pt_decode_input,
                 model_args.dim,
+                start_pos,
+                model_args.sliding_window,
                 tt_model.device_mesh,
             )
 
         # Run ttnn mixtral model
-        tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, rot_mats)
+        tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask, rot_mats)
 
         if embed_on_host:
             # Convert ttnn tensor to torch tensor
