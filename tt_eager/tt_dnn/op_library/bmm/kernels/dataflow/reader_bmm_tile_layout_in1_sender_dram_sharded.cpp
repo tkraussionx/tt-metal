@@ -125,14 +125,6 @@ void kernel_main() {
     uint32_t l1_write_addr_in1;
     constexpr DataFormat in1_data_format = get_dataformat(cb_id_in1);
 
-    // DPRINT << in1_page_size << ENDL();
-    // DPRINT << in1_num_pages << ENDL();
-    // DPRINT << in1_block_w << ENDL();
-    // DPRINT << in1_block_num_tiles << ENDL();
-    // DPRINT << in1_tensor_addr << ENDL();
-    // DPRINT << in1_page_size << ENDL();
-    // DPRINT << vc << ENDL();
-
     uint32_t in1_base_addr = noc_async_read_tile_dram_sharded_set_state<in1_page_size, true>(in1_tensor_addr, dram_bank_id, vc);
 
     uint32_t l1_read_addr_in1 = 0;
@@ -140,8 +132,6 @@ void kernel_main() {
         // Operand 1
         cb_reserve_back(cb_id_in1, in1_block_num_tiles);
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-
-        // DPRINT << l1_write_addr_in1 << ENDL();
 
         // Copy in1 block into CB, as the default kernel
         for(uint32_t h = 0; h < in1_num_pages; ++h) {
