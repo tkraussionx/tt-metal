@@ -37,6 +37,10 @@ namespace detail {
 
 std::map <uint32_t, DeviceProfiler> tt_metal_device_profiler_map;
 
+void ClearDeviceProfiler() {
+    tt_metal_device_profiler_map.clear();
+}
+
 void InitDeviceProfiler(Device *device){
 #if defined(PROFILER)
     ZoneScoped;
