@@ -326,7 +326,7 @@ class MambaBlock(nn.Module):
             x: shape (1, 1, b*l, d_in*n) -> (1, 1, 1*1024, 5120*32)
 
         Returns:
-            output: shape (1, l, b, d_in*n)
+            output: shape (1, 1, b*l, d_in*n) -> (1, 1, 1*1024, 5120*32)
 
         Official Implementation:
             selective_scan_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L86
