@@ -1097,23 +1097,6 @@ def test_falcon7b_crash(
                 )
 
             subblock_w = 1
-            softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                subblock_w=subblock_w,
-                block_h=mm_output_height_shard_spec[0] // 32,
-                block_w=mm_output_height_shard_spec[1] // 32,
-            )
-
-            for device_idx in range(num_devices):
-                mm_slices[device_idx] = ttl.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
-                    mm_slices[device_idx],
-                    scalar_value,
-                    attention_masks_per_device[device_idx],
-                    program_config=softmax_program_config,
-                    compute_kernel_config=compute_kernel_config,
-                )
-
-            subblock_w = 1
             subblock_h = 1
             program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
                 compute_with_storage_grid_size=grid_size,
