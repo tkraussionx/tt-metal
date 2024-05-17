@@ -223,6 +223,15 @@ model_perf_t3000_device() {
 
     ./tests/scripts/t3000/run_t3000_model_perf_tests.sh --pipeline-type "$pipeline_type"
 }
+
+# Run t3000 stress tests
+stress_t3000_device() {
+    local tt_arch=$1
+    local pipeline_type=$2
+    local dispatch_mode=$3
+
+    ./tests/scripts/t3000/run_t3000_stress_tests.sh
+}
 ##########################T3000##########################
 
 ##########################TG##########################
@@ -336,6 +345,8 @@ run_pipeline_tests() {
         demos_t3000_device "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == *"model_perf_t3000_device" ]]; then
         model_perf_t3000_device "$tt_arch" "$pipeline_type" "$dispatch_mode"
+    elif [[ $pipeline_type == "stress_t3000_device" ]]; then
+        stress_t3000_device "$tt_arch" "$pipeline_type" "$dispatch_mode"
     # TG pipelines
     elif [[ $pipeline_type == "unit_tg_device" ]]; then
         unit_tg_device "$tt_arch" "$pipeline_type" "$dispatch_mode"
