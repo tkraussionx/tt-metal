@@ -1007,37 +1007,16 @@ def test_falcon7b_crash(
         packer_l1_acc=True,
     )
 
-    attention_masks_per_slice_per_device = []
-    attention_mask_starting_index_per_slice = 0
-    slice_length = (71 * seq_len) // num_slices
-    number_of_attention_mask_elements_used_per_slice = slice_length - seq_len * (slice_length // seq_len)
-    torch_attention_mask_per_slice = []
-    for slice_index in range(num_slices):
-        torch_attention_mask_per_slice.append(
-            torch.cat(
-                [
-                    torch_attention_mask_proper_dim[:, :, attention_mask_starting_index_per_slice:, :],
-                    torch_attention_mask_proper_dim[:, :, :attention_mask_starting_index_per_slice, :],
-                ],
-                dim=2,
+    attention_masks_per_device = []
+    for device_idx in range(num_devices):
+        attention_masks_per_device.append(
+            torch2tt_tensor(
+                torch_attention_mask_proper_dim,
+                devices[device_idx],
+                tt_memory_config=dram_interleaved_memory_config,
+                tt_dtype=ttl.tensor.DataType.BFLOAT16,
             )
         )
-        attention_mask_starting_index_per_slice = (
-            attention_mask_starting_index_per_slice + number_of_attention_mask_elements_used_per_slice
-        ) % seq_len  # mod attention_mask.height
-
-    for device_idx in range(num_devices):
-        attn_mask_slices = []
-        for slice_index in range(num_slices):
-            attn_mask_slices.append(
-                torch2tt_tensor(
-                    torch_attention_mask_per_slice[slice_index],
-                    devices[device_idx],
-                    tt_memory_config=dram_interleaved_memory_config,
-                    tt_dtype=ttl.tensor.DataType.BFLOAT16,
-                )
-            )
-        attention_masks_per_slice_per_device.append(attn_mask_slices)
 
     reference_scalar_per_device = []
     reference_value_layer_per_device = []
@@ -1118,8 +1097,6 @@ def test_falcon7b_crash(
                 )
 
             subblock_w = 1
-            if seq_len == 2048:
-                subblock_w = 1
             softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
                 compute_with_storage_grid_size=grid_size,
                 subblock_w=subblock_w,
@@ -1131,7 +1108,7 @@ def test_falcon7b_crash(
                 mm_slices[device_idx] = ttl.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
                     mm_slices[device_idx],
                     scalar_value,
-                    attention_masks_per_slice_per_device[device_idx][i],
+                    attention_masks_per_device[device_idx],
                     program_config=softmax_program_config,
                     compute_kernel_config=compute_kernel_config,
                 )
