@@ -1025,119 +1025,107 @@ def test_falcon7b_crash(
     mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
 
     for l in range(loops):
-        for i in range(num_slices):
-            slices = []
-            for device_idx in range(num_devices):
-                slices.append(
-                    ttl.tensor.interleaved_to_sharded_partial(
-                        reference_query_layer_per_device[device_idx],
-                        grid_size,
-                        mm_activations_height_shard_spec,
-                        num_slices,  # num_slices
-                        i,  # slice_index
-                        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                        ttl.tensor.ShardOrientation.ROW_MAJOR,
-                    )
+        slices = []
+        for device_idx in range(num_devices):
+            slices.append(
+                ttl.tensor.interleaved_to_sharded_partial(
+                    reference_query_layer_per_device[device_idx],
+                    grid_size,
+                    mm_activations_height_shard_spec,
+                    num_slices,  # num_slices
+                    0,  # slice_index
+                    ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
                 )
-
-            print("I2SP -> Begin sync of loop: ", l, " for slice: ", i)
-            for device_idx in range(num_devices):
-                ttl.device.Synchronize(devices[device_idx])
-            print("I2SP -> End sync of loop: ", l, " for slice: ", i)
-
-            subblock_h = 1
-            subblock_w = 1
-            if seq_len == 2048:
-                subblock_w = 1  # best option
-            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                in0_block_w=2,
-                per_core_M=tiles_per_shard,
-                per_core_N=seq_len // 32,
-                out_subblock_h=subblock_h,
-                out_subblock_w=subblock_w,
-                fuse_batch=True,
-                fused_activation=None,
-                mcast_in0=False,
             )
 
-            mm_slices = []
-            for device_idx in range(num_devices):
-                mm_slices.append(
-                    ttl.operations.primary.matmul(
-                        slices[device_idx],
-                        reference_key_layer_transposed_per_device[device_idx],
-                        program_config=program_config,
-                        output_mem_config=height_sharded_memory_config,
-                        output_dtype=ttl.tensor.DataType.BFLOAT16,
-                        compute_kernel_config=compute_kernel_config,
-                    )
-                )
-
-            print("MM1 -> Begin sync of loop: ", l, " for slice: ", i)
-            for device_idx in range(num_devices):
-                ttl.device.Synchronize(devices[device_idx])
-            print("MM1 -> End sync of loop: ", l, " for slice: ", i)
-
-            subblock_w = 1
-            subblock_h = 1
-            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                in0_block_w=seq_len // 32,
-                per_core_M=tiles_per_shard,
-                per_core_N=2,
-                out_subblock_h=subblock_h,
-                out_subblock_w=subblock_w,
-                fuse_batch=True,
-                fused_activation=None,
-                mcast_in0=False,
-            )
-
-            attn_out_slices = []
-            for device_idx in range(num_devices):
-                attn_out_slices.append(
-                    ttl.operations.primary.matmul(
-                        mm_slices[device_idx],
-                        reference_value_layer_per_device[device_idx],
-                        program_config=program_config,
-                        output_mem_config=height_sharded_memory_config,
-                        output_dtype=ttl.tensor.DataType.BFLOAT16,
-                        compute_kernel_config=compute_kernel_config,
-                    )
-                )
-
-            print("MM2 -> Begin sync of loop: ", l, " for slice: ", i)
-            for device_idx in range(num_devices):
-                ttl.device.Synchronize(devices[device_idx])
-            print("MM2 -> End sync of loop: ", l, " for slice: ", i)
-
-            for device_idx in range(num_devices):
-                ttl.tensor.sharded_to_interleaved_partial(
-                    attn_out_slices[device_idx],
-                    attention_output_concatenated_per_device[device_idx],
-                    num_slices,
-                    i,
-                    dram_interleaved_memory_config,
-                )
-
-            print("S2IP -> Begin sync of loop: ", l, " for slice: ", i)
-            for device_idx in range(num_devices):
-                ttl.device.Synchronize(devices[device_idx])
-            print("S2IP -> End sync of loop: ", l, " for slice: ", i)
-
-            for device_idx in range(num_devices):
-                slices[device_idx].deallocate()
-                mm_slices[device_idx].deallocate()
-                attn_out_slices[device_idx].deallocate()
-            print("Post slice - Begin sync of loop: ", l, " for slice: ", i)
-            for device_idx in range(num_devices):
-                ttl.device.Synchronize(devices[device_idx])
-            print("Post slice - End sync of loop: ", l, " for slice: ", i)
-
-        print("Begin sync of loop: ", l)
+        print("I2SP -> Begin sync of loop: ", l)
         for device_idx in range(num_devices):
             ttl.device.Synchronize(devices[device_idx])
-        print("End sync of loop: ", l)
+        print("I2SP -> End sync of loop: ", l)
+
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            in0_block_w=2,
+            per_core_M=tiles_per_shard,
+            per_core_N=seq_len // 32,
+            out_subblock_h=1,
+            out_subblock_w=1,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        )
+
+        mm_slices = []
+        for device_idx in range(num_devices):
+            mm_slices.append(
+                ttl.operations.primary.matmul(
+                    slices[device_idx],
+                    reference_key_layer_transposed_per_device[device_idx],
+                    program_config=program_config,
+                    output_mem_config=height_sharded_memory_config,
+                    output_dtype=ttl.tensor.DataType.BFLOAT16,
+                    compute_kernel_config=compute_kernel_config,
+                )
+            )
+
+        print("MM1 -> Begin sync of loop: ", l)
+        for device_idx in range(num_devices):
+            ttl.device.Synchronize(devices[device_idx])
+        print("MM1 -> End sync of loop: ", l)
+
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            in0_block_w=seq_len // 32,
+            per_core_M=tiles_per_shard,
+            per_core_N=2,
+            out_subblock_h=1,
+            out_subblock_w=1,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        )
+
+        attn_out_slices = []
+        for device_idx in range(num_devices):
+            attn_out_slices.append(
+                ttl.operations.primary.matmul(
+                    mm_slices[device_idx],
+                    reference_value_layer_per_device[device_idx],
+                    program_config=program_config,
+                    output_mem_config=height_sharded_memory_config,
+                    output_dtype=ttl.tensor.DataType.BFLOAT16,
+                    compute_kernel_config=compute_kernel_config,
+                )
+            )
+
+        print("MM2 -> Begin sync of loop: ", l)
+        for device_idx in range(num_devices):
+            ttl.device.Synchronize(devices[device_idx])
+        print("MM2 -> End sync of loop: ", l)
+
+        for device_idx in range(num_devices):
+            ttl.tensor.sharded_to_interleaved_partial(
+                attn_out_slices[device_idx],
+                attention_output_concatenated_per_device[device_idx],
+                num_slices,
+                0,
+                dram_interleaved_memory_config,
+            )
+
+        print("S2IP -> Begin sync of loop: ", l)
+        for device_idx in range(num_devices):
+            ttl.device.Synchronize(devices[device_idx])
+        print("S2IP -> End sync of loop: ", l)
+
+        for device_idx in range(num_devices):
+            slices[device_idx].deallocate()
+            mm_slices[device_idx].deallocate()
+            attn_out_slices[device_idx].deallocate()
+        print("Post slice - Begin sync of loop: ", l)
+        for device_idx in range(num_devices):
+            ttl.device.Synchronize(devices[device_idx])
+        print("Post slice - End sync of loop: ", l)
 
     print("Done!")
     passing = True

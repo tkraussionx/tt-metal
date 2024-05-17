@@ -1,0 +1,75 @@
+pytest hanging_all_gather.py -k "test_hanging_all_gather and 10_loops and 8chips"
+pytest hanging_all_gather.py -k "test_hanging_attn_matmul and 10_loops and 8chips"
+python tt_eager/tracy.py -r -m "pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"test_falcon40b_attention_softmax_sequence and seq_len_2048 and 1_loops and 8chips\""
+
+python tt_eager/tracy.py -r -m "pytest hanging_all_gather.py -k \"test_hanging_attn_matmul and 1_loops and 8chips\""
+
+
+
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq1024_bf16_dram and async_on"
+
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_t3000_bare_metal and prefill_seq256"
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_t3000_bare_metal and prefill_seq2048"
+
+
+crash:
+8 chips
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
+TT_METAL_WATCHER=12 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
+
+1 chip
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 1chips and seq_len_1024 and 1000_loops"
+
+source python_env/bin/activate
+
+ Starting pci link reset on WH devices at pci indices: 0, 1, 2, 3
+Traceback (most recent call last):
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/bin/tt-smi", line 8, in <module>
+    sys.exit(main())
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_smi/tt_smi.py", line 672, in main
+    pci_board_reset(args.reset, reinit=True)
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_smi/tt_smi_backend.py", line 582, in pci_board_reset
+    reset_wh_boards(reset_wh_pci_idx)
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_smi/resets/wh_resets.py", line 271, in reset_wh_boards
+    reset_devices = WHChipReset().full_lds_reset(pci_interfaces=boards_to_reset)
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_tools_common/wh_reset.py", line 69, in full_lds_reset
+    chip.arc_msg(self.MSG_TYPE_ARC_STATE3, wait_for_done=True)
+Exception: Read 0xffffffff from ARC scratch[6]: you should reset the board.
+
+
+After reboot now
+thread '<unnamed>' panicked at crates/pyluwen/src/lib.rs:492:70:
+called `Result::unwrap()` on an `Err` value: DeviceOpenFailed { id: 3, source: Os { code: 2, kind: NotFound, message: "No such file or directory" } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Traceback (most recent call last):
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/bin/tt-smi", line 8, in <module>
+    sys.exit(main())
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_smi/tt_smi.py", line 672, in main
+    pci_board_reset(args.reset, reinit=True)
+  File "/opt/tt_metal_infra/provisioning/provisioning_env/lib/python3.8/site-packages/tt_smi/tt_smi_backend.py", line 561, in pci_board_reset
+    chip = PciChip(pci_interface=pci_idx)
+pyo3_runtime.PanicException: called `Result::unwrap()` on an `Err` value: DeviceOpenFailed { id: 3, source: Os { code: 2, kind: NotFound, message: "No such file or directory" } }
+
+
+Running with:  8  devices and loops:  1000
+I2SP -> Begin sync of loop:  0  for slice:  0
+I2SP -> End sync of loop:  0  for slice:  0
+
+
+Running with:  1  devices and loops:  100
+I2SP -> Begin sync of loop:  0  for slice:  0
+I2SP -> End sync of loop:  0  for slice:  0
+MM1 -> Begin sync of loop:  0  for slice:  0
+MM1 -> End sync of loop:  0  for slice:  0
+MM2 -> Begin sync of loop:  0  for slice:  0
+
+Running with:  1  devices and loops:  1000
+I2SP -> Begin sync of loop:  0
+I2SP -> End sync of loop:  0
+MM1 -> Begin sync of loop:  0
+MM1 -> End sync of loop:  0
+MM2 -> Begin sync of loop:  0
+
+Releasing the lock
+
+Releasing the lock
