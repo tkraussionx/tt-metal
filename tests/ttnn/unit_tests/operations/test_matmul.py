@@ -5,8 +5,15 @@
 import pytest
 import torch
 import ttnn
+import math
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
+from models.utility_functions import (
+    comp_pcc,
+    tt2torch_tensor,
+    torch2tt_tensor,
+    skip_for_grayskull,
+)
 from models.utility_functions import skip_for_grayskull, skip_for_wormhole_b0, is_grayskull
 
 
@@ -633,3 +640,305 @@ def test_sd_matmul(device, batch_size, channel_a, channel_b, m_size, k_size, n_s
 
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=pcc)
+
+
+def test_double_matmul_eltwise(device):
+    device.enable_program_cache()
+    M = 512
+    K = 1280
+    N = 5120
+    grid_size = [8, 8]
+
+    in0_shape = [1, 1, M, K]
+    in0_torch = torch.randn(in0_shape)
+    in0 = ttnn.from_torch(in0_torch, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
+    in0 = ttnn.to_device(in0, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    in0 = ttnn.experimental.tensor.interleaved_to_sharded(
+        in0,
+        grid_size,
+        [in0.shape[-2] // grid_size[1], in0.shape[-1] // grid_size[0]],
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+    )
+    in1_shape = [1, 1, K, N]
+    in1a_torch = torch.randn(in1_shape)
+    in1a = ttnn.from_torch(in1a_torch, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
+    in1a = ttnn.to_device(in1a, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    bias_a_torch = torch.randn([1, 1, 1, N])
+    bias_a = ttnn.from_torch(bias_a_torch, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
+    bias_a = ttnn.to_device(bias_a, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    in1b_torch = torch.randn(in1_shape)
+    in1b = ttnn.from_torch(in1b_torch, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
+    in1b = ttnn.to_device(in1b, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    bias_b_torch = torch.randn([1, 1, 1, N])
+    bias_b = ttnn.from_torch(bias_b_torch, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
+    bias_b = ttnn.to_device(bias_b, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    torch_mm0 = in0_torch @ in1a_torch + bias_a_torch
+    torch_mm1 = in0_torch @ in1b_torch + bias_b_torch
+    torch_ret = torch_mm0 * torch.nn.functional.gelu(torch_mm1)
+
+    in0_block_h = 2
+    in0_block_w = 5
+    out_subblock_h = 1
+    out_subblock_w = 5
+    out_block_h = 2
+    out_block_w = 20
+
+    block_sharded_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    for i in range(3000):
+        program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
+        mm0 = ttnn.experimental.operations.primary.matmul(
+            in0,
+            in1a,
+            bias=bias_a,
+            program_config=program_config,
+            output_mem_config=block_sharded_memory_config,
+            output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+            compute_kernel_config=compute_kernel_config,
+        )
+
+        program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=out_block_h,
+            per_core_N=out_block_w,
+            transpose_mcast=False,
+            fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
+        )
+
+        mm1 = ttnn.experimental.operations.primary.matmul(
+            in0,
+            in1b,
+            bias=bias_b,
+            program_config=program_config,
+            output_mem_config=block_sharded_memory_config,
+            output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+            compute_kernel_config=compute_kernel_config,
+        )
+
+        ret = ttnn.mul(mm0, mm1, memory_config=mm0.memory_config())
+        _, pcc = comp_pcc(torch_ret, ttnn.to_torch(ret), 0.99)
+        print(f"iter: {i}, pcc = {pcc:.4f}")
+
+    assert_with_pcc(torch_ret, ttnn.to_torch(ret), 0.99)
+
+
+# Test matmul attention sequence with InterleavedToShardedPartialOp
+@skip_for_grayskull()
+@pytest.mark.parametrize("seq_len", [4096])
+@pytest.mark.parametrize("num_slices", [16])
+@pytest.mark.parametrize("num_cores", [64])
+@pytest.mark.parametrize("num_heads", [16])
+@pytest.mark.parametrize("data_format", [ttnn.experimental.tensor.DataType.BFLOAT8_B])
+def test_time_sharded_attnention(
+    device,
+    seq_len,
+    num_slices,
+    num_cores,
+    num_heads,
+    data_format,
+    function_level_defaults,
+):
+    # pytest.skip()  # ND hang on CI
+    compute_grid_size = device.compute_with_storage_grid_size()
+    if num_cores > (compute_grid_size.x * compute_grid_size.y):
+        pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
+    grid_size = (8, 8)
+
+    query_layer_shape = [1, num_heads, seq_len, 64]
+    key_layer_transposed_shape = [1, num_heads, 64, seq_len]
+    value_layer_shape = [1, num_heads, seq_len, 64]
+    output_shape = [1, num_heads, seq_len, 64]
+
+    torch_query_layer = torch.randn(query_layer_shape).bfloat16().float()
+    torch_key_layer_transposed = torch.randn(key_layer_transposed_shape).bfloat16().float()
+    torch_value_layer = torch.randn(value_layer_shape).bfloat16().float()
+    torch_output = torch.randn(output_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.experimental.tensor.BufferType.DRAM,
+    )
+    l1_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+
+    height_sharded_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+
+    # compare output to regular case
+    reference_query_layer = torch2tt_tensor(
+        torch_query_layer,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    reference_key_layer_transposed = torch2tt_tensor(
+        torch_key_layer_transposed,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    reference_value_layer = torch2tt_tensor(
+        torch_value_layer,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+
+    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
+    passing = True
+    output = None
+
+    mm_out = torch2tt_tensor(
+        torch_output,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    tiles_per_shard = math.ceil((((num_heads * seq_len) / num_cores) / num_slices) / 32)
+    mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+    mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
+
+    heads_per_slice = num_heads // num_slices
+    for iter in range(3000):
+        for i in range(num_slices):
+            slice = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                reference_query_layer,
+                grid_size,
+                mm_activations_height_shard_spec,
+                num_slices,
+                i,
+                ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            )
+            program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=grid_size,
+                in0_block_w=2,
+                per_core_M=tiles_per_shard,
+                per_core_N=seq_len // 32,
+                out_subblock_h=1,
+                out_subblock_w=8,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=False,
+            )
+
+            k_slice = ttnn.experimental.tensor.unpad(
+                reference_key_layer_transposed,
+                (0, (i * heads_per_slice), 0, 0),
+                (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
+                output_mem_config=l1_interleaved_memory_config,
+            )
+            mm_slice = ttnn.experimental.operations.primary.matmul(
+                slice,
+                k_slice,
+                program_config=program_config,
+                output_mem_config=height_sharded_memory_config,
+                output_dtype=data_format,
+                compute_kernel_config=compute_kernel_config,
+            )
+            k_slice.deallocate()
+            slice.deallocate()
+
+            softmax_program_config = (
+                ttnn.experimental.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                    compute_with_storage_grid_size=grid_size,
+                    subblock_w=1,
+                    block_h=mm_output_height_shard_spec[0] // 32,
+                    block_w=mm_output_height_shard_spec[1] // 32,
+                )
+            )
+
+            mm_slice = ttnn.experimental.operations.primary.softmax_in_place(
+                mm_slice, program_config=softmax_program_config
+            )
+
+            program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=grid_size,
+                in0_block_w=seq_len // 32,
+                per_core_M=tiles_per_shard,
+                per_core_N=2,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=False,
+            )
+            v_slice = ttnn.experimental.tensor.unpad(
+                reference_value_layer,
+                (0, (i * heads_per_slice), 0, 0),
+                (0, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, 63),
+                output_mem_config=l1_interleaved_memory_config,
+            )
+            mm_slice = ttnn.experimental.operations.primary.matmul(
+                mm_slice,
+                v_slice,
+                program_config=program_config,
+                output_mem_config=height_sharded_memory_config,
+                output_dtype=data_format,
+                compute_kernel_config=compute_kernel_config,
+            )
+            v_slice.deallocate()
+
+            ttnn.experimental.tensor.sharded_to_interleaved_partial(
+                mm_slice,
+                mm_out,
+                num_slices,
+                i,
+                dram_interleaved_memory_config,
+            )
+
+            mm_slice.deallocate()
+
+        mm_out_torch = tt2torch_tensor(mm_out)
+        print(iter)
+
+    attn_weights = ttnn.experimental.tensor.bmm(
+        reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
+    )
+    attn_weights = ttnn.experimental.operations.primary.softmax_in_place(attn_weights)
+    attn_weights = ttnn.experimental.tensor.bmm(
+        attn_weights, reference_value_layer, output_mem_config=dram_interleaved_memory_config
+    )
+
+    attn_weights_torch = tt2torch_tensor(attn_weights)
+    passing, output = comp_pcc(mm_out_torch, attn_weights_torch)
+
+    print(output)
+    assert passing
