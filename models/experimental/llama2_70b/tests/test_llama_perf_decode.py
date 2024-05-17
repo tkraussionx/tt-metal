@@ -249,8 +249,8 @@ def run_test_LlamaModel_end_to_end(
     "generation_length, expected_compile_time, expected_inference_time",
     (
         (32, 10000, 0.139 + 0.02),  # TODO: decrease expected compile time once as_tensor gets speedup
-        (128, 10000, 0.138 + 0.02),
-        (2048, 10000, 2.0),
+        (128, 10000, 0.138 + 0.02),  # Fudge delta
+        (2048, 10000, 0.153 + 0.02),
     ),
     ids=["gen32", "gen128", "gen2048"],
 )
