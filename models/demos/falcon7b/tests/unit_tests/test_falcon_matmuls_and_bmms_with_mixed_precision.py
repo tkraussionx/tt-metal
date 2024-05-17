@@ -1040,6 +1040,11 @@ def test_falcon7b_crash(
                     )
                 )
 
+            print("I2SP -> Begin sync of loop: ", l, " for slice: ", i)
+            for device_idx in range(num_devices):
+                ttl.device.Synchronize(devices[device_idx])
+            print("I2SP -> End sync of loop: ", l, " for slice: ", i)
+
             subblock_h = 1
             subblock_w = 1
             if seq_len == 2048:
@@ -1069,6 +1074,11 @@ def test_falcon7b_crash(
                     )
                 )
 
+            print("MM1 -> Begin sync of loop: ", l, " for slice: ", i)
+            for device_idx in range(num_devices):
+                ttl.device.Synchronize(devices[device_idx])
+            print("MM1 -> End sync of loop: ", l, " for slice: ", i)
+
             subblock_w = 1
             subblock_h = 1
             program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -1096,6 +1106,11 @@ def test_falcon7b_crash(
                     )
                 )
 
+            print("MM2 -> Begin sync of loop: ", l, " for slice: ", i)
+            for device_idx in range(num_devices):
+                ttl.device.Synchronize(devices[device_idx])
+            print("MM2 -> End sync of loop: ", l, " for slice: ", i)
+
             for device_idx in range(num_devices):
                 ttl.tensor.sharded_to_interleaved_partial(
                     attn_out_slices[device_idx],
@@ -1105,14 +1120,19 @@ def test_falcon7b_crash(
                     dram_interleaved_memory_config,
                 )
 
+            print("S2IP -> Begin sync of loop: ", l, " for slice: ", i)
+            for device_idx in range(num_devices):
+                ttl.device.Synchronize(devices[device_idx])
+            print("S2IP -> End sync of loop: ", l, " for slice: ", i)
+
             for device_idx in range(num_devices):
                 slices[device_idx].deallocate()
                 mm_slices[device_idx].deallocate()
                 attn_out_slices[device_idx].deallocate()
-            print("Begin sync of loop: ", l, " for slice: ", i)
+            print("Post slice - Begin sync of loop: ", l, " for slice: ", i)
             for device_idx in range(num_devices):
                 ttl.device.Synchronize(devices[device_idx])
-            print("End sync of loop: ", l, " for slice: ", i)
+            print("Post slice - End sync of loop: ", l, " for slice: ", i)
 
         print("Begin sync of loop: ", l)
         for device_idx in range(num_devices):
