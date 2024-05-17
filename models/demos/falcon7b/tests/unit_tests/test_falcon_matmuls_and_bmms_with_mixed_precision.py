@@ -1136,6 +1136,11 @@ def test_falcon7b_crash(
                 slices[device_idx].deallocate()
                 mm_slices[device_idx].deallocate()
                 attn_out_slices[device_idx].deallocate()
+            print("Begin sync of loop: ", l, " for slice: ", i)
+            for device_idx in range(num_devices):
+                ttl.device.Synchronize(devices[device_idx])
+            print("End sync of loop: ", l, " for slice: ", i)
+
         print("Begin sync of loop: ", l)
         for device_idx in range(num_devices):
             ttl.device.Synchronize(devices[device_idx])
