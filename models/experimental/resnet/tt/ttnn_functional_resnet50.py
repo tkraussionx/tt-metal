@@ -9,6 +9,7 @@ from models.utility_functions import (
     is_wormhole_b0,
     pad_and_fold_conv_activation_for_unity_stride,
 )
+from tt_lib.tensor import format_output_tensor
 
 hardcoded_matmul_config_linear = {
     8: ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -668,6 +669,8 @@ class resnet50:
         x = self.layer3_module6(x)
 
         # do reshard before layer4
+        if self.batch_size == 16:
+            x = format_output_tensor(x, x.shape_without_padding(), self.device, x.get_layout(), x.memory_config())
         x = ttnn.to_memory_config(x, self.layer4_module1.conv1.conv.input_sharded_memory_config)
         x = self.layer4_module1(x)
         x = self.layer4_module2(x)
