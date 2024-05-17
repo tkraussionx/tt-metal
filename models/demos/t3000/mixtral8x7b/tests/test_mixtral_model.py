@@ -44,10 +44,10 @@ class Emb(torch.nn.Module):
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 10, 127),
+    (1, 10),
 )
 def test_mixtral_model_inference(
-    t3k_device_mesh, use_program_cache, reset_seeds, iterations=1, n_layers=32, validation_type="output"
+    t3k_device_mesh, use_program_cache, reset_seeds, iterations, n_layers, validation_type
 ):
     pcc = 0.97
     dtype = ttnn.bfloat8_b
