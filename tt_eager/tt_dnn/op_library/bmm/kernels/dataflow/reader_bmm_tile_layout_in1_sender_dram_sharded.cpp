@@ -125,16 +125,19 @@ void kernel_main() {
     constexpr uint32_t out_reshard_tensor_stride_w_bytes  = get_compile_time_arg_val(7);
     constexpr uint32_t per_core_M                         = get_compile_time_arg_val(8);
 
+
+    constexpr uint32_t num_transaction_groups_per_block   = get_compile_time_arg_val(9);
+
     #ifdef FUSE_BIAS
-    constexpr uint32_t in3_page_size                      = get_compile_time_arg_val(9);
-    constexpr uint32_t in3_num_pages                      = get_compile_time_arg_val(10);
+    constexpr uint32_t in3_page_size                      = get_compile_time_arg_val(10);
+    constexpr uint32_t in3_num_pages                      = get_compile_time_arg_val(11);
     constexpr uint32_t cb_id_in3 = 3;
     constexpr uint32_t bias_single_tile_size_bytes = get_tile_size(cb_id_in3);
     constexpr DataFormat bias_data_format = get_dataformat(cb_id_in3);
     #endif
 
     constexpr uint32_t cb_id_in1 = 1;
-    constexpr uint32_t cb_id_in1_inplace[2] = {1, 4};
+    constexpr uint32_t cb_id_in1_inplace[8] = {1, 4, 5, 6, 7, 8, 9, 10};
     constexpr uint32_t cb_id_out = 16;
     constexpr uint32_t cb_id_out_reshard = 17;
     constexpr uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
@@ -152,11 +155,12 @@ void kernel_main() {
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
         // Copy in1 block into CB, as the default kernel
-        for(uint32_t i = 0; i < 2; ++i) {
+        #ifdef MULTIPLE_GROUPS_PER_BLOCK
+        for(uint32_t i = 0; i < num_transaction_groups_per_block; ++i) {
 
             noc_async_read_tile_dram_sharded_set_trid(i);
 
-            for(uint32_t h = 0; h < in1_num_pages / 2; ++h) {
+            for(uint32_t h = 0; h < in1_num_pages; ++h) {
                 // noc_async_read_tile_dram_sharded<in1_page_size, true>(in1_tensor_addr, l1_read_addr_in1, l1_write_addr_in1, dram_bank_id, vc);
                 noc_async_read_tile_dram_sharded_with_state<true>(in1_base_addr, l1_read_addr_in1, l1_write_addr_in1);
                 l1_read_addr_in1 += in1_page_size;
@@ -164,14 +168,21 @@ void kernel_main() {
             }
         }
 
-        for(uint32_t i = 0; i < 2; ++i) {
+        for(uint32_t i = 0; i < num_transaction_groups_per_block; ++i) {
             noc_async_read_barrier_with_trid(i);
             cb_push_back(cb_id_in1_inplace[i], in1_block_num_tiles);
         }
+        #else
+        for(uint32_t h = 0; h < in1_num_pages; ++h) {
+            // noc_async_read_tile_dram_sharded<in1_page_size, true>(in1_tensor_addr, l1_read_addr_in1, l1_write_addr_in1, dram_bank_id, vc);
+            noc_async_read_tile_dram_sharded_with_state<false>(in1_base_addr, l1_read_addr_in1, l1_write_addr_in1);
+            l1_read_addr_in1 += in1_page_size;
+            l1_write_addr_in1 += in1_page_size;
+        }
 
-        // Barrier! make sure the reads are done
-        // noc_async_read_barrier();
-        // cb_push_back(cb_id_in1, in1_block_num_tiles);
+        noc_async_read_barrier();
+        cb_push_back(cb_id_in1, in1_block_num_tiles);
+        #endif
     }
     #ifdef FUSE_BIAS
         // Operand 1

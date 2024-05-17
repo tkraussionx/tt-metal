@@ -267,6 +267,16 @@ void move_common_entries(std::vector<CoreCoord>& v1, std::vector<CoreCoord>& v2,
     }
 }
 
+uint32_t get_num_groups_per_block(uint32_t in0_block_w, uint32_t max_group_size) {
+    uint32_t best_group_size = max_group_size;
+
+    while (in0_block_w % best_group_size != 0 && best_group_size > 1) {
+        best_group_size--;
+    }
+
+    uint32_t num_groups = in0_block_w / best_group_size;
+    return num_groups;
+}
 
 operation::ProgramWithCallbacks create_program_dram_sharded(
     tt_metal::Device *device,
@@ -317,6 +327,9 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
 
     log_info("out_subblock_h: {}, out_subblock_w: {}", out_subblock_h, out_subblock_w);
 
+    uint32_t num_transaction_groups_per_block = get_num_groups_per_block(in0_block_w, 16); // 16 tiles maxmimum in block height
+
+    log_info("num_transaction_groups_per_block: {}", num_transaction_groups_per_block);
 
     uint32_t num_blocks = K / in0_block_w;
     //Only enable packer l1 accumulation when there are spills, otherwise
@@ -469,7 +482,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     std::vector<uint32_t> in1_sender_writer_compile_time_args = {
         // (std::uint32_t)  in1_buffer->address(),
         (std::uint32_t)  in1_buffer_page_size,
-        (std::uint32_t)  in1_buffer_num_pages,
+        (std::uint32_t)  in1_buffer_num_pages / num_transaction_groups_per_block,
         // in1 block args
         (std::uint32_t)  per_core_N, // in1_block_w
         (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
@@ -478,7 +491,8 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         (std::uint32_t)  out_block_tiles, // out_block_num_tiles
         (std::uint32_t)  per_core_N * output_single_tile_size, // out_tensor_stride_w_bytes
         (std::uint32_t)  per_core_N_storage * output_single_tile_size, // out_reshard_tensor_stride_w_bytes
-        (std::uint32_t)  per_core_M
+        (std::uint32_t)  per_core_M,
+        (std::uint32_t)  num_transaction_groups_per_block
     };
     if (bias_buffer != nullptr) {
         // in1_sender_writer_compile_time_args.push_back(bias_buffer->address());
@@ -520,6 +534,11 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
     mm_kernel_in1_sender_writer_defines["SKIP_MCAST"] = "1";
 
+    if (num_transaction_groups_per_block > 1) {
+        mm_kernel_defines["MULTIPLE_GROUPS_PER_BLOCK"] = "1";
+        mm_kernel_in1_sender_writer_defines["MULTIPLE_GROUPS_PER_BLOCK"] = "1";
+    }
+
     auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_dram_sharded.cpp",
@@ -548,7 +567,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     uint32_t out_subblock_num_tiles = out_subblock_h*out_subblock_w;
 
     vector<uint32_t> compute_kernel_args = {
-        in0_block_w, // in0_block_w
+        in0_block_w / num_transaction_groups_per_block, // in0_block_w
         in0_num_subblocks, // in0_num_subblocks
         in0_block_num_tiles, // in0_block_num_tiles
         in0_subblock_num_tiles, // in0_subblock_num_tiles
@@ -565,7 +584,9 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         B, // batch
         out_block_tiles, // out_block_num_tiles
 
-        untilize_out // untilize_out
+        untilize_out, // untilize_out
+        num_transaction_groups_per_block,
+        in1_block_num_tiles / num_transaction_groups_per_block
     };
 
     // Create compute kernel
@@ -587,13 +608,20 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src0_cb_index, in0_single_tile_size, in0_CB_size / in0_single_tile_size, in0_CB_size);
 
 
+    uint32_t src1_cb_index = 1;
     std::map<uint8_t, tt::DataFormat> in1_cb_data_format_spec {
-        {1, in1_data_format},
-        {4, in1_data_format}
+        {src1_cb_index, in1_data_format}
     };
+    for (uint32_t i = 0; i < num_transaction_groups_per_block - 1; ++i) {
+        in1_cb_data_format_spec.insert({src1_cb_index + i + 3, in1_data_format});
+    }
     tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, in1_cb_data_format_spec)
-        .set_page_size(1, in1_single_tile_size)
-        .set_page_size(4, in1_single_tile_size);
+        .set_page_size(1, in1_single_tile_size);
+
+    for (uint32_t i = 0; i < num_transaction_groups_per_block - 1; ++i) {
+        src1_cb_config = src1_cb_config.set_page_size(src1_cb_index + i + 3, in1_single_tile_size);
+    }
+
     // uint32_t src1_cb_index = 1;
     // tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
 	// 	.set_page_size(src1_cb_index, in1_single_tile_size);

@@ -135,9 +135,9 @@ def test_matmul_in1_dram_sharded(
         buffer_type=ttl.tensor.BufferType.L1,
     )
 
-    # in0 = torch.randn(in0_shape).bfloat16().float()
+    in0 = torch.randn(in0_shape).bfloat16().float()
     step = K // num_cores
-    in0 = torch.ones(in0_shape).bfloat16().float()
+    # in0 = torch.ones(in0_shape).bfloat16().float()
     # for i in range(num_cores):  # since 32768 / 16 = 2048
     #     in0[:, :, :, i * step : (i + 1) * step] = i + 1
     # in1 = torch.randn(in1_shape).bfloat16().float()
