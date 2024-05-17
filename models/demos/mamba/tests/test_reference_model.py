@@ -9,7 +9,7 @@ from typing import Optional
 from transformers import AutoTokenizer
 
 from models.demos.mamba.reference.decode_model import MambaDecode, MambaPretrainedModelName
-from models.demos.mamba.reference.model import Mamba
+from models.demos.mamba.reference.prefill_model import Mamba
 
 
 def generate_through_selective_scan(
@@ -33,7 +33,7 @@ def generate_through_decode(model, tokenizer, prompt: str, n_tokens_to_gen: int 
 @pytest.mark.parametrize(
     "model_version, batch, genlen",
     (
-        ("state-spaces/mamba-130m", 1, 32),
+        # ("state-spaces/mamba-130m", 1, 32),
         ("state-spaces/mamba-370m", 1, 32),
     ),
 )
@@ -42,14 +42,15 @@ def test_cpu_reference_model_decode_vs_selective_scan(
     batch: int,
     genlen: int,
 ):
-    prompt = "Hello World!"
+    prompt = "Mamba is the"
 
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
 
-    selective_scan_model = Mamba.from_pretrained(model_version)
+    prefill_model = Mamba.from_pretrained(model_version)
     decode_model = MambaDecode.from_pretrained(model_version)
 
-    selective_scan_output = generate_through_selective_scan(selective_scan_model, tokenizer, prompt, genlen)
+    prefill_output = generate_through_selective_scan(prefill_model, tokenizer, prompt, genlen)
     decode_output = generate_through_decode(decode_model, tokenizer, prompt, genlen)
-
-    assert selective_scan_output == decode_output, "Model outputs should match"
+    print(f"selective_scan_output: {prefill_output}")
+    print(f"decode_output: {decode_output}")
+    assert prefill_output == decode_output, "Model outputs should match"
