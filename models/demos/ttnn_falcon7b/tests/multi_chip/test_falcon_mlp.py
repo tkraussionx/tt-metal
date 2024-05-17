@@ -72,12 +72,12 @@ def test_falcon_mlp(
 ):
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(enable_async)
+        device_mesh.get_device(device).enable_program_cache()
 
     torch.manual_seed(0)
 
     configuration = transformers.FalconConfig.from_pretrained(PRETRAINED_MODEL_NAME)
     torch_input = (torch.rand(batch * device_mesh.get_num_devices(), 1, seq_len, configuration.hidden_size) * 2) - 1
-    torch_output = torch_model(torch_input)
 
     model_config = get_model_config(model_config_str)
     parameters = preprocess_model_parameters(
@@ -100,16 +100,34 @@ def test_falcon_mlp(
         layout=ttnn.TILE_LAYOUT,
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
     )
-    ttnn_output = ttnn_model(ttnn_input)
 
-    passed, pcc = assert_with_pcc(
-        torch_output,
-        ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
-            torch_output.dtype
-        ),
-        expected_pcc,
-    )
-    logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+    logger.info("Compiling Model")
+    ttnn_model(ttnn_input)
+    logger.info("Capturing Trace")
+    trace_id = ttnn.begin_trace_capture(device_mesh, trace_buffer_size=16064, cq_id=0)
+    ttnn_output = ttnn_model(ttnn_input)
+    ttnn.end_trace_capture(device_mesh, trace_id, cq_id=0)
+    logger.info("Executing Traced Model")
+    for i in range(10):
+        torch_input = (torch.rand(batch * device_mesh.get_num_devices(), 1, seq_len, configuration.hidden_size) * 2) - 1
+        torch_output = torch_model(torch_input)
+
+        ttnn_input_updated = ttnn.from_torch(
+            torch_input,
+            dtype=model_config["DEFAULT_DTYPE"],
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        )
+        ttnn.copy_host_to_device_tensor(ttnn_input_updated, ttnn_input)
+        ttnn.execute_trace(device_mesh, trace_id, cq_id=0, blocking=False)
+        passed, pcc = assert_with_pcc(
+            torch_output,
+            ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
+                torch_output.dtype
+            ),
+            expected_pcc,
+        )
+        logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
 
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(False)

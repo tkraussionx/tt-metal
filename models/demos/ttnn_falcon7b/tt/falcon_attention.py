@@ -6,7 +6,7 @@ import math
 from typing import Optional, Tuple
 
 import ttnn
-
+import tt_lib as ttl
 from models.utility_functions import (
     nearest_32,
     is_wormhole_b0,
@@ -94,6 +94,7 @@ class TtFalconAttention:
         #################
         ### FUSED QKV ###
         #################
+        print("Running MM")
         fused_query_key_value = ttnn.matmul(
             input_tensor_a=hidden_states,
             input_tensor_b=self.query_key_value_weights,
@@ -110,6 +111,7 @@ class TtFalconAttention:
         ###########
         ### TMs ###
         ###########
+        print("Running QKV")
         query_layer, key_layer, value_layer = ttnn.transformer.split_query_key_value_and_split_heads(
             fused_query_key_value,
             num_heads=self.num_heads,
@@ -122,6 +124,7 @@ class TtFalconAttention:
         #########################
         ### ROTARY EMBEDDINGS ###
         #########################
+        print("Running rotary embedding")
         if llm_mode == "prefill":
             query_layer = self.rotary_embedding(query_layer)
             key_layer = self.rotary_embedding(key_layer)
@@ -132,6 +135,7 @@ class TtFalconAttention:
         ######################
         ### K CACHE UPDATE ###
         ######################
+        print("Running cache op")
         if llm_mode == "prefill":
             ttnn.kv_cache.fill_cache_for_user_(layer_past[0], key_layer, user_id)
 
@@ -144,6 +148,7 @@ class TtFalconAttention:
         ######################
         ### PRE-SOFTMAX MM ###
         ######################
+        print("Running permute")
         key_layer_transposed = ttnn.permute(
             key_layer,
             (0, 1, 3, 2),
@@ -152,6 +157,7 @@ class TtFalconAttention:
         ttnn.deallocate(key_layer, force=False)
 
         if llm_mode == "prefill":
+            print("Running MM")
             attn_weights = ttnn.matmul(
                 input_tensor_a=query_layer,
                 input_tensor_b=key_layer_transposed,
@@ -162,6 +168,7 @@ class TtFalconAttention:
         elif llm_mode == "decode":
             # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
             if is_wormhole_b0():
+                print("Running attn matmul")
                 attn_weights = ttnn.experimental.operations.primary.transformers.attn_matmul(
                     query_layer,
                     key_layer_transposed,
@@ -179,11 +186,16 @@ class TtFalconAttention:
                 )
         ttnn.deallocate(query_layer)
         ttnn.deallocate(key_layer_transposed)
-
-        attn_weights = ttnn.mul(
-            attn_weights, self.scalar, memory_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"]
+        print("Running mul")
+        attn_weights = ttl.tensor.unary_chain(
+            attn_weights,
+            [[ttl.tensor.FusibleActivation.MUL_UNARY_SFPU, self.scalar]],
+            self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
         )
-
+        # attn_weights = ttnn.mul(
+        #     attn_weights, self.scalar, memory_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"]
+        # )
+        print("Running add")
         if attention_mask is not None:
             attn_weights = ttnn.add(
                 attn_weights,
@@ -197,6 +209,7 @@ class TtFalconAttention:
         # TODO: Replace with scaled_softmax_attention_mask from BERT
         # attn_weights = ttnn.mul(attn_weights, 1 / self.temperature)
         # attn_weights = ttnn.transformer.attention_softmax(attn_weights)
+        print("Running softmax")
         attn_weights = ttnn.softmax(attn_weights, dim=-1)  # TODO(jchu): change to in-place
 
         ######################

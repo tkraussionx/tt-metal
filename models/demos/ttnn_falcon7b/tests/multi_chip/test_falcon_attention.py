@@ -61,7 +61,7 @@ def torch_model():
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        4,
     ],
     indirect=True,
 )
@@ -83,6 +83,7 @@ def test_falcon_attention(
 ):
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(enable_async)
+        device_mesh.get_device(device).enable_program_cache()
 
     torch.manual_seed(0)
     batch = device_batch_size * device_mesh.get_num_devices()
@@ -129,14 +130,6 @@ def test_falcon_attention(
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
     )
 
-    pytorch_out, pytorch_layer_present = torch_model(
-        attention_input,
-        alibi=None,
-        attention_mask=attention_mask,
-        position_ids=position_ids,
-        layer_past=layer_past,
-        use_cache=True,
-    )
     parameters = preprocess_model_parameters(
         initialize_model=lambda: torch_model,
         device=device_mesh,
@@ -156,6 +149,17 @@ def test_falcon_attention(
         parameters=parameters,
     )
 
+    tt_FalconAttention_model(
+        tt_attention_input,
+        alibi=None,
+        attention_mask=tt_attention_mask,
+        llm_mode=llm_mode,
+        user_id=0,
+        layer_past=tt_layer_past,
+        layer_past_len=kv_cache_len,
+        use_cache=True,
+    )
+    trace_id = ttnn.begin_trace_capture(device_mesh, trace_buffer_size=72576, cq_id=0)
     tt_out, tt_layer_present = tt_FalconAttention_model(
         tt_attention_input,
         alibi=None,
@@ -166,28 +170,53 @@ def test_falcon_attention(
         layer_past_len=kv_cache_len,
         use_cache=True,
     )
-    tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=concat_dim)).squeeze(1)
+    ttnn.end_trace_capture(device_mesh, trace_id, cq_id=0)
+    for i in range(10):
+        attention_input, tt_attention_input_updated = create_attention_input(
+            llm_mode,
+            dtype,
+            batch,
+            seq_len,
+            configuration.hidden_size,
+            None,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
+        )
+        pytorch_out, pytorch_layer_present = torch_model(
+            attention_input,
+            alibi=None,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=True,
+        )
+        ttnn.copy_host_to_device_tensor(tt_attention_input_updated, tt_attention_input)
+        ttnn.execute_trace(device_mesh, trace_id, cq_id=0)
+        tt_out_host = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=concat_dim)).squeeze(1)
 
-    tt_layer_present = (
-        ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-        ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-    )
+        tt_layer_present_host = (
+            ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+            ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+        )
 
-    if llm_mode == "decode":
-        tt_out = tt_out.transpose(0, 1)
-    tt_layer_present = (
-        tt_layer_present[0][:, :kv_len, :],
-        tt_layer_present[1][:, :kv_len, :],
-    )
+        if llm_mode == "decode":
+            tt_out_host = tt_out_host.transpose(0, 1)
+        tt_layer_present_host = (
+            tt_layer_present_host[0][:, :kv_len, :],
+            tt_layer_present_host[1][:, :kv_len, :],
+        )
 
-    passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
-    logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
-    assert_with_pcc(
-        pytorch_layer_present[0].squeeze(1), tt_layer_present[0].to(pytorch_layer_present[0].dtype), expected_pcc
-    )
-    assert_with_pcc(
-        pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
-    )
+        passed, pcc = assert_with_pcc(pytorch_out, tt_out_host.to(pytorch_out.dtype), expected_pcc)
+        logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+        assert_with_pcc(
+            pytorch_layer_present[0].squeeze(1),
+            tt_layer_present_host[0].to(pytorch_layer_present[0].dtype),
+            expected_pcc,
+        )
+        assert_with_pcc(
+            pytorch_layer_present[1].squeeze(1),
+            tt_layer_present_host[1].to(pytorch_layer_present[1].dtype),
+            expected_pcc,
+        )
 
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(False)
