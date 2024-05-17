@@ -1007,16 +1007,12 @@ def test_falcon7b_crash(
         packer_l1_acc=True,
     )
 
-    # We need to create attention masks per slice
     attention_masks_per_slice_per_device = []
     attention_mask_starting_index_per_slice = 0
     slice_length = (71 * seq_len) // num_slices
     number_of_attention_mask_elements_used_per_slice = slice_length - seq_len * (slice_length // seq_len)
-    # print("Slice length is: ", slice_length)
-    # print("Number of attention mask elements per slice = ", number_of_attention_mask_elements_used_per_slice)
     torch_attention_mask_per_slice = []
     for slice_index in range(num_slices):
-        # print("Slice attention mask starting index: ", attention_mask_starting_index_per_slice)
         torch_attention_mask_per_slice.append(
             torch.cat(
                 [
@@ -1121,10 +1117,6 @@ def test_falcon7b_crash(
                     )
                 )
 
-            # Deallocating here causes pcc to drop - issue #6638
-            # So we have to move it after the entire sequence is finished
-            # slice.deallocate()
-
             subblock_w = 1
             if seq_len == 2048:
                 subblock_w = 1
@@ -1184,11 +1176,10 @@ def test_falcon7b_crash(
                 slices[device_idx].deallocate()
                 mm_slices[device_idx].deallocate()
                 attn_out_slices[device_idx].deallocate()
-
-    print("Begin sync")
-    for device_idx in range(num_devices):
-        ttl.device.Synchronize(devices[device_idx])
-    print("End sync")
+        print("Begin sync of loop: ", l)
+        for device_idx in range(num_devices):
+            ttl.device.Synchronize(devices[device_idx])
+        print("End sync of loop: ", l)
 
     print("Done!")
     passing = True
