@@ -260,7 +260,7 @@ struct AttentionSoftmax : public tt::operations::primary::Softmax {
             tt::operations::primary::transformers::SoftmaxDefaultProgramConfig{},
         const std::optional<bool> causal_mask = false,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt) {
-        float head_size = head_size_arg.has_value() ? 1.0f / sqrt(head_size_arg.value()) : 1.0f;
+        float head_size = head_size_arg.has_value() ? 1.0f / ::sqrt(head_size_arg.value()) : 1.0f;
         if constexpr (in_place) {
             TT_FATAL(attention_mask.has_value(), "Cannot apply divide by sqrt(head_size) using in-place version!");
         } else {
@@ -293,6 +293,11 @@ struct AttentionSoftmax : public tt::operations::primary::Softmax {
 }  // namespace operations
 
 namespace transformer {
+
+constexpr auto split_query_key_value_and_split_heads =
+    ttnn::register_operation<ttnn::operations::transformer::split_query_key_value_and_split_heads>(
+        "ttnn::transfomer::split_query_key_value_and_split_heads");
+
 constexpr auto concatenate_heads =
     ttnn::register_operation<ttnn::operations::transformer::ConcatenateHeads>("ttnn::transfomer::concatenate_heads");
 
