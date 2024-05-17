@@ -20,6 +20,20 @@
 #include "tt_metal/llrt/rtoptions.hpp"
 #include "tt_metal/llrt/tlb_config.hpp"
 
+#ifdef ARCH_GRAYSKULL
+static constexpr uint32_t DYNAMIC_TLB_COUNT = 16;
+static constexpr unsigned int MEM_SMALL_READ_WRITE_TLB = DEVICE_DATA.TLB_BASE_INDEX_2M + 1;
+static constexpr unsigned int DYNAMIC_TLB_BASE_INDEX = DEVICE_DATA.MEM_LARGE_READ_TLB + 1;
+
+#else
+static constexpr uint32_t DYNAMIC_TLB_COUNT = 16;
+static constexpr unsigned int MEM_SMALL_READ_WRITE_TLB = DEVICE_DATA.TLB_BASE_INDEX_2M + 1;
+static constexpr uint32_t DYNAMIC_TLB_BASE_INDEX = DEVICE_DATA.MEM_LARGE_READ_TLB + 1;
+static constexpr uint32_t GALAXY_HOST_MEM_CHANNELS = 4;
+static constexpr uint32_t GALAXY_HOST_MEM_CHANNELS_MASK = GALAXY_HOST_MEM_CHANNELS - 1;
+
+#endif
+
 namespace tt {
 
 const Cluster &Cluster::instance() {
@@ -207,8 +221,8 @@ void Cluster::assign_mem_channels_to_devices(chip_id_t mmio_device_id, const std
     // g_MAX_HOST_MEM_CHANNELS (4) is defined in tt_SiliconDevice and denotes the max number of host memory channels per MMIO device
     // Metal currently assigns 1 channel per device. See https://github.com/tenstorrent/tt-metal/issues/4087
 
-    // TGG will have 16 remote chips + mmio chip accessed over one mmio chip.
-    TT_ASSERT(controlled_device_ids.size() <= 17, "Unable to assign each device to its own host memory channel!");
+    // One WH gateway should have 8 remote deivces in its control group.
+    TT_ASSERT(controlled_device_ids.size() <= 9, "Unable to assign each device to its own host memory channel!");
     uint16_t channel = 0;
     this->device_to_host_mem_channel_[mmio_device_id] = channel++;
     for (const chip_id_t &device_id : controlled_device_ids) {
@@ -241,7 +255,7 @@ void Cluster::open_driver(
             this->arch_ == tt::ARCH::BLACKHOLE ? 0 : controlled_device_ids.size();
         std::unordered_map<std::string, std::int32_t> dynamic_tlb_config = ll_api::get_dynamic_tlb_config();
         if (is_tg_cluster_) {
-            num_host_mem_ch_per_mmio_device = 4;
+            num_host_mem_ch_per_mmio_device = GALAXY_HOST_MEM_CHANNELS;
         }
         // This will remove harvested rows from the soc descriptor
         const bool perform_harvesting = true;
@@ -481,13 +495,13 @@ void Cluster::read_reg(std::uint32_t *mem_ptr, tt_cxy_pair target, uint64_t addr
 void Cluster::write_sysmem(
     const void *vec, uint32_t size_in_bytes, uint64_t addr, chip_id_t src_device_id, uint16_t channel) const {
     TT_ASSERT(this->cluster_desc_->is_chip_mmio_capable(src_device_id));
-    this->get_driver(src_device_id).write_to_sysmem(vec, size_in_bytes, addr, channel, src_device_id);
+    this->get_driver(src_device_id).write_to_sysmem(vec, size_in_bytes, addr, channel & GALAXY_HOST_MEM_CHANNELS_MASK, src_device_id);
 }
 
 void Cluster::read_sysmem(
     void *vec, uint32_t size_in_bytes, uint64_t addr, chip_id_t src_device_id, uint16_t channel) const {
     TT_ASSERT(this->cluster_desc_->is_chip_mmio_capable(src_device_id));
-    this->get_driver(src_device_id).read_from_sysmem(vec, addr, channel, size_in_bytes, src_device_id);
+    this->get_driver(src_device_id).read_from_sysmem(vec, addr, channel & GALAXY_HOST_MEM_CHANNELS_MASK, size_in_bytes, src_device_id);
 }
 
 void Cluster::verify_sw_fw_versions(
@@ -536,12 +550,12 @@ uint32_t Cluster::get_num_host_channels(chip_id_t device_id) const {
 
 uint32_t Cluster::get_host_channel_size(chip_id_t device_id, uint32_t channel) const {
     TT_ASSERT(this->cluster_desc_->is_chip_mmio_capable(device_id));
-    return this->get_driver(device_id).get_host_channel_size(device_id, channel);
+    return this->get_driver(device_id).get_host_channel_size(device_id, channel & GALAXY_HOST_MEM_CHANNELS_MASK);
 }
 
 void *Cluster::host_dma_address(uint64_t offset, chip_id_t src_device_id, uint16_t channel) const {
     TT_ASSERT(this->cluster_desc_->is_chip_mmio_capable(src_device_id));
-    return this->get_driver(src_device_id).host_dma_address(offset, src_device_id, channel);
+    return this->get_driver(src_device_id).host_dma_address(offset, src_device_id, channel & GALAXY_HOST_MEM_CHANNELS_MASK);
 }
 
 uint64_t Cluster::get_pcie_base_addr_from_device(chip_id_t chip_id) const {
@@ -574,7 +588,7 @@ std::unordered_map<chip_id_t, std::vector<CoreCoord>> Cluster::get_ethernet_core
     }
     return connected_chips;
 }
-
+#define MAX_TUNNEL_DEPTH 4
 std::vector<std::vector<chip_id_t>> Cluster::get_tunnels_from_mmio_device(chip_id_t mmio_chip_id) const {
     std::vector<std::vector<chip_id_t>> tunnels_from_mmio = {};
     const auto &all_eth_connections = this->cluster_desc_->get_ethernet_connections();
@@ -605,7 +619,7 @@ std::vector<std::vector<chip_id_t>> Cluster::get_tunnels_from_mmio_device(chip_i
         }
     }
 
-    log_info(tt::LogMetal, " Found {} FD Tunnels originating from MMIO Device {}", tunnels_from_mmio.size(), mmio_chip_id);
+    log_info(tt::LogMetal, "Found {} FD Tunnels originating from MMIO Device {}", tunnels_from_mmio.size(), mmio_chip_id);
 
     device_ids = get_devices_controlled_by_mmio_device(mmio_chip_id);
     device_ids.erase(mmio_chip_id);
@@ -637,9 +651,15 @@ std::vector<std::vector<chip_id_t>> Cluster::get_tunnels_from_mmio_device(chip_i
     uint32_t tunnel_depth = tunnels_from_mmio[0].size();
     log_info(tt::LogMetal, "Each FD Tunnel is {} deep.", tunnel_depth);
 
-    for (auto &dev_vec : tunnels_from_mmio)
+    for (auto &dev_vec : tunnels_from_mmio) {
         TT_ASSERT(dev_vec.size() == tunnel_depth,"All tunnels from mmio device must have same depth. Found {}. Expected {}.", dev_vec.size(), tunnel_depth);
-
+        //Now that all remotete chips have been added to respective tunnels,
+        //add mmio device at start of each of the tunnels.
+        if (dev_vec.size() > MAX_TUNNEL_DEPTH) {
+            dev_vec.resize(dev_vec.size() - (dev_vec.size() - MAX_TUNNEL_DEPTH));
+        }
+        dev_vec.insert(dev_vec.begin(), mmio_chip_id);
+    }
     return tunnels_from_mmio;
 }
 

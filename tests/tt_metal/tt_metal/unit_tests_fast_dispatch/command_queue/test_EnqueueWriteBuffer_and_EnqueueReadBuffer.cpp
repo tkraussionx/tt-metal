@@ -95,10 +95,13 @@ void test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device *device, CommandQueue 
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device->id());
     uint32_t cq_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel) / device->num_hw_cqs();
+    if (tt::Cluster::instance().is_galaxy_cluster()) {
+        cq_size = cq_size / 4;
+    }
 
     std::vector<uint32_t> cq_zeros((cq_size - CQ_START) / sizeof(uint32_t), 0);
 
-    tt::Cluster::instance().write_sysmem(cq_zeros.data(), (cq_size - CQ_START), CQ_START, mmio_device_id, channel);
+    tt::Cluster::instance().write_sysmem(cq_zeros.data(), (cq_size - CQ_START), get_absolute_cq_offset(channel, 0, cq_size) + CQ_START, mmio_device_id, channel);
 
     for (const bool cq_write : {true, false}) {
         for (const bool cq_read : {true, false}) {
@@ -327,6 +330,7 @@ namespace dram_tests {
 TEST_F(CommandQueueSingleCardFixture, WriteOneTileToDramBank0) {
     TestBufferConfig config = {.num_pages = 1, .page_size = 2048, .buftype = BufferType::DRAM};
     for (Device *device : devices_) {
+        tt::log_info("Running On Device {}", device->id());
         local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(device, device->command_queue(), config);
     }
 }
@@ -712,7 +716,7 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferL1ReadWrites) {
                             config.num_iterations = num_iterations;
                             config.mem_config = shard_strategy;
                             config.page_shape = page_shape;
-                            tt::log_info(tt::LogTest, fmt::format("cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations).c_str());
+                            tt::log_info(tt::LogTest, fmt::format("Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", device->id(), cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations).c_str());
                             local_test_functions::stress_test_EnqueueWriteBuffer_and_EnqueueReadBuffer_sharded(
                                 device, device->command_queue(), config, BufferType::L1, false);
                         }
