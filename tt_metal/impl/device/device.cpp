@@ -1400,30 +1400,15 @@ bool Device::initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_ba
         return true;
 
    // bool already_initialized = this->active_devices_.activate_device(this->id_);
-    bool already_initialized = false;
-    if (!already_initialized) {
-        this->build_firmware();
-    }
+    this->state_ = ActiveState::ACTIVE;
 
     DprintServerAttach(this);
     watcher_init(this);
-
-    this->initialize_and_launch_firmware();
 
     watcher_attach(this);
 
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
     this->initialized_ = true;
-
-    // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
-    if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
-        detail::DispatchStateCheck(true);
-        this->initialize_command_queue();
-    } else {
-        detail::DispatchStateCheck(false);
-        this->initialize_synchronous_sw_cmd_queue();
-        TT_ASSERT(this->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
-    }
 
     return true;
 }
@@ -1595,6 +1580,9 @@ bool Device::close() {
     allocator::clear(*this->allocator_);
 
     this->state_ = ActiveState::INACTIVE;
+    this->compute_cores_.clear();
+    this->storage_only_cores_.clear();
+    this->ethernet_cores_.clear();
     this->disable_and_clear_program_cache();
     this->command_queue_programs.clear();
     this->sw_command_queues_.clear();

@@ -151,20 +151,22 @@ std::map<chip_id_t, Device *> CreateDevices(
     const uint8_t num_hw_cqs,
     const size_t l1_small_size,
     const std::vector<uint32_t> &l1_bank_remap) {
+    // TODO: deprecate
     ZoneScoped;
-    std::vector<Device *> devices = tt::DevicePool::instance(device_ids, num_hw_cqs, l1_small_size).get_all_devices();
-    // TODO: return a vector here
+    std::cout << " CreateDevices " << std::endl;
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_devices();
     std::map<chip_id_t, Device *> ret_devices;
     for (Device * dev: devices) {
         ret_devices.insert({dev->id(), dev});
     }
+
     return ret_devices;
 }
 
 void CloseDevices(std::map<chip_id_t, Device *> devices) {
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     for (const auto &[device_id, dev] : devices) {
-      std::cout << " calling device close 2 " << std::endl;
         dev->close();
     }
 }

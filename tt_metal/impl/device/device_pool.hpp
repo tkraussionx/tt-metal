@@ -17,12 +17,22 @@ class DevicePool {
     DevicePool(const DevicePool &) = delete;
     DevicePool(DevicePool &&other) noexcept = delete;
 
-    static const DevicePool &instance(
+
+		static DevicePool& instance() noexcept {
+        TT_ASSERT(_inst != nullptr, "Trying to get DevicePool without initializing it");
+        return *_inst;
+    }
+
+    static void initialize(
         std::vector<chip_id_t> device_ids,
         const uint8_t num_hw_cqs,
-        size_t l1_small_size);
+        size_t l1_small_size) noexcept {
+      std::cout << " DP initialize " << std::endl;
+        static DevicePool device_pool(device_ids, num_hw_cqs, l1_small_size);
+        _inst = &device_pool;
+    }
 
-    Device* get_device(chip_id_t device_id) const;
+    Device* get_active_device(chip_id_t device_id) const;
     std::vector<Device*> get_all_devices() const;
     bool close_device(chip_id_t device_id) const;
 
@@ -37,6 +47,10 @@ class DevicePool {
     void activate_device(chip_id_t id);
     void deactivate_device(chip_id_t id);
     bool is_device_active(chip_id_t id) const;
+    void initialize_device_after_close(Device *dev) const;
+    static DevicePool* _inst;
+
 };
+
 
 }  // namespace tt

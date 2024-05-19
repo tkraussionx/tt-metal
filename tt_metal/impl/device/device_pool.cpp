@@ -6,48 +6,54 @@
 #include "tt_metal/detail/tt_metal.hpp"
 
 namespace tt {
-/*
-ActiveDevices::~ActiveDevices() {
-    for (size_t i = 0; i < devices_.size(); i++) {
-        if (devices_[i] == ActiveState::ACTIVE) {
-            TT_THROW("Process tear down with device {} still active", i);
-        }
+
+DevicePool* DevicePool::_inst = nullptr;
+
+void DevicePool::initialize_device_after_close(Device *dev) const {
+    //TODO: temp, all these can be removed
+    dev->initialize_and_launch_firmware();
+
+    // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
+    if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
+        detail::DispatchStateCheck(true);
+        dev->initialize_command_queue();
+    } else {
+        detail::DispatchStateCheck(false);
+        dev->initialize_synchronous_sw_cmd_queue();
+        TT_ASSERT(dev->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
     }
-}*/
+    detail::InitDeviceProfiler(dev);
+}
 
 void DevicePool::activate_device(chip_id_t id) {
+
     const std::lock_guard<std::mutex> lock(this->lock);
     if (this->devices.size() < id + 1) {
        this->devices.resize(id + 1);
     }
     if (this->devices[id] == nullptr) {
+      std::cout << " DP activate device " << id << std::endl;
         auto dev = new Device(id, this->num_hw_cqs, this->l1_small_size);
+        dev->build_firmware();
+        this->initialize_device_after_close(dev);
         this->devices[id] = std::unique_ptr<Device>(dev);
-        detail::InitDeviceProfiler(dev);
+
     } else if (this->devices[id]->state() == ActiveState::ACTIVE) {
         TT_THROW("Cannot re-initialize device {}, must first call close()", id);
     }
-}
 
-void DevicePool::deactivate_device(chip_id_t id) {
-    const std::lock_guard<std::mutex> lock(this->lock);
-   // this->devices[id] = ActiveState::INACTIVE;
 }
 
 bool DevicePool::is_device_active(chip_id_t id) const {
-    if (this->devices.size() < id + 1) {
+    if (this->devices.size() < id + 1 || this->devices[id] == nullptr) {
         return false;
     } else {
         return this->devices[id]->state() == ActiveState::ACTIVE;
     }
 }
 
-const DevicePool& DevicePool::instance(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size) {
-    static DevicePool device_pool(device_ids, num_hw_cqs, l1_small_size);
-    return device_pool;
-}
-
 DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size) {
+  std::cout << " device pool ctor  " << std::endl;
     ZoneScoped;
     this->l1_small_size = l1_small_size;
     this->num_hw_cqs = num_hw_cqs;
@@ -60,17 +66,12 @@ DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_c
             }
         }
     }
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
 }
 
-Device* DevicePool::get_device(chip_id_t device_id) const {
+Device* DevicePool::get_active_device(chip_id_t device_id) const {
     TT_ASSERT(
         this->is_device_active(device_id), "DevicePool does not contain active device {}", device_id);
-    Device* dev = this->devices[device_id].get();
-    if (not dev->is_initialized()) {
-        dev->initialize(this->l1_small_size);
-    }
-    return dev;
+    return this->devices[device_id].get();
 }
 
 std::vector<Device*> DevicePool::get_all_devices() const {
@@ -79,15 +80,17 @@ std::vector<Device*> DevicePool::get_all_devices() const {
         if (dev != nullptr) {
             if (not dev->is_initialized()) {
                 dev->initialize(this->l1_small_size);
+                this->initialize_device_after_close(dev.get());
             }
             user_devices.emplace_back(dev.get());
         }
     }
+    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     return user_devices;
 }
 
 bool DevicePool::close_device(chip_id_t device_id) const {
-    auto device = this->get_device(device_id);
+    auto device = this->get_active_device(device_id);
     return device->close();
 }
 
