@@ -260,6 +260,8 @@ from ttnn.operations.core import (
     squeeze,
     clone,
     as_tensor,
+    allocate_tensor_on_device,
+    copy_host_to_device_tensor,
 )
 
 from ttnn.operations.matmul import (
@@ -451,12 +453,19 @@ from ttnn.operations.normalization import (
     get_group_norm_cores_accross_channel,
 )
 
+from ttnn.operations.trace import (
+    begin_trace_capture,
+    end_trace_capture,
+    execute_trace,
+    release_trace,
+)
+
 from ttnn.operations.ccl import all_gather
 
 from ttnn.operations import transformer
 from ttnn.operations import kv_cache
 from ttnn.operations.conv2d import Conv2d
-from ttnn.operations.maxpool2d import (
+from ttnn.operations.pool import (
     MaxPool2d,
     global_avg_pool2d,
 )
