@@ -118,6 +118,10 @@ namespace tt::tt_metal::detail
 
         // Custom Generic NLP TMs
         // This op should support arbitrary B and S divisible by 32 on DRAM; on L1, might error out due to space
+        m_tensor.def("nlp_create_qkv_heads_mistral", &nlp_create_qkv_heads_mistral,
+            py::arg("input").noconvert(), py::arg("num_heads").noconvert(), py::arg("num_kv_heads").noconvert() = std::nullopt, py::arg("output_mem_config") = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Shuffles [1, S=1, B=32, head_dim * (num_heads + 2*num_kv_heads)] fused qkv matrix into Q, K, and V heads with shape [B, S, num_heads, head_dim] for Q and [B, S, 1, num_kv_heads*head_dim] for K and V, where num_heads and num_kv_heads will be padded to nearest 32. Input must be interleaved, B=32 and S=1.
+        )doc");
         m_tensor.def("nlp_create_qkv_heads_falcon7b", &nlp_create_qkv_heads_falcon7b,
             py::arg().noconvert(), py::arg("output_mem_config") = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
             Shuffles [B, 1, S, 4672] fused qkv matrix into 3 heads with shapes [B, 71, S, 64], [B, 1, S, 64], and [B, 1, S, 64].

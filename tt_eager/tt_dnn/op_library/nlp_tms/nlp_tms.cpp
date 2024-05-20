@@ -286,6 +286,65 @@ tt::stl::reflection::Attributes NlpCreateHeads::attributes() const {
 }
 
 
+// Generic NLP CreateHeadsMistral op
+void NlpCreateHeadsMistral::validate(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    // NOTE: Checks for head_dim and shape[3] is done in nlp_create_qkv_heads because it's needed to infer head_dim
+    TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
+    TT_FATAL(input_tensor.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor.get_dtype() == tt::tt_metal::DataType::FLOAT32 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+
+    TT_FATAL(input_shape[2] % TILE_HEIGHT == 0, "Unsupported input shape");
+    TT_FATAL(input_shape[1] == 1, "Unsupported input shape");
+    TT_FATAL(!input_tensor.is_sharded(), "Sharded input not supported");
+    TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED);
+}
+
+std::vector<Shape> NlpCreateHeadsMistral::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+    std::vector<Shape> output_shape_vec;
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    auto sequence_length = input_shape[2];
+    auto head_dim = this->head_dim;
+    if (head_dim % TILE_WIDTH != 0) {
+        head_dim = (head_dim / TILE_WIDTH + 1) * TILE_WIDTH;
+    }
+
+    const Shape q_output_shape = {sequence_length, input_shape[0], this->num_q_heads, head_dim};
+    const Shape v_output_shape = {sequence_length, input_shape[0], 32 , head_dim*this->num_kv_heads};
+    const Shape k_output_shape = v_output_shape;
+    output_shape_vec = {q_output_shape, k_output_shape, v_output_shape};
+
+    return output_shape_vec;
+}
+
+std::vector<Tensor> NlpCreateHeadsMistral::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+}
+
+operation::ProgramWithCallbacks NlpCreateHeadsMistral::create_program(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    auto& output_tensor = output_tensors.at(0);
+
+    CoreCoord compute_with_storage_grid_size = input_tensor.device()->compute_with_storage_grid_size();
+    return  multi_core_nlp_create_qkv_heads_mistral(input_tensor, this->num_q_heads, this->num_kv_heads, this->head_dim, output_tensors, compute_with_storage_grid_size);
+
+}
+
+tt::stl::reflection::Attributes NlpCreateHeadsMistral::attributes() const {
+    return {
+        {"num_q_heads", this->num_q_heads},
+        {"num_kv_heads", this->num_kv_heads},
+        {"output_mem_config", this->output_mem_config},
+    };
+}
+
+
 // Generic NLP ConcatHeads op
 void NlpConcatHeads::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
