@@ -14,11 +14,11 @@ pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/test_perf_falcon.py -
 
 crash:
 8 chips
-pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 8chips"
 TT_METAL_WATCHER=12 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
 
 1 chip
-pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 1chips and seq_len_1024 and 1000_loops"
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
 
 source python_env/bin/activate
 
@@ -73,3 +73,17 @@ MM2 -> Begin sync of loop:  0
 Releasing the lock
 
 Releasing the lock
+
+
+Min repro 1 device:
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
+TT_METAL_SLOW_DISPATCH_MODE=1 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
+
+Min repro 8 devices:
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 8chips"
+
+Original attention loop 8 devices:
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
+
+Original attention loop 1 devices:
+pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 1chips and seq_len_1024 and 1000_loops"
