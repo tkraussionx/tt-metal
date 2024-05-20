@@ -203,6 +203,7 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/scan/scan_op.cpp \
 	tt_eager/tt_dnn/op_library/topk/topk_op.cpp \
 	tt_eager/tt_dnn/op_library/topk/single_core/single_core_topk.cpp \
+	tt_eager/tt_dnn/op_library/llama/llama_op.cpp \
 
 TT_DNN_LIB = $(LIBDIR)/libtt_dnn.a
 TT_DNN_DEFINES =

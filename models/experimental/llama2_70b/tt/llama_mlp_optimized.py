@@ -185,58 +185,60 @@ class TtLlamaMLP_optimized:
         return hidden_states
 
     def decode_forward(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
-        hidden_states = []
-        w1_outs = []
-        w3_outs = []
+        # hidden_states = []
+        # w1_outs = []
+        # # w3_outs = []
 
-        w1_out = tt_lib.operations.primary.matmul_1d(
-            x,
-            self.w1,
-            program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
-        )
-
-        w3_out = tt_lib.operations.primary.matmul_1d(
-            x,
-            self.w3,
-            program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
-        )
-        x.deallocate(True)
-
-        hidden_states = tt_lib.tensor.mul(
-            w1_out,
-            w3_out,
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
-            output_dtype=self.model_config["BFP8_DTYPE"],
-        )
-        w1_out.deallocate(True)
-        w3_out.deallocate(True)
-
-        # hidden_states = tt_lib.tensor.sharded_to_interleaved(
-        #     hidden_states, output_mem_config=self.model_config["L1_MEMCFG"]
+        # w1_out = tt_lib.operations.primary.matmul_1d(
+        #     x,
+        #     self.w1,
+        #     program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
         # )
 
-        hidden_states = ttnn.all_gather(
-            hidden_states,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            # memory_config=self.model_config["L1_MEMCFG"],
-            memory_config=self.model_config["PADDED_MLP_ALL_GATHER_OUTPUT_MEMCFG"],
-        )
+        # w3_out = tt_lib.operations.primary.matmul_1d(
+        #     x,
+        #     self.w3,
+        #     program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
+        # )
+        # x.deallocate(True)
 
-        # hidden_states = tt_lib.tensor.interleaved_to_sharded(
-        #     hidden_states, sharded_mem_config=self.model_config["PADDED_MLP_ALL_GATHER_OUTPUT_MEMCFG"]
+        # hidden_states = tt_lib.tensor.mul(
+        #     w1_out,
+        #     w3_out,
+        #     output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+        #     output_dtype=self.model_config["BFP8_DTYPE"],
+        # )
+        # w1_out.deallocate(True)
+        # w3_out.deallocate(True)
+
+        # # hidden_states = tt_lib.tensor.sharded_to_interleaved(
+        # #     hidden_states, output_mem_config=self.model_config["L1_MEMCFG"]
+        # # )
+
+        # hidden_states = ttnn.all_gather(
+        #     hidden_states,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     # memory_config=self.model_config["L1_MEMCFG"],
+        #     memory_config=self.model_config["PADDED_MLP_ALL_GATHER_OUTPUT_MEMCFG"],
         # )
 
-        hidden_states = tt_lib.operations.primary.matmul_1d(
-            hidden_states,
-            self.w2,
-            program_config=self.model_config["PADDED_FF2_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
-            # output_dtype=self.model_config["BFP8_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-        )
-        return hidden_states
+        # # hidden_states = tt_lib.tensor.interleaved_to_sharded(
+        # #     hidden_states, sharded_mem_config=self.model_config["PADDED_MLP_ALL_GATHER_OUTPUT_MEMCFG"]
+        # # )
+
+        # hidden_states = tt_lib.operations.primary.matmul_1d(
+        #     hidden_states,
+        #     self.w2,
+        #     program_config=self.model_config["PADDED_FF2_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+        #     # output_dtype=self.model_config["BFP8_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
+        # return hidden_states
+
+        return tt_lib.operations.primary.transformers.llama_mlp_decode_forward(x, self.w1, self.w2, self.w3)

@@ -7,6 +7,7 @@
 #include "tt_dnn/op_library/transformer_tms/transformer_tms.hpp"
 #include "tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "tt_dnn/op_library/sdpa/sdpa_op.hpp"
+#include "tt_dnn/op_library/llama/llama_op.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -133,6 +134,16 @@ void py_module(py::module& m_transformers) {
 
         "Accepts a `SDPAMultiCoreProgramConfig` which specifies the grid size and chunk tiles in the Q and K sequence lengths. The op parallelizes over `b`, `nqh`, and Q's `s` dimension."
         );
+
+    m_transformers.def(
+        "llama_mlp_decode_forward",
+        &llama_mlp_decode_forward,
+        py::arg("input").noconvert(),
+        py::arg("w1").noconvert(),
+        py::arg("w2").noconvert(),
+        py::arg("w3").noconvert(),
+        "LLAMA MLP decode forward. This API mimicks the PyTorch API of the same name."
+    );
 
 }
 
