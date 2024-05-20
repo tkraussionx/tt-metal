@@ -71,6 +71,13 @@ MM1 -> Begin sync of loop:  0
 MM1 -> End sync of loop:  0
 MM2 -> Begin sync of loop:  0
 
+TT_METAL_SLOW_DISPATCH_MODE=1
+Running with:  1  devices.
+I2SP -> Begin sync
+I2SP -> End sync
+MM1 -> Begin sync
+MM1 -> End sync
+
 Releasing the lock
 
 Releasing the lock
