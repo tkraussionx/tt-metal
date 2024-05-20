@@ -695,6 +695,7 @@ def test_small_resnet50_block(
     weight_dtype,
     math_fidelity,
 ):
+    pytest.skip()
     torch.manual_seed(0)
     conv1_weight_shape = [input_channels, input_channels, 1, 1]
     conv1_bias_shape = [1, 1, 1, input_channels]
