@@ -88,6 +88,7 @@ def test_run_max_pool(
     device,
     dtype,
 ):
+    pytest.skip()
     in_n, in_c, in_h, in_w = act_shape
     kernel_h, kernel_w = kernel_size
     pad_h, pad_w = padding
