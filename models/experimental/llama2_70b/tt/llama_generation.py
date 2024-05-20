@@ -69,6 +69,13 @@ class TtLlamaModelForGeneration:
                     model_config_str="BFLOAT16-DRAM", num_devices=self.n_devices, seq_len=seq_len
                 )
                 self.tt_model.set_model_config(model_config)
+                # Disable and reenable program cache
+                # Helps with bug in prefill -> decode, where we're hitting cache when we shouldn't
+                for device_id in self.device_mesh.get_device_ids():
+                    device = self.device_mesh.get_device(device_id)
+                    device.disable_and_clear_program_cache()
+                    device.enable_program_cache()
+
             return self.decode_forward(tokens, start_pos, *args, **kwargs)
         else:
             # Prefill
