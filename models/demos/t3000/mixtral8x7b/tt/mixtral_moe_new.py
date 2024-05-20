@@ -69,6 +69,24 @@ class TtMoeLayer(torch.nn.Module):
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
+        self.x_mem = ttnn.create_sharded_memory_config(
+            shape=(32, int(4096 / 32)),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
+            strategy=ttnn.ShardStrategy.WIDTH,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            use_height_and_width_as_shard_shape=True,
+        )
+        self.gates_prg_cfg = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 4),
+            in0_block_w=4,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=1,  # M / TILE_HEIGHT = 32 / 32
+            per_core_N=1,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
+        )
 
     def forward(self, inputs):
         """
@@ -82,33 +100,48 @@ class TtMoeLayer(torch.nn.Module):
         input_i_1SBH = inputs
         expert_i_HH = self.experts
         # get logits for the experts
-        gate_logits_1SB8 = ttnn.linear(
+        from models.demos.t3000.mixtral8x7b.tt.create_prg_config import create_matmul_program_config
+
+        # prg_cfg = create_matmul_program_config(
+        #     input_tensor_a=input_i_1SBH,
+        #     input_tensor_b=self.gates_H8,
+        #     core_grid=ttnn.CoreGrid(y=4, x=8),
+        #     use_1d_systolic_array=True,
+        #     activation = None,
+        #     compute_kernel_config=self.compute_kernel,
+        # )
+
+        # print("prg_cfg", prg_cfg)
+        print("started moe layer")
+        gate_logits_1SB8 = ttnn.experimental.operations.primary.matmul(
             input_i_1SBH,
             self.gates_H8,
-            memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
-            compute_kernel_config=self.compute_kernel,
-            use_1d_systolic_array=True,
-            core_grid=ttnn.CoreGrid(y=1, x=8),
-            dtype=ttnn.bfloat16,
+            # memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+            # compute_kernel_config=self.compute_kernel,
+            # use_1d_systolic_array=True,
+            # core_grid=ttnn.CoreGrid(y=4, x=8),
+            # program_config = self.gates_prg_cfg,
+            # dtype=ttnn.bfloat16,
         )
-
+        # print("gates done", gate_logits_1SB8)
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
         ttl_topk_values, ttl_topk_indices = ttnn.experimental.operations.primary.topk(gate_logits_1SB8, 32)
         ttl_topk_values = ttnn.add(ttl_topk_values, self.top2_mask_11BB)
         mask_B2 = ttnn.eq(self.expert_mask_11BB, ttl_topk_indices)
-        weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=-1)
-
+        weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=3)
+        # print("mask done", mask_B2)
         # MLP and masking
         weights = expert_i_HH(input_i_1SBH)
 
         results_11BH = ttnn.mul(weights, weights_1SB1)
-
-        # convert to bf8 for all-gather perf
-        results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
-
+        # print("MLP done", results_11BH)
+        # # convert to bf8 for all-gather perf
+        # results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
+        results_11BH = ttnn.to_memory_config(results_11BH, self.x_mem)
         # all gather
         output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
         # sum on each device
-        output_11BH_gathered = ttnn.matmul(self.reduce_mask, output_11BH_gathered)
+        # print("all gather done", output_11BH_gathered)
+        output_11BH_gathered = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
         return output_11BH_gathered

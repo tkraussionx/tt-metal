@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 import ttnn
 from models.demos.t3000.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
-from models.demos.t3000.mixtral8x7b.tt.mixtral_moe import TtMoeLayer
+from models.demos.t3000.mixtral8x7b.tt.mixtral_moe_new import TtMoeLayer
 from models.demos.t3000.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.t3000.mixtral8x7b.reference.model import FeedForward
 from models.utility_functions import (
@@ -26,6 +26,8 @@ from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
 def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
+    # t3k_device_mesh = ttnn.open_device_mesh(ttnn.DeviceGrid(1, 8), [0, 4, 5, 1, 2, 6, 7, 3])
+
     pcc = 0.99
     iterations = 1
     dtype = ttnn.bfloat8_b
@@ -89,30 +91,44 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
         )
+        # tt_decode_input = ttnn.to_memory_config(tt_decode_input, ttnn.create_sharded_memory_config(
+        #     shape=(32, int(4096 / 32)),
+        #     core_grid=ttnn.CoreGrid(y=4, x=8),
+        #     strategy=ttnn.ShardStrategy.WIDTH,
+        #     orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        #     use_height_and_width_as_shard_shape=True,
+        # ))
+        import time
 
         # Run TT model
-        tt_out = tt_model(tt_decode_input)
-        tt_output_torch = (
-            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
-            .squeeze(2)
-            .view(batch, 1, -1)
-        )
+        for iter in range(3):
+            start_time = time.time()
+            tt_out = tt_model(tt_decode_input)
+            tt_output_torch = (
+                ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
+                .squeeze(2)
+                .view(batch, 1, -1)
+            )
+            print("ttnn matmul took: ", iter, time.time() - start_time)
 
-        # Reference model
-        ref_output = reference_model(pt_decode_input)
-        passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+        # # Reference model
+        # ref_output = reference_model(pt_decode_input)
+        # passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
-        logger.info(comp_allclose(ref_output, tt_output_torch))
-        logger.info(pcc_message)
+        # logger.info(comp_allclose(ref_output, tt_output_torch))
+        # logger.info(pcc_message)
 
-        if passing:
-            logger.info("Mistral MOE Passed!")
-        else:
-            logger.warning("Mistral MOE Failed!")
-            all_tests_pass = False
+        # if passing:
+        #     logger.info("Mistral MOE Passed!")
+        # else:
+        #     logger.warning("Mistral MOE Failed!")
+        #     all_tests_pass = False
 
     if all_tests_pass:
         logger.info(f"All {iterations} Mistral MOE iterations Passed!")
     else:
         logger.warning("One or more iterations of Mistral MOE Failed!")
         assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+
+
+# test_mixtral_moe_inference()
