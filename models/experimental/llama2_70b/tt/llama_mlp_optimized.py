@@ -29,6 +29,7 @@ class TtLlamaMLP_optimized:
         emulated=False,
         cache_path=None,
         read_cache=False,
+        use_llama_cpp=False,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -36,6 +37,7 @@ class TtLlamaMLP_optimized:
         self.model_config = model_config
         self.emulated = emulated
         self.read_cache = read_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = hidden_size
 
@@ -134,7 +136,10 @@ class TtLlamaMLP_optimized:
     def __call__(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if self.model_config["LLM_MODE"] == "decode":
-            return self.decode_forward(x)
+            if self.use_llama_cpp:
+                return self.decode_forward_cpp(x)
+            else:
+                return self.decode_forward(x)
         # Prefill should have input tensor of shape (1, batch, seqlen, hidden_size)
         elif self.model_config["LLM_MODE"] == "prefill":
             return self.prefill_forward(x)
@@ -184,11 +189,10 @@ class TtLlamaMLP_optimized:
 
         return hidden_states
 
-    def decode_forward(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
-        hidden_states = []
-        w1_outs = []
-        w3_outs = []
+    def decode_forward_cpp(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
+        return tt_lib.operations.primary.transformers.llama_mlp_decode_forward(x, self.w1, self.w2, self.w3)
 
+    def decode_forward(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         w1_out = tt_lib.operations.primary.matmul_1d(
             x,
             self.w1,

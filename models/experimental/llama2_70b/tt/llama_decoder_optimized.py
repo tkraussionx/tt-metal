@@ -38,6 +38,7 @@ class TtLlamaDecoder_optimized:
         emulated=False,
         cache_path=None,
         read_cache=False,
+        use_llama_cpp=False,
     ):
         super().__init__()
 
@@ -47,6 +48,7 @@ class TtLlamaDecoder_optimized:
         self.model_config = model_config
         self.emulated = emulated
         self.read_cache = read_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -70,6 +72,7 @@ class TtLlamaDecoder_optimized:
             emulated=emulated,
             cache_path=cache_path,
             read_cache=read_cache,
+            use_llama_cpp=use_llama_cpp,
         )
 
         self.mlp = TtLlamaMLP_optimized(
@@ -82,6 +85,7 @@ class TtLlamaDecoder_optimized:
             emulated=emulated,
             cache_path=cache_path,
             read_cache=read_cache,
+            use_llama_cpp=use_llama_cpp,
         )
 
         self.load_weights()

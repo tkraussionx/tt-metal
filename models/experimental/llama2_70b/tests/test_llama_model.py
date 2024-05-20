@@ -60,14 +60,7 @@ class PytorchLlamaModel(torch.nn.Module):
 
 
 def run_test_LlamaModel_inference(
-    t3k_device_mesh,
-    batch,
-    seq_len,
-    pcc,
-    model_config,
-    n_layers,
-    n_devices,
-    emulated=False,
+    t3k_device_mesh, batch, seq_len, pcc, model_config, n_layers, n_devices, emulated=False, use_llama_cpp=False
 ):
     # Prepare paths and devices
     t3k_device_mesh, ckpt_dir, tokenizer_path, cache_path = get_llama_path(
@@ -105,6 +98,7 @@ def run_test_LlamaModel_inference(
         batch,
         emulated=emulated,
         cache_path=cache_path,
+        use_llama_cpp=use_llama_cpp,
     )
 
     if model_config["LLM_MODE"] == "prefill":
@@ -136,6 +130,7 @@ def run_test_LlamaModel_inference(
             start_pos,
             attn_mask,
         )
+
         del tt_inp_emb, rot_mat, attn_mask
 
         tt_out = ttnn.from_device(tt_out)
@@ -244,15 +239,8 @@ def run_test_LlamaModel_inference(
     ((32, 1), (1, 128), (1, 2048)),
     ids=("decode", "prefill_128", "prefill_2k"),
 )
-def test_LlamaModel_inference(
-    batch,
-    seq_len,
-    pcc,
-    n_layers,
-    n_devices,
-    t3k_device_mesh,
-    emulated,
-):
+@pytest.mark.parametrize("use_llama_cpp", (True, False), ids=["llama_cpp", "llama_python"])
+def test_LlamaModel_inference(batch, seq_len, pcc, n_layers, n_devices, t3k_device_mesh, emulated, use_llama_cpp):
     model_config = get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=n_devices, seq_len=seq_len)
 
     if t3k_device_mesh.get_num_devices() < n_devices and not emulated:
@@ -267,12 +255,5 @@ def test_LlamaModel_inference(
         device.enable_program_cache()
 
     run_test_LlamaModel_inference(
-        t3k_device_mesh,
-        batch,
-        seq_len,
-        pcc,
-        model_config,
-        n_layers,
-        n_devices,
-        emulated,
+        t3k_device_mesh, batch, seq_len, pcc, model_config, n_layers, n_devices, emulated, use_llama_cpp
     )

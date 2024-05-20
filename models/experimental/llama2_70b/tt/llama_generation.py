@@ -44,7 +44,8 @@ class TtLlamaModelForGeneration:
             batch,
             emulated=emulated,
             cache_path=cache_path,
-            read_cache=False,
+            read_cache=True,
+            generate_input_cache=False,
         )
         self.params = configuration
         self.device_mesh = device_mesh

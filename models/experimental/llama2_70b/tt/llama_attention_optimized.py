@@ -35,6 +35,7 @@ class TtLlamaAttention_optimized:
         cache_path=None,
         batch_size=None,
         read_cache=False,
+        use_llama_cpp=False,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -42,6 +43,7 @@ class TtLlamaAttention_optimized:
         self.model_config = model_config
         self.emulated = emulated
         self.read_cache = read_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -342,12 +344,62 @@ class TtLlamaAttention_optimized:
     ):
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if self.model_config["LLM_MODE"] == "decode":
-            return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
+            if self.use_llama_cpp:
+                return self.decode_forward_cpp(xs, rot_mats, start_pos, attn_masks)
+            else:
+                return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
         # Prefill should have input tensor of shape (1, batch=1, seqlen, hidden_size)
         elif self.model_config["LLM_MODE"] == "prefill":
             return self.prefill_forward(xs, rot_mats, attn_masks, user_id)
         else:
             raise ValueError(f"Unknown llm_mode: {self.model_config['LLM_MODE']}")
+
+    def decode_forward_cpp(
+        self,
+        xs,
+        rot_mats,
+        start_pos: int,
+        attn_masks,
+    ):
+        padded_layer_past_len = nearest_32(start_pos + 1)
+
+        (
+            query_layer,
+            key_layer,
+            value_layer,
+        ) = tt_lib.operations.primary.transformers.llama_attn_qkv_decode_forward(
+            xs, rot_mats, self.qkv, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
+        )
+
+        # For some reason, creating this exact memconfig in C++ leads to mismatch.
+        # We need to create in python and pass it in.
+        # K Cache Update
+        kv_cache_memcfg = self.model_config["KV_CACHE_SLICE_OUTPUT_MEMCFG"]
+        if kv_cache_memcfg.is_sharded():
+            kv_cache_shard_shape = kv_cache_memcfg.shard_spec.shape
+            kv_cache_shard_shape[0] = self.layer_past[0].shape[0] * padded_layer_past_len
+            kv_cache_memcfg.shard_spec.shape = kv_cache_shard_shape
+
+        attn_output = tt_lib.operations.primary.transformers.llama_attn_mqa_decode_forward(
+            query_layer,
+            key_layer,
+            value_layer,
+            start_pos,
+            attn_masks,
+            0,  # batch_offset
+            self.layer_past[0],
+            self.layer_past[1],
+            self.scale,
+            kv_cache_memcfg,
+        )
+
+        selfout = tt_lib.operations.primary.transformers.llama_attn_selfout_decode_forward(
+            attn_output,
+            self.wo,
+            self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"],
+            self.model_config["SELFOUT_MM_INPUT_MEMCFG"],
+        )
+        return selfout
 
     def decode_forward(
         self,

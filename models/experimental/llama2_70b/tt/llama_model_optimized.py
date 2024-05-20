@@ -39,6 +39,8 @@ class TtLlamaModel_optimized:
         emulated=False,
         cache_path=None,
         read_cache=False,
+        generate_input_cache=False,
+        use_llama_cpp=False,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -46,6 +48,8 @@ class TtLlamaModel_optimized:
         self.model_config = model_config
         self.emulated = emulated
         self.read_cache = read_cache
+        self.generate_input_cache = generate_input_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -85,6 +89,7 @@ class TtLlamaModel_optimized:
                 emulated=emulated,
                 cache_path=cache_path,
                 read_cache=read_cache,
+                use_llama_cpp=use_llama_cpp,
             )
             for layer_num in tqdm(range(n_layers))
         ]
@@ -100,6 +105,48 @@ class TtLlamaModel_optimized:
             cache_path,
         )
         self.load_weights()
+
+        if generate_input_cache:
+            # self.cache_input_tensors() # already generated
+            pass
+
+    def cache_input_tensors(self):
+        # decode mode
+        seq_len = 1
+        batch = 32
+        for start_pos in range(512):
+            rot_mat = get_rotation_mat(self.rot_emb, start_pos, seq_len, batch=batch)
+            assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
+
+            rot_mats = ttnn.as_tensor(
+                rot_mat,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device_mesh,
+                cache_file_name=self.cache_path / f"rot_mat_decode_{start_pos}",
+                memory_config=self.model_config["DRAM_MEMCFG"],
+                mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+            )
+            # rot_mats = ttnn.to_device(rot_mats, self.device_mesh)
+            rot_mats.deallocate(True)
+
+            padded_layer_past_len = nearest_32(start_pos + 1)
+
+            padded_layer_past_len = nearest_32(start_pos + 1)
+            attn_mask_shape = (seq_len, 1, self.padded_local_heads, padded_layer_past_len)
+            attn_mask = torch.zeros(*attn_mask_shape)
+            attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
+
+            attn_masks = ttnn.as_tensor(
+                attn_mask,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=self.model_config["DRAM_MEMCFG"],
+                mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+                device=self.device_mesh,
+                cache_file_name=self.cache_path / f"attn_mask_decode_{start_pos}",
+            )
+            attn_masks.deallocate(True)
 
     def set_model_config(self, model_config):
         self.model_config = model_config
@@ -261,9 +308,16 @@ class TtLlamaModel_optimized:
             xs = tt_lib.tensor.interleaved_to_sharded(
                 xs, sharded_mem_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"]
             )
+            rot_mat = None
+            attn_mask = None
+            if not self.generate_input_cache:
+                rot_mat = get_rotation_mat(self.rot_emb, start_pos, seq_len, batch=batch)
+                assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
 
-            rot_mat = get_rotation_mat(self.rot_emb, start_pos, seq_len, batch=batch)
-            assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
+                padded_layer_past_len = nearest_32(start_pos + 1)
+                attn_mask_shape = (seq_len, 1, self.padded_local_heads, padded_layer_past_len)
+                attn_mask = torch.zeros(*attn_mask_shape)
+                attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
 
             rot_mats = ttnn.as_tensor(
                 rot_mat,
@@ -282,11 +336,6 @@ class TtLlamaModel_optimized:
 
             padded_layer_past_len = nearest_32(start_pos + 1)
 
-            padded_layer_past_len = nearest_32(start_pos + 1)
-            attn_mask_shape = (seq_len, 1, self.padded_local_heads, padded_layer_past_len)
-            attn_mask = torch.zeros(*attn_mask_shape)
-            attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
-
             attn_masks = ttnn.as_tensor(
                 attn_mask,
                 dtype=ttnn.bfloat16,
@@ -294,6 +343,7 @@ class TtLlamaModel_optimized:
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 device=self.device_mesh,
+                cache_file_name=self.cache_path / f"attn_mask_decode_{start_pos}",
             )
             attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
 

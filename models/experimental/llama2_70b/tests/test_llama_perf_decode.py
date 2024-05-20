@@ -148,6 +148,7 @@ def run_test_LlamaModel_end_to_end(
     expected_compile_time,
     expected_inference_time,
     emulated,
+    use_llama_cpp,
 ):
     device_mesh, ckpt_dir, tokenizer_path, cache_path = get_llama_path(device_mesh, model_config, n_devices, emulated)
     logger.info(f"Running num_layer: {n_layers}")
@@ -190,6 +191,7 @@ def run_test_LlamaModel_end_to_end(
         emulated=emulated,
         cache_path=cache_path,
         read_cache=False,
+        use_llama_cpp=use_llama_cpp,
     )
 
     for i in device_mesh.get_device_ids():
@@ -244,6 +246,7 @@ def run_test_LlamaModel_end_to_end(
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(240000)
 @pytest.mark.model_perf_t3000
+@pytest.mark.parametrize("use_llama_cpp", (True, False), ids=["llama_cpp", "llama_python"])
 @pytest.mark.parametrize(
     "generation_length, expected_compile_time, expected_inference_time",
     (
@@ -258,7 +261,8 @@ def test_Llama_perf_host(
     expected_compile_time,
     expected_inference_time,
     t3k_device_mesh,
-    n_layers=80,
+    use_llama_cpp,
+    n_layers=2,
     n_devices=8,
     emulated=False,
 ):
@@ -292,4 +296,5 @@ def test_Llama_perf_host(
         expected_compile_time,
         expected_inference_time,
         emulated,
+        use_llama_cpp,
     )
