@@ -20,6 +20,7 @@ TT_METAL_WATCHER=12 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/u
 1 chip
 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
 
+export WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml
 source python_env/bin/activate
 
  Starting pci link reset on WH devices at pci indices: 0, 1, 2, 3
