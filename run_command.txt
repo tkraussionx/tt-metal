@@ -85,7 +85,6 @@ Releasing the lock
 
 Min repro 1 device:
 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
-TT_METAL_SLOW_DISPATCH_MODE=1 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 1chips"
 
 Min repro 8 devices:
 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_min_repro and 8chips"
@@ -95,3 +94,50 @@ pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falco
 
 Original attention loop 1 devices:
 pytest /home/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_crash and 1chips and seq_len_1024 and 1000_loops"
+
+
+Min repo 8 devices seq_fault:
+gdb /home/ppopovic/tt-metal/build/lib/libdevice.so /home/ppopovic/tt-metal/core_unit_test_8_chips.1716213136
+
+rogram terminated with signal SIGSEGV, Segmentation fault.
+#0  __GI_raise (sig=<optimized out>) at ../sysdeps/unix/sysv/linux/raise.c:50
+50      ../sysdeps/unix/sysv/linux/raise.c: No such file or directory.
+[Current thread is 1 (Thread 0x7f12994c2740 (LWP 3560))]
+(gdb) bt
+#0  __GI_raise (sig=<optimized out>) at ../sysdeps/unix/sysv/linux/raise.c:50
+#1  <signal handler called>
+#2  0x00007f1227d23ffa in memcpy_to_device (dest=0xe3418020, src=0x7ffdb26a5df0, num_bytes=48) at /home/ppopovic/tt-metal/tt_metal/third_party/umd/device/tt_silicon_driver.cpp:912
+#3  0x00007f1227d24875 in write_block (dev=0x67aa100, byte_addr=3812720672, num_bytes=48, buffer_addr=0x7ffdb26a5df0 "", dma_buf_size=0) at /home/ppopovic/tt-metal/tt_metal/third_party/umd/device/tt_silicon_driver.cpp:1057
+#4  0x00007f1227d358fa in tt_SiliconDevice::write_device_memory (this=0x6ef5570, mem_ptr=0x7ffdb26a5df0, size_in_bytes=48, target=..., address=98336, fallback_tlb="LARGE_WRITE_TLB") at /home/ppopovic/tt-metal/tt_metal/third_party/umd/device/tt_silicon_driver.cpp:2108
+bt
+#5  0x00007f1227d4c501 in tt_SiliconDevice::write_to_device (this=0x6ef5570, mem_ptr=0x7ffdb26a5df0, size=48, core=..., addr=98336, fallback_tlb="LARGE_WRITE_TLB", send_epoch_cmd=false, last_send_epoch_cmd=true, ordered_with_prev_remote_write=false) at /home/ppopovic/tt-metal/tt_metal/third_party/umd/device/tt_silicon_driver.cpp:4326
+#6  0x00007f1228467dd0 in tt::Cluster::write_core (this=0x7f12287e0ba0 <tt::Cluster::instance()::inst>, mem_ptr=0x7ffdb26a5df0, sz_in_bytes=48, core=..., addr=98336, small_access=false) at ../tt_metal/llrt/tt_cluster.cpp:382
+#7  0x00007f122846bc3e in tt::Cluster::set_internal_routing_info_for_ethernet_cores (this=0x7f12287e0ba0 <tt::Cluster::instance()::inst>, enable_internal_routing=false) at ../tt_metal/llrt/tt_cluster.cpp:724
+#8  0x00007f122862d622 in tt::tt_metal::detail::CloseDevices (devices=Python Exception <class 'AttributeError'> 'NoneType' object has no attribute 'pointer':
+std::map with 8 elements) at ../tt_metal/tt_metal.cpp:177
+#9  0x00007f122a6f0cb4 in pybind11::detail::argument_loader<std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > > >::call_impl<void, void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), 0ul, pybind11::detail::void_type>(void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), std::integer_sequence<unsigned long, 0ul>, pybind11::detail::void_type&&) && (this=0x7ffdb26a5fc0,
+    f=@0x5ef8118: 0x7f122862d5f1 <tt::tt_metal::detail::CloseDevices(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >)>) at /home/ppopovic/tt-metal/tt_metal/third_party/pybind11/include/pybind11/cast.h:1443
+#10 0x00007f122a6bb754 in pybind11::detail::argument_loader<std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > > >::call<void, pybind11::detail::void_type, void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >)>(void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >)) && (this=0x7ffdb26a5fc0,
+    f=@0x5ef8118: 0x7f122862d5f1 <tt::tt_metal::detail::CloseDevices(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >)>) at /home/ppopovic/tt-metal/tt_metal/third_party/pybind11/include/pybind11/cast.h:1417
+#11 0x00007f122a67f7c8 in pybind11::cpp_function::initialize<void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), void, std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >, pybind11::name, pybind11::scope, pybind11::sibling, char [627]>(void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), void (*)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), pybind11::name const&, pybind11::scope const&, pybind11::sibling const&, char const (&) [627])::{lambda(pybind11::detail::function_call&)#3}::operator()(pybind11::detail::function_call&) const (this=0x0, call=...) at /home/ppopovic/tt-metal/tt_metal/third_party/pybind11/include/pybind11/pybind11.h:248
+#12 0x00007f122a67fa56 in pybind11::cpp_function::initialize<void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), void, std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >, pybind11::name, pybind11::scope, pybind11::sibling, char [627]>(void (*&)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), void (*)(std::map<int, tt::tt_metal::Device*, std::less<int>, std::allocator<std::pair<int const, tt::tt_metal::Device*> > >), pybind11::name const&, pybind11::scope const&, pybind11::sibling const&, char const (&) [627])::{lambda(pybind11::detail::function_call&)#3}::_FUN(pybind11::detail::function_call&) () at /home/ppopovic/tt-metal/tt_metal/third_party/pybind11/include/pybind11/pybind11.h:223
+#13 0x00007f122a5ad3f6 in pybind11::cpp_function::dispatcher (self=0x7f122ad23d80, args_in=0x7f1222456340, kwargs_in=0x0) at /home/ppopovic/tt-metal/tt_metal/third_party/pybind11/include/pybind11/pybind11.h:939
+
+Attention repo 8 devices:
+gdb /home/ppopovic/tt-metal/build/lib/libdevice.so /home/ppopovic/tt-metal/core_attention_8_chips.1716213815
+gdb /home/ppopovic/tt-metal/build/lib/libtt_metal.so /home/ppopovic/tt-metal/core_attention_8_chips.1716213815
+(same stack trace)
+
+
+single test:
+// Min repro 1 devices
+pytest test_seg_fault.py -k "test_min_repro and 1chips"
+
+// Min repro 8 devices
+pytest test_seg_fault.py -k "test_min_repro and 8chips"
+
+// Attn 1 devices
+pytest test_seg_fault -k "test_falcon7b_crash and 1chips and seq_len_1024 and 1000_loops"
+
+// Attn 8 devices
+pytest test_seg_fault -k "test_falcon7b_crash and 8chips and seq_len_1024 and 1000_loops"
