@@ -26,10 +26,15 @@ class DevicePool {
     static void initialize(
         std::vector<chip_id_t> device_ids,
         const uint8_t num_hw_cqs,
-        size_t l1_small_size) noexcept {
+        size_t l1_small_size,
+        const std::vector<uint32_t> &l1_bank_remap = {}) noexcept {
       std::cout << " DP initialize " << std::endl;
-        static DevicePool device_pool(device_ids, num_hw_cqs, l1_small_size);
-        _inst = &device_pool;
+        if (_inst == nullptr) {
+            static DevicePool device_pool(device_ids, num_hw_cqs, l1_small_size, l1_bank_remap);
+            _inst = &device_pool;
+        } else {
+            _inst->add_devices_to_pool(device_ids, num_hw_cqs, l1_small_size, l1_bank_remap);
+        }
     }
 
     Device* get_active_device(chip_id_t device_id) const;
@@ -38,16 +43,18 @@ class DevicePool {
 
    private:
     ~DevicePool();
-    DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size);
+    DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap);
     uint8_t num_hw_cqs;
     size_t l1_small_size;
+    std::vector<uint32_t> l1_bank_remap;
     std::mutex lock;
     std::vector<std::unique_ptr<Device>> devices;
 
     void activate_device(chip_id_t id);
+    void initialize_device(Device *dev) const;
     void deactivate_device(chip_id_t id);
     bool is_device_active(chip_id_t id) const;
-    void initialize_device_after_close(Device *dev) const;
+    void add_devices_to_pool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap);
     static DevicePool* _inst;
 
 };

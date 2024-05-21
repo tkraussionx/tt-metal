@@ -1539,9 +1539,7 @@ bool Device::close() {
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     std::unordered_set<CoreCoord> wait_for_cores = not_done_dispatch_cores;
 
-    std::cout << " close: wait for done " << std::endl;
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
-    std::cout << " close: done for done " << std::endl;
 
     DprintServerDetach(this);
 

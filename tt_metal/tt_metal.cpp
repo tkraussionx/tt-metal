@@ -750,10 +750,9 @@ Device *CreateDevice(
     const size_t l1_small_size,
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
-    Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
-    detail::InitDeviceProfiler(dev);
-    return dev;
+    std::cout << " CreateDevice " << device_id << std::endl;
+    tt::DevicePool::initialize({device_id}, num_hw_cqs, l1_small_size, l1_bank_remap);
+    return tt::DevicePool::instance().get_active_device(device_id);
 }
 
 Device *CreateDeviceMinimal(

@@ -9,7 +9,7 @@ namespace tt {
 
 DevicePool* DevicePool::_inst = nullptr;
 
-void DevicePool::initialize_device_after_close(Device *dev) const {
+void DevicePool::initialize_device(Device *dev) const {
     //TODO: temp, all these can be removed
     dev->initialize_and_launch_firmware();
 
@@ -33,9 +33,9 @@ void DevicePool::activate_device(chip_id_t id) {
     }
     if (this->devices[id] == nullptr) {
       std::cout << " DP activate device " << id << std::endl;
-        auto dev = new Device(id, this->num_hw_cqs, this->l1_small_size);
+        auto dev = new Device(id, this->num_hw_cqs, this->l1_small_size, this->l1_bank_remap);
         dev->build_firmware();
-        this->initialize_device_after_close(dev);
+        this->initialize_device(dev);
         this->devices[id] = std::unique_ptr<Device>(dev);
 
     } else if (this->devices[id]->state() == ActiveState::ACTIVE) {
@@ -52,11 +52,10 @@ bool DevicePool::is_device_active(chip_id_t id) const {
     }
 }
 
-DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size) {
-  std::cout << " device pool ctor  " << std::endl;
-    ZoneScoped;
+void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap) {
     this->l1_small_size = l1_small_size;
     this->num_hw_cqs = num_hw_cqs;
+    this->l1_bank_remap = l1_bank_remap;
     for (const auto& device_id : device_ids) {
         const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         for (const auto& mmio_controlled_device_id :
@@ -66,6 +65,12 @@ DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_c
             }
         }
     }
+}
+
+DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap) {
+  std::cout << " device pool ctor  " << std::endl;
+    ZoneScoped;
+    this->add_devices_to_pool(device_ids, num_hw_cqs, l1_small_size, l1_bank_remap);
 }
 
 Device* DevicePool::get_active_device(chip_id_t device_id) const {
@@ -79,8 +84,8 @@ std::vector<Device*> DevicePool::get_all_devices() const {
     for (const auto& dev : this->devices) {
         if (dev != nullptr) {
             if (not dev->is_initialized()) {
-                dev->initialize(this->l1_small_size);
-                this->initialize_device_after_close(dev.get());
+                dev->initialize(this->l1_small_size, this->l1_bank_remap);
+                this->initialize_device(dev.get());
             }
             user_devices.emplace_back(dev.get());
         }
