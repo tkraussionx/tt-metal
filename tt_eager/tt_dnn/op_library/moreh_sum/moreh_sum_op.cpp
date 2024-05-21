@@ -26,12 +26,12 @@ namespace {
         const std::string& op_name,
         DataType data_type = DataType::BFLOAT16,
         Layout layout = Layout::TILE) {
-        TT_FATAL(tensor.get_layout() == layout, fmt::format("{} only supports tiled layout.", op_name));
-        TT_FATAL(tensor.get_dtype() == data_type, fmt::format("{} only supports data type {}.", op_name, data_type));
+        TT_FATAL(tensor.get_layout() == layout, "{} only supports tiled layout.", op_name);
+        TT_FATAL(tensor.get_dtype() == data_type, "{} only supports data type {}.", op_name, data_type);
         TT_FATAL(
-            tensor.storage_type() == StorageType::DEVICE, fmt::format("Operands to {} need to be on device!", op_name));
+            tensor.storage_type() == StorageType::DEVICE, "Operands to {} need to be on device!", op_name);
         TT_FATAL(
-            tensor.buffer() != nullptr, fmt::format("Operands to {} need to be allocated in buffers on device!", op_name));
+            tensor.buffer() != nullptr, "Operands to {} need to be allocated in buffers on device!", op_name);
     }
 
     inline void check_tensor(
@@ -49,8 +49,13 @@ namespace {
         const Tensor& input,
         const int64_t& dim,
         const std::optional<const Tensor>& output,
-        const MemoryConfig& output_mem_config) {
-        return operation::run(MorehSum{ .dim = dim, .output_mem_config = output_mem_config }, { input }, {}, { output }).at(0);
+        const MemoryConfig& output_mem_config,
+        std::optional<const DeviceComputeKernelConfig> &compute_kernel_config) {
+
+        TT_FATAL(input.storage_type() == StorageType::DEVICE);
+        auto device = input.device();
+        auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config);
+        return operation::run(MorehSum{ .dim = dim, .output_mem_config = output_mem_config, .compute_kernel_config = kernel_config_val }, { input }, {}, { output }).at(0);
     }
 }  // namespace
 
@@ -143,11 +148,11 @@ operation::ProgramWithCallbacks MorehSum::create_program(
 
     const auto input_rank = input.get_legacy_shape().rank();
     if (this->dim == input_rank - 1) {
-        return moreh_sum_w_impl(input, output);
+        return moreh_sum_w_impl(input, output, this->compute_kernel_config);
     } else if(this->dim == input_rank - 2) {
-        return moreh_sum_h_impl(input, output);
+        return moreh_sum_h_impl(input, output, this->compute_kernel_config);
     } else {
-        return moreh_sum_nc_impl(input, output, dim);
+        return moreh_sum_nc_impl(input, output, dim, this->compute_kernel_config);
     }
 }
 
@@ -155,7 +160,8 @@ Tensor moreh_sum(
     const Tensor& input,
     std::vector<int64_t>& dims,
     const std::optional<const Tensor> output,
-    const MemoryConfig& output_mem_config) {
+    const MemoryConfig& output_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     // reduce for all dims
     if (dims.empty()) {
         const auto input_rank = input.get_legacy_shape().rank();
@@ -169,11 +175,11 @@ Tensor moreh_sum(
     auto temp_input = input;
     for (uint32_t i = dims.size() - 1; i > 0; i--) {
         log_debug(LogOp, "{}:{} dim {}", __func__, __LINE__, sorted_dims[i]);
-        auto temp_output = _moreh_sum(temp_input, sorted_dims[i], std::nullopt, output_mem_config);
+        auto temp_output = _moreh_sum(temp_input, sorted_dims[i], std::nullopt, output_mem_config, compute_kernel_config);
         temp_input = temp_output;
     }
     log_debug(LogOp, "{}:{} dim {}", __func__, __LINE__, sorted_dims.front());
-    return _moreh_sum(temp_input, sorted_dims.front(), output, output_mem_config);
+    return _moreh_sum(temp_input, sorted_dims.front(), output, output_mem_config, compute_kernel_config);
 }
 
 }  // namespace primary
