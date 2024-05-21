@@ -97,6 +97,7 @@ def get_model_config(model_config_str, prefill_seq_len=0):
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     BFP8_DTYPE = ttl.tensor.DataType.BFLOAT8_B
+    BFP4_DTYPE = ttl.tensor.DataType.BFLOAT4_B
 
     # Set default dtype and mem_config based on model_config_str
     if model_config_str in ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT16-L1_SHARDED"):
@@ -122,11 +123,23 @@ def get_model_config(model_config_str, prefill_seq_len=0):
     # Input ids are UINT32
     model_config["INPUT_DTYPE"] = ttl.tensor.DataType.UINT32
 
-    # Matmul Weights must always be BFP8_B
+    ff1_ff2_precision = "bfp8_bfp4"
     # Override defaults for certain configs
     for key in model_config.keys():
         if "MM_WEIGHTS_DTYPE" in key:
-            model_config[key] = BFP8_DTYPE
+            bfp4_weights = False
+            if ff1_ff2_precision == "bfp4":
+                bfp4_weights = "DENSE_H_TO_4H" in key or "DENSE_4H_TO_H" in key
+            elif ff1_ff2_precision == "bfp4_bfp8":
+                bfp4_weights = "DENSE_H_TO_4H" in key
+            elif ff1_ff2_precision == "bfp8_bfp4":
+                bfp4_weights = "DENSE_4H_TO_H" in key
+
+            if bfp4_weights:
+                print(f"Setting {key} to BFP4")
+                model_config[key] = BFP4_DTYPE
+            else:
+                model_config[key] = BFP8_DTYPE
 
     if model_config_str in ("BFLOAT16-L1", "BFLOAT16-L1_SHARDED"):
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
