@@ -488,7 +488,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
         tie(weight_tensor_on_device, bias_tensor_on_device) = prepare_conv_weights_biases_and_move_to_device(weight_tensor, bias_tensor, conv_config.input_channels_alignment, conv_config.weights_dtype, opt_conv_op_block_config.act_block_w_ntiles, opt_conv_op_block_config.out_subblock_w_ntiles, parallel_config, device);
     }
     // if 1x1 conv w/ stride 1, convert input tensor to tile layout if required
-    bool is_1x1_s1_p0_conv = kernel_size[0] == 1 && kernel_size[1] == 1 && stride[0] == 1 && stride[1] == 1 && padding[0] == 1 && padding[1] == 1 && dilation[0] == 1 && dilation[1] == 1 && groups == 1;
+    bool is_1x1_s1_p0_conv = kernel_size[0] == 1 && kernel_size[1] == 1 && stride[0] == 1 && stride[1] == 1 && padding[0] == 0 && padding[1] == 0 && dilation[0] == 1 && dilation[1] == 1 && groups == 1;
     if (is_1x1_s1_p0_conv) {
         input_tensor_post_tm = ttnn::operations::core::ToLayout::execute(input_tensor_post_tm, Layout::TILE, conv_config.dtype, input_tensor_post_tm.memory_config(),&device);
     }

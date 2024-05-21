@@ -615,8 +615,8 @@ def test_resnet50_conv_wh_fp32(
     )
 
 
-@pytest.mark.skip("New API needs to be tested")
-@skip_for_wormhole_b0()
+# @pytest.mark.skip("New API needs to be tested")
+# @skip_for_wormhole_b0()
 @pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
@@ -665,7 +665,7 @@ def test_resnet50_conv_wh_fp32(
         (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
         (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
         # 1x1 conv
-        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
+        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, True, None),
         # Small conv
         (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),
     ),
