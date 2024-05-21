@@ -155,7 +155,7 @@ std::map<chip_id_t, Device *> CreateDevices(
     ZoneScoped;
     std::cout << " CreateDevices " << std::endl;
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
-    std::vector<Device *> devices = tt::DevicePool::instance().get_all_devices();
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     std::map<chip_id_t, Device *> ret_devices;
     for (Device * dev: devices) {
         ret_devices.insert({dev->id(), dev});

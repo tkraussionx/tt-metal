@@ -15,19 +15,12 @@
 using namespace tt;
 using namespace tt::test_utils;
 
-TEST_F(FDBasicFixture, DevicePoolUninitialized) {
-    std::vector<chip_id_t> device_ids{0};
-    int num_hw_cqs = 1;
-    int l1_small_size = 1024;
-    ASSERT_ANY_THROW(std::vector<Device *> devices = tt::DevicePool::instance().get_all_devices());
-}
-
 TEST_F(FDBasicFixture, DevicePoolOpenClose) {
     std::vector<chip_id_t> device_ids{0};
     int num_hw_cqs = 1;
     int l1_small_size = 1024;
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
-    std::vector<Device *> devices = tt::DevicePool::instance().get_all_devices();
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     for (const auto& dev: devices) {
       ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
       ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
@@ -38,35 +31,75 @@ TEST_F(FDBasicFixture, DevicePoolOpenClose) {
     for (const auto& dev: devices) {
         dev->close();
     }
-    devices = tt::DevicePool::instance().get_all_devices();
+    devices = tt::DevicePool::instance().get_all_active_devices();
     for (const auto& dev: devices) {
       ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
       ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
       ASSERT_TRUE(dev->is_initialized());
     }
+    for (const auto& dev: devices) {
+        dev->close();
+    }
 }
 
-TEST_F(FDBasicFixture, DevicePoolAddDevices) {
+TEST_F(FDBasicFixture, DevicePoolReconfigDevices) {
     std::vector<chip_id_t> device_ids{0};
     int num_hw_cqs = 1;
     int l1_small_size = 1024;
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
-    std::vector<Device *> devices = tt::DevicePool::instance().get_all_devices();
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     for (const auto& dev: devices) {
       ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
       ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
       ASSERT_TRUE(dev->is_initialized());
     }
 
-    // Close then get devices again
+    // Close then get devices with different configs
+    for (const auto& dev: devices) {
+      std::cout << "closing device " << dev->id() << std::endl;
+        dev->close();
+    }
+    l1_small_size = 2048;
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
+    devices = tt::DevicePool::instance().get_all_active_devices();
+    for (const auto& dev: devices) {
+      ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
+      ASSERT_TRUE(dev->is_initialized());
+    }
     for (const auto& dev: devices) {
         dev->close();
     }
-    devices.clear();
-    devices = tt::DevicePool::instance().get_all_devices();
+}
+
+TEST_F(FDBasicFixture, DevicePoolAddDevices) {
+    if (tt::tt_metal::GetNumAvailableDevices() != 8) {
+        GTEST_SKIP();
+    }
+    std::vector<chip_id_t> device_ids{0};
+    int num_hw_cqs = 1;
+    int l1_small_size = 1024;
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     for (const auto& dev: devices) {
       ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
       ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
       ASSERT_TRUE(dev->is_initialized());
+    }
+
+    // Close then get more devices
+    for (const auto& dev: devices) {
+        dev->close();
+    }
+    device_ids = {0, 1, 2, 3};
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
+    devices = tt::DevicePool::instance().get_all_active_devices();
+    ASSERT_TRUE(devices.size() >= 4);
+    for (const auto& dev: devices) {
+      ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
+      ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
+      ASSERT_TRUE(dev->is_initialized());
+    }
+    for (const auto& dev: devices) {
+        dev->close();
     }
 }

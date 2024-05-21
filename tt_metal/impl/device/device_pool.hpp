@@ -38,7 +38,7 @@ class DevicePool {
     }
 
     Device* get_active_device(chip_id_t device_id) const;
-    std::vector<Device*> get_all_devices() const;
+    std::vector<Device*> get_all_active_devices() const;
     bool close_device(chip_id_t device_id) const;
 
    private:

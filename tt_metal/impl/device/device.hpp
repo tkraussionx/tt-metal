@@ -200,7 +200,7 @@ class Device {
 
     // Checks that the given arch is on the given pci_slot and that it's responding
     // Puts device into reset
-    bool initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap = {}, bool minimal = false);
+    bool initialize(const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap = {}, bool minimal = false);
     void initialize_cluster();
     void initialize_allocator(size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap = {});
     void initialize_build();

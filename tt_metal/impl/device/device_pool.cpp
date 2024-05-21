@@ -38,8 +38,14 @@ void DevicePool::activate_device(chip_id_t id) {
         this->initialize_device(dev);
         this->devices[id] = std::unique_ptr<Device>(dev);
 
-    } else if (this->devices[id]->state() == ActiveState::ACTIVE) {
-        TT_THROW("Cannot re-initialize device {}, must first call close()", id);
+    } else {
+      const auto& dev = this->devices[id];
+      if (not dev->is_initialized()) {
+          dev->initialize(num_hw_cqs, this->l1_small_size, this->l1_bank_remap);
+          this->initialize_device(dev.get());
+      } else {
+          TT_THROW("Cannot re-initialize device {}, must first call close()", id);
+      }
     }
 
 }
@@ -65,6 +71,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids, const ui
             }
         }
     }
+    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
 }
 
 DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap) {
@@ -79,18 +86,13 @@ Device* DevicePool::get_active_device(chip_id_t device_id) const {
     return this->devices[device_id].get();
 }
 
-std::vector<Device*> DevicePool::get_all_devices() const {
+std::vector<Device*> DevicePool::get_all_active_devices() const {
     std::vector<Device*> user_devices;
-    for (const auto& dev : this->devices) {
-        if (dev != nullptr) {
-            if (not dev->is_initialized()) {
-                dev->initialize(this->l1_small_size, this->l1_bank_remap);
-                this->initialize_device(dev.get());
-            }
-            user_devices.emplace_back(dev.get());
-        }
+    for (int id=0; id < this->devices.size(); id++) {
+      if(this->is_device_active(id)) {
+        user_devices.emplace_back(this->devices[id].get());
+      }
     }
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     return user_devices;
 }
 
