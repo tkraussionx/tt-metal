@@ -1051,10 +1051,16 @@ def matmul(
     output_mem_config,
     **kwargs,
 ):
+    xcore = kwargs.get("xcore")
+    ycore = kwargs.get("ycore")
+
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
-
-    t2 = ttnn.matmul(t0, t1, memory_config=memory_config_to_ttnn(output_mem_config))
+    print(xcore)
+    print(ycore)
+    t2 = ttnn.matmul(
+        t0, t1, memory_config=memory_config_to_ttnn(output_mem_config), core_grid=ttnn.CoreGrid(y=ycore, x=xcore)
+    )
     return ttnn_tensor_to_torch(t2)
 
 

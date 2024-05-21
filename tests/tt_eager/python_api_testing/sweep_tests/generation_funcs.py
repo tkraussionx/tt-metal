@@ -1886,3 +1886,17 @@ def gen_repeat_args(
 
         input_info.update({"shape": shapes})
         yield input_info
+
+
+def gen_coregrid_args(input_shapes, dtypes, layouts, mem_configs, xcore, ycore, do_sanitize_args=True):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=do_sanitize_args
+    ):
+        if input_info is not None:
+            # max_dim = len(input_shapes[0]) - 1
+            # dim = random.randint(-max_dim-1, max_dim)
+            # For now onlu last dim is supported
+            input_info.update({"xcore": 1})
+            input_info.update({"ycore": 1})
+
+            yield input_info

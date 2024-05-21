@@ -15,6 +15,8 @@ test-list:
         args:
           low: -100
           high: 100
+          corex: 3
+          corey: 3
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
