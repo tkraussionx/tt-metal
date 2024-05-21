@@ -86,7 +86,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
         tt_decode_input = ttnn.from_torch(
             pt_decode_input.clone().unsqueeze(1).view(1, 1, 32, 4096),
             device=t3k_device_mesh,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
@@ -101,7 +101,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
         import time
 
         # Run TT model
-        for iter in range(3):
+        for iter in range(1):
             start_time = time.time()
             tt_out = tt_model(tt_decode_input)
             tt_output_torch = (
@@ -111,18 +111,18 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
             )
             print("ttnn matmul took: ", iter, time.time() - start_time)
 
-        # # Reference model
-        # ref_output = reference_model(pt_decode_input)
-        # passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+        # Reference model
+        ref_output = reference_model(pt_decode_input)
+        passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
-        # logger.info(comp_allclose(ref_output, tt_output_torch))
-        # logger.info(pcc_message)
+        logger.info(comp_allclose(ref_output, tt_output_torch))
+        logger.info(pcc_message)
 
-        # if passing:
-        #     logger.info("Mistral MOE Passed!")
-        # else:
-        #     logger.warning("Mistral MOE Failed!")
-        #     all_tests_pass = False
+        if passing:
+            logger.info("Mistral MOE Passed!")
+        else:
+            logger.warning("Mistral MOE Failed!")
+            all_tests_pass = False
 
     if all_tests_pass:
         logger.info(f"All {iterations} Mistral MOE iterations Passed!")

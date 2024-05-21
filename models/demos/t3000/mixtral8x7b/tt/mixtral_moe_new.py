@@ -18,13 +18,13 @@ class TtMoeLayer(torch.nn.Module):
 
         gate_name = f"layers.{layer_num}.feed_forward.gate.weight"
         self.gates_H8 = ttnn.as_tensor(
-            torch.nn.functional.pad(state_dict[gate_name].permute(1, 0), (0, 56), "constant", 0)
+            torch.nn.functional.pad(state_dict[gate_name].permute(1, 0), (1, 55), "constant", 0)
             .unsqueeze(0)
             .unsqueeze(0),
             dtype=ttnn.bfloat16,
             layout=self.model_config["GATE_W_LAYOUT_TILE"],
             memory_config=self.model_config["GATE_WEIGHTS_MEMCFG"],
-            cache_file_name=args.weight_cache_path(dtype) / (gate_name + "_multidevice_padded"),
+            cache_file_name=args.weight_cache_path(dtype) / (gate_name + "_multidevice_repadded"),
             device=self.device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
@@ -44,17 +44,17 @@ class TtMoeLayer(torch.nn.Module):
         )
         self.reduce_mask = ttnn.to_device(self.reduce_mask, device_mesh)
         self.expert_mask_11BB = ttnn.from_torch(
-            torch.cat([torch.full((1, 1, 32, 32), fill_value=i) for i in range(8)], dim=3),
+            torch.cat([torch.full((1, 1, 32, 32), fill_value=i + 1) for i in range(8)], dim=3),
             dtype=ttnn.uint16,
             layout=ttnn.TILE_LAYOUT,
             device=device_mesh,
             mesh_mapper=ShardTensorToMesh(device_mesh, dim=3),
         )
         top8_mask = torch.full((1, 1, 32, 64), fill_value=torch.finfo(torch.float).min)
-        top8_mask[:, :, :, :8] = 0.0
+        top8_mask[:, :, :, 1:9] = 0.0
         self.top8_mask_11B_64 = ttnn.from_torch(
             top8_mask,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             layout=ttnn.TILE_LAYOUT,
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
@@ -64,7 +64,7 @@ class TtMoeLayer(torch.nn.Module):
         top2_mask[:, :, :, :2] = 0.0
         self.top2_mask_11BB = ttnn.from_torch(
             top2_mask,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             layout=ttnn.TILE_LAYOUT,
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
@@ -112,36 +112,29 @@ class TtMoeLayer(torch.nn.Module):
         # )
 
         # print("prg_cfg", prg_cfg)
-        print("started moe layer")
-        gate_logits_1SB8 = ttnn.experimental.operations.primary.matmul(
+        gate_logits_1SB8 = ttnn.linear(
             input_i_1SBH,
             self.gates_H8,
-            # memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
-            # compute_kernel_config=self.compute_kernel,
-            # use_1d_systolic_array=True,
-            # core_grid=ttnn.CoreGrid(y=4, x=8),
-            # program_config = self.gates_prg_cfg,
-            # dtype=ttnn.bfloat16,
+            memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.compute_kernel,
+            use_1d_systolic_array=True,
+            core_grid=ttnn.CoreGrid(y=1, x=8),
+            dtype=ttnn.bfloat16,
         )
-        # print("gates done", gate_logits_1SB8)
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
         ttl_topk_values, ttl_topk_indices = ttnn.experimental.operations.primary.topk(gate_logits_1SB8, 32)
         ttl_topk_values = ttnn.add(ttl_topk_values, self.top2_mask_11BB)
         mask_B2 = ttnn.eq(self.expert_mask_11BB, ttl_topk_indices)
         weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=3)
-        # print("mask done", mask_B2)
+
         # MLP and masking
         weights = expert_i_HH(input_i_1SBH)
 
         results_11BH = ttnn.mul(weights, weights_1SB1)
-        # print("MLP done", results_11BH)
-        # # convert to bf8 for all-gather perf
-        # results_11BH = ttnn.clone(results_11BH, dtype=ttnn.bfloat8_b, memory_config=ttnn.L1_MEMORY_CONFIG)
-        results_11BH = ttnn.to_memory_config(results_11BH, self.x_mem)
+        # results_11BH = ttnn.to_memory_config(results_11BH, self.x_mem)
         # all gather
         output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
         # sum on each device
-        # print("all gather done", output_11BH_gathered)
         output_11BH_gathered = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
         return output_11BH_gathered

@@ -1,7 +1,7 @@
 import time
 import ttnn
 import torch
-from ttnn import ReplicateTensorToMesh
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 
 def test_matmul(device_mesh, use_program_cache):
@@ -55,3 +55,29 @@ def test_sharded_matmul(device):
 
     print("done", gate_logits_1SBE)
     assert True
+
+
+def test_sharded_allgather(t3k_device_mesh):
+    device_mesh = t3k_device_mesh
+    results_11BH = ttnn.from_torch(
+        torch.randn(1, 1, 32, 4096),
+        dtype=ttnn.bfloat8_b,
+        layout=ttnn.TILE_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    x_mem = ttnn.create_sharded_memory_config(
+        shape=(32, int(4096 / 32)),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
+    allgather = ttnn.to_torch(output_11BH_gathered, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))
+
+    results_11BH = ttnn.to_memory_config(results_11BH, x_mem)
+    output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
+    allgather_sharded = ttnn.to_torch(output_11BH_gathered, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))
+    assert torch.all(allgather == allgather_sharded).item()

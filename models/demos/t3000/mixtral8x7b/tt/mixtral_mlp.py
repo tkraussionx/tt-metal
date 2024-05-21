@@ -97,28 +97,28 @@ class TtMixtralMLP(torch.nn.Module):
         w3 -> up_proj
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
-        w1_out = ttnn.linear(  # ttnn.experimental.operations.primary.matmul_1d(
+        w1_out = ttnn.experimental.operations.primary.matmul_1d(
             x,
             self.w1,
             # activation="silu",
-            # core_grid=self.model_args.max_grid_size,
+            # core_grid=ttnn.CoreGrid(y=8, x=8), #self.model_args.max_grid_size,
             # use_1d_systolic_array=True,
             program_config=self.w1_prg_cfg,
-            memory_config=self.model_config["FF1_OUTPUT_MEMCFG"],
+            output_mem_config=self.model_config["FF1_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
-            dtype=ttnn.bfloat8_b,
+            output_dtype=ttnn.bfloat8_b,
         )
-        w3_out = ttnn.matmul(  # ttnn.experimental.operations.primary.matmul_1d(
+        w3_out = ttnn.experimental.operations.primary.matmul_1d(
             x,
             self.w3,
-            # core_grid=self.model_args.max_grid_size,
+            # core_grid=ttnn.CoreGrid(y=8, x=8), #self.model_args.max_grid_size,
             # use_1d_systolic_array=True,
             program_config=self.w3_prg_cfg,
-            memory_config=self.model_config["FF3_OUTPUT_MEMCFG"],
+            output_mem_config=self.model_config["FF3_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
-            dtype=ttnn.bfloat8_b,
+            output_dtype=ttnn.bfloat8_b,
         )
-        w2_in = ttnn.mul(w1_out, w3_out)
+        w2_in = ttnn.experimental.tensor.mul(w1_out, w3_out)
         # prg_cfg = create_matmul_program_config(
         #     input_tensor_a=w2_in,
         #     input_tensor_b=self.w2,
@@ -128,15 +128,15 @@ class TtMixtralMLP(torch.nn.Module):
         #     compute_kernel_config=self.model_args.get_compute_kernel_config(),
         # )
 
-        w2_out = ttnn.matmul(  # ttnn.experimental.operations.primary.matmul_1d(
+        w2_out = ttnn.experimental.operations.primary.matmul_1d(
             w2_in,
             self.w2,
-            # core_grid=self.model_args.max_grid_size,
+            # core_grid=ttnn.CoreGrid(y=8, x=8), #self.model_args.max_grid_size,
             # use_1d_systolic_array=True,
             program_config=self.w3_prg_cfg,
-            memory_config=self.model_config["FF2_OUTPUT_MEMCFG"],
+            output_mem_config=self.model_config["FF2_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
-            dtype=ttnn.bfloat8_b,
+            output_dtype=ttnn.bfloat8_b,
         )
 
         return w2_out

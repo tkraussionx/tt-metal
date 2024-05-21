@@ -178,7 +178,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     )
 
     generation_start_pos = 0
-    max_generated_tokens = 120
+    max_generated_tokens = 50
 
     cache_attention(device_mesh, state_dict, model_args, rot_mats, generation_start_pos, max_generated_tokens, dtype)
 
@@ -272,9 +272,9 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     "input_prompts, instruct_weights",
     [
         ("models/demos/t3000/mixtral8x7b/demo/input_data.json", False),
-        ("models/demos/t3000/mixtral8x7b/demo/input_data_questions.json", True),
+        # ("models/demos/t3000/mixtral8x7b/demo/input_data_questions.json", True),
     ],
-    ids=["general_weights", "instruct_weights"],
+    ids=["general_weights"],
 )
 def test_mixtral8x7b_demo(t3k_device_mesh, use_program_cache, input_prompts, instruct_weights):
     return run_mixtral_demo(

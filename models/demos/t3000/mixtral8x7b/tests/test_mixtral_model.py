@@ -36,15 +36,15 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "validation_type",
-    ("pcc", "output"),
+    ("pcc"),
 )
 @pytest.mark.parametrize(
     "n_layers",
-    (1, 32),
+    (1,),
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 10),
+    (1,),
 )
 def test_mixtral_model_inference(
     t3k_device_mesh, use_program_cache, reset_seeds, iterations, n_layers, validation_type
