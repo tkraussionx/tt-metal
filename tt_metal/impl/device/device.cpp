@@ -1287,10 +1287,12 @@ bool Device::close() {
         }
         hw_command_queue->terminate();
     }
+
+    tt_metal::detail::DumpDeviceProfileResults(this, true);
+
+
     this->trace_buffer_pool_.clear();
     detail::EnableAllocs(this);
-
-    tt_metal::detail::DumpDeviceProfileResults(this);
 
     this->deallocate_buffers();
     watcher_detach(this);

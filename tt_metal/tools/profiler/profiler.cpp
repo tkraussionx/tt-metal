@@ -382,26 +382,6 @@ void DeviceProfiler::dumpResults (
                 worker_core);
 
         }
-
-        for (const auto &worker_core : worker_cores) {
-            std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
-            if (device_tracy_contexts.find(device_core) == device_tracy_contexts.end())
-            {
-                auto tracyCtx = TracyTTContext();
-                std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
-                TracyTTContextPopulate(tracyCtx, smallest_timestamp, 1000.f / (float)device_core_frequency);
-                TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
-
-                device_tracy_contexts.emplace(
-                        device_core,
-                        tracyCtx
-                    );
-            }
-        }
-
-        //std::sort (device_events.begin(), device_events.end());
-
-        pushTracyDeviceResults();
     }
     else
     {
@@ -413,10 +393,7 @@ void DeviceProfiler::dumpResults (
 void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(PROFILER) && defined(TRACY_ENABLE)
-<<<<<<< HEAD
-=======
     ZoneScoped;
->>>>>>> #8223: Working guaranteed markers on FULL DRAM
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)
@@ -481,7 +458,6 @@ void DeviceProfiler::pushTracyDeviceResults()
         }
     }
 
-    std::sort (device_events.begin(), device_events.end());
     for (auto& event: device_events)
     {
         std::pair<uint32_t, CoreCoord> device_core = {event.chip_id, (CoreCoord){event.core_x,event.core_y}};

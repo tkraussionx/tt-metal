@@ -47,11 +47,6 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count)
     );
 
     EnqueueProgram(device->command_queue(), program, false);
-<<<<<<< HEAD
-    tt_metal::detail::DumpDeviceProfileResults(device, lastCall);
-=======
-    //tt_metal::detail::DumpDeviceProfileResults(device);
->>>>>>> #8223: Working guaranteed markers on FULL DRAM
 
     return pass;
 }
@@ -78,7 +73,7 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(600));
         pass &= RunCustomCycle(device, loop_count);
         std::this_thread::sleep_for(std::chrono::milliseconds(600));
-        pass &= RunCustomCycle(device, loop_count, true);
+        pass &= RunCustomCycle(device, loop_count);
 
         pass &= tt_metal::CloseDevice(device);
 
