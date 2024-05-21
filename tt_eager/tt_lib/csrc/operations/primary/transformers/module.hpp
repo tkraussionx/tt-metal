@@ -142,7 +142,17 @@ void py_module(py::module& m_transformers) {
         py::arg("w1").noconvert(),
         py::arg("w2").noconvert(),
         py::arg("w3").noconvert(),
-        "LLAMA MLP decode forward. This API mimicks the PyTorch API of the same name."
+        "LLAMA MLP decode forward."
+    );
+
+    m_transformers.def(
+        "llama_attn_qkv_decode_forward",
+        &llama_attn_qkv_decode_forward,
+        py::arg("input").noconvert(),
+        py::arg("rot_mat").noconvert(),
+        py::arg("wqkv").noconvert(),
+        py::arg("sharded_mem_cfg").noconvert(),
+        "LLAMA attention QKV decode forward."
     );
 
 }

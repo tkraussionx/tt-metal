@@ -365,59 +365,80 @@ class TtLlamaAttention_optimized:
         xs,
         rot_mats,
     ):
-        # Assume input is already padded to 32, even if the batch size is not 32. Batch size is in self.max_batch_size.
-
+        # # Assume input is already padded to 32, even if the batch size is not 32. Batch size is in self.max_batch_size.
         # Reshard
-        if self.model_config["LN_ATTN_OUTPUT_MEMCFG"] != self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]:
-            # xs = tt_lib.tensor.reshard(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
-            xs = tt_lib.tensor.sharded_to_interleaved(xs, self.model_config["L1_MEMCFG"])
-            xs = tt_lib.tensor.interleaved_to_sharded(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
+        # if self.model_config["LN_ATTN_OUTPUT_MEMCFG"] != self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]:
+        #     # xs = tt_lib.tensor.reshard(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
+        #     xs = tt_lib.tensor.sharded_to_interleaved(xs, self.model_config["L1_MEMCFG"])
+        #     xs = tt_lib.tensor.interleaved_to_sharded(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
+        # breakpoint()
+        # print(self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
 
-        # Fused QKV
-        fused_query_key_value = tt_lib.operations.primary.matmul_1d(
-            xs,
-            self.qkv,
-            program_config=self.model_config["FUSED_QKV_MM_PROGCFG"],
-            output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-        )
-        xs.deallocate(True)
+        # print(self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"])
+        # # Fused QKV
+        # fused_query_key_value = tt_lib.operations.primary.matmul_1d(
+        #     xs,
+        #     self.qkv,
+        #     program_config=self.model_config["FUSED_QKV_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+        #     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
+        # xs.deallocate(True)
 
-        # TMs
+        # print(f'Fused QKV MAE: {torch.nn.functional.mse_loss(ttnn.to_torch(fused_query_key_value,  mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float(),ttnn.to_torch(test_query_layer, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float())}')
+        # breakpoint()
+
+        # # TMs
+        # (
+        #     query_layer,  # [seqlen, n_local_heads, bsz, head_dim]
+        #     key_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
+        #     value_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
+        # ) = tt_lib.tensor.nlp_create_qkv_heads_decode(
+        #     fused_query_key_value,
+        #     num_heads=self.n_local_heads,
+        #     num_kv_heads=self.n_local_kv_heads,
+        #     output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        # )
+
+        # fused_query_key_value.deallocate(True)
+
+        # # ROTARY EMBEDDINGS
+        # # Q Rotary Embeddings
+        # query_layer = tt_lib.operations.primary.matmul(
+        #     query_layer,
+        #     rot_mats,
+        #     program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        #     compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"]
+        #     # [seqlen, n_heads, bsz, head_dim]  # [1, 1, head_dim, head_dim]  => [seqlen, n_heads, bsz, head_dim]
+        # )
+
+        # key_layer = tt_lib.operations.primary.matmul(
+        #     key_layer,
+        #     rot_mats,
+        #     program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
+        #     output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        #     compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"],
+        # )
+
+        # # Compare test to actual
+        # # print(f'Query Layer MAE: {torch.nn.functional.mse_loss(ttnn.to_torch(query_layer,  mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float(),ttnn.to_torch(test_query_layer, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float())}')
+        # # print(f'Key Layer MAE: {torch.nn.functional.mse_loss(ttnn.to_torch(key_layer,  mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float(),ttnn.to_torch(test_key_layer, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float())}')
+        # # print(f'Value Layer MAE: {torch.nn.functional.mse_loss(ttnn.to_torch(value_layer,  mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float(),ttnn.to_torch(test_value_layer, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)).float())}')
+        # return query_layer, key_layer, value_layer
+        # # breakpoint()
+        # # query_layer, key_layer, value_layer = tt_lib.operations.primary.transformers.llama_attn_qkv_decode_forward(xs, rot_mats, self.qkv)
+        # # return query_layer, key_layer, value_layer
+
         (
-            query_layer,  # [seqlen, n_local_heads, bsz, head_dim]
-            key_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
-            value_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
-        ) = tt_lib.tensor.nlp_create_qkv_heads_decode(
-            fused_query_key_value,
-            num_heads=self.n_local_heads,
-            num_kv_heads=self.n_local_kv_heads,
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            test_query_layer,
+            test_key_layer,
+            test_value_layer,
+        ) = tt_lib.operations.primary.transformers.llama_attn_qkv_decode_forward(
+            xs, rot_mats, self.qkv, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
         )
-
-        fused_query_key_value.deallocate(True)
-
-        # ROTARY EMBEDDINGS
-        # Q Rotary Embeddings
-        query_layer = tt_lib.operations.primary.matmul(
-            query_layer,
-            rot_mats,
-            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"]
-            # [seqlen, n_heads, bsz, head_dim]  # [1, 1, head_dim, head_dim]  => [seqlen, n_heads, bsz, head_dim]
-        )
-
-        key_layer = tt_lib.operations.primary.matmul(
-            key_layer,
-            rot_mats,
-            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"],
-        )
-
-        return query_layer, key_layer, value_layer
+        return test_query_layer, test_key_layer, test_value_layer
 
     def attn_mqa(
         self,
