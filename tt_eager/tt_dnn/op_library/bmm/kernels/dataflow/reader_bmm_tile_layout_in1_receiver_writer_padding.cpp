@@ -92,14 +92,14 @@ void kernel_main() {
             // Operand 1
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
-            // Set in1 semaphore value to INVALID
-            noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
+            // // Set in1 semaphore value to INVALID
+            // noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-            // Atomic increment source core counter
-            noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
+            // // Atomic increment source core counter
+            // noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
 
-            // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
+            // // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
+            // noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
 
             cb_push_back(cb_id_in1, in1_block_num_tiles);
         }

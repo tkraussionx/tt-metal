@@ -241,7 +241,7 @@ def test_min_repro(
 @pytest.mark.parametrize("seq_len", [1024, 2048], ids=["seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.parametrize("num_devices", [1, 8], ids=["1chips", "8chips"])
-@pytest.mark.parametrize("loops", [1, 10, 100, 1000], ids=["1_loops", "10_loops", "100_loops", "1000_loops"])
+@pytest.mark.parametrize("loops", [1, 10, 100, 10000], ids=["1_loops", "10_loops", "100_loops", "1000_loops"])
 def test_falcon7b_crash(
     all_devices,
     seq_len,
@@ -534,10 +534,31 @@ def test_problematic_matmul(device, num_cores):
         memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
     )
 
+    tiles_per_shard = 9
+    mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+
+    in0_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(7, 7),
+                    ),
+                }
+            ),
+            mm_activations_height_shard_spec,
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
     in0_tt = torch2tt_tensor(
         torch_in0,
         device,
-        tt_memory_config=dram_interleaved_memory_config,
+        tt_memory_config=in0_mem_config,
         tt_dtype=ttl.tensor.DataType.BFLOAT16,
     )
 
@@ -547,8 +568,6 @@ def test_problematic_matmul(device, num_cores):
         tt_memory_config=dram_interleaved_memory_config,
         tt_dtype=ttl.tensor.DataType.BFLOAT16,
     )
-
-    tiles_per_shard = 9
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=grid_size,
@@ -569,35 +588,11 @@ def test_problematic_matmul(device, num_cores):
         packer_l1_acc=True,
     )
 
-    # inline Tensor interleaved_to_sharded(
-    #     const Tensor &input_tensor,
-    #     const MemoryConfig &sharded_mem_config,
-    #     std::optional<const DataType> output_dtype = std::nullopt)
-
-    # inline Tensor interleaved_to_sharded(
-    #     const Tensor &input_tensor,
-    #     const std::variant<CoreCoord, CoreRangeSet> grid,
-    #     const std::array<uint32_t, 2> shard_shape,
-    #     const TensorMemoryLayout shard_scheme,
-    #     const ShardOrientation shard_orientation,
-    #     const std::optional<const DataType> output_dtype = std::nullopt
-
-    mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
-
-    in0_sharded = ttl.tensor.interleaved_to_sharded(
-        in0_tt,
-        grid_size,
-        mm_activations_height_shard_spec,
-        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.ShardOrientation.ROW_MAJOR,
-        ttl.tensor.DataType.BFLOAT16,
-    )
-
     tt_out = ttl.operations.primary.matmul(
-        in0_sharded,
+        in0_tt,
         in1_tt,
         program_config=program_config,
-        output_mem_config=height_sharded_memory_config,
+        output_mem_config=dram_interleaved_memory_config,
         output_dtype=ttl.tensor.DataType.BFLOAT16,
         compute_kernel_config=compute_kernel_config,
     )
