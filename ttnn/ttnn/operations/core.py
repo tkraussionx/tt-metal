@@ -13,6 +13,9 @@ import tt_lib as ttl
 
 import ttnn
 import ttnn.decorators
+import time
+
+from_torch_time = 0
 
 
 def _getitem_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
@@ -242,7 +245,7 @@ def from_torch(
         Tensor([ [1.375, -1.30469, -0.714844],
             [-0.761719, 0.53125, -0.652344]], dtype=bfloat16 )
     """
-
+    start_time = time.time_ns()
     shape_with_padding = None
     if dtype == ttnn.bfloat8_b or dtype == ttnn.bfloat4_b:
         if len(tensor.shape) < 2:
@@ -275,7 +278,9 @@ def from_torch(
 
     if shape_with_padding is not None and shape_with_padding != tensor.shape and mesh_mapper is None:
         tensor = ttnn.reshape(tensor, shape_with_padding)
-
+    time_spent = time.time_ns() - start_time
+    if time_spent > 10**6:
+        print("Time spent in from_torch ", time_spent / (10**9), tensor.shape, tensor.dtype, tensor.layout)
     return tensor
 
 

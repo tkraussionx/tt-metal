@@ -108,9 +108,9 @@ inline std::vector<uint32_t> pack_fp32_vec_as_bfp8_tiles(const std::vector<float
     uint32_t num_tiles = fp32_vec.size() / num_float_in_tile;
 
     std::vector<uint32_t> packed_result;
-
     std::vector<uint8_t> exponents;
     std::vector<uint32_t> data;
+
 
     int subtiles_in_tile_row = 2;
     int subtiles_in_tile_col = 2;
@@ -118,6 +118,11 @@ inline std::vector<uint32_t> pack_fp32_vec_as_bfp8_tiles(const std::vector<float
     int subtile_cols = 16;
     int num_elements_in_dword = 4;
     int fp32_element_index = 0;
+
+    packed_result.reserve(num_tiles * 16 * 17);
+    exponents.reserve(subtile_rows);
+    data.reserve(subtile_rows);
+
     for (int tile_index = 0; tile_index < num_tiles; ++tile_index) {
         std::vector<uint32_t> packed_data;
         for (int tr = 0; tr < subtiles_in_tile_row; ++tr) {

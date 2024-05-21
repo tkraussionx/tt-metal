@@ -42,7 +42,7 @@ struct ConvConfig {
     bool height_sharding = true; // used only if override_sharding_config is true
     CoreRangeSet core_grid = {{}}; // used only if override_sharding_config is true
     bool transpose_shards = true; // used only if override_sharding_config is true and if height sharding is false
-    Layout output_layout = Layout::TILE;
+    Layout output_layout = Layout::ROW_MAJOR;
     static constexpr auto attribute_names = std::make_tuple(
         "math_fidelity",
         "dtype",

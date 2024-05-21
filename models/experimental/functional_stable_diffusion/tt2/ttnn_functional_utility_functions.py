@@ -90,9 +90,9 @@ def pad_encoder_hidden_states(device, tensor, required_sequence_length):
 
 
 def post_process_output(device, tensor, batch_size, output_height, output_width, output_channels):
-    tensor = ttnn.to_layout(
-        tensor, ttnn.ROW_MAJOR_LAYOUT, use_multicore=ttnn.get_memory_config(tensor).shard_spec is not None
-    )
+    # tensor = ttnn.to_layout(
+    #     tensor, ttnn.ROW_MAJOR_LAYOUT, use_multicore=ttnn.get_memory_config(tensor).shard_spec is not None
+    # )
     tensor = ttnn.from_device(tensor)
     assert output_channels == tensor.shape[3]
     tensor = fallback_ops.reshape(

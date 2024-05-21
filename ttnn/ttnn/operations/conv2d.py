@@ -7,7 +7,11 @@ import torch
 import warnings
 import math
 import ttnn
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import calculate_shard_grid, roundup
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import (
+    calculate_shard_grid,
+    roundup,
+    get_output_dim as get_conv_output_dim,
+)
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv import (
     TTPyCompositeConv,
     SlidingWindowOpParams,
@@ -478,6 +482,7 @@ def conv2d(
     conv_op_cache={},  # basic conv object caching in python needed for intermediate refactoring. Not needed after full op refactoring in C++.
     debug=False,
     run_new_conv=True,
+    output_layout=ttnn.TILE_LAYOUT,
 ) -> Tuple[ttnn.Tensor, int, int, ttnn.Tensor, ttnn.Tensor]:
     run_new_conv = True
     if run_new_conv:
@@ -496,7 +501,7 @@ def conv2d(
             override_sharding_config=False,  # TODO: pass in config
             height_sharding=conv_config.height_sharding if conv_config.height_sharding is not None else True,
             transpose_shards=True,  # TODO: pass in config
-            output_layout=ttnn.TILE_LAYOUT,  # TODO: pass in config
+            output_layout=output_layout,  # TODO: pass in config
         )
         if conv_config.core_grid:
             conv_config_.core_grid = conv_config.core_grid
