@@ -321,16 +321,18 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
     ZoneScoped;
     if (getDeviceProfilerState())
     {
-        //const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
-        //if (USE_FAST_DISPATCH)
-        //{
-            //Finish(device->command_queue());
-        //}
-        //TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
+        if (!free_buffers)
+        {
+            const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
+            if (USE_FAST_DISPATCH)
+            {
+                Finish(device->command_queue());
+            }
+        }
+        TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
-            syncDeviceHost (device, SYNC_CORE, false);
             tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
             tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
             if (free_buffers)
@@ -341,6 +343,7 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
             }
             else
             {
+                syncDeviceHost (device, SYNC_CORE, false);
                 InitDeviceProfiler(device);
             }
         }

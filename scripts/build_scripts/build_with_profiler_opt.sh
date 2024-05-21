@@ -13,7 +13,7 @@ fi
 
 remove_default_log_locations
 
-ENABLE_TRACY=1 ENABLE_PROFILER=1 cmake -B build -G Ninja && cmake --build build --target clean
+ENABLE_TRACY=1 ENABLE_PROFILER=1 cmake -B build -G Ninja && cmake --build build
 cmake --build build --target install
 cmake --build build --target programming_examples
 PYTHON_ENV_DIR=$(pwd)/build/python_env ./scripts/build_scripts/create_venv.sh

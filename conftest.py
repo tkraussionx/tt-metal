@@ -283,7 +283,7 @@ def device(device_l1_small_size):
 
     device = ttl.device.GetDefaultDevice()
     yield device
-    ttl.device.DumpDeviceProfiler(device, True)
+    ttl.device.DumpDeviceProfiler(device)
     ttl.device.DeallocateBuffers(device)
 
 
@@ -299,7 +299,7 @@ def pcie_devices(request):
     yield [devices[i] for i in range(num_devices)]
 
     for device in devices.values():
-        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DumpDeviceProfiler(device)
         ttl.device.DeallocateBuffers(device)
 
     ttl.device.CloseDevices(devices)
@@ -317,7 +317,7 @@ def all_devices(request):
     yield [devices[i] for i in range(num_devices)]
 
     for device in devices.values():
-        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DumpDeviceProfiler(device)
         ttl.device.DeallocateBuffers(device)
 
     ttl.device.CloseDevices(devices)
@@ -393,7 +393,7 @@ def t3k_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
 
     for i in device_mesh.get_device_ids():
         device = device_mesh.get_device(i)
-        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DumpDeviceProfiler(device)
         ttl.device.DeallocateBuffers(device)
 
     ttnn.close_device_mesh(device_mesh)
