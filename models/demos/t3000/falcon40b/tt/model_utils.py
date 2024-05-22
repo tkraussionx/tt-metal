@@ -420,9 +420,35 @@ def fused_partial_layernorm(
         assert seq_len % slice_size == 0, "Sequence length must be divisible by layernorm slice size {slice_size}"
         num_slices = seq_len // slice_size  # we do 128 per iteration (slice), then we concat the result.
 
-        xs_output_cat = []  # this is the output we write to. Initiate as empty tensors
+        repeat_shape = [1, 1, slice_size, 1]
+        ln_gamma_1_for_seqlen = [
+            ttl.tensor.repeat(ln_gamma_1[i], repeat_shape, output_mem_config=memconfig) for i in range(num_devices)
+        ]
+        ln_beta_1_for_seqlen = [
+            ttl.tensor.repeat(ln_beta_1[i], repeat_shape, output_mem_config=memconfig) for i in range(num_devices)
+        ]
+
+        ln_gamma_2_for_seqlen = [
+            ttl.tensor.repeat(ln_gamma_2[i], repeat_shape, output_mem_config=memconfig) for i in range(num_devices)
+        ]
+        ln_beta_2_for_seqlen = [
+            ttl.tensor.repeat(ln_beta_2[i], repeat_shape, output_mem_config=memconfig) for i in range(num_devices)
+        ]
+
+        xs_output1_cat = []  # this is the output we write to. Initiate as empty tensors
         for i in range(len(xs)):
-            xs_output_cat.append(
+            xs_output1_cat.append(
+                torch2tt_tensor(
+                    torch.zeros([1, 1, seq_len, hidden_size]),
+                    devices[i],
+                    tt_memory_config=dram_memcfg,
+                    tt_dtype=ttl.tensor.DataType.BFLOAT16,
+                )
+            )
+
+        xs_output2_cat = []  # this is the output we write to. Initiate as empty tensors
+        for i in range(len(xs)):
+            xs_output2_cat.append(
                 torch2tt_tensor(
                     torch.zeros([1, 1, seq_len, hidden_size]),
                     devices[i],
@@ -456,10 +482,42 @@ def fused_partial_layernorm(
                     pgmconfig,
                 )
 
+            # Apply first layernorm gamma+beta
+            xs_slice_replica = []
+            for i in range(num_devices):
+                xs_slice_replica.append(
+                    ttl.tensor.mul(xs_slice[i], ln_gamma_1_for_seqlen[i], output_mem_config=memconfig)
+                )
+            for i in range(num_devices):
+                xs_slice_replica[i] = ttl.tensor.add(
+                    xs_slice_replica[i],
+                    ln_beta_1_for_seqlen[i],
+                    output_mem_config=memconfig,
+                )
+            for i in range(num_devices):
+                ttl.tensor.sharded_to_interleaved_partial(
+                    xs_slice_replica[i],
+                    xs_output1_cat[i],
+                    num_slices,
+                    slice_i,
+                    dram_memcfg,
+                )
+                xs_slice_replica[i].deallocate(True)
+
+            # Apply second layernorm gamma+beta
+            for i in range(num_devices):
+                xs_slice[i] = ttl.tensor.mul(xs_slice[i], ln_gamma_2_for_seqlen[i], output_mem_config=dram_memcfg)
+            for i in range(num_devices):
+                xs_slice[i] = ttl.tensor.add(
+                    xs_slice[i],
+                    ln_beta_2_for_seqlen[i],
+                    output_mem_config=dram_memcfg,
+                )
+
             for i in range(num_devices):
                 ttl.tensor.sharded_to_interleaved_partial(
                     xs_slice[i],
-                    xs_output_cat[i],
+                    xs_output2_cat[i],
                     num_slices,
                     slice_i,
                     dram_memcfg,
@@ -476,35 +534,60 @@ def fused_partial_layernorm(
                 memconfig,
                 pgmconfig,
             )
+
+        # Apply first layernorm gamma+beta
+        xs_output1_cat = []
+        for i in range(num_devices):
+            xs_output1_cat.append(ttl.tensor.mul(xs[i], ln_gamma_1[i], output_mem_config=memconfig))
+        for i in range(num_devices):
+            xs_output1_cat[i] = ttl.tensor.add(
+                xs_output1_cat[i],
+                ln_beta_1[i],
+                output_mem_config=memconfig,
+            )
+        xs_output1_cat = convert_to_layout(xs_output1_cat, memconfig, dram_memcfg)
+
+        # Apply second layernorm gamma+beta
+        for i in range(num_devices):
+            xs[i] = ttl.tensor.mul(xs[i], ln_gamma_2[i], output_mem_config=dram_memcfg)
+        for i in range(num_devices):
+            xs[i] = ttl.tensor.add(
+                xs[i],
+                ln_beta_2[i],
+                output_mem_config=dram_memcfg,
+            )
+
         xs = convert_to_layout(xs, memconfig, dram_memcfg)
-        xs_output_cat = xs
+        xs_output2_cat = xs
     if dtype != ttl.tensor.DataType.BFLOAT16:
         for i in range(num_devices):
-            xs_output_cat[i] = ttl.tensor.typecast(xs_output_cat[i], dtype)
+            xs_output1_cat[i] = ttl.tensor.typecast(xs_output1_cat[i], dtype)
+        for i in range(num_devices):
+            xs_output2_cat[i] = ttl.tensor.typecast(xs_output2_cat[i], dtype)
 
-    # Apply first layernorm gamma+beta
-    xs_output_1 = []
-    for i in range(num_devices):
-        xs_output_1.append(ttl.tensor.mul(xs_output_cat[i], ln_gamma_1[i], output_mem_config=dram_memcfg))
-    for i in range(num_devices):
-        xs_output_1[i] = ttl.tensor.add(
-            xs_output_1[i],
-            ln_beta_1[i],
-            output_mem_config=dram_memcfg,
-        )
+    # # Apply first layernorm gamma+beta
+    # xs_output_1 = []
+    # for i in range(num_devices):
+    #     xs_output_1.append(ttl.tensor.mul(xs_output_cat[i], ln_gamma_1[i], output_mem_config=dram_memcfg))
+    # for i in range(num_devices):
+    #     xs_output_1[i] = ttl.tensor.add(
+    #         xs_output_1[i],
+    #         ln_beta_1[i],
+    #         output_mem_config=dram_memcfg,
+    #     )
 
-    # Apply second layernorm gamma+beta
-    xs_output_2 = []
-    for i in range(num_devices):
-        xs_output_2.append(ttl.tensor.mul(xs_output_cat[i], ln_gamma_2[i], output_mem_config=dram_memcfg))
-    for i in range(num_devices):
-        xs_output_2[i] = ttl.tensor.add(
-            xs_output_2[i],
-            ln_beta_2[i],
-            output_mem_config=dram_memcfg,
-        )
+    # # Apply second layernorm gamma+beta
+    # xs_output_2 = []
+    # for i in range(num_devices):
+    #     xs_output_2.append(ttl.tensor.mul(xs_output_cat[i], ln_gamma_2[i], output_mem_config=dram_memcfg))
+    # for i in range(num_devices):
+    #     xs_output_2[i] = ttl.tensor.add(
+    #         xs_output_2[i],
+    #         ln_beta_2[i],
+    #         output_mem_config=dram_memcfg,
+    #     )
 
-    for i in range(num_devices):
-        xs_output_cat[i].deallocate(True)
+    # for i in range(num_devices):
+    #     xs_output_cat[i].deallocate(True)
 
-    return xs_output_1, xs_output_2
+    return xs_output1_cat, xs_output2_cat

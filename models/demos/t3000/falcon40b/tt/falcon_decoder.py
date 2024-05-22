@@ -219,7 +219,7 @@ class TtFalconDecoderLayer:
         self.self_attn.preprocessing(llm_mode, batch_size, sequence_size)
 
         # broadcast layernorm gamma and beta along S
-        repeat_shape = (1, 1, sequence_size, 1)
+        repeat_shape = (1, 1, 512, 1)
 
         # mlp
         self.ln_mlp_gamma_for_seqlen = [
@@ -361,10 +361,14 @@ class TtFalconDecoderLayer:
             replicated_hidden_states,
             self.ln_no_gamma,
             self.ln_no_beta,
-            self.ln_attn_gamma_for_seqlen,
-            self.ln_attn_beta_for_seqlen,
-            self.ln_mlp_gamma_for_seqlen,
-            self.ln_mlp_beta_for_seqlen,
+            # self.ln_attn_gamma_for_seqlen,
+            # self.ln_attn_beta_for_seqlen,
+            # self.ln_mlp_gamma_for_seqlen,
+            # self.ln_mlp_beta_for_seqlen,
+            self.ln_attn_gamma,
+            self.ln_attn_beta,
+            self.ln_mlp_gamma,
+            self.ln_mlp_beta,
             self.layernorm_eps,
             self.model_config["layernorm_params"],
             self.model_config["PARTIAL_LN_MEMCFG"],
