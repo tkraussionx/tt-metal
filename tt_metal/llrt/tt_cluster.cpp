@@ -358,6 +358,7 @@ Cluster::~Cluster() {
 
     this->mmio_device_id_to_driver_.clear();
     this->sdesc_per_chip_.clear();
+    std::cout << " DONE closing cluster " << std::endl;
 }
 
 tt_device &Cluster::get_driver(chip_id_t device_id) const {

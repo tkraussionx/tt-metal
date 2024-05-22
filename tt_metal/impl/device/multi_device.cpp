@@ -24,6 +24,7 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
     TT_ASSERT(num_requested_devices <= device_ids.size(), "User provided insufficient number of device_ids for DeviceMesh");
 
 
+    std::cout << " Using DeviceMesh " << std::endl;
     //TODO: for DevicePool feature delete CreateDevices and merge with this function
     //TODO: should there be an explicit CloseDevices call somewhere?
     managed_devices = tt::tt_metal::detail::CreateDevices(device_ids, 1, l1_small_size);

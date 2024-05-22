@@ -1386,12 +1386,14 @@ void Device::initialize_synchronous_sw_cmd_queue() {
 bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) {
     ZoneScoped;
     log_info(tt::LogMetal, "Initializing device {}. Program cache is {}enabled", this->id_, this->program_cache.is_enabled() ? "": "NOT ");
+    std::cout << " open this->worker_queue" << (uint32_t)this->work_executor.worker_queue.empty() << std::endl;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->build_key_ = tt::Cluster::instance().get_harvesting_mask(this->id());
     this->num_hw_cqs_ = num_hw_cqs;
     this->initialize_cluster();
     this->initialize_allocator(l1_small_size, l1_bank_remap);
     this->initialize_build();
+    std::cout << " worker exec " << uint32_t(this->work_executor.get_worker_mode()) << std::endl;
     auto num_devices = tt::tt_metal::GetNumAvailableDevices();
     tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
     TT_ASSERT(id_ < num_devices);
@@ -1586,6 +1588,13 @@ bool Device::close() {
     this->command_queue_programs.clear();
     this->sw_command_queues_.clear();
     this->hw_command_queues_.clear();
+    this->sysmem_manager_.reset();
+    this->trace_insts_.clear();
+    this->trace_contexts_.clear();
+    this->synchronize();
+    std::cout << " close this->worker_queue" << (uint32_t)this->work_executor.worker_queue.empty() << std::endl;
+    this->work_executor.worker_queue.clear();
+    std::cout << " close this->worker_queue" << (uint32_t)this->work_executor.worker_queue.empty() << std::endl;
 
     this->initialized_ = false;
 
@@ -1825,6 +1834,7 @@ void Device::set_worker_mode(const WorkExecutorMode& mode) {
 void Device::enable_async(bool enable) {
     auto mode = enable ? WorkExecutorMode::ASYNCHRONOUS : WorkExecutorMode::SYNCHRONOUS;
     this->set_worker_mode(mode);
+    std::cout << " enable async " << (uint32_t)enable << std::endl;
 }
 
 bool Device::using_slow_dispatch() const {

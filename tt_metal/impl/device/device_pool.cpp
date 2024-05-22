@@ -40,6 +40,7 @@ void DevicePool::activate_device(chip_id_t id) {
 
     } else {
       const auto& dev = this->devices[id];
+      std::cout << " DP re-init device " << id << std::endl;
       if (not dev->is_initialized()) {
           dev->initialize(num_hw_cqs, this->l1_small_size, this->l1_bank_remap);
           this->initialize_device(dev.get());
@@ -66,6 +67,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids, const ui
         const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         for (const auto& mmio_controlled_device_id :
              tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+          std::cout << " Checking device " << mmio_controlled_device_id << std::endl;
             if (not this->is_device_active(mmio_controlled_device_id)) {
                 this->activate_device(mmio_controlled_device_id);
             }
@@ -83,6 +85,7 @@ DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_c
 Device* DevicePool::get_active_device(chip_id_t device_id) const {
     TT_ASSERT(
         this->is_device_active(device_id), "DevicePool does not contain active device {}", device_id);
+    std::cout << " Get active device " << this->devices[device_id]->id() << std::endl;
     return this->devices[device_id].get();
 }
 

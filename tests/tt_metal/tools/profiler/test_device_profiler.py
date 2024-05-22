@@ -22,6 +22,7 @@ PROG_EXMP_DIR = "programming_examples/profiler"
 def run_device_profiler_test(doubleRun=False, setup=False):
     name = inspect.stack()[1].function
     clear_profiler_runtime_artifacts()
+    print(f"build/{PROG_EXMP_DIR}/{name}")
     profilerRun = os.system(f"cd {TT_METAL_HOME} && " f"build/{PROG_EXMP_DIR}/{name}")
     assert profilerRun == 0
 

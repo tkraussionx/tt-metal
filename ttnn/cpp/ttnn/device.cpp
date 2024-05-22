@@ -51,10 +51,13 @@ void close_device(Device &device) {
     TT_ASSERT(device.id() < device_pool::devices.size());
 
     size_t offset = device.id();
+    std::cout << " TTNN device pool close " << device.id() << std::endl;
     if (device_pool::devices[offset] != nullptr) {
         tt::tt_metal::detail::DeallocateBuffers(device_pool::devices[offset]);
         device_pool::devices[offset]->close();
-        delete device_pool::devices[offset];
+    std::cout << " TTNN device pool close " << device.id() << std::endl;
+        //delete device_pool::devices[offset];
+    std::cout << " TTNN device pool close " << device.id() << std::endl;
         device_pool::devices[offset] = nullptr;
     }
 }

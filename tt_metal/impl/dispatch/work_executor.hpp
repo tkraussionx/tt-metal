@@ -196,6 +196,7 @@ class WorkExecutor {
         this->worker_state = WorkerState::IDLE;
     }
 
+
     static WorkExecutorMode default_worker_queue_mode() {
         static int value = parse_env<int>("TT_METAL_ASYNC_DEVICE_QUEUE", static_cast<int>(WorkExecutorMode::SYNCHRONOUS));
         return static_cast<WorkExecutorMode>(value);

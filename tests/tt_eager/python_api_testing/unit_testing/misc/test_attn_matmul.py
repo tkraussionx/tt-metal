@@ -39,6 +39,7 @@ def generate_input_shapes():
 def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, device):
     torch.manual_seed(0)
     device.enable_async(enable_async)
+    print("pytest done enable async")
 
     for input_shape_a, input_shape_b in generate_input_shapes():
         for _ in range(num_loops):
@@ -69,6 +70,7 @@ def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, d
             assert allclose, f"FAILED: {output}"
 
     device.enable_async(False)
+    print("done disable async")
 
 
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")
