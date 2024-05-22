@@ -876,9 +876,11 @@ operation::ProgramWithCallbacks reshard_multi_core(const Tensor& input, Tensor& 
         auto output_shard_spec = output.shard_spec().value();
         auto all_cores = output_shard_spec.grid;
         auto cores = corerange_to_cores(all_cores, std::nullopt, output_shard_spec.orientation == ShardOrientation::ROW_MAJOR);
+        auto &runtime_args_0_by_core = GetRuntimeArgs(program, kernel_id_0);
+        auto &runtime_args_1_by_core = GetRuntimeArgs(program, kernel_id_1);
         for (auto core: cores) {
-            auto &runtime_args_0 = GetRuntimeArgs(program, kernel_id_0, core);
-            auto &runtime_args_1 = GetRuntimeArgs(program, kernel_id_1, core);
+            auto& runtime_args_0 = runtime_args_0_by_core[core.x][core.y];
+            auto& runtime_args_1 = runtime_args_1_by_core[core.x][core.y];
             runtime_args_0[grid.x + grid.y] = input.buffer()->address();
             runtime_args_1[grid.x + grid.y] = input.buffer()->address();
         }
