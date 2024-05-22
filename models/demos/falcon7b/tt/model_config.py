@@ -195,7 +195,7 @@ def get_model_config(model_config_str, prefill_seq_len=0):
 
 def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["PREFILL_OPTIMIZED_MODE"] = not is_grayskull()
-    model_config["PREFILL_ATTENTION_OPTIMIZED_MODE"] = False  # enable when #8349 is fixed
+    model_config["PREFILL_ATTENTION_OPTIMIZED_MODE"] = True  # enable when #8349 is fixed
     model_config["MLP_SEQ_LEN"] = seq_len
     model_config["MLP_PADDING_VALUE"] = 4608
     model_config["MLP_GRID_SIZE"] = (8, 8)
