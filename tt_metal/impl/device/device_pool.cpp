@@ -97,8 +97,14 @@ std::vector<Device*> DevicePool::get_all_active_devices() const {
 }
 
 bool DevicePool::close_device(chip_id_t device_id) const {
-    auto device = this->get_active_device(device_id);
-    return device->close();
+  bool pass = true;
+  const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
+  for (const auto& mmio_controlled_device_id :
+       tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+    auto device = this->get_active_device(mmio_controlled_device_id);
+    pass &= device->close();
+  }
+  return pass;
 }
 
 DevicePool::~DevicePool() {

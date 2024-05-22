@@ -151,7 +151,6 @@ std::map<chip_id_t, Device *> CreateDevices(
     const uint8_t num_hw_cqs,
     const size_t l1_small_size,
     const std::vector<uint32_t> &l1_bank_remap) {
-    // TODO: deprecate
     ZoneScoped;
     std::cout << " CreateDevices " << std::endl;
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
@@ -771,7 +770,7 @@ bool CloseDevice(Device *device) {
     if (device_pool::devices[device_id] != nullptr) {
         device_pool::devices[device_id] = nullptr;
     }
-    return device->close();
+    return tt::DevicePool::instance().close_device(device_id);
 }
 
 Program CreateProgram(){
