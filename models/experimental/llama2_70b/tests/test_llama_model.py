@@ -136,6 +136,7 @@ def run_test_LlamaModel_inference(
             start_pos,
             attn_mask,
         )
+
         del tt_inp_emb, rot_mat, attn_mask
 
         tt_out = ttnn.from_device(tt_out)

@@ -458,101 +458,119 @@ class TtLlamaAttention_optimized:
             kv_cache_shard_shape[0] = self.layer_past[0].shape[0] * padded_layer_past_len
             kv_cache_memcfg.shard_spec.shape = kv_cache_shard_shape
 
-        keys = self.layer_past[0]
-        tt_lib.tensor.update_cache(keys, key_layer, start_pos, batch_offset=batch_offset)
-        key_layer.deallocate(True)
-        # key and value layers will have kv_seq_len padded to nearest 32
+        # keys = self.layer_past[0]
+        # tt_lib.tensor.update_cache(keys, key_layer, start_pos, batch_offset=batch_offset)
+        # key_layer.deallocate(True)
+        # # key and value layers will have kv_seq_len padded to nearest 32
 
-        keys = self.layer_past[0]
-        key_layer = tt_lib.tensor.unpad(
-            keys,
-            [0, 0, 0, 0],
-            [
-                self.n_local_kv_heads - 1,
-                self.max_batch_size - 1,
-                padded_layer_past_len - 1,
-                self.head_dim - 1,
-            ],
-            output_mem_config=self.model_config["DRAM_MEMCFG"],
-        )
+        # keys = self.layer_past[0]
+        # key_layer = tt_lib.tensor.unpad(
+        #     keys,
+        #     [0, 0, 0, 0],
+        #     [
+        #         self.n_local_kv_heads - 1,
+        #         self.max_batch_size - 1,
+        #         padded_layer_past_len - 1,
+        #         self.head_dim - 1,
+        #     ],
+        #     output_mem_config=self.model_config["DRAM_MEMCFG"],
+        # )
 
-        key_layer = tt_lib.tensor.interleaved_to_sharded(key_layer, sharded_mem_config=kv_cache_memcfg)
+        # key_layer = tt_lib.tensor.interleaved_to_sharded(key_layer, sharded_mem_config=kv_cache_memcfg)
 
-        # PRE-SOFTMAX MM
+        # # PRE-SOFTMAX MM
 
-        key_layer_transposed = tt_lib.tensor.transpose(
-            key_layer,
-            -2,
-            -1,
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-        )
+        # key_layer_transposed = tt_lib.tensor.transpose(
+        #     key_layer,
+        #     -2,
+        #     -1,
+        #     output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        # )
 
-        key_layer.deallocate(True)
+        # key_layer.deallocate(True)
 
         attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
         attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
         attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
 
-        attn_weights = tt_lib.operations.primary.matmul(
-            query_layer,
-            key_layer_transposed,
-            program_config=attn_prog_config,
-            output_mem_config=attn_output_memcfg,
-            output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-        )
+        # attn_weights = tt_lib.operations.primary.matmul(
+        #     query_layer,
+        #     key_layer_transposed,
+        #     program_config=attn_prog_config,
+        #     output_mem_config=attn_output_memcfg,
+        #     output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
 
-        query_layer.deallocate(True)
-        key_layer_transposed.deallocate(True)
+        # query_layer.deallocate(True)
+        # key_layer_transposed.deallocate(True)
 
         # SOFTMAX
-        softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
-        softmax_progcfg.block_w = padded_layer_past_len // 32
+        # softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
+        # softmax_progcfg.block_w = padded_layer_past_len // 32
 
-        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-            attn_weights,
-            self.scale,
-            attn_masks,
-            program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
-            is_causal_mask=True,
-        )
+        # attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+        #     attn_weights,
+        #     self.scale,
+        #     attn_masks,
+        #     program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
+        #     is_causal_mask=True,
+        # )
 
         # V CACHE UPDATE
 
-        values = self.layer_past[1]
-        tt_lib.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
-        value_layer.deallocate(True)
+        # values = self.layer_past[1]
+        # tt_lib.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
+        # value_layer.deallocate(True)
 
-        values = self.layer_past[1]
-        value_layer = tt_lib.tensor.unpad(
-            values,
-            [0, 0, 0, 0],
-            [
-                self.n_local_kv_heads - 1,
-                self.max_batch_size - 1,
-                padded_layer_past_len - 1,
-                self.head_dim - 1,
-            ],
-            output_mem_config=self.model_config["DRAM_MEMCFG"],
-        )
+        # values = self.layer_past[1]
+        # value_layer = tt_lib.tensor.unpad(
+        #     values,
+        #     [0, 0, 0, 0],
+        #     [
+        #         self.n_local_kv_heads - 1,
+        #         self.max_batch_size - 1,
+        #         padded_layer_past_len - 1,
+        #         self.head_dim - 1,
+        #     ],
+        #     output_mem_config=self.model_config["DRAM_MEMCFG"],
+        # )
 
-        value_layer = tt_lib.tensor.interleaved_to_sharded(value_layer, sharded_mem_config=kv_cache_memcfg)
+        # value_layer = tt_lib.tensor.interleaved_to_sharded(value_layer, sharded_mem_config=kv_cache_memcfg)
 
         # POST-SOFTMAX MM
-        scores_prog_config = self.model_config["SCORES_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+        # scores_prog_config = self.model_config["SCORES_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
 
-        attn_output = tt_lib.operations.primary.matmul(
-            attn_weights,
+        # attn_output = tt_lib.operations.primary.matmul(
+        #     attn_weights,
+        #     value_layer,
+        #     program_config=scores_prog_config,
+        #     output_mem_config=self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
+        #     output_dtype=self.model_config["BFLOAT16_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
+        # attn_weights.deallocate(True)
+        # value_layer.deallocate(True)
+
+        # return attn_output
+
+        output = tt_lib.operations.primary.transformers.llama_attn_mqa_decode_forward(
+            query_layer,
+            key_layer,
             value_layer,
-            program_config=scores_prog_config,
-            output_mem_config=self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["BFLOAT16_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+            start_pos,
+            attn_masks,
+            batch_offset,
+            self.layer_past[0],
+            self.layer_past[1],
+            self.scale,
+            kv_cache_memcfg,
+            self.model_config["DRAM_MEMCFG"],
+            self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            attn_output_memcfg,
+            self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
         )
-        attn_weights.deallocate(True)
-        value_layer.deallocate(True)
-
-        return attn_output
+        return output
 
     def attn_selfout(
         self,

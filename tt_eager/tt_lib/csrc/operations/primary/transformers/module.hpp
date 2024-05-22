@@ -155,6 +155,26 @@ void py_module(py::module& m_transformers) {
         "LLAMA attention QKV decode forward."
     );
 
+    m_transformers.def(
+        "llama_attn_mqa_decode_forward",
+        &llama_attn_mqa_decode_forward,
+        py::arg("query_layer").noconvert(),
+        py::arg("key_layer").noconvert(),
+        py::arg("value_layer").noconvert(),
+        py::arg("start_pos").noconvert(),
+        py::arg("attn_masks").noconvert(),
+        py::arg("batch_offset").noconvert(),
+        py::arg("K_cache").noconvert(),
+        py::arg("V_cache").noconvert(),
+        py::arg("scale").noconvert(),
+        py::arg("kv_cache_mem_config").noconvert(),
+        py::arg("dram_mem_config").noconvert(),
+        py::arg("height_mem_config").noconvert(),
+        py::arg("attn_output_memcfg").noconvert(),
+        py::arg("scores_output_memcfg").noconvert(),
+        "LLAMA attention MQA decode forward."
+    );
+
 }
 
 }  // namespace transformers
