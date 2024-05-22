@@ -14,12 +14,12 @@ namespace primary {
 namespace {
 
 inline void check_tensor(const Tensor &tensor, const std::string &op_name) {
-    TT_FATAL(tensor.get_layout() == Layout::TILE, fmt::format("{} only supports tiled layout.", op_name));
-    TT_FATAL(tensor.get_dtype() == DataType::BFLOAT16, fmt::format("{} only supports bfloat16.", op_name));
+    TT_FATAL(tensor.get_layout() == Layout::TILE, "{} only supports tiled layout.", op_name);
+    TT_FATAL(tensor.get_dtype() == DataType::BFLOAT16, "{} only supports bfloat16.", op_name);
     TT_FATAL(
-        tensor.storage_type() == StorageType::DEVICE, fmt::format("Operands to {} need to be on device!", op_name));
+        tensor.storage_type() == StorageType::DEVICE, "Operands to {} need to be on device!", op_name);
     TT_FATAL(
-        tensor.buffer() != nullptr, fmt::format("Operands to {} need to be allocated in buffers on device!", op_name));
+        tensor.buffer() != nullptr, "Operands to {} need to be allocated in buffers on device!", op_name);
 }
 
 inline void check_tensor(std::optional<Tensor> tensor, const std::string &op_name) {
@@ -80,7 +80,7 @@ operation::ProgramWithCallbacks MorehSumBackward::create_program(
     auto& output_grad = inputs.at(0);
     auto& input_grad = outputs.at(0);
 
-    return moreh_sum_backward_impl(output_grad, input_grad);
+    return moreh_sum_backward_impl(output_grad, input_grad, this->compute_kernel_config);
 }
 
 Tensor moreh_sum_backward(
@@ -88,9 +88,13 @@ Tensor moreh_sum_backward(
     const Tensor &input,
     std::vector<int64_t> &dims,
     const std::optional<const Tensor> input_grad,
-    const MemoryConfig &input_grad_mem_config) {
+    const MemoryConfig &input_grad_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+
+    auto device = input.device();
+    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config);
     return operation::run(
-               MorehSumBackward{.dims = dims, .input_grad_mem_config = std::move(input_grad_mem_config)},
+               MorehSumBackward{.dims = dims, .input_grad_mem_config = input_grad_mem_config, .compute_kernel_config = kernel_config_val},
                {output_grad, input},
                {},
                {input_grad})
