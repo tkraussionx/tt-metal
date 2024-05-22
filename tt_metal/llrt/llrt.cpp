@@ -353,7 +353,6 @@ void wait_until_cores_done(chip_id_t device_id,
             for (const auto &core : not_done_phys_cores) {
                 not_done_cores_str += (core.str() + " ");
             }
-            std::cout << " not done device " << device_id << std::endl;
             log_debug(tt::LogMetal, not_done_cores_str.c_str());
         }
 
