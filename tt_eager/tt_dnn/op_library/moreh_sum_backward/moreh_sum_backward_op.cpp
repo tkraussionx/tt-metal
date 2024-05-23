@@ -91,8 +91,7 @@ Tensor moreh_sum_backward(
     const MemoryConfig &input_grad_mem_config,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
 
-    auto device = input.device();
-    auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config);
+    auto kernel_config_val = init_device_compute_kernel_config(input.device()->arch(), compute_kernel_config, MathFidelity::HiFi4);
     return operation::run(
                MorehSumBackward{.dims = dims, .input_grad_mem_config = input_grad_mem_config, .compute_kernel_config = kernel_config_val},
                {output_grad, input},

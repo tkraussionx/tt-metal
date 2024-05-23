@@ -53,8 +53,7 @@ namespace {
         std::optional<const DeviceComputeKernelConfig> &compute_kernel_config) {
 
         TT_FATAL(input.storage_type() == StorageType::DEVICE);
-        auto device = input.device();
-        auto kernel_config_val = init_device_compute_kernel_config(device->arch(), compute_kernel_config);
+        auto kernel_config_val = init_device_compute_kernel_config(input.device()->arch(), compute_kernel_config, MathFidelity::HiFi4);
         return operation::run(MorehSum{ .dim = dim, .output_mem_config = output_mem_config, .compute_kernel_config = kernel_config_val }, { input }, {}, { output }).at(0);
     }
 }  // namespace
