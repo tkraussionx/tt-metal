@@ -101,7 +101,23 @@ def run_all_gather_on_t3000_impl(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.rand(input_shape).bfloat16()
+    # input_tensor = torch.rand(input_shape).bfloat16()
+    input_tensor = torch.zeros(input_shape).bfloat16()
+    id = 0
+    if layout == ttl.tensor.Layout.TILE:
+        for w in range(input_shape[0]):
+            for z in range(input_shape[1]):
+                for i in range(0, input_shape[2], 32):
+                    for j in range(0, input_shape[3], 32):
+                        input_tensor[w][z][i : i + 32][j : j + 32] = id
+                        id += 1
+    else:
+        for w in range(input_shape[0]):
+            for z in range(input_shape[1]):
+                for i in range(input_shape[2]):
+                    for j in range(0, input_shape[3], 32):
+                        input_tensor[w][z][i][j : j + 32] = id
+                        id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
@@ -370,7 +386,25 @@ def test_line_all_gather_on_t3000_post_commit(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.rand(input_shape).bfloat16()
+    if input_dtype == ttl.tensor.DataType.BFLOAT8_B:
+        input_tensor = torch.rand(input_shape).bfloat16()
+    else:
+        input_tensor = torch.zeros(input_shape).bfloat16()
+        id = 0
+        if layout == ttl.tensor.Layout.TILE:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for i in range(0, input_shape[2], 32):
+                        for j in range(0, input_shape[3], 32):
+                            input_tensor[w][z][i : i + 32][j : j + 32] = id
+                            id += 1
+        else:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for i in range(input_shape[2]):
+                        for j in range(0, input_shape[3], 32):
+                            input_tensor[w][z][i][j : j + 32] = id
+                            id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
@@ -602,6 +636,11 @@ def test_all_gather_on_t3000_nightly(
             (32, 64),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
         ),
+        # (
+        #     (1, 1, 32, 3072),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 2))}),
+        # ),
         # LLama
         (
             (1, 1, 32, 1024),
@@ -628,6 +667,31 @@ def test_all_gather_on_t3000_nightly(
             (32, 32),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 6))}),
         ),
+        # (
+        #     (1, 1, 64, 256),
+        #     (64, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 64, 512),
+        #     (64, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 96, 512),
+        #     (96, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 96, 1024),
+        #     (96, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 96, 1024),
+        #     (96, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
     ),
 )
 def test_all_gather_post_commit_sharded(
@@ -662,7 +726,21 @@ def test_all_gather_post_commit_sharded(
     unchunked_input_shape = list(input_shape)
     unchunked_input_shape[dim] *= num_devices
 
-    unchunked_input_tensor = torch.rand(unchunked_input_shape).bfloat16()
+    # if input_dtype != ttl.tensor.DataType.BFLOAT8_B:
+    unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape)
+
+    id = 0
+    for w in range(unchunked_input_shape[0]):
+        for z in range(unchunked_input_shape[1]):
+            for i in range(0, unchunked_input_shape[2], 32):
+                for j in range(0, unchunked_input_shape[3], 32):
+                    for ii in range(32):
+                        for jj in range(32):
+                            unchunked_input_tensor[w][z][i + ii][j + jj] = id
+                    id += 1
+    # else:
+    #     # unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape).bfloat16()
+    # unchunked_input_tensor = torch.rand(unchunked_input_shape).bfloat16()
 
     unchunked_input_tensor = unchunked_input_tensor.bfloat16()
 
