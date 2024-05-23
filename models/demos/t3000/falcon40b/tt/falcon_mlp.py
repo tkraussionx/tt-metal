@@ -6,7 +6,7 @@ import torch
 import tt_lib
 
 from typing import List
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from models.demos.t3000.falcon40b.tt.model_utils import falcon_prefill_matmul
 
 
@@ -29,70 +29,130 @@ class TtFalconMLP:
         self.model_config = model_config
 
         layer_name = f"{base_url}.{layer_num}"
+        self.layer_name = layer_name
 
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         num_devices = len(devices)
+        # self.dense_h_to_4h_weights = []
+        # self.dense_4h_to_h_weights = []
+        # for i in range(num_devices):
+        #     dense_h_to_4h_path = (
+        #         tt_cache_path
+        #         / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.bin"
+        #     )
+        #     if (dense_h_to_4h_path).exists():
+        #         self.dense_h_to_4h_weights.append(
+        #             tt_lib.tensor.load_tensor(str(dense_h_to_4h_path)).to(
+        #                 devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"]
+        #             )
+        #         )
+        #     else:
+        #         dense_h_to_4h_weights_host = torch2tt_tensor(
+        #             torch.transpose(
+        #                 torch.chunk(self.state_dict[dense_h_to_4h_str], num_devices)[i],
+        #                 -2,
+        #                 -1,
+        #             ),
+        #             None,
+        #             tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
+        #             tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
+        #         )
+        #         self.dense_h_to_4h_weights.append(
+        #             dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
+        #         )
+        #         tt_lib.tensor.dump_tensor(
+        #             str(dense_h_to_4h_path),
+        #             dense_h_to_4h_weights_host,
+        #         )
+        #     dense_4h_to_h_path = (
+        #         tt_cache_path
+        #         / f"{dense_4h_to_h_str}_{i}_{num_devices}_{self.model_config['DENSE_4H_TO_H_MM_WEIGHTS_DTYPE'].name}.bin"
+        #     )
+        #     if (dense_4h_to_h_path).exists():
+        #         self.dense_4h_to_h_weights.append(
+        #             tt_lib.tensor.load_tensor(str(dense_4h_to_h_path)).to(
+        #                 devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"]
+        #             )
+        #         )
+        #     else:
+        #         dense_4h_to_h_weights_host = torch2tt_tensor(
+        #             torch.transpose(
+        #                 torch.chunk(self.state_dict[dense_4h_to_h_str], num_devices)[i],
+        #                 -2,
+        #                 -1,
+        #             ),
+        #             None,
+        #             tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
+        #             tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
+        #         )
+        #         self.dense_4h_to_h_weights.append(
+        #             dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
+        #         )
+        #         tt_lib.tensor.dump_tensor(
+        #             str(dense_4h_to_h_path),
+        #             dense_4h_to_h_weights_host,
+        #         )
+
+        # Scaling experiment
         self.dense_h_to_4h_weights = []
         self.dense_4h_to_h_weights = []
+        self.dense_4h_to_h_weights_unscale = []
+
+        dense_h_to_4h_weights = self.state_dict[dense_h_to_4h_str]
+        dense_4h_to_h_weights = self.state_dict[dense_4h_to_h_str]
+
+        max_abs_weights = torch.max(torch.abs(dense_4h_to_h_weights), dim=1).values  # max over the h dimension
+        overall_max_abs_weight = torch.max(max_abs_weights)
+        dense_4h_to_h_weights_scale = overall_max_abs_weight / max_abs_weights.unsqueeze(1).repeat(1, 4 * 8192)
+        dense_4h_to_h_weights_scaled = dense_4h_to_h_weights * dense_4h_to_h_weights_scale
+
+        dense_4h_to_h_weights_unscale = max_abs_weights.unsqueeze(1).repeat(1, 128) / overall_max_abs_weight
+
         for i in range(num_devices):
-            dense_h_to_4h_path = (
-                tt_cache_path
-                / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.bin"
+            dense_h_to_4h_weights_host = torch2tt_tensor(
+                torch.transpose(
+                    torch.chunk(dense_h_to_4h_weights, num_devices)[i],
+                    -2,
+                    -1,
+                ),
+                None,
+                tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
             )
-            if (dense_h_to_4h_path).exists():
-                self.dense_h_to_4h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_h_to_4h_path)).to(
-                        devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
-            else:
-                dense_h_to_4h_weights_host = torch2tt_tensor(
-                    torch.transpose(
-                        torch.chunk(self.state_dict[dense_h_to_4h_str], num_devices)[i],
-                        -2,
-                        -1,
-                    ),
-                    None,
-                    tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
-                    tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
-                )
-                self.dense_h_to_4h_weights.append(
-                    dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
-                )
-                tt_lib.tensor.dump_tensor(
-                    str(dense_h_to_4h_path),
-                    dense_h_to_4h_weights_host,
-                )
-            dense_4h_to_h_path = (
-                tt_cache_path
-                / f"{dense_4h_to_h_str}_{i}_{num_devices}_{self.model_config['DENSE_4H_TO_H_MM_WEIGHTS_DTYPE'].name}.bin"
+            self.dense_h_to_4h_weights.append(
+                dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
             )
-            if (dense_4h_to_h_path).exists():
-                self.dense_4h_to_h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_4h_to_h_path)).to(
-                        devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
-            else:
-                dense_4h_to_h_weights_host = torch2tt_tensor(
-                    torch.transpose(
-                        torch.chunk(self.state_dict[dense_4h_to_h_str], num_devices)[i],
-                        -2,
-                        -1,
-                    ),
-                    None,
-                    tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
-                    tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
-                )
-                self.dense_4h_to_h_weights.append(
-                    dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
-                )
-                tt_lib.tensor.dump_tensor(
-                    str(dense_4h_to_h_path),
-                    dense_4h_to_h_weights_host,
-                )
+
+            dense_4h_to_h_weights_unscale_host = torch2tt_tensor(
+                torch.transpose(
+                    torch.chunk(dense_4h_to_h_weights_unscale, num_devices)[i],
+                    -2,
+                    -1,
+                ),
+                None,
+                tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["BFLOAT16_DTYPE"],
+            )
+
+            self.dense_4h_to_h_weights_unscale.append(
+                dense_4h_to_h_weights_unscale_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
+            )
+
+            dense_4h_to_h_weights_host = torch2tt_tensor(
+                torch.transpose(
+                    torch.chunk(dense_4h_to_h_weights_scaled, num_devices)[i],
+                    -2,
+                    -1,
+                ),
+                None,
+                tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
+            )
+            self.dense_4h_to_h_weights.append(
+                dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
+            )
 
     def set_model_config(self, model_config):
         self.model_config = model_config
@@ -147,6 +207,15 @@ class TtFalconMLP:
         return hidden_states
 
     def fwd_prefill(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
+        # x_torch = tt2torch_tensor(x[0])
+        # # save to disk
+        # torch.save(x_torch, "activations_data/" + self.layer_name + "__ff1_in0_torch.pt")
+        # activation_mag = torch.norm(x_torch, p=2, dim=2)
+        # torch.save(activation_mag, "activations_data/" + self.layer_name + "__ff1_in0_torch_mag.pt")
+        # print(activation_mag)
+        # print(f"Min mag: {torch.min(activation_mag)}")
+        # print(f"Max mag: {torch.max(activation_mag)}")
+
         hidden_states = []
         for i in range(len(x)):
             hidden_states.append(
@@ -169,6 +238,8 @@ class TtFalconMLP:
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],
         )
+        # # y_torch = tt2torch_tensor(hidden_states[0])
+        # # torch.save(y_torch, "activations_data/" + self.layer_name + "__ff1_out_torch.pt")
 
         for i in range(len(hidden_states)):
             hidden_states[i] = falcon_prefill_matmul(
@@ -179,6 +250,13 @@ class TtFalconMLP:
                 output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                 overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
                 overwrite_subblock_h=1,
+            )
+
+        for i in range(len(hidden_states)):
+            hidden_states[i] = tt_lib.tensor.mul(
+                hidden_states[i],
+                self.dense_4h_to_h_weights_unscale[i],
+                output_mem_config=self.model_config["DEFAULT_MEMCFG"],
             )
 
         # return TT Tensor

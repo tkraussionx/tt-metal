@@ -6,6 +6,8 @@ import torch
 import pytest
 from loguru import logger
 
+from transformers import AutoTokenizer
+
 import tt_lib
 from models.demos.t3000.falcon40b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
@@ -25,13 +27,40 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
     profiler,
-    enable_persistent_kernel_cache,
-    disable_persistent_kernel_cache,
+    # enable_persistent_kernel_cache,
+    # disable_persistent_kernel_cache,
     disable_compilation_reports,
     nearest_32,
     skip_for_grayskull,
     get_devices_for_t3000,
 )
+
+
+# load from jason, return as a list
+def load_inputs(user_input, batch):
+    if isinstance(user_input, str):
+        with open(user_input, "r") as f:
+            user_input = json.load(f)
+    assert len(user_input) >= batch, f"Number of users (batch) must be {batch}!"
+    in_prompt = []
+    for i in range(batch):
+        in_prompt.append(user_input[i]["question"])
+    return in_prompt
+
+
+def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len):
+    tokenizer.pad_token = tokenizer.eos_token
+
+    tokenized_inputs = tokenizer(
+        input_prompts,
+        padding="max_length",
+        max_length=max_seq_len,
+        add_special_tokens=False,
+        return_tensors="pt",
+    )
+    prefill_ids = tokenized_inputs["input_ids"]
+
+    return prefill_ids
 
 
 # TODO: Replace this with actual Falcon application-level tests
@@ -75,11 +104,14 @@ def run_test_FalconCausalLM_end_to_end(
     use_cache = True
     use_global_cos_sin_cache = True
 
-    if 1:
-        model_input = torch.arange(seq_len * batch).reshape(batch, seq_len)
-    else:
-        # batch identical sequences for debugging
-        model_input = torch.stack([torch.arange(seq_len)] * batch).reshape(batch, seq_len)
+    # if 1:
+    #     model_input = torch.arange(seq_len * batch).reshape(batch, seq_len)
+    # else:
+    #     # batch identical sequences for debugging
+    #     model_input = torch.stack([torch.arange(seq_len)] * batch).reshape(batch, seq_len)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_version)
+    model_input = preprocess_and_validate_inputs(["What is the capital of Serbia?"], tokenizer, seq_len)
 
     # Generate dummy kv_cache --------------------------------------------------------------
     if llm_mode == "prefill":
@@ -250,7 +282,7 @@ def run_test_FalconCausalLM_end_to_end(
     # Second run for perf ----------------------------------------------------------------
     logger.info(f"Enable profiler and enable binary and compile cache")
     profiler.enable()
-    enable_persistent_kernel_cache()
+    # enable_persistent_kernel_cache()
 
     if llm_mode == "prefill":
         model_inputs = torch.split(model_input, 1)
@@ -313,10 +345,6 @@ def run_test_FalconCausalLM_end_to_end(
     min_v_cache_pcc = 1.0
 
     for i in range(num_layers):
-        # Only check every 4 layers for full model
-        if num_layers == 60 and i % 4 > 0:
-            continue
-
         pytorch_layer_pres = pytorch_layer_present[i]
         tt_layer_pres = (
             torch.cat([tt2torch_tensor(tt_layer_p) for tt_layer_p in tt_layer_present[i][0]], 1),
@@ -525,7 +553,7 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
 
-    disable_persistent_kernel_cache()
+    # disable_persistent_kernel_cache()
     disable_compilation_reports()
 
     run_test_FalconCausalLM_end_to_end(

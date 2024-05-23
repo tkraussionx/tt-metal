@@ -726,6 +726,10 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     model_config["ATTENTION_OUT_DTYPE"] = BFP8_DTYPE  # Attention AllGather
     model_config["SELFOUT_MM_OUTPUT_DTYPE"] = BFP8_DTYPE  # AllGather at start of the decoder layer and final AllGather
 
+    # Lower precision weights
+    # model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
+    # model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
+
     head_dim = 64
     hidden_size = model_config_entries["hidden_size"]
     vocab_size = model_config_entries["vocab_size"]
