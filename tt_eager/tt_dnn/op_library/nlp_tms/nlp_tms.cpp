@@ -287,7 +287,7 @@ tt::stl::reflection::Attributes NlpCreateHeads::attributes() const {
 
 
 // Generic NLP CreateHeadsMistral op
-void NlpCreateHeadsMistral::validate(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
+void NlpCreateHeadsMistral::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     const auto input_shape = input_tensor.get_legacy_shape();
 
@@ -327,7 +327,7 @@ std::vector<Tensor> NlpCreateHeadsMistral::create_output_tensors(const std::vect
     return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
 }
 
-operation::ProgramWithCallbacks NlpCreateHeadsMistral::create_program(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, std::vector<Tensor> &output_tensors) const {
+operation::ProgramWithCallbacks NlpCreateHeadsMistral::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
 

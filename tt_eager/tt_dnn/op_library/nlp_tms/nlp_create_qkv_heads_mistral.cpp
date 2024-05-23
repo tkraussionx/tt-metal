@@ -31,28 +31,27 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
     ////////////////////////////////////////////////////////////////////////////
     //                      TM Parameters Setup
     ////////////////////////////////////////////////////////////////////////////
-    uint32_t in0_w_tiles = input_shape[3] / TILE_WIDTH;
+    uint32_t in0_w_tiles = input_shape[3] / TILE_WIDTH; // 48 * 128 
 
     // Per output tensor args
-    // Output shape for Q is: [s, B, num_q_heads, head_dim], shuffled from [B, 1, s, num_q_heads * head_dim]
-    // Output shape for K/V is: [s, B, 1, head_dim*num_kv_heads], shuffled from [B, 1, s, num_kv_heads * head_dim]
-    uint32_t q_out_h_tiles = num_q_heads / TILE_HEIGHT;
-    uint32_t q_out_w_tiles = head_dim / TILE_WIDTH; // tiles along head_dim
-    uint32_t q_out_HtWt = q_out_h_tiles * q_out_w_tiles;
-    uint32_t q_out_CHtWt = input_shape[2] * q_out_HtWt;
-    uint32_t kv_out_h_tiles = 32 / TILE_HEIGHT;
-    uint32_t kv_out_w_tiles = (num_kv_heads * head_dim) / TILE_WIDTH; // tiles along head_dim
-    uint32_t kv_out_HtWt = kv_out_h_tiles * kv_out_w_tiles;
-    uint32_t kv_out_CHtWt = input_shape[2] * q_out_HtWt;
-    uint32_t q_num_tiles = num_q_heads * q_out_w_tiles;
-    uint32_t kv_num_tiles = 1 * kv_out_w_tiles;
+    // Output shape for Q is: [B, s, num_q_heads, head_dim], shuffled from [B, 1, s, num_q_heads * head_dim]
+    // Output shape for K/V is: [B, s, 1, head_dim*num_kv_heads], shuffled from [B, 1, s, num_kv_heads * head_dim]
+    uint32_t q_out_h_tiles = num_q_heads / TILE_HEIGHT; //1
+    uint32_t q_out_w_tiles = head_dim / TILE_WIDTH; // tiles along head_dim, 4
+    uint32_t q_out_HtWt = q_out_h_tiles * q_out_w_tiles; //4
+    uint32_t q_out_CHtWt = input_shape[2] * q_out_HtWt; //32 * 4 = 128
+    uint32_t kv_out_h_tiles = 32 / TILE_HEIGHT; //1
+    uint32_t kv_out_w_tiles = (num_kv_heads * head_dim) / TILE_WIDTH; // tiles along head_dim, 128* 8 / 32 = 32
+    uint32_t kv_out_HtWt = kv_out_h_tiles * kv_out_w_tiles; //32
+    uint32_t kv_out_CHtWt = input_shape[2] * q_out_HtWt; //32 * 32 
+    uint32_t q_num_tiles = num_q_heads * q_out_w_tiles; // 32 * 4 = 128
+    uint32_t kv_num_tiles = 1 * kv_out_w_tiles; // 32
 
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     // Block is a unit of work; ie. num of in0_w_tiles per core
-    uint32_t num_blocks = input_shape[0] * input_shape[1] * input_shape[2] / TILE_HEIGHT;
+    uint32_t num_blocks = input_shape[0] * input_shape[1] * input_shape[2] / TILE_HEIGHT; //1
     auto [num_cores, all_cores, core_group_1, core_group_2, num_blocks_per_core_group_1, num_blocks_per_core_group_2] = split_work_to_cores(compute_with_storage_grid_size, num_blocks);
-
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup
@@ -69,7 +68,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
     tt_metal::Buffer *v_buffer = v.buffer();
     TT_ASSERT(v_buffer != nullptr, "Output v buffer should be allocated on device!");
 
-
     ////////////////////////////////////////////////////////////////////////////
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
@@ -79,7 +77,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
     bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
 
 
-    // TODO: Q, K, V doesn't necessarily need to be the same output mem config
     bool out_is_dram = q_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> reader_compile_time_args = {
             // interleaved accessor args
@@ -97,12 +94,11 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
             (std::uint32_t) kv_out_w_tiles,
             (std::uint32_t) kv_out_HtWt,
             (std::uint32_t) num_q_heads, // q_out_c
-            (std::uint32_t) num_kv_heads, // kv_out_c
+            (std::uint32_t) 1, //num_kv_heads, // kv_out_c
     };
 
     std::map<string, string> reader_defines;
     std::map<string, string> writer_defines;
-
     auto reader_kernel_id = tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/nlp_tms/kernels/dataflow/reader_tm_tile_layout_nlp_create_qkv_heads_mistral.cpp",
@@ -113,7 +109,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
         "tt_eager/tt_dnn/op_library/nlp_tms/kernels/dataflow/writer_tm_tile_layout_nlp_create_qkv_heads_mistral.cpp",
         all_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args, writer_defines));
-
 
     // Create circular buffers
     uint32_t micro_block_size = 1; // Num tiles to read/wait for in reader and writer
@@ -127,7 +122,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
 		.set_page_size(src1_cb_index, single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
-
+    
     for (uint32_t i = 0, num_blocks_written = 0; i < num_cores; i++){
         CoreCoord core = {i / num_cores_y, i % num_cores_y};
         uint32_t num_blocks_per_core = 0;
@@ -145,11 +140,13 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_mistral(const Te
             num_blocks_written * in0_w_tiles,
         };
 
-        uint32_t q_out_h_dim = num_blocks_written % q_out_h_tiles;
-        uint32_t kv_out_h_dim = num_blocks_written % kv_out_h_tiles;
-        uint32_t q_out_tensor_tile_id = num_blocks_written / q_out_h_tiles * q_out_CHtWt + q_out_h_dim * q_out_w_tiles;
-        uint32_t v_out_tensor_tile_id = num_blocks_written / kv_out_h_tiles * kv_out_CHtWt + kv_out_h_dim * kv_out_w_tiles;
-        uint32_t k_out_tensor_tile_id = v_out_tensor_tile_id;
+        uint32_t q_out_h_dim = num_blocks_written % q_out_h_tiles; //0
+        uint32_t kv_out_h_dim = num_blocks_written % kv_out_h_tiles; //0
+        uint32_t q_out_tensor_tile_id = num_blocks_written / q_out_h_tiles * q_out_CHtWt + q_out_h_dim * q_out_w_tiles; //1 x 4 = 4 // 0
+        uint32_t v_out_tensor_tile_id = num_blocks_written / kv_out_h_tiles * kv_out_CHtWt + kv_out_h_dim * kv_out_w_tiles; // 1 x 32 = 32 //0
+        uint32_t k_out_tensor_tile_id = v_out_tensor_tile_id; //32
+
+        //DPRINT<< " in loop: "<<q_out_tensor_tile_id<<v_out_tensor_tile_id << ENDL();
 
         std::vector<uint32_t> writer_runtime_args = {
             (std::uint32_t) q_buffer->address(), // q_tensor_addr

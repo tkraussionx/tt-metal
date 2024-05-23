@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 
 import ttnn
-from models.demos.wormhole.mistral7b.tt.mistral_attention import TtMistralAttention
+from models.demos.wormhole.mistral7b.tt.mistral_attention_mha import TtMistralAttention
 from models.demos.wormhole.mistral7b.tt.mistral_common import (
     precompute_freqs,
     prepare_inputs_ttnn,
