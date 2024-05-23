@@ -24,8 +24,6 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
     profiler,
-    enable_persistent_kernel_cache,
-    disable_persistent_kernel_cache,
     disable_compilation_reports,
     is_e75,
     nearest_32,
@@ -250,8 +248,7 @@ def run_test_FalconCausalLM_end_to_end(
     for device in devices:
         tt_lib.device.DumpDeviceProfiler(device)
     profiler.enable()
-    enable_persistent_kernel_cache()
-    logger.info(f"Enable profiler and enable binary and compile cache")
+    logger.info(f"Enable profiler")
     profiler.start(f"model_run_for_inference")
     if llm_mode == "prefill":
         tt_outs = []
@@ -384,7 +381,6 @@ def test_perf_bare_metal(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
 
-    disable_persistent_kernel_cache()
     disable_compilation_reports()
 
     run_test_FalconCausalLM_end_to_end(

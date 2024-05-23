@@ -22,8 +22,6 @@ from models.demos.t3000.falcon40b.tt.falcon_common import PytorchFalconCausalLM
 from models.demos.t3000.falcon40b.tt.model_config import get_model_config, model_config_entries
 from models.utility_functions import (
     disable_compilation_reports,
-    disable_persistent_kernel_cache,
-    enable_persistent_kernel_cache,
     profiler,
     torch2tt_tensor,
     tt2torch_tensor,
@@ -252,8 +250,6 @@ def run_falcon_demo_kv(
 
     kv_cache_singlelayer = tt_FalconCausalLM_singlelayer.initialize_kv_cache()  # only used for compile
 
-    enable_persistent_kernel_cache()
-
     ### First prefill run with compile ###
     use_cache = True
     time_prefill_compile = 0
@@ -357,7 +353,6 @@ def run_falcon_demo_kv(
     profiler.end(f"initializing_KV_cache")
 
     ### Second prefill run without compile ###
-    enable_persistent_kernel_cache()
 
     post_processor = partial(post_process)
     output_ids = torch.zeros(num_users, 1, dtype=torch.int64)
@@ -570,7 +565,6 @@ def test_demo(
     num_devices = 8
     devices = get_devices_for_t3000(all_devices, num_devices)
 
-    # disable_persistent_kernel_cache()
     disable_compilation_reports()
 
     return run_falcon_demo_kv(
