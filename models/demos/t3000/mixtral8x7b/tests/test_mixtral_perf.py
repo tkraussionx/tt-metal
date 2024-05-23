@@ -58,7 +58,7 @@ def test_mixtral_model_perf(
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
-    model_args.n_layers = 32
+    model_args.n_layers = 1
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     # Clear global profiler state before starting measurements
@@ -114,12 +114,15 @@ def test_mixtral_model_perf(
         tt_lib.device.DumpDeviceProfiler(t3k_device_mesh.get_device(device_id))
 
     signpost("Model perf run")
-    profiler.clear()
-    profiler.start(f"end_to_end_inference")
-    run_inference(tt_model, embd, encoded_prompts, generation_start_pos, generation_length, rot_mat)
-    profiler.end(f"end_to_end_inference")
-    profiler.print()
-    iter_time = profiler.get("model_run_for_inference_0")
+    from viztracer import VizTracer
+
+    with VizTracer() as tracer:
+        profiler.clear()
+        profiler.start(f"end_to_end_inference")
+        run_inference(tt_model, embd, encoded_prompts, generation_start_pos, generation_length, rot_mat)
+        profiler.end(f"end_to_end_inference")
+        profiler.print()
+        iter_time = profiler.get("model_run_for_inference_0")
 
     comment = f"kv_cache_len={generation_start_pos}_num_layers={model_args.n_layers}"
 

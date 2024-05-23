@@ -50,14 +50,15 @@ class TtTransformer(torch.nn.Module):
         self.state_dict = state_dict
 
         self.output_weight = ttnn.as_tensor(
-            self.state_dict["output.weight"].permute(1, 0),
+            self.state_dict["output.weight"].permute(1, 0).unsqueeze(0).unsqueeze(0),
             device=device_mesh,
             layout=self.model_config["OUTPUT_W_LAYOUT_TILE"],
             dtype=dtype,
             memory_config=self.model_config["OUTPUT_WEIGHTS_MEMCFG"],
-            cache_file_name=args.weight_cache_path(dtype) / "output_multidevice.weight",
+            cache_file_name=args.weight_cache_path(dtype) / "output_multidevice.weight_4d_hack",
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
+        print(f"output_weight.shape: {self.output_weight.shape}")
 
         self.compute_kernel = self.args.get_compute_kernel_config()
 

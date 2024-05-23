@@ -196,6 +196,20 @@ class TtModelArgs:
             inplace=False,
         )
 
+        self.model_config[
+            "GATE_MM_OUTPUT_PROGCFG"
+        ] = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 1),
+            in0_block_w=16,
+            out_subblock_h=1,
+            out_subblock_w=1,
+            per_core_M=1,
+            per_core_N=1,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        )
+
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
             # TODO Lower max grid size (used by MLP) to avoid hangs

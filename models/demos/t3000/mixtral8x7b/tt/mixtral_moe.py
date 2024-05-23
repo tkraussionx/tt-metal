@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from time import time
 import torch
 import ttnn
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
@@ -82,6 +83,18 @@ class TtMoeLayer(torch.nn.Module):
         input_i_1SBH = inputs
         expert_i_HH = self.experts
         # get logits for the experts
+
+        start = time()
+        gate_logits_1SB8 = ttnn.experimental.operations.primary.matmul(
+            input_i_1SBH,
+            self.gates_H8,
+            program_config=self.model_config["GATE_MM_OUTPUT_PROGCFG"],
+            output_mem_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.compute_kernel,
+        )
+        ttlib_time = time() - start
+
+        start = time()
         gate_logits_1SB8 = ttnn.linear(
             input_i_1SBH,
             self.gates_H8,
@@ -91,6 +104,9 @@ class TtMoeLayer(torch.nn.Module):
             core_grid=ttnn.CoreGrid(y=1, x=8),
             dtype=ttnn.bfloat16,
         )
+        ttnn_time = time() - start
+        print(f"ttlib_time: {1e6*ttlib_time:.0f} us, ttnn_time: {1e6*ttnn_time:.0f} us")
+
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
         ttl_topk_values, ttl_topk_indices = ttnn.experimental.operations.primary.topk(gate_logits_1SB8, 32)

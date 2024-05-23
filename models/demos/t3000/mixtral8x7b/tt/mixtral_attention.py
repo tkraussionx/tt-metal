@@ -39,7 +39,7 @@ class TtMixtralAttention(torch.nn.Module):
         wv_str = f"{layer_name}.wv.weight"
         wo_str = f"{layer_name}.wo.weight"
 
-        self.wqkv = ttnn.as_tensor(
+        torch_wqkv = (
             torch.concat(
                 [
                     torch.concat(
@@ -65,28 +65,40 @@ class TtMixtralAttention(torch.nn.Module):
                     for i in range(self.num_devices)
                 ],
                 dim=-1,
-            ),
+            )
+            .unsqueeze(0)
+            .unsqueeze(0)
+        )
+        print(f"torch_wqkv shape: {torch_wqkv.shape}")
+
+        self.wqkv = ttnn.as_tensor(
+            torch_wqkv,
             device=self.device_mesh,
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=1),
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=-1),
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wqkv_multidevice"),
+            cache_file_name=cache_name(f"wqkv_multidevice_4d_hack"),
         )
+        print(f"wqkv shape: {self.wqkv.shape}")
         self.wqkv = ttnn.to_device(self.wqkv, self.device_mesh)
+        print(f"wqkv device shape: {self.wqkv.shape}")
         self.wo = ttnn.as_tensor(
             torch.transpose(
                 self.state_dict[wo_str],
                 -2,
                 -1,
-            ),
+            )
+            .unsqueeze(0)
+            .unsqueeze(0),
             device=self.device_mesh,
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=0),
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=-2),
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wo_multidevice"),
+            cache_file_name=cache_name(f"wo_multidevice_4d_hack"),
         )
+        print(f"wo shape: {self.wo.shape}")
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
 
         cache_k = torch.zeros(
@@ -173,6 +185,8 @@ class TtMixtralAttention(torch.nn.Module):
         ###
         # QKV matmuls
         ###
+        print(f"x_11BH shape: {x_11BH.shape}")
+        print(f"wqkv shape: {self.wqkv.shape}")
         xqkv_fused = ttnn.linear(
             x_11BH,
             self.wqkv,
@@ -181,6 +195,7 @@ class TtMixtralAttention(torch.nn.Module):
             core_grid=self.core_grid_attention,
             compute_kernel_config=self.compute_kernel,
         )
+        print(f"xqkv_fused shape: {xqkv_fused.shape}")
 
         # split qkv into heads
         (
@@ -292,6 +307,8 @@ class TtMixtralAttention(torch.nn.Module):
         ###
         # Output matmul
         ###
+        print(f"attn_output_11BH shape: {attn_output_11BH.shape}")
+        print(f"wo shape: {wo.shape}")
         dense_out_11BH = ttnn.linear(
             attn_output_11BH,
             wo,
@@ -306,4 +323,5 @@ class TtMixtralAttention(torch.nn.Module):
 
         # return the sum of the outputs
         dense_outputs_11BH = ttnn.matmul(self.reduce_mask, dense_outputs_11BH)
+        print("Finished attention")
         return dense_outputs_11BH
