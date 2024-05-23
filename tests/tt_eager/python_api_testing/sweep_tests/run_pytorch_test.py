@@ -113,12 +113,15 @@ def generate_test_sweep_parameters(input_test_config, env=""):
 
             env_dict_combinations = make_env_combinations(env_dict)
 
+            coregrid_dict = test_config.get("coregrid", {})
+
             for env_dict in env_dict_combinations:
                 shape_dict = test_config["shape"]
                 datagen_dict = test_config["datagen"]
 
                 comparison_dict = test_config["comparison"]
                 comparison_args = comparison_dict.get("args", {})
+
                 comparison_func = partial(getattr(comparison_funcs, comparison_dict["function"]), **comparison_args)
 
                 test_args_gen = getattr(
@@ -130,10 +133,14 @@ def generate_test_sweep_parameters(input_test_config, env=""):
                 # Optional test args for dtype, etc...
                 test_args = test_config.get("args", {})
 
+                if coregrid_dict:
+                    test_args["coregrid"] = coregrid_dict
+
                 # Set tests parameters --------------------------
                 test_tt_dtypes = []
                 test_tt_layouts = []
                 test_mem_configs = []
+                test_coregrid_configs = []
 
                 if "inputs" in test_args:
                     for input_spec in test_args["inputs"]:
@@ -177,6 +184,15 @@ def generate_test_sweep_parameters(input_test_config, env=""):
                         else:
                             test_mem_configs[-1] = generation_funcs.supported_mem_configs
 
+                if "coregrid" in test_args:
+                    print("JA dict")
+                    print(coregrid_dict)
+                    test_coregrid_configs.append(coregrid_dict.get("xmin", {}))
+                    test_coregrid_configs.append(coregrid_dict.get("xmax", {}))
+                    test_coregrid_configs.append(coregrid_dict.get("ymin", {}))
+                    test_coregrid_configs.append(coregrid_dict.get("ymax", {}))
+
+                print(test_coregrid_configs)
                 if "outputs" in test_args:
                     for out_spec in test_args["outputs"]:
                         test_mem_configs.append([])
@@ -203,6 +219,7 @@ def generate_test_sweep_parameters(input_test_config, env=""):
                     test_tt_dtypes,
                     test_tt_layouts,
                     test_mem_configs,
+                    test_coregrid_configs,
                     sanitize_args=sanitize_args,
                 ):
                     data_seed = random.randint(0, 20000000)
@@ -361,3 +378,4 @@ if __name__ == "__main__":
     run_sweep_tests(test_sweep_parameters, args.output_folder_path, output_file, args.run_tests_for_ci, device)
 
     tt_lib.device.CloseDevice(device)
+shapes_and_datagen

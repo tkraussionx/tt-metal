@@ -1,6 +1,12 @@
 ---
 test-list:
   - ttnn-matmul:
+      coregrid:
+        xmin: 2
+        xmax: 5
+        ymin: 2
+        ymax: 3
+        step: 1
       shape:
         start-shape: [1, 1, 32, 32, 32]
         end-shape: [6, 12, 512, 512, 512]
@@ -17,7 +23,7 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
+      args-gen: gen_matmul_coregrid_args
       sanitize-args: False
       args:
         data-layout: ["TILE"]
@@ -26,6 +32,12 @@ test-list:
         out-buffer-type: ["DRAM", "L1"]
       output-file: matmul_sweep.csv
   - ttnn-matmul:
+      coregrid:
+        xmin: 2
+        xmax: 5
+        ymin: 2
+        ymax: 3
+        step: 1
       shape:
         start-shape: [1, 1, 32, 32, 32]
         end-shape: [6, 12, 512, 512, 512]
@@ -42,7 +54,7 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
+      args-gen: gen_matmul_coregrid_args
       sanitize-args: False
       args:
         data-layout: ["TILE"]
