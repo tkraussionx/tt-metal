@@ -181,6 +181,26 @@ from enum import Enum
             None,
             None,
         ),
+        # (1, 1, 512, 1280) (32 cores block sharded to 4 cores height sharded)
+        (
+            512,
+            1280,
+            ttnn.TILE_LAYOUT,
+            dict(core_grid=ttnn.CoreGrid(y=4, x=8), strategy=ttnn.ShardStrategy.BLOCK),
+            dict(core_grid=ttnn.CoreGrid(y=8, x=8), strategy=ttnn.ShardStrategy.BLOCK),
+            None,
+            None,
+        ),
+        # (1, 1, 512, 1280) (32 cores block sharded to 4 cores height sharded)
+        (
+            512,
+            1280,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(core_grid=ttnn.CoreGrid(y=4, x=8), strategy=ttnn.ShardStrategy.BLOCK),
+            dict(core_grid=ttnn.CoreGrid(y=8, x=8), strategy=ttnn.ShardStrategy.BLOCK),
+            None,
+            None,
+        ),
     ],
 )
 def test_reshard(
