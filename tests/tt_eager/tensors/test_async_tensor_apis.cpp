@@ -57,7 +57,7 @@ TEST_F(CommonFixture, TestTensorOwnershipSanity) {
         readback_tensor.set_dtype(thread_local_tensor.get_dtype());
         readback_tensor.set_layout(thread_local_tensor.get_layout());
         readback_tensor.tensor_attributes->metadata_populated = true;
-        readback_tensor.tensor_attributes->worker_index++;
+        readback_tensor.tensor_attributes->num_workers_completed++;
         // Ensure that the readback buffer is owned inside and outside the lambda
         std::visit(
             [](auto&& storage) {
@@ -301,7 +301,7 @@ TEST_F(CommonFixture, TestTensorAsyncDataMovement) {
             readback_tensor.set_dtype(thread_local_tensor.get_dtype());
             readback_tensor.set_layout(thread_local_tensor.get_layout());
             readback_tensor.tensor_attributes->metadata_populated = true;
-            readback_tensor.tensor_attributes->worker_index++;
+            readback_tensor.tensor_attributes->num_workers_completed++;
             // Ensure that this buffer is currently owned by both the thread_local and read_back tensors
             // This is because we explictly pass in the buffer to a new tensor_attr object
             std::visit(

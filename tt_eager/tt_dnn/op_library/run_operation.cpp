@@ -391,11 +391,11 @@ OutputTensors run(
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
+    auto device = detail::get_device(input_tensors, optional_input_tensors);
 #ifdef DEBUG
     operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
     detail::validate_op_launch(device);
 #endif
-    auto device = detail::get_device(input_tensors, optional_input_tensors);
     return detail::decorate_device_operation(detail::run_device_operation<OutputTensors>)(
         queue, operation, input_tensors, optional_input_tensors, optional_output_tensors);
 }
@@ -420,11 +420,11 @@ OutputTensors run(
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
+    auto device = detail::get_device(input_tensors, optional_input_tensors);
 #ifdef DEBUG
     operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
     detail::validate_op_launch(device);
 #endif
-    auto device = detail::get_device(input_tensors, optional_input_tensors);
     return detail::decorate_device_operation(detail::run_device_operation<OutputTensors>)(
         detail::USE_FAST_DISPATCH ? std::make_optional(std::ref(device->command_queue())) : std::nullopt,
         operation,
@@ -817,8 +817,8 @@ void launch_op(
                             outputs.at(i).tensor_attributes->dynamic_storage = false;
                         }
                         insert_buffer_and_shape_for_device(target_device, local_tensors.at(i), outputs.at(i));
-                        int worker_index = (outputs.at(i).tensor_attributes->worker_index)++;
-                        if (not worker_index) {
+                        int num_workers_completed = (outputs.at(i).tensor_attributes->num_workers_completed)++;
+                        if (not num_workers_completed) {
                             outputs.at(i).tensor_attributes->shape = local_tensors.at(i).tensor_attributes->shape;
                             outputs.at(i).tensor_attributes->dtype = local_tensors.at(i).tensor_attributes->dtype;
                             outputs.at(i).tensor_attributes->layout = local_tensors.at(i).tensor_attributes->layout;

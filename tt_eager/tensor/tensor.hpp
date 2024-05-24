@@ -32,12 +32,12 @@ struct Tensor {
         DataType dtype;
         Layout layout;
         std::mutex populated_mutex;
-        uint32_t num_shards = 0;
+        uint32_t num_shards_to_be_populated = 0;
         uint32_t main_thread_ref_count = 0;
         std::atomic<uint32_t> num_sibling_workers_sharing_tensor = 0;
         std::atomic<bool> main_thread_tensor = true;
         std::atomic<bool> metadata_populated = false;
-        std::atomic<int> worker_index = 0;
+        std::atomic<int> num_workers_completed = 0;
         bool deallocated = false;      // Set to true if device side storage was deallocated
         bool dynamic_storage = false;  // Storage type can change, depending on op behaviour
         bool track_ref_count = false;
@@ -157,7 +157,7 @@ struct Tensor {
                         std::get<MultiDeviceStorage>(this->tensor_attributes->storage).ordered_device_ids),
                     [](const Device *worker) { return worker->id(); });
             }
-            this->tensor_attributes->num_shards = workers.size();
+            this->tensor_attributes->num_shards_to_be_populated = workers.size();
         } else if (num_buffers) {
             if (num_buffers == 1) {
                 this->tensor_attributes->storage = OwnedStorage();
@@ -169,7 +169,7 @@ struct Tensor {
                 std::get<MultiDeviceHostStorage>(this->tensor_attributes->storage).shapes =
                     std::vector<Shape>(num_buffers, this->tensor_attributes->shape.value());
             }
-            this->tensor_attributes->num_shards = num_buffers;
+            this->tensor_attributes->num_shards_to_be_populated = num_buffers;
         }
     }
 
@@ -367,7 +367,7 @@ struct Tensor {
         ZoneScoped;
         // Stall until all the workers for this tensor
         // have populated the full tensor
-        while (this->tensor_attributes->worker_index < this->tensor_attributes->num_shards) {
+        while (this->tensor_attributes->num_workers_completed < this->tensor_attributes->num_shards_to_be_populated) {
         }
     }
 
