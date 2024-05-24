@@ -61,8 +61,8 @@ operation::ProgramWithCallbacks MorehBiasAddBackward::create_program(
     const std::vector<Tensor>& inputs, std::vector<Tensor>& outputs) const {
     const auto& output_grad = inputs.at(0);
     const auto& bias_grad = outputs.at(0);
-    return is_scalar(bias_grad) ? (moreh_bias_backward_single_core_hw(output_grad, bias_grad))
-                                : (moreh_bias_backward_multi_core_h(output_grad, bias_grad));
+    return is_scalar(bias_grad) ? (moreh_bias_backward_single_core_hw(output_grad, bias_grad, this->compute_kernel_config))
+                                : (moreh_bias_backward_multi_core_h(output_grad, bias_grad, this->compute_kernel_config));
 }
 
 inline void moreh_linear_backward_validate(
@@ -100,7 +100,8 @@ std::vector<std::optional<Tensor>> moreh_linear_backward(
     std::optional<const Tensor> bias_grad,
     const MemoryConfig& input_grad_mem_config,
     const MemoryConfig& weight_grad_mem_config,
-    const MemoryConfig& bias_grad_mem_config) {
+    const MemoryConfig& bias_grad_mem_config,
+    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     std::vector<std::optional<Tensor>> result(3);
     const auto [input_required_grad, weight_required_grad, bias_required_grad] =
         get_required_outputs(are_required_outputs);
@@ -109,6 +110,9 @@ std::vector<std::optional<Tensor>> moreh_linear_backward(
         output_grad.storage_type() == StorageType::DEVICE && input.storage_type() == StorageType::DEVICE &&
             weight.storage_type() == StorageType::DEVICE,
         "input and weight tensors need to be on device");
+
+    TT_FATAL(output_grad.storage_type() == StorageType::DEVICE);
+    auto kernel_config_val = init_device_compute_kernel_config(output_grad.device()->arch(), compute_kernel_config, MathFidelity::HiFi4);
 
     moreh_linear_backward_validate(output_grad, input, weight, input_grad, weight_grad, bias_grad);
 
@@ -136,7 +140,7 @@ std::vector<std::optional<Tensor>> moreh_linear_backward(
     if (bias_required_grad) {
         TT_ASSERT(bias.has_value(), "bias tensor should not be std::nullopt");
         result[2] = operation::run(
-                        MorehBiasAddBackward{.bias_grad_mem_config = bias_grad_mem_config},
+                        MorehBiasAddBackward{.bias_grad_mem_config = bias_grad_mem_config, .compute_kernel_config = kernel_config_val},
                         {output_grad, bias.value()},
                         {},
                         {bias_grad})
