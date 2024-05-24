@@ -35,9 +35,8 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
         [&](auto&& storage) {
             using StorageType = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<StorageType, OwnedStorage>) {
-                this->tensor_attributes->num_shards = 1;
-            }
-            else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
+                this->tensor_attributes->num_shards_to_be_populated = 1;
+            } else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_ASSERT(storage.buffer->device() != nullptr);
                 workers = {storage.buffer->device()};
                 tensor_impl::validate_on_device_dtype_and_layout(
@@ -49,10 +48,9 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                 if (not this->workers.at(0)->in_main_thread()) {
                     this->tensor_attributes->main_thread_tensor = false;
                 }
-                this->tensor_attributes->num_shards = 1;
-            }
-            else if constexpr (std::is_same_v<StorageType, BorrowedStorage>) {
-                this->tensor_attributes->num_shards = 1;
+                this->tensor_attributes->num_shards_to_be_populated = 1;
+            } else if constexpr (std::is_same_v<StorageType, BorrowedStorage>) {
+                this->tensor_attributes->num_shards_to_be_populated = 1;
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
                 workers.reserve(storage.buffers.size());
                 for (int i = 0; i < storage.ordered_device_ids.size(); i++) {
@@ -70,15 +68,16 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                 if (not this->workers.at(0)->in_main_thread()) {
                     this->tensor_attributes->main_thread_tensor = false;
                 }
-                this->tensor_attributes->num_shards = storage.buffers.size();
+                this->tensor_attributes->num_shards_to_be_populated = storage.buffers.size();
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceHostStorage>) {
-                this->tensor_attributes->num_shards = storage.buffers.size();
+                this->tensor_attributes->num_shards_to_be_populated = storage.buffers.size();
             } else {
                 raise_unsupported_storage<StorageType>();
             }
-        }, storage);
-        this->tensor_attributes->worker_index = this->tensor_attributes->num_shards;
-        this->tensor_attributes->metadata_populated = true;
+        },
+        storage);
+    this->tensor_attributes->num_workers_completed = this->tensor_attributes->num_shards_to_be_populated;
+    this->tensor_attributes->metadata_populated = true;
 }
 
 Tensor::Tensor(const Storage storage, const Shape shape, DataType dtype, Layout layout) :
@@ -252,7 +251,7 @@ void Tensor::deepcopy(const Tensor& other) {
     this->set_layout(other.get_layout());
     // Set metadata populated flag for getters
     this->tensor_attributes->metadata_populated = true;
-    this->tensor_attributes->worker_index++;
+    this->tensor_attributes->num_workers_completed++;
 }
 
 void Tensor::populate_buffers_and_metadata(const Tensor& other) {
@@ -263,17 +262,22 @@ void Tensor::populate_buffers_and_metadata(const Tensor& other) {
     this->set_dtype(other.get_dtype());
     this->set_layout(other.get_layout());
     // Populate storage container with buffers + shapes
-    std::visit([this] (auto&& storage) {
-        using StorageType = std::decay_t<decltype(storage)>;
-        if constexpr(std::is_same_v<StorageType, OwnedStorage> or std::is_same_v<StorageType, DeviceStorage>) {
-            std::get<StorageType>(this->tensor_attributes->storage).insert_buffer(storage.get_buffer());
-        } else if constexpr(std::is_same_v<StorageType, MultiDeviceHostStorage> or std::is_same_v<StorageType, MultiDeviceStorage>) {
-            std::get<StorageType>(this->tensor_attributes->storage).buffers = storage.buffers;
-            std::get<StorageType>(this->tensor_attributes->storage).shapes = storage.shapes;
-        }
-    }, other.get_storage()); // Non blocking storage query, since this is done for tensors that get created inside the worker thread
+    std::visit(
+        [this](auto&& storage) {
+            using StorageType = std::decay_t<decltype(storage)>;
+            if constexpr (std::is_same_v<StorageType, OwnedStorage> or std::is_same_v<StorageType, DeviceStorage>) {
+                std::get<StorageType>(this->tensor_attributes->storage).insert_buffer(storage.get_buffer());
+            } else if constexpr (
+                std::is_same_v<StorageType, MultiDeviceHostStorage> or
+                std::is_same_v<StorageType, MultiDeviceStorage>) {
+                std::get<StorageType>(this->tensor_attributes->storage).buffers = storage.buffers;
+                std::get<StorageType>(this->tensor_attributes->storage).shapes = storage.shapes;
+            }
+        },
+        other.get_storage());  // Non blocking storage query, since this is done for tensors that get created inside the
+                               // worker thread
     this->tensor_attributes->metadata_populated = true;
-    this->tensor_attributes->worker_index++;
+    this->tensor_attributes->num_workers_completed++;
 }
 
 std::vector<Device*> Tensor::get_workers(bool blocking) const {
@@ -450,8 +454,8 @@ Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig& mem_c
                     shard = tensor_impl::to_device_wrapper(shard, worker, mem_config, std::nullopt);
                 }
                 insert_buffer_and_shape_for_device(worker, shard, device_tensor, worker_index);
-                uint32_t worker_index = (device_tensor.tensor_attributes->worker_index)++;
-                if (not worker_index) {
+                uint32_t num_workers_completed = (device_tensor.tensor_attributes->num_workers_completed)++;
+                if (not num_workers_completed) {
                     device_tensor.set_shape(this->get_shape());
                     device_tensor.set_dtype(this->get_dtype());
                     device_tensor.set_layout(this->get_layout());
@@ -486,8 +490,8 @@ Tensor Tensor::cpu(bool blocking) const {
             auto shard = get_shard_for_device(*this, target_device);
             shard = tensor_impl::to_host_wrapper(shard, blocking);
             insert_buffer_and_shape_for_device(target_device, shard, host_tensor, worker_index);
-            uint32_t worker_index = (host_tensor.tensor_attributes->worker_index)++;
-            if (not worker_index) {
+            uint32_t num_workers_completed = (host_tensor.tensor_attributes->num_workers_completed)++;
+            if (not num_workers_completed) {
                 host_tensor.set_shape(this->get_shape());
                 host_tensor.set_dtype(this->get_dtype());
                 host_tensor.set_layout(this->get_layout());
@@ -565,8 +569,8 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
                 auto shard = get_shard_for_device(*this, worker, worker_index);
                 shard = tensor_impl::to_layout_wrapper(shard, target_layout);
                 insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout, worker_index);
-                uint32_t tensor_worker_index = (tensor_modified_layout.tensor_attributes->worker_index)++;
-                if (not tensor_worker_index) {
+                uint32_t num_workers_completed = (tensor_modified_layout.tensor_attributes->num_workers_completed)++;
+                if (not num_workers_completed) {
                     tensor_modified_layout.set_shape(this->get_shape());
                     tensor_modified_layout.set_dtype(this->get_dtype());
                     tensor_modified_layout.set_layout(target_layout);
@@ -949,8 +953,8 @@ Tensor allocate_tensor_on_device(
                 auto local_tensor = create_device_tensor(shape.value(), data_type, layout, worker, memory_config);
                 insert_buffer_and_shape_for_device(worker, local_tensor, device_tensor, worker_index);
 
-                uint32_t tensor_worker_index = (device_tensor.tensor_attributes->worker_index)++;
-                if (not tensor_worker_index) {
+                uint32_t num_workers_completed = (device_tensor.tensor_attributes->num_workers_completed)++;
+                if (not num_workers_completed) {
                     device_tensor.set_shape(ttnn::Shape(shape));
                     device_tensor.set_dtype(data_type);
                     device_tensor.set_layout(layout);
