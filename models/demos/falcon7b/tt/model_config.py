@@ -200,12 +200,13 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["MLP_PADDING_VALUE"] = 4608
     model_config["MLP_GRID_SIZE"] = (8, 8)
 
-    model_config["MLP_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
+    default_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.HiFi2,
         math_approx_mode=False,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
     )
+    model_config["MLP_KERNEL_CONFIG"] = default_kernel_config
 
     mm_h_to_4h_prog_cfg = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
@@ -300,6 +301,8 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
         fused_activation=None,
         mcast_in0=False,
     )
+
+    model_config["LM_HEAD_KERNEL_CONFIG"] = default_kernel_config
 
 
 model_config_entries = {
