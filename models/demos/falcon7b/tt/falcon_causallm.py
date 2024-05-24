@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 
 import torch
 import tt_lib
+import ttnn
+
 from models.demos.falcon7b.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
@@ -119,12 +121,14 @@ class TtFalconCausalLM(TtFalconModelShared):
             ]
         else:
             lm_logits = [
-                tt_lib.tensor.falcon_lm_head_matmul(
+                ttnn.matmul(
                     hidden_states[device_id],
                     self.lm_head_weights[device_id],
-                    bias=None,
-                    output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                    memory_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                    dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                    core_grid=ttnn.CoreGrid(y=8, x=8),
+                    use_1d_systolic_array=True,
+                    compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
                 )
                 for device_id in range(self.num_devices)
             ]
