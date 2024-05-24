@@ -5,7 +5,7 @@
 import tt_lib as ttl
 from loguru import logger
 from pathlib import Path
-from models.utility_functions import is_grayskull, is_wormhole_b0
+from models.utility_functions import is_grayskull, is_wormhole_b0, nearest_y
 
 OP_KEYS = (
     # Inputs
@@ -309,6 +309,31 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     )
 
     model_config["LM_HEAD_KERNEL_CONFIG"] = default_kernel_config
+    model_config["LM_HEAD_NUM_SLICES"] = {1024: 4, 2048: 8}
+
+    model_config["LM_HEAD_PROGCFG"] = {}
+    for seq_len in [1024, 2048]:
+        grid = (8, 8)
+        activations_m_in_tiles = seq_len // 32
+        weights_n_in_tiles = 65024 // 32
+
+        # calculate parameters for the given sequence length
+        out_subblock_h = 2
+        out_subblock_w = 4
+        per_core_M = nearest_y(activations_m_in_tiles / grid[0], out_subblock_h)
+        per_core_N = nearest_y(weights_n_in_tiles / grid[1], out_subblock_w)
+        in0_block_w = 4 if seq_len <= 1024 else 8
+
+        model_config["LM_HEAD_PROGCFG"][seq_len] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=grid,
+            in0_block_w=in0_block_w,
+            out_subblock_h=out_subblock_h,
+            out_subblock_w=out_subblock_w,
+            per_core_M=per_core_M,
+            per_core_N=per_core_N,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
 
 
 model_config_entries = {
