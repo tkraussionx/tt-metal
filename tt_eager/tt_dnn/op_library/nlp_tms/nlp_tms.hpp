@@ -236,7 +236,6 @@ inline std::vector<Tensor> nlp_create_qkv_heads_mistral(
         [num_heads, num_kv_heads, mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& input_tensor = input_tensors.at(0);
             const uint32_t num_kv_heads_val = num_kv_heads.value_or(num_heads);
-            // Infer head_dim
             uint32_t head_dim;
             TT_FATAL(input_tensor.get_legacy_shape()[3] % (num_heads + 2 * num_kv_heads_val) == 0, "Unsupported input shape");
             head_dim = input_tensor.get_legacy_shape()[3] / (num_heads + 2 * num_kv_heads_val);

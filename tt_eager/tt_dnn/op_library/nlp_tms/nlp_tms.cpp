@@ -308,14 +308,14 @@ std::vector<Shape> NlpCreateHeadsMistral::compute_output_shapes(const std::vecto
     const auto& input_tensor = input_tensors.at(0);
     const auto input_shape = input_tensor.get_legacy_shape();
 
-    auto sequence_length = input_shape[2];
+    auto batch = input_shape[2];
     auto head_dim = this->head_dim;
     if (head_dim % TILE_WIDTH != 0) {
         head_dim = (head_dim / TILE_WIDTH + 1) * TILE_WIDTH;
     }
 
-    const Shape q_output_shape = {sequence_length, input_shape[0], this->num_q_heads, head_dim};
-    const Shape v_output_shape = {sequence_length, input_shape[0], 32 , head_dim*this->num_kv_heads};
+    const Shape q_output_shape = {this->num_q_heads, 1, batch, head_dim};
+    const Shape v_output_shape = {1, 1, batch, head_dim*this->num_kv_heads};
     const Shape k_output_shape = v_output_shape;
     output_shape_vec = {q_output_shape, k_output_shape, v_output_shape};
 

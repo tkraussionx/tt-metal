@@ -123,7 +123,7 @@ class TtMistralAttention(nn.Module):
                     self.max_batch_size,
                     1,
                     self.kv_seq_len,  # self.sliding_window,
-                    self.head_dim* self.n_kv_heads // self.num_devices,
+                    self.head_dim * self.n_kv_heads // self.num_devices,
                 )
             )
             layer_past = [cache_k, cache_v]
@@ -142,7 +142,7 @@ class TtMistralAttention(nn.Module):
         # Pre-scaled head dimension (for softmax) to avoid fallbacking to host
         self.head_dims = [
             ttnn.from_torch(
-                torch.ones(1, self.n_heads, self.max_batch_size, self.head_dim)
+                torch.ones(self.n_heads, 1, self.max_batch_size, self.head_dim)
                 * (self.head_dim**-0.5),  # [seqlen, n_heads, bsz, head_dim] [1,32,32,128]
                 device=self.devices[i],
                 layout=ttnn.TILE_LAYOUT,
@@ -193,7 +193,7 @@ class TtMistralAttention(nn.Module):
             for i in range(len(devices))
         ]
 
-        mask_Q_8D_torch = torch.zeros(1, 32, 32, 8 * 128)
+        mask_Q_8D_torch = torch.zeros(32, 1, 32, 8 * 128)
         for j in range(8):
             mask_Q_8D_torch[:, :, j * 4 : (j + 1) * 4, j * 128 : (j + 1) * 128] = 1
         self.mask_Q_8D = [
@@ -289,85 +289,87 @@ class TtMistralAttention(nn.Module):
             # Reshape and rotary embeddings
             ###
             (
-                q_heads_pre_rot_Q1BD, 
-                k_heads_pre_rot_11BC, 
+                q_heads_Q1BD,  # q_heads_pre_rot_Q1BD,
+                k_heads_11BC,  # k_heads_pre_rot_11BC,
                 v_heads_11BC,
             ) = ttnn.experimental.tensor.nlp_create_qkv_heads_mistral(
                 xqkv_fused,
                 num_heads=self.n_local_heads,
                 num_kv_heads=self.n_local_kv_heads,
-                output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
+                output_mem_config=ttnn.DRAM_MEMORY_CONFIG,
             )
-
-            k_heads_pre_rot_11BC = k_heads_pre_rot_11BC[:1, :, :, :]
-            v_heads_11BC = v_heads_11BC[:1, :, :, :]
 
             ttnn.deallocate(xqkv_fused)
 
             # Update rotary matrix on device
-            rotary_mat = self.rot_mat[current_pos]
+            # rotary_mat = self.rot_mat[current_pos]
 
-            q_heads_Q1BD = ttnn.linear(
-                q_heads_pre_rot_Q1BD,
-                rotary_mat,
-                program_config=self.q_heads_program_config,
-                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
-                compute_kernel_config=self.compute_kernel_config,
-                dtype=self.dtype,
-            )
-            
-            k_heads_11BC = ttnn.linear(
-                k_heads_pre_rot_11BC,
-                rotary_mat,
-                program_config=self.k_heads_program_config,
-                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
-                compute_kernel_config=self.compute_kernel_config,
-                dtype=self.dtype,
-            )
+            # q_heads_Q1BD = ttnn.linear(
+            #     q_heads_pre_rot_Q1BD,
+            #     rotary_mat,
+            #     program_config=self.q_heads_program_config,
+            #     memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            #     compute_kernel_config=self.compute_kernel_config,
+            #     dtype=self.dtype,
+            # )
 
-            ttnn.deallocate(q_heads_pre_rot_Q1BD)
-            ttnn.deallocate(k_heads_pre_rot_11BC)
+            # k_heads_11BC = ttnn.linear(
+            #     k_heads_pre_rot_11BC,
+            #     rotary_mat,
+            #     program_config=self.k_heads_program_config,
+            #     memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            #     compute_kernel_config=self.compute_kernel_config,
+            #     dtype=self.dtype,
+            # )
+
+            # ttnn.deallocate(q_heads_pre_rot_Q1BD)
+            # ttnn.deallocate(k_heads_pre_rot_11BC)
 
             ###
             # KV update
             ###
             keys_B1WC = layer_past[0]
-            values_B1WC  = layer_past[1]
-
-            ttnn.experimental.tensor.update_cache(keys_B1WC , k_heads_11BC, current_pos)  # self.current)
-            ttnn.experimental.tensor.update_cache(values_B1WC , v_heads_11BC, current_pos)  # self.current)
-            self.layer_past_list[i] = [keys_B1WC , values_B1WC ]
-
+            values_B1WC = layer_past[1]
+            # ttnn.experimental.tensor.update_cache(keys_B1WC , k_heads_11BC, current_pos)  # self.current)
             ttnn.deallocate(k_heads_11BC)
+            # ttnn.experimental.tensor.update_cache(values_B1WC , v_heads_11BC, current_pos)  # self.current)
+            self.layer_past_list[i] = [keys_B1WC, values_B1WC]
+
             ttnn.deallocate(v_heads_11BC)
 
             ###
             # Attention
             ###
             keys_sliced_B1PC = keys_B1WC[:, :, :padded_layer_past_len, :]
-            keys_sliced_B1CP = ttnn.permute(keys_sliced_B1PC, (0, 1, 3, 2)) 
+            keys_sliced_B1CP = ttnn.experimental.tensor.transpose(keys_sliced_B1PC, 2, 3)
             ttnn.deallocate(keys_sliced_B1PC)
 
-            q_heads_Q1BD = q_heads_Q1BD * head_dim 
-            q_heads_B1QD = ttnn.permute(q_heads_Q1BD, (2, 1, 0, 3))
-
-            q_heads_B1QC = ttnn.matmul(
-                        q_heads_B1QD,
-                        expand_D_8D,
-                        program_config=self.expand_program_config,
-                        compute_kernel_config=self.compute_kernel_config,
-                        memory_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"],
-                    ) * mask_Q_8D
-            
-            # scores matmul
-            attn_B1QP = ttnn.matmul(
-                    keys_sliced_B1CP,
-                    q_heads_B1QC,
-                    core_grid=ttnn.CoreGrid(y=4, x=8),
-                    compute_kernel_config=self.compute_kernel_config_attn,
-                    dtype=ttnn.bfloat16,
+            q_heads_Q1BD = q_heads_Q1BD * head_dim
+            # q_heads_Q1BD = ttnn.clone(
+            #         q_heads_Q1BD, dtype=ttnn.bfloat16, memory_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"]
+            #     )
+            # q_heads_B1QD = ttnn.experimental.tensor.transpose(q_heads_Q1BD, 0, 2)
+            q_heads_B1QD = q_heads_Q1BD
+            q_heads_B1QC = (
+                ttnn.matmul(
+                    q_heads_B1QD,
+                    expand_D_8D,
+                    program_config=self.expand_program_config,
+                    compute_kernel_config=self.compute_kernel_config,
                     memory_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"],
                 )
+                * mask_Q_8D
+            )
+
+            # scores matmul
+            attn_B1QP = ttnn.matmul(
+                q_heads_B1QC,
+                keys_sliced_B1CP,
+                core_grid=ttnn.CoreGrid(y=4, x=8),
+                compute_kernel_config=self.compute_kernel_config_attn,
+                dtype=ttnn.bfloat16,
+                memory_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"],
+            )
             ttnn.deallocate(keys_sliced_B1CP)
             ttnn.deallocate(keys_sliced_B1CP)
 
@@ -390,17 +392,15 @@ class TtMistralAttention(nn.Module):
 
             # reduce and reshape
             attn_output_B1QD = ttnn.matmul(
-                    attn_output_B1QC * mask_Q_8D,
-                    reduce_8D_D,
-                    compute_kernel_config=self.compute_kernel_config,
-                    program_config=self.reduce_program_config,
-                    memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
-                )
+                attn_output_B1QC * mask_Q_8D,
+                reduce_8D_D,
+                compute_kernel_config=self.compute_kernel_config,
+                program_config=self.reduce_program_config,
+                memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
+            )
 
             # concat heads
-            attn_output_11BH = ttnn.reshape(
-                attn_output_B1QD, [1, 1, 32, 4096]
-            )
+            attn_output_11BH = ttnn.experimental.tensor.reshape(attn_output_B1QD, 1, 1, 32, 4096)
 
             ttnn.deallocate(attn_output_B1QD)
 
@@ -410,7 +410,7 @@ class TtMistralAttention(nn.Module):
                 memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
                 core_grid=self.grid_size,
-            )  
+            )
 
             ttnn.deallocate(attn_output_11BH)
             dense_outputs.append(dense_out)

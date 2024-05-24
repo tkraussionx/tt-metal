@@ -291,8 +291,8 @@ class TtMistralAttention(nn.Module):
             # Reshape and rotary embeddings
             ###
             (
-                q_heads_pre_rot,  # [seqlen, n_heads, bsz, head_dim]
-                k_heads_pre_rot,  # [seqlen, n_kv_heads, bsz, head_dim]
+                q_heads,  # [seqlen, n_heads, bsz, head_dim]
+                k_heads,  # [seqlen, n_kv_heads, bsz, head_dim]
                 v_heads,  # [seqlen, n_kv_heads, bsz, head_dim]
             ) = ttnn.experimental.tensor.nlp_create_qkv_heads(
                 xqkv_fused,
@@ -305,28 +305,28 @@ class TtMistralAttention(nn.Module):
             ttnn.deallocate(xqkv_fused)
 
             # Update rotary matrix on device
-            rotary_mat = self.rot_mat[current_pos]
+            # rotary_mat = self.rot_mat[current_pos]
 
-            q_heads = ttnn.linear(
-                q_heads_pre_rot,
-                rotary_mat,
-                program_config=self.q_heads_program_config,
-                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
-                compute_kernel_config=self.compute_kernel_config,
-                dtype=self.dtype,
-            )
+            # q_heads = ttnn.linear(
+            #     q_heads_pre_rot,
+            #     rotary_mat,
+            #     program_config=self.q_heads_program_config,
+            #     memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            #     compute_kernel_config=self.compute_kernel_config,
+            #     dtype=self.dtype,
+            # )
 
-            k_heads = ttnn.linear(
-                k_heads_pre_rot,
-                rotary_mat,
-                program_config=self.k_heads_program_config,
-                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
-                compute_kernel_config=self.compute_kernel_config,
-                dtype=self.dtype,
-            )
+            # k_heads = ttnn.linear(
+            #     k_heads_pre_rot,
+            #     rotary_mat,
+            #     program_config=self.k_heads_program_config,
+            #     memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+            #     compute_kernel_config=self.compute_kernel_config,
+            #     dtype=self.dtype,
+            # )
 
-            ttnn.deallocate(q_heads_pre_rot)
-            ttnn.deallocate(k_heads_pre_rot)
+            # ttnn.deallocate(q_heads_pre_rot)
+            # ttnn.deallocate(k_heads_pre_rot)
 
             ###
             # KV update
@@ -336,9 +336,10 @@ class TtMistralAttention(nn.Module):
 
             # k_heads, [seqlen, n_kv_heads, bsz, head_dim]
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
+            print(keys.shape, k_heads.shape)
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
-            ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
-            ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
+            # ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
+            # ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
             self.layer_past_list[i] = [keys, values]
 
             ttnn.deallocate(k_heads)

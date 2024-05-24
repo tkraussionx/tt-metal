@@ -50,14 +50,14 @@ def run_nlp_create_qkv_heads_mistral_test(
     logger.debug(f"v: {v.memory_config().buffer_type} and {v.get_dtype()}")
 
     assert list(q.get_legacy_shape()) == [batch, seq_len, num_q_heads, head_dim]
-    assert list(k.get_legacy_shape()) == [batch, seq_len, 32, head_dim * num_kv_heads]
-    assert list(v.get_legacy_shape()) == [batch, seq_len, 32, head_dim * num_kv_heads]
+    assert list(k.get_legacy_shape()) == [1, seq_len, 32, head_dim * num_kv_heads]
+    assert list(v.get_legacy_shape()) == [1, seq_len, 32, head_dim * num_kv_heads]
 
     pyt_got_back_rm_q = tt2torch_tensor(q).transpose(0, 2)
-    pyt_got_back_rm_k = tt2torch_tensor(k)#[:, :, :1, :]
+    pyt_got_back_rm_k = tt2torch_tensor(k)  # [:, :, :1, :]
     print("K torch", pyt_got_back_rm_k)
-    pyt_got_back_rm_k = pyt_got_back_rm_k.transpose(0, 2)[:, :, :1, :]
-    pyt_got_back_rm_v = tt2torch_tensor(v).transpose(0, 2)[:, :, :1, :]
+    pyt_got_back_rm_k = pyt_got_back_rm_k.transpose(0, 2)
+    pyt_got_back_rm_v = tt2torch_tensor(v).transpose(0, 2)
 
     (ref_q, ref_k, ref_v) = torch.split(
         A, [num_q_heads * head_dim, num_kv_heads * head_dim, num_kv_heads * head_dim], dim=-1
@@ -94,16 +94,12 @@ def run_nlp_create_qkv_heads_mistral_test(
 
 @pytest.mark.parametrize(
     "out_mem_config",
-    (
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
-    ),
+    (ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),),
     ids=["out_L1"],
 )
 @pytest.mark.parametrize(
     "in_mem_config",
-    (
-        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
-    ),
+    (ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),),
     ids=["in_L1"],
 )
 @pytest.mark.parametrize(

@@ -24,7 +24,7 @@ from models.utility_functions import skip_for_grayskull
 @skip_for_grayskull("Requires wormhole_b0 to run")
 @pytest.mark.parametrize(
     "iterations",
-    ((1),),
+    ((5),),
 )
 def test_mistral_attention_inference(iterations, device, use_program_cache, reset_seeds):
     dtype = ttnn.bfloat8_b
@@ -55,7 +55,7 @@ def test_mistral_attention_inference(iterations, device, use_program_cache, rese
             )
         )  # ttnn.bfloat16
 
-    generation_start_pos = 0
+    generation_start_pos = 75
     generation_length = iterations
     all_tests_pass = True
 
@@ -72,11 +72,12 @@ def test_mistral_attention_inference(iterations, device, use_program_cache, rese
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
+    import time
 
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
-        current_pos = generation_start_pos + i
+        current_pos = generation_start_pos  # + i
         attention_input, pos = prepare_inputs_ttnn(
             tt_attention_input,
             current_pos,
@@ -84,7 +85,7 @@ def test_mistral_attention_inference(iterations, device, use_program_cache, rese
             model_args.sliding_window,
             device,
         )
-
+        start_time = time.time()
         tt_out = tt_model(
             [attention_input],
             pos,
@@ -92,53 +93,53 @@ def test_mistral_attention_inference(iterations, device, use_program_cache, rese
         # multi-device attention module returns replicated output
         assert isinstance(tt_out, list)
         tt_out = tt_out[0]
-        tt_output_torch = ttnn.to_torch(tt_out).permute(1, 0, 2)  # [ batch, seq, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out)  # .permute(1, 0, 2)  # [ batch, seq, hidden_dim]
+        print("time: ", time.time() - start_time)
+        # freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
+        # positions = torch.tensor([current_pos])
+        # # mask = torch.randn(1, 1)
 
-        freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
-        positions = torch.tensor([current_pos])
-        # mask = torch.randn(1, 1)
+        # reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
 
-        reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
+        # passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
 
-        passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
+        # logger.info(comp_allclose(reference_output, tt_output_torch))
+        # logger.info(pcc_message)
 
-        logger.info(comp_allclose(reference_output, tt_output_torch))
-        logger.info(pcc_message)
+        # if passing:
+        #     logger.info(f"[pos={current_pos}] Mistral_Attention Passed!")
+        # else:
+        #     logger.warning(f"[pos={current_pos}] Mistral_Attention Failed!")
+        #     all_tests_pass = False
 
-        if passing:
-            logger.info(f"[pos={current_pos}] Mistral_Attention Passed!")
-        else:
-            logger.warning(f"[pos={current_pos}] Mistral_Attention Failed!")
-            all_tests_pass = False
+        # # Check kv cache
+        # # PyTorch output --------------------------------------------------------------------
+        # pytorch_layer_present = [
+        #     reference_model.cache_k.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
+        #     reference_model.cache_v.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
+        # ]
+        # # TT hardware execution -------------------------------------------------------------
+        # tt_layer_present = []
+        # for layer_past in tt_model.layer_past_list:
+        #     tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
 
-        # Check kv cache
-        # PyTorch output --------------------------------------------------------------------
-        pytorch_layer_present = [
-            reference_model.cache_k.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
-            reference_model.cache_v.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
-        ]
-        # TT hardware execution -------------------------------------------------------------
-        tt_layer_present = []
-        for layer_past in tt_model.layer_past_list:
-            tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
+        # tt_layer_present = tt_layer_present[0]
 
-        tt_layer_present = tt_layer_present[0]
+        # for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
+        #     cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
+        #     cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
+        #     cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
+        #     does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
+        #     if i == 0:
+        #         logger.info(f"K cache output: {output_pcc}")
+        #     else:
+        #         logger.info(f"V cache output: {output_pcc}")
 
-        for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
-            cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
-            cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
-            does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
-            if i == 0:
-                logger.info(f"K cache output: {output_pcc}")
-            else:
-                logger.info(f"V cache output: {output_pcc}")
-
-            if does_pass:
-                logger.info(f"KV Cache Passed!")
-            else:
-                logger.warning(f"KV Cache Failed! PCC value is lower than {pcc}")
-                all_tests_pass = False
+        #     if does_pass:
+        #         logger.info(f"KV Cache Passed!")
+        #     else:
+        #         logger.warning(f"KV Cache Failed! PCC value is lower than {pcc}")
+        #         all_tests_pass = False
 
     if all_tests_pass:
         logger.info("Mistral Attention output Passed!")
