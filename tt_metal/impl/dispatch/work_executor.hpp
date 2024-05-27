@@ -61,22 +61,31 @@ class WorkExecutor {
     public:
     LockFreeQueue<std::function<void()>> worker_queue;
 
-    WorkExecutor(int device_id) : managed_device_id(device_id) {
-        set_process_priority(0);
-        if (this->worker_queue_mode == WorkExecutorMode::ASYNCHRONOUS) {
-            this->start_worker();
-        }
-    }
+    WorkExecutor(int device_id) : managed_device_id(device_id) { initialize(); }
 
     WorkExecutor(WorkExecutor &&other) {
         worker_state = other.worker_state;
         managed_device_id = other.managed_device_id;
     }
 
-    ~WorkExecutor() {
+    ~WorkExecutor() { reset(); }
+
+    inline void initialize() {
+        this->worker_state = WorkerState::IDLE;
+        this->worker_queue_mode = default_worker_queue_mode();
+        this->worker_queue.parent_thread_id = 0;
+        this->worker_queue.worker_thread_id = 0;
+        set_process_priority(0);
+        if (this->worker_queue_mode == WorkExecutorMode::ASYNCHRONOUS) {
+            this->start_worker();
+        }
+    }
+
+    inline void reset() {
         if (this->worker_queue_mode == WorkExecutorMode::ASYNCHRONOUS) {
             stop_worker();
         }
+        this->worker_queue.clear();
     }
 
     inline void run_worker() {
@@ -169,7 +178,7 @@ class WorkExecutor {
     inline std::size_t get_parent_thread_id() { return this->worker_queue.parent_thread_id; }
     private:
     std::thread worker_thread;
-    WorkerState worker_state = WorkerState::IDLE;
+    WorkerState worker_state;
     int managed_device_id = 0;
     std::condition_variable cv;
     std::mutex cv_mutex;
@@ -201,7 +210,7 @@ class WorkExecutor {
         return static_cast<WorkExecutorMode>(value);
     }
 
-    WorkExecutorMode worker_queue_mode = default_worker_queue_mode();
+    WorkExecutorMode worker_queue_mode;
 };
 
 } // namespace tt

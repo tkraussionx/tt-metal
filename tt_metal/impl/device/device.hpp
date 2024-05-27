@@ -47,12 +47,6 @@ using on_close_device_callback = std::function<void ()>;
 static constexpr float  EPS_GS = 0.001953125f;
 static constexpr float  EPS_WHB0 = 1.19209e-7f;
 
-enum class ActiveState {
-    UNINITIALIZED = 0,
-    INACTIVE = 1,
-    ACTIVE = 2,
-};
-
 // A physical PCIexpress Tenstorrent device
 class Device {
    public:
@@ -75,8 +69,6 @@ class Device {
     Device& operator=(Device &&other) = default;
 
     tt::ARCH arch() const;
-
-    ActiveState state() const { return state_; }
 
     chip_id_t id() const { return id_; }
 
@@ -231,7 +223,6 @@ class Device {
     friend class SystemMemoryManager;
 
     static constexpr MemoryAllocator allocator_scheme_ = MemoryAllocator::L1_BANKING;
-    ActiveState state_;
     chip_id_t id_;
     uint32_t build_key_;
     std::unique_ptr<Allocator> allocator_ = nullptr;

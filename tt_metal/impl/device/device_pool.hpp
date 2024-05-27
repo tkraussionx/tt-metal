@@ -10,7 +10,6 @@
 #include "tt_metal/third_party/umd/device/tt_cluster_descriptor.h"
 namespace tt {
 
-
 using Device = tt_metal::Device;
 class DevicePool {
    public:

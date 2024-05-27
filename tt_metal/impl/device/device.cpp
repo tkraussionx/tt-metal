@@ -1397,10 +1397,8 @@ bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, const st
     if (minimal)
         return true;
 
-   // bool already_initialized = this->active_devices_.activate_device(this->id_);
-    this->state_ = ActiveState::ACTIVE;
-
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
+    this->work_executor.initialize();
     this->initialized_ = true;
 
     return true;
@@ -1572,7 +1570,6 @@ bool Device::close() {
 
     this->release_last_trace();
     this->trace_contexts_.clear();
-    this->state_ = ActiveState::INACTIVE;
     this->compute_cores_.clear();
     this->storage_only_cores_.clear();
     this->ethernet_cores_.clear();
@@ -1581,6 +1578,7 @@ bool Device::close() {
     this->sw_command_queues_.clear();
     this->hw_command_queues_.clear();
     this->sysmem_manager_.reset();
+    this->work_executor.reset();
 
     this->initialized_ = false;
     std::cout << " device close " << std::endl;

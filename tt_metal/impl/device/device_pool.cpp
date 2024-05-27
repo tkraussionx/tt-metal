@@ -56,7 +56,7 @@ bool DevicePool::is_device_active(chip_id_t id) const {
     if (this->devices.size() < id + 1 || this->devices[id] == nullptr) {
         return false;
     } else {
-        return this->devices[id]->state() == ActiveState::ACTIVE;
+        return this->devices[id]->is_initialized();
     }
 }
 
