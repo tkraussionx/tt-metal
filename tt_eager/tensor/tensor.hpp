@@ -288,13 +288,23 @@ struct Tensor {
     const ttnn::Shape &get_shape() const;
     const DataType &get_dtype() const;
     const Layout &get_layout() const;
+
+    // ======================================================================================
+    // Non-Blocking Getters. Query attributes directly, without waiting for worker completion
+    // ======================================================================================
+    inline const Storage &storage() const { return this->tensor_attributes->storage; };
+    inline const Shape &legacy_shape() const { return this->tensor_attributes->shape.value(); };
+    inline const ttnn::Shape &shape() const { return this->tensor_attributes->shape; };
+    inline const DataType &dtype() const { return this->tensor_attributes->dtype; };
+    inline const Layout &layout() const { return this->tensor_attributes->layout; };
+
     // ======================================================================================
     //                                      Setters
     // ======================================================================================
-    void set_storage(const Storage &storage) { this->tensor_attributes->storage = storage; }
-    void set_shape(const ttnn::Shape &shape) { this->tensor_attributes->shape = shape; }
-    void set_dtype(const DataType &dtype) { this->tensor_attributes->dtype = dtype; }
-    void set_layout(const Layout &layout) { this->tensor_attributes->layout = layout; }
+    inline void set_storage(const Storage &storage) { this->tensor_attributes->storage = storage; }
+    inline void set_shape(const ttnn::Shape &shape) { this->tensor_attributes->shape = shape; }
+    inline void set_dtype(const DataType &dtype) { this->tensor_attributes->dtype = dtype; }
+    inline void set_layout(const Layout &layout) { this->tensor_attributes->layout = layout; }
     // ======================================================================================
     //                                      Extra Helper Functions
     // ======================================================================================

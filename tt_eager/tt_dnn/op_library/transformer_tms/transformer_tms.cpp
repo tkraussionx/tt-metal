@@ -292,10 +292,10 @@ const operation::Hash AttnMatmul::compute_program_hash(const std::vector<Tensor>
         this->transpose_hw,
         this->output_mem_config,
         this->output_dtype,
-        std::get<DeviceStorage>(input_tensors.at(0).tensor_attributes->storage).memory_config(),
-        input_tensors.at(0).tensor_attributes->dtype,
-        std::get<DeviceStorage>(input_tensors.at(1).tensor_attributes->storage).memory_config(),
-        input_tensors.at(1).tensor_attributes->dtype);
+        std::get<DeviceStorage>(input_tensors.at(0).storage()).memory_config(),
+        input_tensors.at(0).dtype(),
+        std::get<DeviceStorage>(input_tensors.at(1).storage()).memory_config(),
+        input_tensors.at(1).dtype());
 }
 
 void GroupAttnMatmul::validate(const std::vector<Tensor>& input_tensors) const {
@@ -502,14 +502,14 @@ const operation::Hash GroupAttnMatmul::compute_program_hash(const std::vector<Te
         this->output_mem_config.buffer_type,
         this->output_dtype,
         this->row_major,
-        std::get<DeviceStorage>(input_tensor_a.tensor_attributes->storage).memory_config().memory_layout,
-        std::get<DeviceStorage>(input_tensor_a.tensor_attributes->storage).memory_config().buffer_type,
-        input_tensor_a.tensor_attributes->dtype,
-        std::get<DeviceStorage>(input_tensor_b.tensor_attributes->storage).buffer->device()->id(),
-        std::get<DeviceStorage>(input_tensor_b.tensor_attributes->storage).memory_config().memory_layout,
-        std::get<DeviceStorage>(input_tensor_b.tensor_attributes->storage).memory_config().buffer_type,
-        input_tensor_b.tensor_attributes->dtype,
-        std::get<DeviceStorage>(input_tensor_b.tensor_attributes->storage).buffer->device()->id());
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().buffer_type,
+        input_tensor_a.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().buffer_type,
+        input_tensor_b.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id());
 }
 
 // SSM eltwise mul
