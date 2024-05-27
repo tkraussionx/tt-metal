@@ -85,6 +85,8 @@ class WorkExecutor {
         if (this->worker_queue_mode == WorkExecutorMode::ASYNCHRONOUS) {
             stop_worker();
         }
+        // TODO: investigate enabling this
+        //this->worker_queue.clear();
     }
 
     inline void run_worker() {
