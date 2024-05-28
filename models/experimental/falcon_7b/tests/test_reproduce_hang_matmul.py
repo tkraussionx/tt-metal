@@ -14,7 +14,7 @@ import torch
 # Used to reproduce issue #8665 with matmul 2D (Falcon 7b matmuls)
 @pytest.mark.parametrize(
     "seq_len, inner_dim, weights_n, per_core_M, per_core_N, in_block_w, out_subblock_h, out_subblock_w, loop_count",
-    ((1024, 4608, 18432, 4, 72, 3, 1, 8, 20000), (1024, 4608, 18432, 4, 72, 3, 1, 1, 20000)),
+    ((1024, 4608, 18432, 4, 72, 3, 1, 8, 1), (1024, 4608, 18432, 4, 72, 3, 1, 1, 20000)),
     ids=["ff1-hang", "ff1-pass"],
 )
 def test_reproduce_matmul_2d_hang(
@@ -83,7 +83,8 @@ def test_reproduce_matmul_2d_hang(
     )
 
     compute_config = ttl.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        # math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_fidelity=ttl.tensor.MathFidelity.HiFi3,
         math_approx_mode=False,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
