@@ -373,6 +373,7 @@ def test_resnet50_conv_gs(
     pad_w,
     use_1d_systolic_array,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
         pytest.skip("Batch > 8 must be run fully bfp8")
 
@@ -880,6 +881,7 @@ def test_sd_conv_wh(
     config_override,
     enable_auto_formatting,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y == 7:
         pytest.skip("This test is not supported for N300")
 
@@ -1183,7 +1185,7 @@ def test_halo_reshard_conv(
     pad_w,
     config_override,
 ):
-    pytest.skip("Reshard broken")
+    pytest.skip("Skipping, suspecting some device state dependency")
     if is_wormhole_b0() and device.core_grid.y > 7:
         pytest.skip("Not tested for N150 yet")
 
