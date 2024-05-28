@@ -1621,6 +1621,7 @@ CoreCoord Device::logical_grid_size() const {
 }
 
 CoreCoord Device::compute_with_storage_grid_size() const {
+  std::cout << " Calling compute with storage grid " << std::endl;
     return tt::get_compute_grid_size(id_, num_hw_cqs_);
 }
 

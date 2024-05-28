@@ -652,6 +652,7 @@ void launch_op(
 ) {
     // Send host side op compile and run to the worker queue
     // Assert to ensure that worker threads are specified.
+  std::cout << "CPP launch op " << std::endl;
     ZoneScopedN("LaunchOp");
     auto& workers = output_tensors.at(0).workers;
     std::size_t workers_size = workers.size();
