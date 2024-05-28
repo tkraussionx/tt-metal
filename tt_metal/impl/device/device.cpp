@@ -1388,17 +1388,24 @@ bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, const st
     ZoneScoped;
     log_info(tt::LogMetal, "Initializing device {}. Program cache is {}enabled", this->id_, this->program_cache.is_enabled() ? "": "NOT ");
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
+    std::cout << " here 1" << std::endl;
     this->build_key_ = tt::Cluster::instance().get_harvesting_mask(this->id());
+    std::cout << " here 2" << std::endl;
     this->num_hw_cqs_ = num_hw_cqs;
+    std::cout << " here 3" << std::endl;
     this->initialize_cluster();
+    std::cout << " here 4" << std::endl;
     this->initialize_allocator(l1_small_size, l1_bank_remap);
+    std::cout << " here 5" << std::endl;
     this->initialize_build();
+    std::cout << " here 6" << std::endl;
     // For minimal setup, don't initialize FW, watcher, dprint. They won't work if we're attaching to a hung chip.
     if (minimal)
         return true;
 
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
     this->work_executor.initialize();
+    std::cout << " here 7" << std::endl;
     this->initialized_ = true;
 
     return true;
