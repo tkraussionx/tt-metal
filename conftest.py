@@ -261,7 +261,9 @@ def device_l1_small_size(request):
 
     device_id = request.config.getoption("device_id")
 
+    print("DEVICE L1 device fixture 0")
     num_devices = ttl.device.GetNumPCIeDevices()
+    print("DEVICE L1 device fixture 1")
     assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
 
     if hasattr(request, "param"):
@@ -269,7 +271,9 @@ def device_l1_small_size(request):
         device = ttl.device.CreateDevice(device_id, l1_small_size)
     else:
         device = ttl.device.CreateDevice(device_id)
+    print("DEVICE L1 device fixture 2")
     ttl.device.SetDefaultDevice(device)
+    print("DEVICE L1 device fixture 3")
 
     yield device
 
