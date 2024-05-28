@@ -361,13 +361,9 @@ struct Tensor {
     // Size in bytes of a single element held in tensor
     uint32_t element_size() const;
 
-    static constexpr auto attribute_names = std::make_tuple("storage", "shape", "dtype", "layout");
+    static constexpr auto attribute_names = std::forward_as_tuple("storage", "shape", "dtype", "layout");
     const auto attribute_values() const {
-        return std::make_tuple(
-            std::cref(this->tensor_attributes->storage),
-            std::cref(this->tensor_attributes->shape),
-            std::cref(this->tensor_attributes->dtype),
-            std::cref(this->tensor_attributes->layout));
+        return std::forward_as_tuple(this->tensor_attributes->storage, this->tensor_attributes->shape, this->tensor_attributes->dtype, this->tensor_attributes->layout);
     }
 
     std::vector<uint32_t> host_page_ordering();
