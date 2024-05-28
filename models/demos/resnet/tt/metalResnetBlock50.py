@@ -2154,7 +2154,7 @@ class ResNet(nn.Module):
 
         if not self.sharded:
             x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
-            x = x.reshape(
+            x.reshape(
                 self.conv1_output_shape[0],
                 self.conv1_output_shape[1],
                 self.conv1_output_shape[2],
@@ -2162,7 +2162,7 @@ class ResNet(nn.Module):
             )
         x = self.maxpool(x)
 
-        x = x.reshape(
+        x.reshape(
             1,
             1,
             self.maxpool_output_shape[0] * self.maxpool_output_shape[1] * self.maxpool_output_shape[2],
