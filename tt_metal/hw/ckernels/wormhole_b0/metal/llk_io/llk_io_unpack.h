@@ -17,6 +17,11 @@ using namespace ckernel;
 
 // "llk_setup_operands" is the old function name that HLKC emits
 inline void llk_setup_operands() {
+
+    // Programable delay to stagger next MM op
+    constexpr uint32_t DELAY_MATMUL_START_CYCLES = 10000;
+    wait(DELAY_MATMUL_START_CYCLES);
+
     volatile tt_l1_ptr std::uint32_t* circular_buffer_config_addr = (volatile uint32_t*)(CIRCULAR_BUFFER_CONFIG_BASE);
 
     for (uint32_t cb_id = 0; cb_id < NUM_CIRCULAR_BUFFERS; cb_id++) {
