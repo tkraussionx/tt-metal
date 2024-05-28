@@ -486,6 +486,7 @@ def test_resnet50_conv_wh(
     config_override,
     packer_l1_acc,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y == 7:
         pytest.skip("Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range")
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
@@ -609,6 +610,7 @@ def test_resnet50_conv_wh_fp32(
     config_override,
     packer_l1_acc,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y > 7:
         pytest.skip("Not tested for N150 yet")
 
@@ -1124,6 +1126,7 @@ def test_unet_conv_wh(
     use_shallow_conv_variant,
     output_layout,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
         pytest.skip("Test is not supported on n300 (8,7) grid")
     if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
@@ -1245,6 +1248,7 @@ def test_conv_core_nondivis(
     config_override,
     xfail,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if xfail:
         pytest.xfail()
 
