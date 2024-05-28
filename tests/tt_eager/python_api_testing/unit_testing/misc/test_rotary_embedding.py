@@ -89,11 +89,11 @@ def test_rotary_embedding_prefill(W, Z, Y, X, cache_size, in_sharded, out_sharde
     else:
         xt = xt.to(device)
 
-    """
     print("pushing tensor")
     cost = ttl.tensor.Tensor(cos_cached, sincos_dtype).to(ttl.tensor.Layout.TILE).to(device)
     sint = ttl.tensor.Tensor(sin_cached, sincos_dtype).to(ttl.tensor.Layout.TILE).to(device)
     print("op")
+    """
     xtt = ttl.tensor.rotary_embedding(xt, cost, sint, output_mem_config=out_mem_config)
 
     print("done op")
