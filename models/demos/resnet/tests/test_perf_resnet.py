@@ -18,7 +18,7 @@ from loguru import logger
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck
 
 model_config = {
-    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.HiFi2,
+    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.LoFi,
     "WEIGHTS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
     "ACTIVATIONS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
 }
