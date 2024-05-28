@@ -52,7 +52,6 @@ def test_rotary_embedding_prefill(W, Z, Y, X, cache_size, in_sharded, out_sharde
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1)
     else:
         out_mem_config = ttl.tensor.MemoryConfig()
-    """
     xt = ttl.tensor.Tensor(x, input_dtype)
     if xt.get_legacy_shape()[-2] % 32 == 0 and xt.get_legacy_shape()[-1] % 32 == 0:
         xt = xt.to(ttl.tensor.Layout.TILE)
@@ -90,6 +89,7 @@ def test_rotary_embedding_prefill(W, Z, Y, X, cache_size, in_sharded, out_sharde
     else:
         xt = xt.to(device)
 
+    """
     print("pushing tensor")
     cost = ttl.tensor.Tensor(cos_cached, sincos_dtype).to(ttl.tensor.Layout.TILE).to(device)
     sint = ttl.tensor.Tensor(sin_cached, sincos_dtype).to(ttl.tensor.Layout.TILE).to(device)
