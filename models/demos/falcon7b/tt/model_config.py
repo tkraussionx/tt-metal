@@ -315,7 +315,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     for seq_len in [1024, 2048]:
         grid = (8, 8)
         activations_m_in_tiles = seq_len // 32
-        weights_n_in_tiles = 65024 // 32
+        weights_n_in_tiles = 65024 // model_config["LM_HEAD_NUM_SLICES"][seq_len] // 32
 
         # calculate parameters for the given sequence length
         out_subblock_h = 2

@@ -119,14 +119,13 @@ class TtFalconCausalLM(TtFalconModelShared):
 
                     out_slices = []
                     for slice_id in range(self.model_config["LM_HEAD_NUM_SLICES"][seq_len]):
-                        breakpoint()
                         out_slices.append(
                             tt_lib.operations.primary.matmul(
                                 hidden_states[device_id],
                                 self.lm_head_sliced_weights[slice_id][device_id],
                                 program_config=self.model_config["LM_HEAD_PROGCFG"][seq_len],
                                 output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-                                dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                                output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                                 compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
                             )
                         )
