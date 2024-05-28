@@ -139,14 +139,14 @@ inline Tensor move_sharded(const Tensor &input_tensor, const std::optional<Memor
             auto input_address = input_tensor.buffer()->address();
             auto output_mem_config = mem_config.value_or(input_mem_config);
             TT_FATAL(output_mem_config.is_sharded(), "Expected output tensor memory config to be sharded");
-            if (not move_op_utils::can_deallocate(input_tensor)) {
-                TT_FATAL(
-                    false,
-                    "Expect input tensor to be deallocated after move op. Cannot deallocate before there is probably "
-                    "another consumer.");
-                // TODO: Should this throw error?
-                return {input_tensor};
-            }
+            // if (not move_op_utils::can_deallocate(input_tensor)) {
+            //     TT_FATAL(
+            //         false,
+            //         "Expect input tensor to be deallocated after move op. Cannot deallocate before there is probably "
+            //         "another consumer.");
+            //     // TODO: Should this throw error?
+            //     return {input_tensor};
+            // }
             auto shard_spec = input_tensor.shard_spec().value();
             auto shard_shape = shard_spec.shape;
             auto shard_grid = shard_spec.grid;

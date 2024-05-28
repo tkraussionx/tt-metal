@@ -827,6 +827,7 @@ Device *CreateDevice(
     auto cpu_cores_per_numa_node = device_cpu_allocator::get_cpu_cores_per_numa_node(free_cores);
     int core_assigned_to_device =
         device_cpu_allocator::get_cpu_core_for_device_worker_thread(device_id, cpu_cores_per_numa_node, free_cores);
+    free_cores.erase(71);
     Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, core_assigned_to_device);
     // Bind main thread to cores not being used by workers.
     device_cpu_allocator::bind_current_thread_to_free_cores(free_cores);

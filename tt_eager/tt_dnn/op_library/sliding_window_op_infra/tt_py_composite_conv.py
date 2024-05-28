@@ -880,12 +880,15 @@ class TTPyCompositeConv(TTPyOp):
     def __call__(self, activation):
         # print("Going to run conv with input shape-", self.input_tensor_shape)
         # print("with output shape = ", self.conv_output_shape)
-        if self.enable_auto_formatting and not activation.is_sharded():
-            activation = self.conv_input_interleaved_to_sharded(activation)
-        activation = self.conv(activation)
-        if self.enable_auto_formatting and activation.is_sharded():
-            activation = self.conv_output_sharded_to_interleaved(activation)
-        return activation
+        # print("enable autoformatting: " + str(self.enable_auto_formatting))
+        # if self.enable_auto_formatting and not activation.is_sharded():
+        #     print("activation is not sharded")
+        #     activation = self.conv_input_interleaved_to_sharded(activation)
+        # activation = self.conv(activation)
+        # if self.enable_auto_formatting and activation.is_sharded():
+        #     print("activation is sharded")
+        #     activation = self.conv_output_sharded_to_interleaved(activation)
+        return self.conv(activation)
 
     def get_parallelization_config(self):
         return self.opt_conv_parall_conf_auto

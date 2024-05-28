@@ -215,7 +215,6 @@ class TTPyMaxPool(TTPyOp):
         in_w = op_params.input_w
 
         def max_pool_(activation):
-            act_mem_config = activation.memory_config()
             haloed_act = self.untilize_with_halo(activation)
 
             if self.deallocate_activation:

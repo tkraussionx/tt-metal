@@ -676,12 +676,41 @@ uint32_t Tensor::element_size() const { return tensor_impl::element_size_bytes(t
 
 Tensor Tensor::reshape(int N, int C, int H, int W) const {
     ZoneScoped;
+    auto workers = this->get_workers();
+    if (workers.size()) {
+        Tensor reshaped_tensor = Tensor(workers);
+        workers.at(0)->push_work([N, C, H, W, *this, reshaped_tensor] () mutable {
+            auto new_shape = infer_dims_for_reshape(N, C, H, W, this->volume());;
+            auto local_tensor = this->reshape(new_shape);
+            reshaped_tensor.populate_buffers_and_metadata(local_tensor);
+        });
+        return reshaped_tensor;
+    }
     auto new_shape = infer_dims_for_reshape(N, C, H, W, this->volume());
     return this->reshape(new_shape);
 }
 
 Tensor Tensor::reshape(const Shape& new_shape) const {
     ZoneScoped;
+    auto workers = this->get_workers();
+    if (workers.size() and workers.at(0)->in_main_thread()) {
+        Tensor reshaped_tensor = Tensor(workers);
+        workers.at(0)->push_work([*this, reshaped_tensor, new_shape] () mutable {
+            TT_ASSERT(
+                this->volume() == tt::tt_metal::compute_volume(new_shape),
+                "{} != {}",
+                this->volume(),
+                tt::tt_metal::compute_volume(new_shape));
+            if (this->get_layout() == Layout::TILE) {
+                TT_ASSERT(
+                    new_shape[-2] % TILE_HEIGHT == 0 && new_shape[-1] % TILE_WIDTH == 0 &&
+                    "Expected a multiple of 32 for H, W (or -1 evaluating to such) in Tensor::reshape()!");
+            }
+            auto local_tensor = Tensor(this->get_storage(), new_shape, this->get_dtype(), this->get_layout());
+            reshaped_tensor.populate_buffers_and_metadata(local_tensor);
+        });
+        return reshaped_tensor;
+    }
     TT_ASSERT(
         this->volume() == tt::tt_metal::compute_volume(new_shape),
         "{} != {}",
