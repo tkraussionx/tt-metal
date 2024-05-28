@@ -745,8 +745,11 @@ Device *CreateDevice(
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
     tt::DevicePool::initialize({device_id}, num_hw_cqs, l1_small_size, l1_bank_remap);
+    std::cout << " done init" << std::endl;
     auto dev = tt::DevicePool::instance().get_active_device(device_id);
+    std::cout << " got active devicie " << std::endl;
     detail::InitDeviceProfiler(dev);
+    std::cout << " init device profiler" << std::endl;
     return dev;
 }
 

@@ -29,7 +29,9 @@ class AutoFormat {
 
         AutoFormat() {}
     public:
-        static void SetDefaultDevice(Device * dev) { device = dev; }
+        static void SetDefaultDevice(Device * dev) {
+          std::cout << " set default device " << std::endl;
+          device = dev; }
         static Device * GetDefaultDevice() { return device; }
 
 
