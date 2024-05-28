@@ -787,6 +787,15 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
 
 uint32_t Cluster::get_tensix_soft_reset_addr() const { return DEVICE_DATA.TENSIX_SOFT_RESET_ADDR; }
 
+void Cluster::write32(tt_cxy_pair target, uint64_t addr, uint32_t val) const {
+    auto &soc_desc = this->get_soc_desc(target.chip);
+    auto &driver = this->get_driver(target.chip);
+    auto &tt_sil_dev = dynamic_cast<tt_SiliconDevice &>(driver); // Gross.
+    auto fixed_up_target = soc_desc.convert_to_umd_coordinates(target);
+    auto callable = tt_sil_dev.get_static_tlb_write32_callable(fixed_up_target);
+    callable(addr, val);
+}
+
 }  // namespace tt
 
 std::ostream &operator<<(std::ostream &os, tt_target_dram const &dram) {

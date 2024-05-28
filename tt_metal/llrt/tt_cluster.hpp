@@ -176,6 +176,8 @@ class Cluster {
         return this->devices_grouped_by_assoc_mmio_device_.at(mmio_device_id);
     }
 
+    void write32(tt_cxy_pair target, uint64_t addr, uint32_t val) const;
+
    private:
     Cluster();
     ~Cluster();
