@@ -1587,7 +1587,6 @@ bool Device::close() {
     this->sysmem_manager_.reset();
     this->work_executor.reset();
     this->allocator_.reset();
-    this->disable_and_clear_program_cache();
 
     this->initialized_ = false;
     std::cout << " device close " << std::endl;

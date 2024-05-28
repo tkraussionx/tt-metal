@@ -40,7 +40,6 @@ def apply_rotary_pos_emb(x, cos_cached, sin_cached, token_idx=None):
 @pytest.mark.parametrize("sincos_dtype", [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B])
 def test_rotary_embedding_prefill(W, Z, Y, X, cache_size, in_sharded, out_sharded, input_dtype, sincos_dtype, device):
     print("got to test")
-    """
     torch.manual_seed(0)
 
     input_shape = [W, Z, Y, X]
@@ -53,7 +52,7 @@ def test_rotary_embedding_prefill(W, Z, Y, X, cache_size, in_sharded, out_sharde
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1)
     else:
         out_mem_config = ttl.tensor.MemoryConfig()
-
+    """
     xt = ttl.tensor.Tensor(x, input_dtype)
     if xt.get_legacy_shape()[-2] % 32 == 0 and xt.get_legacy_shape()[-1] % 32 == 0:
         xt = xt.to(ttl.tensor.Layout.TILE)
