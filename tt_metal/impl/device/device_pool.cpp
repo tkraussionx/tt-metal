@@ -10,17 +10,24 @@ namespace tt {
 DevicePool* DevicePool::_inst = nullptr;
 
 void DevicePool::initialize_device(Device *dev) const {
+    std::cout << " here 8 " << std::endl;
     DprintServerAttach(dev);
+    std::cout << " here 9 " << std::endl;
     watcher_init(dev);
+    std::cout << " here 10 " << std::endl;
 
     //TODO: temp, all these can be removed
     dev->initialize_and_launch_firmware();
+    std::cout << " here 11 " << std::endl;
 
     watcher_attach(dev);
+    std::cout << " here 12 " << std::endl;
     // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
         detail::DispatchStateCheck(true);
+        std::cout << " here 13 " << std::endl;
         dev->initialize_command_queue();
+        std::cout << " here 14 " << std::endl;
     } else {
         detail::DispatchStateCheck(false);
         dev->initialize_synchronous_sw_cmd_queue();
