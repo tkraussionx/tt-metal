@@ -211,6 +211,15 @@ void py_module(py::module& m_transformers) {
         py::arg("scale").noconvert(),
         py::arg("kv_cache_mem_config").noconvert(),
         "LLAMA attention MQA decode forward.");
+
+    m_transformers.def(
+        "llama_attn_selfout_decode_forward",
+        &llama_attn_selfout_decode_forward,
+        py::arg("input").noconvert(),
+        py::arg("wo").noconvert(),
+        py::arg("all_gather_memcfg").noconvert(),
+        py::arg("mm_inp_memcfg").noconvert(),
+        "LLAMA attention selfout decode forward.");
 }
 
 }  // namespace transformers

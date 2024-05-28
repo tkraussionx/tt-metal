@@ -413,6 +413,7 @@ class TtLlamaAttention_optimized:
         attn_output,
     ):
         # ATTENTION SELFOUT
+        """
 
         attn_output = tt_lib.tensor.nlp_concat_heads_decode(
             attn_output,
@@ -444,6 +445,15 @@ class TtLlamaAttention_optimized:
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )  # seqlen, 1, batch, hidden_size
 
+        return attn_output
+        """
+
+        attn_output = tt_lib.operations.primary.transformers.llama_attn_selfout_decode_forward(
+            attn_output,
+            self.wo,
+            self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"],
+            self.model_config["SELFOUT_MM_INPUT_MEMCFG"],
+        )
         return attn_output
 
     def prefill_forward(

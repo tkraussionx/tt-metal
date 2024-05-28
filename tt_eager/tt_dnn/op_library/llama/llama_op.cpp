@@ -291,6 +291,39 @@ Tensor llama_attn_mqa_decode_forward(
     return attn_output;
 }
 
+Tensor llama_attn_selfout_decode_forward(
+    const Tensor& input_tensor, const Tensor& wo, MemoryConfig all_gather_memcfg, MemoryConfig mm_inp_memcfg) {
+    auto attn_output = nlp_concat_heads_decode(input_tensor, 8);
+
+    auto attn_output_gathered = tt::operations::ccl::all_gather(
+        attn_output,
+        3,  // dim
+        1,  // num_links
+        all_gather_memcfg);
+
+    auto attn_output_reshard = reshard(attn_output_gathered, mm_inp_memcfg);
+
+    auto attn_mm_output = matmul_1d(
+        attn_output_reshard,
+        wo,
+        std::nullopt,  // bias
+        MatmulMultiCoreReuseMultiCast1DProgramConfig{
+            CoreCoord(8, 4),
+            8,
+            1,
+            1,
+            1,
+            1,
+            true,
+            std::nullopt,  // fused activation
+            true},
+        MemoryConfig{TensorMemoryLayout::WIDTH_SHARDED, BufferType::L1},
+        DataType::BFLOAT8_B,  // output_dtype
+        WormholeComputeKernelConfig{MathFidelity::HiFi2, true, true, true});
+
+    return attn_mm_output;
+}
+
 }  // namespace transformers
 }  // namespace primary
 }  // namespace operations

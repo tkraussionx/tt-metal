@@ -31,6 +31,9 @@ Tensor llama_attn_mqa_decode_forward(
     const float scale,
     MemoryConfig kv_cache_mem_config);
 
+Tensor llama_attn_selfout_decode_forward(
+    const Tensor& input_tensor, const Tensor& wo, MemoryConfig all_gather_memcfg, MemoryConfig mm_inp_memcfg);
+
 }  // namespace transformers
 }  // namespace primary
 }  // namespace operations
