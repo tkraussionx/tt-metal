@@ -49,7 +49,10 @@ void kernel_main() {
     constexpr uint32_t window_outer = get_compile_time_arg_val(6);
     constexpr uint32_t window_inner = get_compile_time_arg_val(7);
     constexpr uint32_t act_block_h_datums = get_compile_time_arg_val(8);
-
+    constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(9);
+    constexpr uint32_t weight_size_w = get_compile_time_arg_val(10);
+    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(12);
+    constexpr uint32_t weight_size_h = get_compile_time_arg_val(13);
     constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(14);
     constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(15);
     constexpr uint32_t act_w_num_outer = get_compile_time_arg_val(16);
@@ -114,9 +117,7 @@ void kernel_main() {
 
     // TODO: need to make the read coalescing optimization cleaner
     // currently works for the case of num_coalesced_reads == weight_size_w since these reads are contiguous on both src/dst side
-    constexpr uint32_t num_coalesced_reads = 3;
-    constexpr uint32_t coalesced_read_bytes = num_coalesced_reads * conv_act_c_read_bytes;
-
+    constexpr uint32_t coalesced_read_bytes = weight_size_w * conv_act_c_read_bytes;
 
     // Fully create act matrix and tilize it before mcast
     // set_state uses just x/y from the get_noc_addr, addr is ignored
