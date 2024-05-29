@@ -61,15 +61,20 @@ Tensor llama_mlp_decode_forward(Tensor& input_tensor, const Tensor& w1, const Te
     w1_out.deallocate(true);
     w3_out.deallocate(true);
 
+    auto all_gather_memcfg = MemoryConfig{
+        TensorMemoryLayout::WIDTH_SHARDED,
+        BufferType::L1,
+        ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}), // creates two ranges
+                  CoreRangeSet({CoreRange({0, 0}, {7, 3})}),  // works
+                  {32, 1024},
+                  ShardOrientation::ROW_MAJOR,
+                  false}};
+
     auto hidden_states_gathered = tt::operations::ccl::all_gather(
         hidden_states,
         3,  // dim
         1,  // num_links
-        MemoryConfig{
-            TensorMemoryLayout::WIDTH_SHARDED,
-            BufferType::L1,
-            ShardSpec{
-                CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}), {32, 1024}, ShardOrientation::ROW_MAJOR, false}});
+        all_gather_memcfg);
     hidden_states.deallocate(true);
 
     auto output = matmul_1d(
@@ -138,11 +143,11 @@ std::tuple<Tensor, Tensor, Tensor> llama_attn_qkv_decode_forward(
         MemoryConfig{
             TensorMemoryLayout::WIDTH_SHARDED,
             BufferType::L1,
-            ShardSpec{
-                CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 0}}),
-                {32, 160},
-                ShardOrientation::ROW_MAJOR,
-                false}},  // output_memconfig
+            ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 0}}),
+                      CoreRangeSet({CoreRange({0, 0}, {7, 0})}),
+                      {32, 160},
+                      ShardOrientation::ROW_MAJOR,
+                      false}},  // output_memconfig
         // DataType::BFLOAT16, // output_dtype
         std::nullopt,
         WormholeComputeKernelConfig{MathFidelity::HiFi2, true, true, true});
@@ -235,11 +240,11 @@ Tensor llama_attn_mqa_decode_forward(
     auto attn_output_memcfg_mine = MemoryConfig{
         TensorMemoryLayout::HEIGHT_SHARDED,
         BufferType::L1,
-        ShardSpec{
-            CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}),
-            {32, padded_layer_past_len},
-            ShardOrientation::ROW_MAJOR,
-            false}};
+        ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}),
+                  CoreRangeSet({CoreRange({0, 0}, {7, 3})}),
+                  {32, padded_layer_past_len},
+                  ShardOrientation::ROW_MAJOR,
+                  false}};
 
     auto attn_weights = matmul(
         query_layer,

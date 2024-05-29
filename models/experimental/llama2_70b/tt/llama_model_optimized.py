@@ -40,6 +40,7 @@ class TtLlamaModel_optimized:
         cache_path=None,
         read_cache=False,
         generate_input_cache=False,
+        use_llama_cpp=False,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -48,6 +49,7 @@ class TtLlamaModel_optimized:
         self.emulated = emulated
         self.read_cache = read_cache
         self.generate_input_cache = generate_input_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -87,6 +89,7 @@ class TtLlamaModel_optimized:
                 emulated=emulated,
                 cache_path=cache_path,
                 read_cache=read_cache,
+                use_llama_cpp=use_llama_cpp,
             )
             for layer_num in tqdm(range(n_layers))
         ]

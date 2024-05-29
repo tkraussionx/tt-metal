@@ -35,6 +35,7 @@ class TtLlamaAttention_optimized:
         cache_path=None,
         batch_size=None,
         read_cache=False,
+        use_llama_cpp=False,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -42,6 +43,7 @@ class TtLlamaAttention_optimized:
         self.model_config = model_config
         self.emulated = emulated
         self.read_cache = read_cache
+        self.use_llama_cpp = use_llama_cpp
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -342,12 +344,62 @@ class TtLlamaAttention_optimized:
     ):
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if self.model_config["LLM_MODE"] == "decode":
-            return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
+            if self.use_llama_cpp:
+                return self.decode_forward_cpp(xs, rot_mats, start_pos, attn_masks)
+            else:
+                return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
         # Prefill should have input tensor of shape (1, batch=1, seqlen, hidden_size)
         elif self.model_config["LLM_MODE"] == "prefill":
             return self.prefill_forward(xs, rot_mats, attn_masks, user_id)
         else:
             raise ValueError(f"Unknown llm_mode: {self.model_config['LLM_MODE']}")
+
+    def decode_forward_cpp(
+        self,
+        xs,
+        rot_mats,
+        start_pos: int,
+        attn_masks,
+    ):
+        padded_layer_past_len = nearest_32(start_pos + 1)
+
+        (
+            query_layer,
+            key_layer,
+            value_layer,
+        ) = tt_lib.operations.primary.transformers.llama_attn_qkv_decode_forward(
+            xs, rot_mats, self.qkv, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
+        )
+
+        # For some reason, creating this exact memconfig in C++ leads to mismatch.
+        # We need to create in python and pass it in.
+        # K Cache Update
+        kv_cache_memcfg = self.model_config["KV_CACHE_SLICE_OUTPUT_MEMCFG"]
+        if kv_cache_memcfg.is_sharded():
+            kv_cache_shard_shape = kv_cache_memcfg.shard_spec.shape
+            kv_cache_shard_shape[0] = self.layer_past[0].shape[0] * padded_layer_past_len
+            kv_cache_memcfg.shard_spec.shape = kv_cache_shard_shape
+
+        attn_output = tt_lib.operations.primary.transformers.llama_attn_mqa_decode_forward(
+            query_layer,
+            key_layer,
+            value_layer,
+            start_pos,
+            attn_masks,
+            0,  # batch_offset
+            self.layer_past[0],
+            self.layer_past[1],
+            self.scale,
+            kv_cache_memcfg,
+        )
+
+        selfout = tt_lib.operations.primary.transformers.llama_attn_selfout_decode_forward(
+            attn_output,
+            self.wo,
+            self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"],
+            self.model_config["SELFOUT_MM_INPUT_MEMCFG"],
+        )
+        return selfout
 
     def decode_forward(
         self,
@@ -365,14 +417,59 @@ class TtLlamaAttention_optimized:
         xs,
         rot_mats,
     ):
-        (
-            test_query_layer,
-            test_key_layer,
-            test_value_layer,
-        ) = tt_lib.operations.primary.transformers.llama_attn_qkv_decode_forward(
-            xs, rot_mats, self.qkv, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
+        # Assume input is already padded to 32, even if the batch size is not 32. Batch size is in self.max_batch_size.
+
+        # Reshard
+        if self.model_config["LN_ATTN_OUTPUT_MEMCFG"] != self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]:
+            # xs = tt_lib.tensor.reshard(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
+            xs = tt_lib.tensor.sharded_to_interleaved(xs, self.model_config["L1_MEMCFG"])
+            xs = tt_lib.tensor.interleaved_to_sharded(xs, self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"])
+
+        # Fused QKV
+        fused_query_key_value = tt_lib.operations.primary.matmul_1d(
+            xs,
+            self.qkv,
+            program_config=self.model_config["FUSED_QKV_MM_PROGCFG"],
+            output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+            output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )
-        return test_query_layer, test_key_layer, test_value_layer
+        xs.deallocate(True)
+
+        # TMs
+        (
+            query_layer,  # [seqlen, n_local_heads, bsz, head_dim]
+            key_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
+            value_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
+        ) = tt_lib.tensor.nlp_create_qkv_heads_decode(
+            fused_query_key_value,
+            num_heads=self.n_local_heads,
+            num_kv_heads=self.n_local_kv_heads,
+            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        )
+
+        fused_query_key_value.deallocate(True)
+
+        # ROTARY EMBEDDINGS
+        # Q Rotary Embeddings
+        query_layer = tt_lib.operations.primary.matmul(
+            query_layer,
+            rot_mats,
+            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
+            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"]
+            # [seqlen, n_heads, bsz, head_dim]  # [1, 1, head_dim, head_dim]  => [seqlen, n_heads, bsz, head_dim]
+        )
+
+        key_layer = tt_lib.operations.primary.matmul(
+            key_layer,
+            rot_mats,
+            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
+            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"],
+        )
+
+        return query_layer, key_layer, value_layer
 
     def attn_mqa(
         self,
@@ -385,8 +482,6 @@ class TtLlamaAttention_optimized:
     ):
         padded_layer_past_len = nearest_32(start_pos + 1)
 
-        # For some reason, creating this exact memconfig in C++ leads to mismatch.
-        # We need to create in python and pass it in.
         # K Cache Update
         kv_cache_memcfg = self.model_config["KV_CACHE_SLICE_OUTPUT_MEMCFG"]
         if kv_cache_memcfg.is_sharded():
@@ -394,26 +489,107 @@ class TtLlamaAttention_optimized:
             kv_cache_shard_shape[0] = self.layer_past[0].shape[0] * padded_layer_past_len
             kv_cache_memcfg.shard_spec.shape = kv_cache_shard_shape
 
-        output = tt_lib.operations.primary.transformers.llama_attn_mqa_decode_forward(
-            query_layer,
-            key_layer,
-            value_layer,
-            start_pos,
-            attn_masks,
-            batch_offset,
-            self.layer_past[0],
-            self.layer_past[1],
-            self.scale,
-            kv_cache_memcfg,
+        keys = self.layer_past[0]
+        tt_lib.tensor.update_cache(keys, key_layer, start_pos, batch_offset=batch_offset)
+        key_layer.deallocate(True)
+        # key and value layers will have kv_seq_len padded to nearest 32
+
+        keys = self.layer_past[0]
+        key_layer = tt_lib.tensor.unpad(
+            keys,
+            [0, 0, 0, 0],
+            [
+                self.n_local_kv_heads - 1,
+                self.max_batch_size - 1,
+                padded_layer_past_len - 1,
+                self.head_dim - 1,
+            ],
+            output_mem_config=self.model_config["DRAM_MEMCFG"],
         )
-        return output
+
+        key_layer = tt_lib.tensor.interleaved_to_sharded(key_layer, sharded_mem_config=kv_cache_memcfg)
+
+        # PRE-SOFTMAX MM
+
+        key_layer_transposed = tt_lib.tensor.transpose(
+            key_layer,
+            -2,
+            -1,
+            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        )
+
+        key_layer.deallocate(True)
+
+        attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+        attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
+        attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
+
+        attn_weights = tt_lib.operations.primary.matmul(
+            query_layer,
+            key_layer_transposed,
+            program_config=attn_prog_config,
+            output_mem_config=attn_output_memcfg,
+            output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        )
+
+        query_layer.deallocate(True)
+        key_layer_transposed.deallocate(True)
+
+        # SOFTMAX
+        softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
+        softmax_progcfg.block_w = padded_layer_past_len // 32
+
+        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+            attn_weights,
+            self.scale,
+            attn_masks,
+            program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
+            is_causal_mask=True,
+        )
+
+        # V CACHE UPDATE
+
+        values = self.layer_past[1]
+        tt_lib.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
+        value_layer.deallocate(True)
+
+        values = self.layer_past[1]
+        value_layer = tt_lib.tensor.unpad(
+            values,
+            [0, 0, 0, 0],
+            [
+                self.n_local_kv_heads - 1,
+                self.max_batch_size - 1,
+                padded_layer_past_len - 1,
+                self.head_dim - 1,
+            ],
+            output_mem_config=self.model_config["DRAM_MEMCFG"],
+        )
+
+        value_layer = tt_lib.tensor.interleaved_to_sharded(value_layer, sharded_mem_config=kv_cache_memcfg)
+
+        # POST-SOFTMAX MM
+        scores_prog_config = self.model_config["SCORES_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+
+        attn_output = tt_lib.operations.primary.matmul(
+            attn_weights,
+            value_layer,
+            program_config=scores_prog_config,
+            output_mem_config=self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
+            output_dtype=self.model_config["BFLOAT16_DTYPE"],
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        )
+        attn_weights.deallocate(True)
+        value_layer.deallocate(True)
+
+        return attn_output
 
     def attn_selfout(
         self,
         attn_output,
     ):
         # ATTENTION SELFOUT
-        """
 
         attn_output = tt_lib.tensor.nlp_concat_heads_decode(
             attn_output,
@@ -445,15 +621,6 @@ class TtLlamaAttention_optimized:
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )  # seqlen, 1, batch, hidden_size
 
-        return attn_output
-        """
-
-        attn_output = tt_lib.operations.primary.transformers.llama_attn_selfout_decode_forward(
-            attn_output,
-            self.wo,
-            self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"],
-            self.model_config["SELFOUT_MM_INPUT_MEMCFG"],
-        )
         return attn_output
 
     def prefill_forward(
