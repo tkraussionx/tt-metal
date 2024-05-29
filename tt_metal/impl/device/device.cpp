@@ -1810,11 +1810,15 @@ CommandQueue &Device::command_queue(size_t cq_id) {
 }
 
 void Device::push_work(std::function<void()>&& work, bool blocking) {
+  std::cout << " device push work " << std::endl;
     this->work_executor.push_work(work, blocking);
+  std::cout << " done  " << std::endl;
 }
 
 void Device::push_work(std::shared_ptr<std::function<void()>> work, bool blocking) {
+  std::cout << " device shared ptr push work " << std::endl;
     this->work_executor.push_work(work, blocking);
+  std::cout << " done  " << std::endl;
 }
 
 void Device::synchronize() {
