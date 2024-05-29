@@ -21,6 +21,7 @@ import ttnn
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
+    prepare_attn_mask,
     prepare_rotation_mat_ttnn,
     sample,
     cache_attention,
@@ -109,7 +110,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
 
     dtype = ttnn.bfloat8_b
 
-    embed_on_host = True  # Do embedding and argmax on host. TODO Seeing bad output when on device
+    embed_on_host = False  # Do embedding and argmax on host. TODO Seeing bad output when on device
     seqlen = 1  # Generating one token per user at a time
 
     logger.info(f"Reading inputs...")
@@ -122,7 +123,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     model_args = TtModelArgs(device_mesh.get_device(0), instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    model_args.n_layers = 32  # Full model
+    model_args.n_layers = 1  # Full model
 
     logger.info("Loading weights...")
     state_dict = torch.load(model_args.state_dict_path)
@@ -210,13 +211,12 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         current_pos = start_pos % model_args.sliding_window
 
         if embed_on_host:
-            decode_input_11BH, attn_mask = prepare_inputs_ttnn(
+            decode_input_11BH = prepare_inputs_ttnn(
                 pt_decode_input,
                 model_args.dim,
-                start_pos,
-                model_args.sliding_window,
-                tt_model.device_mesh,
+                device_mesh,
             )
+        attn_mask = prepare_attn_mask(current_pos, model_args.sliding_window, device_mesh)
 
         # Run ttnn mixtral model
         tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask, rot_mats)

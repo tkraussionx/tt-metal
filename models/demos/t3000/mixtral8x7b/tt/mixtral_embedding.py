@@ -9,7 +9,7 @@ import ttnn
 class TtMixtralEmbedding(torch.nn.Module):
     def __init__(
         self,
-        device,
+        device_mesh,
         args,
         weight_cache_path,
         state_dict,
@@ -17,19 +17,17 @@ class TtMixtralEmbedding(torch.nn.Module):
     ):
         super().__init__()
 
-        self.state_dict = state_dict
-        self.device = device
-
         base_name = "tok_embeddings.weight"
-        torch_weight = self.state_dict[base_name]
+        torch_weight = state_dict[base_name]
         cache_name = weight_cache_path / base_name
         self.weights = ttnn.as_tensor(
             torch_weight,
             dtype=dtype,
-            device=self.device,
+            device=device_mesh,
             layout=ttnn.ROW_MAJOR_LAYOUT,
             memory_config=args.get_model_config()["EMB_WEIGHTS_MEMCFG"],
             cache_file_name=cache_name,
+            mesh_mapper=ttnn.ReplicateTensorToMesh(device_mesh),
         )
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:

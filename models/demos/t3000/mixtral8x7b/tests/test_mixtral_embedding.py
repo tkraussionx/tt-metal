@@ -32,10 +32,10 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
-def test_mixtral_embedding(device, use_program_cache, reset_seeds):
+def test_mixtral_embedding(t3k_device_mesh, use_program_cache, reset_seeds):
     dtype = ttnn.bfloat16
 
-    model_args = TtModelArgs(device)
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = torch.load(model_args.state_dict_path)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
@@ -43,7 +43,7 @@ def test_mixtral_embedding(device, use_program_cache, reset_seeds):
     reference_emb.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
 
     tt_emb = TtMixtralEmbedding(
-        device=device,
+        device_mesh=t3k_device_mesh,
         args=model_args,
         weight_cache_path=model_args.weight_cache_path(dtype),
         state_dict=state_dict,
@@ -55,9 +55,17 @@ def test_mixtral_embedding(device, use_program_cache, reset_seeds):
     reference_output = reference_emb(pt_input)
     logger.info(f"reference_output: {reference_output.shape}")
 
-    tt_input = ttnn.from_torch(pt_input, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
+    tt_input = ttnn.from_torch(
+        pt_input,
+        device=t3k_device_mesh,
+        dtype=ttnn.uint32,
+        layout=ttnn.ROW_MAJOR_LAYOUT,
+        mesh_mapper=ttnn.ReplicateTensorToMesh(t3k_device_mesh),
+    )
     tt_output = tt_emb(tt_input)
-    tt_output_torch = ttnn.to_torch(tt_output)
+    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ttnn.ConcatMeshToTensor(t3k_device_mesh, dim=0))[
+        : tt_output.shape[0]
+    ]
     logger.info(f"tt_output_torch: {tt_output_torch.shape}")
 
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch)
