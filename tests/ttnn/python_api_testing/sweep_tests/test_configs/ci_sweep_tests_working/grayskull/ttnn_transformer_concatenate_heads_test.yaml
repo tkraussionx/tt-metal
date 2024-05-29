@@ -3,10 +3,10 @@ test-list:
   - ttnn-transformer_concatenate_heads:
       shape:
         start-shape: [1, 1, 32, 32]
-        end-shape: [6, 12, 256, 256]
-        interval: [1, 1, 32, 32]
+        end-shape: [6, 12, 16384, 16384]
+        interval: [1, 1, 1, 1]
         num-shapes: 1
-        num-samples: 128
+        num-samples: 5000
         args-sampling-strategy: "all"
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"

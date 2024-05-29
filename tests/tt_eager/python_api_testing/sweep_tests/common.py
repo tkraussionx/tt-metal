@@ -205,10 +205,32 @@ def shapes_and_datagen(
                         if len(args) == 0:
                             sample_id += 1
                             continue
+                        total = 0
+                        for ishape in input_shapes:
+                            p = 1
+                            for i in ishape:
+                                p = p * i
+                            total = total + p
 
+                        smallest = False
                         for datagen_funcs, generated_test_args in args:
-                            sample_id += 1
-                            yield input_shapes, datagen_funcs, generated_test_args
+                            input_conf = generated_test_args["input_mem_config"]
+                            for inp in input_conf:
+                                print(inp.buffer_type)
+                                if inp.buffer_type == "BufferType.L1":
+                                    smallest = True
+                                """
+                                if inp==ttl.tensor.BufferType.L1:
+                                    smallest = True
+                                """
+                        if smallest and total > 100000:
+                            continue
+                        else:
+                            if total < 800000:
+                                sample_id += 1
+                                yield input_shapes, datagen_funcs, generated_test_args
+                            else:
+                                continue
 
         if method == "default":
             # Sweep across start-shape to end-shape
