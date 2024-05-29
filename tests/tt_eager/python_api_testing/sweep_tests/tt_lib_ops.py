@@ -3354,3 +3354,39 @@ def tt_embedding_bw(
     t3 = ttl.tensor.embedding_bw(grad_tensor, input_tensor, weights_tensor)[0]
 
     return tt2torch_tensor(t3)
+
+
+@setup_host_and_device
+def interleaved_to_sharded_partial(
+    x,
+    *args,
+    # num_slices,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    grid_size = (8, 8)
+    W = x.shape[-1]
+    H = x.shape[-2]
+    height_shard_spec = [H // 2, W]
+
+    print("pre")
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.interleaved_to_sharded_partial(
+        t0,
+        grid_size,
+        height_shard_spec,
+        2,
+        0,
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
+
+    print("posle")
+
+    returned_res = tt2torch_tensor(t1)
+    print(returned_res.shape)
+    return returned_res

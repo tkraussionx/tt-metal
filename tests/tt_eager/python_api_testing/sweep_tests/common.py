@@ -216,13 +216,14 @@ def shapes_and_datagen(
                         for datagen_funcs, generated_test_args in args:
                             input_conf = generated_test_args["input_mem_config"]
                             for inp in input_conf:
-                                print(inp.buffer_type)
                                 if inp.buffer_type == "BufferType.L1":
                                     smallest = True
                                 """
                                 if inp==ttl.tensor.BufferType.L1:
                                     smallest = True
                                 """
+                        print(total)
+                        print(input_shapes)
                         if smallest and total > 100000:
                             continue
                         else:

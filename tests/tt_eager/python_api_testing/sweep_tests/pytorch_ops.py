@@ -1848,7 +1848,7 @@ def max_pool2d(x, *args, **kwargs):
     return output
 
 
-def repeat_2(x, *args, shape, **kwargs):
+def repeat_2(x, num_slice, *args, shape, **kwargs):
     return x.repeat(*shape)
 
 
@@ -1882,3 +1882,16 @@ def multiply_and_apply_activation(x, y, *args, **kwargs):
         output = torch.gelu(output)
 
     return output
+
+
+def interleaved_to_sharded_partial(x, *args, **kwargs):
+    # print('prepy')
+    # slice_size = x.size(0) // 2 + 1
+    # print('poslepy')
+    # res = x[0:slice_size]
+    # print(res.shape)
+
+    res = torch.ones(x.shape).bfloat16().float()
+    print(res.shape)
+
+    return res
