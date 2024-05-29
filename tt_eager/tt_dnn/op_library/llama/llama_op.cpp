@@ -64,11 +64,11 @@ Tensor llama_mlp_decode_forward(Tensor& input_tensor, const Tensor& w1, const Te
     auto all_gather_memcfg = MemoryConfig{
         TensorMemoryLayout::WIDTH_SHARDED,
         BufferType::L1,
-        ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}), // creates two ranges
-                  CoreRangeSet({CoreRange({0, 0}, {7, 3})}),  // works
-                  {32, 1024},
-                  ShardOrientation::ROW_MAJOR,
-                  false}};
+        ShardSpec{
+            CoreRangeSet({CoreRange(CoreCoord({0, 0}), CoreCoord({7, 3}))}),
+            {32, 1024},
+            ShardOrientation::ROW_MAJOR,
+            false}};
 
     auto hidden_states_gathered = tt::operations::ccl::all_gather(
         hidden_states,
@@ -101,29 +101,10 @@ Tensor llama_mlp_decode_forward(Tensor& input_tensor, const Tensor& w1, const Te
 
 std::tuple<Tensor, Tensor, Tensor> llama_attn_qkv_decode_forward(
     const Tensor& input_tensor, const Tensor& rot_mat, const Tensor& wqkv, const MemoryConfig sharded_mem_config) {
-    // ShardSpec cores_40_qkv_shard_spec = {
-    //     CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 4}}),
-    //     {32, 256},
-    //     ShardOrientation::ROW_MAJOR,
-    //     false
-    // };
-    // MemoryConfig qkv_inp_memcfg = {
-    //     TensorMemoryLayout::WIDTH_SHARDED,
-    //     BufferType::L1,
-    //     cores_40_qkv_shard_spec
-    // };
-
     auto input_interleaved =
         sharded_to_interleaved(input_tensor, MemoryConfig{TensorMemoryLayout::INTERLEAVED, BufferType::L1});
     // input_tensor.deallocate(true);
-    auto input_resharded = interleaved_to_sharded(
-        input_interleaved,
-        // qkv_inp_memcfg
-        // tt::tt_metal::MemoryConfig(memory_layout=TensorMemoryLayout::WIDTH_SHARDED,buffer_type=BufferType::L1,shard_spec=tt::tt_metal::ShardSpec(grid={[(x=0,y=0)
-        // - (x=7,y=4)]}, shape={32, 256}, orientation=ShardOrientation::ROW_MAJOR, halo=false))
-        sharded_mem_config
-        // std::nullopt // output dtype
-    );
+    auto input_resharded = interleaved_to_sharded(input_interleaved, sharded_mem_config);
     // input_interleaved.deallocate(true);
 
     auto fused_query_key_value = matmul_1d(
@@ -143,15 +124,13 @@ std::tuple<Tensor, Tensor, Tensor> llama_attn_qkv_decode_forward(
         MemoryConfig{
             TensorMemoryLayout::WIDTH_SHARDED,
             BufferType::L1,
-            ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 0}}),
-                      CoreRangeSet({CoreRange({0, 0}, {7, 0})}),
-                      {32, 160},
-                      ShardOrientation::ROW_MAJOR,
-                      false}},  // output_memconfig
-        // DataType::BFLOAT16, // output_dtype
+            ShardSpec{
+                CoreRangeSet({CoreRange(CoreCoord({0, 0}), CoreCoord({7, 0}))}),
+                {32, 160},
+                ShardOrientation::ROW_MAJOR,
+                false}},  // output_memconfig
         std::nullopt,
         WormholeComputeKernelConfig{MathFidelity::HiFi2, true, true, true});
-    // return std::make_tuple(fused_query_key_value, fused_query_key_value, fused_query_key_value);
 
     // input_resharded.deallocate(true);
 
@@ -240,18 +219,17 @@ Tensor llama_attn_mqa_decode_forward(
     auto attn_output_memcfg_mine = MemoryConfig{
         TensorMemoryLayout::HEIGHT_SHARDED,
         BufferType::L1,
-        ShardSpec{// CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}),
-                  CoreRangeSet({CoreRange({0, 0}, {7, 3})}),
-                  {32, padded_layer_past_len},
-                  ShardOrientation::ROW_MAJOR,
-                  false}};
+        ShardSpec{
+            CoreRangeSet({CoreRange(CoreCoord({0, 0}), CoreCoord({7, 3}))}),
+            {32, padded_layer_past_len},
+            ShardOrientation::ROW_MAJOR,
+            false}};
 
     auto attn_weights = matmul(
         query_layer,
         key_layer_transposed,
         std::nullopt,  // bias
         attn_prog_config,
-        // attn_output_memcfg,
         attn_output_memcfg_mine,
         std::nullopt,  // output_dtype
         WormholeComputeKernelConfig{MathFidelity::HiFi2, true, true, true});
@@ -281,14 +259,20 @@ Tensor llama_attn_mqa_decode_forward(
     auto scores_output_memcfg_mine = MemoryConfig{
         TensorMemoryLayout::HEIGHT_SHARDED,
         BufferType::L1,
-        ShardSpec{CoreRangeSet({CoreCoord{0, 0}, CoreCoord{7, 3}}), {32, 128}, ShardOrientation::ROW_MAJOR, false}};
+        ShardSpec{
+            CoreRangeSet({CoreRange(CoreCoord{0, 0}, CoreCoord{7, 3})}),
+            {32, 128},
+            ShardOrientation::ROW_MAJOR,
+            false}};
 
     auto attn_output = matmul(
         attn_weights_softmax,
         value_layer_sharded,
         std::nullopt,  // bias
         scores_prog_config,
-        scores_output_memcfg_mine);
+        scores_output_memcfg_mine,
+        std::nullopt,  // output_dtype
+        WormholeComputeKernelConfig{MathFidelity::HiFi2, true, true, true});
 
     attn_weights_softmax.deallocate(true);
     value_layer_sharded.deallocate(true);
