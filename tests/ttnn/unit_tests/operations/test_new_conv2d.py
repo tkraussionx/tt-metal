@@ -301,11 +301,14 @@ def run_conv_with_split(
         # rn50 layer4
         (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False),
         (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False),
+        ## misc
+        (32, 32, 1024, 1024, 3, 3, 2, 2, 1, 1, True),
+        (32, 32, 512, 512, 3, 3, 2, 2, 1, 1, True),
     ),
 )
 @pytest.mark.parametrize(
     "batch_size",
-    [8, 16, 20],
+    [1, 8, 16, 20],
 )
 @pytest.mark.parametrize(
     "weights_dtype",
