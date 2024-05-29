@@ -50,7 +50,7 @@ def get_rotation_mat(dhead, end):
     return rot_mat
 
 
-def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, sliding_window, device_mesh):
+def prepare_inputs_ttnn(x_bsh, hidden_size, device_mesh):
     """
     Prepare inputs for decode mode.
     x: (batch, seq, hidden_dim)
@@ -78,10 +78,14 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, sliding_window, device_
     )
     xs_1SBH = ttnn.to_device(xs_1SBH, device_mesh)
 
+    return xs_1SBH
+
+
+def prepare_attn_mask(current_pos, sliding_window, device_mesh):
     # Attention mask
+    seq_len = 1  # Only supports decode mode
     padded_layer_past_len = min(nearest_32(current_pos + 1), sliding_window)
     current = current_pos % sliding_window
-    n_local_heads = 4  # model_args.n_heads // 8 # num_devices TODO pass the arguments instead of hard coding
 
     attn_mask = torch.zeros(seq_len, 32, 32, padded_layer_past_len)  # [SB4P]
 
@@ -113,8 +117,6 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, sliding_window, device_
     )
 
     attn_mask = ttnn.experimental.tensor.interleaved_to_sharded(attn_mask, sharded_mem_config=ATTN_MASK_MEMCFG)
-
-    return xs_1SBH, attn_mask
 
 
 def prepare_rotation_mat_ttnn(head_dim, max_seq_len, device_mesh):
