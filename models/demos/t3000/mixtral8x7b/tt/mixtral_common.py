@@ -81,7 +81,7 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, device_mesh):
     return xs_1SBH
 
 
-def prepare_attn_mask(current_pos, sliding_window, device_mesh):
+def prepare_attn_mask_ttnn(current_pos, sliding_window, device_mesh):
     # Attention mask
     seq_len = 1  # Only supports decode mode
     padded_layer_past_len = min(nearest_32(current_pos + 1), sliding_window)
@@ -117,6 +117,7 @@ def prepare_attn_mask(current_pos, sliding_window, device_mesh):
     )
 
     attn_mask = ttnn.experimental.tensor.interleaved_to_sharded(attn_mask, sharded_mem_config=ATTN_MASK_MEMCFG)
+    return attn_mask
 
 
 def prepare_rotation_mat_ttnn(head_dim, max_seq_len, device_mesh):

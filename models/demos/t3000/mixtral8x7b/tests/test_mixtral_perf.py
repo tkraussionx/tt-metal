@@ -22,6 +22,7 @@ if not os.getenv("CI") == "true":  # Enable tracy signpost support in local runs
 
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
+    prepare_attn_mask_ttnn,
     prepare_rotation_mat_ttnn,
 )
 from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
@@ -150,9 +151,12 @@ def run_inference(tt_model, embd, encoded_prompts, generation_start_pos, generat
         current_pos = start_pos % tt_model.args.sliding_window
 
         profiler.start(f"prepare_inputs_for_inference_{i}")
-        decode_input, attn_mask = prepare_inputs_ttnn(
+        decode_input = prepare_inputs_ttnn(
             pt_decode_input,
             tt_model.args.dim,
+            tt_model.device_mesh,
+        )
+        attn_mask = prepare_attn_mask_ttnn(
             start_pos,
             tt_model.args.sliding_window,
             tt_model.device_mesh,

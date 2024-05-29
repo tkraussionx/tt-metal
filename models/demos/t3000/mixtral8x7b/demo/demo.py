@@ -21,7 +21,7 @@ import ttnn
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
-    prepare_attn_mask,
+    prepare_attn_mask_ttnn,
     prepare_rotation_mat_ttnn,
     sample,
     cache_attention,
@@ -123,7 +123,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     model_args = TtModelArgs(device_mesh.get_device(0), instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    model_args.n_layers = 1  # Full model
+    model_args.n_layers = 32  # Full model
 
     logger.info("Loading weights...")
     state_dict = torch.load(model_args.state_dict_path)
@@ -216,7 +216,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                 model_args.dim,
                 device_mesh,
             )
-        attn_mask = prepare_attn_mask(current_pos, model_args.sliding_window, device_mesh)
+        attn_mask = prepare_attn_mask_ttnn(current_pos, model_args.sliding_window, device_mesh)
 
         # Run ttnn mixtral model
         tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask, rot_mats)
@@ -240,17 +240,37 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                     input_mask_pt[:, iteration], input_tokens_pt[:, iteration], tt_token_batch[:, 0]
                 ).unsqueeze(1)
             # Next PT input embedding
-            pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
+            # pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
+            logger.info(f"Embeding on device")
+            dev_token_batch = ttnn.from_torch(
+                tt_token_batch,
+                device=device_mesh,
+                dtype=ttnn.uint32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            )
+            decode_input_11BH = tt_embds(dev_token_batch)
+            decode_input_11BH = ttnn.reshape(decode_input_11BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
+            decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT)
         else:  # Embedding/argmax on device
+            logger.info("Argmax on device")
             # TODO Update argmax to ttnn when OP becomes available
             tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH, dim=-1)
+            logger.info("Reshape and where on device")
+            logger.info(f"input: {tt_out_B11B[:1, :, :, :].shape}")
+            logger.info(f"target: {ttnn.Shape([1, batch_size])}")
             tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
+            logger.info(f"tt_out_1B shape: {tt_out_1B.shape}")
             # Update the users that are still in prefill and the ones generating new tokens
             if iteration < max_prompt_len:
+                logger.info(
+                    f"Calling where with input shape {input_mask[iteration].shape}, input_tokens_tt[iteration]: {input_tokens_tt[iteration].shape}, tt_out_1B: {tt_out_1B.shape}"
+                )
                 decode_input_1B = ttnn.where(input_mask[iteration], input_tokens_tt[iteration], tt_out_1B)
             else:
                 decode_input_1B = tt_out_1B
 
+            logger.info(f"Next embeddings on device (input shape {decode_input_1B.shape})")
             # Next TT input embeddings
             decode_input_1BH = tt_embds(decode_input_1B)
             decode_input_11BH = ttnn.reshape(decode_input_1BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
@@ -258,6 +278,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
 
             # Convert ttnn tensor to torch tensor and print decoded output (from a single device)
             # tt_output_torch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
+            logger.info("Get output from device")
             tt_token_batch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
 
         # Get the generated tokens for each user for printing in the log

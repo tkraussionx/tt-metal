@@ -19,7 +19,11 @@ if os.getenv("CI") == "true":
 import ttnn
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
-from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, prepare_rotation_mat_ttnn
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import (
+    prepare_inputs_ttnn,
+    prepare_attn_mask_ttnn,
+    prepare_rotation_mat_ttnn,
+)
 from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
 from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
@@ -108,9 +112,13 @@ def test_mixtral_model_inference(
         start_pos = generation_start_pos + i
         current_pos = start_pos % model_args.sliding_window
 
-        decode_input, attn_mask = prepare_inputs_ttnn(
+        decode_input = prepare_inputs_ttnn(
             tt_decode_input,
             model_args.dim,
+            tt_model.device_mesh,
+        )
+
+        attn_mask = prepare_attn_mask_ttnn(
             start_pos,
             model_args.sliding_window,
             tt_model.device_mesh,
