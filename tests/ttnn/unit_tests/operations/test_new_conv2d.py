@@ -420,6 +420,9 @@ def test_resnet50_conv_gs(
         (1, 64, 64, 16, 16, 3, 3, 1, 1, 1, 1, False, {"num_cores_nhw": 4, "grid_size": (2, 4)}),
         # (1, 160, 160, 7, 7, 3, 3, 1, 1, 1, 1, False, None), sliding_window_op_infra/sliding_window.cpp:341: indices_length_last_core <= indices_length_per_core
         (8, 256, 256, 7, 7, 3, 3, 1, 1, 1, 1, False, None),
+        ## misc
+        (1, 32, 32, 1024, 1024, 3, 3, 2, 2, 1, 1, True, None),
+        (1, 32, 32, 512, 512, 3, 3, 2, 2, 1, 1, True, None),
     ),
 )
 @pytest.mark.parametrize(
