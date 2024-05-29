@@ -21,6 +21,8 @@ from models.experimental.llama2_70b.tt.model_config import (
 from models.utility_functions import get_devices_for_t3000
 from models.experimental.llama2_70b.tt.llama_common import get_llama_path, load_llama_state_dict
 
+from models.experimental.llama2_70b.reference.llama.llama.tokenizer3 import ChatFormat, Dialog, Message, Tokenizer3
+
 
 def main(args):
     # Set random reproducible seed
@@ -31,18 +33,33 @@ def main(args):
     # Load the model and tokenizer
     model, tokenizer = generator.model, generator.tokenizer
 
-    tokenized, prompts = load_prompts_file(args, tokenizer)
+    # If args.chat is True, listen for user_input in terminal to as initial prompts, and decode the model's response using
+    # run_decode function. While user_inputs is not [eos], continue to listen for user_input and decode the model's response.
 
-    # Run decode
-    with torch.no_grad():
-        all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
+    if args.chat:
+        formatter = ChatFormat(tokenizer)
+        user_input = input("Enter your prompt: ")
+        while user_input != "[eos]":
+            dialog = formatter.encode_dialog_prompt([user_input])
+            breakpoint()
+            with torch.no_grad():
+                all_text = run_decode(
+                    args=args, model=model, tokenizer=tokenizer, prompt_tokens=dialog, prompts=[user_input]
+                )
+            logger.info(all_text[0])
+            user_input = input("Enter your prompt: ")
+    else:
+        tokenized, prompts = load_prompts_file(args, tokenizer)
+        # Run decode
+        with torch.no_grad():
+            all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
 
-        if args.output_at_end:
-            with open(
-                "models/demos/t3000/llama2_70b/demo/data/demo_user_output.txt", "w"
-            ) as f:  # Open a file for writing
-                for i, text in enumerate(all_text):
-                    f.write(f"User {i}: {text}\n")
+            if args.output_at_end:
+                with open(
+                    "models/demos/t3000/llama2_70b/demo/data/demo_user_output.txt", "w"
+                ) as f:  # Open a file for writing
+                    for i, text in enumerate(all_text):
+                        f.write(f"User {i}: {text}\n")
 
 
 def build_generator(args):
@@ -160,7 +177,7 @@ def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=Fal
         latencies.append(time() - start)
 
         # Decode the entire sequence generated so far and log it
-        for user_id in range(bsz):
+        for user_id in range(bsz if not args.chat else 1):
             text = tokenizer.decode(tokens[user_id, : cur_pos + 1].tolist())
             logger.info(f"Loop {cur_pos} user {user_id}: {text}\n")
 
@@ -248,6 +265,7 @@ class Args:
         top_p=1,
         top_k=1,
         temperature=1.0,
+        chat=False,
         # TT args
         device_mesh=None,
         n_devices=8,
@@ -268,6 +286,7 @@ class Args:
         self.top_p = top_p
         self.top_k = top_k
         self.temperature = temperature
+        self.chat = chat
         self.device_mesh = device_mesh
         self.n_devices = n_devices
         self.emulated = emulated
@@ -280,6 +299,7 @@ def construct_arg(**kwargs):
 
 
 @pytest.mark.timeout(240000)
+@pytest.mark.parametrize("chat", (True, False), ids=["chat_enabled", "chat_disabled"])
 @pytest.mark.parametrize("decode_only", (True, False), ids=["decode_only", "prefill_decode"])
 @pytest.mark.parametrize("num_layers", (1, 2, 10, 80), ids=["1L", "2L", "10L", "80L"])
 @pytest.mark.parametrize(
@@ -326,6 +346,7 @@ def test_LlamaModel_demo(
     top_p,
     top_k,
     temperature,
+    chat,
     # TT args
     # all_devices,
     t3k_device_mesh,
@@ -366,6 +387,7 @@ def test_LlamaModel_demo(
         top_p=top_p,
         top_k=top_k,
         temperature=temperature,
+        chat=chat,
         device_mesh=t3k_device_mesh,
         n_devices=n_devices,
         emulated=emulated,
