@@ -230,7 +230,7 @@ class Conv2dConfig:
         reallocate_halo_output=False,
         # following config values are set by conv op later if user does not set them
         act_block_h=None,
-        height_sharding=None,
+        conv_shard_scheme=None,
         core_grid=None,
     ):
         self.math_fidelity = math_fidelity
@@ -241,7 +241,7 @@ class Conv2dConfig:
         self.packer_l1_acc = packer_l1_acc
         self.activation = activation
         self.act_block_h = act_block_h
-        self.height_sharding = height_sharding
+        self.conv_shard_scheme = conv_shard_scheme
         self.core_grid = core_grid
         self.input_channels_alignment = input_channels_alignment
         self.deallocate_activation = deallocate_activation
@@ -391,7 +391,7 @@ def determine_parallel_config(
 # internal helper function. not exposed to user.
 def get_grid_size_and_num_cores_nhw_from_core_grid(core_grid, height_sharded):
     if isinstance(core_grid, ttnn.CoreGrid):
-        if height_sharded:
+        if height_sharded == "HEIGHT":
             num_cores_nhw = core_grid.x * core_grid.y
         else:
             num_cores_nhw = core_grid.x
@@ -408,7 +408,7 @@ def get_grid_size_and_num_cores_nhw_from_core_grid(core_grid, height_sharded):
     elif isinstance(core_grid, ttnn.experimental.tensor.CoreRangeSet):
         grid_size = core_grid.bounding_box().grid_size()
         num_cores = core_grid.num_cores()
-        if height_sharded:
+        if height_sharded == "HEIGHT":
             num_cores_nhw = num_cores
         else:
             num_cores_nhw = grid_size.x
@@ -482,6 +482,10 @@ def conv2d(
     run_new_conv=False,
 ) -> Tuple[ttnn.Tensor, int, int, ttnn.Tensor, ttnn.Tensor]:
     run_new_conv = True
+    print("hello")
+    # breakpoint()
+
+    print(f"conv_config.conv_shard_scheme : {conv_config.conv_shard_scheme}")
     if run_new_conv:
         conv_config_ = ttnn._ttnn.operations.conv2d.Conv2dConfig(
             math_fidelity=conv_config.math_fidelity,
@@ -496,7 +500,7 @@ def conv2d(
             act_block_h_override=conv_config.act_block_h if conv_config.act_block_h is not None else 0,
             reshard_if_not_optimal=reshard_if_not_optimal,
             override_sharding_config=False,  # TODO: pass in config
-            height_sharding=conv_config.height_sharding if conv_config.height_sharding is not None else True,
+            conv_shard_scheme=conv_config.conv_shard_scheme if conv_config.conv_shard_scheme is not None else "HEIGHT",
             transpose_shards=True,  # TODO: pass in config
             output_layout=ttnn.TILE_LAYOUT,  # TODO: pass in config
         )
@@ -558,7 +562,9 @@ def conv2d(
         config_shard_grid = get_shard_grid_from_core_grid(conv_config.core_grid)
 
     needs_reshard = False
+    # breakpoint()
     input_memory_config = ttnn.get_memory_config(input_tensor)
+    print(input_memory_config)
     if ttnn.is_sharded(input_tensor):
         input_shard_scheme = input_memory_config.memory_layout
         input_shard_orientation = input_memory_config.shard_spec.orientation
@@ -581,16 +587,18 @@ def conv2d(
         if config_shard_grid is not None:
             if config_shard_grid != input_shard_grid:
                 needs_reshard = True
-        input_height_sharded = input_shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-        if conv_config.height_sharding is not None:
-            if input_height_sharded != conv_config.height_sharding:
+        input_height_sharded = "HEIGHT" if input_shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED else "BLOCK"
+        if conv_config.conv_shard_scheme is not None:
+            print(f"Conv shard scheme: {conv_config.conv_shard_scheme} {input_height_sharded}")
+            if input_height_sharded != conv_config.conv_shard_scheme:
+                print("ERROR test")
                 needs_reshard = True
     else:
         needs_reshard = True
     parallel_config = None
     if reshard_if_not_optimal or needs_reshard:
         optimal_parallel_config = determine_parallel_config(
-            True if conv_config.height_sharding is None else conv_config.height_sharding,
+            True if conv_config.conv_shard_scheme is None else conv_config.conv_shard_scheme == "HEIGHT",
             batch_size,
             in_channels,
             output_height,
@@ -598,26 +606,31 @@ def conv2d(
             out_channels,
             device,
         )
+    print(conv_config.conv_shard_scheme)
     if needs_reshard:
-        if conv_config.height_sharding is None:
+        if conv_config.conv_shard_scheme is None:
             # default shard scheme is height sharding
-            conv_config.height_sharding = True
+            conv_config.conv_shard_scheme = "HEIGHT"
         if conv_config.core_grid is None:
             parallel_config = optimal_parallel_config
         else:
             assert config_shard_grid is not None
             grid_size, num_cores_nhw = get_grid_size_and_num_cores_nhw_from_core_grid(
-                conv_config.core_grid, conv_config.height_sharding
+                conv_config.core_grid, conv_config.conv_shard_scheme
             )
             shard_scheme = (
                 ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-                if conv_config.height_sharding
+                if conv_config.conv_shard_scheme == "HEIGHT"
                 else ttnn.TensorMemoryLayout.BLOCK_SHARDED
             )
             shard_orientation = (
-                ttnn.ShardOrientation.ROW_MAJOR if conv_config.height_sharding else ttnn.ShardOrientation.COL_MAJOR
+                ttnn.ShardOrientation.ROW_MAJOR
+                if conv_config.conv_shard_scheme == "HEIGHT"
+                else ttnn.ShardOrientation.COL_MAJOR
             )
             parallel_config = ParallelConfig(grid_size.y, grid_size.x, num_cores_nhw, shard_scheme, shard_orientation)
+            print(shard_scheme)
+            print(shard_orientation)
     else:
         assert ttnn.is_sharded(input_tensor)
         grid_size, num_cores_nhw = get_grid_size_and_num_cores_nhw_from_core_grid(
@@ -729,6 +742,7 @@ def conv2d(
         else:
             assert False, f"Unsupported device: {device}"
         # Build conv op object
+        print(parallel_config.shard_scheme)
         conv = ttnn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,

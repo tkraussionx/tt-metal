@@ -57,7 +57,7 @@ void py_module(py::module& module) {
 
     auto py_conv_config = py::class_<Conv2dConfig>(module, "Conv2dConfig");
     py_conv_config.def(
-            py::init<MathFidelity, DataType, DataType, bool, bool, bool, string, uint32_t, bool, bool, uint32_t, bool, bool, bool, CoreRangeSet, bool, Layout>(),
+            py::init<MathFidelity, DataType, DataType, bool, bool, bool, string, uint32_t, bool, bool, uint32_t, bool, bool, string, CoreRangeSet, bool, Layout>(),
             py::kw_only(),
             py::arg("math_fidelity") = MathFidelity::HiFi4,
             py::arg("dtype") = DataType::BFLOAT16,
@@ -72,7 +72,7 @@ void py_module(py::module& module) {
             py::arg("act_block_h_override") = 0,
             py::arg("reshard_if_not_optimal") = false,
             py::arg("override_sharding_config") = false,
-            py::arg("height_sharding") = true,
+            py::arg("conv_shard_scheme") = "HEIGHT",
             py::arg("core_grid") = CoreRangeSet({CoreRange({})}),
             py::arg("transpose_shards") = true,
             py::arg("output_layout") = Layout::TILE

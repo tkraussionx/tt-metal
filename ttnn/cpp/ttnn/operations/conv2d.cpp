@@ -63,7 +63,7 @@ uint32_t find_closest_common_largest_divisor(uint32_t num1, uint32_t num2, uint3
 }
 
 ParallelConfig determine_parallel_config(
-    bool height_sharding,
+    string conv_shard_scheme,
     uint32_t batch_size,
     uint32_t input_channels,
     uint32_t output_height,
@@ -91,14 +91,14 @@ ParallelConfig determine_parallel_config(
 
     auto calculate_num_cores_nhw = [&]() {
         uint32_t num_cores_nhw =
-            height_sharding
+            conv_shard_scheme == "HEIGHT"
                 ? find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
                 : find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0]);
         return num_cores_nhw;
     };
 
     auto calculate_grid = [&](uint32_t num_cores_nhw) {
-        if (height_sharding) {
+        if (conv_shard_scheme == "HEIGHT") {
             uint32_t cores_x_1 = num_cores_nhw >= device_grid_size[0] ? device_grid_size[0] : num_cores_nhw;
             uint32_t cores_y_1 = (uint32_t)(num_cores_nhw / device_grid_size[0]);
             TT_ASSERT(cores_y_1 <= device_grid_size[1], "Internal Error: Incorrect num_cores_nhw");
@@ -128,8 +128,8 @@ ParallelConfig determine_parallel_config(
 
     uint32_t num_cores_nhw = calculate_num_cores_nhw();
     const CoreRangeSet& grid = calculate_grid(num_cores_nhw);
-    auto shard_scheme = height_sharding ? TensorMemoryLayout::HEIGHT_SHARDED : TensorMemoryLayout::BLOCK_SHARDED;
-    auto shard_orientation = height_sharding ? ShardOrientation::ROW_MAJOR : block_shard_orientation;
+    auto shard_scheme = (conv_shard_scheme == "HEIGHT") ? TensorMemoryLayout::HEIGHT_SHARDED : TensorMemoryLayout::BLOCK_SHARDED;
+    auto shard_orientation = (conv_shard_scheme == "HEIGHT") ? ShardOrientation::ROW_MAJOR : block_shard_orientation;
     ParallelConfig pconfig = {.grid = grid, .shard_scheme = shard_scheme, .shard_orientation = shard_orientation};
     return pconfig;
 }
@@ -240,6 +240,8 @@ tt::tt_metal::OptimizedConvBlockConfig determine_per_core_conv_block_config(
     uint32_t window_w,
     bool fp32_accum,
     bool use_shallow_conv_variant) {
+    bool test = parallel_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED;
+    std::cout << "parallel_config " <<  test  << std::endl;
     if (act_block_h_override > 0) {
         TT_ASSERT(
             act_block_h_override % 32 == 0,
@@ -319,12 +321,12 @@ std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_requir
                 if (conv_config.core_grid != input_shard_grid) {
                     needs_shard_or_reshard = true;
                 }
-                bool input_tensor_height_sharded = input_shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED;
-                if (conv_config.height_sharding != input_tensor_height_sharded) {
+                string input_tensor_height_sharded = input_shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED ? "HEIGHT" : "BLOCK";
+                if (conv_config.conv_shard_scheme != input_tensor_height_sharded) {
                     needs_shard_or_reshard = true;
                 }
                 bool input_transpose_shards = input_shard_orientation == ShardOrientation::COL_MAJOR;
-                if (!conv_config.height_sharding && conv_config.transpose_shards != input_transpose_shards) {
+                if (conv_config.conv_shard_scheme != "HEIGHT" && conv_config.transpose_shards != input_transpose_shards) {
                     needs_shard_or_reshard = true;
                 }
             }
@@ -335,7 +337,7 @@ std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_requir
         auto block_shard_orientation =
             conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
         const ParallelConfig& optimal_parallel_config = determine_parallel_config(
-            conv_config.height_sharding,
+            conv_config.conv_shard_scheme,
             batch_size,
             in_channels,
             height,
@@ -349,10 +351,10 @@ std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_requir
                 parallel_config = optimal_parallel_config;
             } else {
                 // override parallel config
-                auto shard_scheme = conv_config.height_sharding ? TensorMemoryLayout::HEIGHT_SHARDED
+                auto shard_scheme = conv_config.conv_shard_scheme == "HEIGHT" ? TensorMemoryLayout::HEIGHT_SHARDED
                                                                 : TensorMemoryLayout::BLOCK_SHARDED;
                 auto shard_orientation =
-                    conv_config.height_sharding ? ShardOrientation::ROW_MAJOR : block_shard_orientation;
+                    conv_config.conv_shard_scheme == "HEIGHT" ? ShardOrientation::ROW_MAJOR : block_shard_orientation;
                 parallel_config = {
                     .grid = conv_config.core_grid,
                     .shard_scheme = shard_scheme,
@@ -731,7 +733,7 @@ auto fmt::formatter<ttnn::operations::conv2d::Conv2dConfig>::format(
         "Conv2dConfig(math_fidelity={}, dtype={}, weights_dtype={}, math_approx_mode_enabled={}, "
         "fp32_dest_acc_enabled={}, packer_l1_accum_enabled={}, activation={}, input_channels_alignment={}, "
         "deallocate_activation={}, reallocate_halo_output={}, act_block_h_override={}, reshard_if_not_optimal={}, "
-        "override_sharding_config={}, height_sharding={}, core_grid={}, transpose_shards={}, output_layout={})",
+        "override_sharding_config={}, conv_shard_scheme={}, core_grid={}, transpose_shards={}, output_layout={})",
         t.math_fidelity,
         t.dtype,
         t.weights_dtype,
@@ -745,7 +747,7 @@ auto fmt::formatter<ttnn::operations::conv2d::Conv2dConfig>::format(
         t.act_block_h_override,
         t.reshard_if_not_optimal,
         t.override_sharding_config,
-        t.height_sharding,
+        t.conv_shard_scheme,
         t.core_grid.str(),
         t.transpose_shards,
         t.output_layout);

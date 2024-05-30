@@ -92,13 +92,14 @@ def run_conv(
         )
 
     tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+    conv_shard_scheme = "HEIGHT" if use_1d_systolic_array else "BLOCK"
     # breakpoint()
     conv_config = ttnn.Conv2dConfig(
         dtype=activations_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
         activation=None,
-        height_sharding=use_1d_systolic_array,
+        conv_shard_scheme=conv_shard_scheme,
         input_channels_alignment=(16 if use_shallow_conv_variant else 32),
         deallocate_activation=deallocate_activation,
     )
@@ -212,12 +213,13 @@ def run_conv_with_split(
     torch_input2_tensor = torch.permute(split_input_tensors[1], (0, 2, 3, 1))
     reader_patterns_cache = {}
 
+    conv_shard_scheme = "HEIGHT" if use_1d_systolic_array else "BLOCK"
     conv_config = ttnn.Conv2dConfig(
         dtype=activations_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
         activation=None,
-        height_sharding=use_1d_systolic_array,
+        conv_shard_scheme=conv_shard_scheme,
         # input_channels_alignment=(16 if use_shallow_conv_variant else 32),
     )
     if config_override and "act_block_h" in config_override:

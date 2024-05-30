@@ -30,7 +30,7 @@ inline Tensor maxpool2d(const Tensor& input_tensor, uint32_t batch_size, uint32_
     TT_FATAL(shard_orientation == ShardOrientation::ROW_MAJOR, "Only row major orientation is supported.");
 
     ParallelConfig parallel_config = conv2d::determine_parallel_config(
-                                        shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED,
+                                        shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED ? "HEIGHT" : "BLOCK",
                                         batch_size,
                                         0,          // in_channels -- not used
                                         input_h,
