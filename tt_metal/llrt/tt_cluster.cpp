@@ -230,6 +230,7 @@ void Cluster::assign_mem_channels_to_devices(chip_id_t mmio_device_id, const std
             continue;
         }
         this->device_to_host_mem_channel_[device_id] = channel++;
+        if ((channel + 1) % 4 == 0) channel++;
     }
 }
 
