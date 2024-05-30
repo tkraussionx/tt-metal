@@ -311,3 +311,107 @@ class TtMixtralAttention(torch.nn.Module):
         # return the sum of the outputs
         dense_outputs_11BH = ttnn.matmul(self.reduce_mask, dense_outputs_11BH)
         return dense_outputs_11BH
+
+    def forward_prefill(self, xs_11SH, start_pos, current_pos, attn_masks, rot_mats, user_id: int = 0):
+        assert xs_11SH.shape[2] % 128 == 0 and xs_11SH.shape[2] > 0, "Seqlen must be divisible by 128"
+        padded_layer_len = nearest_32(start_pos + 1)
+        ###
+        # QKV matmuls
+        ###
+        xqkv_fused = ttnn.linear(
+            xs_11SH,
+            self.wqkv,
+            dtype=ttnn.bfloat16,
+            memory_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+            core_grid=self.core_grid_attention,
+            compute_kernel_config=self.compute_kernel,
+        )
+
+        # split qkv into heads
+        (
+            q_heads_14SD,
+            k_heads_11SD,
+            v_heads_11SD,
+        ) = ttnn.experimental.tensor.nlp_create_qkv_heads(
+            xqkv_fused,
+            num_heads=self.n_local_heads,
+            num_kv_heads=self.n_local_kv_heads,
+            transpose_k_heads=False,
+            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        )
+
+        xqkv_fused.deallocate(True)
+
+        ###
+        # Rotary embeddings
+        ###
+
+        # TODO: Implement the rotation matrix
+        seq_len = q_heads_14SD.shape[2]
+        slice_size = 256 if seq_len == 2048 else 128
+        cores_y = 4 if slice_size == 128 else 8
+        num_slices = seq_len // slice_size  # we do q_lens of 128 per iteration (slice), then we concat the result.
+
+        # FILL K CACHE
+        keys = self.layer_past[0]
+        keys_11SD = ttnn.reshape(keys, [self.max_batch_size, self.n_local_kv_heads, -1, self.head_dim])
+        ttnn.experimental.tensor.fill_cache(
+            keys_11SD, ttnn.experimental.tensor.typecast(k_heads_11SD, self.model_config["BFP8_DTYPE"]), user_id
+        )
+
+        # FILL V CACHE
+        values = self.layer_past[0]
+        values_11SD = ttnn.reshape(values, [self.max_batch_size, self.n_local_kv_heads, -1, self.head_dim])
+        ttnn.experimental.tensor.fill_cache(
+            values_11SD, ttnn.experimental.tensor.typecast(v_heads_11SD, self.model_config["BFP8_DTYPE"]), user_id
+        )
+
+        # SDPA
+        program_config = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[8, 8],
+            q_chunk_size=128,
+            k_chunk_size=128,
+        )
+        attn_output_14SD = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention(
+            q_heads_14SD,
+            k_heads_11SD,
+            v_heads_11SD,
+            attn_masks,
+            is_causal=True,
+            scale=self.scale,
+            program_config=program_config,
+        )
+
+        # deallocate keys and values
+        q_heads_14SD.deallocate(True)
+        k_heads_11SD.deallocate(True)
+        v_heads_11SD.deallocate(True)
+
+        ###
+        # Output matmul
+        ###
+        attn_output_11SH = ttnn.experimental.tensor.nlp_concat_heads(
+            attn_output_14SD,
+            output_mem_config=self.model_config["L1_MEMCFG"],
+        )
+        attn_output_11SH = ttnn.all_gather(
+            attn_output_11SH,
+            dim=3,
+            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+            memory_config=self.model_config["DRAM_MEMCFG"],
+        )
+
+        seq_tiles = attn_output_11SH.shape[2] // 32
+        cores_y = 8 if seq_tiles % 8 == 0 else 4
+        dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"](seq_tiles, cores_y)
+
+        attn_output_11SH = ttnn.experimental.operations.primary.matmul(
+            attn_output_11SH,
+            self.wo,
+            program_config=dense_out_prog_cfg,
+            output_mem_config=self.model_config["DRAM_MEMCFG"],
+            output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        )
+
+        return attn_output_11SH
