@@ -538,6 +538,7 @@ def run_falcon_demo_kv(
         "inference_token_throughput_decode": num_tokens_generated_decode / time_decode_inference,  # tokens/s
         "model_preprocessing_time": model_preprocessing_time_end - model_preprocessing_time_start,
         "my_prefill_inference_time": my_time_prefill_inference_end - my_time_prefill_inference_start,
+        "my_pure_prefill_inference_time": my_time_prefill_inference_end - model_preprocessing_time_end,
         "bullshit_time": bullshit_time_end - bullshit_time_start,
     }
 
@@ -563,6 +564,7 @@ def run_falcon_demo_kv(
     )
     logger.info(f"Prefill model preprocessing time: {round(measurements['model_preprocessing_time'], 5)} s")
     logger.info(f"My prefill inference time: {round(measurements['my_prefill_inference_time'], 5)} s")
+    logger.info(f"My pure prefill inference time: {round(measurements['my_pure_prefill_inference_time'], 5)} s")
     logger.info(f"Bullshit time: {round(measurements['bullshit_time'], 5)} s")
 
     # Verify output or perf if expected values are provided
