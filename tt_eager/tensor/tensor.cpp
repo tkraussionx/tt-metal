@@ -395,7 +395,7 @@ Tensor Tensor::to(CommandQueue& queue, const MemoryConfig& mem_config) const {
 Tensor Tensor::to(Device* target_device, const MemoryConfig& mem_config) const {
     ZoneScoped;
     // Tensor can be using borrowed storage. If so, when running in async mode, copy this tensor to owned storage.
-    Tensor async_safe_tensor = copy_borrowed_tensor_in_async_mode(target_device, *this);
+    Tensor async_safe_tensor = *this; // copy_borrowed_tensor_in_async_mode(target_device, *this);
     // Populate device storage outside of thread, so that downstream
     // functions running in main can get storage type without blocking
     Tensor device_tensor({target_device});

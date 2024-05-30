@@ -94,8 +94,30 @@ Tensor convert_torch_tensor_to_tt_tensor(
         }
     }
 
-    auto on_creation_callback = [tensor = contiguous_torch_tensor] { tensor.inc_ref(); };
-    auto on_destruction_callback = [tensor = contiguous_torch_tensor] { tensor.dec_ref(); };
+    struct on_creation_callback_t {
+        py::handle tensor;
+        on_creation_callback_t(py::handle& tensor_arg) : tensor{tensor_arg} {}
+
+        void operator() () {
+            py::gil_scoped_release release;
+            py::gil_scoped_acquire acquire;
+            this->tensor.inc_ref();
+        }
+    };
+
+    struct on_destruction_callback_t {
+        py::handle tensor;
+        on_destruction_callback_t(py::handle& tensor_arg) : tensor{tensor_arg} {}
+        void operator() () {
+            py::gil_scoped_release release;
+            py::gil_scoped_acquire acquire;
+            this->tensor.dec_ref();
+        }
+    };
+
+    auto on_creation_callback = on_creation_callback_t(contiguous_torch_tensor);
+    auto on_destruction_callback = on_destruction_callback_t(contiguous_torch_tensor);
+
 
     auto num_elements = py::cast<std::size_t>(contiguous_torch_tensor.attr("numel")());
     auto torch_data_ptr = py::cast<std::size_t>(contiguous_torch_tensor.attr("data_ptr")());

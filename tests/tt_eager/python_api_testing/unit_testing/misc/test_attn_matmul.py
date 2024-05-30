@@ -34,7 +34,7 @@ def generate_input_shapes():
 @pytest.mark.parametrize("out_dtype", [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B])
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 20), (False, 1)),
+    ((True, 200), (False, 1)),
 )
 def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, device):
     torch.manual_seed(0)
@@ -42,10 +42,14 @@ def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, d
 
     for input_shape_a, input_shape_b in generate_input_shapes():
         for _ in range(num_loops):
-            input_tensor_a = torch.randn(input_shape_a).bfloat16()
-            input_tensor_b = torch.randn(input_shape_b).bfloat16()
-            tt_input_tensor_a = ttl.tensor.Tensor(input_tensor_a, in0_dtype).to(ttl.tensor.Layout.TILE)
-            tt_input_tensor_b = ttl.tensor.Tensor(input_tensor_b, in1_dtype).to(ttl.tensor.Layout.TILE)
+            # input_tensor_a = torch.ones(input_shape_a).bfloat16()
+            # input_tensor_b = torch.ones(input_shape_b).bfloat16()
+            tt_input_tensor_a = ttl.tensor.Tensor(torch.ones(input_shape_a).bfloat16(), in0_dtype).to(
+                ttl.tensor.Layout.TILE, device
+            )
+            tt_input_tensor_b = ttl.tensor.Tensor(torch.ones(input_shape_b).bfloat16(), in1_dtype).to(
+                ttl.tensor.Layout.TILE, device
+            )
             # Test python syntax in async mode -> tensor handle for inputs should get properly updated when sending to device
             tt_input_tensor_a = tt_input_tensor_a.to(device)
             tt_input_tensor_b = tt_input_tensor_b.to(device)
@@ -63,7 +67,9 @@ def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, d
             tt_input_tensor_b.deallocate()
             tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
             tt_output_tensor_on_device.deallocate()
-            golden_output_tensor = (input_tensor_a.transpose(0, 2) @ input_tensor_b).transpose(0, 2)
+            golden_output_tensor = (
+                torch.ones(input_shape_a).bfloat16().transpose(0, 2) @ torch.ones(input_shape_b).bfloat16()
+            ).transpose(0, 2)
 
             allclose, output = comp_pcc(tt_output_tensor, golden_output_tensor)
             assert allclose, f"FAILED: {output}"

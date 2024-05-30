@@ -480,28 +480,29 @@ void insert_buffer_and_shape_for_device(
 Tensor copy_borrowed_tensor_in_async_mode(Device* worker, const Tensor& tensor) {
     // When using async mode, tensors with borrowed storage cannot be passed to workers.
     // They need to be copied to owned storage before being passed to the worker.
-    ZoneScopedN("ConvertBorrowedToOwned");
+    return tensor;
     // Tensor has workers (on device) or runtime mode is synchronous or tensor has multiple buffers.
     // No need to check for borrowed storage.
-    if (worker->get_worker_mode() == WorkExecutorMode::SYNCHRONOUS or
-        tensor.tensor_attributes->num_shards_to_be_populated > 1)
-        return tensor;
+    // if (worker->get_worker_mode() == WorkExecutorMode::SYNCHRONOUS or
+    //     tensor.tensor_attributes->num_shards_to_be_populated > 1)
+    //     return tensor;
 
-    if (tensor.storage_type() == StorageType::BORROWED) {
-        ZoneScopedN("CopyBorrowedStorage");
-        auto borrowed_buffer = std::get<BorrowedStorage>(tensor.get_storage()).buffer;
-        Tensor owned_tensor;
-        std::visit(
-            [&owned_tensor, &tensor](auto&& buffer) {
-                using BorrowedStorageType = std::vector<std::decay_t<decltype(*(buffer.begin()))>>;
-                auto owned_buf = owned_buffer::create(BorrowedStorageType(buffer.begin(), buffer.end()));
-                owned_tensor =
-                    Tensor(OwnedStorage{owned_buf}, tensor.get_shape(), tensor.get_dtype(), tensor.get_layout());
-            },
-            borrowed_buffer);
-        return owned_tensor;
-    }
-    return tensor;
+    // if (tensor.storage_type() == StorageType::BORROWED) {
+    //     tensor.get_storage().buffer.on_creation_call_back();
+    //     ZoneScopedN("CopyBorrowedStorage");
+    //     auto borrowed_buffer = std::get<BorrowedStorage>(tensor.get_storage()).buffer;
+    //     Tensor owned_tensor;
+    //     std::visit(
+    //         [&owned_tensor, &tensor](auto&& buffer) {
+    //             using BorrowedStorageType = std::vector<std::decay_t<decltype(*(buffer.begin()))>>;
+    //             auto owned_buf = owned_buffer::create(BorrowedStorageType(buffer.begin(), buffer.end()));
+    //             owned_tensor =
+    //                 Tensor(OwnedStorage{owned_buf}, tensor.get_shape(), tensor.get_dtype(), tensor.get_layout());
+    //         },
+    //         borrowed_buffer);
+    //     return owned_tensor;
+    // }
+    // return tensor;
 }
 
 }  // namespace tt_metal
