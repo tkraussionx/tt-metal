@@ -245,3 +245,25 @@ def test_moreh_linear_backward_enable_cache(shapes, device, use_program_cache):
             shapes, requires_input_grad, requires_weight_grad, requires_bias_grad, compute_kernel_config, device
         )
         assert passing
+
+
+@pytest.mark.parametrize(
+    "shapes",
+    (
+        # input, weight, bias(1d or scalar), output
+        ([31, 31], [30, 31], [1, 1], [31, 30]),
+    ),
+)
+@pytest.mark.parametrize(
+    "requires_grads",
+    ((True, True),),
+)
+def test_reduce_scalar_with_fp32_acc(shapes, requires_grads, device):
+    torch.manual_seed(3072)
+    requires_input_grad, requires_weight_grad = requires_grads
+    requires_bias_grad = True
+    compute_kernel_config = get_compute_kernel_options(True)
+    passing = moreh_linear_backward(
+        shapes, requires_input_grad, requires_weight_grad, requires_bias_grad, compute_kernel_config, device
+    )
+    assert passing

@@ -59,8 +59,8 @@ operation::ProgramWithCallbacks moreh_bias_backward_single_core_hw(const Tensor 
 
     // TODO
     if (fp32_dest_acc_en) {
-        log_warning(LogOp, "reduce scalar doesn't support fp32_dest_acc_en. fallback to false.");
-        fp32_dest_acc_en = false;
+        log_warning(LogOp, "reduce scalar doesn't support fp32_dest_acc_en! TEST BRANCH");
+        // fp32_dest_acc_en = false;
     }
 
     ////////////////////////////////////////////////////////////////////////////
