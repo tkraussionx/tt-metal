@@ -1895,3 +1895,22 @@ def interleaved_to_sharded_partial(x, *args, **kwargs):
     print(res.shape)
 
     return res
+
+
+"""
+
+def interleaved_to_sharded_partial(x, *args, **kwargs):
+    slice_size = x.size(-2) // 2
+    sliced_tensor = x.index_select(-2, torch.tensor(torch.arange(0, slice_size-1)))
+    print(sliced_tensor.shape)
+
+    return sliced_tensor
+
+def interleaved_to_sharded_partial(x, *args, **kwargs):
+    slice_size = x.size(-2) // 2
+    sliced_tensor = x.index_select(-2, torch.tensor([0, slice_size - 1]))
+
+    print(sliced_tensor.shape)
+
+    return sliced_tensor
+"""

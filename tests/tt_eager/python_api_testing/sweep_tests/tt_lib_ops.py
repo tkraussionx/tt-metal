@@ -3375,18 +3375,40 @@ def interleaved_to_sharded_partial(
 
     print("pre")
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.interleaved_to_sharded_partial(
-        t0,
-        grid_size,
-        height_shard_spec,
-        2,
-        0,
-        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.ShardOrientation.ROW_MAJOR,
+
+    interleaved_mem_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
     )
+
+    out_initial = torch.randn(x.shape).bfloat16().float()
+
+    t2 = torch2tt_tensor(out_initial, device, tt_memory_config=interleaved_mem_config, tt_dtype=dtype[0])
+    print(dtype)
+
+    for slice_index in range(2):
+        t1 = ttl.tensor.interleaved_to_sharded_partial(
+            t0,
+            grid_size,
+            height_shard_spec,
+            2,
+            slice_index,
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+        )
+
+        print("posle1")
+
+        ttl.tensor.sharded_to_interleaved_partial(
+            t1,
+            t2,
+            2,
+            slice_index,
+            interleaved_mem_config,
+        )
 
     print("posle")
 
-    returned_res = tt2torch_tensor(t1)
+    returned_res = tt2torch_tensor(t2)
     print(returned_res.shape)
     return returned_res
