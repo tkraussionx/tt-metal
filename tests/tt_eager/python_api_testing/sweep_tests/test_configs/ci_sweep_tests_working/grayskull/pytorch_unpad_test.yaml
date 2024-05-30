@@ -4,9 +4,9 @@ test-list:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
-        interval: [1, 1, 32, 32]
+        interval: [1, 1, 1, 1]
         num-shapes: 1
-        num-samples: 48
+        num-samples: 1000
         args-sampling-strategy: "all"
       datagen:
         function: gen_rand
@@ -15,7 +15,7 @@ test-list:
           high: 100
       comparison:
         function: comp_equal
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"
@@ -28,9 +28,9 @@ test-list:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
-        interval: [1, 1, 32, 32]
+        interval: [1, 1, 1, 1]
         num-shapes: 1
-        num-samples: 48
+        num-samples: 1000
         args-sampling-strategy: "all"
       datagen:
         function: gen_rand
@@ -39,7 +39,7 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"
@@ -52,9 +52,9 @@ test-list:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
-        interval: [1, 1, 32, 32]
+        interval: [1, 1, 1, 1]
         num-shapes: 1
-        num-samples: 48
+        num-samples: 1000
         args-sampling-strategy: "all"
       datagen:
         function: gen_rand
@@ -63,7 +63,7 @@ test-list:
           high: 100
       comparison:
         function: comp_equal
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"

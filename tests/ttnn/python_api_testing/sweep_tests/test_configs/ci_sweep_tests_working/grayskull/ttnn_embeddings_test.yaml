@@ -3,10 +3,10 @@ test-list:
   - ttnn-embeddings:
       shape:
         start-shape: [1, 32, 512, 2048]
-        end-shape: [1, 512, 2048, 4096]
-        interval: [1, 32, 32, 32]
+        end-shape: [1, 512, 2048, 16384]
+        interval: [1, 1, 1, 1]
         num-shapes: 2
-        num-samples: 128
+        num-samples: 5000
         method: ttnn-embeddings
       datagen:
         function: gen_rand

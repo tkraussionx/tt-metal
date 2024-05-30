@@ -15,7 +15,7 @@ test-list:
           high: 100
       comparison:
         function: comp_equal
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"
@@ -39,7 +39,7 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"
@@ -63,7 +63,7 @@ test-list:
           high: 100
       comparison:
         function: comp_equal
-      args-gen: gen_unpad_args
+      args-gen: gen_unpad_args_2
       output-file: unpad_sweep.csv
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"

@@ -3,10 +3,10 @@ test-list:
   - embeddings-bw:
       shape:
         start-shape: [1, 32, 32, 32]
-        end-shape: [6, 256, 256, 256]
-        interval: [1, 32, 32, 32]
+        end-shape: [6, 512, 512, 512]
+        interval: [1, 1, 1, 1]
         num-shapes: 3
-        num-samples: 64
+        num-samples: 2000
         args-sampling-strategy: "all"
         method: embeddings-bw
       datagen:
@@ -39,10 +39,10 @@ test-list:
   - embeddings-bw:
       shape:
         start-shape: [1, 1, 2, 2]
-        end-shape: [6, 12, 256, 256]
-        interval: [1, 1, 1, 2]
+        end-shape: [6, 12, 512, 512]
+        interval: [1, 1, 1, 1]
         num-shapes: 3
-        num-samples: 64
+        num-samples: 2000
         method: embeddings-bw
         args-sampling-strategy: "all"
       datagen:

@@ -935,6 +935,65 @@ def gen_unpad_args(
             yield input_info
 
 
+def gen_unpad_args_2(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    mem_configs=[supported_mem_configs],
+    do_sanitize_args=True,
+):
+    assert len(input_shapes) == 1
+    assert len(input_shapes[0]) == 4
+
+    for input_info in gen_dtype_layout_device(
+        input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=do_sanitize_args
+    ):
+        if input_info is not None:
+            if input_shapes[0][0] == 1:
+                first_start = 0
+                first_end = 1
+            else:
+                first_start = random.randint(0, input_shapes[0][0] - 2)
+                first_end = random.randint(first_start + 1, input_shapes[0][0] - 1)
+
+            if input_shapes[0][1] == 1:
+                second_start = 0
+                second_end = 1
+            else:
+                second_start = random.randint(0, input_shapes[0][1] - 2)
+                second_end = random.randint(second_start + 1, input_shapes[0][1] - 1)
+
+            if input_shapes[0][2] == 1:
+                third_start = 0
+                third_end = 1
+            else:
+                third_start = random.randint(0, input_shapes[0][2] - 2)
+                third_end = random.randint(third_start + 1, input_shapes[0][2] - 1)
+
+            if input_shapes[0][3] == 1:
+                fourth_start = 0
+                fourth_end = 1
+            else:
+                fourth_start = random.randint(0, input_shapes[0][3] - 2)
+                fourth_end = random.randint(fourth_start + 1, input_shapes[0][3] - 1)
+
+            output_tensor_start = [first_start, second_start, third_start, fourth_start]
+            print("case 1")
+            print(output_tensor_start)
+
+            output_tensor_end = [first_end, second_end, third_end, fourth_end]
+            print(output_tensor_end)
+
+            input_info.update(
+                {
+                    "output_tensor_start": output_tensor_start,
+                    "output_tensor_end": output_tensor_end,
+                }
+            )
+
+            yield input_info
+
+
 def gen_lamb_optimized_args(
     input_shapes,
     dtypes,
