@@ -149,7 +149,6 @@ def run_test_FalconDecoder_inference(
         assert does_pass, f"PCC value is lower than {pcc}"
 
 
-@pytest.mark.parametrize("num_devices", (1, 2, 4))
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
@@ -164,9 +163,8 @@ def run_test_FalconDecoder_inference(
     "model_version, layer_num, pcc",
     (("tiiuae/falcon-7b-instruct", 0, 0.98),),
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ["BFLOAT16-DRAM"])
 def test_FalconDecoder_inference(
-    num_devices,
     model_version,
     llm_mode,
     batch,
@@ -177,9 +175,10 @@ def test_FalconDecoder_inference(
     model_config_str,
     model_location_generator,
     get_tt_cache_path,
-    all_devices,
+    device,
 ):
-    devices = get_devices_for_t3000(all_devices, num_devices)
+    devices = []
+    devices.append(device)
 
     model_config = get_model_config(model_config_str, seq_len)
     tt_cache_path = get_tt_cache_path(

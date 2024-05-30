@@ -355,6 +355,7 @@ def run_falcon_demo_kv(
 
     post_processor = partial(post_process)
     output_ids = torch.zeros(num_users, 1, dtype=torch.int64)
+    logger.info("Inference.Begin")
     logger.info("Running inference prefill stage...")
     time_prefill_inference = 0
     if not perf_mode:
@@ -363,15 +364,21 @@ def run_falcon_demo_kv(
     else:
         N = 15
         N_warmup = 5
+    logger.info(f"N = {N} N_warmup = {N_warmup}")
     for i in tqdm(range(N)):
         user_id = i if not perf_mode else 0
         time_prefill_inference_start = time.time()
+        my_time_prefill_inference_start = time.time()
+        model_preprocessing_time_start = time.time()
         (
             tt_prefill_input_ids,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
             "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
+        synchronize_devices(devices)
+
+        model_preprocessing_time_end = time.time()
         assert tt_prefill_attention_mask is not None
 
         tt_logits, kv_cache = tt_FalconCausalLM(
@@ -384,7 +391,9 @@ def run_falcon_demo_kv(
             use_cache=use_cache,
         )
         synchronize_devices(devices)
+        my_time_prefill_inference_end = time.time()
 
+        bullshit_time_start = time.time()
         if tt_prefill_attention_mask is not None:
             for device_id in range(len(tt_prefill_attention_mask)):
                 if isinstance(tt_prefill_attention_mask[device_id], ttnn.experimental.tensor.Tensor):
@@ -408,7 +417,10 @@ def run_falcon_demo_kv(
 
         if i >= N_warmup:
             time_prefill_inference += time.time() - time_prefill_inference_start
+        bullshit_time_end = time.time()
 
+    # here is inference end timer
+    logger.info("Prefill.End")
     logger.info("Finished inference prefill stage!")
     num_users_generated_prefill = num_users if not perf_mode else (N - N_warmup) * num_devices
 
@@ -524,6 +536,9 @@ def run_falcon_demo_kv(
         / time_prefill_inference
         * prefill_ids.shape[1],  # tokens/s
         "inference_token_throughput_decode": num_tokens_generated_decode / time_decode_inference,  # tokens/s
+        "model_preprocessing_time": model_preprocessing_time_end - model_preprocessing_time_start,
+        "my_prefill_inference_time": my_time_prefill_inference_end - my_time_prefill_inference_start,
+        "bullshit_time": bullshit_time_end - bullshit_time_start,
     }
 
     logger.info(f"pre processing: {round(measurements['preprocessing'], 5)} s")
@@ -546,6 +561,9 @@ def run_falcon_demo_kv(
     logger.info(
         f"inference throughput decode (per user): {round(measurements['inference_token_throughput_decode']/global_batch, 5)} tok/s/user"
     )
+    logger.info(f"Prefill model preprocessing time: {round(measurements['model_preprocessing_time'], 5)} s")
+    logger.info(f"My prefill inference time: {round(measurements['my_prefill_inference_time'], 5)} s")
+    logger.info(f"Bullshit time: {round(measurements['bullshit_time'], 5)} s")
 
     # Verify output or perf if expected values are provided
     perf_prefill_decode = [
