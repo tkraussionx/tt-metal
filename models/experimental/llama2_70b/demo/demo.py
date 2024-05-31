@@ -185,19 +185,27 @@ def latency_printout(latencies, args, generated_len):
     overall_time = sum(latencies)
     overall_tokens = args.max_batch_size * len(latencies)
     warmup_batch = 2
-    # skip initial warmup batch
+    # Skip initial warmup batch
     if len(latencies) > warmup_batch:
         overall_time -= sum(latencies[:warmup_batch])
         overall_tokens -= warmup_batch * args.max_batch_size
         latencies = latencies[warmup_batch:]
-    mean_latency = sum(latencies) / len(latencies)
+
+    if len(latencies) > 0:
+        mean_latency = sum(latencies) / len(latencies)
+    else:
+        mean_latency = 0
+
     tokens_per_second = 1 / mean_latency if mean_latency != 0 else 0
     overall_tokens_per_second = overall_tokens / overall_time if overall_time != 0 else 0
-    tokens_per_second_per_user = overall_tokens_per_second / args.max_batch_size
+    tokens_per_second_per_user = overall_tokens_per_second / args.max_batch_size if args.max_batch_size != 0 else 0
 
-    logger.info(
-        f"Overall throughput: {1000 * overall_time / overall_tokens:.1f} ms @ {overall_tokens_per_second:.1f} tokens/s"
-    )
+    if overall_tokens > 0:
+        throughput = 1000 * overall_time / overall_tokens
+    else:
+        throughput = 0
+
+    logger.info(f"Overall throughput: {throughput:.1f} ms @ {overall_tokens_per_second:.1f} tokens/s")
     logger.info(f"Tokens per second per user: {tokens_per_second_per_user:.1f} tokens/s/u")
     logger.info(f"User latency: {1000 * mean_latency:.1f} ms @ {tokens_per_second:.1f} tokens/s")
 
@@ -205,14 +213,21 @@ def latency_printout(latencies, args, generated_len):
 def get_all_text(tokenizer, tokens, prompt_tokens, max_gen_len):
     out_tokens = []
     for i, toks in enumerate(tokens.tolist()):
-        # cut to max gen len
-        start = 0
-        toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
+        try:
+            # cut to max gen len
+            start = 0
+            toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
+        except IndexError:
+            print(f"Index out of range for sequence {i}, returning entire sequence.")
+            # Continue with the entire sequence without slicing
+            pass
+
         # cut to eos tok if any
         if tokenizer.eos_id in toks:
             eos_idx = toks.index(tokenizer.eos_id)
             toks = toks[:eos_idx]
         out_tokens.append(toks)
+
     all_text = [tokenizer.decode(toks) for toks in out_tokens]
     return all_text
 
