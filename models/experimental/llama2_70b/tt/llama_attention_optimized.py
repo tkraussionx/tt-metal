@@ -678,7 +678,9 @@ class TtLlamaAttention_optimized:
             memory_config=self.model_config["DRAM_MEMCFG"],
         )
 
-        dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"]
+        seq_tiles = attn_output.shape[2] // 32
+        cores_y = 8 if seq_tiles % 8 == 0 else 4
+        dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"](seq_tiles, cores_y)
         # print('wo matmul')
         attn_output = tt_lib.operations.primary.matmul(
             attn_output,
