@@ -793,12 +793,7 @@ class resnet50:
                 x.get_legacy_shape()[3],
             ),
         )
-        # for _, tensor in conv_op_cache["reader_patterns_cache"]["conv"].items():
-        #     ttnn.deallocate(tensor)
-        # for _, halo_tensors in conv_op_cache["reader_patterns_cache"]["halo"].items():
-        #     for tensor in halo_tensors.values():
-        #         if isinstance(tensor, ttnn.Tensor):
-        #             ttnn.deallocate(tensor)
+
         return x
 
     def optimized_run(self, input_tensor, device, batch_size, ops_parallel_config, conv_op_cache) -> ttnn.Tensor:
