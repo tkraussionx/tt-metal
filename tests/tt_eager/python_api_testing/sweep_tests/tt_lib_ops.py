@@ -3360,7 +3360,7 @@ def tt_embedding_bw(
 def interleaved_to_sharded_partial(
     x,
     *args,
-    # num_slices,
+    num_slices,
     device,
     dtype,
     layout,
@@ -3386,12 +3386,12 @@ def interleaved_to_sharded_partial(
     t2 = torch2tt_tensor(out_initial, device, tt_memory_config=interleaved_mem_config, tt_dtype=dtype[0])
     print(dtype)
 
-    for slice_index in range(2):
+    for slice_index in range(num_slices):
         t1 = ttl.tensor.interleaved_to_sharded_partial(
             t0,
             grid_size,
             height_shard_spec,
-            2,
+            num_slices,
             slice_index,
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
             ttl.tensor.ShardOrientation.ROW_MAJOR,
@@ -3402,7 +3402,7 @@ def interleaved_to_sharded_partial(
         ttl.tensor.sharded_to_interleaved_partial(
             t1,
             t2,
-            2,
+            num_slices,
             slice_index,
             interleaved_mem_config,
         )

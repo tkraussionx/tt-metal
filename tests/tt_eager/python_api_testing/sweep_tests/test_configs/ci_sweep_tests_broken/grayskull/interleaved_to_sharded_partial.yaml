@@ -6,7 +6,7 @@ test-list:
         end-shape: [6, 12, 256, 256]
         interval: [1, 1, 32, 32]
         num-shapes: 1
-        num-samples: 64
+        num-samples: 5000
         args-sampling-strategy: "all"
       env:
         # TT_PCI_DMA_BUF_SIZE: "1048576"
@@ -17,7 +17,7 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
+      args-gen: gen_sharded_args
       output-file: interleaved_to_sharded_partial.csv
       args:
         data-layout: ["ROW_MAJOR"]

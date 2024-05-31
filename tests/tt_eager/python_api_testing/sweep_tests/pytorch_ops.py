@@ -1884,7 +1884,7 @@ def multiply_and_apply_activation(x, y, *args, **kwargs):
     return output
 
 
-def interleaved_to_sharded_partial(x, *args, **kwargs):
+def interleaved_to_sharded_partial(x, num_slices, *args, **kwargs):
     # print('prepy')
     # slice_size = x.size(0) // 2 + 1
     # print('poslepy')
