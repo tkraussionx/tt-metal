@@ -117,3 +117,66 @@ class TtMixtralMLP(torch.nn.Module):
         )
 
         return w2_out
+
+    def forward_prefill(self, x: ttnn.Tensor):
+        self.w1_prg_cfg = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            in0_block_w=2,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=4,  # M / TILE_HEIGHT = 32 / 32
+            per_core_N=7,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+            fuse_batch=True,
+            fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+            mcast_in0=True,
+        )
+        self.w3_prg_cfg = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            in0_block_w=4,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=4,  # M / TILE_HEIGHT = 32 / 32
+            per_core_N=11,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
+        )
+        self.w2_prg_cfg = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            in0_block_w=7,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=2,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=4,  # M / TILE_HEIGHT = 32 / 32
+            per_core_N=2,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
+        )
+        w1_out = ttnn.experimental.operations.primary.matmul_1d(
+            x,
+            self.w1,
+            program_config=self.w1_prg_cfg,
+            output_mem_config=self.model_config["FF1_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
+        )
+        w3_out = ttnn.experimental.operations.primary.matmul_1d(
+            x,
+            self.w3,
+            program_config=self.w3_prg_cfg,
+            output_mem_config=self.model_config["FF3_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
+        )
+        w2_in = ttnn.experimental.tensor.mul(w1_out, w3_out)
+
+        w2_out = ttnn.experimental.operations.primary.matmul_1d(
+            w2_in,
+            self.w2,
+            program_config=self.w3_prg_cfg,
+            output_mem_config=self.model_config["FF2_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
+        )
+
+        return w2_out
