@@ -58,7 +58,6 @@ def test_mixtral_argmax(t3k_device_mesh, use_program_cache, reset_seeds):
 
     # TODO Update argmax to ttnn when OP becomes available
     logger.info(f"Running on device")
-    tt_lib.device.SetDefaultDevice(t3k_device_mesh.get_device(0))
     tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH, dim=-1)
     tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
     logger.info(f"tt_out_1B shape: {tt_out_1B.shape}")
@@ -69,6 +68,7 @@ def test_mixtral_argmax(t3k_device_mesh, use_program_cache, reset_seeds):
     # else:
     #     decode_input_1B = tt_out_1B
 
+    tt_out_1B = ttnn.to_torch(tt_out_1B, mesh_composer=ttnn.ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
     passing = comp_allclose(ref_out_1B, tt_out_1B)
 
     if passing:
