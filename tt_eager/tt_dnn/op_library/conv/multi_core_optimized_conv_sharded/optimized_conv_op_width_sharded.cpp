@@ -22,8 +22,7 @@ namespace tt {
 
 namespace tt_metal {
 
-// TODO: Add namespace for utilities?
-tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
+tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
     tt_metal::Program& program,
     const Tensor& input,
     CoreRange core,
@@ -189,7 +188,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
     return {cb_sharded_act, cb_output};
 }
 
-operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
+operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_sharded(
     tt_metal::Program& program,
     const Tensor& a,
     const Tensor& b,
@@ -207,15 +206,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     bool use_shallow_conv_variant,
     bool transpose_mcast,
     Tensor& output,
-    DeviceComputeKernelConfig compute_kernel_config) {
-    if(a.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED){
-        return multi_core_optimized_conv_sharded_v2_impl_width_sharded(
-            program, a, b, ashape, bias, conv_reader_indices, conv_params, output_channels, untilize_out, has_bias, fuse_relu,
-            parallelization_config, block_config, extra_padding_for_32B_alignment, use_shallow_conv_variant, transpose_mcast, output, compute_kernel_config);
-    }
-    std::cout << "testing multi_core_optimized_conv_sharded_v2_impl 1" << std::endl;
+    DeviceComputeKernelConfig compute_kernel_config){
+         std::cout << "testing multi_core_optimized_conv_sharded_v2_impl 1" << std::endl;
     bool pass = true;
-    tt_metal::Device* device = a.device();
+     tt_metal::Device* device = a.device();
     TT_ASSERT(a.get_layout() == Layout::ROW_MAJOR, "Conv activation should be in row major layout");
     TT_ASSERT(a.memory_config().is_sharded(), "Conv activation must be sharded.");
     TT_ASSERT(output_channels <= b.get_legacy_shape()[3], "Invalid weight shape. Incorrect weight tensor.");
@@ -312,9 +306,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
 
     // weight_width_sliced determines is 1d-sysarr-conv or 2d-sysarr-conv
     bool weight_width_sliced = per_core_out_matrix_width_ntiles < weight_matrix_width_ntiles;
+    //weight_width_sliced = false;
     uint32_t conv_act_c_blocks = weight_matrix_width_ntiles / per_core_out_matrix_width_ntiles;
     uint32_t input_channels_padded = 0;
-    if (weight_width_sliced) {
+    if (weight_width_sliced && a.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED) {
         if (transpose_mcast) {
             TT_FATAL(conv_act_c_blocks == num_cores_y, "Expected conv_act_c_blocks to be equal to height of grid");
             input_channels_padded = shard_shape[1] * num_cores_y;
@@ -323,7 +318,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
             input_channels_padded = shard_shape[1] * num_cores_x;
         }
     } else {
-        input_channels_padded = shard_shape[1];
+        input_channels_padded = shard_shape[1] ;
+    }
+    if(a.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED){
+        input_channels_padded = shard_shape[1] * p_config.num_cores_c ;
     }
     TT_FATAL(input_channels_padded >= ashape[3], "Incorrect padding of input channels!");
     // check is for 16-byte alignment
@@ -375,6 +373,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     }
 
     // Normal matrix shape check
+    std::cout << "act_matrix_width: " << act_matrix_width << " weight_matrix_height " << weight_matrix_height << std::endl;
     TT_ASSERT(act_matrix_width == weight_matrix_height, "The width of tensor a needs to match the height of tensor b");
 
     // Tile size divisibility checks
@@ -581,50 +580,66 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t num_weight_slices_width = weight_matrix_width_ntiles / per_core_out_matrix_width_ntiles;
     uint32_t total_num_cores_per_weight_slice = 0;
     uint32_t total_num_cores_per_act_slice = 0;  // only used when (BLOCK_SHARDING && !transpose_mcast)
-    if (weight_width_sliced) {
-        if (transpose_mcast) {
+    if(a.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED){
+        assert(p_config.num_cores_c % num_weight_slices_width == 0);
+        uint32_t num_cores_x_per_weight_slice_width = num_weight_slices_width;
+        uint32_t num_act_slices_height = act_matrix_height_ntiles / per_core_out_matrix_height_ntiles;
+        total_num_cores_per_act_slice = num_cores_x * num_cores_y / num_act_slices_height;
+        log_debug(LogOp, "total_num_cores_per_act_slice: {}", total_num_cores_per_act_slice);
+        total_num_cores_per_weight_slice = num_cores_x_per_weight_slice_width;
+    }
+    /*else{
+        if (weight_width_sliced) {
+            if (transpose_mcast) {
+                assert(num_cores_y % num_weight_slices_width == 0);
+                uint32_t num_cores_y_per_weight_slice_width = num_cores_y / num_weight_slices_width;
+                total_num_cores_per_weight_slice = num_cores_y_per_weight_slice_width * num_cores_x;
+            } else {
+                assert(num_cores_x % num_weight_slices_width == 0);
+                uint32_t num_cores_x_per_weight_slice_width = num_cores_x / num_weight_slices_width;
+                uint32_t num_act_slices_height = act_matrix_height_ntiles / per_core_out_matrix_height_ntiles;
+                total_num_cores_per_act_slice = num_cores_x * num_cores_y / num_act_slices_height;
+                log_debug(LogOp, "total_num_cores_per_act_slice: {}", total_num_cores_per_act_slice);
+                total_num_cores_per_weight_slice = num_cores_x_per_weight_slice_width * num_cores_y;
+            }
+            assert(total_num_cores_per_weight_slice * per_core_out_matrix_height_ntiles == act_matrix_height_ntiles);
+        } else {
             assert(num_cores_y % num_weight_slices_width == 0);
             uint32_t num_cores_y_per_weight_slice_width = num_cores_y / num_weight_slices_width;
             total_num_cores_per_weight_slice = num_cores_y_per_weight_slice_width * num_cores_x;
-        } else {
-            assert(num_cores_x % num_weight_slices_width == 0);
-            uint32_t num_cores_x_per_weight_slice_width = num_cores_x / num_weight_slices_width;
-            uint32_t num_act_slices_height = act_matrix_height_ntiles / per_core_out_matrix_height_ntiles;
-            total_num_cores_per_act_slice = num_cores_x * num_cores_y / num_act_slices_height;
-            log_debug(LogOp, "total_num_cores_per_act_slice: {}", total_num_cores_per_act_slice);
-            total_num_cores_per_weight_slice = num_cores_x_per_weight_slice_width * num_cores_y;
+            assert(total_num_cores * per_core_out_matrix_height_ntiles >= act_matrix_height_ntiles);
         }
-        assert(total_num_cores_per_weight_slice * per_core_out_matrix_height_ntiles == act_matrix_height_ntiles);
-    } else {
-        assert(num_cores_y % num_weight_slices_width == 0);
-        uint32_t num_cores_y_per_weight_slice_width = num_cores_y / num_weight_slices_width;
-        total_num_cores_per_weight_slice = num_cores_y_per_weight_slice_width * num_cores_x;
-        assert(total_num_cores * per_core_out_matrix_height_ntiles >= act_matrix_height_ntiles);
-    }
+    }*/
+
     assert(per_core_out_matrix_height_ntiles % act_block_h_ntiles == 0);
     uint32_t num_blocks_act_h_per_core = per_core_out_matrix_height_ntiles / act_block_h_ntiles;
     assert(per_core_out_matrix_height_ntiles % out_block_h_ntiles == 0);
     uint32_t num_blocks_out_h_per_core = per_core_out_matrix_height_ntiles / out_block_h_ntiles;
     bool act_height_sliced = per_core_out_matrix_height_ntiles < act_matrix_height_ntiles;
-    if (not act_height_sliced) {
+    /*if (not act_height_sliced) {
         assert(num_blocks_act_h_per_core == num_blocks_act_h);
         assert(num_blocks_out_h_per_core == num_blocks_out_h);
         assert(num_cores_x == 1);
-    }
+    }*/
 
     log_debug(LogOp, "total_num_cores_per_weight_slice: {}", total_num_cores_per_weight_slice);
     log_debug(LogOp, "num_blocks_act_h_per_core: {}", num_blocks_act_h_per_core);
     log_debug(LogOp, "num_blocks_out_h_per_core: {}", num_blocks_out_h_per_core);
 
+    //issue here testing more
     assert(act_matrix_height_ntiles % per_core_out_matrix_height_ntiles == 0);
     uint32_t total_active_num_cores_per_weight_slice = act_matrix_height_ntiles / per_core_out_matrix_height_ntiles;
     assert(total_active_num_cores_per_weight_slice <= total_num_cores_per_weight_slice);
-    uint32_t total_noop_cores = total_num_cores_per_weight_slice - total_active_num_cores_per_weight_slice;
-    uint32_t total_active_num_cores = total_active_num_cores_per_weight_slice * num_weight_slices_width;
-    if (weight_width_sliced) {
+    //uint32_t total_noop_cores = total_num_cores_per_weight_slice - total_active_num_cores_per_weight_slice;
+    uint32_t total_cores = num_cores_x * num_cores_y; //changed
+    uint32_t total_active_num_cores = p_config.num_cores_c;
+    uint32_t total_noop_cores = total_cores - total_num_cores_per_weight_slice;
+
+    //issue could be here
+    /*if (weight_width_sliced) {
         assert(total_noop_cores == 0);
         assert(total_active_num_cores == total_num_cores);
-    }
+    }*/
 
     if (has_bias) {
         assert(bias_ntiles % num_weight_slices_width == 0);
@@ -765,7 +780,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     // TODO: Moving this function call to after kernel logic causes pcc fails
     // There are additional CBs and semaphores created in 2D conv in kernel logic,
     // so does order of create_cb calls matter?
-    auto [cb_sharded_act, cb_output] = create_CBs_for_sharded_input_v2(
+    auto [cb_sharded_act, cb_output] = create_CBs_for_sharded_input_v2_width(
         program,
         a,
         all_cores,
@@ -1374,151 +1389,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
             }
         };
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
-}
-
-operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(
-    const Tensor& a,
-    const Tensor& b,
-    const Shape& ashape,
-    std::optional<const Tensor> bias,
-    const std::optional<const Tensor> conv_reader_indices,
-    vector<int> conv_params,
-    uint32_t output_channels,
-    bool untilize_out,
-    bool has_bias,
-    bool fuse_relu,
-    const OptimizedConvParallelizationConfig& parallelization_config,
-    const OptimizedConvBlockConfig& block_config,
-    uint32_t extra_padding_for_32B_alignment,
-    bool use_shallow_conv_variant,
-    bool transpose_mcast,
-    Tensor& output,
-    DeviceComputeKernelConfig compute_kernel_config) {
-    tt_metal::Program program = tt_metal::CreateProgram();
-    return multi_core_optimized_conv_sharded_v2_impl(
-        program,
-        a,
-        b,
-        ashape,
-        bias,
-        conv_reader_indices,
-        conv_params,
-        output_channels,
-        untilize_out,
-        has_bias,
-        fuse_relu,
-        parallelization_config,
-        block_config,
-        extra_padding_for_32B_alignment,
-        use_shallow_conv_variant,
-        transpose_mcast,
-        output,
-        compute_kernel_config);
-}
-
-operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
-    const Tensor& a,
-    const Tensor& b,
-    std::optional<const Tensor> bias,
-    vector<int> conv_params,
-    uint32_t output_channels,
-    bool untilize_out,
-    bool fuse_relu,
-    MathFidelity math_fidelity,
-    const OptimizedConvParallelizationConfig& parallelization_config,
-    const OptimizedConvBlockConfig& block_config,
-    uint32_t extra_padding_for_32B_alignment,
-    DataType output_dtype,
-    std::array<std::uint32_t, 4> input_tensor_shape,
-    bool use_shallow_conv_variant,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config,
-    Tensor& output) {
-    tt_metal::Program program = tt_metal::CreateProgram();
-    // TODO: conv params need to be cleaned up and replaced with sliding window config
-    ParallelConfig parallel_config;
-    parallel_config.grid = a.shard_spec().value().grid;
-    parallel_config.shard_scheme = a.memory_config().memory_layout;
-    parallel_config.shard_orientation = a.shard_spec().value().orientation;
-    // TODO: pass sliding window config to the function instead of conv params
-    uint32_t weight_size_h = (uint32_t)conv_params[0];  // filter_h
-    uint32_t weight_size_w = (uint32_t)conv_params[1];  // filter_W
-    uint32_t stride_h = (uint32_t)conv_params[2];
-    uint32_t stride_w = (uint32_t)conv_params[3];
-    uint32_t pad_h = (uint32_t)conv_params[4];
-    uint32_t pad_w = (uint32_t)conv_params[5];
-    SlidingWindowConfig sliding_window_config = SlidingWindowConfig(
-        input_tensor_shape[0],
-        input_tensor_shape[1],
-        input_tensor_shape[2],
-        weight_size_h,
-        weight_size_w,
-        stride_h,
-        stride_w,
-        pad_h,
-        pad_w,
-        1,
-        1,
-        parallelization_config.num_cores_nhw,
-        parallel_config.grid,
-        true);
-
-    std::cout << "Testing multi_core_optimized_conv_sharded_v2_new 3 " << std::endl;
-    // create conv config tensors
-    auto pad_metadata = sliding_window::generate_pad_metadata(sliding_window_config);
-    auto op_trace_metadata = sliding_window::generate_op_trace_metadata(sliding_window_config);
-    auto shard_boundaries = sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
-    auto conv_sharded_input_top_left_indices =
-        sliding_window::generate_sliding_window_op_config(op_trace_metadata, shard_boundaries, true, true);
-    // create sharded ttnn config tensors
-    DataType indices_tt_dtype = DataType::UINT16;
-    // For 2d convs, each core in a column or row share the same specs
-    CoreCoord grid_size = parallel_config.grid.bounding_box().grid_size();
-    // if(parallel_config.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED) {
-    //     uint32_t num_shards_nhw = conv_sharded_input_top_left_indices.size();
-    //     TT_ASSERT(sliding_window_config.num_cores_nhw_ == num_shards_nhw);
-    //     uint32_t num_shards_channels = 0;
-    //     if(parallel_config.shard_orientation == ShardOrientation::COL_MAJOR) {
-    //         num_shards_channels = grid_size.y;
-    //     } else {
-    //         num_shards_channels = grid_size.x;
-    //     }
-    //     // replicate across channel shards
-    //     for (uint32_t j = 1; j < num_shards_channels; j++) {
-    //         for (uint32_t i = 0; i < num_shards_nhw; i++) {
-    //             conv_sharded_input_top_left_indices.push_back(conv_sharded_input_top_left_indices[i]);
-    //         }
-    //     }
-    // }
-    bool is_block_sharded = a.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED;
-    auto conv_reader_indices_tensor = sliding_window::construct_on_host_config_tensor(
-        conv_sharded_input_top_left_indices, sliding_window_config, parallel_config);
-    std:cout << "moving started" << std::endl;
-    conv_reader_indices_tensor = sliding_window::move_config_tensor_to_device(
-        conv_reader_indices_tensor, parallel_config, is_block_sharded, a.device());
-
-    std::cout << "Testing multi_core_optimized_conv_sharded_v2_new 3 " << std::endl;
-    // add config tensor to program
-    tt::tt_metal::detail::AddConfigBuffer(program, conv_reader_indices_tensor.device_buffer());
-    return multi_core_optimized_conv_sharded_v2_impl(
-        program,
-        a,
-        b,
-        Shape(input_tensor_shape),
-        bias,
-        conv_reader_indices_tensor,
-        conv_params,
-        output_channels,
-        untilize_out,
-        bias.has_value(),
-        fuse_relu,
-        parallelization_config,
-        block_config,
-        extra_padding_for_32B_alignment,
-        use_shallow_conv_variant,
-        parallel_config.shard_orientation == ShardOrientation::COL_MAJOR,
-        output,
-        compute_kernel_config.value());
-}
+    }
 }  // namespace tt_metal
 
 }  // namespace tt

@@ -424,15 +424,18 @@ void TensorModule(py::module& m_tensor) {
 
     py::class_<OptimizedConvParallelizationConfig>(m_tensor, "OptimizedConvParallelizationConfig")
         .def(
-            py::init<CoreCoord, uint32_t, uint32_t, uint32_t>(),
+            py::init<CoreCoord, uint32_t, uint32_t, uint32_t, uint32_t>(),
             py::kw_only(),
             py::arg("grid_size"),
             py::arg("num_cores_nhw"),
+            py::arg("num_cores_c"),
             py::arg("per_core_out_matrix_height_ntiles").noconvert(),
             py::arg("per_core_out_matrix_width_ntiles").noconvert())
         .def_property_readonly("grid_size", [](OptimizedConvParallelizationConfig const& c) { return c.grid_size; })
         .def_property_readonly(
             "num_cores_nhw", [](OptimizedConvParallelizationConfig const& c) { return c.num_cores_nhw; })
+        .def_property_readonly(
+            "num_cores_c", [](OptimizedConvParallelizationConfig const& c) { return c.num_cores_c; })
         .def_property_readonly(
             "per_core_out_matrix_height_ntiles",
             [](OptimizedConvParallelizationConfig const& c) { return c.per_core_out_matrix_height_ntiles; })

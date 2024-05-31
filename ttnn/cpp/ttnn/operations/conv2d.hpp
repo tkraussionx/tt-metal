@@ -136,6 +136,23 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     std::optional<const Conv2dConfig> conv_config_ = std::nullopt
     );
 
+ttnn::Tensor opt_conv(const Tensor& a, const Tensor &b,
+    ttnn::Device& device,
+    const vector<int> conv_params,
+    uint32_t output_channels,
+    bool untilize_out, bool fuse_relu,
+    MathFidelity math_fidelity,
+    const OptimizedConvParallelizationConfig& parallelization_config,
+    const OptimizedConvBlockConfig& block_config,
+    uint32_t extra_padding_for_32B_alignment,
+    MemoryConfig output_mem_config,
+    DataType output_dtype,
+    std::array<std::uint32_t, 4> input_tensor_shape,
+    bool use_shallow_conv_variant,
+    std::optional<const ttnn::Tensor> bias_tensor = std::nullopt/*,
+    std::optional<const Conv2dConfig> conv_config_ = std::nullopt*/
+);
+
 
 }  // namespace conv2d
 }  // namespace operations

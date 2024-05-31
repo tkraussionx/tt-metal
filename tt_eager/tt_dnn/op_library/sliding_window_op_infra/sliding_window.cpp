@@ -58,7 +58,7 @@ namespace tt::tt_metal::sliding_window {
             shard_boundaries.push_back({{output_index_start, output_index_end}, {input_index_start, input_index_end}});
             output_index_start += output_shard_h;
         }
-        #if 0
+        #if 1
         for (auto [output_shard, input_shard] : shard_boundaries) {
             log_debug(LogOp, "output_shard: ({}, {}), input_shard: ({}, {})", output_shard.first, output_shard.second, input_shard.first, input_shard.second);
         }
@@ -359,10 +359,10 @@ namespace tt::tt_metal::sliding_window {
     Tensor construct_on_host_config_tensor(const std::vector<std::vector<uint16_t>>& config, const SlidingWindowConfig& sw_config, const ParallelConfig& p_config) {
         std::vector<uint16_t> config_vector = flatten(config);
         Shape config_shape = {(uint32_t) config.size(), (uint32_t) config[0].size()};
-        if (p_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED) {
+        if (p_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED || p_config.shard_scheme == TensorMemoryLayout::WIDTH_SHARDED) {
             auto config_buffer = owned_buffer::create<uint16_t>(std::move(config_vector));
             return Tensor(OwnedStorage{config_buffer}, config_shape, DataType::UINT16, Layout::ROW_MAJOR);
-        } else if (p_config.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED) {
+        } else if (p_config.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED ) {
             TT_ASSERT(p_config.grid.ranges().size() == 1, "BLOCK_SHARDED should have just a single core range");
             // NOTE: it is assumed that the range start is always (0, 0)
             uint32_t ncores_y = p_config.grid.ranges().begin()->end.y + 1;

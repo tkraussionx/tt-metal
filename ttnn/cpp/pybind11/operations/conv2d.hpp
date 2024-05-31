@@ -78,6 +78,62 @@ void py_module(py::module& module) {
             py::arg("output_layout") = Layout::TILE
         );
         py_conv_config.def_readwrite("core_grid", &Conv2dConfig::core_grid);
+
+    module.def(
+        "opt_conv",
+        []( const ttnn::Tensor& input_tensor,
+            const ttnn::Tensor& weight_tensor,
+            ttnn::Device& device,
+            const vector<int> conv_params,
+            uint32_t output_channels,
+            bool untilize_out,
+            bool fused_relu,
+            MathFidelity math_fidelity,
+            const OptimizedConvParallelizationConfig& parallelization_config,
+            const OptimizedConvBlockConfig& block_config,
+            uint32_t extra_padding_for_32B_alignment,
+            MemoryConfig output_mem_config,
+            DataType output_dtype,
+            std::array<uint32_t, 4> input_tensor_shape,
+            bool use_shallow_conv_variant,
+            std::optional<const ttnn::Tensor> bias_tensor = std::nullopt
+            //std::optional<const Conv2dConfig> conv_config_ = std::nullopt
+            ) -> ttnn::Tensor {
+            return ttnn::operations::conv2d::opt_conv(
+                input_tensor, weight_tensor,
+                device,
+                conv_params, output_channels, untilize_out, fused_relu,
+                math_fidelity,
+                parallelization_config,
+                block_config,
+                extra_padding_for_32B_alignment,
+                output_mem_config,
+                output_dtype,
+                input_tensor_shape,
+                use_shallow_conv_variant,
+                bias_tensor/*,
+                conv_config_*/
+               );
+        },
+        py::kw_only(),
+        py::arg("input_tensor"),
+        py::arg("weight_tensor"),
+        py::arg("device"),
+        py::arg("conv_params"),
+        py::arg("output_channels"),
+        py::arg("untilize_out"),
+        py::arg("fused_relu"),
+        py::arg("math_fidelity"),
+        py::arg("parallelization_config"),
+        py::arg("block_config"),
+        py::arg("extra_padding_for_32B_alignment"),
+        py::arg("output_mem_config"),
+        py::arg("output_dtype"),
+        py::arg("input_tensor_shape"),
+        py::arg("use_shallow_conv_variant"),
+        py::arg("bias_tensor") = std::nullopt/*,
+        py::arg("conv_config_") = std::nullopt*/
+        );
 }
 
 }  // namespace conv2d

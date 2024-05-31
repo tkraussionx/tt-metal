@@ -40,7 +40,7 @@ class Conv2d:
         dtype: ttnn.DataType = None,
         *,
         device: ttnn.Device,
-        use_1d_systolic_array: bool,
+        conv_shard_scheme: str,
         batch_size: int,
         input_height: int,
         input_width: int,
@@ -115,7 +115,7 @@ class Conv2d:
             out_channels,
             in_channels,
             device,
-            use_1d_systolic_array,
+            conv_shard_scheme,
             reader_patterns_cache,
             bias=bias,
             conv_blocking_and_parallelization_config_override=conv_blocking_and_parallelization_config_override,
@@ -315,7 +315,7 @@ def get_shard_grid_from_core_grid(core_grid):
 
 # internal helper function. not exposed to user.
 def determine_parallel_config(
-    is_1d_systolic,
+    conv_shard_scheme,
     batch_size,
     input_channels,
     output_height,
@@ -346,18 +346,24 @@ def determine_parallel_config(
     max_num_cores = device_grid_size[0] * device_grid_size[1]
 
     def calculate_num_cores_nhw(override):
-        num_cores_nhw = (
-            find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
-            if is_1d_systolic
-            else find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0])
-        )
+        if conv_shard_scheme == "HEIGHT":
+            num_cores_nhw = find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
+        elif conv_shard_scheme == "BLOCK":
+            num_cores_nhw = find_closest_largest_divisor_with_num_padding(
+                conv_out_2d_matrix_height_ntiles, device_grid_size[0]
+            )
+        elif conv_shard_scheme == "WIDTH":
+            num_cores_nhw = find_closest_largest_divisor(conv_out_2d_matrix_width_ntiles, max_num_cores)
+        else:
+            raise RuntimeError("conv_shard_scheme not supported")
+
         if override is not None and num_cores_nhw != override:
             warnings.warn(f"Overriding config: num_cores_nhw from {num_cores_nhw} to user provided config={override}")
             num_cores_nhw = override
         return num_cores_nhw
 
     def calculate_grid_size(num_cores_nhw, override):
-        if is_1d_systolic:
+        if conv_shard_scheme == "HEIGHT" or conv_shard_scheme == "WIDTH":
             grid_size = [
                 device_grid_size[0] if num_cores_nhw >= device_grid_size[0] else num_cores_nhw,
                 math.ceil(num_cores_nhw / device_grid_size[0]),
@@ -365,7 +371,7 @@ def determine_parallel_config(
             assert (
                 num_cores_nhw <= grid_size[0] * grid_size[1]
             ), "Error: For 1d systolic conv, num_cores_nhw must be <= grid size"
-        else:
+        elif conv_shard_scheme == "BLOCK":
             grid_size = [
                 num_cores_nhw,
                 find_closest_common_largest_divisor(
@@ -375,6 +381,8 @@ def determine_parallel_config(
             assert (
                 num_cores_nhw == grid_size[0]
             ), "Error: For 2d systolic conv, num_cores_nhw must be == # of cols in grid size"
+        else:
+            raise RuntimeError("Invalid conv_shard_scheme")
 
         if override is not None and grid_size != override:
             warnings.warn(f"Overriding config: grid_size from {grid_size} to user provided config={override}")
@@ -383,8 +391,16 @@ def determine_parallel_config(
 
     num_cores_nhw = calculate_num_cores_nhw(config_override.get("num_cores_nhw", None))
     grid_size = calculate_grid_size(num_cores_nhw, config_override.get("grid_size", None))
-    shard_scheme = ttnn.TensorMemoryLayout.HEIGHT_SHARDED if is_1d_systolic else ttnn.TensorMemoryLayout.BLOCK_SHARDED
-    shard_orientation = ttnn.ShardOrientation.ROW_MAJOR if is_1d_systolic else ttnn.ShardOrientation.COL_MAJOR
+    if conv_shard_scheme == "HEIGHT":
+        shard_scheme = ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+        shard_orientation = ttnn.ShardOrientation.ROW_MAJOR
+    elif conv_shard_scheme == "BLOCK":
+        shard_scheme = ttnn.TensorMemoryLayout.BLOCK_SHARDED
+        shard_orientation = ttnn.ShardOrientation.COL_MAJOR
+    elif conv_shard_scheme == "WIDTH":
+        shard_scheme = ttnn.TensorMemoryLayout.WIDTH_SHARDED
+        shard_orientation = ttnn.ShardOrientation.ROW_MAJOR
+
     return ParallelConfig(grid_size[1], grid_size[0], num_cores_nhw, shard_scheme, shard_orientation)
 
 
@@ -428,19 +444,32 @@ def create_sharded_memory_config_from_parallel_config(tensor_shape, parallel_con
     num_cores_y = parallel_config.grid_size.y
     shard_scheme = parallel_config.shard_scheme
     shard_orientation = parallel_config.shard_orientation
-    is_1d_systolic = shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-    if is_1d_systolic:
+    # is_1d_systolic = shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+    if shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED:
         logical_grid_size = (num_cores_nhw, 1)
-    else:
+    elif shard_scheme == ttnn.TensorMemoryLayout.BLOCK_SHARDED:
         logical_grid_size = (num_cores_x, num_cores_y)
+    else:
+        logical_grid_size = (1, num_cores_nhw)
 
     shard_grid, shard_layout = calculate_shard_grid((num_cores_x, num_cores_y), num_cores_nhw)
-    assert shard_layout == shard_scheme
-    nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
-    nhw_padded = roundup(nhw_shape, num_cores_nhw * tile_size)
-    nhw_shard = nhw_padded // num_cores_nhw
-    assert channels % logical_grid_size[1] == 0
-    shard_shape = [nhw_shard, channels // logical_grid_size[1]]
+    print(shard_grid, shard_layout)
+    print(shard_scheme)
+    # assert shard_layout == shard_scheme
+    # breakpoint()
+    if shard_scheme == ttnn.TensorMemoryLayout.WIDTH_SHARDED:
+        shard_layout = ttnn.TensorMemoryLayout.WIDTH_SHARDED
+        nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
+        channel_padded = roundup(tensor_shape[3], num_cores_nhw * tile_size)
+        channel_shard = channel_padded // num_cores_nhw
+        assert channels % logical_grid_size[1] == 0
+        shard_shape = [nhw_shape, channels // logical_grid_size[1]]
+    else:
+        nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
+        nhw_padded = roundup(nhw_shape, num_cores_nhw * tile_size)
+        nhw_shard = nhw_padded // num_cores_nhw
+        assert channels % logical_grid_size[1] == 0
+        shard_shape = [nhw_shard, channels // logical_grid_size[1]]
     shard_halo = False
     shard_spec = ttnn.experimental.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, shard_halo)
     return ttnn.MemoryConfig(shard_scheme, ttnn.BufferType.L1, shard_spec)
@@ -598,7 +627,7 @@ def conv2d(
     parallel_config = None
     if reshard_if_not_optimal or needs_reshard:
         optimal_parallel_config = determine_parallel_config(
-            True if conv_config.conv_shard_scheme is None else conv_config.conv_shard_scheme == "HEIGHT",
+            "HEIGHT" if conv_config.conv_shard_scheme is None else conv_config.conv_shard_scheme,
             batch_size,
             in_channels,
             output_height,
@@ -618,16 +647,17 @@ def conv2d(
             grid_size, num_cores_nhw = get_grid_size_and_num_cores_nhw_from_core_grid(
                 conv_config.core_grid, conv_config.conv_shard_scheme
             )
-            shard_scheme = (
-                ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-                if conv_config.conv_shard_scheme == "HEIGHT"
-                else ttnn.TensorMemoryLayout.BLOCK_SHARDED
-            )
-            shard_orientation = (
-                ttnn.ShardOrientation.ROW_MAJOR
-                if conv_config.conv_shard_scheme == "HEIGHT"
-                else ttnn.ShardOrientation.COL_MAJOR
-            )
+            if conv_config.conv_shard_scheme == "HEIGHT":
+                shard_scheme = ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+                shard_orientation = ttnn.ShardOrientation.ROW_MAJOR
+            elif conv_config.conv_shard_scheme == "BLOCK":
+                shard_scheme = ttnn.TensorMemoryLayout.BLOCK_SHARDED
+                shard_orientation = ttnn.ShardOrientation.COL_MAJOR
+            elif conv_config.conv_shard_scheme == "WIDTH":
+                shard_scheme = ttnn.TensorMemoryLayout.WIDTH_SHARDED
+                shard_orientation = ttnn.ShardOrientation.ROW_MAJOR
+            else:
+                raise RuntimeError("Invalid conv_shard_scheme")
             parallel_config = ParallelConfig(grid_size.y, grid_size.x, num_cores_nhw, shard_scheme, shard_orientation)
             print(shard_scheme)
             print(shard_orientation)
@@ -658,7 +688,11 @@ def conv2d(
             # reshape to [1, 1, N*H*W, C]
             input_tensor = ttnn.reshape(input_tensor, (1, 1, -1, input_tensor.shape[-1]))
         input_num_cores_nhw = parallel_config.num_cores_nhw
-        input_tensor_height_snapped_to_tile = roundup(input_tensor.shape[2], input_num_cores_nhw * 32)
+        input_tensor_height_snapped_to_tile = (
+            roundup(input_tensor.shape[2], input_num_cores_nhw * 32)
+            if conv_config.conv_shard_scheme != "WIDTH"
+            else input_tensor.shape[2]
+        )
         assert input_tensor_height_snapped_to_tile >= input_tensor.shape[2]
         input_tensor_width_snapped_to_channels_alignment = roundup(
             input_tensor.shape[3], conv_config.input_channels_alignment
@@ -727,6 +761,7 @@ def conv2d(
         assert parallel_config is not None
         block_and_parallel_config_override["grid_size"] = [parallel_config.grid_size.x, parallel_config.grid_size.y]
         block_and_parallel_config_override["num_cores_nhw"] = parallel_config.num_cores_nhw
+        # block_and_parallel_config_override["num_cores_c"] = 1
         if is_grayskull(device=device):
             compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
                 math_fidelity=conv_config.math_fidelity,
@@ -753,7 +788,9 @@ def conv2d(
             groups=groups,
             dtype=conv_config.dtype,
             device=device,
-            use_1d_systolic_array=parallel_config.shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+            conv_shard_scheme="HEIGHT"
+            if parallel_config.shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+            else "BLOCK",
             batch_size=batch_size,
             input_height=input_height,
             input_width=input_width,

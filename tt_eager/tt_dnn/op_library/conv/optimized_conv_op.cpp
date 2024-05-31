@@ -199,6 +199,7 @@ std::vector<Tensor> OptimizedConv::create_output_tensors(const std::vector<Tenso
 operation::ProgramWithCallbacks OptimizedConv::create_program(const std::vector<Tensor>& input_tensors,
                                                      const std::vector<std::optional<const Tensor>>& optional_input_tensors,
                                                      std::vector<Tensor>& output_tensors) const {
+    std::cout << "old optimize conv" << std::endl;
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     const auto& input_tensor_bias = optional_input_tensors.at(0);
@@ -280,7 +281,10 @@ Tensor optimized_conv_new(const Tensor& a, const Tensor &b, std::optional<const 
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config
 ) {
     //TT_ASSERT(!untilize_out, "Optimized conv only supports tiled out");
+    std::cout << "entering into optimized_conv_new" << std::endl;
+    //std::exit(0);
     TT_ASSERT(b.get_layout() == Layout::TILE); // Weights should already be formatted
+
     const auto& ashape = Shape(input_tensor_shape);
     auto padded_a_shape = Shape({ashape[0], ashape[1], ashape[2], round_up(ashape[3], 16)});
     FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
@@ -304,6 +308,7 @@ void OptimizedConvNew::validate(const std::vector<Tensor>& input_tensors, const 
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     // TODO: ...
+    std::cout << "entering into optimized_conv_new validate" << std::endl;
     TT_FATAL(!input_tensor_b.memory_config().is_sharded());
     if (this->untilize_out) {
         TT_FATAL((this->output_dtype == DataType::BFLOAT16) || (this->output_dtype == DataType::FLOAT32));
@@ -370,6 +375,18 @@ std::vector<Tensor> OptimizedConvNew::create_output_tensors(const std::vector<Te
             auto mem_config = this->output_mem_config;
             mem_config.shard_spec = shard_spec;
             return {create_device_tensor(output_shape, this->output_dtype, output_layout, input_tensor.device(), mem_config)};
+        }else if (this->output_mem_config.memory_layout == TensorMemoryLayout::WIDTH_SHARDED) {
+            uint32_t total_width_tiles = output_shape[-1] / TILE_WIDTH;
+            uint32_t total_height_tiles = tt_metal::compute_volume(output_shape) / output_shape[-1];
+            uint32_t num_cores = total_width_tiles / this->parallelization_config.per_core_out_matrix_width_ntiles;
+            std::cout << "output width sharded  --> " << output_shape[-1] << "  " << total_width_tiles << " " << num_cores << std::endl;
+            CoreRangeSet shard_grid = num_cores_to_corerange_set(num_cores, this->parallelization_config.grid_size, true);
+
+            std::array<uint32_t, 2> shard_shape = {total_height_tiles, this->parallelization_config.per_core_out_matrix_width_ntiles * TILE_WIDTH};
+            auto shard_spec = ShardSpec{shard_grid, shard_shape, ShardOrientation::ROW_MAJOR};
+            auto mem_config = this->output_mem_config;
+            mem_config.shard_spec = shard_spec;
+            return {create_device_tensor(output_shape, this->output_dtype, output_layout, input_tensor.device(), mem_config)};
         } else {
             auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(this->input_tensor_shape, conv_params, this->parallelization_config.per_core_out_matrix_height_ntiles, extra_padding_for_32B_alignment);
             uint32_t act_matrix_height = (uint32_t) act_matrix_shape[1];
@@ -399,6 +416,7 @@ operation::ProgramWithCallbacks OptimizedConvNew::create_program(const std::vect
     const auto& input_tensor_bias = optional_input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     TT_ASSERT(input_tensor_a.memory_config().is_sharded()); // TODO: move this check to validate_input_tensors
+    std::cout << "reached here" << std::endl;
     return multi_core_optimized_conv_sharded_v2_new(
         input_tensor_a, input_tensor_b, input_tensor_bias,
         conv_params,

@@ -7,7 +7,12 @@ from loguru import logger
 import torch
 import pytest
 from models.utility_functions import skip_for_wormhole_b0, skip_for_grayskull, is_grayskull, is_wormhole_b0
-from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc, check_with_pcc_without_tensor_printout
+from tests.ttnn.utils_for_testing import (
+    assert_with_pcc,
+    check_with_pcc,
+    check_with_pcc_without_tensor_printout,
+    update_process_id,
+)
 import ttnn
 import tt_lib
 import math
@@ -57,6 +62,7 @@ def run_conv(
     debug=False,
 ):
     # has_bias = False
+    update_process_id()
     has_bias = True
     torch.manual_seed(0)
     conv_input_shape = [batch_size, input_channels, input_height, input_width]
@@ -93,6 +99,7 @@ def run_conv(
 
     tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
     conv_shard_scheme = "HEIGHT" if use_1d_systolic_array else "BLOCK"
+    # conv_shard_scheme = "WIDTH"
     # breakpoint()
     conv_config = ttnn.Conv2dConfig(
         dtype=activations_dtype,
@@ -278,6 +285,95 @@ def run_conv_with_split(
     else:
         pcc = 0.998
     assert_with_pcc(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
+
+
+@skip_for_wormhole_b0(
+    "Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range"
+)
+@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize(
+    "output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array",
+    (
+        # unique convs in rn50 (complete list)
+        # first conv post folding and input_channels padding to tile width
+        # (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True), act_block_h_ntiles % 2 == 0
+        # rn50 layer1
+        # (1024, 512, 4, 4, 3, 3, 1, 1, 0, 0, True),
+        (1024, 1024, 16, 16, 3, 3, 1, 1, 1, 1, True),
+    ),
+)
+@pytest.mark.parametrize(
+    "batch_size",
+    [2],
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_width_conv_gs(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+):
+    if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
+        pytest.skip("Batch > 8 must be run fully bfp8")
+    if batch_size == 20 and input_channels >= 128:
+        pytest.skip("L1 Allocation error")
+    pytest.skip("not tested yet")
+    if (
+        activations_dtype == ttnn.bfloat16
+        and batch_size == 20
+        and (
+            output_channels == 64
+            or (
+                stride_h == 2
+                and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+            )
+        )
+    ):
+        pytest.skip("Skipping test because it won't fit in L1!")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override=None,
+        use_shallow_conv_variant=input_channels == 16,
+        padded_input_channels=16 if input_channels == 16 else None,
+        debug=not (batch_size == 20 and input_height == 115),
+    )
 
 
 @skip_for_wormhole_b0(
