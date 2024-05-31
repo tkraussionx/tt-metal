@@ -177,6 +177,10 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .set_globally_allocated_address(*remote_config_buffer);
     CBHandle remote_config_cb = CreateCircularBuffer(program, all_cores, remote_config_cb_config);
 
+    log_debug(LogOp, "padding_config: {} {}", padding_config_buffer->address(), padding_config.get_legacy_shape());
+    log_debug(LogOp, "local_config: {} {}", local_config_buffer->address(), local_config.get_legacy_shape());
+    log_debug(LogOp, "remote_config: {} {}", remote_config_buffer->address(), remote_config.get_legacy_shape());
+
     bool const is_block_sharded = input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED;
 
     // reader kernel
@@ -222,6 +226,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .noc = NOC::RISCV_1_default,
             .compile_args = reader_ct_args});
 
+    log_debug(LogOp, "======================================= done");
+
     auto override_runtime_arguments_callback =
         [src_cb, out_cb, padding_config_cb, local_config_cb, remote_config_cb](
             const void* operation,
@@ -230,16 +236,16 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             const std::vector<std::optional<const Tensor>>&,
             const std::vector<Tensor>& output_tensors) {
             auto src_buffer = input_tensors.at(0).buffer();
-            auto padding_config_buffer = input_tensors.at(1).buffer();
-            auto local_config_buffer = input_tensors.at(2).buffer();
-            auto remote_config_buffer = input_tensors.at(3).buffer();
+            // auto padding_config_buffer = input_tensors.at(1).buffer();
+            // auto local_config_buffer = input_tensors.at(2).buffer();
+            // auto remote_config_buffer = input_tensors.at(3).buffer();
             auto dst_buffer = output_tensors.at(0).buffer();
 
             UpdateDynamicCircularBufferAddress(program, src_cb, *src_buffer);
             UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
-            UpdateDynamicCircularBufferAddress(program, padding_config_cb, *padding_config_buffer);
-            UpdateDynamicCircularBufferAddress(program, local_config_cb, *local_config_buffer);
-            UpdateDynamicCircularBufferAddress(program, remote_config_cb, *remote_config_buffer);
+            // UpdateDynamicCircularBufferAddress(program, padding_config_cb, *padding_config_buffer);
+            // UpdateDynamicCircularBufferAddress(program, local_config_cb, *local_config_buffer);
+            // UpdateDynamicCircularBufferAddress(program, remote_config_cb, *remote_config_buffer);
         };
 
     return {

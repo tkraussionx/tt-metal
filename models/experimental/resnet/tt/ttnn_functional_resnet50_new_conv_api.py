@@ -172,6 +172,7 @@ class resnet50Bottleneck:
                     math_fidelity=self.model_config["MATH_FIDELITY"],
                     height_sharding=height_sharding,
                     deallocate_activation=True,
+                    reallocate_halo_output=True,
                 ),
                 conv_op_cache=conv_op_cache,
                 reshard_if_not_optimal=reshard_if_not_optimal,
@@ -232,12 +233,13 @@ class resnet50Bottleneck:
             ):
                 act_block_h_override = 160
 
-        self.run_downsample_before_conv2 = False
+        run_downsample_before_conv2 = False
         if not (input_height == 56 and self.conv1_input_channels == 64):
-            self.run_downsample_before_conv2 = True
+            run_downsample_before_conv2 = True
 
-        if self.run_downsample_before_conv2:
-            ttnn.dump_device_memory_state(device, "before_ds_layer2_m1_")
+        if run_downsample_before_conv2:
+            ttnn.synchronize_device(device)
+            ttnn.dump_device_memory_state(device, "0_before_ds_layer2_m1_")
             ds_out = self.run_downsample_if_req(
                 x, device, batch_size, input_height, input_width, conv_op_cache, reshard_if_not_optimal, height_sharding
             )
@@ -301,7 +303,9 @@ class resnet50Bottleneck:
             reshard_if_not_optimal=reshard_if_not_optimal,
         )
 
-        if not self.run_downsample_before_conv2:
+        if not run_downsample_before_conv2:
+            ttnn.synchronize_device(device)
+            ttnn.dump_device_memory_state(device, "1_before_ds_layer2_m1_")
             ds_out = self.run_downsample_if_req(
                 x, device, batch_size, input_height, input_width, conv_op_cache, reshard_if_not_optimal, height_sharding
             )
@@ -550,6 +554,8 @@ class resnet50:
         x_height = 56
         x_width = 56
 
+        print(f"============================================ l1 m1")
+
         layer1_module1_input_shape = [
             x.get_legacy_shape()[0],
             x.get_legacy_shape()[1],
@@ -569,6 +575,8 @@ class resnet50:
             )
         else:
             x, x_height, x_width = self.layer1_module1(x, device, batch_size, x_height, x_width, conv_op_cache)
+
+        print(f"============================================ l1 m2")
         x_memory_config = ttnn.get_memory_config(x)
         ops_parallel_config["layer1_module1_input"] = ttnn.create_sharded_memory_config_(
             layer1_module1_input_shape,
@@ -578,17 +586,19 @@ class resnet50:
             tile_layout=True,
         )
         x, x_height, x_width = self.layer1_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l1 m3")
         x, x_height, x_width = self.layer1_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
-        if self.batch_size == 20 and is_wormhole_b0():
+        if self.batch_size == 20:  ## and is_wormhole_b0():
             x = ttnn.reallocate(x)
 
+        print(f"============================================ l2 m1")
         layer2_module1_input_shape = [
             x.get_legacy_shape()[0],
             x.get_legacy_shape()[1],
             x.get_legacy_shape()[2],
             x.get_legacy_shape()[3],
         ]
-        if is_wormhole_b0() and self.batch_size == 20:
+        if self.batch_size == 20:  ## and is_wormhole_b0():
             x, x_height, x_width = self.layer2_module1(
                 x,
                 device,
@@ -601,6 +611,8 @@ class resnet50:
             )
         else:
             x, x_height, x_width = self.layer2_module1(x, device, batch_size, x_height, x_width, conv_op_cache)
+
+        print(f"============================================ l2 m2")
         x_memory_config = ttnn.get_memory_config(x)
         ops_parallel_config["layer2_module1_input"] = ttnn.create_sharded_memory_config_(
             layer2_module1_input_shape,
@@ -610,9 +622,12 @@ class resnet50:
             tile_layout=True,
         )
         x, x_height, x_width = self.layer2_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l2 m3")
         x, x_height, x_width = self.layer2_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l2 m4")
         x, x_height, x_width = self.layer2_module4(x, device, batch_size, x_height, x_width, conv_op_cache)
 
+        print(f"============================================ l3 m1")
         layer3_module1_input_shape = [
             x.get_legacy_shape()[0],
             x.get_legacy_shape()[1],
@@ -622,6 +637,8 @@ class resnet50:
         x, x_height, x_width = self.layer3_module1(
             x, device, batch_size, x_height, x_width, conv_op_cache, reshard_if_not_optimal=True, height_sharding=False
         )
+
+        print(f"============================================ l3 m2")
         x_memory_config = ttnn.get_memory_config(x)
         ops_parallel_config["layer3_module1_input"] = ttnn.create_sharded_memory_config_(
             layer3_module1_input_shape,
@@ -631,9 +648,13 @@ class resnet50:
             tile_layout=True,
         )
         x, x_height, x_width = self.layer3_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l3 m3")
         x, x_height, x_width = self.layer3_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l3 m4")
         x, x_height, x_width = self.layer3_module4(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l3 m5")
         x, x_height, x_width = self.layer3_module5(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l3 m6")
         x, x_height, x_width = self.layer3_module6(
             x,
             device,
@@ -644,6 +665,7 @@ class resnet50:
             eltwise_binary_out_in_place=False,
         )
 
+        print(f"============================================ l4 m1")
         layer4_module1_input_shape = [
             x.get_legacy_shape()[0],
             x.get_legacy_shape()[1],
@@ -653,6 +675,8 @@ class resnet50:
         x, x_height, x_width = self.layer4_module1(
             x, device, batch_size, x_height, x_width, conv_op_cache, reshard_if_not_optimal=True, height_sharding=False
         )
+
+        print(f"============================================ l4 m2")
         x_memory_config = ttnn.get_memory_config(x)
         ops_parallel_config["layer4_module1_input"] = ttnn.create_sharded_memory_config_(
             layer4_module1_input_shape,
@@ -662,6 +686,7 @@ class resnet50:
             tile_layout=True,
         )
         x, x_height, x_width = self.layer4_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
+        print(f"============================================ l4 m3")
         x, x_height, x_width = self.layer4_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
 
         unpadded_shape = x.shape_without_padding()

@@ -668,7 +668,7 @@ class resnet50:
             eltwise_binary_out_in_place=False,
         )
 
-        return x
+        # return x
 
         print(f"=================================== layer: 4, module: 1")
         layer4_module1_input_shape = [

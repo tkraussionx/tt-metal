@@ -301,6 +301,12 @@ def run_conv_with_split(
         # rn50 layer4
         (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False),
         (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False),
+        ## 1x1s2 convs
+        (256, 64, 56, 56, 1, 1, 2, 2, 0, 0, False),  # r50 first bottleneck downsample shape
+        (256, 64, 56, 56, 1, 1, 2, 2, 0, 0, True),  # r50 first bottleneck downsample shape
+        (512, 256, 56, 56, 1, 1, 2, 2, 0, 0, False),  # r50 second bottleneck downsample shape
+        (1024, 512, 28, 28, 1, 1, 2, 2, 0, 0, False),  # r50 third bottleneck downsample shape
+        (2048, 1024, 14, 14, 1, 1, 2, 2, 0, 0, False),  # r50 fourth bottleneck downsample shape
     ),
 )
 @pytest.mark.parametrize(
@@ -337,8 +343,8 @@ def test_resnet50_conv_gs(
 ):
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
         pytest.skip("Batch > 8 must be run fully bfp8")
-    if batch_size == 20 and input_channels >= 128:
-        pytest.skip("L1 Allocation error")
+    # if batch_size == 20 and input_channels >= 128:
+    #     pytest.skip("L1 Allocation error")
     if (
         activations_dtype == ttnn.bfloat16
         and batch_size == 20
@@ -372,7 +378,7 @@ def test_resnet50_conv_gs(
         config_override=None,
         use_shallow_conv_variant=input_channels == 16,
         padded_input_channels=16 if input_channels == 16 else None,
-        debug=not (batch_size == 20 and input_height == 115),
+        debug=False,  ##not (batch_size == 20 and input_height == 115),
     )
 
 

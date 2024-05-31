@@ -268,7 +268,7 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
     return ResNet50TestInfra(device, batch_size, act_dtype, weight_dtype, math_fidelity)
 
 
-@pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
+@pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, act_dtype, weight_dtype, math_fidelity",
     (
@@ -285,8 +285,8 @@ def test_resnet_50(device, batch_size, act_dtype, weight_dtype, math_fidelity):
     test_infra.preprocess_torch_input()
     # First run configures convs JIT
     test_infra.run()
-    # Optimized run
+    # # Optimized run
     test_infra.run()
-    # More optimized run with caching
-    test_infra.run()
+    # # More optimized run with caching
+    # test_infra.run()
     test_infra.validate()

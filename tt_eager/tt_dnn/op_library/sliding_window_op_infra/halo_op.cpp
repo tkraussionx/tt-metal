@@ -127,6 +127,12 @@ Tensor halo_op(const Tensor& input_tensor,
         auto tensor_metadata = sliding_window::generate_tensor_metadata(pad_metadata, config, reshard_num_cores_nhw);
         auto kernel_config = sliding_window::generate_halo_kernel_config_tensors(tensor_metadata, shard_boundaries, is_block_sharded, transpose_mcast, remote_read, device);
 
+        // log_debug(tt::LogOp, "pad_metadata: {}", pad_metadata);
+        // log_debug(tt::LogOp, "op_trace_metadata: {}", op_trace_metadata);
+        // // log_debug(tt::LogOp, "shard_boundaries: {}", shard_boundaries);
+        // // log_debug(tt::LogOp, "tensor_metadata: {}", tensor_metadata);
+        // log_debug(tt::LogOp, "kernel_config: {}", kernel_config);
+
         const auto& pad_config = std::get<0>(kernel_config);
         const auto& local_config = std::get<1>(kernel_config);
         const auto& remote_config = std::get<2>(kernel_config);
