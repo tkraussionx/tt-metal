@@ -110,7 +110,8 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
 
     dtype = ttnn.bfloat8_b
 
-    embed_on_host = False  # Do embedding and argmax on host. TODO Seeing bad output when on device
+    embed_on_host = False
+    argmax_on_host = True  # hangs on device (https://github.com/tenstorrent/tt-metal/issues/8932)
     seqlen = 1  # Generating one token per user at a time
 
     logger.info(f"Reading inputs...")
@@ -222,7 +223,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask, rot_mats)
         # Work around program cache issue https://github.com/tenstorrent/tt-metal/issues/7159
         del decode_input_11BH, attn_mask
-        if embed_on_host:
+        if argmax_on_host:
             # Convert ttnn tensor to torch tensor
             tt_output_torch = (
                 ttnn.to_torch(tt_out_11BH, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[0]
@@ -231,7 +232,6 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                 .detach()
                 .float()
             )
-            # tt_token_batch = tt_output_torch.squeeze().argmax(axis=-1)
             # Argmax on host to get the new generated tokens
             tt_token_batch = sample(tt_output_torch, temperature=0, top_p=0.8)
             # Update the users that are still in prefill and the ones generating new tokens
@@ -240,32 +240,25 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                     input_mask_pt[:, iteration], input_tokens_pt[:, iteration], tt_token_batch[:, 0]
                 ).unsqueeze(1)
             # Next PT input embedding
-            # pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
-            logger.info(f"Embeding on device")
-            dev_token_batch = ttnn.from_torch(
-                tt_token_batch,
-                device=device_mesh,
-                dtype=ttnn.uint32,
-                layout=ttnn.ROW_MAJOR_LAYOUT,
-                mesh_mapper=ReplicateTensorToMesh(device_mesh),
-            )
-            decode_input_11BH = tt_embds(dev_token_batch)
-            decode_input_11BH = ttnn.reshape(decode_input_11BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
-            decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT)
-        else:  # Embedding/argmax on device
-            logger.info("Argmax on device")
+            if embed_on_host:
+                pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
+            else:
+                dev_token_batch = ttnn.from_torch(
+                    tt_token_batch,
+                    device=device_mesh,
+                    dtype=ttnn.uint32,
+                    layout=ttnn.ROW_MAJOR_LAYOUT,
+                    mesh_mapper=ReplicateTensorToMesh(device_mesh),
+                )
+                decode_input_11BH = tt_embds(dev_token_batch)
+                decode_input_11BH = ttnn.reshape(decode_input_11BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
+                decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT)
+        else:  # argmax on device
             # TODO Update argmax to ttnn when OP becomes available
             tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH, dim=-1)
-            logger.info("Reshape and where on device")
-            logger.info(f"input: {tt_out_B11B[:1, :, :, :].shape}")
-            logger.info(f"target: {ttnn.Shape([1, batch_size])}")
             tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
-            logger.info(f"tt_out_1B shape: {tt_out_1B.shape}")
             # Update the users that are still in prefill and the ones generating new tokens
             if iteration < max_prompt_len:
-                logger.info(
-                    f"Calling where with input shape {input_mask[iteration].shape}, input_tokens_tt[iteration]: {input_tokens_tt[iteration].shape}, tt_out_1B: {tt_out_1B.shape}"
-                )
                 decode_input_1B = ttnn.where(input_mask[iteration], input_tokens_tt[iteration], tt_out_1B)
             else:
                 decode_input_1B = tt_out_1B
