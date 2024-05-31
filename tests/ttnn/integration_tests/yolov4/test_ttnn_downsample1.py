@@ -159,8 +159,9 @@ def create_custom_preprocessor(device):
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
 def test_downsample1(device, reset_seeds, model_location_generator):
-    model_path = model_location_generator("models", model_subdir="Yolo")
-    weights_pth = str(model_path / "yolov4.pth")
+    # model_path = model_location_generator("models", model_subdir="Yolo")
+    model_path = "tests/ttnn/integration_tests/yolov4/"
+    weights_pth = str(model_path + "yolov4.pth")
     state_dict = torch.load(weights_pth)
     ds_state_dict = {k: v for k, v in state_dict.items() if (k.startswith("down1."))}
 
