@@ -260,7 +260,11 @@ std::map<chip_id_t, Device *> CreateDevices(
     bool tg_remote_chip_found = false;
     bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
     for (const auto &device_id : device_ids) {
+        // For Galaxy init, we only need to loop over mmio devices
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
+        if (is_galaxy and mmio_device_id != device_id) {
+            continue;
+        }
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
             for (const auto &mmio_controlled_device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
                 uint32_t tunnel_stop = tt::Cluster::instance().get_device_tunnel_depth(mmio_controlled_device_id);
