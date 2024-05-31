@@ -11,7 +11,7 @@
 #include "impl/dispatch/work_executor.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
-// #include "tt_metal/impl/trace/trace.hpp"
+#include "tt_metal/impl/trace/trace_buffer.hpp"
 #include "tt_metal/jit_build/build.hpp"
 #include "llrt/tt_cluster.hpp"
 #include "dev_msgs.h"
@@ -91,6 +91,8 @@ class Device {
 
     chip_id_t id() const { return id_; }
 
+    uint32_t build_key() const { return build_key_; }
+
     uint8_t num_hw_cqs() const { return num_hw_cqs_; }
 
     bool is_initialized() const { return this->initialized_; }
@@ -104,11 +106,16 @@ class Device {
 
     CoreCoord compute_with_storage_grid_size() const;
 
+    CoreCoord dram_grid_size() const;
+
     CoreCoord physical_core_from_logical_core(const CoreCoord &logical_core, const CoreType &core_type) const;
     CoreType core_type_from_physical_core(const CoreCoord &physical_core) const;
-    CoreCoord worker_core_from_logical_core(const CoreCoord &logical_core) const;
 
+    CoreCoord worker_core_from_logical_core(const CoreCoord &logical_core) const;
     std::vector<CoreCoord> worker_cores_from_logical_cores(const std::vector<CoreCoord> &logical_cores) const;
+
+    CoreCoord dram_core_from_logical_core(const CoreCoord &logical_core) const;
+    std::vector<CoreCoord> dram_cores_from_logical_cores(const std::vector<CoreCoord> &logical_cores) const;
 
     // Ethernet API
     CoreCoord ethernet_core_from_logical_core(const CoreCoord &logical_core) const;
@@ -155,7 +162,9 @@ class Device {
 
     uint32_t dram_channel_from_bank_id(uint32_t bank_id) const;
 
-    CoreCoord core_from_dram_channel(uint32_t dram_channel) const;
+    CoreCoord dram_core_from_dram_channel(uint32_t dram_channel) const;
+    CoreCoord logical_core_from_dram_channel(uint32_t dram_channel) const;
+    uint32_t dram_channel_from_logical_core(const CoreCoord& logical_core) const;
 
     int32_t bank_offset(BufferType buffer_type, uint32_t bank_id) const;
 
@@ -198,10 +207,11 @@ class Device {
     CommandQueue& command_queue(size_t cq_id = 0);
 
     // Metal trace device capture mode
-    void begin_trace();
-    void end_trace();
-    void execute_last_trace(bool blocking);
-    void release_last_trace();
+    void begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t trace_buff_size);
+    void end_trace(const uint8_t cq_id, const uint32_t tid);
+    void replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking);
+    void release_trace(const uint32_t tid);
+    std::shared_ptr<TraceBuffer> get_trace(const uint32_t tid);
 
     bool using_slow_dispatch() const;
     void check_allocator_is_initialized() const;
@@ -217,6 +227,8 @@ class Device {
     void initialize_and_launch_firmware();
     void initialize_command_queue();
     void initialize_synchronous_sw_cmd_queue();
+    void configure_kernel_variant(Program& program, string path, std::vector<uint32_t> compile_args, CoreCoord kernel_core, CoreCoord Kernel_physical_core,
+                                  CoreType dispatch_core_type, CoreCoord upstream_physical_core, CoreCoord downstream_physical_core, std::map<string, string> defines_in , bool is_active_eth_core = false);
     void compile_command_queue_programs();
     void configure_command_queue_programs();
     void clear_l1_state();
@@ -228,11 +240,13 @@ class Device {
 
     // APIs to access this device's work executor
     void push_work(std::function<void()>&& work, bool blocking = false);
+    void push_work(std::shared_ptr<std::function<void()>> work, bool blocking = false);
     void synchronize();
     void set_worker_mode(const WorkExecutorMode& mode);
     void enable_async(bool enable);
     WorkExecutorMode get_worker_mode() { return work_executor.get_worker_mode(); }
-
+    void set_worker_queue_mode(const WorkerQueueMode& mode) { this->work_executor.set_worker_queue_mode(mode); }
+    WorkerQueueMode get_worker_queue_mode() { return this->work_executor.get_worker_queue_mode(); }
     // TODO: Uplift usage of friends. Buffer and Program just need access to allocator
     friend class Buffer;
     friend class Program;
@@ -241,6 +255,7 @@ class Device {
     static constexpr MemoryAllocator allocator_scheme_ = MemoryAllocator::L1_BANKING;
     static ActiveDevices active_devices_;
     chip_id_t id_;
+    uint32_t build_key_;
     std::unique_ptr<Allocator> allocator_ = nullptr;
     bool initialized_ = false;
 
@@ -259,7 +274,6 @@ class Device {
     // all tasks scheduled on this device
     WorkExecutor work_executor;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
-    vector<std::unique_ptr<Program, detail::ProgramDeleter>> command_queue_programs_;
     uint8_t num_hw_cqs_;
 
     vector<std::unique_ptr<Program, tt::tt_metal::detail::ProgramDeleter>> command_queue_programs;
@@ -293,8 +307,7 @@ class Device {
     }
 
    private:
-    std::vector<std::optional<uint32_t>> trace_insts_;
-    std::vector<std::shared_ptr<tt::tt_metal::detail::TraceDescriptor>> trace_contexts_;
+    std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };
 
 }  // namespace tt_metal

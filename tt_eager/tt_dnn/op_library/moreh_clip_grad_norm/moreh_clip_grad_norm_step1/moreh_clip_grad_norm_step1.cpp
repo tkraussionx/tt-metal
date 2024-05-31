@@ -52,16 +52,15 @@ operation::ProgramWithCallbacks moreh_clip_grad_norm_step1_impl(
     ////////////////////////////////////////////////////////////////////////////
     //                         Core Setup
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CoreGridDesc core_grid(device);
-    const auto num_cores_y = core_grid.y_;
-    CoreCoord core_grid_coord = {core_grid.x_, num_cores_y};
+    auto grid = device->compute_with_storage_grid_size();
+    const auto num_cores_y = grid.y;
     const auto
         [num_cores_to_be_used,
          all_cores,
          core_group_1,
          core_group_2,
          num_inputs_per_core_group_1,
-         num_inputs_per_core_group_2] = tt_metal::split_work_to_cores(core_grid_coord, num_inputs);
+         num_inputs_per_core_group_2] = tt_metal::split_work_to_cores(grid, num_inputs);
     TT_ASSERT(core_group_2.ranges().empty());
     TT_ASSERT(num_inputs_per_core_group_1 == 1);
     TT_ASSERT(num_inputs_per_core_group_2 == 0);
@@ -196,23 +195,20 @@ operation::ProgramWithCallbacks moreh_clip_grad_norm_step1_impl(
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
             {
-                auto runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
                 runtime_args[0] = input_tensors.at(i).buffer()->address();
                 runtime_args[3] = *reinterpret_cast<uint32_t*>(&decimal);
-                SetRuntimeArgs(program, reader_kernels_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
                 runtime_args[0] = output_address;
-                SetRuntimeArgs(program, writer_kernels_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, compute_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, compute_kernels_id, core);
                 runtime_args[1] = p;
                 runtime_args[2] = static_cast<uint32_t>(p_is_negative);
-                SetRuntimeArgs(program, compute_kernels_id, core, runtime_args);
             }
         }
     };

@@ -133,6 +133,12 @@ class TtFalconModelShared:
 
         self.layernorm_eps = config.layer_norm_epsilon
 
+    def initialize_kv_cache(self):
+        layer_past = ()
+        for layer_num in range(self.num_layers):
+            layer_past += self.layers[layer_num].self_attn.initialize_kvcache()
+        return layer_past
+
     def set_model_config(self, model_config):
         self.model_config = model_config
         self.embeddings.set_model_config(model_config)
@@ -180,15 +186,23 @@ class TtFalconModelShared:
                 attn_mask_shard_shape[-1] = sequence_size
                 attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
+            # Push attention mask to device in row major order and then tilize on device (faster than tilizing on CPU)
             tt_attention_mask = [
                 torch2tt_tensor(
                     attention_mask_bool_chunks[i],
                     self.devices[i],
+                    tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
                     tt_memory_config=attention_mask_memconfig,
-                    tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
+                    tt_dtype=self.model_config["BFLOAT16_DTYPE"],  # subsequent tilize op expects bfloat16 inputs
                 )
                 for i in range(len(self.devices))
             ]
+            for i in range(self.num_devices):
+                tt_attention_mask[i] = tt_lib.tensor.tilize(
+                    tt_attention_mask[i],
+                    output_mem_config=attention_mask_memconfig,
+                    output_dtype=self.model_config["ATTN_MASK_DTYPE"],
+                )
 
         elif llm_mode == "decode":
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
@@ -218,15 +232,23 @@ class TtFalconModelShared:
                 attn_mask_shard_shape[-1] = num_max_tokens
                 attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
+            # Push attention mask to device in row major order and then tilize on device (faster than tilizing on CPU)
             tt_attention_mask = [
                 torch2tt_tensor(
                     attention_mask_bool_padded[i],
                     self.devices[i],
+                    tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
                     tt_memory_config=attention_mask_memconfig,
-                    tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
+                    tt_dtype=self.model_config["BFLOAT16_DTYPE"],  # subsequent tilize op expects bfloat16 inputs
                 )
                 for i in range(len(self.devices))
             ]
+            for i in range(self.num_devices):
+                tt_attention_mask[i] = tt_lib.tensor.tilize(
+                    tt_attention_mask[i],
+                    output_mem_config=attention_mask_memconfig,
+                    output_dtype=self.model_config["ATTN_MASK_DTYPE"],
+                )
 
         else:
             raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
@@ -298,12 +320,21 @@ class TtFalconModelShared:
             presents += layer_output[1:]
             layer_output = layer_output[0]
 
+        if layer_output[0].dtype != self.model_config["BFP8_DTYPE"]:
+            for i in range(len(layer_output)):
+                layer_output[i] = tt_lib.tensor.typecast(layer_output[i], self.model_config["BFP8_DTYPE"])
+
         layer_output = tt_lib.tensor.all_gather(
             layer_output,
             dim=3,
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],
         )
+
+        if self.model_config["LN_INPUT_DTYPE"] != self.model_config["BFP8_DTYPE"]:
+            for i in range(len(layer_output)):
+                layer_output[i] = tt_lib.tensor.typecast(layer_output[i], self.model_config["LN_INPUT_DTYPE"])
+
         # apply final norm layer
         layer_output = partial_layernorm(
             layer_output,

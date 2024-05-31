@@ -9,6 +9,8 @@ import math
 import torch
 from typing import Optional, Dict
 
+conv_cache = {}
+
 
 def round_up_to_tile_dim(n):
     return ((n + 31) // 32) * 32
@@ -89,7 +91,8 @@ def pad_encoder_hidden_states(device, tensor, required_sequence_length):
 
 def post_process_output(device, tensor, batch_size, output_height, output_width, output_channels):
     tensor = ttnn.to_layout(
-        tensor, ttnn.ROW_MAJOR_LAYOUT, use_multicore=ttnn.get_memory_config(tensor).shard_spec is not None
+        tensor,
+        ttnn.ROW_MAJOR_LAYOUT,  # use_multicore=ttnn.get_memory_config(tensor).shard_spec is not None
     )
     tensor = ttnn.from_device(tensor)
     assert output_channels == tensor.shape[3]
@@ -241,3 +244,52 @@ def determine_blocking(M, K, N, grid_size, transpose_mcast=False):
         out_subblock_h = 1
         out_subblock_w = 1
     return in0_block_h, in0_block_w, out_subblock_h, out_subblock_w, out_block_h, out_block_w
+
+
+def reshard_to(tensor, grid_size, layout, col_major=False):
+    if layout == ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED:
+        logical_grid_size = list(grid_size)
+        if col_major:
+            logical_grid_size[0], logical_grid_size[1] = grid_size[1], grid_size[0]
+        shard_spec = [
+            tensor.volume() // tensor.shape[-1] // logical_grid_size[1],
+            tensor.shape[-1] // logical_grid_size[0],
+        ]
+    elif layout == ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED:
+        num_cores = grid_size[0] * grid_size[1]
+        shard_spec = [tensor.volume() // tensor.shape[-1] // num_cores, tensor.shape[-1]]
+    output_shard_grid = ttnn.experimental.tensor.CoreRangeSet(
+        {
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 0),
+                ttnn.experimental.tensor.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
+            )
+        }
+    )
+    output_shard_spec = ttnn.experimental.tensor.ShardSpec(
+        output_shard_grid,
+        shard_spec,
+        ttnn.experimental.tensor.ShardOrientation.COL_MAJOR
+        if col_major
+        else ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    output_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        layout,
+        ttnn.experimental.tensor.BufferType.L1,
+        output_shard_spec,
+    )
+    if tensor.is_sharded():
+        tensor = ttnn.experimental.tensor.reshard(
+            tensor,
+            output_mem_config,
+        )
+    else:
+        tensor = ttnn.experimental.tensor.interleaved_to_sharded(
+            tensor,
+            grid_size,
+            shard_spec,
+            layout,
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        )
+    return tensor

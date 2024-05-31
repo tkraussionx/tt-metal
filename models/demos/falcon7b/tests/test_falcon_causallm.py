@@ -6,7 +6,6 @@ import torch
 import pytest
 from loguru import logger
 
-import tt_lib
 from models.demos.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
@@ -94,6 +93,7 @@ def run_test_FalconCausalLM_inference(
         head_dim,
         max_position_embeddings,
         configuration,
+        model_config,
         num_layers=num_layers,
         generate_attention_inputs=False,
     )

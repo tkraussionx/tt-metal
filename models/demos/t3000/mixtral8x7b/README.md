@@ -16,15 +16,19 @@ python models/demos/t3000/mixtral8x7b/scripts/repack_weights.py <path_to_checkpo
 ```
 
 ### Set up environment
+1. Set async env var:
+```
+export TT_METAL_ASYNC_DEVICE_QUEUE=1
+```
 
-1. Prepare the weight cache directory:
+2. Prepare the weight cache directory:
 
 ```
 # Make a directory for ttnn us to cache weights into. This speeds up subsequent runs.
 mkdir <weight_cache_dir>
 ```
 
-2. Set up environment variables:
+3. Set up environment variables:
 ```
 export MIXTRAL_CKPT_DIR=<repacked_output_dir>
 export MIXTRAL_TOKENIZER_PATH=<path_to_tokenizer_dir>
@@ -40,21 +44,21 @@ Note that the cached weights folder structure will contain the general and instr
   ...
 ```
 
-3. Cache the weights (first-time setup):
+4. Cache the weights (first-time setup):
 ```
 # Build a full 32 layer model to cache the weights. This will take some time.
-pytest -svv models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[1-32-output]
+pytest -svv models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[wormhole_b0-True-1-32-output]
 ```
 
 ### Run the demo
 ```
 # Run the demo with a pre-written batch of 32 user prompts
-pytest -svv models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[general_weights]
+pytest -svv models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[wormhole_b0-True-general_weights]
 ```
 
 We also provide an input file with 32 user question-prompt for instruct weights (don't forget to update your flags to the correct weights):
 ```
-pytest -svv models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[instruct_weights]
+pytest -svv models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[wormhole_b0-True-instruct_weights]
 ```
 
 Both input files are provided inside `models/demos/t3000/mixtral8x7b/demo/`.

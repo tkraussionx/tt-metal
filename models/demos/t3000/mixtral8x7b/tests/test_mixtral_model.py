@@ -7,20 +7,24 @@ import pytest
 import numpy as np
 from loguru import logger
 from sklearn.metrics import top_k_accuracy_score
-import ttnn
-from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, prepare_rotation_mat_ttnn
-from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
-from models.demos.t3000.mixtral8x7b.reference.model import Transformer
-from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
-from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
 # Set Mixtral flags for CI, if CI environment is setup
 if os.getenv("CI") == "true":
     os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
+    os.environ["TT_METAL_ASYNC_DEVICE_QUEUE"] = "1"
+    os.environ["WH_ARCH_YAML"] = "wormhole_b0_80_arch_eth_dispatch.yaml"
 
+import ttnn
+from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
+
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, prepare_rotation_mat_ttnn
+from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
+from models.demos.t3000.mixtral8x7b.reference.model import Transformer
+from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+from models.utility_functions import comp_pcc, comp_allclose
 
 
 class Emb(torch.nn.Module):
@@ -42,31 +46,21 @@ class Emb(torch.nn.Module):
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 10, 127),
+    (1, 10),
 )
-def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_type, use_program_cache, reset_seeds):
+def test_mixtral_model_inference(
+    t3k_device_mesh, use_program_cache, reset_seeds, iterations, n_layers, validation_type
+):
     pcc = 0.97
     dtype = ttnn.bfloat8_b
 
-    devices = all_devices
-    num_devices = len(devices)
-    assert num_devices == 8, "This test requires a T3000 (8 devices)"
-    devices = get_devices_for_t3000(devices, num_devices)
-
-    model_args = TtModelArgs(devices[0])
+    model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = n_layers
 
-    state_dict = torch.load(model_args.state_dict_path)
-    keys_dict = list(state_dict.keys())[:]
-    remv = [f"layers.{i}" for i in range(n_layers, 32)]
-    for k in keys_dict:
-        if any([r in k for r in remv]):
-            state_dict.pop(k)
+    state_dict = model_args.load_state_dict()
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
-
     prompts = ["Once"] * 32
-
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
     if validation_type == "pcc":
@@ -80,7 +74,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
 
     # Load TTNN model
     tt_model = TtTransformer(
-        devices=devices,
+        device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
         layers=list(range(model_args.n_layers)),
@@ -90,7 +84,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
     rot_mat = prepare_rotation_mat_ttnn(
         model_args.head_dim,
         model_args.max_seq_len,
-        tt_model.devices,
+        tt_model.device_mesh,
     )
 
     generation_start_pos = 0
@@ -114,17 +108,26 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, validation_t
         start_pos = generation_start_pos + i
         current_pos = start_pos % model_args.sliding_window
 
-        decode_input = prepare_inputs_ttnn(
+        decode_input, attn_mask = prepare_inputs_ttnn(
             tt_decode_input,
             model_args.dim,
-            tt_model.devices,
+            start_pos,
+            model_args.sliding_window,
+            tt_model.device_mesh,
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
-
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
+        # Work around program cache issue https://github.com/tenstorrent/tt-metal/issues/7159
+        del decode_input, attn_mask
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1).detach().float()
+        tt_output_torch = (
+            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
+            .squeeze(1)
+            .view(batch, seqlen, -1)
+            .detach()
+            .float()
+        )
 
         # Measure PCC
         if validation_type == "pcc":

@@ -21,7 +21,7 @@ import os
 #     plt.figure(figsize=(100, 50))
 #     plt.xticks(torch.arange(0, stick_len) + 0.5, range(0, stick_len))
 #     plt.yticks(torch.arange(0, nsticks) + 0.5, range(0, nsticks))
-#     # plt.grid()
+#     plt.grid()
 #     bool_vals = vals > 0
 #     plt.imshow(bool_vals, interpolation="none", vmin=0, vmax=1, cmap="Blues")
 #     plt.savefig(f"diff_core_{fid}.png", bbox_inches="tight", pad_inches=0.1)
@@ -817,7 +817,7 @@ def test_sd_conv(
         # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
         # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
         # # sd convs with HxW=64x64 with batch size=2
-        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),     ## TODO: DISABLED DUE TO FLAKY HANG issue #7179
+        (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
         (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
         (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
         (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),

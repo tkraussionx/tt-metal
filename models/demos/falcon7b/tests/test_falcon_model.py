@@ -5,7 +5,6 @@
 import torch
 import pytest
 from loguru import logger
-import tt_lib
 from models.demos.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
@@ -88,6 +87,7 @@ def run_test_FalconModel_inference(
         head_dim,
         max_position_embeddings,
         configuration,
+        model_config,
         num_layers=num_layers,
         generate_attention_inputs=False,
     )
@@ -220,7 +220,7 @@ def test_FalconModel_inference(
 ):
     devices = get_devices_for_t3000(all_devices, num_devices)
 
-    model_config = get_model_config(model_config_str)
+    model_config = get_model_config(model_config_str, seq_len)
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )

@@ -12,13 +12,15 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
 @skip_for_wormhole_b0()
+@pytest.mark.requires_fast_runtime_mode_off
 @pytest.mark.parametrize("height", [32])
 @pytest.mark.parametrize("width", [32])
 def test_ttnn_experimental_tensor_exp(device, height, width):
     torch.manual_seed(0)
 
     torch_input_tensor = torch_random((1, 1, height, width), -1, 1, dtype=torch.bfloat16)
-    torch_output_tensor = ttnn.experimental.tensor.exp.golden_function(torch_input_tensor)
+    golden_function = ttnn.get_golden_function(ttnn.experimental.tensor.exp)
+    torch_output_tensor = golden_function(torch_input_tensor)
 
     input_tensor = ttnn.from_torch(torch_input_tensor, device=device)
     output_tensor = ttnn.experimental.tensor.exp(input_tensor)
@@ -68,6 +70,7 @@ def test_ttnn_experimental_operations_primary_moreh_matmul(device, m_size, k_siz
     assert_with_pcc(torch_output_tensor, output_tensor)
 
 
+@pytest.mark.requires_fast_runtime_mode_off
 @pytest.mark.parametrize("input_a_is_sharded", [True, False])
 @pytest.mark.parametrize("output_is_sharded", [True, False])
 @pytest.mark.parametrize("m_size, num_cores", [[25088, 98]])
@@ -167,12 +170,9 @@ def test_ttnn_experimental_operations_primary_matmul_1d(
 
 @pytest.mark.parametrize("H, num_cores", [[64, 64]])
 @pytest.mark.parametrize("num_slices", [2])
-def test_sharded_partial_op(
-    device,
-    H,
-    num_cores,
-    num_slices,
-):
+@pytest.mark.parametrize("enable_async", [True, False])
+def test_sharded_partial_op(device, H, num_cores, num_slices, enable_async):
+    device.enable_async(enable_async)
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")

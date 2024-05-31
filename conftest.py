@@ -341,6 +341,12 @@ def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
     logger.debug(f"multidevice with {device_mesh.get_num_devices()} devices is created")
     yield device_mesh
 
+    import tt_lib as ttl
+
+    for device in device_mesh.get_devices():
+        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DeallocateBuffers(device)
+
     ttnn.close_device_mesh(device_mesh)
     del device_mesh
 
@@ -365,6 +371,12 @@ def pcie_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
     logger.debug(f"multidevice with {device_mesh.get_num_devices()} devices is created")
     yield device_mesh
 
+    import tt_lib as ttl
+
+    for device in device_mesh.get_devices():
+        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DeallocateBuffers(device)
+
     ttnn.close_device_mesh(device_mesh)
     del device_mesh
 
@@ -375,7 +387,7 @@ def t3k_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
 
     if ttnn.get_num_devices() < 8:
         pytest.skip()
-    device_ids = [0, 7, 6, 1, 2, 5, 4, 3]
+    device_ids = [0, 4, 5, 1, 2, 6, 7, 3]
     try:
         num_devices_requested = min(request.param, len(device_ids))
     except (ValueError, AttributeError):
@@ -388,6 +400,12 @@ def t3k_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
 
     logger.debug(f"multidevice with {device_mesh.get_num_devices()} devices is created")
     yield device_mesh
+
+    import tt_lib as ttl
+
+    for device in device_mesh.get_devices():
+        ttl.device.DumpDeviceProfiler(device, True)
+        ttl.device.DeallocateBuffers(device)
 
     ttnn.close_device_mesh(device_mesh)
     del device_mesh
@@ -414,13 +432,31 @@ def reset_default_device():
 def use_program_cache(request):
     import tt_lib as ttl
 
-    if "device" in request.fixturenames:
+    if "device" in request.fixturenames or "device_l1_small_size" in request.fixturenames:
         dev = ttl.device.GetDefaultDevice()
         dev.enable_program_cache()
     elif "all_devices" in request.fixturenames:
         devices = request.getfixturevalue("all_devices")
         for dev in devices:
             dev.enable_program_cache()
+    elif "pcie_devices" in request.fixturenames:
+        devices = request.getfixturevalue("pcie_devices")
+        for dev in devices:
+            dev.enable_program_cache()
+    elif "device_mesh" in request.fixturenames:
+        mesh = request.getfixturevalue("device_mesh")
+        for device_id in mesh.get_device_ids():
+            mesh.get_device(device_id).enable_program_cache()
+    elif "t3k_device_mesh" in request.fixturenames:
+        mesh = request.getfixturevalue("t3k_device_mesh")
+        for device_id in mesh.get_device_ids():
+            mesh.get_device(device_id).enable_program_cache()
+    elif "pcie_device_mesh" in request.fixturenames:
+        mesh = request.getfixturevalue("pcie_device_mesh")
+        for device_id in mesh.get_device_ids():
+            mesh.get_device(device_id).enable_program_cache()
+    else:
+        logger.warning("No device fixture found to apply program cache to: PROGRAM CACHE DISABLED")
     yield
 
 

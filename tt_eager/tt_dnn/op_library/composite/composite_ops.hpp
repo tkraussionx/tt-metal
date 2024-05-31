@@ -5,13 +5,13 @@
 #pragma once
 #include <type_traits>
 
-#include "tt_metal/common/constants.hpp"
-#include "tensor/owned_buffer_functions.hpp"
+#include "tensor/host_buffer/functions.hpp"
 #include "tensor/tensor.hpp"
 #include "tensor/tensor_utils.hpp"
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "tt_metal/common/constants.hpp"
 
 namespace tt {
 
@@ -174,6 +174,11 @@ Tensor div(
 Tensor div_no_nan(
     const Tensor& input_a,
     const Tensor& input_b,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+
+Tensor div_no_nan(
+    const Tensor& input_a,
+    float value,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
 // xlogy(x,y))=x*log(y)

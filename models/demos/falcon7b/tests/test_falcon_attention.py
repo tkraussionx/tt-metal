@@ -13,10 +13,9 @@ from models.demos.falcon7b.tt.falcon_attention import TtFalconAttentionDecode, T
 from models.demos.falcon7b.tt.model_config import get_model_config
 from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose,
     comp_pcc,
 )
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
+from models.utility_functions import get_devices_for_t3000
 
 
 class PytorchFalconAttentionModel(torch.nn.Module):
@@ -78,7 +77,16 @@ def run_test_FalconAttention_inference(
         tt_layer_past,
         kv_len,
     ) = get_rand_falcon_inputs(
-        llm_mode, seq_len, batch, kv_cache_len, devices, global_batch, head_dim, max_position_embeddings, configuration
+        llm_mode,
+        seq_len,
+        batch,
+        kv_cache_len,
+        devices,
+        global_batch,
+        head_dim,
+        max_position_embeddings,
+        configuration,
+        model_config,
     )
     if layer_past is not None:
         layer_past = layer_past[0]

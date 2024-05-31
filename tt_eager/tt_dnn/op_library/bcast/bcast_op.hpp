@@ -14,37 +14,34 @@ namespace tt {
 
 namespace tt_metal {
 
-enum class BcastOpMath { ADD = 0, SUB = 1, MUL = 2 };
+enum class BcastOpMath { ADD, SUB, MUL };
 
-enum class BcastOpDim { H = 0, W = 1, HW = 2 };
+enum class BcastOpDim { H, W, HW };
 
 // TODO: Accept parallelization
-enum class BcastOpParallelizationStrategy { MULTI_CORE_H = 0, MULTI_CORE_W = 1, MULTI_CORE_HW = 2, SINGLE_CORE = 3 };
+enum class BcastOpParallelizationStrategy { MULTI_CORE_H_SHARDED, MULTI_CORE_H, MULTI_CORE_W, MULTI_CORE_HW, SINGLE_CORE };
 
-operation::ProgramWithCallbacks bcast_single_core(
-    const Tensor &input_tensor_a,
-    const Tensor &input_tensor_b,
-    const Tensor &output_tensor,
-    BcastOpMath bcast_op,
-    BcastOpDim bcast_dim);
 operation::ProgramWithCallbacks bcast_multi_core_h(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     const Tensor &output_tensor,
-    BcastOpMath bcast_op,
-    BcastOpDim bcast_dim);
+    BcastOpMath bcast_op);
+operation::ProgramWithCallbacks bcast_sharded_h(
+    const Tensor &input_tensor_a,
+    const Tensor &input_tensor_b,
+    const Tensor &output_tensor,
+    BcastOpMath bcast_op);
 operation::ProgramWithCallbacks bcast_multi_core_w(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     const Tensor &output_tensor,
-    BcastOpMath bcast_op,
-    BcastOpDim bcast_dim);
+    BcastOpMath bcast_op);
 operation::ProgramWithCallbacks bcast_multi_core_hw(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     const Tensor &output_tensor,
     BcastOpMath bcast_op,
-    BcastOpDim bcast_dim);
+    bool inplace);
 
 struct EltwiseBinaryBroadcast {
     const BcastOpMath math_op;
@@ -77,7 +74,7 @@ inline Tensor bcast(
 
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a}))};
     operation::launch_with_autoformat(
-        [bcast_op, bcast_dim, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        [bcast_op, bcast_dim, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             using tt::constants::TILE_HEIGHT;
             using tt::constants::TILE_WIDTH;
             auto& input_tensor_a = input_tensors.at(0);
@@ -146,14 +143,6 @@ inline Tensor bcast(
 }  // namespace tt
 
 namespace bcast_op_utils {
-
-using namespace tt::tt_metal;
-
-const char *get_reader_name(BcastOpDim bcast_dim, BcastOpParallelizationStrategy bcast_parallelization_strategy);
-
-const char *get_compute_name(BcastOpDim bcast_dim);
-
-const char *get_math_to_op_define(BcastOpMath bcast_math);
 
 std::map<std::string, std::string> get_defines(BcastOpDim bcast_dim, BcastOpMath bcast_math);
 

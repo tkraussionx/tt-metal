@@ -11,22 +11,17 @@ run_perf_models_other() {
     local tt_arch=$1
     local test_marker=$2
 
-    if [ "$tt_arch" == "grayskull" ]; then
-        env pytest "tests/ttnn/integration_tests/resnet/test_performance.py" -m $test_marker
+    env pytest tests/ttnn/integration_tests/resnet/test_performance.py -m $test_marker
 
-        env pytest "tests/ttnn/integration_tests/bert/test_performance.py" -m $test_marker
+    env pytest tests/ttnn/integration_tests/bert/test_performance.py -m $test_marker
 
-        env pytest models/demos/ttnn_falcon7b/tests -m $test_marker
+    env pytest models/demos/ttnn_falcon7b/tests -m $test_marker
 
-        env pytest models/demos/resnet/tests -m $test_marker
+    env pytest models/demos/resnet/tests -m $test_marker
 
-        env pytest models/demos/metal_BERT_large_11/tests -m $test_marker
+    env pytest tests/ttnn/integration_tests/whisper/test_performance.py -m $test_marker
 
-        env pytest "tests/ttnn/integration_tests/whisper/test_performance.py::test_performance" -m $test_marker
-
-    else
-        echo "There are no other model perf tests for Javelin yet specified. Arch $tt_arch requested"
-    fi
+    env pytest models/demos/metal_BERT_large_11/tests -m $test_marker
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
@@ -36,26 +31,13 @@ run_perf_models_llm_javelin() {
     local tt_arch=$1
     local test_marker=$2
 
-    env pytest models/demos/falcon7b/tests -m $test_marker
+    env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests -m $test_marker
 
     if [ "$tt_arch" == "wormhole_b0" ]; then
         env pytest models/demos/mamba/tests -m $test_marker
     fi
 
     env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/wormhole/mistral7b/tests -m $test_marker  # -> hanging: issue #7540
-
-    ## Merge all the generated reports
-    env python models/perf/merge_perf_results.py
-}
-
-run_perf_models_llm_javelin_multi_device() {
-    local tt_arch=$1
-    local test_marker=$2
-
-    env pytest models/demos/falcon7b/tests -m $test_marker
-
-    # Mistral8x7b env flags are set inside the tests
-    env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
@@ -75,16 +57,6 @@ run_perf_models_cnn_javelin() {
     env python models/perf/merge_perf_results.py
 }
 
-run_perf_models_cnn_javelin_multi_device() {
-    local tt_arch=$1
-    local test_marker=$2
-
-    # Add tests here
-
-    ## Merge all the generated reports
-    env python models/perf/merge_perf_results.py
-}
-
 run_device_perf_models() {
     local test_marker=$1
 
@@ -93,7 +65,7 @@ run_device_perf_models() {
     if [ "$tt_arch" == "grayskull" ]; then
         #TODO(MO): Until #6560 is fixed, GS device profiler test are grouped with
         #Model Device perf regression tests to make sure thy run on no-soft-reset BMs
-        tests/scripts/run_profiler_regressions.sh PROFILER
+        tests/scripts/run_profiler_regressions.sh PROFILER_NO_RESET
 
         env pytest models/demos/metal_BERT_large_11/tests -m $test_marker
 
@@ -158,8 +130,6 @@ main() {
         test_marker="models_performance_virtual_machine"
     elif [[ "$pipeline_type" == *"device_performance_bare_metal"* ]]; then
         test_marker="models_device_performance_bare_metal"
-    elif [[ "$pipeline_type" == *"_bare_metal_multi_device"* ]]; then
-        test_marker="models_performance_bare_metal_multi_device"
     elif [[ "$pipeline_type" == *"_bare_metal"* ]]; then
         test_marker="models_performance_bare_metal"
     else
@@ -170,12 +140,8 @@ main() {
     if [[ "$pipeline_type" == *"device_performance"* ]]; then
         run_device_perf_models "$test_marker"
         run_device_perf_ops "$test_marker"
-    elif [[ "$pipeline_type" == "llm_javelin_models_performance_bare_metal_multi_device" ]]; then
-        run_perf_models_llm_javelin_multi_device "$tt_arch" "$test_marker"
     elif [[ "$pipeline_type" == "llm_javelin_models_performance"* ]]; then
         run_perf_models_llm_javelin "$tt_arch" "$test_marker"
-    elif [[ "$pipeline_type" == "cnn_javelin_models_performance_bare_metal_multi_device" ]]; then
-        run_perf_models_cnn_javelin_multi_device "$tt_arch" "$test_marker"
     elif [[ "$pipeline_type" == "cnn_javelin_models_performance"* ]]; then
         run_perf_models_cnn_javelin "$tt_arch" "$test_marker"
     elif [[ "$pipeline_type" == *"other_models_performance"* ]]; then

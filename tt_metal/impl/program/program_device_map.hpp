@@ -39,11 +39,3 @@ struct ProgramTransferInfo {
     std::unordered_map<uint32_t, vector<transfer_info_2>> unicast_semaphores;      // WritePacked, sorted by dst
     vector<kernel_bins_transfer_info> kernel_bins;                                 // RelayPaged, WriteLinear
 };
-
-struct ProgramCommandIndices {
-    std::uint32_t cb_configs_payload_start;    // device_commands
-    // pair of cmd idx, rt arg offset
-    // Currently we only really need the base cmd idx since they are sequential, and the rt arg len is currently the same for all splits
-    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> processor_to_cmd_mapping;
-    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> kernel_to_cmd_mapping;
-};

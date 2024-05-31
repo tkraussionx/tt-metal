@@ -40,6 +40,7 @@ class RunTimeOptions {
     bool dprint_all_chips = false;
     uint32_t dprint_riscv_mask = 0;
     std::string dprint_file_name;
+    bool dprint_noc_transfer_data = false;
 
     bool test_mode_enabled = false;
 
@@ -48,6 +49,8 @@ class RunTimeOptions {
     bool null_kernels = false;
 
     bool clear_l1 = false;
+
+    bool riscv_debug_info_enabled = false;
 
    public:
     RunTimeOptions();
@@ -125,6 +128,8 @@ class RunTimeOptions {
     inline void set_dprint_file_name(std::string file_name) {
         dprint_file_name = file_name;
     }
+    inline bool get_dprint_noc_transfers() { return dprint_noc_transfer_data; }
+    inline void set_dprint_noc_transfers(bool val) { dprint_noc_transfer_data = val; }
 
     // Used for both watcher and dprint servers, this dev option (no corresponding env var) sets
     // whether to catch exceptions (test mode = true) coming from debug servers or to throw them
@@ -141,6 +146,10 @@ class RunTimeOptions {
 
     inline bool get_clear_l1() { return clear_l1; }
     inline void set_clear_l1(bool clear) { clear_l1 = clear; }
+
+    // Whether to compile with -g to include DWARF debug info in the binary.
+    inline bool get_riscv_debug_info_enabled() { return riscv_debug_info_enabled; }
+    inline void set_riscv_debug_info_enabled(bool enable) { riscv_debug_info_enabled = enable; }
 
 private:
     // Helper functions to parse DPrint-specific environment vaiables.

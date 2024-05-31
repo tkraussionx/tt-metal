@@ -11,8 +11,15 @@ if [[ -z "$ARCH_NAME" ]]; then
     exit 1
 fi
 
-remove_default_log_locations
+ENABLE_TRACY=1 ENABLE_PROFILER=1 cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-17
 
-# rm -rf build
-PYTHON_ENV_DIR=$(pwd)/build/python_env ENABLE_TRACY=1 ENABLE_PROFILER=1 ./build_metal.sh
-cmake --build build --target programming_examples -- -j`nproc`
+if [[ $1 == "NO_CLEAN" ]]; then
+    cmake --build build
+else
+    remove_default_log_locations
+    cmake --build build --target clean
+fi
+
+cmake --build build --target install
+cmake --build build --target programming_examples
+PYTHON_ENV_DIR=$(pwd)/build/python_env ./create_venv.sh

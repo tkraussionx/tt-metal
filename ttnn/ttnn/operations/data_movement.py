@@ -77,7 +77,6 @@ def _pad_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
     golden_function=_golden_function,
     preprocess_golden_function_inputs=_preprocess_golden_function_inputs,
     postprocess_golden_function_outputs=_postprocess_golden_function_outputs,
-    allow_to_fallback_to_golden_function_on_failure=True,
 )
 def pad(
     input_tensor: ttnn.Tensor,
@@ -168,67 +167,29 @@ def _permute_validate_input_tensors(operation_name, input_tensor, *args, **kwarg
     )
 
 
-@ttnn.register_operation(
+doc = r"""
+permute(input_tensor: ttnn.Tensor, order: Tuple[int, ...]) -> ttnn.Tensor
+
+Permutes :attr:`input_tensor` using :attr:`order`.
+
+Args:
+    * :attr:`input_tensor`: the input tensor
+    * :attr:`order`: the desired ordering of dimensions.
+
+Example::
+
+    >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
+    >>> output = ttnn.permute(tensor, (0, 1, 3, 2))
+    >>> print(output.shape)
+    [1, 1, 32, 64]
+
+"""
+permute = ttnn.register_operation(
     name="ttnn.permute",
     validate_input_tensors=_permute_validate_input_tensors,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
-)
-def permute(input_tensor: ttnn.Tensor, order: Tuple[int, ...]) -> ttnn.Tensor:
-    r"""
-    permute(input_tensor: ttnn.Tensor, order: Tuple[int, ...]) -> ttnn.Tensor
-
-    Permutes :attr:`input_tensor` using :attr:`order`.
-
-    Args:
-        * :attr:`input_tensor`: the input tensor
-        * :attr:`order`: the desired ordering of dimensions.
-
-    Example::
-
-        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
-        >>> output = ttnn.permute(tensor, (0, 1, 3, 2))
-        >>> print(output.shape)
-        [1, 1, 32, 64]
-
-    """
-    if not isinstance(order, tuple):
-        raise RuntimeError("order must be a tuple")
-
-    if len(input_tensor.shape) != len(order):
-        raise RuntimeError(
-            "The number of dimensions in the tensor input does not match the length of the desired ordering"
-        )
-
-    on_device = ttnn.is_tensor_storage_on_device(input_tensor)
-    layout = input_tensor.layout
-    rank = len(input_tensor.shape)
-
-    if len(input_tensor.shape) < 4:
-        input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
-        adjusted_order_for_4D_tensor = order
-        while len(adjusted_order_for_4D_tensor) < 4:
-            adjusted_order_for_4D_tensor = (0,) + tuple(x + 1 for x in adjusted_order_for_4D_tensor)
-        order = adjusted_order_for_4D_tensor
-
-    if ttnn.has_tile_padding(input_tensor):
-        input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
-
-    if ttnn.is_tensor_storage_on_device(input_tensor) and len(input_tensor.shape) == 4:
-        output_tensor = ttl.tensor.permute(input_tensor, order)
-        output_tensor = ttnn.to_layout(output_tensor, layout)
-        rank_should_be_updated = len(output_tensor.shape) > rank
-        while rank_should_be_updated:
-            prior_rank = len(output_tensor.shape)
-            output_tensor = ttnn.squeeze(output_tensor, dim=0)
-            rank_should_be_updated = prior_rank != len(output_tensor.shape) and len(output_tensor.shape) > rank
-
-        if on_device and not ttnn.is_tensor_storage_on_device(output_tensor):
-            device = input_tensor.device()
-            output_tensor = ttnn.to_device(output_tensor, device)
-        return output_tensor
-    else:
-        raise NotImplementedError
+    doc=doc,
+)(ttnn._ttnn.operations.data_movement.permute)
 
 
 def _golden_function(tensors, dim=0, **_):
@@ -250,88 +211,35 @@ def _concat_validate_input_tensors(operation_name, tensors, dim, *args, **kwargs
         )
 
 
-@ttnn.register_operation(
+doc = r"""
+concat(tensors: List[ttnn.Tensor], dim: int = 0, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
+
+Concats :attr:`tensors` in the given :attr:`dim`.
+
+Args:
+    * :attr:`tensors`: the tensors to be concatenated.
+    * :attr:`dim`: the concatenating dimension.
+
+Keyword Args:
+    * :attr:`memory_config`: the memory configuration to use for the operation
+
+Example::
+
+    >>> tensor = ttnn.concat(ttnn.from_torch(torch.zeros((1, 1, 64, 32), ttnn.from_torch(torch.zeros((1, 1, 64, 32), dim=3)), device)
+
+    >>> tensor1 = ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16), device=device)
+    >>> tensor2 = ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16), device=device)
+    >>> output = ttnn.concat([tensor1, tensor2], dim=4)
+    >>> print(output.shape)
+    [1, 1, 32, 64]
+
+"""
+concat = ttnn.register_operation(
     name="ttnn.concat",
     validate_input_tensors=_concat_validate_input_tensors,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
-)
-def concat(
-    tensors: List[ttnn.Tensor],
-    dim: int = 0,
-    *,
-    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
-) -> ttnn.Tensor:
-    r"""
-    concat(tensors: List[ttnn.Tensor], dim: int = 0, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
-
-    Concats :attr:`tensors` in the given :attr:`dim`.
-
-    Args:
-        * :attr:`tensors`: the tensors to be concatenated.
-        * :attr:`dim`: the concatenating dimension.
-
-    Keyword Args:
-        * :attr:`memory_config`: the memory configuration to use for the operation
-
-    Example::
-
-        >>> tensor = ttnn.concat(ttnn.from_torch(torch.zeros((1, 1, 64, 32), ttnn.from_torch(torch.zeros((1, 1, 64, 32), dim=3)), device)
-
-        >>> tensor1 = ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16), device=device)
-        >>> tensor2 = ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16), device=device)
-        >>> output = ttnn.concat([tensor1, tensor2], dim=4)
-        >>> print(output.shape)
-        [1, 1, 32, 64]
-
-    """
-    if len(tensors) < 1:
-        raise RuntimeError("ttnn.concat: expected a non-empty list of Tensors!")
-
-    if len(tensors) == 1:
-        return ttnn.to_memory_config(tensors[0], memory_config)
-
-    first_tensor = tensors[0]
-    first_tensor_shape = first_tensor.shape
-    for tensor in tensors:
-        shape = tensor.shape
-        if (
-            len(shape) != len(first_tensor_shape)
-            or any(shape[i] != first_tensor_shape[i] for i in range(len(shape)) if i != dim)
-            or any(
-                shape.with_tile_padding()[i] != first_tensor_shape.with_tile_padding()[i]
-                for i in range(len(shape))
-                if i != dim
-            )
-        ):
-            raise ValueError(
-                "All dimensions must be the same size except for the dimension along which the contenation is taking place."
-            )
-
-    rank = len(tensors[0].shape)
-    original_dim = dim
-    if dim < 0:
-        dim = rank + dim
-    if dim < 0 or dim >= rank:
-        raise RuntimeError(
-            f"ttnn: Dimension out of range: dim {original_dim} cannot be used for tensors of rank {rank}"
-        )
-
-    rank = len(tensors[0].shape)
-
-    all_tensors_are_tile_layout_without_padding = all(
-        tensor.layout == ttnn.TILE_LAYOUT and not ttnn.has_tile_padding(tensor) for tensor in tensors
-    )
-
-    if rank <= 4 and all_tensors_are_tile_layout_without_padding:
-        tensors_4d = [ttnn.unsqueeze_to_4D(tensor) for tensor in tensors]
-        dim = dim + 4 - rank
-        output_tensor = ttl.tensor.concat(tensors_4d, dim=dim, output_mem_config=memory_config)
-        while len(output_tensor.shape) > rank:
-            output_tensor = ttnn.squeeze(output_tensor, dim=0)
-        return output_tensor
-    else:
-        raise NotImplementedError
+    doc=doc,
+)(ttnn._ttnn.operations.data_movement.concat)
 
 
 def _golden_function(input_tensor, split_size, dim):
@@ -356,7 +264,6 @@ def _split_validate_input_tensors(operation_name, input_tensor, *args, **kwargs)
     name="ttnn.split",
     validate_input_tensors=_split_validate_input_tensors,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
 )
 def split(input_tensor: ttnn.Tensor, split_size: int, dim: int) -> ttnn.Tensor:
     r"""
@@ -390,11 +297,13 @@ def _repeat_interleave_validate_input_tensors(operation_name, input_tensor, *arg
     )
 
 
+# This operation does not support the following cases:
+#   - Shape([2[32], 2[32]]) -> repeats = 2, dim = 0
+#   - Shape([2[32], 2[32]]) -> repeats = Tensor[1,2], dim = 1
 @ttnn.register_operation(
     name="ttnn.repeat_interleave",
     validate_input_tensors=_repeat_interleave_validate_input_tensors,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
 )
 def repeat_interleave(input_tensor: ttnn.Tensor, repeats: Union[ttnn.Tensor, int], dim: int = 0) -> ttnn.Tensor:
     r"""
@@ -477,7 +386,6 @@ def _repeat_validate_input_tensors(operation_name, input_tensor, *args, **kwargs
     name="ttnn.repeat",
     validate_input_tensors=_repeat_validate_input_tensors,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
 )
 def repeat(
     input_tensor: ttnn.Tensor,
@@ -520,91 +428,6 @@ def repeat(
         raise NotImplementedError
 
 
-## helper function for upsample. currently only supports HEIGHT sharding
-def _get_upsample_shard_grid_from_num_shards(ncores: int, device):
-    max_grid_size = (8, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
-    if ncores % max_grid_size[1] == 0:
-        core_grid = ttnn.CoreGrid(y=ncores // max_grid_size[1], x=max_grid_size[1])
-        grid_coord = ttnn.experimental.tensor.CoreCoord(core_grid.x - 1, core_grid.y - 1)
-        return ttnn.experimental.tensor.CoreRangeSet(
-            {ttnn.experimental.tensor.CoreRange(ttnn.experimental.tensor.CoreCoord(0, 0), grid_coord)}
-        )
-    else:
-        if ncores < max_grid_size[1]:
-            core_grid = ttnn.CoreGrid(y=1, x=ncores)
-            grid_coord = ttnn.experimental.tensor.CoreCoord(core_grid.x - 1, 0)
-            return ttnn.experimental.tensor.CoreRangeSet(
-                {ttnn.experimental.tensor.CoreRange(ttnn.experimental.tensor.CoreCoord(0, 0), grid_coord)}
-            )
-        else:
-            core_grid_1 = ttnn.CoreGrid(y=ncores // max_grid_size[1], x=max_grid_size[1])
-            core_grid_2 = ttnn.CoreGrid(y=ncores // max_grid_size[1] + 1, x=ncores % max_grid_size[1])
-            grid_coord_1 = ttnn.experimental.tensor.CoreCoord(core_grid_1.x - 1, core_grid_1.y - 1)
-            grid_coord_2 = ttnn.experimental.tensor.CoreCoord(core_grid_2.x - 1, core_grid_2.y - 1)
-            return ttnn.experimental.tensor.CoreRangeSet(
-                {
-                    ttnn.experimental.tensor.CoreRange(ttnn.experimental.tensor.CoreCoord(0, 0), grid_coord_1),
-                    ttnn.experimental.tensor.CoreRange(
-                        ttnn.experimental.tensor.CoreCoord(0, grid_coord_2.y), grid_coord_2
-                    ),
-                }
-            )
-
-
-## helper function for upsample
-def _get_upsample_num_shards(
-    batch_size: int, height: int, num_channels: int, shard_strategy: ttnn.ShardStrategy, device
-):
-    ## calculate ncores, corresponding grid_size and in_shard_shape based on the input_shape
-    max_grid_size = (8, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
-    if shard_strategy == ttnn.ShardStrategy.HEIGHT:
-        ## nsticks per shard should be divisible by in_w
-        max_nshards = min(batch_size * height, max_grid_size[0] * max_grid_size[1])
-        nshards = max_nshards
-        while nshards > 0:
-            if batch_size * height % nshards == 0:
-                break
-            nshards -= 1
-        if nshards == 0:
-            ## should fallback to single core (TODO)
-            raise ValueError("nshards is 0")
-
-    ## TODO: support BLOCK strategy?
-    # elif shard_strategy == ttnn.ShardStrategy.BLOCK:
-    #     max_nshards_h = min(batch_size * height, max_grid_size[0])  ## height along NHW
-    #     max_nshards_w = min(num_channels, max_grid_size[1])  ## width along C
-    #     ## find nshards_h along NHW
-    #     nshards_h = max_nshards_h
-    #     while nshards_h > 0:
-    #         if batch_size * height % nshards_h == 0:
-    #             break
-    #         nshards_h -= 1
-    #     ## find nshards_w along C
-    #     nshards_w = max_nshards_w
-    #     while nshards_w > 0:
-    #         if num_channels % nshards_w == 0:
-    #             break
-    #         nshards_w -= 1
-    #     if nshards_w == 0 or nshards_h == 0:
-    #         ## should fallback to single core (TODO)
-    #         raise ValueError("nshards_h or nshards_w is 0")
-    #     return (nshards_h, nshards_w)
-
-    return nshards
-
-
-def _upsample_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
-    ttnn.validate_input_tensor(
-        operation_name,
-        input_tensor,
-        ranks=(2, 3, 4),
-        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-        layouts=(ttnn.ROW_MAJOR_LAYOUT,),
-        can_be_on_device=True,
-        can_be_on_cpu=False,
-    )
-
-
 def _golden_function(input_tensor: ttnn.Tensor, scale_factor: Tuple[float, float], **_):
     import torch
 
@@ -614,88 +437,8 @@ def _golden_function(input_tensor: ttnn.Tensor, scale_factor: Tuple[float, float
     return ret
 
 
-@ttnn.register_operation(
-    name="ttnn.upsample",
-    validate_input_tensors=_upsample_validate_input_tensors,
+upsample = ttnn.register_operation(
     golden_function=_golden_function,
-)
-def upsample(
-    input_tensor: ttnn.Tensor,
-    scale_factor: Union[float, Tuple[float, float], Tuple[float, float, float], Tuple[float, float, float, float]],
-    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
-) -> ttnn.Tensor:
-    r"""
-    Upsamples a given multi-channel 2D (spatial) data.
-    The input data is assumed to be of the form [N, H, W, C].
-
-    The algorithms available for upsampling are 'nearest' for now.
-
-    Args:
-        * :attr:`input_tensor`: the input tensor
-        * :attr:`scale_factor`: multiplier for spatial size. Has to match input size if it is a tuple.
-    """
-
-    scale_h, scale_w = 1, 1
-    if isinstance(scale_factor, float) or isinstance(scale_factor, int):
-        scale_h = scale_factor
-        scale_w = scale_factor
-    elif isinstance(scale_factor, tuple):
-        if len(scale_factor) == 2:
-            scale_w, scale_c = scale_factor
-            assert scale_c == 1, "scale_c should be 1"
-        elif len(scale_factor) == 3:
-            scale_h, scale_w, scale_c = scale_factor
-            assert scale_c == 1, "scale_c should be 1"
-        elif len(scale_factor) == 4:
-            scale_n, scale_h, scale_w, scale_c = scale_factor
-            assert scale_n == 1, "scale_n should be 1"
-            assert scale_c == 1, "scale_c should be 1"
-        else:
-            RuntimeError("Invalid scale factor")
-
-    ## check if the incoming sharding spec is compatible with the upsample operation
-    ## if the sharding spec is not compatible, then the input tensor needs to be resharded
-    if ttnn.is_sharded(input_tensor):
-        if memory_config == ttnn.DRAM_MEMORY_CONFIG:
-            ## input is sharded, make the output config sharded too if not provided
-            memory_config = ttnn.get_memory_config(input_tensor)
-
-        ## check if shard height % input_w == 0
-        input_mem_config = ttnn.get_memory_config(input_tensor)
-        shard_shape = input_mem_config.shard_spec.shape
-        batch_size, input_h, input_w, num_channels = input_tensor.shape
-        if shard_shape[0] % input_w != 0:
-            ## perform a resharding operation:
-            ## calculate ideal shard_grid
-            nshards = _get_upsample_num_shards(
-                batch_size, input_h, num_channels, ttnn.ShardStrategy.HEIGHT, input_tensor.device()
-            )
-            shard_grid = _get_upsample_shard_grid_from_num_shards(nshards, input_tensor.device())
-
-            ## construct new shard_spec
-            shard_width = num_channels
-            shard_height = batch_size * input_h * input_w // nshards
-            shard_spec = ttnn.experimental.tensor.ShardSpec(
-                shard_grid, (shard_height, shard_width), ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
-            )
-            sharded_mem_config = ttnn.MemoryConfig(
-                ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
-            )
-
-            ## interleaved to sharded
-            input_tensor = ttnn.to_memory_config(input_tensor, memory_config=sharded_mem_config)
-
-            ## also update the output memory_config
-            shard_height = shard_height * scale_h * scale_w
-            shard_spec = ttnn.experimental.tensor.ShardSpec(
-                shard_grid, (shard_height, shard_width), ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
-            )
-            memory_config = ttnn.MemoryConfig(
-                ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
-            )
-
-    output_tensor = ttl.tensor.upsample(input_tensor, int(scale_h), int(scale_w), output_mem_config=memory_config)
-    return output_tensor
-
+)(ttnn._ttnn.operations.data_movement.upsample)
 
 __all__ = []

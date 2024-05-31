@@ -355,9 +355,6 @@ void jit_build_genfiles_descriptors(const JitBuildEnv& env,
     }
 }
 
-#define NOC_X(noc_index, noc_size_x, x) (noc_index == 0 ? (x) : (noc_size_x-1-(x)))
-#define NOC_Y(noc_index, noc_size_y, y) (noc_index == 0 ? (y) : (noc_size_y-1-(y)))
-
 std::string generate_bank_to_noc_coord_descriptor_string(
     tt_xy_pair grid_size,
     std::vector<CoreCoord>& dram_bank_map,
@@ -414,10 +411,12 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     ss << endl;
     ss << "extern uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];" << endl;
     ss << "extern int32_t bank_to_dram_offset[NUM_DRAM_BANKS];" << endl;
-    ss << "extern int32_t noc_xy_to_profiler_flat_id[noc_size_x][noc_size_y];" << endl;
     ss << "extern uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];" << endl;
     ss << "extern int32_t bank_to_l1_offset[NUM_L1_BANKS];" << endl;
+    ss << "#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC)" << endl;
+    ss << "extern uint8_t noc_xy_to_profiler_flat_id[noc_size_x][noc_size_y];" << endl;
     ss << "extern uint16_t profiler_core_count_per_dram;" << endl;
+    ss << "#endif" << endl;
 
     ss << endl;
     ss << "#else // !KERNEL_BUILD (FW_BUILD)" << endl;
@@ -427,8 +426,8 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     for (unsigned int noc = 0; noc < 2; noc++) {
         ss << "    {" << "\t// noc=" << noc << endl;
         for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
-            uint16_t noc_x = NOC_X(noc, grid_size.x, dram_bank_map[bank_id].x);
-            uint16_t noc_y = NOC_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
+            uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
+            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << (NOC_ADDR_LOCAL_BITS - 32);
             ss << "        " << xy << "," << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
         }
@@ -454,17 +453,18 @@ std::string generate_bank_to_noc_coord_descriptor_string(
      * For DRAM banks in particular, integer division of flat_id/core_count_per_dram gives the dram bank id and the modulo
      * is the offset.
      * */
+    ss << "#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC)" << endl;
     ss << "uint16_t profiler_core_count_per_dram __attribute__((used)) = ";
     ss << core_count_per_dram <<  ";" << endl;
     ss << endl;
 
-    ss << "int32_t noc_xy_to_profiler_flat_id[noc_size_x][noc_size_y] __attribute__((used)) = {" << endl;
+    ss << "uint8_t noc_xy_to_profiler_flat_id[noc_size_x][noc_size_y] __attribute__((used)) = {" << endl;
     for (unsigned int x = 0; x < grid_size.x; x++) {
         ss << "    {" << endl;
         for (unsigned int y = 0; y < grid_size.y; y++) {
             CoreCoord core = {x,y};
             if (profiler_flat_id_map.find(core) == profiler_flat_id_map.end()){
-                ss << "        " << -1 << "," << endl;
+                ss << "        " << 255 << "," << endl;
             }
             else{
                 ss << "        " << profiler_flat_id_map.at(core) << "," << endl;
@@ -474,6 +474,7 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     }
     ss << "};" << endl;
     ss << endl;
+    ss << "#endif" << endl;
 
 #endif
 
@@ -482,8 +483,8 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     for (unsigned int noc = 0; noc < 2; noc++) {
         ss << "    {" << "\t// noc=" << noc << endl;
         for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
-            uint16_t noc_x = NOC_X(noc, grid_size.x, l1_bank_map[bank_id].x);
-            uint16_t noc_y = NOC_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
+            uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
+            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << (NOC_ADDR_LOCAL_BITS - 32);
             ss << "        " << xy << "," << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
         }

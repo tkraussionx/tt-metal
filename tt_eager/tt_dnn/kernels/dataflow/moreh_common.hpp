@@ -4,7 +4,15 @@
 
 #include <stdint.h>
 
+#include <cstring>
+
 #include "dataflow_api.h"
+
+constexpr std::uint32_t FACE_HEIGHT = 16;
+constexpr std::uint32_t FACE_WIDTH = 16;
+constexpr std::uint32_t TILE_HEIGHT = 32;
+constexpr std::uint32_t TILE_WIDTH = 32;
+constexpr std::uint32_t NOC_MINIMUM_READ_SIZE = 32;  // 32 Bytes
 
 union Scalar {
     float f;
@@ -22,11 +30,11 @@ class ArgFetcher {
     }
 };
 
-#define InterleavedAddrGenFastHelper(addr, cb, idx) \
-    ({ \
-        constexpr bool is_dram = (get_compile_time_arg_val(idx) == 1); \
+#define InterleavedAddrGenFastHelper(addr, cb, idx)                                                        \
+    ({                                                                                                     \
+        constexpr bool is_dram = (get_compile_time_arg_val(idx) == 1);                                     \
         const InterleavedAddrGenFast<is_dram> ret = InterleavedAddrGenFastHelper_<is_dram>(addr, cb, idx); \
-        ret; \
+        ret;                                                                                               \
     })
 
 template <bool DRAM>
@@ -35,15 +43,12 @@ FORCE_INLINE InterleavedAddrGenFast<DRAM> InterleavedAddrGenFastHelper_(uint32_t
     auto data_format = get_dataformat(cb);
 
     const InterleavedAddrGenFast<DRAM> x = {
-        .bank_base_address = addr,
-        .page_size = tile_bytes,
-        .data_format = data_format
-    };
+        .bank_base_address = addr, .page_size = tile_bytes, .data_format = data_format};
 
     return x;
 }
 
-template<typename AddrGen>
+template <typename AddrGen>
 FORCE_INLINE void noc_async_read_tile_helper(tt::CB cb, uint32_t num_tiles, uint32_t tile_idx, AddrGen addr_gen) {
     cb_reserve_back(cb, num_tiles);
     uint32_t addr = get_write_ptr(cb);
@@ -52,7 +57,7 @@ FORCE_INLINE void noc_async_read_tile_helper(tt::CB cb, uint32_t num_tiles, uint
     cb_push_back(cb, num_tiles);
 }
 
-template<typename AddrGen>
+template <typename AddrGen>
 FORCE_INLINE void noc_async_write_tile_helper(tt::CB cb, uint32_t num_tiles, uint32_t tile_idx, AddrGen addr_gen) {
     cb_wait_front(cb, num_tiles);
     uint32_t l1_read_addr = get_read_ptr(cb);
@@ -61,35 +66,35 @@ FORCE_INLINE void noc_async_write_tile_helper(tt::CB cb, uint32_t num_tiles, uin
     cb_pop_front(cb, num_tiles);
 }
 
-FORCE_INLINE void generate_bcast_scaler(
-    uint32_t cb_scaler,
-    uint32_t scaler) {
-    union { float f; uint32_t u; } u; u.u = scaler;
+FORCE_INLINE void generate_bcast_scaler(uint32_t cb_scaler, uint32_t scaler) {
+    union {
+        float f;
+        uint32_t u;
+    } u;
+    u.u = scaler;
     cb_reserve_back(cb_scaler, 1);
-    auto ptr = reinterpret_cast<uint16_t*>(get_write_ptr(cb_scaler));
+    auto ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_scaler));
 
-    for (int j = 0; j < 1024; j++)
-        ptr[j] = uint16_t(0);
+    for (int j = 0; j < 1024; j++) ptr[j] = uint16_t(0);
 
     for (int k = 0; k < 4; k++)
-    for (int j = 0; j < 16; j++)
-        ptr[k*256 + j] = uint16_t(u.u>>16);
+        for (int j = 0; j < 16; j++) ptr[k * 256 + j] = uint16_t(u.u >> 16);
     cb_push_back(cb_scaler, 1);
 }
 
 FORCE_INLINE void fill_cb_with_value(uint32_t cb_id, uint32_t value, int32_t num_of_elems = 1024) {
     cb_reserve_back(cb_id, 1);
-    #if defined FP32_DEST_ACC_EN
-        auto ptr = reinterpret_cast<uint32_t *>(get_write_ptr(cb_id));
-        for (int j = 0; j < 1024; j++) {
-            ptr[j] = value;
-        }
-    #else
-        auto ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_id));
-        for (int j = 0; j < 1024; j++) {
-            ptr[j] = uint16_t(value >> 16);
-        }
-    #endif
+#if defined FP32_DEST_ACC_EN
+    auto ptr = reinterpret_cast<uint32_t *>(get_write_ptr(cb_id));
+    for (int j = 0; j < 1024; j++) {
+        ptr[j] = value;
+    }
+#else
+    auto ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_id));
+    for (int j = 0; j < 1024; j++) {
+        ptr[j] = uint16_t(value >> 16);
+    }
+#endif
     cb_push_back(cb_id, 1);
 }
 
@@ -416,7 +421,7 @@ FORCE_INLINE void mask_tile_hw(uint32_t l1_addr, uint32_t mask_h = 32, uint32_t 
     zero.f = 0.0f;
     const auto u16_zero = uint16_t(zero.u >> 16);
 
-    volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr);
+    volatile tt_l1_ptr uint16_t *ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t *>(l1_addr);
     for (uint32_t h = 0; h < 16; h++) {
         // sub tile 0
         {
@@ -470,4 +475,197 @@ FORCE_INLINE void mask_tile_if_need(uint32_t l1_addr, uint32_t origin_h, uint32_
     if (do_mask_h || do_mask_w) {
         mask_tile_hw(l1_addr, mask_h, mask_w);
     }
+}
+
+FORCE_INLINE void generate_mask_tiles(
+    uint32_t cb_mask, uint32_t mask_h, uint32_t mask_w, uint32_t single_tile_size = 2048) {
+    constexpr uint32_t num_mask_tiles = 3;
+    Scalar one;
+    Scalar zero;
+
+    one.f = 1.0f;
+    zero.f = 0.0f;
+
+    const auto u16_one = uint16_t(one.u >> 16);
+    const auto u16_zero = uint16_t(zero.u >> 16);
+
+    cb_reserve_back(cb_mask, num_mask_tiles);
+
+    // mask_h
+    // first tile ptr
+    auto mask_h_ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_mask));
+    for (uint32_t w = 0; w < 16; w++) {
+        // sub tile 0
+        {
+            uint32_t mask_h_0 = mask_h;
+            if (mask_h_0 >= 16) {
+                mask_h_0 = 16;
+            }
+            uint32_t h = 0;
+            for (; h < mask_h_0; h++) {
+                mask_h_ptr[h * 16 + w] = u16_one;
+            }
+            for (; h < 16; h++) {
+                mask_h_ptr[h * 16 + w] = u16_zero;
+            }
+        }
+
+        // sub tile 1
+        {
+            uint32_t mask_h_0 = mask_h;
+            if (mask_h_0 >= 16) {
+                mask_h_0 = 16;
+            }
+            uint32_t h = 0;
+            for (; h < mask_h_0; h++) {
+                mask_h_ptr[h * 16 + w + 256] = u16_one;
+            }
+            for (; h < 16; h++) {
+                mask_h_ptr[h * 16 + w + 256] = u16_zero;
+            }
+        }
+
+        // sub tile 2
+        {
+            uint32_t mask_h_1 = (mask_h < 16) ? 0 : mask_h - 16;
+            uint32_t h = 0;
+            for (; h < mask_h_1; h++) {
+                mask_h_ptr[h * 16 + w + 512] = u16_one;
+            }
+            for (; h < 16; h++) {
+                mask_h_ptr[h * 16 + w + 512] = u16_zero;
+            }
+        }
+
+        // sub tile 3
+        {
+            uint32_t mask_h_1 = (mask_h < 16) ? 0 : mask_h - 16;
+            uint32_t h = 0;
+            for (; h < mask_h_1; h++) {
+                mask_h_ptr[h * 16 + w + 768] = u16_one;
+            }
+            for (; h < 16; h++) {
+                mask_h_ptr[h * 16 + w + 768] = u16_zero;
+            }
+        }
+    }
+
+    // mask_w
+    // second tile ptr
+    auto mask_w_ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_mask) + single_tile_size);
+    for (uint32_t h = 0; h < 16; h++) {
+        // sub tile 0
+        {
+            uint32_t mask_w_0 = mask_w;
+            if (mask_w_0 >= 16) {
+                mask_w_0 = 16;
+            }
+            uint32_t w = 0;
+            for (; w < mask_w_0; w++) {
+                mask_w_ptr[h * 16 + w] = u16_one;
+            }
+            for (; w < 16; w++) {
+                mask_w_ptr[h * 16 + w] = u16_zero;
+            }
+        }
+
+        // sub tile 1
+        {
+            uint32_t mask_w_1 = (mask_w < 16) ? 0 : mask_w - 16;
+            uint32_t w = 0;
+            for (; w < mask_w_1; w++) {
+                mask_w_ptr[h * 16 + w + 256] = u16_one;
+            }
+            for (; w < 16; w++) {
+                mask_w_ptr[h * 16 + w + 256] = u16_zero;
+            }
+        }
+
+        // sub tile 2
+        {
+            uint32_t mask_w_0 = mask_w;
+            if (mask_w_0 >= 16) {
+                mask_w_0 = 16;
+            }
+            uint32_t w = 0;
+            for (; w < mask_w_0; w++) {
+                mask_w_ptr[h * 16 + w + 512] = u16_one;
+            }
+            for (; w < 16; w++) {
+                mask_w_ptr[h * 16 + w + 512] = u16_zero;
+            }
+        }
+
+        // sub tile 3
+        {
+            uint32_t mask_w_1 = (mask_w < 16) ? 0 : mask_w - 16;
+            uint32_t w = 0;
+            for (; w < mask_w_1; w++) {
+                mask_w_ptr[h * 16 + w + 768] = u16_one;
+            }
+            for (; w < 16; w++) {
+                mask_w_ptr[h * 16 + w + 768] = u16_zero;
+            }
+        }
+    }
+
+    // mask_hw
+    // third tile ptr
+    auto mask_hw_ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_mask) + (single_tile_size * 2));
+    for (uint32_t i = 0; i < 1024; ++i) {
+        if (mask_h_ptr[i] == mask_w_ptr[i]) {
+            mask_hw_ptr[i] = mask_h_ptr[i];
+        } else {
+            mask_hw_ptr[i] = u16_zero;
+        }
+    }
+    cb_push_back(cb_mask, num_mask_tiles);
+}
+
+static inline float bfloat16_to_float(uint16_t bfloat_val) {
+    uint32_t uint32_data = ((uint32_t)bfloat_val) << 16;
+    float f;
+    std::memcpy(&f, &uint32_data, sizeof(f));
+    return f;
+}
+
+uint32_t get_tilized_idx(uint32_t h, uint32_t w) {
+    uint32_t idx = 0;
+    if (w >= FACE_WIDTH) {
+        w -= FACE_WIDTH;
+        idx += FACE_HEIGHT * FACE_WIDTH;
+    }
+    if (h >= FACE_WIDTH) {
+        h -= FACE_WIDTH;
+        idx += FACE_HEIGHT * TILE_WIDTH;
+    }
+
+    idx += h * FACE_WIDTH + w;
+    return idx;
+}
+
+void get_noc_offset(uint32_t h, uint32_t w, uint32_t element_size, uint32_t &noc_offset) {
+    noc_offset = 0;
+
+    // compute h, w in tile
+    h = h - (h / TILE_HEIGHT) * TILE_HEIGHT;
+    w = w - (w / TILE_WIDTH) * TILE_WIDTH;
+
+    const bool is_even_face = (w < FACE_HEIGHT);
+    const bool is_odd_face = !is_even_face;
+
+    const uint32_t face_width_bytes = FACE_WIDTH * element_size;
+
+    if (h < FACE_WIDTH && is_even_face)
+        noc_offset += h * face_width_bytes + w * element_size;  // face 0
+    else if (h < FACE_WIDTH && is_odd_face)
+        noc_offset += (FACE_HEIGHT + h) * face_width_bytes + (w - FACE_WIDTH) * element_size;  // face 1
+    else if (h >= FACE_WIDTH && is_even_face)
+        noc_offset += (FACE_HEIGHT + h) * face_width_bytes + w * element_size;  // face 2
+    else if (h >= FACE_WIDTH && is_odd_face)
+        noc_offset += (2 * FACE_HEIGHT + h) * face_width_bytes + (w - FACE_WIDTH) * element_size;  // face 3
+
+    const uint32_t noc_offset_alilgn_32 = (noc_offset / NOC_MINIMUM_READ_SIZE) * NOC_MINIMUM_READ_SIZE;
+
+    noc_offset = noc_offset_alilgn_32;
 }

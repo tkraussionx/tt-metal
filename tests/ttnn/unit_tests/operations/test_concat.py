@@ -14,13 +14,18 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("height", [20, 32])
 @pytest.mark.parametrize("width", [4, 32])
 @pytest.mark.parametrize("dim", [0, 1])
-def test_concat(device, height, width, dim):
+@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
+def test_concat(device, height, width, dim, async_mode):
+    device.enable_async(async_mode)
     torch_input_tensor_a = torch.rand((height, width), dtype=torch.bfloat16)
     torch_input_tensor_b = torch.rand((height, width), dtype=torch.bfloat16)
     torch_output_tensor = torch.concat([torch_input_tensor_a, torch_input_tensor_b], dim=dim)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    if ttnn.has_tile_padding(input_tensor_a, dim=dim) or ttnn.has_tile_padding(input_tensor_b, dim=dim):
+        pytest.skip("Cannot concat tensors with tile padding")
 
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)
     output = ttnn.to_torch(output)
@@ -75,9 +80,12 @@ def test_concat(device, height, width, dim):
         ),
     ),
 )
+@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
+@pytest.mark.skip(reason="Issue #8426: Add validation for ttnn.concat for sharded inputs")
 def test_sharded_concat(
-    device, input_shape_a, shard_shape_a, input_shape_b, shard_shape_b, output_shard_shape, shard_grid
+    device, input_shape_a, shard_shape_a, input_shape_b, shard_shape_b, output_shard_shape, shard_grid, async_mode
 ):
+    device.enable_async(async_mode)
     input_a_sharded_memory_config = ttnn.create_sharded_memory_config(
         shard_shape_a,
         core_grid=shard_grid,

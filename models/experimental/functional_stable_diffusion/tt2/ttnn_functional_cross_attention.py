@@ -5,6 +5,7 @@
 import math
 import ttnn
 import torch
+import os
 import tt_lib as ttl
 from ttnn.operations.core import squeeze, unsqueeze_to_4D
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import (
@@ -12,6 +13,7 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
     round_up_to_tile_dim,
     dealloc_input,
     determine_blocking,
+    reshard_to,
 )
 
 
@@ -298,13 +300,20 @@ class cross_attention:
                     ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                     ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 )
+                out_subblock_h = 1
+                out_subblock_w = 8
+                slow_mm = os.environ.get("SLOW_MATMULS", "0") == "1"
+                if slow_mm:
+                    out_subblock_h = 1
+                    out_subblock_w = 1
+
                 program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
                     compute_with_storage_grid_size=grid_size,
                     in0_block_w=t_key.shape[-2] // 32,
                     per_core_M=tiles_per_shard,
                     per_core_N=seq_len // 32,
-                    out_subblock_h=1,
-                    out_subblock_w=4,
+                    out_subblock_h=out_subblock_h,
+                    out_subblock_w=out_subblock_w,
                     fuse_batch=True,
                     fused_activation=None,
                     mcast_in0=False,
@@ -362,13 +371,19 @@ class cross_attention:
                         program_config=softmax_program_config,
                     )
 
+                out_subblock_h = tiles_per_shard
+                out_subblock_w = t_key.shape[-2] // 32
+                slow_mm = os.environ.get("SLOW_MATMULS", "0") == "1"
+                if slow_mm:
+                    out_subblock_h = 1
+                    out_subblock_w = 1
                 program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
                     compute_with_storage_grid_size=grid_size,
                     in0_block_w=seq_len // 32,
                     per_core_M=tiles_per_shard,
                     per_core_N=t_key.shape[-2] // 32,
-                    out_subblock_h=tiles_per_shard,
-                    out_subblock_w=t_key.shape[-2] // 32,
+                    out_subblock_h=out_subblock_h,
+                    out_subblock_w=out_subblock_w,
                     fuse_batch=True,
                     fused_activation=None,
                     mcast_in0=False,
@@ -397,16 +412,17 @@ class cross_attention:
                     self.dram_interleaved_memory_config,
                 )
         num_cores = 16
-        # output = ttnn.experimental.tensor.interleaved_to_sharded(
-        #     self.output_tensors[seq_len],
-        #     (2, 8),
-        #     [
-        #         self.output_tensors[seq_len].volume() // self.output_tensors[seq_len].shape[-1] // num_cores,
-        #         self.output_tensors[seq_len].shape[-1],
-        #     ],
-        #     ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        #     ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-        # )
+        output = ttnn.experimental.tensor.interleaved_to_sharded(
+            self.output_tensors[seq_len],
+            (8, 2),
+            [
+                self.output_tensors[seq_len].volume() // self.output_tensors[seq_len].shape[-1] // num_cores,
+                self.output_tensors[seq_len].shape[-1],
+            ],
+            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        )
+        return output
         return self.output_tensors[seq_len]
 
     def sharded_attention(self, query, key, value, original_seq_len, head_size, index):
@@ -540,9 +556,12 @@ class cross_attention:
             attention_scores,
             v_sharded,
             program_config=program_config,
-            output_mem_config=self.l1_interleaved_memory_config,
+            output_mem_config=self.height_sharded_memory_config,
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
             compute_kernel_config=self.compute_kernel_config,
+        )
+        attention_scores = reshard_to(
+            attention_scores, (8, 2), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED
         )
         v_sharded.deallocate()
         return ttnn.reshape(attention_scores, (2, 8, attention_scores.shape[-2], attention_scores.shape[-1]))
@@ -554,40 +573,6 @@ class cross_attention:
             return self.time_sharded_attention(query, t_key, value, head_size)
         else:
             return self.sharded_attention(query, t_key, value, original_seq_len, head_size, index)
-
-        print("Legacy path")
-        seq_len = query.shape[-2]
-        key_len = t_key.shape[-1]
-        attention_mask = self.attention_masks[seq_len][key_len]
-        attention_scores = ttnn.matmul(
-            query,
-            t_key,
-        )
-        ttnn.deallocate(query)
-        ttnn.deallocate(t_key)
-        orig_shape = attention_scores.shape
-        attention_scores = ttnn.reshape(
-            attention_scores,
-            (
-                1,
-                attention_scores.shape[-4] * attention_scores.shape[-3],
-                attention_scores.shape[-2],
-                attention_scores.shape[-1],
-            ),
-        )
-        attention_scores = ttnn.transformer.attention_softmax_(
-            attention_scores, attention_mask=attention_mask, head_size=head_size
-        )
-        attention_scores = ttnn.reshape(attention_scores, orig_shape)
-        if attention_scores.shape[-2] > original_seq_len:
-            attention_scores = attention_scores[:, :, :original_seq_len, :]
-        attention_scores = ttnn.matmul(
-            attention_scores,
-            value,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
-            dtype=ttnn.bfloat8_b,
-        )
-        return attention_scores
 
     def out(self, hidden_states):
         size = hidden_states.shape[-2] // 2  # 2 is the batch size
@@ -607,7 +592,7 @@ class cross_attention:
 
         hs = shard_directions[size] == ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED
         if hs:
-            hidden_states = self.reshard_to(
+            hidden_states = reshard_to(
                 hidden_states, grid_size, ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED
             )
             output_mem_config = self.height_sharded_memory_config
@@ -623,7 +608,7 @@ class cross_attention:
                 mcast_in0=False if hs else True,
             )
         else:
-            hidden_states = self.reshard_to(
+            hidden_states = reshard_to(
                 hidden_states, grid_size, ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED
             )
             output_mem_config = self.block_sharded_memory_config
@@ -771,15 +756,15 @@ class cross_attention:
                     num_heads=heads,
                 )
             else:
-                qkv_out = self.reshard_to(qkv_out, (8, 2), ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED)
+                qkv_out = reshard_to(qkv_out, (8, 2), ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED)
                 query, key, value = ttnn.transformer.split_query_key_value_and_split_heads(
                     qkv_out,
                     memory_config=ttnn.ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
                     num_heads=heads,
                 )
-                query = self.reshard_to(query, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
-                key = self.reshard_to(key, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
-                value = self.reshard_to(value, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+                query = reshard_to(query, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+                key = reshard_to(key, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+                value = reshard_to(value, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
             ttnn.deallocate(qkv_out)
         else:
             if hidden_states.shape[-2] == 8192:
@@ -896,9 +881,9 @@ class cross_attention:
             )
             ttnn.deallocate(kv_proj)
             ttnn.deallocate(q_proj)
-            query = self.reshard_to(query, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
-            key = self.reshard_to(key, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
-            value = self.reshard_to(value, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+            query = reshard_to(query, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+            key = reshard_to(key, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
+            value = reshard_to(value, (2, 8), ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED)
 
         hidden_states = self.get_attention_scores_opt(
             query,
@@ -909,7 +894,10 @@ class cross_attention:
             index=index,
         )
 
-        hidden_states = ttnn.transformer.concatenate_heads(hidden_states, memory_config=ttnn.L1_MEMORY_CONFIG)
+        hidden_states = ttnn.transformer.concatenate_heads(
+            hidden_states,
+            memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        )
 
         if hidden_states.shape.with_tile_padding()[-1] != hidden_states.shape[-1]:
             assert False

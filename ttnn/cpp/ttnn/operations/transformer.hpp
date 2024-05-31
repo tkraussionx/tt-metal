@@ -6,7 +6,9 @@
 
 // This is a place holder for when the cpp/ttnn folder structure and ttnn namespace is moved over to tt_eager.
 #include "tensor/tensor.hpp"
+#include "tt_dnn/op_library/compute_kernel_config.hpp"
 #include "tt_dnn/op_library/nlp_tms/nlp_tms.hpp"
+#include "tt_dnn/op_library/rotary_embedding/rotary_embedding_op.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "ttnn/operations/core.hpp"
@@ -60,16 +62,19 @@ inline std::tuple<Tensor, Tensor, Tensor> reshape_outputs_of_split_query_key_val
 }  // namespace detail
 
 inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
-    const Tensor &input_tensor,
-    const std::optional<Tensor> &input_tensor_kv,
+    const Tensor& input_tensor,
+    const std::optional<Tensor>& input_tensor_kv,
     const uint32_t num_heads,
     const std::optional<uint32_t> num_kv_heads,
     const bool transpose_key,
-    const std::optional<MemoryConfig> &memory_config) {
+    const std::optional<MemoryConfig>& memory_config) {
     const auto input_shape = input_tensor.get_shape();
     TT_FATAL(input_shape.rank() == 3, "Input Tensor must have strictly 3 dimensions!");
-    TT_FATAL(input_tensor.get_layout() == tt::tt_metal::Layout::TILE,"Input Tensor must be in a TILE_LAYOUT!");
-    TT_FATAL(input_tensor.storage_type() == tt::tt_metal::StorageType::DEVICE or input_tensor.storage_type() == tt::tt_metal::StorageType::MULTI_DEVICE,  "Input_tensor must be on device!");
+    TT_FATAL(input_tensor.get_layout() == tt::tt_metal::Layout::TILE, "Input Tensor must be in a TILE_LAYOUT!");
+    TT_FATAL(
+        input_tensor.storage_type() == tt::tt_metal::StorageType::DEVICE or
+            input_tensor.storage_type() == tt::tt_metal::StorageType::MULTI_DEVICE,
+        "Input_tensor must be on device!");
 
     const uint32_t sequence_size = input_shape[1];
     const uint32_t sequence_size_padded = input_shape.with_tile_padding()[1];
@@ -81,7 +86,13 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
         auto head_size = qkv_heads_times_head_dim / (num_heads + (num_kv_heads.value() * 2));
         auto padded_head_size = qkv_heads_times_head_dim_padded / (num_heads + (num_kv_heads.value() * 2));
 
-        TT_FATAL(head_size % TILE_SIZE == 0, fmt::format("Head size {} must be a multiple of tile size {}! Update the preceding matmul to have the padding in the weights!", head_size, TILE_WIDTH));
+        TT_FATAL(
+            head_size % TILE_SIZE == 0,
+            fmt::format(
+                "Head size {} must be a multiple of tile size {}! Update the preceding matmul to have the padding in "
+                "the weights!",
+                head_size,
+                TILE_WIDTH));
         TT_FATAL(padded_head_size == head_size, fmt::format("Head size {} cannot have tile padding", head_size));
 
         const auto input_4d = input_tensor.reshape(
@@ -89,7 +100,8 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             1,
             input_shape.with_tile_padding()[1],
             input_shape.with_tile_padding()[2]);
-        auto outputs = tt::tt_metal::nlp_create_qkv_heads_falcon7b(input_4d, memory_config.value_or(input_tensor.memory_config()));
+        auto outputs =
+            tt::tt_metal::nlp_create_qkv_heads_falcon7b(input_4d, memory_config.value_or(input_tensor.memory_config()));
         return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
             {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, transpose_key);
     }
@@ -99,18 +111,19 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
         const auto input_shape_kv = input_tensor_kv.value().get_shape();
         TT_FATAL(input_shape_kv[0] == input_shape[0], "KV tensor batch dim must be same as Q tensor batch!");
         TT_FATAL(input_shape_kv[1] == input_shape[1], "KV tensor seq_len dim must be same as Q tensor seq_len!");
-        TT_FATAL(input_shape_kv[2] == 2*input_shape[2], "KV tensor hidden size must be 2 times Q hidden size");
+        TT_FATAL(input_shape_kv[2] == 2 * input_shape[2], "KV tensor hidden size must be 2 times Q hidden size");
         hidden_dim = input_shape[2];
         hidden_dim_padded = input_shape.with_tile_padding()[2];
-    }
-    else {
+    } else {
         hidden_dim = input_shape[2];
         hidden_dim_padded = input_shape.with_tile_padding()[2];
     }
 
     uint32_t head_size = hidden_dim / num_heads;
     uint32_t padded_head_size = hidden_dim_padded / num_heads;
-    TT_FATAL(head_size % TILE_WIDTH == 0, fmt::format("Head size {} must be a multiple of tile width {}", head_size, TILE_WIDTH));
+    TT_FATAL(
+        head_size % TILE_WIDTH == 0,
+        fmt::format("Head size {} must be a multiple of tile width {}", head_size, TILE_WIDTH));
     TT_FATAL(padded_head_size == head_size, fmt::format("Head size {} cannot have tile padding", head_size));
 
     if (input_tensor.is_sharded()) {
@@ -130,8 +143,7 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             sequence_size,
             sequence_size_padded,
             transpose_key);
-    }
-    else {
+    } else {
         const auto input_tensor_4d = input_tensor.reshape(
             input_shape.with_tile_padding()[0],
             1,
@@ -200,7 +212,7 @@ struct ConcatenateHeads : public tt::tt_metal::NlpConcatHeads {
             shard_spec.shape = {shard_spec.shape[0] / heads_per_shard, shard_spec.shape[1] * heads_per_shard};
             auto mem_config = this->output_mem_config;
             mem_config.shard_spec = shard_spec;
-            return {create_sharded_device_tensor(
+            return {create_device_tensor(
                 this->compute_output_shapes(input_tensors).at(0),
                 input_tensor.get_dtype(),
                 Layout::TILE,
@@ -211,7 +223,9 @@ struct ConcatenateHeads : public tt::tt_metal::NlpConcatHeads {
                 *this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
         }
     }
+};
 
+struct ExecuteConcatenateHeads {
     static inline const std::array<TensorSchema, 1> input_tensor_schemas() {
         return {ttnn::TensorSchema{
             4, 4, {ttnn::bfloat16, ttnn::bfloat8_b}, {ttnn::TILE_LAYOUT}, true, false, false, false}};
@@ -219,27 +233,50 @@ struct ConcatenateHeads : public tt::tt_metal::NlpConcatHeads {
 
     template <typename... Args>
     static auto input_tensors_to_validate(const Tensor& input_tensor, Args&&... args) {
-        return std::make_tuple(input_tensor);
+        return std::forward_as_tuple(input_tensor);
     }
 
-    static inline ttnn::Tensor execute(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config) {
-        std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
-        operation::launch_op(
-            [memory_config](
-                std::vector<Tensor> input_tensors,
-                const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
-                auto& input_tensor = input_tensors.at(0);
-                return operation::run(
-                    ConcatenateHeads{memory_config.value_or(input_tensor.memory_config())}, {input_tensor});
-            },
-            {input_tensor},
-            output_tensors);
-        return output_tensors.at(0);
+    static inline ttnn::Tensor execute_on_worker_thread(
+        const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config) {
+        return operation::run(ConcatenateHeads{memory_config.value_or(input_tensor.memory_config())}, {input_tensor})
+            .at(0);
+    }
+};
+
+struct ExecuteRotaryEmbedding {
+    static inline const std::array<TensorSchema, 3> input_tensor_schemas() {
+        return {
+            ttnn::TensorSchema{4, 4, {ttnn::bfloat16, ttnn::bfloat8_b}, {ttnn::TILE_LAYOUT}, true, false, false, false},
+            ttnn::TensorSchema{4, 4, {ttnn::bfloat16, ttnn::bfloat8_b}, {ttnn::TILE_LAYOUT}, true, false, false, false},
+            ttnn::TensorSchema{
+                4, 4, {ttnn::bfloat16, ttnn::bfloat8_b}, {ttnn::TILE_LAYOUT}, true, false, false, false}};
+    }
+
+    static inline ttnn::Tensor execute_on_worker_thread(
+        const Tensor& input_tensor,
+        const Tensor& cos_cache,
+        const Tensor& sin_cache,
+        const std::optional<uint32_t> token_index = std::nullopt,
+        const std::optional<MemoryConfig> memory_config = std::nullopt,
+        const std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
+        uint32_t seq_len = input_tensor.get_legacy_shape()[-2];
+        uint32_t B = input_tensor.get_legacy_shape()[0];
+        uint32_t X = input_tensor.get_legacy_shape()[-1];
+
+        auto arch = input_tensor.device()->arch();
+        auto kernel_config_val =
+            init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
+
+        return operation::run(
+                   tt::tt_metal::RotaryEmbedding{
+                       seq_len, token_index, memory_config.value_or(input_tensor.memory_config()), kernel_config_val},
+                   {input_tensor, cos_cache, sin_cache})
+            .at(0);
     }
 };
 
 template <bool in_place>
-struct AttentionSoftmax : public tt::operations::primary::Softmax {
+struct ExecuteAttentionSoftmax {
     static inline const std::array<TensorSchema, 2> input_tensor_schemas() {
         return {
             ttnn::TensorSchema{4, 4, {ttnn::bfloat16, ttnn::bfloat8_b}, {ttnn::TILE_LAYOUT}, true, false, false, false},
@@ -252,25 +289,33 @@ struct AttentionSoftmax : public tt::operations::primary::Softmax {
         const std::optional<int>& head_size = std::nullopt,
         const std::optional<const ttnn::Tensor>& attention_mask = std::nullopt,
         Args&&... args) {
-        return std::make_tuple(input_tensor, attention_mask);
+        return std::forward_as_tuple(input_tensor, attention_mask);
     }
 
-    static ttnn::Tensor execute(
+    static ttnn::Tensor execute_on_worker_thread(
         const ttnn::Tensor& input_tensor,
-        const std::optional<int>& head_size = std::nullopt,
+        const std::optional<int>& head_size_arg = std::nullopt,
         const std::optional<const ttnn::Tensor>& attention_mask = std::nullopt,
         const tt::operations::primary::transformers::SoftmaxProgramConfig& program_config =
             tt::operations::primary::transformers::SoftmaxDefaultProgramConfig{},
         const std::optional<bool> causal_mask = false,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt) {
-        TT_FATAL(attention_mask.has_value(), "Cannot apply divide by sqrt(head_size) using in-place version!");
+        float head_size = head_size_arg.has_value() ? 1.0f / std::sqrt(head_size_arg.value()) : 1.0f;
+        if constexpr (in_place) {
+            TT_FATAL(attention_mask.has_value(), "Cannot apply divide by sqrt(head_size) using in-place version!");
+        } else {
+            if (not attention_mask.has_value()) {
+                auto output_tensor = ttnn::multiply(input_tensor, head_size);
+                return tt::tt_metal::softmax(output_tensor, memory_config.value_or(input_tensor.memory_config()));
+            }
+        }
 
         std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt;
         auto kernel_config_val = init_device_compute_kernel_config(
             input_tensor.device()->arch(), compute_kernel_config, MathFidelity::HiFi4, true, false, false);
         auto output_tensor = operation::run(
-                                 AttentionSoftmax{
-                                     head_size.has_value() ? 1.0 / sqrt(head_size.value()) : 1.0,
+                                 tt::operations::primary::Softmax{
+                                     head_size,
                                      in_place,
                                      memory_config.value_or(input_tensor.memory_config()),
                                      program_config,
@@ -288,11 +333,24 @@ struct AttentionSoftmax : public tt::operations::primary::Softmax {
 }  // namespace operations
 
 namespace transformer {
-constexpr auto concatenate_heads =
-    ttnn::register_operation<ttnn::operations::transformer::ConcatenateHeads>("ttnn::transfomer::concatenate_heads");
 
-constexpr auto attention_softmax_ = ttnn::register_operation<ttnn::operations::transformer::AttentionSoftmax<true>>(
-    "ttnn::transfomer::attention_softmax_");
+constexpr auto split_query_key_value_and_split_heads = ttnn::register_operation(
+    "ttnn::transfomer::split_query_key_value_and_split_heads",
+    TO_LAMBDA(ttnn::operations::transformer::split_query_key_value_and_split_heads));
+
+constexpr auto concatenate_heads = ttnn::register_operation<ttnn::operations::transformer::ExecuteConcatenateHeads>(
+    "ttnn::transfomer::concatenate_heads");
+
+constexpr auto rotary_embedding = ttnn::register_operation<ttnn::operations::transformer::ExecuteRotaryEmbedding>(
+    "ttnn::transfomer::rotary_embedding");
+
+constexpr auto attention_softmax =
+    ttnn::register_operation<ttnn::operations::transformer::ExecuteAttentionSoftmax<false>>(
+        "ttnn::transfomer::attention_softmax");
+constexpr auto attention_softmax_ =
+    ttnn::register_operation<ttnn::operations::transformer::ExecuteAttentionSoftmax<true>>(
+        "ttnn::transfomer::attention_softmax_");
+
 }  // namespace transformer
 
 }  // namespace ttnn

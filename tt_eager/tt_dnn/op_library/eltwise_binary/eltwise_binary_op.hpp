@@ -19,33 +19,27 @@ namespace tt_metal {
 
 enum class BinaryOpType {
 
-    ADD = 0,
-    SUB = 1,
-    MUL = 2,
-    GT = 3,
-    LT = 4,
-    LTE = 5,
-    GTE = 6,
-    EQ = 7,
-    NE = 8,
-    SQUARED_DIFFERENCE = 9,
-    BIAS_GELU = 10,
-    LOGADDEXP = 11,
-    LOGICAL_AND = 12,
-    LOGICAL_OR = 13,
-    LDEXP = 14,
-    LOGADDEXP2 = 15,
-    DIV_FAST = 16
+    ADD,
+    SUB,
+    MUL,
+    GT,
+    LT,
+    LTE,
+    GTE,
+    EQ,
+    NE,
+    SQUARED_DIFFERENCE,
+    BIAS_GELU,
+    LOGADDEXP,
+    LOGICAL_AND,
+    LOGICAL_OR,
+    LDEXP,
+    LOGADDEXP2,
+    DIV_FAST
 };
 
-enum class BinaryOpParallelizationStrategy { MULTI_CORE = 0, SINGLE_CORE = 1 };
+enum class BinaryOpParallelizationStrategy { MULTI_CORE };
 
-operation::ProgramWithCallbacks eltwise_binary_single_core(
-    const Tensor &a,
-    const Tensor &b,
-    const Tensor &output_tensor,
-    BinaryOpType op_type,
-    const std::optional<std::vector<UnaryWithParam>> fused_activations);
 operation::ProgramWithCallbacks eltwise_binary_multi_core(
     const Tensor &a,
     const Tensor &b,
@@ -91,7 +85,7 @@ struct EltwiseBinary {
         return result;
     }
     static constexpr auto attribute_names =
-        std::make_tuple("op_type", "fused_activations", "output_mem_config", "output_dtype");
+        std::make_tuple("op_type", "fused_activations", "output_mem_config", "output_dtype", "in_place");
     const auto attribute_values() const {
         return std::make_tuple(
             std::cref(this->op_type),
@@ -114,7 +108,7 @@ struct make_eltwise_binary {
         std::optional<const DataType> output_dtype = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
         operation::launch_with_autoformat(
-            [fused_activations, output_mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            [fused_activations, output_mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
                 Tensor in_b = input_tensors.at(1);
                 Shape shape_a = in_a.get_legacy_shape();
@@ -188,7 +182,7 @@ inline Tensor add(
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
 
     operation::launch_op(
-        [fused_activations, output_mem_config, output_dtype, in_place] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        [fused_activations, output_mem_config, output_dtype, in_place] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& input_tensor_a = input_tensors.at(0);
             auto& input_tensor_b = input_tensors.at(1);
 

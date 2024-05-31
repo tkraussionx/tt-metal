@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "tensor/owned_buffer_functions.hpp"
+#include "tensor/host_buffer/functions.hpp"
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_dnn/op_library/sharding_utilities.hpp"
 #include "tt_dnn/op_library/sliding_window_op_infra/utils.hpp"
@@ -22,9 +22,6 @@ using namespace tt::constants;
 namespace tt {
 namespace tt_metal {
 
-using range_t = std::array<int32_t, 2>;
-const int32_t NEIGHBORHOOD_DIST = 2;    // => ncores to left and ncores to right
-
 namespace untilize_with_halo_v2_helpers {
 
 int32_t my_max(const std::vector<int32_t>& in) {
@@ -38,6 +35,7 @@ int32_t my_max(const std::vector<int32_t>& in) {
 } // namespace untilize_with_halo_v2_helpers
 
 operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
+    Program& program,
     const Tensor& input_tensor,
     const uint32_t pad_val,
     const uint32_t ncores_nhw,
@@ -48,7 +46,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     const bool remote_read,
     const bool transpose_mcast,
     Tensor& output_tensor) {
-    Program program = CreateProgram();
 
     Device *device = input_tensor.device();
     Buffer *src_buffer = input_tensor.buffer();
@@ -313,7 +310,7 @@ std::vector<Tensor> UntilizeWithHaloV2::create_output_tensors(const std::vector<
     out_mem_config.shard_spec->shape[0] = div_up(output_shape[0] * output_shape[2], ncores_nhw_);
     out_mem_config.shard_spec->shape[1] = input_tensor.memory_config().shard_spec->shape[1];
     out_mem_config.shard_spec->halo = true;
-    return {create_sharded_device_tensor(
+    return {create_device_tensor(
         output_shape, output_dtype, Layout::ROW_MAJOR, input_tensor.device(), out_mem_config)};
 }
 
@@ -324,7 +321,10 @@ operation::ProgramWithCallbacks UntilizeWithHaloV2::create_program(const std::ve
     const auto& remote_config = inputs.at(3);
     auto& output_tensor = outputs.at(0);
 
+    Program program = CreateProgram();
+
     return {untilize_with_halo_multi_core_v2(
+        program,
         input_tensor,
         pad_val_,
         ncores_nhw_,
@@ -348,20 +348,28 @@ Tensor untilize_with_halo_v2(
     const MemoryConfig& mem_config,
     const bool remote_read,
     const bool transpose_mcast) {
-    TT_ASSERT(input_tensor.memory_config().is_sharded());
-    TT_ASSERT(input_tensor.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED || input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED);
-    // NOTE: for HEIGHT_SHARDED, ncores_nhw == ncores
-    //       for BLOCK_SHARDED, ncores_nhw is just the ncores along height dim (last tensor dim is split along width)
+    std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor, padding_config, local_config, remote_config}))};
+    operation::launch_op(
+        [pad_val, ncores_nhw, max_out_nsticks_per_core, mem_config, remote_read, transpose_mcast] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            auto& input_tensor = input_tensors.at(0);
+            auto& padding_config = input_tensors.at(1);
+            auto& local_config = input_tensors.at(2);
+            auto& remote_config = input_tensors.at(3);
+            TT_ASSERT(input_tensor.memory_config().is_sharded());
+            TT_ASSERT(input_tensor.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED || input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED);
+            // NOTE: for HEIGHT_SHARDED, ncores_nhw == ncores
+            //       for BLOCK_SHARDED, ncores_nhw is just the ncores along height dim (last tensor dim is split along width)
 
-    return operation::run_without_autoformat(
-               UntilizeWithHaloV2{pad_val, ncores_nhw, max_out_nsticks_per_core, mem_config, remote_read, transpose_mcast},
-               {
-                   input_tensor,
-                   padding_config,
-                   local_config,
-                   remote_config,
-               })
-        .at(0);
+            return operation::run_without_autoformat(
+                    UntilizeWithHaloV2{pad_val, ncores_nhw, max_out_nsticks_per_core, mem_config, remote_read, transpose_mcast},
+                    {
+                        input_tensor,
+                        padding_config,
+                        local_config,
+                        remote_config,
+                    });
+        }, {input_tensor, padding_config, local_config, remote_config}, output_tensors);
+    return output_tensors.at(0);
 }
 
 }  // namespace tt_metal

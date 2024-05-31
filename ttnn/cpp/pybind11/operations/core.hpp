@@ -7,7 +7,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "../decorators.hpp"
+#include "ttnn/cpp/pybind11/decorators.hpp"
 #include "ttnn/operations/core.hpp"
 
 namespace py = pybind11;
@@ -88,24 +88,153 @@ void py_module(py::module& module) {
     module.def("deallocate", &ttnn::operations::core::deallocate, py::arg("tensor"), py::arg("force") = true);
 
     module.def(
-        "to_memory_config",
-        &ttnn::operations::core::to_memory_config,
-        py::arg("tensor"),
-        py::arg("memory_config"),
-        py::arg("dtype") = std::nullopt);
-
-    module.def(
         "reallocate",
         [](ttnn::Tensor& input_tensor, const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt)
             -> ttnn::Tensor { return reallocate(input_tensor, memory_config); },
         py::arg("tensor"),
         py::arg("memory_config") = std::nullopt,
         R"doc(
-Deallocates device tensor and returns a reallocated tensor
+            Deallocates device tensor and returns a reallocated tensor
 
-Args:
-    * :attr:`input_tensor`: Input Tensor
-    )doc");
+            Args:
+                * :attr:`input_tensor`: Input Tensor
+        )doc");
+
+    bind_registered_operation(
+        module,
+        ttnn::to_memory_config,
+        R"doc(to_memory_config(tensor: ttnn.Tensor, memory_config: MemoryConfig, dtype: Optional[DataType] = None) -> ttnn.Tensor
+
+            Converts a tensor to the desired mem_config, used for converting tensors to sharded tensors or interleaved, and to convert DRAM to L1 and vice versa
+
+
+            Args:
+                * :attr:`tensor`: the ttnn.Tensor
+                * :attr:`memory_config`: the desired MemoryConfig
+                * :attr:`dtype`: the optional `ttnn` data type.
+
+            Example::
+                >>> device_id = 0
+                >>> device = ttnn.open_device(device_id=device_id)
+                >>> tensor = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+                >>> tensor = ttnn.to_memory_config(tensor, memory_config)
+        )doc",
+        ttnn::pybind_arguments_t{py::arg("tensor"), py::arg("memory_config"), py::arg("dtype") = std::nullopt});
+
+    bind_registered_operation(
+        module,
+        ttnn::to_dtype,
+        R"doc(to_dtype(tensor: ttnn.Tensor, dtype: DataType = None) -> ttnn.Tensor
+
+            Converts a tensor to the desired dtype
+
+
+            Args:
+                * :attr:`tensor`: the ttnn.Tensor
+                * :attr:`dtype`: `ttnn` data type.
+
+            Example::
+                >>> tensor = ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16))
+                >>> tensor = ttnn.to_dtype(tensor, dtype=ttnn.uint16)
+        )doc",
+        ttnn::pybind_arguments_t{py::arg("tensor"), py::arg("dtype")});
+
+    module.def(
+        "allocate_tensor_on_device",
+        py::overload_cast<
+            const ttnn::Shape&,
+            ttnn::DataType,
+            ttnn::Layout,
+            Device*,
+            const std::optional<ttnn::MemoryConfig>&>(&ttnn::operations::core::allocate_tensor_on_device),
+        py::arg("shape"),
+        py::arg("dtype"),
+        py::arg("layout"),
+        py::arg("device"),
+        py::arg("memory_config") = std::nullopt);
+
+    module.def(
+        "allocate_tensor_on_device",
+        py::overload_cast<
+            const ttnn::Shape&,
+            ttnn::DataType,
+            ttnn::Layout,
+            DeviceMesh*,
+            const std::optional<ttnn::MemoryConfig>&>(&ttnn::operations::core::allocate_tensor_on_device),
+        py::arg("shape"),
+        py::arg("dtype"),
+        py::arg("layout"),
+        py::arg("device_mesh"),
+        py::arg("memory_config") = std::nullopt);
+
+    module.def(
+        "copy_host_to_device_tensor",
+        &ttnn::operations::core::copy_host_to_device_tensor,
+        py::arg("host_tensor"),
+        py::arg("device_tensor"),
+        py::arg("cq_id") = 0);
+
+    module.def(
+        "begin_trace_capture",
+        py::overload_cast<Device*, const uint32_t, const uint8_t>(&ttnn::operations::core::begin_trace_capture),
+        py::arg("device"),
+        py::kw_only(),
+        py::arg("trace_buffer_size"),
+        py::arg("cq_id") = 0);
+
+    module.def(
+        "end_trace_capture",
+        py::overload_cast<Device*, const uint32_t, const uint8_t>(&ttnn::operations::core::end_trace_capture),
+        py::arg("device"),
+        py::arg("trace_id"),
+        py::kw_only(),
+        py::arg("cq_id") = 0);
+
+    module.def(
+        "execute_trace",
+        py::overload_cast<Device*, const uint32_t, const uint8_t, bool>(&ttnn::operations::core::execute_trace),
+        py::arg("device"),
+        py::arg("trace_id"),
+        py::kw_only(),
+        py::arg("cq_id") = 0,
+        py::arg("blocking") = true);
+
+    module.def(
+        "release_trace",
+        py::overload_cast<Device*, const uint32_t>(&ttnn::operations::core::release_trace),
+        py::arg("device"),
+        py::arg("trace_id"));
+
+    module.def(
+        "begin_trace_capture",
+        py::overload_cast<DeviceMesh*, const uint32_t, const uint8_t>(&ttnn::operations::core::begin_trace_capture),
+        py::arg("device_mesh"),
+        py::kw_only(),
+        py::arg("trace_buffer_size"),
+        py::arg("cq_id") = 0);
+
+    module.def(
+        "end_trace_capture",
+        py::overload_cast<DeviceMesh*, const uint32_t, const uint8_t>(&ttnn::operations::core::end_trace_capture),
+        py::arg("device_mesh"),
+        py::arg("trace_id"),
+        py::kw_only(),
+        py::arg("cq_id") = 0);
+
+    module.def(
+        "execute_trace",
+        py::overload_cast<DeviceMesh*, const uint32_t, const uint8_t, bool>(&ttnn::operations::core::execute_trace),
+        py::arg("device_mesh"),
+        py::arg("trace_id"),
+        py::kw_only(),
+        py::arg("cq_id") = 0,
+        py::arg("blocking") = true);
+
+    module.def(
+        "release_trace",
+        py::overload_cast<DeviceMesh*, const uint32_t>(&ttnn::operations::core::release_trace),
+        py::arg("device_mesh"),
+        py::arg("trace_id"));
 
     bind_registered_operation(
         module,
@@ -136,29 +265,24 @@ Args:
                const ttnn::Layout layout,
                const std::optional<ttnn::DataType>& dtype,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               Device* device) -> ttnn::Tensor {
-                return self(tensor, layout, dtype, memory_config, device);
-               },
-               py::arg("tensor"),
-               py::arg("layout"),
-               py::arg("dtype") = std::nullopt,
-               py::arg("memory_config") = std::nullopt,
-               py::arg("device") = std::nullopt},
+               Device* device) -> ttnn::Tensor { return self(tensor, layout, dtype, memory_config, device); },
+            py::arg("tensor"),
+            py::arg("layout"),
+            py::arg("dtype") = std::nullopt,
+            py::arg("memory_config") = std::nullopt,
+            py::arg("device") = nullptr},
         ttnn::pybind_overload_t{
             [](const std::decay_t<decltype(ttnn::to_layout)> self,
                const ttnn::Tensor& tensor,
                const ttnn::Layout layout,
                const std::optional<ttnn::DataType>& dtype,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               DeviceMesh* device) -> ttnn::Tensor {
-                return self(tensor, layout, dtype, memory_config, device);
-               },
-               py::arg("tensor"),
-               py::arg("layout"),
-               py::arg("dtype") = std::nullopt,
-               py::arg("memory_config") = std::nullopt,
-               py::arg("device") = std::nullopt});
-    
+               DeviceMesh* device) -> ttnn::Tensor { return self(tensor, layout, dtype, memory_config, device); },
+            py::arg("tensor"),
+            py::arg("layout"),
+            py::arg("dtype") = std::nullopt,
+            py::arg("memory_config") = std::nullopt,
+            py::arg("device") = nullptr});
 }
 
 }  // namespace core

@@ -7,6 +7,7 @@
 
 #include "tt_metal/host_api.hpp"
 
+#include "tensor/tensor_utils.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 
 #include "eth_l1_address_map.h"
@@ -14,6 +15,20 @@
 namespace tt {
 
 namespace tt_metal {
+
+AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim) {
+    bool is_sharded = input_tensor.is_sharded();
+
+    if (is_sharded) {
+        if (input_tensor.buffer()->shard_spec().tensor2d_shape[0] > 1) {
+            return AllGatherMode::FULL_WORKER_GRID_SHARDED;
+        } else {
+            return AllGatherMode::SINGLE_TILE_HIGH_WIDTH_SHARDED;
+        }
+    } else {
+        return AllGatherMode::RING_INTERLEAVED;
+    }
+}
 
 void AllGather::validate(const std::vector<Tensor> &input_tensors) const {
     TT_FATAL(input_tensors.size() == 1);
@@ -42,7 +57,6 @@ void AllGather::validate(const std::vector<Tensor> &input_tensors) const {
         input_tensor.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED ||
         input_tensor.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
 
-
     // Sharding Config checks
     bool input_sharded = input_tensor.is_sharded();
     if (input_sharded) {
@@ -59,7 +73,7 @@ std::vector<Shape> AllGather::compute_output_shapes(const std::vector<Tensor> &i
 std::vector<Tensor> AllGather::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors[0];
     if(this->output_mem_config.is_sharded()) {
-        return {create_sharded_device_tensor(
+        return {create_device_tensor(
             this->compute_output_shapes(input_tensors).at(0),
             input_tensor.get_dtype(),
             input_tensor.get_layout(),
@@ -72,7 +86,18 @@ std::vector<Tensor> AllGather::create_output_tensors(const std::vector<Tensor> &
 }
 
 operation::ProgramWithCallbacks AllGather::create_program(const std::vector<Tensor> & input_tensors, std::vector<Tensor> &output_tensors) const {
-    return all_gather_multi_core_with_workers(input_tensors[0], output_tensors[0], this->dim, this->num_links, this->ring_size, this->ring_index, this->receiver_device_id, this->sender_device_id, this->topology);
+    AllGatherMode all_gather_mode = tt::tt_metal::choose_all_gather_mode(input_tensors.at(0), output_tensors.at(0), dim);
+    switch (all_gather_mode) {
+        case AllGatherMode::RING_INTERLEAVED:
+        case AllGatherMode::SINGLE_TILE_HIGH_WIDTH_SHARDED:
+            return all_gather_multi_core_with_workers(input_tensors[0], output_tensors[0], this->dim, this->num_links, this->ring_size, this->ring_index, this->receiver_device_id, this->sender_device_id, this->topology);
+        break;
+        case AllGatherMode::FULL_WORKER_GRID_SHARDED:
+            TT_THROW("Unsupported AllGatherMode");
+        break;
+        default:
+            TT_THROW("Unsupported AllGatherMode");
+    };
 }
 
 tt::stl::reflection::Attributes AllGather::attributes() const {
@@ -104,7 +129,7 @@ std::vector<Tensor> all_gather_impl(const std::vector<Tensor>& input_tensors, co
         // Package output in vector, to populate it with launch_op
         std::vector<Tensor> output_for_curr_device = {output_tensors[i]};
         operation::launch_op(
-            [is_ring, dim, num_links, i, num_inputs, output_mem_config, topology] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            [is_ring, dim, num_links, i, num_inputs, output_mem_config, topology] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 bool is_last_chip_in_clockwise_direction = is_ring ? false : i == (num_inputs - 1);
                 bool is_last_chip_in_counter_clockwise_direction = is_ring ? false : i == 0;
 
@@ -129,5 +154,50 @@ std::vector<Tensor> line_all_gather(const std::vector<Tensor>& input_tensors, co
 }
 
 }  // namespace tt_metal
+
+namespace operations {
+namespace ccl {
+
+Tensor all_gather(
+    const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const std::optional<MemoryConfig>& memory_config) {
+
+    TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
+
+    auto devices = input_tensor.get_workers();
+    std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
+    operation::launch_op(
+        [dim, num_links, memory_config, devices](
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+            const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+
+            const auto& input_tensor = input_tensors.at(0);
+            uint32_t num_devices = devices.size();
+
+            uint32_t device_index = 0; // Initialize device index
+            uint32_t receiver_device_id = 0; // Initialize receiver device ID
+            uint32_t sender_device_id = 0; // Initialize sender device ID
+
+            for (uint32_t i = 0; i < num_devices; ++i) {
+                if (devices[i] == input_tensor.device()) {
+                    device_index = i;
+                    receiver_device_id = devices[(i + 1) % num_devices]->id(); // Next device in the ring
+                    sender_device_id = devices[(i + num_devices - 1) % num_devices]->id(); // Previous device in the ring
+                    break;
+                }
+            }
+
+            return operation::run(
+                AllGather{
+                    dim, num_links, num_devices, device_index, receiver_device_id, sender_device_id, memory_config.value_or(input_tensor.memory_config())},
+                {input_tensor});
+        },
+        {input_tensor},
+        output_tensors);
+    return output_tensors.at(0);
+}
+
+} // namespace ccl
+} // namespace operations
 
 }  // namespace tt

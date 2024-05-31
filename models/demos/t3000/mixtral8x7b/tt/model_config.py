@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import ttnn
 from pathlib import Path
 from loguru import logger
+import torch
+import ttnn
+from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 
 
 class TtModelArgs:
@@ -40,6 +42,7 @@ class TtModelArgs:
         "MLP_W_LAYOUT",
         # Attention
         "ATTN_WEIGHTS",
+        "ATTN_CACHE_WEIGHTS",
         "XQKV_MM_OUTPUT",
         "QKV_HEADS_OUTPUT",
         "QV_ROT_EMB_OUTPUT",
@@ -62,24 +65,27 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(self, device=None, instruct=False):
-        # Assert if all folders and files exist
-        assert os.path.exists(
-            self.DEFAULT_CKPT_DIR
-        ), f"Checkpoint directory {self.DEFAULT_CKPT_DIR} does not exist, please use export MIXTRAL_CKPT_DIR=..."
-        assert os.path.isfile(
-            self.DEFAULT_CKPT_DIR + "/repack_weights.pt"
-        ), f"Repacked weights {self.DEFAULT_CKPT_DIR + '/repack_weights.pt'} does not exist, please use export MIXTRAL_CKPT_DIR=..."
-        assert os.path.isfile(
-            self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
-        ), f"Tokenizer file {self.DEFAULT_TOKENIZER_PATH + '/tokenizer.model'} does not exist, please use export MIXTRAL_TOKENIZER_PATH=..."
-        assert os.path.exists(
-            self.DEFAULT_CACHE_PATH
-        ), f"Cache directory {self.DEFAULT_CACHE_PATH} does not exist, please use export MIXTRAL_CACHE_PATH=..."
+    def __init__(self, device=None, instruct=False, dummy_weights=False):
+        if not dummy_weights:
+            # Assert if all folders and files exist
+            assert os.path.exists(
+                self.DEFAULT_CKPT_DIR
+            ), f"Checkpoint directory {self.DEFAULT_CKPT_DIR} does not exist, please use export MIXTRAL_CKPT_DIR=..."
+            assert os.path.isfile(
+                self.DEFAULT_CKPT_DIR + "/repack_weights.pt"
+            ), f"Repacked weights {self.DEFAULT_CKPT_DIR + '/repack_weights.pt'} does not exist, please use export MIXTRAL_CKPT_DIR=..."
+            assert os.path.isfile(
+                self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
+            ), f"Tokenizer file {self.DEFAULT_TOKENIZER_PATH + '/tokenizer.model'} does not exist, please use export MIXTRAL_TOKENIZER_PATH=..."
+            assert os.path.exists(
+                self.DEFAULT_CACHE_PATH
+            ), f"Cache directory {self.DEFAULT_CACHE_PATH} does not exist, please use export MIXTRAL_CACHE_PATH=..."
 
         logger.info(f"Checkpoint directory: {self.DEFAULT_CKPT_DIR}")
         logger.info(f"Tokenizer file: {self.DEFAULT_TOKENIZER_PATH + '/tokenizer.model'}")
         logger.info(f"Cache directory: {self.DEFAULT_CACHE_PATH}")
+        if dummy_weights:
+            logger.info(f"Note: Using dummy weights, weight caching disabled")
 
         self.model_base_path = Path(self.DEFAULT_CKPT_DIR)
         self.model_cache_path = Path(self.DEFAULT_CACHE_PATH)
@@ -87,6 +93,7 @@ class TtModelArgs:
         self.tokenizer_path = self.DEFAULT_TOKENIZER_PATH + "/tokenizer.model"
         self.state_dict_path = str(self.model_base_path / "repack_weights.pt")
         self.instruct = instruct
+        self.dummy_weights = dummy_weights
 
         DRAM_MEMCFG = ttnn.DRAM_MEMORY_CONFIG
         L1_MEMCFG = ttnn.L1_MEMORY_CONFIG
@@ -98,28 +105,49 @@ class TtModelArgs:
         # Update memory layouts (Tile, except MLP)
         self.model_config.update({f"{key}_TILE": ttnn.TILE_LAYOUT for key in self.OP_KEYS if "LAYOUT" in key})
 
+        self.model_config["WIDTH_SHARDED_MEMCFG"] = ttnn.experimental.tensor.MemoryConfig(
+            ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttnn.experimental.tensor.BufferType.L1
+        )
+
+        self.model_config["HEIGHT_SHARDED_MEMCFG"] = ttnn.experimental.tensor.MemoryConfig(
+            ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.experimental.tensor.BufferType.L1
+        )
+
+        self.model_config["BLOCK_SHARDED_MEMCFG"] = ttnn.experimental.tensor.MemoryConfig(
+            ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED, ttnn.experimental.tensor.BufferType.L1
+        )
+
+        self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
+            shape=(32, 32),
+            core_grid=ttnn.CoreGrid(y=4, x=6),
+            strategy=ttnn.ShardStrategy.WIDTH,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            use_height_and_width_as_shard_shape=True,
+        )
+
+        self.model_config[
+            "ROT_MAT_MM_PROGCFG"
+        ] = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 4),
+            in0_block_w=4,
+            out_subblock_h=1,
+            out_subblock_w=4,
+            per_core_M=1,
+            per_core_N=4,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        )
+
+        self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
+            math_approx_mode=False,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=True,
+        )
+
         self.model_config["Q_TRANSPOSE_MEMCFG"] = ttnn.create_sharded_memory_config(
             shape=(32, 128),
-            core_grid=ttnn.CoreGrid(y=4, x=8),
-            strategy=ttnn.ShardStrategy.HEIGHT,
-            orientation=ttnn.ShardOrientation.ROW_MAJOR,
-            use_height_and_width_as_shard_shape=True,
-        )
-
-        self.model_config[
-            "K_CACHE_SLICE_OUTPUT_MEMCFG"
-        ] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
-            shape=(128, padded_layer_past_len),
-            core_grid=ttnn.CoreGrid(y=4, x=8),
-            strategy=ttnn.ShardStrategy.HEIGHT,
-            orientation=ttnn.ShardOrientation.ROW_MAJOR,
-            use_height_and_width_as_shard_shape=True,
-        )
-
-        self.model_config[
-            "V_CACHE_SLICE_OUTPUT_MEMCFG"
-        ] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
-            shape=(padded_layer_past_len, 128),
             core_grid=ttnn.CoreGrid(y=4, x=8),
             strategy=ttnn.ShardStrategy.HEIGHT,
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
@@ -134,6 +162,15 @@ class TtModelArgs:
             strategy=ttnn.ShardStrategy.HEIGHT,
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
             use_height_and_width_as_shard_shape=True,
+        )
+
+        self.model_config[
+            "ATTN_BATCHED_SOFTMAX_PROGCFG"
+        ] = lambda padded_layer_past_len: ttnn.experimental.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=(8, 4),  # In-place softmax on 32 cores sharded on batch dim
+            subblock_w=1,
+            block_h=1,  # Shard_height // 32,
+            block_w=padded_layer_past_len // 32,  # Dynamic
         )
 
         self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
@@ -215,3 +252,19 @@ class TtModelArgs:
 
     def get_compute_kernel_attn_config(self):
         return self.compute_kernel_attn_config
+
+    def load_state_dict(self):
+        """Generate or load state_dict for the first n_layers of the model"""
+        if self.dummy_weights:
+            reference_model = Transformer(args=self)
+            state_dict = reference_model.state_dict()
+        else:
+            state_dict = torch.load(self.state_dict_path)
+
+        keys_dict = list(state_dict.keys())[:]
+        remv = [f"layers.{i}" for i in range(self.n_layers, 32)]
+        for k in keys_dict:
+            if any([r in k for r in remv]):
+                state_dict.pop(k)
+
+        return state_dict

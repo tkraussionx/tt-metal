@@ -117,6 +117,9 @@ def enable_persistent_kernel_cache():
     """
     Enables persistent compiled kernel caching - disables recompiling the kernels for the duration of running process if built_kernels/.../hash directory with kernel binaries is present.
     """
+    logger.warning(
+        "Persistent kernel cache is enabled. Cache invalidation may fail after a rebase and may require deleting the build directory."
+    )
     tt_lib.device.EnablePersistentKernelCache()
 
 
@@ -180,19 +183,31 @@ def torch2tt_tensor(
 
 
 def tt_tensors_to_torch_tensors(tt_tensors_device):
+    # Convert tensors to interleaved, assume all devices have same memory layout
+    if tt_tensors_device[0].is_sharded():
+        for i in range(len(tt_tensors_device)):
+            tt_tensors_device[i] = tt_lib.tensor.sharded_to_interleaved(tt_tensors_device[i])
+
+    # Convert tensors to RM layout, assume all devices have same layout/dtype
+    if tt_tensors_device[0].layout == tt_lib.tensor.Layout.TILE:
+        # Convert to bfloat16 to ensure untilize works
+        if tt_tensors_device[0].dtype != tt_lib.tensor.DataType.BFLOAT16:
+            for i in range(len(tt_tensors_device)):
+                tt_tensors_device[i] = tt_lib.tensor.clone(
+                    tt_tensors_device[i], output_dtype=tt_lib.tensor.DataType.BFLOAT16
+                )
+        # Untilize using singlecore since multicore version runs out of l1 memory (TODO: change when multicore untilize is fixed)
+        for i in range(len(tt_tensors_device)):
+            tt_tensors_device[i] = tt_lib.tensor.untilize(tt_tensors_device[i], use_multicore=False)
+
     # Issue non-blocking reads across all devices. This allows for reads across devices to overlap
     tensors_on_host = [tt_tensor_device.cpu(False) for tt_tensor_device in tt_tensors_device]
     # Flush each device and stall until each tensor is populated
     for i, tensor in enumerate(tensors_on_host):
         tensor.sync()
         tt_lib.device.Synchronize(tt_tensors_device[i].device())
-    # Once populated, convert tensors to RM layout
-    row_major_tensors = [
-        tt_tensor_host.to(tt_lib.tensor.Layout.ROW_MAJOR, tt_tensors_device[i].device())
-        for i, tt_tensor_host in enumerate(tensors_on_host)
-    ]
     # Return torch tensors
-    return [tensor.to_torch() for tensor in row_major_tensors]
+    return [tensor.to_torch() for tensor in tensors_on_host]
 
 
 def torch_tensors_to_tt_tensors(torch_tensors, layout, dtype, mem_config, devices):
@@ -1009,7 +1024,7 @@ def get_devices_for_t3000(all_devices, num_devices):
         return all_devices[:num_devices]
     elif num_devices == 8:
         # TODO: Generalize this for different arch
-        hamiltonian_ring_indices = [0, 7, 6, 1, 2, 5, 4, 3]
+        hamiltonian_ring_indices = [0, 4, 5, 1, 2, 6, 7, 3]
         return [all_devices[i] for i in hamiltonian_ring_indices]
     else:
         raise NotImplementedError("Only supports 1, 2, 3, 4, and 8 chip configurations!")

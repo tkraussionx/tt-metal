@@ -25,7 +25,7 @@ namespace tt::tt_metal{
 
     namespace device_pool {
 
-    // Definition of the global device vector
+        // Definition of the global device vector
         extern std::vector<Device*> devices;
 
     } // device_pool
@@ -46,15 +46,6 @@ namespace tt::tt_metal{
 
         void CloseDevices(std::map<chip_id_t, Device *> devices);
         Device *GetDeviceHandle(chip_id_t device_id);
-
-        void BeginTraceCapture(Device *device);
-        void EndTraceCapture(Device *device);
-        void ExecuteLastTrace(Device *device, bool blocking);
-        void ReleaseLastTrace(Device *device);
-
-        void BeginTraceCaptures(std::map<chip_id_t, Device *> devices);
-        void EndTraceCaptures(std::map<chip_id_t, Device *> devices);
-        void ExecuteLastTraces(std::map<chip_id_t, Device *> devices, bool blocking);
 
         /**
         * Copies data from a host buffer into the specified buffer
@@ -163,7 +154,7 @@ namespace tt::tt_metal{
          * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
          * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
          * */
-	void InitDeviceProfiler(Device *device);
+	    void InitDeviceProfiler(Device *device);
 
         /**
          * Read device side profiler data and dump results into device side CSV log
@@ -281,7 +272,7 @@ namespace tt::tt_metal{
          * | Argument      | Description                                     | Data type             | Valid range                                         | required |
          * |---------------|-------------------------------------------------|-----------------------|-----------------------------------------------------|----------|
          * | device        | The device whose DRAM to write data into        | Device *              |                                                     | Yes      |
-         * | logical_core  | Logical coordinate of core whose L1 to write to | CoreCoord            | On Grayskull, any valid logical worker coordinate   | Yes      |
+         * | logical_core  | Logical coordinate of core whose L1 to write to | CoreCoord             | On Grayskull, any valid logical worker coordinate   | Yes      |
          * | address       | Starting address in L1 to write into            | uint32_t              | Any non-reserved address in L1 that fits for buffer | Yes      |
          * | host_buffer   | Buffer on host whose data to copy from          | std::vector<uint32_t> | Buffer must fit into L1                             | Yes      |
          */
@@ -358,6 +349,9 @@ namespace tt::tt_metal{
             device->deallocate_buffers();
         }
 
+        void DisableAllocs(Device *device);
+        void EnableAllocs(Device *device);
+
         inline void GenerateDeviceHeaders(Device *device,
                                           const std::string &path)
         {
@@ -368,7 +362,7 @@ namespace tt::tt_metal{
             std::vector<CoreCoord> dram_noc_coord_per_bank(num_dram_banks);
             std::vector<int32_t> dram_offsets_per_bank(num_dram_banks);
             for (unsigned bank_id = 0; bank_id < num_dram_banks; bank_id++) {
-                dram_noc_coord_per_bank[bank_id] = device->core_from_dram_channel(device->dram_channel_from_bank_id(bank_id));
+                dram_noc_coord_per_bank[bank_id] = device->dram_core_from_dram_channel(device->dram_channel_from_bank_id(bank_id));
                 dram_offsets_per_bank[bank_id] = device->bank_offset(BufferType::DRAM, bank_id);
             }
             const size_t num_l1_banks = device->num_banks(BufferType::L1); // 128

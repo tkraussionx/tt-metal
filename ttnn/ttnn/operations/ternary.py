@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import sys
+from typing import Union
 
 import tt_lib as ttl
 
@@ -254,111 +255,89 @@ for ternary_function_name, ttl_ternary_function, name, param in TTL_TERNARY_FUNC
     register_ttl_ternary_function_with_float(ternary_function_name, ttl_ternary_function, name, param)
 
 
-def register_ttl_ternary_function_where(name, ttl_ternary_function):
-    def _golden_function(input_tensor: ttnn.Tensor, **_):
-        import torch
+def _golden_function(input_tensor: ttnn.Tensor, **_):
+    import torch
 
-        name_to_golden_function_function = {
-            "where": torch.where,
-        }
-        torch_function = name_to_golden_function_function[name]
-        return torch_function(input_tensor)
+    name_to_golden_function_function = {
+        "where": torch.where,
+    }
+    torch_function = name_to_golden_function_function[name]
+    return torch_function(input_tensor)
 
-    def _ternary_validate_input_tensors(operation_name, input_tensor, input1, input2, *args, **kwargs):
-        ttnn.validate_input_tensor(
-            operation_name,
-            input_tensor,
-            ranks=(2, 3, 4),
-            dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-            layouts=(ttnn.TILE_LAYOUT,),
-            can_be_on_device=True,
-            can_be_on_cpu=False,
-        )
-        ttnn.validate_input_tensor(
-            operation_name,
-            input1,
-            ranks=(2, 3, 4),
-            dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-            layouts=(ttnn.TILE_LAYOUT,),
-            can_be_on_device=True,
-            can_be_on_cpu=False,
-            can_be_a_scalar=True,
-        )
-        ttnn.validate_input_tensor(
-            operation_name,
-            input2,
-            ranks=(2, 3, 4),
-            dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-            layouts=(ttnn.TILE_LAYOUT,),
-            can_be_on_device=True,
-            can_be_on_cpu=False,
-            can_be_a_scalar=True,
-        )
 
-    @ttnn.register_operation(
-        name=f"ttnn.{name}",
-        validate_input_tensors=_ternary_validate_input_tensors,
-        golden_function=_golden_function,
+where = ttnn.register_operation(
+    golden_function=_golden_function,
+)(ttnn._ttnn.operations.ternary.where)
+
+
+def _golden_function(
+    input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, weight: Union[ttnn.Tensor, int, float], **_
+):
+    import torch
+
+    return torch.lerp(input_tensor_a, input_tensor_b, weight)
+
+
+def _validate_input_tensors(operation_name, input_tensor_a, input_tensor_b, *args, **kwargs):
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_a,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
     )
-    def ternary_function(
-        predicate: ttnn.Tensor,
-        true_value: [ttnn.Tensor, float],
-        false_value: [ttnn.Tensor, float],
-        *,
-        memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
-    ) -> ttnn.Tensor:
-        original_shape = predicate.shape
-        predicate = ttnn.unsqueeze_to_4D(predicate)
-        if not _is_scalar(true_value):
-            true_value = ttnn.unsqueeze_to_4D(true_value)
-        if not _is_scalar(false_value):
-            false_value = ttnn.unsqueeze_to_4D(false_value)
-
-        if not isinstance(predicate, ttnn.Tensor):
-            raise TypeError("Expected input_tensor arguments to be a ttnn.Tensor")
-
-        if not ttnn.is_tensor_storage_on_device(predicate):
-            raise RuntimeError("input_tensor must be on device!")
-
-        output_tensor = ttl_ternary_function(predicate, true_value, false_value, output_mem_config=memory_config)
-
-        output_tensor = ttnn.reshape(output_tensor, original_shape)
-        return output_tensor
-
-    if isinstance(ternary_function, ttnn.decorators.Operation):
-        ternary_function.__name__ = f"ttnn.{name}"
-        ternary_function.decorated_function.__doc__ = f"""{name}(predicate_tensor: ttnn.Tensor, true_value: [ttnn.Tensor,float], false_value: [ttnn.Tensor,float], *, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
-
-            Perform an ternary {name} operation on two tensors based on predicate input tensor.
-
-            .. math::
-                {name.replace('_',' ')}(\\mathrm{{input\\_tensor}}_i)
-
-            Args:
-                * :attr:`predicate_tensor`
-                * :attr:`true_value`
-                * :attr:`false_value`
-
-            Example::
-
-                >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
-                >>> tensor1 = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
-                >>> tensor2 = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
-                >>> output = ttnn.{name}(tensor, tensor1, tensor2)
-
-            {ternary_function.__doc__}
-
-            """
-    setattr(THIS_MODULE, name, ternary_function)
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_b,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+    )
 
 
-TTL_TERNARY_FUNCTIONS_WHERE = [
-    ("where", ttl.tensor.where),
-]
+@ttnn.register_operation(
+    name=f"ttnn.lerp",
+    validate_input_tensors=_validate_input_tensors,
+    golden_function=_golden_function,
+)
+def lerp(
+    input_tensor_a: ttnn.Tensor,
+    input_tensor_b: ttnn.Tensor,
+    weight: Union[ttnn.Tensor, int, float],
+    *,
+    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
+) -> ttnn.Tensor:
+    if not (input_tensor_a.shape == input_tensor_b.shape):
+        raise RuntimeError("input_tensors must be of same size!")
 
+    if not isinstance(input_tensor_a, ttnn.Tensor) or not isinstance(input_tensor_b, ttnn.Tensor):
+        raise TypeError("Expected both arguments to be a ttnn.Tensor")
 
-for ternary_function_name, ttl_ternary_function in TTL_TERNARY_FUNCTIONS_WHERE:
-    register_ttl_ternary_function_where(ternary_function_name, ttl_ternary_function)
+    if not ttnn.is_tensor_storage_on_device(input_tensor_a) or not ttnn.is_tensor_storage_on_device(input_tensor_b):
+        raise RuntimeError("input_tensors must be on device!")
+
+    if isinstance(weight, ttnn.Tensor) and not (input_tensor_a.shape == weight.shape):
+        raise RuntimeError("weight tensor must be of same size!")
+
+    if isinstance(weight, ttnn.Tensor) and not ttnn.is_tensor_storage_on_device(weight):
+        raise RuntimeError("weight tensor must be on device!")
+
+    original_shape = input_tensor_a.shape
+
+    input_tensor_a = ttnn.unsqueeze_to_4D(input_tensor_a)
+    input_tensor_b = ttnn.unsqueeze_to_4D(input_tensor_b)
+
+    if isinstance(weight, ttnn.Tensor):
+        weight = ttnn.unsqueeze_to_4D(weight)
+
+    output_tensor = ttl.tensor.lerp(input_tensor_a, input_tensor_b, weight, output_mem_config=memory_config)
+
+    output_tensor = ttnn.reshape(output_tensor, original_shape)
+    return output_tensor
 
 
 __all__ = []

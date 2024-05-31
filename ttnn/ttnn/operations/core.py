@@ -39,7 +39,6 @@ def _golden_function(input_tensor: ttnn.Tensor, slices):
     validate_input_tensors=_getitem_validate_input_tensors,
     is_method=True,
     golden_function=_golden_function,
-    allow_to_fallback_to_golden_function_on_failure=True,
 )
 def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
     input_rank = len(input_tensor.shape)
@@ -69,7 +68,7 @@ def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
         if len(slices) > input_rank:
             raise RuntimeError(f"Too many slices for tensor of rank {input_rank}")
 
-    if ttnn.is_tensor_storage_on_device(input_tensor) and input_rank <= 4:
+    if input_rank <= 4:
         input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
 
         while len(slices) != 4:
@@ -89,7 +88,15 @@ def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
             output = input_tensor
         else:
             padded_slice_end_minus_1 = [x - 1 for x in padded_slice_end]
-            output = ttl.tensor.unpad(input_tensor, slice_start, padded_slice_end_minus_1)
+            if any([x < 0 for x in padded_slice_end_minus_1]):
+                raise RuntimeError("ttnn.Tensor.__getitem__: cannot return a scalar!")
+
+            if ttnn.is_tensor_storage_on_device(input_tensor):
+                output = ttl.tensor.unpad(input_tensor, slice_start, padded_slice_end_minus_1)
+            else:
+                input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
+                output = input_tensor.unpad(slice_start, padded_slice_end_minus_1)
+                output = ttnn.to_layout(output, input_layout)
 
         output_shape = [end - start for (start, end) in zip(slice_start, slice_end)][-input_rank:]
         padded_output_shape = list(output.shape.with_tile_padding())[-input_rank:]
@@ -167,16 +174,20 @@ Example::
 
 """
 
-
+# Unsupported cases, which require a fallback: (found in bert, t5, bloom)
+# Shape([1, 128, 512])  <-> (1, 128, 8, 64)
+# Shape([1, 128, 384])  <-> (1, 128, 6, 64)
+# Shape([1, 384, 1024]) <-> (1, 384, 16, 64)
+# Shape([1, 11, 4096])  <-> (1, 11, 32, 128)
+# Shape([1, 128, 28, 28]) <-> (-1, 128)
+# Shape([1, 11, 32, 128]) <-> (1, 1, 11, -1) in ttnn_functional_attention.py test_mistral_attention_inference
 reshape = ttnn.register_operation(
     name="ttnn.reshape",
     golden_function=_golden_function,
     preprocess_golden_function_inputs=_preprocess_golden_function_inputs,
     postprocess_golden_function_outputs=_postprocess_golden_function_outputs,
-    allow_to_fallback_to_golden_function_on_failure=True,
     doc=doc,
 )(ttnn._ttnn.operations.core.reshape)
-
 
 # TODO(arakhmati): remove this once underlying C++ code can handle non-4D shapes
 unsqueeze_to_4D = ttnn.register_operation(name="ttnn.unsqueeze_to_4D")(ttnn._ttnn.operations.core.unsqueeze_to_4D)
@@ -454,6 +465,13 @@ from_device = ttnn.register_operation(
     doc=doc,
 )(ttnn._ttnn.operations.core.from_device)
 
+allocate_tensor_on_device = ttnn.register_operation(
+    name="ttnn.allocate_tensor_on_device",
+)(ttnn._ttnn.operations.core.allocate_tensor_on_device)
+
+copy_host_to_device_tensor = ttnn.register_operation(
+    name="ttnn.copy_host_to_device_tensor",
+)(ttnn._ttnn.operations.core.copy_host_to_device_tensor)
 
 doc = """
 deallocate(tensor: ttnn.Tensor, force: bool = True) -> None
@@ -479,25 +497,7 @@ def _golden_function(tensor, *args, **kwargs):
     return tensor
 
 
-doc = r"""
-    to_memory_config(tensor: ttnn.Tensor, memory_config: MemoryConfig, dtype: Optional[DataType] = None) -> ttnn.Tensor
-
-    Converts a tensor to the desired mem_config, used for converting tensors to sharded tensors or interleaved, and to convert DRAM to L1 and vice versa
-
-
-    Args:
-        * :attr:`tensor`: the ttnn.Tensor
-        * :attr:`memory_config`: the desired MemoryConfig
-        * :attr:`dtype`: the optional `ttnn` data type.
-
-    Example::
-        >>> device_id = 0
-        >>> device = ttnn.open_device(device_id=device_id)
-        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
-        >>> tensor = ttnn.to_memory_config(tensor, memory_config)
-    """
-
-to_memory_config = ttnn.register_operation(name="ttnn.to_memory_config", golden_function=_golden_function, doc=doc)(
+to_memory_config = ttnn.register_operation(golden_function=_golden_function)(
     ttnn._ttnn.operations.core.to_memory_config
 )
 
@@ -507,6 +507,13 @@ def _golden_function(tensor, *args, **kwargs):
 
 
 to_layout = ttnn.register_operation(golden_function=_golden_function)(ttnn._ttnn.operations.core.to_layout)
+
+
+def _golden_function(tensor, *args, **kwargs):
+    return tensor
+
+
+to_dtype = ttnn.register_operation(golden_function=_golden_function)(ttnn._ttnn.operations.core.to_dtype)
 
 
 def _clone_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
@@ -600,6 +607,7 @@ def as_tensor(
     cache_file_name: Optional[Union[str, pathlib.Path]] = None,
     preprocess: Optional[Callable[[ttnn.Tensor], ttnn.Tensor]] = None,
     mesh_mapper: Optional[ttnn.TensorToMesh] = None,
+    use_device_tilizer: bool = False,
 ) -> ttnn.Tensor:
     """
     as_tensor(tensor: Union[torch.Tensor], dtype: Optional[ttnn.DataType] = None, layout: Optional[ttnn.Layout] = ROW_MAJOR_LAYOUT, device: Optional[ttnn.Device] = None, memory_config: Optional[ttnn.MemoryConfig] = None, cache_file_name: Optional[str | pathlib.Path] = None) -> ttnn.Tensor
@@ -615,6 +623,7 @@ def as_tensor(
         * :attr:`cache_file_name`: the optional cache file name.
         * :attr:`preprocess`: the optional function to preprocess the tensor before serializing/converting to ttnn.
         * :attr:`mesh_mapper`: the optional TensorToMesh to define the mapping from torch to multi-device.
+        * :attr:`use_device_tilizer`: the optional flag to use device tilizer instead of host-tilizer.
 
     Example::
 
@@ -640,7 +649,19 @@ def as_tensor(
         def from_torch_and_dump(tensor, dtype, layout, cache_file_name):
             if preprocess:
                 tensor = preprocess(tensor)
-            tensor = ttnn.from_torch(tensor, dtype=dtype, layout=layout, mesh_mapper=mesh_mapper)
+            if use_device_tilizer and device and layout == ttnn.TILE_LAYOUT:
+                # To use the device tilizer, we're going to first move the tensor
+                # to the device because the on-device tilizer works on bfloat16, on-device tensor.
+                tensor = ttnn.from_torch(
+                    tensor,
+                    layout=ttnn.ROW_MAJOR_LAYOUT,
+                    mesh_mapper=mesh_mapper,
+                    device=device,
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                )
+                tensor = ttnn.to_layout(tensor, layout, dtype=dtype, memory_config=memory_config, device=device)
+            else:
+                tensor = ttnn.from_torch(tensor, dtype=dtype, layout=layout, mesh_mapper=mesh_mapper)
             logger.debug(
                 f"Generating cache for {cache_file_name} of shape {tensor.shape}, dtype {dtype_name}, layout {layout_name}"
             )

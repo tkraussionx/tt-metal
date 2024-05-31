@@ -53,9 +53,8 @@ operation::ProgramWithCallbacks moreh_norm_h_impl(const Tensor &input, float p, 
     ////////////////////////////////////////////////////////////////////////////
     //                         Core Setup
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CoreGridDesc core_grid(device);
-    const auto num_cores_y = core_grid.y_;
-    CoreCoord core_grid_coord(core_grid.x_, num_cores_y);
+    auto grid = device->compute_with_storage_grid_size();
+    const auto num_cores_y = grid.y;
 
     const auto
         [num_cores_to_be_used,
@@ -63,7 +62,7 @@ operation::ProgramWithCallbacks moreh_norm_h_impl(const Tensor &input, float p, 
          core_group_1,
          core_group_2,
          num_cols_per_core_group_1,
-         num_cols_per_core_group_2] = tt_metal::split_work_to_cores(core_grid_coord, N * C * Wt);
+         num_cols_per_core_group_2] = tt_metal::split_work_to_cores(grid, N * C * Wt);
 
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup
@@ -221,17 +220,15 @@ operation::ProgramWithCallbacks moreh_norm_h_impl(const Tensor &input, float p, 
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
             {
-                auto runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
                 runtime_args[0] = input_buffer->address();
                 runtime_args[2] = *reinterpret_cast<uint32_t *>(&decimal);
                 runtime_args[3] = *reinterpret_cast<uint32_t *>(&recip_p_decimal);
-                SetRuntimeArgs(program, reader_kernels_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
                 runtime_args[0] = output_buffer->address();
-                SetRuntimeArgs(program, writer_kernels_id, core, runtime_args);
             }
 
             {
@@ -243,12 +240,11 @@ operation::ProgramWithCallbacks moreh_norm_h_impl(const Tensor &input, float p, 
                 } else {
                     TT_THROW("Core not in specified core ranges.");
                 }
-                auto runtime_args = GetRuntimeArgs(program, compute_kernel_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, compute_kernel_id, core);
                 runtime_args[3] = floored_p;
                 runtime_args[4] = static_cast<uint32_t>(p_is_negative);
                 runtime_args[5] = floored_recip_p;
                 runtime_args[6] = static_cast<uint32_t>(recip_p_is_negative);
-                SetRuntimeArgs(program, compute_kernel_id, core, runtime_args);
             }
         }
     };
