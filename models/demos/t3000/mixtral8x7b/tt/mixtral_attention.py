@@ -92,7 +92,20 @@ class TtMixtralAttention(torch.nn.Module):
             cache_file_name=cache_name(f"wo_multidevice"),
         )
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
-
+        self.wo_prefill = ttnn.as_tensor(
+            torch.transpose(
+                self.state_dict[wo_str],
+                -2,
+                -1,
+            ),
+            device=self.device_mesh,
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+            dtype=self.dtype,
+            memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+            layout=self.model_config["ATTN_W_LAYOUT_TILE"],
+            cache_file_name=cache_name(f"wo_prefill"),
+        )
+        self.wo_prefill = ttnn.to_device(self.wo_prefill, self.device_mesh)
         cache_k = torch.zeros(
             (
                 self.n_kv_heads,
@@ -322,10 +335,12 @@ class TtMixtralAttention(torch.nn.Module):
             xs_11SH,
             self.wqkv,
             dtype=ttnn.bfloat16,
-            memory_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+            memory_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
             core_grid=self.core_grid_attention,
             compute_kernel_config=self.compute_kernel,
         )
+
+        print("xqkv_fused", xqkv_fused.shape)
 
         # split qkv into heads
         (
@@ -337,8 +352,9 @@ class TtMixtralAttention(torch.nn.Module):
             num_heads=self.n_local_heads,
             num_kv_heads=self.n_local_kv_heads,
             transpose_k_heads=False,
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            output_mem_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["HEIGHT_SHARDED_MEMCFG"],
         )
+        print("q_heads_14SD", q_heads_14SD.shape, k_heads_11SD.shape, v_heads_11SD.shape)
 
         xqkv_fused.deallocate(True)
 
@@ -354,18 +370,21 @@ class TtMixtralAttention(torch.nn.Module):
 
         # FILL K CACHE
         keys = self.layer_past[0]
-        keys_11SD = ttnn.reshape(keys, [self.max_batch_size, self.n_local_kv_heads, -1, self.head_dim])
+        keys_11SD = ttnn.reshape(keys, [1, self.n_local_kv_heads, -1, self.head_dim])
         ttnn.experimental.tensor.fill_cache(
-            keys_11SD, ttnn.experimental.tensor.typecast(k_heads_11SD, self.model_config["BFP8_DTYPE"]), user_id
+            keys_11SD, ttnn.experimental.tensor.typecast(k_heads_11SD, ttnn.bfloat8_b), user_id
         )
+
+        print("keys_11SD", keys_11SD.shape)
 
         # FILL V CACHE
         values = self.layer_past[0]
-        values_11SD = ttnn.reshape(values, [self.max_batch_size, self.n_local_kv_heads, -1, self.head_dim])
+        values_11SD = ttnn.reshape(values, [1, self.n_local_kv_heads, -1, self.head_dim])
         ttnn.experimental.tensor.fill_cache(
-            values_11SD, ttnn.experimental.tensor.typecast(v_heads_11SD, self.model_config["BFP8_DTYPE"]), user_id
+            values_11SD, ttnn.experimental.tensor.typecast(v_heads_11SD, ttnn.bfloat8_b), user_id
         )
 
+        print("values_11SD", values_11SD.shape)
         # SDPA
         program_config = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
             compute_with_storage_grid_size=[8, 8],
@@ -382,6 +401,8 @@ class TtMixtralAttention(torch.nn.Module):
             program_config=program_config,
         )
 
+        print("attn_output_14SD", attn_output_14SD.shape)
+
         # deallocate keys and values
         q_heads_14SD.deallocate(True)
         k_heads_11SD.deallocate(True)
@@ -392,26 +413,46 @@ class TtMixtralAttention(torch.nn.Module):
         ###
         attn_output_11SH = ttnn.experimental.tensor.nlp_concat_heads(
             attn_output_14SD,
-            output_mem_config=self.model_config["L1_MEMCFG"],
+            output_mem_config=ttnn.L1_MEMORY_CONFIG,
         )
+
+        print("attn_output_11SH", attn_output_11SH.shape)
         attn_output_11SH = ttnn.all_gather(
             attn_output_11SH,
             dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            memory_config=self.model_config["DRAM_MEMCFG"],
+            num_links=1,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
 
-        seq_tiles = attn_output_11SH.shape[2] // 32
-        cores_y = 8 if seq_tiles % 8 == 0 else 4
-        dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"](seq_tiles, cores_y)
+        print("attn_output_11SH", attn_output_11SH.shape)
 
-        attn_output_11SH = ttnn.experimental.operations.primary.matmul(
-            attn_output_11SH,
-            self.wo,
-            program_config=dense_out_prog_cfg,
-            output_mem_config=self.model_config["DRAM_MEMCFG"],
-            output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-        )
+        # seq_tiles = attn_output_11SH.shape[2] // 32
+        # cores_y = 8 if seq_tiles % 8 == 0 else 4
+        # seq_len_tiles = seq_len // 32
+        # cores_y = 4  # 8 if seq_len_tiles % 8 == 0 else 4
+        # self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"] = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=(8, cores_y),
+        #     in0_block_w=8,  # how much inner dim you take each time
+        #     out_subblock_h=1,  # Must be divisible by per_core_M
+        #     out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+        #     per_core_M=seq_len_tiles // cores_y,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+        #     per_core_N=4,  # N / TILE_WIDTH / Grid_Size
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
+        # dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"]
+
+        # attn_output_11SH = ttnn.experimental.operations.primary.matmul(
+        #     attn_output_11SH,
+        #     self.wo,
+        #     #program_config=dense_out_prog_cfg,
+        #     output_mem_config=ttnn.L1_MEMORY_CONFIG,
+        #     output_dtype=ttnn.bfloat8_b,
+        #     compute_kernel_config=self.compute_kernel,
+        # )
+
+        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo_prefill, core_grid=ttnn.CoreGrid(y=8, x=8))
+
+        print("attn_output_11SH", attn_output_11SH.shape)
 
         return attn_output_11SH

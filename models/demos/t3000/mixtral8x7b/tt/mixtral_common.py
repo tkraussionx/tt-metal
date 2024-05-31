@@ -117,6 +117,58 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, sliding_window, device_
     return xs_1SBH, attn_mask
 
 
+def prepare_inputs_ttnn_prefill(x_bsh, hidden_size, current_pos, sliding_window, device_mesh):
+    """
+    Prepare inputs for decode mode.
+    x: (batch, seq, hidden_dim)
+    B: batch (32)
+    S: sequence len (1)
+    H: dim (4096)
+    """
+    batch = x_bsh.size(0)
+    seq_len = x_bsh.size(1)
+
+    x_1BSH = x_bsh.unsqueeze(0)
+
+    # input goes to L1
+    xs_1BSH = ttnn.from_torch(
+        x_1BSH,
+        device=device_mesh,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    # Attention mask
+    padded_layer_past_len = min(nearest_32(current_pos + 1), sliding_window)
+    current = current_pos % sliding_window
+    n_local_heads = 4  # model_args.n_heads // 8 # num_devices TODO pass the arguments instead of hard coding
+
+    attn_mask = torch.full((seq_len, seq_len), float("-inf"))
+    attn_mask_torch = torch.triu(attn_mask, diagonal=1)
+    attn_mask = attn_mask_torch.expand(batch, n_local_heads, -1, -1)
+
+    attn_mask = ttnn.from_torch(
+        attn_mask,
+        device=device_mesh,
+        dtype=ttnn.bfloat4_b,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    ATTN_MASK_MEMCFG = ttnn.create_sharded_memory_config(
+        shape=(32, padded_layer_past_len),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    attn_mask = ttnn.experimental.tensor.interleaved_to_sharded(attn_mask, sharded_mem_config=ATTN_MASK_MEMCFG)
+
+    return xs_1BSH, attn_mask, attn_mask_torch
+
+
 def prepare_rotation_mat_ttnn(head_dim, max_seq_len, device_mesh):
     """
     Prepare rotation matricies for decode mode.
