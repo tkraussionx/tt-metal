@@ -12,6 +12,7 @@
 #include "tt_dnn/op_library/repeat/repeat_op.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_metal/host_api.hpp"
+#include "tt_eager/tensor/tensor.hpp"
 
 namespace tt {
 
@@ -140,6 +141,10 @@ struct make_eltwise_binary {
                         {in_a, in_b});
             },
         {input_tensor_a, input_tensor_b}, output_tensors);
+        if(binary_op_type == BinaryOpType::EQ){
+            Tensor& res = output_tensors.at(0);
+            res.set_dtype(DataType::UINT16);
+        }
         return output_tensors.at(0);
     }
 };
