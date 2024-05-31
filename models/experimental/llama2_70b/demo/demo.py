@@ -20,6 +20,7 @@ from models.experimental.llama2_70b.tt.model_config import (
 )
 from models.utility_functions import get_devices_for_t3000
 from models.experimental.llama2_70b.tt.llama_common import get_llama_path, load_llama_state_dict
+from models.experimental.llama2_70b.reference.llama.llama.tokenizer3 import ChatFormat
 
 
 def main(args):
@@ -75,8 +76,13 @@ def load_prompts_file(args, tokenizer):
     # Load prompts from json
     prompts = json.load(open(args.prompts_file))
     # Encode the prompt
-    tokenized = [tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+    if args.chat:
+        formatter = ChatFormat(tokenizer)
+        tokenized = [formatter.encode_dialog_prompt(dialog) for dialog in prompts]
+    else:
+        tokenized = [tokenizer.encode(x, bos=True, eos=False) for x in prompts]
 
+    breakpoint()
     if len(tokenized) > args.max_batch_size:
         logger.warn(
             f"Warning: prompts file contains {len(tokenized)} prompts, but max batch size is {args.max_batch_size}. Only first {args.max_batch_size} are decoded."
@@ -263,6 +269,7 @@ class Args:
         top_p=1,
         top_k=1,
         temperature=1.0,
+        chat=False,
         # TT args
         device_mesh=None,
         n_devices=8,
@@ -283,6 +290,7 @@ class Args:
         self.top_p = top_p
         self.top_k = top_k
         self.temperature = temperature
+        self.chat = chat
         self.device_mesh = device_mesh
         self.n_devices = n_devices
         self.emulated = emulated
@@ -295,6 +303,14 @@ def construct_arg(**kwargs):
 
 
 @pytest.mark.timeout(240000)
+@pytest.mark.parametrize(
+    "chat, prompts_file",
+    [
+        (True, "models/demos/t3000/llama2_70b/demo/data/multi_prompt_chat.json"),
+        (False, "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json"),
+    ],
+    ids=["chat_completion", "text_completion"],
+)
 @pytest.mark.parametrize("decode_only", (True, False), ids=["decode_only", "prefill_decode"])
 @pytest.mark.parametrize("num_layers", (1, 2, 10, 80), ids=["1L", "2L", "10L", "80L"])
 @pytest.mark.parametrize(
@@ -312,20 +328,14 @@ def construct_arg(**kwargs):
             8,
             True,
         ),
-        (
-            "tt",
-            False,
-            8,
-            True,
-        ),
     ],
-    ids=["tt-70b-T3000", "meta-70b", "tt-70b-emulated"],
+    ids=["tt-70b-T3000", "meta-70b"],
 )
 @pytest.mark.parametrize(
-    "num_tokens, prompts_file, output_at_end, top_p, top_k, temperature",
+    "num_tokens, output_at_end, top_p, top_k, temperature",
     [
-        (128, "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json", True, 1, 1, 1.0),
-        (128, "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json", True, 0.9, 10, 1.0),
+        (128, True, 1, 1, 1.0),
+        (128, True, 0.9, 10, 1.0),
     ],
     ids=["greedy", "sampling"],
 )
@@ -341,6 +351,7 @@ def test_LlamaModel_demo(
     top_p,
     top_k,
     temperature,
+    chat,
     # TT args
     # all_devices,
     t3k_device_mesh,
@@ -381,6 +392,7 @@ def test_LlamaModel_demo(
         top_p=top_p,
         top_k=top_k,
         temperature=temperature,
+        chat=chat,
         device_mesh=t3k_device_mesh,
         n_devices=n_devices,
         emulated=emulated,
