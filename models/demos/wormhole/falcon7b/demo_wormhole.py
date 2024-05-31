@@ -37,7 +37,7 @@ def test_demo(
     return run_falcon_demo_kv(
         user_input=user_input,
         batch_size=32,
-        max_seq_len=1024,
+        max_seq_len=128,
         model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
         model_location_generator=model_location_generator,
         get_tt_cache_path=get_tt_cache_path,

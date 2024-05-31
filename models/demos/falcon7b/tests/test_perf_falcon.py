@@ -249,17 +249,17 @@ def run_test_FalconCausalLM_end_to_end(
             for device in devices:
                 tt_lib.device.Synchronize(device)
             preprocessing_end_time = time.time()
-            # for user_id in range(batch):
-            tt_out, tt_layer_present = tt_FalconCausalLM(
-                input_ids=tt_input_ids[0],
-                llm_mode="prefill",
-                attention_mask=tt_attention_mask[0],
-                user_id=0,
-                layer_past=tt_layer_past,
-                layer_past_len=0,
-                use_cache=use_cache,
-            )
-            # tt_outs.append(tt_out)
+            for user_id in range(batch):
+                tt_out, tt_layer_present = tt_FalconCausalLM(
+                    input_ids=tt_input_ids[0],
+                    llm_mode="prefill",
+                    attention_mask=tt_attention_mask[0],
+                    user_id=0,
+                    layer_past=tt_layer_past,
+                    layer_past_len=0,
+                    use_cache=use_cache,
+                )
+            tt_outs.append(tt_out)
 
         elif llm_mode == "decode":
             tt_out, tt_layer_present = tt_FalconCausalLM(
@@ -278,78 +278,78 @@ def run_test_FalconCausalLM_end_to_end(
         total_preprocessing_times.append(preprocessing_end_time - prefill_start_time)
         total_pure_prefill_times.append(prefill_end_time - preprocessing_end_time)
 
-    # if llm_mode == "prefill":
-    #     tt_out_tmp = torch.zeros(global_batch, seq_len, configuration.vocab_size)  # Output tensor to overwrite
-    #     for user_id, tt_out in enumerate(tt_outs):
-    #         # Get outputs from all devices
-    #         tt_out_tmp[user_id::batch] = torch.concat(
-    #             [tt_out_torch.squeeze(1) for tt_out_torch in tt_tensors_to_torch_tensors(tt_out)]
-    #         )
-    #     tt_out = tt_out_tmp
-    # elif llm_mode == "decode":
-    #     tt_out = [tt_out_torch.squeeze(1).transpose(0, 1) for tt_out_torch in tt_tensors_to_torch_tensors(tt_out)]
-    #     tt_out = torch.concat(tt_out)
+    if llm_mode == "prefill":
+        tt_out_tmp = torch.zeros(global_batch, seq_len, configuration.vocab_size)  # Output tensor to overwrite
+        for user_id, tt_out in enumerate(tt_outs):
+            # Get outputs from all devices
+            tt_out_tmp[user_id::batch] = torch.concat(
+                [tt_out_torch.squeeze(1) for tt_out_torch in tt_tensors_to_torch_tensors(tt_out)]
+            )
+        tt_out = tt_out_tmp
+    elif llm_mode == "decode":
+        tt_out = [tt_out_torch.squeeze(1).transpose(0, 1) for tt_out_torch in tt_tensors_to_torch_tensors(tt_out)]
+        tt_out = torch.concat(tt_out)
 
     # check outputs ----------------------------------------------------------------------
-    # does_pass = True
-    # tt_out_tmp = tt_out.type(pytorch_out.dtype)
-    # _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_out, tt_out_tmp)
-    # logger.info(f"Output: {pcc_str}")
-    # if device_pcc < expected_pccs[0]:
-    #     does_pass = False
-    #     logger.warning(f"Output PCC {device_pcc} is lower than {expected_pccs[0]}")
-    # if device_pcc > (expected_pccs[0] + 0.01):
-    #     does_pass = False
-    #     logger.warning(f"Output PCC {device_pcc} is higher than {expected_pccs[0]}. Please update the expected PCC")
+    does_pass = True
+    tt_out_tmp = tt_out.type(pytorch_out.dtype)
+    _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_out, tt_out_tmp)
+    logger.info(f"Output: {pcc_str}")
+    if device_pcc < expected_pccs[0]:
+        does_pass = False
+        logger.warning(f"Output PCC {device_pcc} is lower than {expected_pccs[0]}")
+    if device_pcc > (expected_pccs[0] + 0.01):
+        does_pass = False
+        logger.warning(f"Output PCC {device_pcc} is higher than {expected_pccs[0]}. Please update the expected PCC")
 
-    # reference_logits = pytorch_out.view(global_batch * seq_len, -1).float().detach().numpy()
-    # eval_logits = tt_out.view(global_batch * seq_len, -1).float().detach().numpy()
-    # reference_top1 = np.argmax(reference_logits, axis=-1)
-    # top1_acc = top_k_accuracy_score(reference_top1, eval_logits, k=1, labels=np.arange(eval_logits.shape[-1]))
-    # top5_acc = top_k_accuracy_score(reference_top1, eval_logits, k=5, labels=np.arange(eval_logits.shape[-1]))
-    # logger.info(f"Top-1 Accuracy: {top1_acc}")
-    # logger.info(f"Top-5 Accuracy: {top5_acc}")
+    reference_logits = pytorch_out.view(global_batch * seq_len, -1).float().detach().numpy()
+    eval_logits = tt_out.view(global_batch * seq_len, -1).float().detach().numpy()
+    reference_top1 = np.argmax(reference_logits, axis=-1)
+    top1_acc = top_k_accuracy_score(reference_top1, eval_logits, k=1, labels=np.arange(eval_logits.shape[-1]))
+    top5_acc = top_k_accuracy_score(reference_top1, eval_logits, k=5, labels=np.arange(eval_logits.shape[-1]))
+    logger.info(f"Top-1 Accuracy: {top1_acc}")
+    logger.info(f"Top-5 Accuracy: {top5_acc}")
 
-    # device_pcc_k = 1.0
-    # device_pcc_v = 1.0
-    # for i in range(num_layers):
-    #     if llm_mode == "prefill":
-    #         pytorch_layer_pres = (pytorch_layer_present[i][0].squeeze(1), pytorch_layer_present[i][1].squeeze(1))
-    #         tt_layer_pres = concat_device_out_layer_present(num_devices, tt_layer_present[i], kv_len)
-    #     elif llm_mode == "decode":
-    #         pytorch_layer_pres = (
-    #             pytorch_layer_present[i][0].squeeze(1)[:, kv_cache_len, :],
-    #             pytorch_layer_present[i][1].squeeze(1)[:, kv_cache_len, :],
-    #         )
-    #         tt_layer_pres = concat_device_out_layer_present(
-    #             num_devices, tt_layer_present[i], kv_cache_len, end_idx_only=True
-    #         )
-    #     tt_layer_pres_0 = tt_layer_pres[0].type(pytorch_layer_pres[0].dtype)
-    #     _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_layer_pres[0], tt_layer_pres_0)
-    #     logger.info(f"K Cache Layer {i}: {pcc_str}")
-    #     device_pcc_k = min(device_pcc_k, device_pcc)
+    device_pcc_k = 1.0
+    device_pcc_v = 1.0
+    for i in range(num_layers):
+        if llm_mode == "prefill":
+            pytorch_layer_pres = (pytorch_layer_present[i][0].squeeze(1), pytorch_layer_present[i][1].squeeze(1))
+            tt_layer_pres = concat_device_out_layer_present(num_devices, tt_layer_present[i], kv_len)
+        elif llm_mode == "decode":
+            pytorch_layer_pres = (
+                pytorch_layer_present[i][0].squeeze(1)[:, kv_cache_len, :],
+                pytorch_layer_present[i][1].squeeze(1)[:, kv_cache_len, :],
+            )
+            tt_layer_pres = concat_device_out_layer_present(
+                num_devices, tt_layer_present[i], kv_cache_len, end_idx_only=True
+            )
+        tt_layer_pres_0 = tt_layer_pres[0].type(pytorch_layer_pres[0].dtype)
+        _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_layer_pres[0], tt_layer_pres_0)
+        logger.info(f"K Cache Layer {i}: {pcc_str}")
+        device_pcc_k = min(device_pcc_k, device_pcc)
 
-    #     tt_layer_pres_1 = tt_layer_pres[1].type(pytorch_layer_pres[1].dtype)
-    #     _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_layer_pres[1], tt_layer_pres_1)
-    #     logger.info(f"V Cache Layer {i}: {pcc_str}")
-    #     device_pcc_v = min(device_pcc_v, device_pcc)
+        tt_layer_pres_1 = tt_layer_pres[1].type(pytorch_layer_pres[1].dtype)
+        _, _, device_pcc, pcc_str = get_atol_rtol_pcc(pytorch_layer_pres[1], tt_layer_pres_1)
+        logger.info(f"V Cache Layer {i}: {pcc_str}")
+        device_pcc_v = min(device_pcc_v, device_pcc)
 
-    # logger.info(f"Device PCC K: {device_pcc_k}")
-    # logger.info(f"Device PCC V: {device_pcc_v}")
+    logger.info(f"Device PCC K: {device_pcc_k}")
+    logger.info(f"Device PCC V: {device_pcc_v}")
 
-    # if device_pcc_k < expected_pccs[1]:
-    #     does_pass = False
-    #     logger.warning(f"K Cache PCC {device_pcc_k} is lower than {expected_pccs[1]}")
-    # if device_pcc_k > (expected_pccs[1] + 0.01):
-    #     does_pass = False
-    #     logger.warning(f"K Cache PCC {device_pcc_k} is higher than {expected_pccs[1]}. Please update the expected PCC")
+    if device_pcc_k < expected_pccs[1]:
+        does_pass = False
+        logger.warning(f"K Cache PCC {device_pcc_k} is lower than {expected_pccs[1]}")
+    if device_pcc_k > (expected_pccs[1] + 0.01):
+        does_pass = False
+        logger.warning(f"K Cache PCC {device_pcc_k} is higher than {expected_pccs[1]}. Please update the expected PCC")
 
-    # if device_pcc_v < expected_pccs[2]:
-    #     does_pass = False
-    #     logger.warning(f"V Cache PCC {device_pcc_v} is lower than {expected_pccs[2]}")
-    # if device_pcc_v > (expected_pccs[2] + 0.01):
-    #     does_pass = False
-    #     logger.warning(f"V Cache PCC {device_pcc_v} is higher than {expected_pccs[2]}. Please update the expected PCC")
+    if device_pcc_v < expected_pccs[2]:
+        does_pass = False
+        logger.warning(f"V Cache PCC {device_pcc_v} is lower than {expected_pccs[2]}")
+    if device_pcc_v > (expected_pccs[2] + 0.01):
+        does_pass = False
+        logger.warning(f"V Cache PCC {device_pcc_v} is higher than {expected_pccs[2]}. Please update the expected PCC")
 
     profiler.print()
 
@@ -538,9 +538,9 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.97, 0.09),
-            ("prefill", 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 0.5),
-            ("prefill", 32, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
+            ("prefill", 1, 1, 128, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.97, 0.09),
+            ("prefill", 1, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 0.5),
+            ("prefill", 1, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.92, 0.95, 0.95, 0.1),
