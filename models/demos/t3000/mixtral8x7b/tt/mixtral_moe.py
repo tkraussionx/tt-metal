@@ -44,6 +44,7 @@ class TtMoeLayer(torch.nn.Module):
             device=device_mesh,
             mesh_mapper=ShardTensorToMesh(device_mesh, dim=3),
         )
+
         top8_mask = torch.full((1, 1, 1, 64), fill_value=torch.finfo(torch.float).min)
         top8_mask[:, :, :, 1:9] = 0.0
         self.top8_mask_11B_64 = ttnn.from_torch(
@@ -53,8 +54,9 @@ class TtMoeLayer(torch.nn.Module):
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
+        self.top8_mask_11B_64 = ttnn.sum(self.top8_mask_11B_64, dim=2)
 
-        top2_mask = torch.full((1, 1, 32, 32), fill_value=torch.finfo(torch.float).min)
+        top2_mask = torch.full((1, 1, 1, 32), fill_value=torch.finfo(torch.float).min)
         top2_mask[:, :, :, :2] = 0.0
         self.top2_mask_11BB = ttnn.from_torch(
             top2_mask,
@@ -63,8 +65,9 @@ class TtMoeLayer(torch.nn.Module):
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
+        self.top2_mask_11BB = ttnn.sum(self.top2_mask_11BB, dim=2)
 
-    def forward(self, inputs):
+    def forward_prefill(self, inputs):
         """
         inputs: (seq_len, 1, batch, hidden_dim)
 
@@ -75,7 +78,7 @@ class TtMoeLayer(torch.nn.Module):
         """
         input_i_1SBH = inputs
         expert_i_HH = self.experts
-        batch = input_i_1SBH.shape[2]
+        seqlen = input_i_1SBH.shape[2]
         # get logits for the experts
         gate_logits_1SB8 = ttnn.linear(
             input_i_1SBH,
@@ -83,23 +86,36 @@ class TtMoeLayer(torch.nn.Module):
             memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
             use_1d_systolic_array=True,
-            core_grid=ttnn.CoreGrid(y=1, x=8),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
             dtype=ttnn.bfloat16,
         )
+
+        print("gate_logits_1SB8", gate_logits_1SB8)
+
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
         ttl_topk_values, ttl_topk_indices = ttnn.experimental.operations.primary.topk(gate_logits_1SB8, 32)
-        self.top2_mask_11BB = ttnn.repeat(self.top2_mask_11BB, [1, 1, batch / 32, 1])
+
+        print("topk", ttl_topk_values, ttl_topk_indices)
+        self.expert_mask_11BB = ttnn.experimental.tensor.repeat(self.expert_mask_11BB, [1, 1, int(seqlen / 32), 1])
         ttl_topk_values = ttnn.add(ttl_topk_values, self.top2_mask_11BB)
         mask_B2 = ttnn.eq(self.expert_mask_11BB, ttl_topk_indices)
+        print("mask, ", mask_B2)
         weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=3)
-
+        print("weights", weights_1SB1)
         # MLP and masking
-        weights = expert_i_HH(input_i_1SBH)
+        weights = input_i_1SBH  # expert_i_HH.forward_prefill(input_i_1SBH)
+        print("weights", weights)
         results_11BH = ttnn.mul(weights, weights_1SB1)
-
+        print("results", results_11BH)
         # all gather
-        output_11BH_gathered = ttnn.all_gather(results_11BH, dim=1, num_links=1)
+        output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
+        print("output", output_11BH_gathered.shape)
         # sum on each device
-        output_11BH_gathered = ttnn.sum(output_11BH_gathered, dim=1)
+        output_11BH_gathered = ttnn.reshape(output_11BH_gathered, ttnn.Shape([1, 1, 8, seqlen * 4096]))
+        print("output", output_11BH_gathered.shape)
+        output_11BH_gathered = ttnn.sum(output_11BH_gathered, dim=2)
+        print("output", output_11BH_gathered.shape)
+        output_11BH_gathered = ttnn.reshape(output_11BH_gathered, ttnn.Shape([1, 1, seqlen, 4096]))
+        print("output", output_11BH_gathered.shape)
         return output_11BH_gathered
