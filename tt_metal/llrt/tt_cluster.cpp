@@ -179,20 +179,18 @@ void Cluster::generate_cluster_descriptor() {
     }
 
     uint32_t total_num_hugepages = get_num_hugepages();
-    // TODO (abhullar): ignore hugepage set up for BH bringup
-    TT_FATAL(
-        this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
-        "Machine setup error: Insufficient number of hugepages available, expected one per device ({}) but have {}. "
-        "Increase number of hugepages!",
-        this->cluster_desc_->get_all_chips().size(),
-        total_num_hugepages);
     if (this->is_tg_cluster_) {
         // TODO: don't think this check is correct, we want to have total num hugepages == num chips even for Galaxy
         TT_FATAL(total_num_hugepages >= this->cluster_desc_->get_all_chips().size()/4,
             "Machine setup error: Insufficient number of hugepages available, expected >= {} for {} devices but have {}. Increase number of hugepages!", this->cluster_desc_->get_all_chips().size()/4, this->cluster_desc_->get_all_chips().size(), total_num_hugepages);
     } else {
-        TT_FATAL(total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
-            "Machine setup error: Insufficient number of hugepages available, expected one per device ({}) but have {}. Increase number of hugepages!", this->cluster_desc_->get_all_chips().size(), total_num_hugepages);
+    // TODO (abhullar): ignore hugepage set up for BH bringup
+        TT_FATAL(
+            this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
+            "Machine setup error: Insufficient number of hugepages available, expected one per device ({}) but have {}. "
+            "Increase number of hugepages!",
+            this->cluster_desc_->get_all_chips().size(),
+            total_num_hugepages);
     }
 }
 
