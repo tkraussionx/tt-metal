@@ -285,7 +285,8 @@ class TtMistralAttention(nn.Module):
                 core_grid=self.grid_size,
             )
 
-            # ttnn.deallocate(x)
+            # GH Issue: 7822
+            ttnn.deallocate(x)
 
             ###
             # Reshape and rotary embeddings

@@ -49,7 +49,9 @@ class TtModelArgs:
         "DEC_SKIP_OUTPUT",
     )
 
-    def __init__(self, device, model_base_path="/mnt/MLPerf/ttnn/models/demos/mistral7b", instruct=False):
+    def __init__(
+        self, device, model_base_path="/home/eyon/mistral7b/mistral7b_generative/mistral-7B-v0.1", instruct=False
+    ):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         if instruct:  # Load instruct weights and tokenizer (Mistral-7B-Instruct-v0.2)
