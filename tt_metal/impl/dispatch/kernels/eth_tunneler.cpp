@@ -97,7 +97,7 @@ void kernel_main() {
 
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
     noc_init();
-
+    DPRINT << "x: " << (uint32_t) my_x[0] << " y: " << (uint32_t)  my_y[0] << "Running ETH Tunnel" << ENDL();
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
     test_results[PQ_TEST_MISC_INDEX+1] = 0xbb000000;

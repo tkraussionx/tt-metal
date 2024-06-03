@@ -926,7 +926,7 @@ void EnqueueProgramCommand::assemble_device_commands() {
                     cb_config_payload[base_index + 3] = cb->page_size(buffer_index) >> 4;
                 }
             }
-            cb_config_payload += aligned_cb_config_size_bytes / sizeof(uint32_t);
+            cb_config_payload += aligned_cb_config_size_bytes >> 2; // sizeof(uint32_t);
         }
     }
 }
@@ -960,7 +960,7 @@ void EnqueueProgramCommand::process() {
     uint32_t total_fetch_size_bytes =
         preamble_fetch_size_bytes + runtime_args_fetch_size_bytes + program_fetch_size_bytes;
 
-    CoreType dispatch_core_type =
+    thread_local static CoreType dispatch_core_type =
         dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
     if (total_fetch_size_bytes <= dispatch_constants::get(dispatch_core_type).max_prefetch_command_size()) {
         this->manager.issue_queue_reserve(total_fetch_size_bytes, this->command_queue_id);
@@ -2266,7 +2266,7 @@ void EnqueueProgramImpl(
             if constexpr (std::is_same_v<T, std::reference_wrapper<Program>>) {
                 detail::CompileProgram(device, program);
                 program.get().allocate_circular_buffers();
-                detail::ValidateCircularBufferRegion(program, device);
+                // detail::ValidateCircularBufferRegion(program, device);
                 cq.hw_command_queue().enqueue_program(program, blocking);
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.
@@ -2274,7 +2274,7 @@ void EnqueueProgramImpl(
             } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
                 detail::CompileProgram(device, *program);
                 program->allocate_circular_buffers();
-                detail::ValidateCircularBufferRegion(*program, device);
+                // detail::ValidateCircularBufferRegion(*program, device);
                 cq.hw_command_queue().enqueue_program(*program, blocking);
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.

@@ -262,12 +262,12 @@ def test_Llama_perf_host(
     expected_inference_time,
     t3k_device_mesh,
     use_llama_cpp,
-    n_layers=2,
+    n_layers=80,
     n_devices=8,
     emulated=False,
 ):
-    if generation_length == 2048:
-        pytest.skip("Skipping 2048 test for now. segfault issue #8637")
+    # if generation_length == 2048:
+    #     pytest.skip("Skipping 2048 test for now. segfault issue #8637")
     batch = 32
     seq_len = 1
     model_config = get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=n_devices, seq_len=seq_len)

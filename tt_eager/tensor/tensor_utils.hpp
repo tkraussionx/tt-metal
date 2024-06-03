@@ -97,15 +97,6 @@ std::vector<Device*> get_devices(const Tensor& multi_device_tensor);
 
 uint32_t num_buffers_in_tensor(const Tensor& tensor);
 
-Tensor get_shard_for_device(
-    const Tensor& tensor, Device* target_device, std::optional<int> buffer_index = std::nullopt);
-
-void insert_buffer_and_shape_for_device(
-    Device* target_device,
-    const Tensor& shard,
-    Tensor& tensor_to_modify,
-    std::optional<int> buffer_index = std::nullopt);
-
 Tensor copy_borrowed_tensor_in_async_mode(Device* worker, const Tensor& tensor);
 
 template <typename TensorContainer>
@@ -168,6 +159,64 @@ inline uint32_t get_batch_size(const T& shape) {
         result *= shape[i];
     }
     return result;
+}
+
+inline Tensor get_shard_for_device(const Tensor& tensor, Device* target_device, std::optional<int> buffer_index = std::nullopt) {
+    ZoneScopedN("GetShardForDevice");
+    return std::visit(
+        [target_device, buffer_index, &tensor](auto&& s) {
+            using T = std::decay_t<decltype(s)>;
+            // Stalling reads for tensor data-type and layout are needed here
+            // since some worker might have raced ahead to these lookups, while
+            // another worker is populating this metadata.
+            if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                return Tensor{
+                    DeviceStorage{s.get_buffer_for_device(target_device)},
+                    s.get_tensor_shape_for_device(target_device),
+                    tensor.get_dtype(),
+                    tensor.get_layout()};
+            } else if constexpr (std::is_same_v<T, MultiDeviceHostStorage>) {
+                return Tensor{
+                    OwnedStorage{s.get_buffer(buffer_index.value())},
+                    s.get_tensor_shape(buffer_index.value()),
+                    tensor.get_dtype(),
+                    tensor.get_layout()};
+            } else if constexpr (
+                std::is_same_v<T, OwnedStorage> || std::is_same_v<T, BorrowedStorage> ||
+                std::is_same_v<T, DeviceStorage>) {
+                return tensor;
+            } else {
+                TT_FATAL(false, "get_shard_for_device only supports multi-device or device tensors");
+            }
+        },
+        tensor.tensor_attributes->storage);
+}
+
+inline void insert_buffer_and_shape_for_device(
+    Device* target_device, const Tensor& shard, Tensor& tensor_to_modify, std::optional<int> buffer_index = std::nullopt) {
+    ZoneScopedN("InsertBufferAndShapeForDevice");
+    std::visit(
+        [target_device, &shard, &tensor_to_modify, buffer_index](auto&& s) {
+            using T = std::decay_t<decltype(s)>;
+            if constexpr (std::is_same_v<T, MultiDeviceHostStorage>) {
+                s.insert_buffer_and_shape_for_device(
+                    buffer_index.value(),
+                    std::get<OwnedStorage>(shard.tensor_attributes->storage).get_buffer(),
+                    shard.tensor_attributes->shape.value());
+            } else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                s.insert_buffer_and_shape_for_device(
+                    target_device,
+                    std::get<DeviceStorage>(shard.tensor_attributes->storage).get_buffer(),
+                    shard.tensor_attributes->shape.value());
+            } else if constexpr (std::is_same_v<T, OwnedStorage>) {
+                s.insert_buffer(std::get<OwnedStorage>(shard.tensor_attributes->storage).get_buffer());
+            } else if constexpr (std::is_same_v<T, DeviceStorage>) {
+                s.insert_buffer(std::get<DeviceStorage>(shard.tensor_attributes->storage).get_buffer());
+            } else {
+                TT_FATAL(false, "Unsupported storage in insert_buffer_and_shape_for_device");
+            }
+        },
+        tensor_to_modify.tensor_attributes->storage);
 }
 
 DistributedTensorConfig get_distributed_tensor_config_from_tensor(const Tensor& tensor);

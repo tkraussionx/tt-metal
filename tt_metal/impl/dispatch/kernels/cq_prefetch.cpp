@@ -246,7 +246,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // By here, prefetch_q_ready must be false
             // Nothing to fetch, nothing pending, nothing available, stall on host
             DEBUG_STATUS("HQW");
-            DPRINT << "fetch_q_get_cmds stall" << ENDL();
+            DPRINT << "x: " << (uint32_t) my_x[0] << " y: " << (uint32_t)  my_y[0] <<  "fetch_q_get_cmds stall" << ENDL();
             while ((fetch_size = *prefetch_q_rd_ptr) == 0);
             fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
             DEBUG_STATUS("HQD");
@@ -1112,7 +1112,7 @@ void kernel_main_hd() {
 }
 
 void kernel_main() {
-    DPRINT << "prefetcher_" << is_h_variant << is_d_variant << ": start" << ENDL();
+    DPRINT << "x: " << (uint32_t) my_x[0] << " y: " << (uint32_t)  my_y[0] << " prefetcher_" << is_h_variant << is_d_variant << ": start" << ENDL();
 
     if (is_h_variant and is_d_variant) {
         kernel_main_hd();

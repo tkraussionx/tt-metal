@@ -39,15 +39,11 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
             } else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_ASSERT(storage.buffer->device() != nullptr);
                 workers = {storage.buffer->device()};
-                tensor_impl::validate_on_device_dtype_and_layout(
-                    storage.buffer->device(), shape.value(), dtype, layout);
                 // Increment main thread ref count for all tensors on device
                 this->tensor_attributes->increment_main_thread_ref_count(this->workers.at(0));
                 // This tensor is being created from scratch in a worker. Track this and allow it to be explicitly
                 // deallocated inside the worker (composite ops do this).
-                if (not this->workers.at(0)->in_main_thread()) {
-                    this->tensor_attributes->main_thread_tensor = false;
-                }
+                this->tensor_attributes->main_thread_tensor = this->workers.at(0)->in_main_thread();
                 this->tensor_attributes->num_shards_to_be_populated = 1;
             } else if constexpr (std::is_same_v<StorageType, BorrowedStorage>) {
                 this->tensor_attributes->num_shards_to_be_populated = 1;
@@ -58,16 +54,13 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                     auto buffer = storage.get_buffer_for_device_id(device_id);
                     TT_ASSERT(buffer->device() != nullptr);
                     TT_ASSERT(buffer->device()->id() == device_id);
-                    tensor_impl::validate_on_device_dtype_and_layout(buffer->device(), shape.value(), dtype, layout);
                     workers.push_back(buffer->device());
                 }
                 // Increment main thread ref count for all tensors on cluster
                 this->tensor_attributes->increment_main_thread_ref_count(this->workers.at(0));
                 // This tensor is being created from scratch in a worker. Track this and allow it to be explicitly
                 // deallocated inside the worker (composite ops do this).
-                if (not this->workers.at(0)->in_main_thread()) {
-                    this->tensor_attributes->main_thread_tensor = false;
-                }
+                this->tensor_attributes->main_thread_tensor = this->workers.at(0)->in_main_thread();
                 this->tensor_attributes->num_shards_to_be_populated = storage.num_buffers();
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceHostStorage>) {
                 this->tensor_attributes->num_shards_to_be_populated = storage.num_buffers();

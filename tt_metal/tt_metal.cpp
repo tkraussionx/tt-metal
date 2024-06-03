@@ -254,12 +254,12 @@ std::map<chip_id_t, Device *> CreateDevices(
     ZoneScoped;
     std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
     // Construct NUMA Node to CPU core map
-    std::unordered_set<uint32_t> main_thread_cores = {0, 1, 2, 16, 17, 18, 8, 9, 10, 24, 25, 26};
+    // std::unordered_set<uint32_t> main_thread_cores = {0, 1, 2, 3, 4, 5, 16, 17, 18, 19, 20, 21, 8, 9, 10, 11, 12, 13, 24, 25, 26, 27, 28, 29};
     std::unordered_set<uint32_t> free_cores = {};
     auto cpu_cores_per_numa_node = device_cpu_allocator::get_cpu_cores_per_numa_node(free_cores);
-    for (auto core : main_thread_cores) {
-        free_cores.erase(core);
-    }
+    // for (auto core : main_thread_cores) {
+    //     free_cores.erase(core);
+    // }
 
     for (const auto &device_id : device_ids) {
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
@@ -281,7 +281,7 @@ std::map<chip_id_t, Device *> CreateDevices(
         }
     }
     // Bind main thread to cores not being used by workers.
-    device_cpu_allocator::bind_current_thread_to_free_cores(main_thread_cores);
+    device_cpu_allocator::bind_current_thread_to_free_cores(free_cores);
 
     // TODO: need to only enable routing for used mmio chips
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);

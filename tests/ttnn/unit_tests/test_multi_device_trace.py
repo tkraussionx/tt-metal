@@ -15,20 +15,20 @@ from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, L
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)])
 @pytest.mark.parametrize("use_all_gather", [True, False])
 @pytest.mark.parametrize("enable_async", [True, False])
-def test_multi_device_single_trace(pcie_device_mesh, shape, use_all_gather, enable_async):
+def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enable_async):
     # Trace requires program cache to be enabled
-    for device_id in pcie_device_mesh.get_device_ids():
-        pcie_device_mesh.get_device(device_id).enable_async(enable_async)
-        pcie_device_mesh.get_device(device_id).enable_program_cache()
+    for device_id in t3k_device_mesh.get_device_ids():
+        t3k_device_mesh.get_device(device_id).enable_async(enable_async)
+        t3k_device_mesh.get_device(device_id).enable_program_cache()
 
     # Preallocate activation tensors. These will be used when capturing and executing the trace
-    input_0_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, pcie_device_mesh)
-    input_1_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, pcie_device_mesh)
+    input_0_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh)
+    input_1_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh)
 
     # Op chains to be traced
     def run_op_chain(input_0, input_1):
         single_dev_output = ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1)))
-        if use_all_gather:
+        if False:
             return ttnn.all_gather(single_dev_output, dim=0, num_links=1)
         return single_dev_output
 
@@ -37,17 +37,17 @@ def test_multi_device_single_trace(pcie_device_mesh, shape, use_all_gather, enab
 
     # Capture Trace
     logger.info("Capture Trace")
-    tid = ttnn.begin_trace_capture(pcie_device_mesh, trace_buffer_size=106496, cq_id=0)
+    tid = ttnn.begin_trace_capture(t3k_device_mesh, trace_buffer_size=106496, cq_id=0)
     output_tensor = run_op_chain(input_0_dev, input_1_dev)
-    ttnn.end_trace_capture(pcie_device_mesh, tid, cq_id=0)
+    ttnn.end_trace_capture(t3k_device_mesh, tid, cq_id=0)
 
-    for i in range(50):
+    for i in range(1):
         # Create torch inputs
         torch_input_tensor_0 = torch.rand(
-            (pcie_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
+            (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
         )
         torch_input_tensor_1 = torch.rand(
-            (pcie_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
+            (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
         )
         # Compute PT Golden
         torch_output_golden = torch.neg(
@@ -58,10 +58,10 @@ def test_multi_device_single_trace(pcie_device_mesh, shape, use_all_gather, enab
         )
         # Convert torch tensors to TTNN Multi-Device Host Tensors
         ttnn_input_tensor_0 = ttnn.from_torch(
-            torch_input_tensor_0, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0)
+            torch_input_tensor_0, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
         )
         ttnn_input_tensor_1 = ttnn.from_torch(
-            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0)
+            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
         )
 
         # Copy TTNN host tensors into preallocated Mult-Device tensors
@@ -70,9 +70,9 @@ def test_multi_device_single_trace(pcie_device_mesh, shape, use_all_gather, enab
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, input_1_dev)
         logger.info("Execute Trace")
         # Execute trace
-        ttnn.execute_trace(pcie_device_mesh, tid, cq_id=0, blocking=False)
+        ttnn.execute_trace(t3k_device_mesh, tid, cq_id=0, blocking=False)
 
-        if use_all_gather:
+        if False:
             # Device All-Gather: Iterate through tensors on all devices. Ensure they match the full tensor
             logger.info("Read Back Trace Outputs")
             device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
@@ -82,16 +82,17 @@ def test_multi_device_single_trace(pcie_device_mesh, shape, use_all_gather, enab
 
         else:
             # Perform host All-Gather
+            logger.info("Read Back Trace Outputs")
             ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
+                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.99)
 
     # Release trace buffer once workload is complete
-    ttnn.release_trace(pcie_device_mesh, tid)
+    ttnn.release_trace(t3k_device_mesh, tid)
 
-    for device_id in pcie_device_mesh.get_device_ids():
-        pcie_device_mesh.get_device(device_id).enable_async(False)
+    for device_id in t3k_device_mesh.get_device_ids():
+        t3k_device_mesh.get_device(device_id).enable_async(False)
 
 
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)])

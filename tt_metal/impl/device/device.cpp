@@ -467,7 +467,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_physical_core,
                 std::map<string, string> {}
             );
-
+            std::cout << "prefetch physical core: " << prefetch_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
@@ -529,7 +529,7 @@ void Device::compile_command_queue_programs() {
 
         CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_core, dispatch_core_type);
         CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
-
+        std::cout << "prefetch physical core: " << prefetch_core.str() << std::endl;
         log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
         log_debug(LogDevice, "Prefetch H logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
         log_debug(LogDevice, "Dispatch H logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
@@ -1009,7 +1009,6 @@ void Device::compile_command_queue_programs() {
             dispatch_physical_core,
             std::map<string, string> {}
         );
-
         log_debug(LogDevice, "run prefertch_d at {}", prefetch_d_core.str());
 
         std::vector<uint32_t> dispatch_d_compile_args = {
