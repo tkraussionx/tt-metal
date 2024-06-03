@@ -75,36 +75,57 @@ class TtLlamaMLP_optimized:
             padded_w2[:, :, :H4, :] = self.state_dict[w2_str].transpose(-2, -1)
             padded_w3[:, :, :, :H4] = self.state_dict[w3_str].transpose(-2, -1)
 
-        w1_ttnn = ttnn.as_tensor(
+        # w1: 8k x 4k. width-sharded on 12 banks, 4224 over 12 banks.
+        device = self.device_mesh.get_device(0)
+        weight_grid = ttnn.experimental.tensor.CoreRangeSet(
+            {
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 0),
+                    ttnn.experimental.tensor.CoreCoord(device.dram_grid_size().x - 1, device.dram_grid_size().y - 1),
+                )
+            }
+        )
+        w1_shard_shape = (8192, 4224 // 12)  # padded cols to divide by 12
+        w1_shard_spec = ttnn.ShardSpec(weight_grid, w1_shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        w1_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.DRAM, w1_shard_spec)
+        self.w1 = ttnn.from_torch(
             padded_w1,
             dtype=w1_dtype,
             layout=ttnn.TILE_LAYOUT,
             device=self.device_mesh,
-            memory_config=self.model_config["DRAM_MEMCFG"],
+            # memory_config=self.model_config["DRAM_MEMCFG"],
+            memory_config=w1_mem_config,
             mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=3),
-            cache_file_name=self.cache_path / w1_str,
+            # cache_file_name=self.cache_path / w1_str,
         )
-        self.w1 = ttnn.to_device(w1_ttnn, self.device_mesh)
-        w2_ttnn = ttnn.as_tensor(
+        # breakpoint()
+        # self.w1 = ttnn.to_device(w1_ttnn, self.device_mesh)
+
+        w2_shard_shape = (32768, 96)  # Padded cols 1024/12
+        w2_shard_spec = ttnn.ShardSpec(weight_grid, w2_shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        w2_memory_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.DRAM, w2_shard_spec)
+        self.w2 = ttnn.as_tensor(
             padded_w2,
             dtype=w2_dtype,
             layout=ttnn.TILE_LAYOUT,
             device=self.device_mesh,
-            memory_config=self.model_config["DRAM_MEMCFG"],
+            # memory_config=self.model_config["DRAM_MEMCFG"],
+            memory_config=w2_memory_config,
             mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=3),
-            cache_file_name=self.cache_path / w2_str,
+            # cache_file_name=self.cache_path / w2_str,
         )
-        self.w2 = ttnn.to_device(w2_ttnn, self.device_mesh)
-        w3_ttnn = ttnn.as_tensor(
+        # self.w2 = ttnn.to_device(w2_ttnn, self.device_mesh)
+        self.w3 = ttnn.from_torch(
             padded_w3,
             dtype=w3_dtype,
             layout=ttnn.TILE_LAYOUT,
             device=self.device_mesh,
-            memory_config=self.model_config["DRAM_MEMCFG"],
+            # memory_config=self.model_config["DRAM_MEMCFG"],
+            memory_config=w1_mem_config,
             mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=3),
-            cache_file_name=self.cache_path / w3_str,
+            # cache_file_name=self.cache_path / w3_str,
         )
-        self.w3 = ttnn.to_device(w3_ttnn, self.device_mesh)
+        # self.w3 = ttnn.to_device(w3_ttnn, self.device_mesh)
 
     def prepare_inputs(self, x):
         x_multichip = ttnn.from_torch(
@@ -189,19 +210,80 @@ class TtLlamaMLP_optimized:
         w1_outs = []
         w3_outs = []
 
-        w1_out = tt_lib.operations.primary.matmul_1d(
+        # They only used 8 cores for input. Let's first see if 32 works.
+
+        sharded_output_memcfg = ttnn.experimental.tensor.MemoryConfig(
+            memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+            buffer_type=ttnn.experimental.tensor.BufferType.L1,
+        )
+        w1_prog_cfg = (
+            program_config
+        ) = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+            in0_block_w=8,
+            out_subblock_h=1,
+            out_subblock_w=4,
+            per_core_M=1,
+            per_core_N=4,
+            fuse_batch=True,
+            fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+            # fused_activation=None,
+        )
+
+        w3_prog_cfg = (
+            program_config
+        ) = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+            in0_block_w=8,
+            out_subblock_h=1,
+            out_subblock_w=4,
+            per_core_M=1,
+            per_core_N=4,
+            fuse_batch=True,
+            # fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+            fused_activation=None,
+        )
+
+        # x_reshard = ttnn.experimental.tensor.reshard(x, ttnn.MemoryConfig(
+        #     memory_layout=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #     buffer_type=ttnn.BufferType.L1,
+        #     shard_spec=ttnn.ShardSpec(
+        #         ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 0))}),
+        #             (32, 1024),
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         )
+        #     )
+        # )
+
+        # breakpoint()
+        # TODO: Fix output sharding
+        w1_out = ttnn.matmul(
             x,
             self.w1,
-            program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+            # program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
+            program_config=w1_prog_cfg,
+            memory_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
         )
 
-        w3_out = tt_lib.operations.primary.matmul_1d(
+        # # w1_out = ttnn.experimental.tensor.reshard(w1_out, self.model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"])
+        # w1_out = ttnn.experimental.tensor.reshard(w1_out, ttnn.MemoryConfig(
+        #     memory_layout=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #     buffer_type=ttnn.BufferType.L1,
+        #     shard_spec=ttnn.ShardSpec(
+        #         ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
+        #             (32, 128),
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         )
+        #     )
+        # )
+
+        w3_out = ttnn.matmul(
             x,
             self.w3,
-            program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+            # program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
+            program_config=w3_prog_cfg,
+            memory_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG_LOFI"],
         )
         x.deallocate(True)
@@ -211,6 +293,7 @@ class TtLlamaMLP_optimized:
             w3_out,
             output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
             output_dtype=self.model_config["BFP8_DTYPE"],
+            # fused_activations=[tt_lib.tensor.FusibleActivation.SILU,],
         )
         w1_out.deallocate(True)
         w3_out.deallocate(True)
@@ -231,11 +314,24 @@ class TtLlamaMLP_optimized:
         #     hidden_states, sharded_mem_config=self.model_config["PADDED_MLP_ALL_GATHER_OUTPUT_MEMCFG"]
         # )
 
-        hidden_states = tt_lib.operations.primary.matmul_1d(
+        w2_prog_cfg = (
+            program_config
+        ) = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+            in0_block_w=32,
+            out_subblock_h=1,
+            out_subblock_w=1,
+            per_core_M=1,
+            per_core_N=1,
+            fuse_batch=True,
+            fused_activation=None,
+        )
+
+        hidden_states = ttnn.matmul(
             hidden_states,
             self.w2,
-            program_config=self.model_config["PADDED_FF2_MM_PROGCFG"],
-            output_mem_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
+            # program_config=self.model_config["PADDED_FF2_MM_PROGCFG"],
+            program_config=w2_prog_cfg,
+            memory_config=self.model_config["WIDTH_SHARDED_MEMCFG"],
             # output_dtype=self.model_config["BFP8_DTYPE"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )

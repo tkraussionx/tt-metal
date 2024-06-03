@@ -72,13 +72,14 @@ class Decode_FF1:
         self.prog_config = (
             w1_prog_cfg
         ) = program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
-            in0_block_w=32,
+            in0_block_w=8,
             out_subblock_h=1,
             out_subblock_w=4,
             per_core_M=1,
-            per_core_N=16,
+            per_core_N=4,
             fuse_batch=True,
-            fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+            # fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+            fused_activation=None,
         )
 
     def __call__(self, x):
@@ -98,9 +99,9 @@ class Decode_FF1:
 def run_decode_ff1(
     device,
 ):
-    n_cores = 8
+    n_cores = 32
     start_idx = (0, 0)
-    end_idx = (7, 0)
+    end_idx = (7, 3)
 
     inp_shape = (1, 32, DMODEL)
 
@@ -135,7 +136,7 @@ def run_decode_ff1(
     tt_out = tt_model(tt_in)
 
     pt_out = pt_in @ weight
-    pt_out = torch.nn.functional.silu(pt_out)
+    # pt_out = torch.nn.functional.silu(pt_out)
     tt_out = tt2torch_tensor(tt_out)
 
     passing, output_str = comp_pcc(pt_out, tt_out, 0.9998)
@@ -143,38 +144,108 @@ def run_decode_ff1(
 
 
 class Decode_FF2:
-    def __init__(self, device):
+    def __init__(self, device, weight):
+        weight_grid = ttnn.experimental.tensor.CoreRangeSet(
+            {
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 0),
+                    ttnn.experimental.tensor.CoreCoord(device.dram_grid_size().x - 1, device.dram_grid_size().y - 1),
+                )
+            }
+        )
+        w1_shard_shape = (32 * 1024, 96)  # padded cols to divide by 12
+        w1_shard_spec = ttnn.ShardSpec(weight_grid, w1_shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        w1_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.DRAM, w1_shard_spec)
+
         self.weight = torch2tt_tensor(
-            torch.randn(FF_DIM, DMODEL // 8),
+            weight,
             device,
-            tt_memory_config=DRAM_MEMCFG,
+            tt_memory_config=w1_mem_config,
             tt_dtype=BFP8_DTYPE,
         )
 
-        self.prog_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
+        # self.prog_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        #     compute_with_storage_grid_size=(8, 4),
+        #     in0_block_w=32,
+        #     out_subblock_h=1,
+        #     out_subblock_w=1,
+        #     per_core_M=1,
+        #     per_core_N=1,
+        #     fuse_batch=True,
+        #     fused_activation=None,
+        #     mcast_in0=True,
+        # )
+
+        self.prog_config = (
+            w1_prog_cfg
+        ) = program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
             in0_block_w=32,
             out_subblock_h=1,
-            out_subblock_w=1,
+            out_subblock_w=4,
             per_core_M=1,
-            per_core_N=1,
+            per_core_N=4,
             fuse_batch=True,
             fused_activation=None,
-            mcast_in0=True,
         )
 
     def __call__(self, x):
         # Assume interleaved input
-        ff_out = tt_lib.operations.primary.matmul_1d(
+        # ff_out = tt_lib.operations.primary.matmul_1d(
+        ff_out = ttnn.matmul(
             x,
             self.weight,
             program_config=self.prog_config,
-            output_mem_config=WIDTH_SHARDED_MEMCFG,
-            output_dtype=BFP8_DTYPE,
+            memory_config=WIDTH_SHARDED_MEMCFG,
+            dtype=ttnn.bfloat16,
             compute_kernel_config=COMPUTE_KERNEL_CONFIG,
         )
 
         return ff_out
+
+
+def run_decode_ff2(
+    device,
+):
+    n_cores = 8
+    start_idx = (0, 0)
+    end_idx = (7, 0)
+
+    inp_shape = (1, 32, FF_DIM)
+
+    inp_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(*start_idx),
+                        ttl.tensor.CoreCoord(*end_idx),
+                    ),
+                }
+            ),
+            [
+                inp_shape[-2],
+                inp_shape[-1] // n_cores,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+    weight = torch.randn(FF_DIM, DMODEL // 8)
+    pt_in = torch.randn(*inp_shape)
+    tt_in = torch2tt_tensor(pt_in, device, tt_memory_config=inp_mem_config)
+
+    # TT hardware execution -------------------------------------------------------------
+    tt_model = Decode_FF2(device, weight)
+
+    tt_out = tt_model(tt_in)
+
+    pt_out = pt_in @ weight
+    tt_out = tt2torch_tensor(tt_out)
+
+    passing, output_str = comp_pcc(pt_out, tt_out, 0.9998)
+    print(output_str)
 
 
 class Prefill_MLP_128:
@@ -462,45 +533,6 @@ def run_prefill_MLP_2k(
     tt_model = Prefill_MLP_2k(device)
 
     tt_out = tt_model(tt_in, tt_in_allgather)
-
-
-def run_decode_ff2(
-    device,
-):
-    n_cores = 32
-    start_idx = (0, 0)
-    end_idx = (7, 3)
-
-    inp_shape = (1, 32, FF_DIM)
-
-    inp_mem_config = ttl.tensor.MemoryConfig(
-        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-        ttl.tensor.BufferType.L1,
-        ttl.tensor.ShardSpec(
-            ttl.tensor.CoreRangeSet(
-                {
-                    ttl.tensor.CoreRange(
-                        ttl.tensor.CoreCoord(*start_idx),
-                        ttl.tensor.CoreCoord(*end_idx),
-                    ),
-                }
-            ),
-            [
-                inp_shape[-2],
-                inp_shape[-1] // n_cores,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
-        ),
-    )
-
-    pt_in = torch.randn(*inp_shape)
-    tt_in = torch2tt_tensor(pt_in, device, tt_memory_config=inp_mem_config)
-
-    # TT hardware execution -------------------------------------------------------------
-    tt_model = Decode_FF2(device)
-
-    tt_out = tt_model(tt_in)
 
 
 def test_decode_ff1(
