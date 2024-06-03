@@ -806,10 +806,11 @@ Device *CreateDevice(
     std::unordered_set<uint32_t> free_cores = {};
     auto cpu_cores_per_numa_node = device_cpu_allocator::get_cpu_cores_per_numa_node(free_cores);
     int core_assigned_to_device =
-        device_cpu_allocator::get_cpu_core_for_device_worker_thread(device_id, cpu_cores_per_numa_node, free_cores);
+        mmio_controlled_device_id % sysconf(_SC_NPROCESSORS_ONLN);
+        // device_cpu_allocator::get_cpu_core_for_device_worker_thread(device_id, cpu_cores_per_numa_node, free_cores);
     Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, core_assigned_to_device);
     // Bind main thread to cores not being used by workers.
-    device_cpu_allocator::bind_current_thread_to_free_cores(free_cores);
+    // device_cpu_allocator::bind_current_thread_to_free_cores(free_cores);
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     detail::InitDeviceProfiler(dev);
     return dev;
