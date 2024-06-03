@@ -25,6 +25,8 @@ uint32_t op_info_offset = 0;
 uint32_t my_noc_x = 0xFFF;
 uint32_t my_noc_y = 0xFFF;
 uint32_t tiles_proc_delay = 0;
+uint32_t wait_tiles_cnt = 0;
+uint32_t apply_cnt = 0;
 
 namespace ckernel
 {
