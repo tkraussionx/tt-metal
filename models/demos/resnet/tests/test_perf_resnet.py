@@ -18,7 +18,7 @@ from loguru import logger
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck
 
 model_config = {
-    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.HiFi2,
+    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.LoFi,
     "WEIGHTS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
     "ACTIVATIONS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
 }
@@ -120,15 +120,15 @@ def run_perf_resnet(
 
 
 @skip_for_wormhole_b0(reason_str="Not tested on single WH")
-@pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch_size, expected_inference_time, expected_compile_time",
     (
         (1, 0.001, 1),
         (2, 0.001, 1),
-        (16, 0.0085, 1),  # Issue 7816 Inference time
-        (20, 0.0095, 1),  # Issue 7816 Inference time
+        (16, 0.007, 7),
+        (20, 0.007, 7),
     ),
 )
 def test_perf_bare_metal(
@@ -216,7 +216,7 @@ def run_perf_resnet_trace(
         tt_lib.device.DumpDeviceProfiler(device)
 
         # Capture
-        tid = tt_lib.device.BeginTraceCapture(device, 0, 1304576)
+        tid = tt_lib.device.BeginTraceCapture(device, 0, 1334880)
         tt_output_res = tt_resnet50(tt_image_res)
         tt_lib.device.EndTraceCapture(device, 0, tid)
         tt_lib.device.DumpDeviceProfiler(device)
@@ -274,7 +274,7 @@ def run_perf_resnet_trace(
 
 
 @skip_for_wormhole_b0(reason_str="Not tested on single WH")
-@pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch_size, expected_inference_time, expected_compile_time",

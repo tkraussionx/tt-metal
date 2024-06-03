@@ -60,6 +60,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/bmm/multi_core_reuse_padding/bmm_op_multi_core_reuse_padding.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bmm/multi_core_reuse_mcast_1d_optimized/bmm_op_multi_core_reuse_mcast_1d_optimized.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bmm/multi_core_reuse_mcast_2d_optimized/bmm_op_multi_core_reuse_mcast_2d_optimized.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/bmm/multi_core_reuse_mcast_dram_sharded_optimized/bmm_op_multi_core_reuse_dram_sharded_optimized.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bmm/multi_core_reuse_optimized/bmm_op_multi_core_reuse_optimized.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/downsample/downsample_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/conv/conv_op.cpp
@@ -192,6 +193,8 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/rotate_half/rotate_half_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rotary_embedding/multi_core/rotary_embedding_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rotary_embedding/rotary_embedding_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rotary_embedding/multi_core/rotary_embedding_llama_op_multi_core.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rotary_embedding/rotary_embedding_llama_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/embeddings/embeddings_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/update_cache/multi_core/update_cache_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/update_cache/update_cache_op.cpp

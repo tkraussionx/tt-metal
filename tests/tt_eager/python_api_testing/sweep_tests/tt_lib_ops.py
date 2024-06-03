@@ -2187,6 +2187,23 @@ def eltwise_identity(
 
 
 @setup_host_and_device
+def eltwise_typecast(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.eltwise_typecast(t0, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
 def eltwise_rpow(
     x,
     *args,
@@ -2378,6 +2395,48 @@ eltwise_isneginf = make_unary_op(ttl.tensor.isneginf)
 eltwise_isnan = make_unary_op(ttl.tensor.isnan)
 eltwise_logical_not_unary = make_unary_op(ttl.tensor.logical_not_unary)
 eltwise_i0 = make_unary_op(ttl.tensor.i0)
+
+
+def make_binary_op_optional_output(ttl_tensor_binop):
+    @setup_host_and_device
+    def binary_op(
+        x,
+        y,
+        z,
+        *args,
+        device,
+        dtype,
+        layout,
+        input_mem_config,
+        **kwargs,
+    ):
+        t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+        t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+        t2 = setup_tt_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
+        ttl_tensor_binop(t0, t1, output_tensor=t2)
+
+        return tt2torch_tensor(t2)
+
+    return binary_op
+
+
+eltwise_add_optional = make_binary_op_optional_output(ttl.tensor.add)
+eltwise_sub_optional = make_binary_op_optional_output(ttl.tensor.sub)
+eltwise_mul_optional = make_binary_op_optional_output(ttl.tensor.mul)
+eltwise_bias_gelu_optional = make_binary_op_optional_output(ttl.tensor.bias_gelu)
+eltwise_squared_difference_optional = make_binary_op_optional_output(ttl.tensor.squared_difference)
+eltwise_ne_optional = make_binary_op_optional_output(ttl.tensor.ne)
+eltwise_eq_optional = make_binary_op_optional_output(ttl.tensor.eq)
+eltwise_gt_optional = make_binary_op_optional_output(ttl.tensor.gt)
+eltwise_lt_optional = make_binary_op_optional_output(ttl.tensor.lt)
+eltwise_gte_optional = make_binary_op_optional_output(ttl.tensor.gte)
+eltwise_lte_optional = make_binary_op_optional_output(ttl.tensor.lte)
+eltwise_ldexp_optional = make_binary_op_optional_output(ttl.tensor.ldexp)
+eltwise_logaddexp_optional = make_binary_op_optional_output(ttl.tensor.logaddexp)
+eltwise_logaddexp2_optional = make_binary_op_optional_output(ttl.tensor.logaddexp2)
+eltwise_logical_and_optional = make_binary_op_optional_output(ttl.tensor.logical_and)
+eltwise_logical_or_optional = make_binary_op_optional_output(ttl.tensor.logical_or)
+
 
 ################################################
 #################### Tensor ####################
@@ -2677,16 +2736,9 @@ def rmsnorm(x, y, z, *args, device, dtype, layout, input_mem_config, output_mem_
 @setup_host_and_device
 def groupnorm(x, y, z, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     x_shape = x.shape
-    y_shape = y.shape
-    z_shape = z.shape
 
-    target_y = torch.ones(x_shape)
-
-    target_y[: y_shape[0], : y_shape[1], : y_shape[2], : y_shape[3]] = y
-
-    target_z = torch.zeros(x_shape)
-
-    target_z[: z_shape[0], : z_shape[1], : z_shape[2], : z_shape[3]] = z
+    target_y = y.expand(x_shape)
+    target_z = z.expand(x_shape)
 
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_tt_tensor(target_y, device, layout[1], input_mem_config[1], dtype[1])

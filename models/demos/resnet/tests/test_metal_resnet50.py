@@ -118,7 +118,7 @@ golden_pcc = {
 
 
 @skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
-@pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize("batch_size", [1, 2, 16, 20], ids=["batch_1", "batch_2", "batch_16", "batch_20"])
 @pytest.mark.parametrize(
     "weights_dtype",
@@ -222,7 +222,7 @@ def test_run_resnet50_inference(
 
 
 @skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
-@pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize("batch_size", [1, 2, 16, 20], ids=["batch_1", "batch_2", "batch_16", "batch_20"])
 @pytest.mark.parametrize(
     "weights_dtype",
@@ -306,7 +306,7 @@ def test_run_resnet50_trace_inference(
         # Compile
         tt_resnet50(tt_image_res)
         # Trace
-        tid = tt_lib.device.BeginTraceCapture(device, 0, 1304576)
+        tid = tt_lib.device.BeginTraceCapture(device, 0, 1334880)
         tt_output_res = tt_resnet50(tt_image_res)
         tt_lib.device.EndTraceCapture(device, 0, tid)
 

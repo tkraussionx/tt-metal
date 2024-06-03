@@ -22,7 +22,7 @@ union Converter {
     float f;
     uint32_t u;
 
-    Converter(float f_) : f(f_) {};
+    Converter(float f_) : f(f_){};
 
     static std::string to_hex(float f_) {
         Converter obj(f_);
@@ -67,6 +67,8 @@ void update_macro_defines(UnaryOpType op_type, std::map<std::string, std::string
         case UnaryOpType::SIN:
         case UnaryOpType::TAN: defines["SFPU_OP_TRIG_FAMILY_INCLUDE"] = "1"; break;
         case UnaryOpType::NEG: defines["SFPU_OP_NEG_INCLUDE"] = "1"; break;
+        case UnaryOpType::SOFTPLUS: defines["SFPU_OP_SOFTPLUS_INCLUDE"] = "1"; break;
+        case UnaryOpType::TYPECAST: defines["SFPU_OP_TYPECAST_INCLUDE"] = "1"; break;
         default: defines["SFPU_OP_COMPUTE_KERNEL_API_INCLUDE"] = "1"; break;
     };
 }
@@ -74,7 +76,7 @@ void update_macro_defines(UnaryOpType op_type, std::map<std::string, std::string
 std::pair<string, string> get_op_init_and_func_parameterized(
     UnaryOpType op_type, std::vector<float> params, string idst) {
     std::pair<string, string> op_init_and_name;
-    TT_FATAL(is_parametrized_type(op_type) && "operator should support one parameter");
+    TT_FATAL(is_parametrized_type(op_type) && "operator should support at least one parameter");
     float param0 = params[0];
     switch (op_type) {
         case UnaryOpType::RELU_MAX:
@@ -162,6 +164,19 @@ std::pair<string, string> get_op_init_and_func_parameterized(
             op_init_and_name = {
                 "unary_lt_tile_init();", fmt::format("unary_lt_tile({}, {}u);", idst, Converter::to_hex(param0))};
             break;
+        case UnaryOpType::SOFTPLUS: {
+            TT_ASSERT(params.size() == 2, "Expected softplus to take 2 parameters");
+            float param1 = params[1];
+            op_init_and_name = {
+                "softplus_tile_init();",
+                fmt::format(
+                    "softplus_tile({}, {}u, {}u, {}u);",
+                    idst,
+                    Converter::to_hex(param0),
+                    Converter::to_hex(1.0f / param0),  // Pass reciprocal to avoid doing it on device
+                    Converter::to_hex(param1))};
+            break;
+        }
         default: TT_ASSERT(false && "unexpected parameterized type");
     };
     return op_init_and_name;
@@ -242,6 +257,9 @@ std::pair<string, string> get_op_init_and_func_default(UnaryOpType op_type, stri
             break;
         case UnaryOpType::NEG:
             op_init_and_name = {"negative_tile_init();", fmt::format("negative_tile({});", idst)};
+            break;
+        case UnaryOpType::TYPECAST:
+            op_init_and_name = {"typecast_tile_init();", fmt::format("typecast_tile({});", idst)};
             break;
         default: TT_ASSERT(false && "Undefined non-parametrized op type");
     }
@@ -327,13 +345,13 @@ std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor
         Shape output_shape = compute_output_shapes(input_tensors).at(0);
         return {create_device_tensor(
             output_shape,
-            input_tensor.get_dtype(),
+            this->output_dtype,
             input_tensor.get_layout(),
             input_tensor.device(),
             this->output_mem_config)};
     }
     return operation::generic_create_output_tensors(
-        *this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+        *this, input_tensors, this->output_dtype, Layout::TILE, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks EltwiseUnary::create_program(
@@ -362,13 +380,13 @@ UnaryOpParallelizationStrategy EltwiseUnary::get_parallelization_strategy(
 
 const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    const auto& input_shape = input_tensor.get_legacy_shape();
+    const auto& input_shape = input_tensor.legacy_shape();
 
     operation::Hash hash = tt::stl::hash::hash_objects_with_default_seed(
         typeid(*this).hash_code(),
         compute_volume(input_shape),
-        input_tensor.get_dtype(),
-        input_tensor.memory_config(),
+        input_tensor.dtype(),
+        std::get<DeviceStorage>(input_tensor.storage()).memory_config(),
         this->output_mem_config);
 
     for (const auto& unary_with_param_op : this->op_chain) {
@@ -383,7 +401,7 @@ const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tenso
 // unary op version tie
 template <BcastOpMath OP>
 Tensor tie_binop_to_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config) {
-    Tensor t_value = mk_tiled_scalar(value);
+    Tensor t_value = mk_tiled_scalar(value, input_tensor.get_dtype());
     return bcast(input_tensor, t_value, OP, BcastOpDim::HW);
 }
 
