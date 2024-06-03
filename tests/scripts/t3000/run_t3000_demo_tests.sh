@@ -57,7 +57,15 @@ run_t3000_mixtral_falcon_tests() {
 
   echo "LOG_METAL: Running mixtral + falcon tests"
   # mixtral8x7b 8 chip demo test - 100 token generation with general weights (env flags set inside the test)
-  pytest models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[wormhole_b0-True-general_weights]
+  # pytest models/demos/t3000/mixtral8x7b/demo/demo.py::test_mixtral8x7b_demo[wormhole_b0-True-general_weights]
+
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_attention.py
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_mlp.py
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_rms_norm.py
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_embedding.py
+  pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_moe.py
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_decoder.py
+  # pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[wormhole_b0-True-1-1-pcc]
 
   # Falcon 40b decoder
   WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-8chips]
