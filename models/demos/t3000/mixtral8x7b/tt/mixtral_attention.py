@@ -10,7 +10,7 @@ from models.demos.t3000.mixtral8x7b.tt.mixtral_common import LightweightModule
 
 
 class TtMixtralAttention(LightweightModule):
-    def __init__(self, device_mesh, state_dict, args, layer_num, dtype):
+    def __init__(self, device_mesh, state_dict, args, layer_num, dtype, transformation_mats=None):
         super().__init__()
         self.num_devices = 8
         self.state_dict = state_dict
@@ -135,7 +135,7 @@ class TtMixtralAttention(LightweightModule):
                 lp,
                 device=self.device_mesh,
                 mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=0),
-                dtype=ttnn.bfloat8_b,
+                dtype=ttnn.bfloat16,
                 layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 memory_config=self.model_config["ATTN_CACHE_WEIGHTS_MEMCFG"],
                 cache_file_name=cache_name(f"empty_attn_cache_{cache_k.shape}"),
@@ -168,6 +168,8 @@ class TtMixtralAttention(LightweightModule):
         # Will be filled during the initial warmup run
         self.q_mem_config = None
         self.k_mem_config = None
+
+        self.transformation_mats = transformation_mats
 
     def forward(
         self,
@@ -346,7 +348,6 @@ class TtMixtralAttention(LightweightModule):
 
     def forward_prefill(self, xs_11SH, start_pos, current_pos, attn_masks, rot_mats, user_id: int = 0):
         assert xs_11SH.shape[2] % 128 == 0 and xs_11SH.shape[2] > 0, "Seqlen must be divisible by 128"
-        padded_layer_len = nearest_32(start_pos + 1)
         ###
         # QKV matmuls
         ###
@@ -363,8 +364,8 @@ class TtMixtralAttention(LightweightModule):
 
         # split qkv into heads
         (
-            q_heads_14SD,
-            k_heads_11SD,
+            q_heads_14SD_pre_rot,
+            k_heads_11SD_pre_rot,
             v_heads_11SD,
         ) = ttnn.experimental.tensor.nlp_create_qkv_heads(
             xqkv_fused,
@@ -373,7 +374,6 @@ class TtMixtralAttention(LightweightModule):
             transpose_k_heads=False,
             output_mem_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["HEIGHT_SHARDED_MEMCFG"],
         )
-        print("q_heads_14SD", q_heads_14SD.shape, k_heads_11SD.shape, v_heads_11SD.shape)
 
         xqkv_fused.deallocate(True)
 
@@ -381,32 +381,30 @@ class TtMixtralAttention(LightweightModule):
         # Rotary embeddings
         ###
 
-        # TODO: Implement the rotation matrix
-        seq_len = q_heads_14SD.shape[2]
-        slice_size = 256 if seq_len == 2048 else 128
-        cores_y = 4 if slice_size == 128 else 8
-        num_slices = seq_len // slice_size  # we do q_lens of 128 per iteration (slice), then we concat the result.
+        q_heads_14SD = ttnn.experimental.tensor.rotary_embedding_llama(
+            q_heads_14SD_pre_rot, rot_mats[0], rot_mats[1], self.transformation_mats
+        )
+        q_heads_14SD_pre_rot.deallocate(True)
+
+        k_heads_11SD = ttnn.experimental.tensor.rotary_embedding_llama(
+            k_heads_11SD_pre_rot, rot_mats[0], rot_mats[1], self.transformation_mats
+        )
+        k_heads_11SD_pre_rot.deallocate(True)
 
         # FILL K CACHE
-        keys = self.layer_past[0]
-        keys_11SD = ttnn.reshape(keys, [1, self.n_local_kv_heads, -1, self.head_dim])
-        ttnn.experimental.tensor.fill_cache(
-            keys_11SD, ttnn.experimental.tensor.typecast(k_heads_11SD, ttnn.bfloat8_b), user_id
-        )
-
-        print("keys_11SD", keys_11SD.shape)
+        keys_11SD = self.layer_past[0]
+        # keys_11SD = ttnn.reshape(keys, [1, self.n_local_kv_heads, -1, self.head_dim])
+        ttnn.kv_cache.fill_cache_for_user_(keys_11SD, k_heads_11SD, user_id)
 
         # FILL V CACHE
-        values = self.layer_past[0]
-        values_11SD = ttnn.reshape(values, [1, self.n_local_kv_heads, -1, self.head_dim])
-        ttnn.experimental.tensor.fill_cache(
-            values_11SD, ttnn.experimental.tensor.typecast(v_heads_11SD, ttnn.bfloat8_b), user_id
-        )
+        values_11SD = self.layer_past[1]
+        # values_11SD = ttnn.reshape(values, [1, self.n_local_kv_heads, -1, self.head_dim])
+        ttnn.kv_cache.fill_cache_for_user_(values_11SD, v_heads_11SD, user_id)
+        self.layer_past = [keys_11SD, values_11SD]
 
-        print("values_11SD", values_11SD.shape)
         # SDPA
         program_config = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
-            compute_with_storage_grid_size=[8, 8],
+            compute_with_storage_grid_size=[8, 7],
             q_chunk_size=128,
             k_chunk_size=128,
         )
@@ -419,8 +417,7 @@ class TtMixtralAttention(LightweightModule):
             scale=self.scale,
             program_config=program_config,
         )
-
-        print("attn_output_14SD", attn_output_14SD.shape)
+        print("attn_output_14SD", attn_output_14SD)
 
         # deallocate keys and values
         q_heads_14SD.deallocate(True)
@@ -442,33 +439,6 @@ class TtMixtralAttention(LightweightModule):
             num_links=1,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-
-        print("attn_output_11SH", attn_output_11SH.shape)
-
-        # seq_tiles = attn_output_11SH.shape[2] // 32
-        # cores_y = 8 if seq_tiles % 8 == 0 else 4
-        # seq_len_tiles = seq_len // 32
-        # cores_y = 4  # 8 if seq_len_tiles % 8 == 0 else 4
-        # self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"] = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-        #     compute_with_storage_grid_size=(8, cores_y),
-        #     in0_block_w=8,  # how much inner dim you take each time
-        #     out_subblock_h=1,  # Must be divisible by per_core_M
-        #     out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-        #     per_core_M=seq_len_tiles // cores_y,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
-        #     per_core_N=4,  # N / TILE_WIDTH / Grid_Size
-        #     transpose_mcast=False,
-        #     fused_activation=None,
-        # )
-        # dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG_LAMBDA"]
-
-        # attn_output_11SH = ttnn.experimental.operations.primary.matmul(
-        #     attn_output_11SH,
-        #     self.wo,
-        #     #program_config=dense_out_prog_cfg,
-        #     output_mem_config=ttnn.L1_MEMORY_CONFIG,
-        #     output_dtype=ttnn.bfloat8_b,
-        #     compute_kernel_config=self.compute_kernel,
-        # )
 
         attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo_prefill, core_grid=ttnn.CoreGrid(y=8, x=8))
 
