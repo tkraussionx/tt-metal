@@ -8,16 +8,7 @@ from models.demos.t3000.mixtral8x7b.tt.mixtral_common import LightweightModule
 
 
 class TtRMSNorm(LightweightModule):
-    def __init__(
-        self,
-        device_mesh,
-        state_dict,
-        args,
-        dtype,
-        layer_num,
-        weight_key,
-        eps: float = 1e-05,
-    ):
+    def __init__(self, device_mesh, state_dict, args, dtype, layer_num, weight_key, eps: float = 1e-05, mode="decode"):
         super().__init__()
         self.device_mesh = device_mesh
         self.eps = eps
@@ -28,13 +19,15 @@ class TtRMSNorm(LightweightModule):
             weight_name = f"{weight_key}.weight"
         else:
             weight_name = f"layers.{layer_num}.{weight_key}.weight"
-
-        torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
+        if mode == "decode":
+            torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
+            cache_name = args.weight_cache_path(dtype) / (weight_name + "multidevice")
+        else:
+            torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(args.max_seq_len, -1)
+            cache_name = args.weight_cache_path(dtype) / (weight_name + f"multidevice_prefill_{args.max_seq_len}")
 
         if args.dummy_weights:
             cache_name = None
-        else:
-            cache_name = args.weight_cache_path(dtype) / (weight_name + "multidevice")
 
         self.weight = ttnn.as_tensor(
             torch_weight,
