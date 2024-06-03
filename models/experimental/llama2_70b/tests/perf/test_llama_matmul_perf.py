@@ -8,8 +8,9 @@ from loguru import logger
 
 import tt_lib
 import tt_lib as ttl
+import ttnn
 
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor, comp_pcc
 
 DMODEL = 8 * 1024
 FF_DIM = 32 * 1024
@@ -17,9 +18,10 @@ USE_ACC = True
 
 DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
 BFP8_DTYPE = ttl.tensor.DataType.BFLOAT8_B
+BFP4_DTYPE = ttl.tensor.DataType.BFLOAT4_B
 WIDTH_SHARDED_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttl.tensor.BufferType.L1)
 COMPUTE_KERNEL_CONFIG = ttl.tensor.WormholeComputeKernelConfig(
-    math_fidelity=ttl.tensor.MathFidelity.HiFi2,
+    math_fidelity=ttl.tensor.MathFidelity.LoFi,
     math_approx_mode=True,
     fp32_dest_acc_en=True,
     packer_l1_acc=True,
@@ -34,37 +36,110 @@ COMPUTE_KERNEL_FP16_CONFIG = ttl.tensor.WormholeComputeKernelConfig(
 
 
 class Decode_FF1:
-    def __init__(self, device):
+    def __init__(self, device, weight):
+        weight_grid = ttnn.experimental.tensor.CoreRangeSet(
+            {
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 0),
+                    ttnn.experimental.tensor.CoreCoord(device.dram_grid_size().x - 1, device.dram_grid_size().y - 1),
+                )
+            }
+        )
+        w1_shard_shape = (8192, 4224 // 12)  # padded cols to divide by 12
+        w1_shard_spec = ttnn.ShardSpec(weight_grid, w1_shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        w1_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.DRAM, w1_shard_spec)
+
         self.weight = torch2tt_tensor(
-            torch.randn(DMODEL, FF_DIM // 8),
+            weight,
             device,
-            tt_memory_config=DRAM_MEMCFG,
-            tt_dtype=BFP8_DTYPE,
+            # tt_memory_config=DRAM_MEMCFG,
+            tt_memory_config=w1_mem_config,
+            tt_dtype=BFP4_DTYPE,
         )
 
-        self.prog_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
-            in0_block_w=8,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
-            out_subblock_h=1,  # Must be divisible by per_core_M
-            out_subblock_w=4,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-            per_core_M=1,  # M / TILE_HEIGHT = 32 / 32
-            per_core_N=4,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+        # self.prog_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        #     compute_with_storage_grid_size=(8, 4),
+        #     in0_block_w=8,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+        #     out_subblock_h=1,  # Must be divisible by per_core_M
+        #     out_subblock_w=4,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+        #     per_core_M=1,  # M / TILE_HEIGHT = 32 / 32
+        #     per_core_N=4,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+        #     fuse_batch=True,
+        #     fused_activation=ttl.tensor.FusibleActivation.SILU,
+        #     mcast_in0=True,
+        # )
+
+        self.prog_config = (
+            w1_prog_cfg
+        ) = program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+            in0_block_w=32,
+            out_subblock_h=1,
+            out_subblock_w=4,
+            per_core_M=1,
+            per_core_N=16,
             fuse_batch=True,
-            fused_activation=ttl.tensor.FusibleActivation.SILU,
-            mcast_in0=True,
+            fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
         )
 
     def __call__(self, x):
-        ff_out = tt_lib.operations.primary.matmul_1d(
+        # ff_out = tt_lib.operations.primary.matmul_1d(
+        ff_out = ttnn.matmul(
             x,
             self.weight,
             program_config=self.prog_config,
-            output_mem_config=WIDTH_SHARDED_MEMCFG,
-            output_dtype=BFP8_DTYPE,
+            memory_config=WIDTH_SHARDED_MEMCFG,
+            dtype=ttnn.bfloat16,
             compute_kernel_config=COMPUTE_KERNEL_CONFIG,
         )
 
         return ff_out
+
+
+def run_decode_ff1(
+    device,
+):
+    n_cores = 8
+    start_idx = (0, 0)
+    end_idx = (7, 0)
+
+    inp_shape = (1, 32, DMODEL)
+
+    inp_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(*start_idx),
+                        ttl.tensor.CoreCoord(*end_idx),
+                    ),
+                }
+            ),
+            [
+                inp_shape[-2],
+                inp_shape[-1] // n_cores,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    pt_in = torch.randn(*inp_shape)
+    tt_in = torch2tt_tensor(pt_in, device, tt_memory_config=inp_mem_config)
+
+    # TT hardware execution -------------------------------------------------------------
+    weight = torch.randn(DMODEL, FF_DIM // 8)
+    tt_model = Decode_FF1(device, weight)
+
+    tt_out = tt_model(tt_in)
+
+    pt_out = pt_in @ weight
+    pt_out = torch.nn.functional.silu(pt_out)
+    tt_out = tt2torch_tensor(tt_out)
+
+    passing, output_str = comp_pcc(pt_out, tt_out, 0.9998)
+    print(output_str)
 
 
 class Decode_FF2:
@@ -387,45 +462,6 @@ def run_prefill_MLP_2k(
     tt_model = Prefill_MLP_2k(device)
 
     tt_out = tt_model(tt_in, tt_in_allgather)
-
-
-def run_decode_ff1(
-    device,
-):
-    n_cores = 32
-    start_idx = (0, 0)
-    end_idx = (7, 3)
-
-    inp_shape = (1, 32, DMODEL)
-
-    inp_mem_config = ttl.tensor.MemoryConfig(
-        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-        ttl.tensor.BufferType.L1,
-        ttl.tensor.ShardSpec(
-            ttl.tensor.CoreRangeSet(
-                {
-                    ttl.tensor.CoreRange(
-                        ttl.tensor.CoreCoord(*start_idx),
-                        ttl.tensor.CoreCoord(*end_idx),
-                    ),
-                }
-            ),
-            [
-                inp_shape[-2],
-                inp_shape[-1] // n_cores,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
-        ),
-    )
-
-    pt_in = torch.randn(*inp_shape)
-    tt_in = torch2tt_tensor(pt_in, device, tt_memory_config=inp_mem_config)
-
-    # TT hardware execution -------------------------------------------------------------
-    tt_model = Decode_FF1(device)
-
-    tt_out = tt_model(tt_in)
 
 
 def run_decode_ff2(
