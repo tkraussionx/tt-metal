@@ -187,7 +187,7 @@ std::unordered_map<int, std::vector<uint32_t>> get_cpu_cores_per_numa_node(std::
         }
     } else {
         // Host does not have NUMA. Place all CPU Ids under a single node (0).
-        log_warning(tt::LogMetal, "Host does not use NUMA. May see reduced performance.");
+        // log_warning(tt::LogMetal, "Host does not use NUMA. May see reduced performance.");
         for (int cpu = 0; cpu < sysconf(_SC_NPROCESSORS_ONLN); ++cpu) {
             free_cores.insert(cpu);
         }
@@ -210,11 +210,11 @@ int get_cpu_core_for_device_worker_thread(
                 cpu_cores_per_numa_node.at(numa_node_for_device).at(mmio_controlled_device_id % num_cores_in_numa_node);
         } else {
             // NUMA node reported by UMD does not exist on host. Use round-robin binding policy for this worker thread.
-            log_warning(
-                tt::LogMetal,
-                "NUMA node {} for device {} does not exist on host.",
-                numa_node_for_device,
-                mmio_controlled_device_id);
+            // log_warning(
+            //     tt::LogMetal,
+            //     "NUMA node {} for device {} does not exist on host.",
+            //     numa_node_for_device,
+            //     mmio_controlled_device_id);
             core_assigned_to_device = mmio_controlled_device_id % sysconf(_SC_NPROCESSORS_ONLN);
         }
     } else {
@@ -235,10 +235,10 @@ void bind_current_thread_to_free_cores(const std::unordered_set<uint32_t> &free_
     }
     int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
     if (rc) {
-        log_warning(
-            tt::LogMetal,
-            "Unable to bind main thread to free CPU cores. May see performance degradation. Error Code: {}",
-            rc);
+        // log_warning(
+        //     tt::LogMetal,
+        //     "Unable to bind main thread to free CPU cores. May see performance degradation. Error Code: {}",
+        //     rc);
     }
 }
 
