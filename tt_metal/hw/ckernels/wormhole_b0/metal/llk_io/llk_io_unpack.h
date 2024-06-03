@@ -12,6 +12,12 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+// MT: Temp extern declaration
+extern uint32_t tiles_proc_delay;
+extern uint32_t wait_tiles_cnt;
+extern uint32_t apply_cnt;
+extern uint32_t my_noc_x;
+extern uint32_t my_noc_y;
 
 using namespace ckernel;
 
@@ -92,7 +98,9 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     } while (num_tiles_recv < num_tiles_u);
     uint64_t time_end = read_wall_clock();
     uint64_t time_delta = time_end - time_start;
-    if (time_delta > 0) {
+    wait_tiles_cnt++;
+    if (time_delta > 0 && (wait_tiles_cnt==2) && (apply_cnt == 0)) {        // Apply delay only if second operand has arrived
+        apply_cnt++;
         wait(tiles_proc_delay);
     }
 }
@@ -115,6 +123,8 @@ inline void llk_pop_tiles(
     if (cb_interface[input].fifo_rd_ptr >= cb_interface[input].fifo_limit) {
         cb_interface[input].fifo_rd_ptr -= cb_interface[input].fifo_size;
     }
+
+    wait_tiles_cnt--;
 }
 
 inline void llk_wait_blocks(int operand, std::int32_t num_blocks) { llk_wait_tiles(operand, num_blocks); }
