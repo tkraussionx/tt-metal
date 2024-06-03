@@ -35,6 +35,9 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = model_args.load_state_dict()
+    seqlen = 128
+    batch = 1
+    model_args.max_seq_len = seqlen
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
@@ -75,9 +78,6 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
 
     all_tests_pass = True
 
-    seqlen = 128
-    batch = 1
-
     # TODO Update start_pos (check llama test for reference)
     for i in range(iterations):
         logger.info(f"[Decoder] Generating token {i}")
@@ -98,7 +98,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
         tt_output_torch = (
             ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
             .squeeze(2)
-            .view(batch, 1, -1)
+            .view(batch, seqlen, -1)
         )
 
         # Reference model
