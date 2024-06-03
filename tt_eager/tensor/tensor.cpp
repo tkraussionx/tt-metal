@@ -559,7 +559,9 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
             validate_worker_modes(workers),
             "All device threads/workers must be running in the same mode (ASYNC or SYNC)");
         Tensor tensor_modified_layout = Tensor({}, workers.size());
+        std::cout << " tensor to mesh " << std::endl;
         for (int worker_index = 0; worker_index < workers.size(); ++worker_index) {
+        std::cout << " tensor to mesh " << worker_index << std::endl;
             auto& worker = workers[worker_index];
             worker->push_work([*this, tensor_modified_layout, target_layout, worker, worker_index]() mutable {
                 TT_ASSERT(
@@ -808,6 +810,7 @@ uint32_t Tensor::volume() const { return tt::tt_metal::compute_volume(this->get_
 Tensor create_device_tensor(
     const Shape& shape, DataType data_type, Layout layout, Device* device, const MemoryConfig& memory_config) {
     ZoneScoped;
+    std::cout << " Create device tensor " << device->id() << std::endl;
     if (memory_config.is_sharded()) {
         TT_ASSERT(memory_config.shard_spec.has_value());
 

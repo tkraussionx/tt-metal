@@ -96,6 +96,7 @@ def test_falcon_decoder(
     dtype = model_config["DEFAULT_DTYPE"]
     kv_len = seq_len if llm_mode == "prefill" else kv_cache_len + 1
 
+    print("Create model 0")
     decoder_input, tt_decoder_input = create_attention_input(
         llm_mode,
         dtype,
@@ -106,6 +107,7 @@ def test_falcon_decoder(
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
     )
     position_ids = create_position_ids(llm_mode, kv_cache_len)
+    print("Create model 1")
     attention_mask, tt_attention_mask = create_attention_mask(
         llm_mode,
         dtype,
@@ -117,6 +119,7 @@ def test_falcon_decoder(
         device_mesh,
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=shard_dim),
     )
+    print("Create model 2")
     layer_past, tt_layer_past = create_kv_cache(
         llm_mode,
         dtype,
@@ -127,6 +130,7 @@ def test_falcon_decoder(
         mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
     )
 
+    print("Create model 3")
     pytorch_out, pytorch_layer_present = torch_model(
         hidden_states=decoder_input,
         alibi=None,
@@ -135,6 +139,7 @@ def test_falcon_decoder(
         layer_past=layer_past,
         use_cache=True,
     )
+    print("Create model 3")
     parameters = preprocess_model_parameters(
         initialize_model=lambda: torch_model,
         device=device_mesh,
@@ -146,12 +151,14 @@ def test_falcon_decoder(
             weights_mesh_mapper=ReplicateTensorToMesh(device_mesh),
         ),
     )
+    print("Create model 4")
     tt_FalconDecoder_model = TtFalconDecoderLayer(
         device_mesh,
         configuration,
         model_config,
         parameters,
     )
+    print("Create model 5")
 
     tt_out, tt_layer_present = tt_FalconDecoder_model(
         hidden_states=tt_decoder_input,
@@ -165,6 +172,7 @@ def test_falcon_decoder(
     )
     tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim)).squeeze(1)
 
+    print("Create model 6")
     tt_layer_present = (
         ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
         ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),

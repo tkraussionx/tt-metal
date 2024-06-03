@@ -79,7 +79,9 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
     const uint32_t sequence_size = input_shape[1];
     const uint32_t sequence_size_padded = input_shape.with_tile_padding()[1];
 
+    std::cout << " here 1" << std::endl;
     if (num_kv_heads.has_value()) {
+    std::cout << " here 2" << std::endl;
         TT_FATAL(transpose_key == false, "Transpose = true and separate num_kv_heads is not supported");
         uint32_t qkv_heads_times_head_dim = input_shape[2],
                  qkv_heads_times_head_dim_padded = input_shape.with_tile_padding()[2];
@@ -100,14 +102,19 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             1,
             input_shape.with_tile_padding()[1],
             input_shape.with_tile_padding()[2]);
+        std::cout << " here 2.2 " << std::endl;
+        std::cout << input_tensor.device()->id() << std::endl;
+        std::cout << " here 2.3 " << std::endl;
         auto outputs =
             tt::tt_metal::nlp_create_qkv_heads_falcon7b(input_4d, memory_config.value_or(input_tensor.memory_config()));
+        std::cout << " here 2.4 " << std::endl;
         return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
             {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, transpose_key);
     }
 
     uint32_t hidden_dim_padded = 0, hidden_dim = 0;
     if (input_tensor_kv.has_value()) {
+    std::cout << " here 3" << std::endl;
         const auto input_shape_kv = input_tensor_kv.value().get_shape();
         TT_FATAL(input_shape_kv[0] == input_shape[0], "KV tensor batch dim must be same as Q tensor batch!");
         TT_FATAL(input_shape_kv[1] == input_shape[1], "KV tensor seq_len dim must be same as Q tensor seq_len!");
@@ -127,6 +134,7 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
     TT_FATAL(padded_head_size == head_size, fmt::format("Head size {} cannot have tile padding", head_size));
 
     if (input_tensor.is_sharded()) {
+    std::cout << " here 4" << std::endl;
         TT_FATAL(not input_tensor_kv.has_value(), "KV tensor cannot be passed in when sharded");
         const auto input_tensor_4d = input_tensor.reshape(
             input_shape.with_tile_padding()[0],
@@ -144,6 +152,7 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             sequence_size_padded,
             transpose_key);
     } else {
+    std::cout << " here 5" << std::endl;
         const auto input_tensor_4d = input_tensor.reshape(
             input_shape.with_tile_padding()[0],
             1,
@@ -162,6 +171,7 @@ inline std::tuple<Tensor, Tensor, Tensor> split_query_key_value_and_split_heads(
             num_kv_heads.value_or(num_heads),
             transpose_key,
             memory_config.value_or(input_tensor.memory_config()));
+    std::cout << " here 6" << std::endl;
         return detail::reshape_outputs_of_split_query_key_value_and_split_heads(
             {outputs.at(0), outputs.at(1), outputs.at(2)}, sequence_size, sequence_size_padded, transpose_key);
     }

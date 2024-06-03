@@ -108,7 +108,9 @@ class ShardTensorToMesh(TensorToMesh):
         self.shard_dim = dim
 
     def map(self, tensor: torch.tensor) -> Dict[int, ttnn.Tensor]:
+        print(self.device_mesh.get_num_devices())
         sliced_tensors = torch.chunk(tensor, self.device_mesh.get_num_devices(), dim=self.shard_dim)
+        # return [torch.empty((sliced_tensors[0].shape))]*4 + list(sliced_tensors)
         return list(sliced_tensors)
 
     def config(self):
@@ -123,6 +125,7 @@ class ReplicateTensorToMesh(TensorToMesh):
         super().__init__(device_mesh)
 
     def map(self, tensor: torch.tensor):
+        # return [torch.empty((tensor.shape))]*4 + [tensor for i in range(self.device_mesh.get_num_devices())]
         return [tensor for i in range(self.device_mesh.get_num_devices())]
 
     def config(self):

@@ -191,6 +191,7 @@ def create_kv_cache(llm_mode, dtype, batch, kv_cache_length, config, device, mes
     # Pre-initialize KV-cache for prefill mode
     torch_k_cache = torch.zeros(batch, 1, config.max_position_embeddings, head_dim)
     torch_v_cache = torch.zeros(batch, 1, config.max_position_embeddings, head_dim)
+    print(mesh_mapper)
 
     if llm_mode == "prefill":
         layer_past = None

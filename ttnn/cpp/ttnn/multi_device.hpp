@@ -42,6 +42,7 @@ std::vector<ttnn::Tensor> get_device_tensors(const ttnn::Tensor& tensor) {
         auto& device_storage = std::get<tt::tt_metal::MultiDeviceStorage>(tensor.get_storage());
         auto devices = get_devices(tensor);
         for (auto device : devices) {
+        std::cout << " get device tensor " << device->id() << std::endl;
             auto shard = get_shard_for_device(tensor, device);
             tensors.push_back(shard);
         }
@@ -52,6 +53,7 @@ std::vector<ttnn::Tensor> get_device_tensors(const ttnn::Tensor& tensor) {
 
 Tensor aggregate_as_tensor(std::vector<Tensor>& tensor_shards)
 {
+  std::cout << " aggregate as tensor " << std::endl;
     TT_ASSERT(tensor_shards.size() > 0, "At least one tensor shard must be provided");
     for (const auto &shard : tensor_shards) {
         if (shard.storage_type() != tensor_shards.at(0).storage_type()) {

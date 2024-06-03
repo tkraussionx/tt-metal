@@ -330,6 +330,8 @@ def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
         pytest.skip("Requires multiple devices to run")
 
     device_mesh = ttnn.open_device_mesh(ttnn.DeviceGrid(1, num_devices_requested), device_ids[:num_devices_requested])
+    for device in device_mesh.get_devices():
+        print("GOT DEVICE", device.id())
 
     logger.debug(f"multidevice with {device_mesh.get_num_devices()} devices is created")
     yield device_mesh

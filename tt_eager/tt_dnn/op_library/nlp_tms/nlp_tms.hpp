@@ -143,10 +143,12 @@ struct NlpKVCacheLoadSlice {
 
 inline std::vector<Tensor> nlp_create_qkv_heads_falcon7b(const Tensor& input_tensor_a, const MemoryConfig& mem_config) {
     // TODO: hard-coded for falcon-7b; can delete if we switch to the more generic one (but perf may be worse)
+    std::cout <<" nlp get output workers " << std::endl;
     std::vector<Tensor> output_tensors = {
         Tensor(operation::get_workers_for_op_output({input_tensor_a})),
         Tensor(operation::get_workers_for_op_output({input_tensor_a})),
         Tensor(operation::get_workers_for_op_output({input_tensor_a}))};
+    std::cout <<" nlp create qkv run op " << std::endl;
     operation::launch_op(
         [mem_config](
             std::vector<Tensor> input_tensors,
@@ -156,6 +158,7 @@ inline std::vector<Tensor> nlp_create_qkv_heads_falcon7b(const Tensor& input_ten
         },
         {input_tensor_a},
         output_tensors);
+    std::cout <<" nlp create qkv done run op " << std::endl;
     return output_tensors;
 }
 inline std::vector<Tensor> nlp_create_qkv_heads_decode(

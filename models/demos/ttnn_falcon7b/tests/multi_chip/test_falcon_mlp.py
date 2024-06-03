@@ -71,6 +71,7 @@ def test_falcon_mlp(
     enable_async,
 ):
     for device in device_mesh.get_device_ids():
+        print("TEST USING ", device)
         device_mesh.get_device(device).enable_async(enable_async)
 
     torch.manual_seed(0)
