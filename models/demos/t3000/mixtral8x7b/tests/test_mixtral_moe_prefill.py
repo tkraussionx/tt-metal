@@ -28,16 +28,19 @@ from models.utility_functions import (
 )
 
 
-def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
+@pytest.mark.parametrize(
+    "seq_len",
+    (128, 1024, 2048),
+)
+def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     pcc = 0.99
     iterations = 1
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = model_args.load_state_dict()
-    seqlen = 128
     batch = 1
-    model_args.max_seq_len = seqlen
+    model_args.max_seq_len = seq_len
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
@@ -83,12 +86,12 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
         logger.info(f"[Decoder] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
-        pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
+        pt_decode_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_decode_input = ttnn.from_torch(
-            pt_decode_input.clone().unsqueeze(1).view(1, 1, seqlen, 4096),
+            pt_decode_input.clone().unsqueeze(1).view(1, 1, seq_len, 4096),
             device=t3k_device_mesh,
             dtype=ttnn.bfloat16,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
         )
@@ -98,7 +101,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds):
         tt_output_torch = (
             ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
             .squeeze(2)
-            .view(batch, seqlen, -1)
+            .view(batch, seq_len, -1)
         )
 
         # Reference model

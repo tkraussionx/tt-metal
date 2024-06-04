@@ -94,15 +94,15 @@ class TtMoeLayer(LightweightModule):
         expert_i_HH = self.experts
         seqlen = input_i_1SBH.shape[2]
         # get logits for the experts
-        gate_logits_1SB8 = ttnn.experimental.operations.primary.matmul(
+        gate_logits_1SB8 = ttnn.matmul(
             input_i_1SBH,
             self.gates_H8,
-            program_config=self.model_config["GATE_MM_OUTPUT_PROGCFG"],
-            output_mem_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+            # program_config=self.model_config["GATE_MM_OUTPUT_PROGCFG_PREFILL"](seqlen),
+            memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
             # use_1d_systolic_array=True,
-            # core_grid=ttnn.CoreGrid(y=4, x=8),
-            output_dtype=ttnn.bfloat16,
+            core_grid=ttnn.CoreGrid(y=4, x=8),
+            dtype=ttnn.bfloat16,
         )
 
         # get weights for top-2 experts
@@ -118,7 +118,7 @@ class TtMoeLayer(LightweightModule):
             ttl_topk_values,
             device=self.device_mesh,
             dtype=ttnn.bfloat16,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )
@@ -126,7 +126,7 @@ class TtMoeLayer(LightweightModule):
             ttl_topk_indices,
             device=self.device_mesh,
             dtype=ttnn.uint16,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )
@@ -141,12 +141,22 @@ class TtMoeLayer(LightweightModule):
         results_11BH = ttnn.mul(weights, weights_1SB1)
 
         # all gather
-        output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
+        output_11BH_gathered = ttnn.all_gather(results_11BH, dim=1, num_links=1)
         results_11BH.deallocate(True)
         # sum on each device
-        # output_11BH_gathered = ttnn.experimental.tensor.reshape(output_11BH_gathered, 1, seqlen, 32, 4096)
-        # output_11BH_gathered = ttnn.sum(output_11BH_gathered, dim=1)
-        # output_11BH_gathered = ttnn.reshape(output_11BH_gathered, ttnn.Shape([1, 1, seqlen, 4096]))
-        output_11BH_gathered = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
+
+        output_11BH_gathered = ttnn.to_torch(
+            output_11BH_gathered, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=0)
+        )[:1]
+        output_11BH_gathered = torch.sum(output_11BH_gathered, dim=1, keepdim=True)
+        print(output_11BH_gathered.shape)
+        output_11BH_gathered = ttnn.from_torch(
+            output_11BH_gathered,
+            device=self.device_mesh,
+            dtype=ttnn.bfloat8_b,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+        )
 
         return output_11BH_gathered
