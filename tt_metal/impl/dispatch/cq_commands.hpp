@@ -41,6 +41,7 @@ enum CQDispatchCmdId : uint8_t {
     CQ_DISPATCH_CMD_DEBUG = 9,              // log waypoint data to watcher, checksum
     CQ_DISPATCH_CMD_DELAY = 10,             // insert delay (for testing)
     CQ_DISPATCH_CMD_TERMINATE = 11,         // quit
+    CQ_DISPATCH_CMD_EXEC_BUF_END = 12,
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -335,6 +335,22 @@ class DeviceCommand {
         }
     }
 
+    void add_dispatch_exec_buf_end() {
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd));
+        auto initialize_exec_buf_end_cmd = [&](CQDispatchCmd *exec_buf_end_cmd) {
+            exec_buf_end_cmd->base.cmd_id = CQ_DISPATCH_CMD_EXEC_BUF_END;
+        };
+        CQDispatchCmd *exec_buf_end_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
+
+        if constexpr (hugepage_write) {
+            alignas(MEMCPY_ALIGNMENT) CQDispatchCmd exec_buf_end_cmd;
+            initialize_exec_buf_end_cmd(&exec_buf_end_cmd);
+            this->memcpy(exec_buf_end_cmd_dst, &exec_buf_end_cmd, sizeof(CQDispatchCmd));
+        } else {
+            initialize_exec_buf_end_cmd(exec_buf_end_cmd_dst);
+        }
+    }
+
     void update_cmd_sequence(uint32_t cmd_offsetB, const void *new_data, uint32_t data_sizeB) {
         this->memcpy((char *)this->cmd_region + cmd_offsetB, new_data, data_sizeB);
     }

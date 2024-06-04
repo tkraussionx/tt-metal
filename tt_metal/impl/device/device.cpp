@@ -467,7 +467,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_physical_core,
                 std::map<string, string> {}
             );
-
+            std::cout << "prefetch core local: " << prefetch_physical_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
@@ -489,7 +489,8 @@ void Device::compile_command_queue_programs() {
                 0, // unused
                 0, // unused
                 true,   // is_dram_variant
-                true    // is_host_variant
+                true ,   // is_host_variant
+                0
             };
 
             configure_kernel_variant(
@@ -503,7 +504,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 std::map<string, string> {}
             );
-
+            std::cout << "Dispatch core local: " << dispatch_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
@@ -612,7 +613,7 @@ void Device::compile_command_queue_programs() {
             mux_physical_core,
             std::map<string, string> {}
         );
-
+        std::cout << "PrefetchH core: " << prefetch_core.str() << " " << prefetch_physical_core.str() << std::endl;
         log_debug(LogDevice, "run prefetch_h {}", prefetch_core.str());
 
         std::vector<uint32_t> mux_compile_args =
@@ -804,7 +805,8 @@ void Device::compile_command_queue_programs() {
             0, // unused: remote ds semaphore
             0, // preamble size. unused unless tunneler is between h and d
             false,   // is_dram_variant
-            true     // is_host_variant
+            true,     // is_host_variant
+            prefetch_h_exec_buf_sem
         };
 
         configure_kernel_variant(
@@ -815,10 +817,10 @@ void Device::compile_command_queue_programs() {
             dispatch_physical_core,
             dispatch_core_type,
             demux_physical_core,
-            CoreCoord{0xffffffff, 0xffffffff},
+            prefetch_physical_core, // Pass prefetch core in here
             std::map<string, string> {}
         );
-
+        std::cout << "Remote dispatch handler core: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_core.str());
 
         /////////////////Following section is for Remote Device
@@ -1009,7 +1011,7 @@ void Device::compile_command_queue_programs() {
             dispatch_physical_core,
             std::map<string, string> {}
         );
-
+        std::cout << "prefetchD " << prefetch_d_core.str() << std::endl;
         log_debug(LogDevice, "run prefertch_d at {}", prefetch_d_core.str());
 
         std::vector<uint32_t> dispatch_d_compile_args = {
@@ -1029,7 +1031,8 @@ void Device::compile_command_queue_programs() {
             mux_sem, // unused on hd, filled in below for h and d
             sizeof(dispatch_packet_header_t), // unused unless tunneler is between h and d
             true,   // is_dram_variant
-            false    // is_host_variant
+            false,    // is_host_variant
+            0,
         };
 
         configure_kernel_variant(
@@ -1043,7 +1046,7 @@ void Device::compile_command_queue_programs() {
             mux_d_physical_core,
             std::map<string, string> {}
         );
-
+        std:;cout << "Dispatch core remote chip: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch at {}", dispatch_core.str());
 
         std::vector<uint32_t> mux_d_compile_args =
@@ -1716,11 +1719,21 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
     auto &data = this->trace_buffer_pool_[tid]->desc->data;
     data = std::move(this->sysmem_manager().get_bypass_data());
     // Add command to terminate the trace buffer
-    DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
-    command_sequence.add_prefetch_exec_buf_end();
-    for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
-        data.push_back(((uint32_t*)command_sequence.data())[i]);
+    if (not this->is_mmio_capable()) {
+        DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE + CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+        command_sequence.add_dispatch_exec_buf_end();
+        command_sequence.add_prefetch_exec_buf_end();
+        for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
+            data.push_back(((uint32_t*)command_sequence.data())[i]);
+        }
+    } else {
+        DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+        command_sequence.add_prefetch_exec_buf_end();
+        for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
+            data.push_back(((uint32_t*)command_sequence.data())[i]);
+        }
     }
+
     Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
     detail::DisableAllocs(this);
 }

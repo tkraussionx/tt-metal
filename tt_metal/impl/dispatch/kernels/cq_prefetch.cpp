@@ -115,7 +115,7 @@ void write_downstream(uint32_t& data_ptr,
 
 // If prefetcher must stall after this fetch, wait for data to come back, and move to stalled state.
 FORCE_INLINE
-void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence) {
+void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence, uint32_t preamble_size) {
     noc_async_read_barrier();
     fence += pending_read_size;
     pending_read_size = 0;
@@ -214,7 +214,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
         read_from_pcie<preamble_size>
             (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
         if (stall_state == STALL_NEXT) {
-            barrier_and_stall(pending_read_size, fence); // STALL_NEXT -> STALLED
+            barrier_and_stall(pending_read_size, fence, preamble_size); // STALL_NEXT -> STALLED
         }
     }
     if (!cmd_ready) {
@@ -238,10 +238,13 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
                 stall_flag = (prefetch_q_rd_ptr_local & prefetch_q_msb_mask) != 0;
                 stall_state = static_cast<StallState>(stall_flag << 1); // NOT_STALLED -> STALL_NEXT if stall_flag is set
 
-                read_from_pcie<preamble_size>
-                    (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
                 if (stall_state == STALL_NEXT) {
-                    barrier_and_stall(pending_read_size, fence); // STALL_NEXT -> STALLED
+                    read_from_pcie<0>
+                        (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
+                    barrier_and_stall(pending_read_size, fence, preamble_size); // STALL_NEXT -> STALLED
+                } else {
+                    read_from_pcie<preamble_size>
+                        (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
                 }
             }
         } else {
@@ -283,6 +286,20 @@ uint32_t process_debug_cmd(uint32_t cmd_ptr) {
 
     return cmd->debug.stride;
 }
+
+// uint32_t process_end_trace(uint32_t cmd_ptr, uint32_t& downstream_data_ptr) {
+//     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
+//     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(1);
+//     DPRINT << "End Trace: " << (uint32_t)(cmd->base.cmd_id) << ENDL();
+//     write_downstream(cmd_ptr, downstream_data_ptr, 16);
+//     // Round to nearest page
+//     downstream_data_ptr = round_up_pow2(downstream_data_ptr, downstream_cb_page_size);
+
+//     // XXXXX - painful syncing right now?  move this into get_cmds
+//     noc_async_writes_flushed();
+//     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(1);
+//     return 16;
+// }
 
 template<bool cmddat_wrap_enable>
 static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
@@ -882,7 +899,9 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     default:
-        DPRINT << "prefetch invalid command:" << (uint32_t)cmd->base.cmd_id << " " << cmd_ptr << " " << cmddat_q_base << ENDL();
+        volatile CQPrefetchCmd tt_l1_ptr *cmd_to_print = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader) + 32);
+        // DPRINT << "exec_buf cmd: " << (uint32_t)(cmd_to_print->base.cmd_id)  << ENDL();
+        DPRINT << "prefetch invalid command:" << (uint32_t)(cmd_to_print->base.cmd_id) << " " << cmd_ptr << " " << cmddat_q_base << ENDL();
         DPRINT << HEX() << *(uint32_t*)cmd_ptr << ENDL();
         DPRINT << HEX() << *((uint32_t*)cmd_ptr+1) << ENDL();
         DPRINT << HEX() << *((uint32_t*)cmd_ptr+2) << ENDL();
@@ -996,7 +1015,10 @@ void process_exec_buf_cmd_h() {
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(dispatch_h_exec_buf_sem_id));
 
     DEBUG_STATUS("EBCW");
+    DPRINT << "PrefetchH stalled on semaphore " << ENDL();
     while (*sem_addr == 0);
+    *sem_addr = 0;
+    DPRINT << "PrefetchH not stalled on semaphore" << ENDL();
     DEBUG_STATUS("EBCD");
     *sem_addr = 0;
 }
@@ -1015,7 +1037,7 @@ void kernel_main_h() {
         cmd_ptr = process_relay_inline_all(cmd_ptr, fence);
         // Note: one fetch_q entry can contain multiple commands
         // The code below assumes these commands arrive individually, packing them would require parsing all cmds
-        if (cmd_id == CQ_PREFETCH_CMD_EXEC_BUF) {
+        if (stall_state == STALLED) {
             DPRINT << "exec buf\n";
             process_exec_buf_cmd_h();
             stall_state = NOT_STALLED; // Stall is no longer required after ExecBuf finished

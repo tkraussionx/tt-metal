@@ -39,6 +39,7 @@ constexpr uint32_t downstream_cb_sem_id = get_compile_time_arg_val(13);
 constexpr uint32_t split_dispatch_page_preamble_size = get_compile_time_arg_val(14);
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(15);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(16);
+constexpr uint32_t dispatch_h_exec_buf_sem_id = get_compile_time_arg_val(17);
 
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
@@ -364,6 +365,14 @@ void relay_write_h() {
     uint32_t data_ptr = cmd_ptr;
 
     relay_to_next_cb<split_dispatch_page_preamble_size>(data_ptr, length);
+}
+
+void relay_end_trace_h() {
+    volatile tt_l1_ptr CQDispatchCmd *cmd = (volatile tt_l1_ptr CQDispatchCmd *)cmd_ptr;
+    uint32_t data_ptr = cmd_ptr;
+    DPRINT << "Relay CMD" << ENDL();
+    relay_to_next_cb<split_dispatch_page_preamble_size>(data_ptr, sizeof(CQDispatchCmd));
+    DPRINT << "CMD relayed" << ENDL();
 }
 
 // Note that for non-paged writes, the number of writes per page is always 1
@@ -740,6 +749,16 @@ static inline bool process_cmd_d(uint32_t& cmd_ptr) {
         DEBUG_STATUS("DWD");
         break;
 
+    case CQ_DISPATCH_CMD_EXEC_BUF_END:
+        DPRINT << "cmd_exec_buf_end\n";
+        if (is_h_variant) {
+            DPRINT << "Local Core" << ENDL();
+            // ASSERT(0);
+        } else {
+            relay_end_trace_h();
+            DPRINT << "cmd_exec_buf_end\n";
+        }
+        break;
     case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
         DPRINT << "cmd_write_linear_h\n";
         if (is_h_variant) {
@@ -842,6 +861,11 @@ static inline bool process_cmd_h(uint32_t& cmd_ptr) {
         process_write_host_h();
         break;
 
+    case CQ_DISPATCH_CMD_EXEC_BUF_END:
+        // DPRINT << "cmd_exec_buf_end " << DOWNSTREAM_NOC_X << " " << DOWNSTREAM_NOC_Y << " " << dispatch_h_exec_buf_sem_id << ENDL();
+        noc_semaphore_inc(get_noc_addr_helper(downstream_noc_xy, get_semaphore(dispatch_h_exec_buf_sem_id)), 0x80000000);
+        break;
+
     case CQ_DISPATCH_CMD_TERMINATE:
         DPRINT << "dispatch_h terminate\n";
         cmd_ptr += sizeof(CQDispatchCmd);
@@ -922,6 +946,7 @@ void kernel_main() {
         // in case dispatch_h is connected to a depacketizing stage.
         // TODO: This should be replaced with a signal similar to what packetized
         // components use.
+        // sem inc
         noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_dispatch_cb_sem_id)), 0x80000000);
     }
 
