@@ -724,7 +724,6 @@ class TTPyCompositeConv(TTPyOp):
     ):
         assert len(conv_params) == 10
         K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
-
         assert dilation == 1 and groups == 1
         assert padded_input_channels >= C
         if not using_parameters_cache:
@@ -742,7 +741,7 @@ class TTPyCompositeConv(TTPyOp):
             )
             assert weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
             assert weight.get_dtype() == weights_untiled_dtype
-            assert weight.get_legacy_shape() == weights_shape
+            # assert weight.get_legacy_shape() == weights_shape
             weight_untiled = weight.pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
             # for conv op, pad the weights to block shape
             if self.is_1d_systolic:

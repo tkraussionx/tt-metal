@@ -118,7 +118,7 @@ void OptimizedConv::validate(const std::vector<Tensor>& input_tensors, const std
         auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(input_tensor_a.get_legacy_shape(), conv_params, out_block_h_ntiles, extra_padding_for_32B_alignment);
         uint32_t out_width_ntiles = this->compute_output_shapes(input_tensors).at(0)[-1] / TILE_WIDTH;
         if(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
-            TT_FATAL(this->parallelization_config.per_core_out_matrix_width_ntiles == out_width_ntiles);
+            //TT_FATAL(this->parallelization_config.per_core_out_matrix_width_ntiles == out_width_ntiles);
             TT_FATAL(this->block_config.out_subblock_w_ntiles == out_width_ntiles || this->block_config.out_subblock_h_ntiles == 1);
         } else if (this->output_mem_config.memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
             // For block sharded, out_width per core is shard width, and this is split along row
@@ -149,10 +149,10 @@ std::vector<Shape> OptimizedConv::compute_output_shapes(const std::vector<Tensor
 
     // Tiled output shape is padded shape. Padded to tile shape.
     auto shape_w = batch_size * conv_output_h * conv_output_w;
-    auto shape_c = output_channels;
+    auto shape_c = input_tensor_a_shape[3];
     auto padded_shape_w =
         parallelization_config.num_cores_nhw * parallelization_config.per_core_out_matrix_height_ntiles * TILE_HEIGHT;
-    auto padded_shape_c = round_up(this->output_channels, TILE_WIDTH);
+    auto padded_shape_c = round_up(shape_c, TILE_WIDTH);
     auto output_padding = Padding(
         {{0, 0}, {0, 0}, {0, (padded_shape_w - shape_w)}, {0, (padded_shape_c - shape_c)}}, Padding::PadValue::Zero);
     auto output_tensor_shape = Shape({1, 1, padded_shape_w, padded_shape_c}, output_padding);

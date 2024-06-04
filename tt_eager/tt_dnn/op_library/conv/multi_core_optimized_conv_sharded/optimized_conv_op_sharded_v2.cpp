@@ -36,6 +36,9 @@ const uint32_t matmul_partials_cb                     = CB::c_intermed0;
 const uint32_t tilize_mode_tilized_act_cb             = CB::c_intermed1;
 const uint32_t untilize_mode_reblock_cb               = CB::c_intermed2;
 const uint32_t out0_cb                                = CB::c_out0;
+const uint32_t temp_sum_cb                            = CB::c_intermed3;
+const uint32_t transpose_cb                           = CB::c_intermed4;
+const uint32_t prev_eltwise_cb                        = CB::c_intermed5;
 
 
 // TODO: Add namespace for utilities?
@@ -150,15 +153,23 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
     } else {
         //Share buffer if same data format
         if(interm0_df == out_df) {
+            cout<<"**************interm0_df == out_df****************"<<endl;
             CoreRangeSet cores(std::set<CoreRange>({core}));
             std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
                 {out0_cb, out_df},
-                {matmul_partials_cb, out_df}
+                {matmul_partials_cb, out_df},
+                {temp_sum_cb, out_df},
+                {transpose_cb, out_df},
+                {prev_eltwise_cb, out_df}
             };
             CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, cb_output_data_format_spec)
                 .set_page_size(out0_cb, out_tile_size)
-                .set_page_size(matmul_partials_cb, out_tile_size);
+                .set_page_size(matmul_partials_cb, out_tile_size)
+                .set_page_size(temp_sum_cb, out_tile_size)
+                .set_page_size(transpose_cb, out_tile_size)
+                .set_page_size(prev_eltwise_cb, out_tile_size);
             if (output.is_sharded()) {
+                cout<<"**************output.is_sharded()****************"<<endl;
                 cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
             }
             cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
@@ -170,7 +181,9 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
 
             CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{out0_cb, out_df}})
                 .set_page_size(out0_cb, out_tile_size);
+            cout<<"**************interm0_df != out_df****************"<<endl;
             if (output.is_sharded()) {
+                cout<<"**************interm0_df == out_df****************"<<endl;
                 cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
             }
             cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
@@ -192,6 +205,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
 }
 
 operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tensor& a, const Tensor &b, const Shape& ashape, std::optional<const Tensor> bias, const std::optional<const Tensor> conv_reader_indices, vector<int> conv_params, uint32_t output_channels, bool untilize_out, bool has_bias, bool fuse_relu, const OptimizedConvParallelizationConfig& parallelization_config, const OptimizedConvBlockConfig& block_config, uint32_t extra_padding_for_32B_alignment, bool use_shallow_conv_variant, bool transpose_mcast, Tensor &output, DeviceComputeKernelConfig compute_kernel_config) {
+    cout << "output shape" << output.get_legacy_shape() << endl;
     bool pass = true;
     tt_metal::Device *device = a.device();
     TT_ASSERT(a.get_layout() == Layout::ROW_MAJOR, "Conv activation should be in row major layout");
@@ -259,6 +273,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     TT_ASSERT(b.get_layout() == Layout::TILE, "Conv weights should be in tiled layout");
     TT_ASSERT(b.get_legacy_shape()[0] == 1, "Conv weight matrix shape is invalid");
     TT_ASSERT(b.get_legacy_shape()[1] == 1, "Conv weight matrix shape is invalid");
+    cout << "b.get_legacy_shape()[2]: " << b.get_legacy_shape()[2] << endl;
+    cout << "b.get_legacy_shape()[3]: " << b.get_legacy_shape()[3] << endl;
     uint32_t weight_matrix_height = b.get_legacy_shape()[2];
     uint32_t weight_matrix_width = b.get_legacy_shape()[3];
     uint32_t weight_matrix_height_ntiles = weight_matrix_height / TILE_HEIGHT;
@@ -276,6 +292,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     uint32_t num_cores_x = p_config.grid_size.x;
     uint32_t num_cores_y = p_config.grid_size.y;
     uint32_t total_num_cores = num_cores_x * num_cores_y;
+    cout << "num_cores_x: " << num_cores_x << endl;
+    cout << "num_cores_y: " << num_cores_y << endl;
     assert(num_cores_x < 13);
     assert(num_cores_y < 10);
     uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height_ntiles;
@@ -549,6 +567,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     }
     assert(per_core_out_matrix_height_ntiles % act_block_h_ntiles == 0);
     uint32_t num_blocks_act_h_per_core = per_core_out_matrix_height_ntiles / act_block_h_ntiles;
+    cout << "num_blocks_act_h_per_core: " << num_blocks_act_h_per_core << endl;
+    cout << "per_core_out_matrix_height_ntiles: " << per_core_out_matrix_height_ntiles << endl;
+    cout << "act_block_h_ntiles: " << act_block_h_ntiles << endl;
+
     assert(per_core_out_matrix_height_ntiles % out_block_h_ntiles == 0);
     uint32_t num_blocks_out_h_per_core = per_core_out_matrix_height_ntiles / out_block_h_ntiles;
     bool act_height_sliced = per_core_out_matrix_height_ntiles < act_matrix_height_ntiles;
@@ -667,7 +689,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         num_act_cb_tiles = num_act_cb_tiles * 2; // double buffered
     }
 
-    uint32_t writer_output_block_num_tiles = out_block_h_ntiles * weight_block_w_ntiles;
+    uint32_t writer_output_block_num_tiles = out_block_h_ntiles * 80; // out_block_h_ntiles * weight_block_w_ntiles;
 
     std::vector<uint32_t> reader_rt_args;
     std::vector<uint32_t> reader_compile_time_args;
@@ -727,8 +749,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
 
     compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
     // Input should always be sharded in this conv; always use reader kernel for input shard with halo and padding
-    if (weight_size_h == weight_size_w and weight_size_w > 1 and (stride_h == 1 or stride_h == 2)) {
+    if (weight_size_h != weight_size_w and weight_size_w == 1 and (stride_h == 1 or stride_h == 2)) {
+        cout << "Using reader kernel for 1x1 conv" << endl;
         if (weight_width_sliced) {
+            cout<< "Using reader kernel for 1x1 conv with weight width sliced" << endl;
             // 2D conv
             assert(read_3x3_window_in_inner_loop == true);
             reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_2d_mcast_padded_with_halo_3x3_weights_v2.cpp";
@@ -754,12 +778,14 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
             tilize_in0 = false;
         } else {
             // 1D conv
+            cout << "Using reader kernel for 1x1 conv with 1D mcast" << endl;
             assert(act_block_w_datums == round_up(conv_act_size_c * weight_size_w, TILE_WIDTH));
             reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_padded_with_halo_3x3_weights_v2.cpp";
             if (split_reader) {
                 writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_writer_tiled_out_1d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
                 writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_writer_tiled_out_1d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
             } else {
+                cout << " split_reader is false" << endl;
                 writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_1d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
                 writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_1d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
             }

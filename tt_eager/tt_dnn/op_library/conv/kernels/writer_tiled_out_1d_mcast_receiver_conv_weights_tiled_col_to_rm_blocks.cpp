@@ -4,10 +4,11 @@
 
 #include "dataflow_api.h"
 
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 
 void kernel_main() {
+    DPRINT << "----------------------------------------WRITER-RECIEVER-------------------------------------" << ENDL();
     // This writer is for output tensor in tile format
     constexpr bool out_in_dram = get_compile_time_arg_val(0) == 1;
     constexpr uint32_t cb_id_out0 = get_compile_time_arg_val(1);

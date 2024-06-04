@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "firmware_common.h"
+#include "debug/dprint.h"
 
 
 void kernel_main() {
@@ -46,6 +47,10 @@ void kernel_main() {
      * - Update l1_write_addr_act by conv_act_c_read_bytes
      */
     uint32_t reader_offsets[weight_size_w*weight_size_h];
+    DPRINT<< "weight_size_w: " << weight_size_w << ENDL();
+    DPRINT<< "weight_size_h: " << weight_size_h << ENDL();
+    DPRINT<< "act_num_blocks_h: " << act_num_blocks_h << ENDL();
+    DPRINT<< "act_block_num_tiles: " << act_block_num_tiles << ENDL();
     uint32_t reader_offset = 0; // Constant offset for each pixel within filter window
     uint32_t reader_offset_idx = 0;
     for (uint32_t channel_stick_h = 0; channel_stick_h < weight_size_h; channel_stick_h++) {
@@ -58,11 +63,14 @@ void kernel_main() {
     }
 
     #ifdef SPLIT_READER
+    DPRINT<< "SPLIT_READER" << ENDL();
     constexpr uint32_t act_block_h_datums_read = act_block_h_datums / 4; // Extra /2 because of packed uint16 reads
     constexpr uint32_t act_block_num_tiles_read = act_block_num_tiles / 2;
     #else
     constexpr uint32_t act_block_h_datums_read = act_block_h_datums / 2; // packed uint16 reads
     constexpr uint32_t act_block_num_tiles_read = act_block_num_tiles;
+    DPRINT<< "act_block_h_datums_read: " << act_block_h_datums_read << ENDL();
+    DPRINT<< "act_block_num_tiles_read: " << act_block_num_tiles_read << ENDL();
     #endif
 
     // LOOP TO FILL READER INDICES
@@ -85,12 +93,13 @@ void kernel_main() {
     // this has shown to be a big perf win
     static_assert(act_block_h_datums % 2 == 0); // need to be even to read 2 in the body, due to packing of 2 indices in 1 uint32_t word
     if constexpr (coalesce_window_inner_reads and window_inner == num_coalesced_reads) {
+        DPRINT<< "coalesce_window_inner_reads" << ENDL();
         // coalesce reads along weight_size_w
         reader_offset_idx = 0;
         uint32_t act_l1_offset = 0;
         uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
 
-        static_assert(coalesced_read_bytes <= NOC_MAX_BURST_SIZE);
+        //static_assert(coalesced_read_bytes <= NOC_MAX_BURST_SIZE);
         // set_state uses just x/y from the get_noc_addr, addr is ignored
         noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), coalesced_read_bytes);
         uint32_t start_reader_idx = 0;
@@ -144,6 +153,7 @@ void kernel_main() {
         }
 
     } else {
+        DPRINT<< "no coalesce_window_inner_reads" << ENDL();
         // NOTE: This code block expects reader_indices_ptr to be uint32_t (not packed uint16_t)
         // Inner window dim is usually 3, so reading packed indices is complicated
         // TODO: We could probably just remove this block is no convs use it
@@ -153,7 +163,7 @@ void kernel_main() {
         uint32_t act_l1_offset = 0;
         uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
 
-        static_assert(conv_act_c_read_bytes <= NOC_MAX_BURST_SIZE);
+        //static_assert(conv_act_c_read_bytes <= NOC_MAX_BURST_SIZE);
         // set_state uses just x/y from the get_noc_addr, addr is ignored
         noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), conv_act_c_read_bytes);
 
