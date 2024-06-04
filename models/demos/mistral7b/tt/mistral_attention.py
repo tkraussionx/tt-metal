@@ -153,38 +153,38 @@ class TtMistralAttention(nn.Module):
             for i in range(self.num_devices)
         ]
 
-        self.wqkv_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
-            input_shape_a=ttnn.Shape([1, 1, self.max_batch_size, self.hidden_size]),
-            input_shape_b=self.wqkv_list[0].shape,
-            core_grid=self.grid_size,
-            fp32_dst=self.compute_kernel_config.fp32_dest_acc_en,
-        )
-        self.dense_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
-            input_shape_a=ttnn.Shape([1, 1, self.max_batch_size, self.hidden_size]),
-            input_shape_b=self.wo_list[0].shape,
-            core_grid=self.grid_size,
-            fp32_dst=self.compute_kernel_config.fp32_dest_acc_en,
-        )
-        self.q_heads_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-            compute_with_storage_grid_size=ttnn.experimental.tensor.CoreCoord(self.grid_size.x, self.grid_size.y),
-            in0_block_w=4,
-            out_subblock_h=4,
-            out_subblock_w=1,
-            per_core_M=4,
-            per_core_N=1,
-            transpose_mcast=False,
-            fused_activation=None,
-        )
-        self.k_heads_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-            compute_with_storage_grid_size=ttnn.experimental.tensor.CoreCoord(self.grid_size.x, self.grid_size.y),
-            in0_block_w=4,
-            out_subblock_h=1,
-            out_subblock_w=1,
-            per_core_M=1,
-            per_core_N=1,
-            transpose_mcast=False,
-            fused_activation=None,
-        )
+        # self.wqkv_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
+        #     input_shape_a=ttnn.Shape([1, 1, self.max_batch_size, self.hidden_size]),
+        #     input_shape_b=self.wqkv_list[0].shape,
+        #     core_grid=self.grid_size,
+        #     fp32_dst=self.compute_kernel_config.fp32_dest_acc_en,
+        # )
+        # self.dense_program_config = ttnn.operations.matmul.create_matmul_1d_systolic_array_program_config(
+        #     input_shape_a=ttnn.Shape([1, 1, self.max_batch_size, self.hidden_size]),
+        #     input_shape_b=self.wo_list[0].shape,
+        #     core_grid=self.grid_size,
+        #     fp32_dst=self.compute_kernel_config.fp32_dest_acc_en,
+        # )
+        # self.q_heads_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=ttnn.experimental.tensor.CoreCoord(self.grid_size.x, self.grid_size.y),
+        #     in0_block_w=4,
+        #     out_subblock_h=4,
+        #     out_subblock_w=1,
+        #     per_core_M=4,
+        #     per_core_N=1,
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
+        # self.k_heads_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=ttnn.experimental.tensor.CoreCoord(self.grid_size.x, self.grid_size.y),
+        #     in0_block_w=4,
+        #     out_subblock_h=1,
+        #     out_subblock_w=1,
+        #     per_core_M=1,
+        #     per_core_N=1,
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
 
     def forward(
         self,
@@ -220,7 +220,7 @@ class TtMistralAttention(nn.Module):
             xqkv_fused = ttnn.linear(
                 x,
                 wqkv,
-                program_config=self.wqkv_program_config,
+                # program_config=self.wqkv_program_config,
                 memory_config=self.model_config["XQKV_MM_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
                 dtype=self.dtype,
@@ -247,7 +247,7 @@ class TtMistralAttention(nn.Module):
             q_heads = ttnn.linear(
                 q_heads,
                 rotary_mat,
-                program_config=self.q_heads_program_config,
+                # program_config=self.q_heads_program_config,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )
@@ -255,7 +255,7 @@ class TtMistralAttention(nn.Module):
             k_heads = ttnn.linear(
                 k_heads,
                 rotary_mat,
-                program_config=self.k_heads_program_config,
+                # program_config=self.k_heads_program_config,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )
@@ -352,7 +352,7 @@ class TtMistralAttention(nn.Module):
             dense_out = ttnn.linear(
                 attn_output,
                 wo,
-                program_config=self.dense_program_config,
+                # program_config=self.dense_program_config,
                 memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )  # seqlen, 1, batch, hidden_size
