@@ -429,18 +429,22 @@ class TtMixtralAttention(LightweightModule):
         ###
         attn_output_11SH = ttnn.experimental.tensor.nlp_concat_heads(
             attn_output_14SD,
-            output_mem_config=ttnn.L1_MEMORY_CONFIG,
+            output_mem_config=ttnn.DRAM_MEMORY_CONFIG,
         )
+
+        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo, core_grid=ttnn.CoreGrid(y=8, x=8))
 
         print("attn_output_11SH", attn_output_11SH.shape)
         attn_output_11SH = ttnn.all_gather(
             attn_output_11SH,
-            dim=3,
+            dim=1,
             num_links=1,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-
-        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo_prefill, core_grid=ttnn.CoreGrid(y=8, x=8))
+        # attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo_prefill, core_grid=ttnn.CoreGrid(y=8, x=8))
+        attn_output_11SH = ttnn.experimental.operations.primary.moreh_sum(
+            attn_output_11SH, dims=[1], output=None, compute_kernel_config=None
+        )
 
         print("attn_output_11SH", attn_output_11SH.shape)
 
