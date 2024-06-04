@@ -17,6 +17,8 @@ class TtTransformer(LightweightModule):
         args,
         dtype,
         layers,
+        mode="decode",
+        transformation_mats=None,
     ):
         super().__init__()
         self.args = args
@@ -33,6 +35,8 @@ class TtTransformer(LightweightModule):
                 args=args,
                 dtype=dtype,
                 layer_num=i,
+                mode=mode,
+                transformation_mats=transformation_mats,
             )
             for i in layers
         ]
@@ -43,6 +47,7 @@ class TtTransformer(LightweightModule):
             dtype=ttnn.bfloat16,
             layer_num=None,
             weight_key="norm",
+            mode=mode,
         )
 
         self.state_dict = state_dict
@@ -63,6 +68,7 @@ class TtTransformer(LightweightModule):
         )
 
         self.compute_kernel = self.args.get_compute_kernel_config()
+        self.mode = mode
 
     def forward(
         self,
@@ -73,15 +79,22 @@ class TtTransformer(LightweightModule):
         rot_mats,
     ):
         for i, layer in enumerate(self.layers):
-            x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
+            if self.mode == "prefill":
+                x = layer.forward_prefill(x, start_pos, current_pos, attn_masks, rot_mats)
+            else:
+                x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
         attn_masks.deallocate(True)
 
         x_norm = self.norm(x)
+        if self.mode == "prefill":
+            matmul_prg_cfg = self.model_config["OUTPUT_MM_PROGCFG_PREFILL"]
+        else:
+            matmul_prg_cfg = self.model_config["OUTPUT_MM_PROGCFG"]
         outputs = ttnn.experimental.operations.primary.matmul(
             x_norm,
             self.output_weight,
             # compute_with_storage_grid_size=(8, 8),
-            program_config=self.model_config["OUTPUT_MM_PROGCFG"],
+            program_config=matmul_prg_cfg,
             output_mem_config=self.model_config["OUTPUT_MM_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
         )

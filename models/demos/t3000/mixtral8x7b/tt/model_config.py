@@ -310,7 +310,19 @@ class TtModelArgs:
             fused_activation=None,
             mcast_in0=True,
         )
-
+        self.model_config[
+            "OUTPUT_MM_PROGCFG_PREFILL"
+        ] = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(7, 6),  # TODO Hanging with full coreGrid (8,8)
+            in0_block_w=2,
+            out_subblock_h=1,
+            out_subblock_w=4,
+            per_core_M=4,
+            per_core_N=32,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
+        )
         self.model_config[
             "SHARDED_NORM_PRGM_CFG"
         ] = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
