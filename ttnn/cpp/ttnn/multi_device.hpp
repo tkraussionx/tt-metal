@@ -46,6 +46,8 @@ std::vector<ttnn::Tensor> get_device_tensors(const ttnn::Tensor& tensor) {
             tensors.push_back(shard);
         }
         return tensors;
+    } else if (std::holds_alternative<tt::tt_metal::OwnedStorage>(tensor.get_storage())) {
+        return {tensor};
     }
     TT_THROW("Expected tensor to be on MultiDeviceHostStorage type!");
 }
