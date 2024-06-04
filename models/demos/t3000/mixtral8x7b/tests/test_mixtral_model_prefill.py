@@ -41,17 +41,20 @@ class Emb(torch.nn.Module):
 
 
 @pytest.mark.parametrize(
-    "n_layers",
-    (32, 1),
+    "seq_len",
+    (128, 1024),
 )
-def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds, n_layers):
+@pytest.mark.parametrize(
+    "n_layers",
+    (1,),
+)
+def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds, n_layers, seq_len):
     pcc = 0.97
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = n_layers
     batch = 1
-    seq_len = 128  # length to generate
     model_args.max_batch_size = batch
     model_args.max_seq_len = seq_len
     state_dict = model_args.load_state_dict()
