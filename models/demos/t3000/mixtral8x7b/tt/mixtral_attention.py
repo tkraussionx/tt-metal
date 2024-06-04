@@ -372,7 +372,7 @@ class TtMixtralAttention(LightweightModule):
             num_heads=self.n_local_heads,
             num_kv_heads=self.n_local_kv_heads,
             transpose_k_heads=False,
-            output_mem_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            output_mem_config=ttnn.DRAM_MEMORY_CONFIG,  # self.model_config["HEIGHT_SHARDED_MEMCFG"],
         )
 
         xqkv_fused.deallocate(True)

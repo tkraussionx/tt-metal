@@ -167,12 +167,12 @@ def prepare_inputs_ttnn_prefill(x_bsh, hidden_size, current_pos, sliding_window,
     current = current_pos % sliding_window
     n_local_heads = 4  # model_args.n_heads // 8 # num_devices TODO pass the arguments instead of hard coding
 
-    attn_mask = torch.full((seq_len, seq_len), float("-inf"))
+    attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
     attn_mask_torch = torch.triu(attn_mask, diagonal=1)
-    attn_mask = attn_mask_torch.view(1, batch, seq_len, seq_len)
+    attn_mask = attn_mask_torch.expand(batch, 1, -1, -1)
 
     attn_mask = ttnn.from_torch(
-        attn_mask,
+        attn_mask_torch,
         device=device_mesh,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
