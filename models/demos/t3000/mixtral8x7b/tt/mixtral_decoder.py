@@ -17,6 +17,8 @@ class TtTransformerBlock(LightweightModule):
         args,
         layer_num,
         dtype,
+        mode="decode",
+        transformation_mats=None,
     ):
         super().__init__()
 
@@ -32,6 +34,7 @@ class TtTransformerBlock(LightweightModule):
             args=args,
             layer_num=layer_num,
             dtype=dtype,
+            transformation_mats=transformation_mats,
         )
 
         self.feed_forward = TtMoeLayer(
@@ -59,6 +62,7 @@ class TtTransformerBlock(LightweightModule):
             dtype=ttnn.bfloat16,
             layer_num=layer_num,
             weight_key="attention_norm",
+            mode=mode,
         )
 
         self.ffn_norm = TtRMSNorm(
@@ -68,6 +72,7 @@ class TtTransformerBlock(LightweightModule):
             dtype=ttnn.bfloat16,
             layer_num=layer_num,
             weight_key="ffn_norm",
+            mode=mode,
         )
 
     def forward(
@@ -97,5 +102,35 @@ class TtTransformerBlock(LightweightModule):
         hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH)
         ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
         ffn_1SBH = self.feed_forward(ffn_norm_1SBH)
+        out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH)
+        return out_1SBH
+
+    def forward_prefill(
+        self,
+        xs_1SBH,
+        start_pos,
+        current_pos,
+        attn_masks,
+        rot_mats,
+    ) -> ttnn.Tensor:
+        """
+        Tensors are postfixed with 4 characters that represent their 4-D shape:
+        B: batch dim (32)
+        S: seq dim (1)
+        1: unary dim
+        H: hidden dim (4096)
+        """
+        attn_norm_1SBH = self.attention_norm(xs_1SBH)
+
+        attn_1SBH = self.attention.forward_prefill(
+            attn_norm_1SBH,
+            start_pos,
+            current_pos,
+            attn_masks,
+            rot_mats,
+        )
+        hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH)
+        ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
+        ffn_1SBH = self.feed_forward.forward_prefill(ffn_norm_1SBH)
         out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH)
         return out_1SBH

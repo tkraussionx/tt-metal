@@ -145,7 +145,7 @@ class TtMoeLayer(LightweightModule):
         results_11BH.deallocate(True)
         # sum on each device
         # output_11BH_gathered = ttnn.experimental.tensor.reshape(output_11BH_gathered, 1, seqlen, 32, 4096)
-        # output_11BH_gathered = ttnn.sum(output_11BH_gathered, dim=2)
+        # output_11BH_gathered = ttnn.sum(output_11BH_gathered, dim=1)
         # output_11BH_gathered = ttnn.reshape(output_11BH_gathered, ttnn.Shape([1, 1, seqlen, 4096]))
         output_11BH_gathered = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
 
