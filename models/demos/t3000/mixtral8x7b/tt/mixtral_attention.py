@@ -404,20 +404,20 @@ class TtMixtralAttention(LightweightModule):
 
         # SDPA
         program_config = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
-            compute_with_storage_grid_size=[8, 7],
+            compute_with_storage_grid_size=self.device_mesh.get_device(0).compute_with_storage_grid_size(),
             q_chunk_size=128,
             k_chunk_size=128,
         )
+
         attn_output_14SD = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention(
             q_heads_14SD,
-            k_heads_11SD,
-            v_heads_11SD,
+            keys_11SD,
+            values_11SD,
             attn_masks,
             is_causal=True,
             scale=self.scale,
             program_config=program_config,
         )
-        print("attn_output_14SD", attn_output_14SD)
 
         # deallocate keys and values
         q_heads_14SD.deallocate(True)

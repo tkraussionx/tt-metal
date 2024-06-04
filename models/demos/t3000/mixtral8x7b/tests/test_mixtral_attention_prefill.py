@@ -135,4 +135,4 @@ def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_s
         logger.info("Mistral Attention output Passed!")
     else:
         logger.warning("Mistral Attention output Failed!")
-        assert True  # all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+        assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"

@@ -169,8 +169,7 @@ def prepare_inputs_ttnn_prefill(x_bsh, hidden_size, current_pos, sliding_window,
 
     attn_mask = torch.full((seq_len, seq_len), float("-inf"))
     attn_mask_torch = torch.triu(attn_mask, diagonal=1)
-    attn_mask = attn_mask_torch.expand(1, batch, -1, -1)
-    attn_mask = attn_mask.repeat(n_local_heads, 1, 1, 1)
+    attn_mask = attn_mask_torch.view(1, batch, seq_len, seq_len)
 
     attn_mask = ttnn.from_torch(
         attn_mask,
@@ -188,7 +187,6 @@ def prepare_inputs_ttnn_prefill(x_bsh, hidden_size, current_pos, sliding_window,
     #     use_height_and_width_as_shard_shape=True,
     # )
     # attn_mask = ttnn.experimental.tensor.interleaved_to_sharded(attn_mask, sharded_mem_config=ATTN_MASK_MEMCFG)
-
     return xs_1BSH, attn_mask, attn_mask_torch
 
 
