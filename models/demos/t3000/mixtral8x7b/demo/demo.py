@@ -120,11 +120,11 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     else:
         input_prompts = load_inputs(user_input, 32)
 
-    # Load model args, weights, and tokenizer
-    model_args = TtModelArgs(device_mesh.get_device(0), instruct=instruct_mode)
+    # Load model args, weights, and tokenizer, dummy weights for debug only
+    model_args = TtModelArgs(device_mesh.get_device(0), instruct=instruct_mode, dummy_weights=True)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    model_args.n_layers = 32  # Full model
+    model_args.n_layers = 1  # Debug only, use 32 for full model
 
     logger.info("Loading weights...")
     state_dict = torch.load(model_args.state_dict_path)
@@ -200,10 +200,6 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
 
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
-
-    # TODO Debug (only device 0 is doing argmax, otherwise it throws an error)
-    # Alternatively, send the output back to device: tt_lib.tensor.Tensor.to()
-    ttl.device.SetDefaultDevice(device_mesh.get_device(0))
 
     # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
     for iteration in range(max_generated_tokens):

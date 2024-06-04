@@ -18,7 +18,7 @@ class TtMixtralEmbedding(torch.nn.Module):
         super().__init__()
 
         base_name = "tok_embeddings.weight"
-        torch_weight = self.state_dict[base_name]
+        torch_weight = state_dict[base_name]
 
         if args.dummy_weights:
             cache_name = None
