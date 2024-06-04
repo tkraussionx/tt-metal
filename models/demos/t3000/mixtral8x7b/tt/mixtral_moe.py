@@ -154,7 +154,7 @@ class TtMoeLayer(LightweightModule):
             output_11BH_gathered,
             device=self.device_mesh,
             dtype=ttnn.bfloat8_b,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )

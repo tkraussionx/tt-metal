@@ -27,7 +27,11 @@ from models.utility_functions import comp_pcc, comp_allclose
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 
-def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_seeds):
+@pytest.mark.parametrize(
+    "seq_len",
+    (128, 1024, 2048),
+)
+def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     """
     b: batch
     s: sequence length
@@ -38,7 +42,6 @@ def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_see
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     batch = 1
-    seq_len = 128  # length to generate
     model_args.max_batch_size = batch
     model_args.max_seq_len = seq_len
     state_dict = model_args.load_state_dict()

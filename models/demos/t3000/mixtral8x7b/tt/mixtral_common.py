@@ -158,7 +158,7 @@ def prepare_inputs_ttnn_prefill(x_bsh, hidden_size, current_pos, sliding_window,
         device=device_mesh,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        memory_config=ttnn.L1_MEMORY_CONFIG,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
         mesh_mapper=ReplicateTensorToMesh(device_mesh),
     )
 
