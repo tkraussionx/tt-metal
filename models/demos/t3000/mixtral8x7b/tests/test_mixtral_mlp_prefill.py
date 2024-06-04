@@ -4,6 +4,7 @@
 import os
 import torch
 from loguru import logger
+import pytest
 
 # Set Mixtral flags for CI, if CI environment is setup
 if os.getenv("CI") == "true":
@@ -25,15 +26,17 @@ from models.utility_functions import (
 )
 
 
-def test_mixtral_mlp_inference(t3k_device_mesh, use_program_cache, reset_seeds):
+@pytest.mark.parametrize(
+    "seq_len",
+    (128, 1024, 2048),
+)
+def test_mixtral_mlp_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     # Specify different dtypes for each feedForward weights
     dtypes = {
         "w1": ttnn.bfloat4_b,
         "w2": ttnn.bfloat8_b,
         "w3": ttnn.bfloat4_b,
     }
-
-    seq_len = 128
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     state_dict = model_args.load_state_dict()
@@ -66,8 +69,8 @@ def test_mixtral_mlp_inference(t3k_device_mesh, use_program_cache, reset_seeds):
     tt_input = ttnn.from_torch(
         torch_input,
         device=t3k_device_mesh,
-        dtype=ttnn.bfloat16,
-        memory_config=ttnn.L1_MEMORY_CONFIG,
+        dtype=ttnn.bfloat8_b,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
         layout=ttnn.TILE_LAYOUT,
         mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
     )
