@@ -11,6 +11,7 @@
 #include "impl/dispatch/work_executor.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
+#include "tt_metal/impl/kernels/data_types.hpp"
 #include "tt_metal/impl/trace/trace_buffer.hpp"
 #include "tt_metal/jit_build/build.hpp"
 #include "llrt/tt_cluster.hpp"
@@ -76,8 +77,7 @@ class Device {
         const uint8_t num_hw_cqs,
         std::size_t l1_small_size,
         const std::vector<uint32_t> &l1_bank_remap = {},
-        bool minimal = false,
-        uint32_t worker_core = 0);
+        bool minimal = false);
 
     ~Device();
 
@@ -192,6 +192,9 @@ class Device {
     // core.y represents different channels along one <x>
     const std::set<CoreCoord> &ethernet_cores() const { return this->ethernet_cores_; }
 
+    uint32_t get_noc_unicast_encoding(uint8_t noc_index, const CoreCoord& physical_core) const;
+    uint32_t get_noc_multicast_encoding(uint8_t noc_index, const CoreRange& physical_cores) const;
+
     void deallocate_buffers();
 
     // machine epsilon
@@ -229,7 +232,7 @@ class Device {
     void initialize_command_queue();
     void initialize_synchronous_sw_cmd_queue();
     void configure_kernel_variant(Program& program, string path, std::vector<uint32_t> compile_args, CoreCoord kernel_core, CoreCoord Kernel_physical_core,
-                                  CoreType dispatch_core_type, CoreCoord upstream_physical_core, CoreCoord downstream_physical_core, std::map<string, string> defines_in , bool is_active_eth_core = false);
+                                  CoreType dispatch_core_type, CoreCoord upstream_physical_core, CoreCoord downstream_physical_core, std::map<string, string> defines_in, NOC noc_index, bool is_active_eth_core = false);
     void compile_command_queue_programs();
     void configure_command_queue_programs();
     void clear_l1_state();
@@ -274,7 +277,6 @@ class Device {
     // Work Executor for this device - can asynchronously process host side work for
     // all tasks scheduled on this device
     WorkExecutor work_executor;
-    uint32_t worker_thread_core;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
     uint8_t num_hw_cqs_;
 

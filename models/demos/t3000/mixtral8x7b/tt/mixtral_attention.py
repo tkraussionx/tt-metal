@@ -81,7 +81,6 @@ class TtMixtralAttention(LightweightModule):
             cache_file_name=cache_name(f"wqkv_multidevice_4d"),
         )
 
-        self.wqkv = ttnn.to_device(self.wqkv, self.device_mesh)
         self.wo = ttnn.as_tensor(
             torch.transpose(
                 self.state_dict[wo_str],
@@ -143,8 +142,6 @@ class TtMixtralAttention(LightweightModule):
             for lp in layer_past
         ]
 
-        self.layer_past = [ttnn.to_device(lp, self.device_mesh) for lp in self.layer_past]
-
         self.scale = self.head_dim**-0.5
 
         reduce_mask_torch = torch.zeros(1, 1, self.max_batch_size, self.max_batch_size * 8)
@@ -158,7 +155,6 @@ class TtMixtralAttention(LightweightModule):
             layout=ttnn.TILE_LAYOUT,
         )
 
-        self.reduce_mask = ttnn.to_device(self.reduce_mask, self.device_mesh)
         self.compute_kernel = self.model_args.get_compute_kernel_config()
         self.compute_kernel_attn = self.model_args.get_compute_kernel_attn_config()
 

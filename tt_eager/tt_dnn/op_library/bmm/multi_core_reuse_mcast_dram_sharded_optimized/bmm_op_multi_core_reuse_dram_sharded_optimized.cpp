@@ -236,13 +236,26 @@ void get_dram_reader_core_coords_wormhole_b0(
             if (std::find(harvested_rows.begin(), harvested_rows.end(), y) != harvested_rows.end() ||
                 std::count(group_y.begin(), group_y.end(), y) >= 2) {
                 auto adjust_coord = [&](int start, int end, int step) {
+                    bool found_new_row = false;
                     for (int j = start; step > 0 ? j <= end : j >= end; j += step) {
                         if (std::find(harvested_rows.begin(), harvested_rows.end(), j) == harvested_rows.end() &&
                             std::count(group_y.begin(), group_y.end(), j) == 0) {
                             coord.y = j;
                             coord.x += x_step;
                             x_step--;
+                            found_new_row = true;
                             break;
+                        }
+                    }
+                    if (not found_new_row) {
+                        for (int j = start; step > 0 ? j <= end : j >= end; j += step) {
+                            if (std::find(harvested_rows.begin(), harvested_rows.end(), j) == harvested_rows.end()) {
+                                coord.y = j;
+                                coord.x += x_step;
+                                x_step--;
+                                found_new_row = true;
+                                break;
+                            }
                         }
                     }
                 };
@@ -1009,7 +1022,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
     }
 
     auto override_runtime_arguments_callback =
-        [writer_kernel_ids, all_worker_cores_ordered, cb_src2, cb_output](
+        [writer_kernel_ids, all_worker_cores_ordered, cb_src2, cb_output_reshard](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
@@ -1025,7 +1038,7 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
             auto dst_buffer = output_tensors.at(0).buffer();
 
             UpdateDynamicCircularBufferAddress(program, cb_src2, *src_buffer_a);
-            UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
+            UpdateDynamicCircularBufferAddress(program, cb_output_reshard, *dst_buffer);
 
             for (uint32_t i = 0; i < all_worker_cores_ordered.size(); ++i) {
                 auto core = all_worker_cores_ordered[i];
