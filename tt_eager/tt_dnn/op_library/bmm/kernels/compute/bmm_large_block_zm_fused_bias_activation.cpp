@@ -8,7 +8,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/pack_untilize.h"
-
+#include "debug/dprint.h"
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
 #endif
@@ -69,22 +69,50 @@ inline void reblock_and_untilize(
 
 void MAIN {
 
+    DPRINT << "heelloooo" << ENDL();
+
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(0); // inner block size in tiles
-    constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
-    constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
-    constexpr uint32_t in0_subblock_num_tiles = get_compile_time_arg_val(3);  // out_subblock_h*in0_block_w
-    constexpr uint32_t in1_num_subblocks = get_compile_time_arg_val(4); // outer column block size (in inner column blocks)
-    constexpr uint32_t in1_block_num_tiles = get_compile_time_arg_val(5); //out_subblock_w*in0_block_w* in1_num_subblocks;
-    constexpr uint32_t in1_per_core_w = get_compile_time_arg_val(6); // out_subblock_w*in1_num_subblocks
+    uint32_t in0_num_subblocks = get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
+    // constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
+    // constexpr uint32_t in0_subblock_num_tiles = get_compile_time_arg_val(3);  // out_subblock_h*in0_block_w
+    uint32_t in1_num_subblocks = get_compile_time_arg_val(4); // outer column block size (in inner column blocks)
+    // constexpr uint32_t in1_block_num_tiles = get_compile_time_arg_val(5); //out_subblock_w*in0_block_w* in1_num_subblocks;
+    // constexpr uint32_t in1_per_core_w = get_compile_time_arg_val(6); // out_subblock_w*in1_num_subblocks
     constexpr uint32_t num_blocks = get_compile_time_arg_val(7);  // outer inner dim (in inner dim blocks)
-    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(8); // inner row block size in tiles
-    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(9); // inner column block size in tiles
-    constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
+    uint32_t out_subblock_h = get_compile_time_arg_val(8); // inner row block size in tiles
+    uint32_t out_subblock_w = get_compile_time_arg_val(9); // inner column block size in tiles
+    // constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
     constexpr uint32_t batch = get_compile_time_arg_val(11); // batch dim
     constexpr uint32_t out_block_num_tiles = get_compile_time_arg_val(12); // number of tiles in out_block
     constexpr bool untilize_out = get_compile_time_arg_val(13); // untilize output
 
-    constexpr uint32_t out_block_w = out_subblock_w*in1_num_subblocks;
+    uint32_t original_out_subblock_h = out_subblock_h;
+    uint32_t original_out_subblock_w = out_subblock_w;
+
+    out_subblock_h = 1;
+    out_subblock_w = 1;
+
+    in0_num_subblocks = in0_num_subblocks * (original_out_subblock_h / out_subblock_h); // outer row block size (in inner row blocks)
+    uint32_t in0_block_num_tiles = out_subblock_h*in0_block_w*in0_num_subblocks; // out_subblock_h*in0_block_w*in0_num_subblocks;
+    uint32_t in0_subblock_num_tiles = out_subblock_h*in0_block_w;  // out_subblock_h*in0_block_w
+    in1_num_subblocks = in1_num_subblocks * (original_out_subblock_w / out_subblock_w); // outer column block size (in inner column blocks)
+    uint32_t in1_block_num_tiles = out_subblock_w*in0_block_w* in1_num_subblocks; //out_subblock_w*in0_block_w* in1_num_subblocks;
+    uint32_t in1_per_core_w = out_subblock_w*in1_num_subblocks; // out_subblock_w*in1_num_subblocks
+    uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w; // out_subblock_h * out_subblock_w;
+    uint32_t out_block_w = out_subblock_w*in1_num_subblocks;
+
+    // DPRINT << "Numbers ORIGINAL" << ENDL();
+    // DPRINT << in0_block_w << ENDL(); //= get_compile_time_arg_val(0); // inner block size in tiles
+    // DPRINT << in0_num_subblocks << ENDL(); //= get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
+    // DPRINT << in0_block_num_tiles << ENDL(); //= get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
+    // DPRINT << in0_subblock_num_tiles << ENDL(); //= get_compile_time_arg_val(3);  // out_subblock_h*in0_block_w
+    // DPRINT << in1_num_subblocks << ENDL(); //= get_compile_time_arg_val(4); // outer column block size (in inner column blocks)
+    // DPRINT << in1_block_num_tiles << ENDL(); //= get_compile_time_arg_val(5); //out_subblock_w*in0_block_w* in1_num_subblocks;
+    // DPRINT << in1_per_core_w << ENDL(); //= get_compile_time_arg_val(6); // out_subblock_w*in1_num_subblocks
+    // DPRINT << out_subblock_num_tiles << ENDL(); //= get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
+    // DPRINT << out_block_num_tiles << ENDL(); //= get_compile_time_arg_val(12); // number of tiles in out_block
+    // DPRINT << out_block_w << ENDL(); //= out_subblock_w*in1_num_subblocks;
+    // DPRINT << "end" << ENDL();
 
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
@@ -124,6 +152,37 @@ void MAIN {
 
         for(uint32_t block = 0; block < num_blocks; block++)
         {
+            DPRINT << "Block: " << block << ENDL();
+            if (block == 4) {
+                out_subblock_h = original_out_subblock_h;
+                out_subblock_w = original_out_subblock_w;
+
+                in0_num_subblocks = in0_num_subblocks / out_subblock_h; // outer row block size (in inner row blocks)
+                in0_block_num_tiles = out_subblock_h*in0_block_w*in0_num_subblocks; // out_subblock_h*in0_block_w*in0_num_subblocks;
+                in0_subblock_num_tiles = out_subblock_h*in0_block_w;  // out_subblock_h*in0_block_w
+                in1_num_subblocks = in1_num_subblocks / out_subblock_w; // outer column block size (in inner column blocks)
+                in1_block_num_tiles = out_subblock_w*in0_block_w* in1_num_subblocks; //out_subblock_w*in0_block_w* in1_num_subblocks;
+                in1_per_core_w = out_subblock_w*in1_num_subblocks; // out_subblock_w*in1_num_subblocks
+                out_subblock_num_tiles = out_subblock_h * out_subblock_w; // out_subblock_h * out_subblock_w;
+                out_block_w = out_subblock_w*in1_num_subblocks;
+
+                // DPRINT << "Numbers" << ENDL();
+                // DPRINT << in0_block_w << ENDL(); //= get_compile_time_arg_val(0); // inner block size in tiles
+                // DPRINT << in0_num_subblocks << ENDL(); //= get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
+                // DPRINT << in0_block_num_tiles << ENDL(); //= get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
+                // DPRINT << in0_subblock_num_tiles << ENDL(); //= get_compile_time_arg_val(3);  // out_subblock_h*in0_block_w
+                // DPRINT << in1_num_subblocks << ENDL(); //= get_compile_time_arg_val(4); // outer column block size (in inner column blocks)
+                // DPRINT << in1_block_num_tiles << ENDL(); //= get_compile_time_arg_val(5); //out_subblock_w*in0_block_w* in1_num_subblocks;
+                // DPRINT << in1_per_core_w << ENDL(); //= get_compile_time_arg_val(6); // out_subblock_w*in1_num_subblocks
+                // DPRINT << out_subblock_num_tiles << ENDL(); //= get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
+                // DPRINT << out_block_num_tiles << ENDL(); //= get_compile_time_arg_val(12); // number of tiles in out_block
+                // DPRINT << out_block_w << ENDL(); //= out_subblock_w*in1_num_subblocks;
+                // DPRINT << "end" << ENDL();
+
+                mm_block_init_short_with_dt(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
+                // mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
+            }
+
             bool last_out = block == (num_blocks-1);
             // Configure packer once for pack out without Bias
             #if not defined FUSE_BIAS and defined PACK_RELU
@@ -314,42 +373,42 @@ void MAIN {
             }
         }
         #endif // FUSE_BIAS
-        if constexpr(untilize_out) {
-            #ifdef PACK_RELU
-            PACK(( llk_pack_relu_config(ReluType::NO_RELU) ));
-            #endif // PACK_RELU
-            #ifndef FUSE_BIAS
-            unpack_reconfig_data_format_srca(in1_cb_id, mm_partials_cb_id);
-            #ifdef PACKER_L1_ACC
-                PACK((  llk_pack_reconfig_l1_acc(0) ));
-            #endif
-            #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
-                PACK((  pack_reconfig_data_format(out_cb_id) ));
-            #endif
-            #endif // FUSE_BIAS
-            pack_untilize_dst_init_short<out_subblock_w, out_block_w>(out_cb_id);
-            copy_tile_to_dst_init_short();
-            for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
-                reblock_and_untilize<out_subblock_w,out_block_w> (
-                    in1_num_subblocks,
-                    out_subblock_num_tiles,
-                    out_subblock_h,
-                    mm_partials_cb_id,
-                    out_cb_id);
-            }
-            pack_untilize_uninit(mm_partials_cb_id);
-        }
-        if constexpr(batch > 1) {
-            // reconfigure init for matmul
-            mm_block_init_short(in0_cb_id, in1_cb_id, 0, out_subblock_w, out_subblock_h, in0_block_w);
-            #ifdef FUSE_BIAS
-                // reconfigure unpacker df for src A and src B
-                unpack_reconfig_data_format(mm_partials_cb_id, in1_cb_id, bias_cb_id, in0_cb_id);
-            #else
-                // reconfigure unpacker df for src A
-                unpack_reconfig_data_format_srca(mm_partials_cb_id, in1_cb_id);
-            #endif
-        }
+        // if constexpr(untilize_out) {
+        //     #ifdef PACK_RELU
+        //     PACK(( llk_pack_relu_config(ReluType::NO_RELU) ));
+        //     #endif // PACK_RELU
+        //     #ifndef FUSE_BIAS
+        //     unpack_reconfig_data_format_srca(in1_cb_id, mm_partials_cb_id);
+        //     #ifdef PACKER_L1_ACC
+        //         PACK((  llk_pack_reconfig_l1_acc(0) ));
+        //     #endif
+        //     #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
+        //         PACK((  pack_reconfig_data_format(out_cb_id) ));
+        //     #endif
+        //     #endif // FUSE_BIAS
+        //     pack_untilize_dst_init_short<out_subblock_w, out_block_w>(out_cb_id);
+        //     copy_tile_to_dst_init_short();
+        //     for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
+        //         reblock_and_untilize<out_subblock_w,out_block_w> (
+        //             in1_num_subblocks,
+        //             out_subblock_num_tiles,
+        //             out_subblock_h,
+        //             mm_partials_cb_id,
+        //             out_cb_id);
+        //     }
+        //     pack_untilize_uninit(mm_partials_cb_id);
+        // }
+        // if constexpr(batch > 1) {
+        //     // reconfigure init for matmul
+        //     mm_block_init_short(in0_cb_id, in1_cb_id, 0, out_subblock_w, out_subblock_h, in0_block_w);
+        //     #ifdef FUSE_BIAS
+        //         // reconfigure unpacker df for src A and src B
+        //         unpack_reconfig_data_format(mm_partials_cb_id, in1_cb_id, bias_cb_id, in0_cb_id);
+        //     #else
+        //         // reconfigure unpacker df for src A
+        //         unpack_reconfig_data_format_srca(mm_partials_cb_id, in1_cb_id);
+        //     #endif
+        // }
     }
 }
 }

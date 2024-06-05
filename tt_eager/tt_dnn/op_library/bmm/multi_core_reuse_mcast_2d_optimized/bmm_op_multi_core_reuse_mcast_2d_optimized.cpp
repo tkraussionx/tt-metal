@@ -54,6 +54,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t num_blocks = K / in0_block_w;
 
+    std::cout << "num blocks is " << num_blocks << std::endl;
+
     // Only enable packer l1 accumulation when there are num_blocks > 2, otherwise
     // unnecessary overhead for reconfigs are added. Last iteration of l1 accumulation
     // does a spill and reload, so need more than 2 blocks to use l1 acc for packer

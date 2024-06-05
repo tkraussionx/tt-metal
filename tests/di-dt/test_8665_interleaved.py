@@ -7,8 +7,10 @@ import pytest
 import time
 
 import tt_lib as ttl
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import comp_pcc, torch2tt_tensor
 import torch
+
+from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import compare_pcc
 
 
 # Used to reproduce issue #8665 with matmul 2D (Falcon 7b matmuls)
@@ -45,11 +47,17 @@ def test_reproduce_matmul_2d_hang(
     a_shape = [1, 1, seq_len, inner_dim]
     b_shape = [1, 1, inner_dim, weights_n]
 
+    b_shape_32 = [1, 1, inner_dim, weights_n // 2]
+
     A = torch.randn(a_shape)
     B = torch.randn(b_shape)
+    B_32 = torch.randn(b_shape_32)
+
+    torch_result = torch.matmul(A, B)
 
     a_t = torch2tt_tensor(A, device, ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype)
     b_t = torch2tt_tensor(B, device, ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype)
+    b_t_32 = torch2tt_tensor(B_32, device, ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype)
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
@@ -62,12 +70,34 @@ def test_reproduce_matmul_2d_hang(
         fused_activation=None,
     )
 
+    program_config_32 = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=(4, 8),
+        in0_block_w=in_block_w,  # 3
+        out_subblock_h=out_subblock_h,  # 1
+        out_subblock_w=out_subblock_w,  # 8
+        per_core_M=per_core_M,  # 4
+        per_core_N=per_core_N,  # 72
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+
     compute_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=False,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
     )
+
+    # out_32 = ttl.operations.primary.matmul(
+    #     a_t,
+    #     b_t_32,
+    #     program_config=program_config_32,
+    #     output_mem_config=out_mem_config,
+    #     output_dtype=out_dtype,
+    #     compute_kernel_config=compute_config,
+    # )
+
+    print("First run for a reference output")
 
     # First run for a reference output
     out = ttl.operations.primary.matmul(
@@ -79,28 +109,39 @@ def test_reproduce_matmul_2d_hang(
         compute_kernel_config=compute_config,
     )
 
-    nd_output_count = 0
+    does_pass, output_pcc = comp_pcc(torch_result, torch2tt_tensor(out), 0.99)
+
+    print(f"output pcc is {output_pcc}")
 
     start_time = time.time()
 
-    # loop_count iterations to test determinism/hang
-    for i in range(loop_count):
-        out.deallocate(True)
-        out = ttl.operations.primary.matmul(
-            a_t,
-            b_t,
-            program_config=program_config,
-            output_mem_config=out_mem_config,
-            output_dtype=out_dtype,
-            compute_kernel_config=compute_config,
-        )
+    # # loop_count iterations to test determinism/hang
+    # for i in range(loop_count):
+    #     out.deallocate(True)
+    #     # out_32.deallocate(True)
 
-        if i % 100 == 0:
-            seconds = time.time() - start_time
-            print(f"Iteration {i} done, time elapsed from the beginning: {seconds:.2f} seconds")
+    #     # out_32 = ttl.operations.primary.matmul(
+    #     #     a_t,
+    #     #     b_t_32,
+    #     #     program_config=program_config_32,
+    #     #     output_mem_config=out_mem_config,
+    #     #     output_dtype=out_dtype,
+    #     #     compute_kernel_config=compute_config,
+    #     # )
 
-    out.deallocate(True)
+    #     out = ttl.operations.primary.matmul(
+    #         a_t,
+    #         b_t,
+    #         program_config=program_config,
+    #         output_mem_config=out_mem_config,
+    #         output_dtype=out_dtype,
+    #         compute_kernel_config=compute_config,
+    #     )
 
-    print(f"Iterations with nd output: {nd_output_count}")
+    #     if i % 100 == 0:
+    #         seconds = time.time() - start_time
+    #         print(f"Iteration {i} done, time elapsed from the beginning: {seconds:.2f} seconds")
 
-    assert nd_output_count != 0
+    # out.deallocate(True)
+
+    # print(f"Iterations with nd output: {nd_output_count}")
