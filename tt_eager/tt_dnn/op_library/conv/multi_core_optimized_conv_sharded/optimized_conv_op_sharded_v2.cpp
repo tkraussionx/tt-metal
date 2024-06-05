@@ -155,24 +155,36 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         if(interm0_df == out_df) {
             cout<<"**************interm0_df == out_df****************"<<endl;
             CoreRangeSet cores(std::set<CoreRange>({core}));
-            std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
-                {out0_cb, out_df},
-                {matmul_partials_cb, out_df},
-                {temp_sum_cb, out_df},
-                {transpose_cb, out_df},
-                {prev_eltwise_cb, out_df}
-            };
-            CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, cb_output_data_format_spec)
-                .set_page_size(out0_cb, out_tile_size)
-                .set_page_size(matmul_partials_cb, out_tile_size)
-                .set_page_size(temp_sum_cb, out_tile_size)
-                .set_page_size(transpose_cb, out_tile_size)
+
+            // breakdown above as separate CBs
+            CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(1 * out_tile_size, {{matmul_partials_cb, out_df}})
+                .set_page_size(matmul_partials_cb, out_tile_size);
+            auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
+
+            CircularBufferConfig cb_temp_sum_config = CircularBufferConfig(1 * out_tile_size, {{temp_sum_cb, out_df}})
+                .set_page_size(temp_sum_cb, out_tile_size);
+            auto cb_temp_sum = tt_metal::CreateCircularBuffer(program, core, cb_temp_sum_config);
+
+            CircularBufferConfig cb_transpose_config = CircularBufferConfig(1 * out_tile_size, {{transpose_cb, out_df}})
+                .set_page_size(transpose_cb, out_tile_size);
+            auto cb_transpose = tt_metal::CreateCircularBuffer(program, core, cb_transpose_config);
+
+            CircularBufferConfig cb_prev_eltwise_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{prev_eltwise_cb, out_df}})
                 .set_page_size(prev_eltwise_cb, out_tile_size);
+            auto cb_prev_eltwise = tt_metal::CreateCircularBuffer(program, core, cb_prev_eltwise_config);
+
+            std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
+                {out0_cb, out_df}
+            };
+            CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * out_tile_size, cb_output_data_format_spec)
+                .set_page_size(out0_cb, out_tile_size);
+
             if (output.is_sharded()) {
                 cout<<"**************output.is_sharded()****************"<<endl;
-                cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
+                cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
             }
-            cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
+            cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_output_config);
+
         } else {
             //Separate buffer if not same data format
             CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * interm0_single_tile_size, {{matmul_partials_cb, interm0_df}})

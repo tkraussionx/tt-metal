@@ -45,7 +45,7 @@ inline void tilize_in(
 }
 
 inline void eltwise_mul_and_add_block(uint32_t in0_cb_id, uint32_t in1_cb_id, uint32_t eltwise_mul_partials_cb_id, uint32_t transpose_cb_id, uint32_t prev_eltwise_mul_cb_id, uint32_t temp_sum_cb, uint32_t out_cb_id, uint32_t block_num_tiles, uint32_t idx) {
-    uint32_t last_block_idx = 4;
+    uint32_t last_block_idx = 3;
     for(uint32_t i=0; i<block_num_tiles; i++) {
         cb_wait_front(in1_cb_id, 1);
         cb_reserve_back(transpose_cb_id, 1);
@@ -79,10 +79,12 @@ inline void eltwise_mul_and_add_block(uint32_t in0_cb_id, uint32_t in1_cb_id, ui
             cb_pop_front(eltwise_mul_partials_cb_id, 1);
         }
         else{
+
             uint32_t dest_cb_id = idx==last_block_idx ? out_cb_id : temp_sum_cb;
-            add_tiles_init(eltwise_mul_partials_cb_id, prev_eltwise_mul_cb_id);
+            add_tiles_init();
             cb_wait_front(eltwise_mul_partials_cb_id, 1);
             cb_wait_front(prev_eltwise_mul_cb_id, 1);
+
             cb_reserve_back(dest_cb_id, 1);
             ACQ();
             add_tiles(eltwise_mul_partials_cb_id, prev_eltwise_mul_cb_id, 0, 0, 0);
@@ -91,7 +93,6 @@ inline void eltwise_mul_and_add_block(uint32_t in0_cb_id, uint32_t in1_cb_id, ui
             cb_push_back(dest_cb_id, 1);
             cb_pop_front(eltwise_mul_partials_cb_id, 1);
             cb_pop_front(prev_eltwise_mul_cb_id, 1);
-
             if(idx<last_block_idx){
                 copy_tile_to_dst_init_short();
                 cb_wait_front(temp_sum_cb, 1);
@@ -137,7 +138,7 @@ void MAIN {
     constexpr uint32_t in1_cb_id                                = tt::CB::c_in1;
     constexpr uint32_t in0_pretilize_cb_id                      = tt::CB::c_in6;
     constexpr uint32_t in0_cb_second_reader_id                  = tt::CB::c_in7;
-    constexpr uint32_t eltwise_mul_partials                       = tt::CB::c_intermed0;
+    constexpr uint32_t eltwise_mul_partials                     = tt::CB::c_intermed0;
     constexpr uint32_t tilized_in0_cb_id                        = tt::CB::c_intermed1;
     constexpr uint32_t temp_sum_cb                              = tt::CB::c_intermed3;
     constexpr uint32_t transpose_cb                             = tt::CB::c_intermed4;
@@ -146,9 +147,9 @@ void MAIN {
 
     constexpr uint32_t in0_num_subblocks_read = in0_num_subblocks;
 
-    constexpr uint32_t num_blocks = 5;
+    constexpr uint32_t num_blocks = 4; // num_tokens window
 
-    binary_op_init_common(tilized_in0_cb_id, transpose_cb);
+    binary_op_init_common(in0_cb_id, in1_cb_id, out_cb_id);
 
     for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
 

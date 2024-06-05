@@ -95,11 +95,11 @@ def run_conv(
     conv_input_shape = [batch_size, input_channels, input_height, input_width]
     conv_weight_shape = [output_channels, input_channels, filter_height, filter_width]
     conv_bias_shape = [1, 1, 1, output_channels]
-    # torch_input_tensor_nchw = torch.ones(conv_input_shape, dtype=torch.bfloat16).float()
-    torch_input_tensor_nchw = torch.tensor([[i] for i in range(32)], dtype=torch.bfloat16).float()
-    torch_input_tensor_nchw = torch_input_tensor_nchw.repeat(1, 2560, 1, 1)
+    torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
+    # torch_input_tensor_nchw = torch.tensor([[i] for i in range(32)], dtype=torch.bfloat16).float()
+    # torch_input_tensor_nchw = torch_input_tensor_nchw.repeat(1, 2560, 1, 1)
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
-    torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
+    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
     # torch_weight_tensor[:, :, 4, :] = torch.ones_like(torch_weight_tensor[:, :, 4, :])*2
     torch_depthwise_weight_tensor = torch.permute(torch_weight_tensor, (1, 0, 2, 3))
     torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
@@ -852,7 +852,7 @@ def test_sd_conv(
         # # 1x1 conv
         # (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
         # Small conv
-        (1, 1, 2560, 32, 1, 5, 1, 1, 1, 2, 0, True, None),
+        (1, 1, 2560, 1760, 1, 4, 1, 1, 1, 3, 0, True, None),
     ),
 )
 @pytest.mark.parametrize(
