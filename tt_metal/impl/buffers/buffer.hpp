@@ -221,6 +221,8 @@ class Buffer {
 
     uint64_t page_address(uint32_t bank_id, uint32_t page_index) const;
 
+    uint32_t alignment() const { return alignment_bytes_; }
+
     // SHARDED API STARTS HERE
     // TODO: WILL SEPARATE INTO SHARDED BUFFER CLASS
 
@@ -255,6 +257,7 @@ class Buffer {
     BufferType buffer_type_;
     TensorMemoryLayout buffer_layout_;
     std::optional<ShardSpecBuffer> shard_parameters_;
+    uint32_t alignment_bytes_;;
 };
 
 BufferPageMapping generate_buffer_page_mapping(const Buffer &buffer);
