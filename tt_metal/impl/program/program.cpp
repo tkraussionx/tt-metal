@@ -18,6 +18,7 @@
 #include "tt_metal/jit_build/genfiles.hpp"
 #include "tt_metal/llrt/llrt.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/impl/debug/silicon_debugger_ifc.hpp"
 
 namespace tt::tt_metal {
 
@@ -783,6 +784,8 @@ void Program::compile(Device *device) {
         return;
     }
 
+    InitSiliconDebuggerInterfaceFile();
+
     TT_FATAL(
         device->is_initialized(),
         "Device needs to be initialized before program {} compilation! Generating headers for banking information is "
@@ -825,6 +828,9 @@ void Program::compile(Device *device) {
                             *this, kernel, cache_hit, kernel_hash);
                     }
                     kernel->set_binary_path(build_options.path);
+
+                    // Save kernel information for the silicon debugger
+                    SiliconDebuggerInterfaceLogKernel (kernel, build_options);
                 },
                 events);
         }
