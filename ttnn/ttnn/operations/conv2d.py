@@ -7,7 +7,11 @@ import torch
 import warnings
 import math
 import ttnn
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import calculate_shard_grid, roundup
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import (
+    calculate_shard_grid,
+    roundup,
+    get_output_dim as get_conv_output_dim,
+)
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv import (
     TTPyCompositeConv,
     SlidingWindowOpParams,
@@ -232,6 +236,7 @@ class Conv2dConfig:
         act_block_h=None,
         height_sharding=None,
         core_grid=None,
+        transpose_shards=True,
     ):
         self.math_fidelity = math_fidelity
         self.dtype = dtype
@@ -246,6 +251,7 @@ class Conv2dConfig:
         self.input_channels_alignment = input_channels_alignment
         self.deallocate_activation = deallocate_activation
         self.reallocate_halo_output = reallocate_halo_output
+        self.transpose_shards = transpose_shards
 
 
 # internal. not user facing
@@ -497,7 +503,7 @@ def conv2d(
             reshard_if_not_optimal=reshard_if_not_optimal,
             override_sharding_config=False,  # TODO: pass in config
             height_sharding=conv_config.height_sharding if conv_config.height_sharding is not None else True,
-            transpose_shards=True,  # TODO: pass in config
+            transpose_shards=conv_config.transpose_shards,
             output_layout=ttnn.TILE_LAYOUT,  # TODO: pass in config
         )
         if conv_config.core_grid:
