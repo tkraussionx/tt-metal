@@ -291,17 +291,6 @@ void Device::initialize_and_launch_firmware() {
 }
 
 void Device::clear_l1_state() {
-    CoreCoord logical_grid_size = this->logical_grid_size();
-    TT_ASSERT(this->l1_size_per_core() % sizeof(uint32_t) == 0);
-    std::vector<uint32_t> zero_vec(this->l1_size_per_core() / sizeof(uint32_t), 0);
-    constexpr uint32_t start_address = 0;
-    for (uint32_t x = 0; x < logical_grid_size.x; x++) {
-        for (uint32_t y = 0; y < logical_grid_size.y; y++) {
-            CoreCoord logical_core(x, y);
-            detail::WriteToDeviceL1(this, logical_core, start_address, zero_vec);
-        }
-    }
-
     for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
         CoreCoord physical_core = this->ethernet_core_from_logical_core(eth_core);
         std::vector<uint32_t> zero_vec_mailbox(128 / sizeof(uint32_t), 0);
