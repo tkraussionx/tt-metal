@@ -172,7 +172,6 @@ OutputTensors run_device_operation(
             if (not cache_hit or operation.uses_custom_program_hash()) {
                 operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
             }
-
             if (not cache_hit) {
                 program_ptr = std::make_shared<operation::CacheableProgram<OutputTensors>>(
                     operation.create_program(input_tensors, optional_input_tensors, output_tensors));
@@ -180,33 +179,38 @@ OutputTensors run_device_operation(
             }
             auto& program_with_callbacks =
                 *(reinterpret_cast<operation::CacheableProgram<OutputTensors>*>(program_ptr.value().get()));
-            TT_ASSERT(program_with_callbacks.supports_program_cache());
+            if(program_with_callbacks.supports_program_cache()) {
+                if (cache_hit) {
+                    ZoneScopedN("Cache_hit_set_runtime_args");
+                    if (program_with_callbacks.override_addresses_callback.has_value()) {
+                        auto override_addresses_callback = program_with_callbacks.override_addresses_callback.value();
+                        // Deprecated
+                        override_addresses(
+                            override_addresses_callback,
+                            program_with_callbacks.program,
+                            input_tensors,
+                            optional_input_tensors,
+                            output_tensors);
+                    }
 
-            if (cache_hit) {
-                ZoneScopedN("Cache_hit_set_runtime_args");
-                if (program_with_callbacks.override_addresses_callback.has_value()) {
-                    auto override_addresses_callback = program_with_callbacks.override_addresses_callback.value();
-                    // Deprecated
-                    override_addresses(
-                        override_addresses_callback,
-                        program_with_callbacks.program,
-                        input_tensors,
-                        optional_input_tensors,
-                        output_tensors);
+                    if (program_with_callbacks.override_runtime_arguments_callback.has_value()) {
+                        auto override_runtime_arguments_callback =
+                            program_with_callbacks.override_runtime_arguments_callback.value();
+                        operation.override_runtime_arguments(
+                            override_runtime_arguments_callback,
+                            program_with_callbacks.program,
+                            input_tensors,
+                            optional_input_tensors,
+                            output_tensors);
+                    }
                 }
-
-                if (program_with_callbacks.override_runtime_arguments_callback.has_value()) {
-                    auto override_runtime_arguments_callback =
-                        program_with_callbacks.override_runtime_arguments_callback.value();
-                    operation.override_runtime_arguments(
-                        override_runtime_arguments_callback,
-                        program_with_callbacks.program,
-                        input_tensors,
-                        optional_input_tensors,
-                        output_tensors);
-                }
+                return program_with_callbacks.program;
+            } else {
+                program_ptr = std::make_shared<operation::CacheableProgram<OutputTensors>>(
+                    operation.create_program(input_tensors, optional_input_tensors, output_tensors));
+                program_cache.insert(program_hash, program_ptr.value());
+                return (*(reinterpret_cast<operation::CacheableProgram<OutputTensors>*>(program_ptr.value().get()))).program;
             }
-            return program_with_callbacks.program;
         };
     } else {
         get_or_create_program = [](const DeviceOperation<OutputTensors>& operation,
