@@ -28,6 +28,8 @@ void MAIN {
     constexpr uint32_t logk = get_compile_time_arg_val(9);
     constexpr uint32_t logWt = get_compile_time_arg_val(10);
 
+    // dest indices for where to unpack the tiles for the llk
+    // the input goes in index 0,1 and the index goes in index 2,3
     constexpr uint32_t input_dest_start = 0;
     constexpr uint32_t index_dest_start = 2;
     constexpr uint32_t input_dest_end = 1;
@@ -43,7 +45,6 @@ void MAIN {
         cb_reserve_back(index_transposed_cb_index, Wt);
 
         // streaming in input and index tiles to transpose and bitonic local sort them, two tiles at a time
-        // we could load in an entire row of tiles at a time but that would require substantially more memory (we would be double buffering four Wt sized CBs)
         for (uint32_t wt = 0; wt < Wt; wt+=2) {
             acquire_dst(tt::DstMode::Half);
             // local sort into k groups
@@ -63,12 +64,12 @@ void MAIN {
             // llk_topk_sort -> inplace
             ckernel::topk_local_sort(0, (int) ascending, logk - 1);
 
-            // pack value tiles into cb_intermed1
+            // pack value tiles into cb_intermed0
             pack_reconfig_data_format(input_transposed_cb_index);
             pack_tile(0, input_transposed_cb_index);
             pack_tile(1, input_transposed_cb_index);
 
-            // pack index tiles into cb_intermed2
+            // pack index tiles into cb_intermed1
             pack_reconfig_data_format(index_transposed_cb_index);
             pack_tile(2, index_transposed_cb_index);
             pack_tile(3, index_transposed_cb_index);
@@ -85,13 +86,11 @@ void MAIN {
         // first iteration we compare 0th and 1st tile, then 2nd and 3rd, etc. We get the sorted top 32 values in each pair.
         // second iteration we compare 0th and 2nd tile, then 4th and 6th, etc.
         // logWt iteration we compare 0th and Wt/2 tile
+        // single buffer as we can pack tiles back in-place
         for (uint32_t m_iter = 0; m_iter < logWt; ++m_iter) {
             bool a = false;
             cb_wait_front(input_transposed_cb_index, Wt);
             cb_wait_front(index_transposed_cb_index, Wt);
-
-            cb_reserve_back(input_transposed_cb_index, Wt);
-            cb_reserve_back(index_transposed_cb_index, Wt);
 
             for (uint32_t left_ind = 0; left_ind < Wt - (1 << m_iter); left_ind += 2 << m_iter) {
                 uint32_t right_ind = left_ind + (1 << m_iter);
@@ -112,16 +111,18 @@ void MAIN {
                 ckernel::topk_rebuild(0, (uint32_t) a, m_iter, K, logk, true);
 
 
-                // pack value tiles
+                // pack value tiles in-place in the single-buffered cb_intermed0, we only need the upper 32 values for topk, which was in input_dest_start
                 pack_reconfig_data_format(input_transposed_cb_index);
                 pack_tile<true>(input_dest_start, input_transposed_cb_index, left_ind);
 
-                // pack index tiles
+                // pack index tiles in-place in the single-buffered cb_intermed1, we only need the upper 32 values for topk, which was in index_dest_start
                 pack_reconfig_data_format(index_transposed_cb_index);
                 pack_tile<true>(index_dest_start, index_transposed_cb_index, left_ind);
                 release_dst(tt::DstMode::Half);
                 a = !a;
             }
+            cb_reserve_back(input_transposed_cb_index, Wt);
+            cb_reserve_back(index_transposed_cb_index, Wt);
 
             cb_pop_front(input_transposed_cb_index, Wt);
             cb_pop_front(index_transposed_cb_index, Wt);

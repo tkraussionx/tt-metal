@@ -12,6 +12,7 @@
 #include "tt_dnn/op_library/repeat/repeat_op.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_metal/host_api.hpp"
+#include "tt_metal/common/logger.hpp"
 
 namespace tt {
 
@@ -37,6 +38,14 @@ enum class BinaryOpType {
     LOGADDEXP2,
     DIV_FAST
 };
+
+namespace eltwise_binary_op_utils {
+
+std::map<string, string> get_defines(BinaryOpType op_type, const std::optional<DataType> out_dtype = std::nullopt,
+                                    const std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt);
+
+}  // namespace eltwise_binary_op_utils
+
 
 enum class BinaryOpParallelizationStrategy { MULTI_CORE };
 
@@ -98,19 +107,18 @@ struct EltwiseBinary {
     const operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
 };
 
-template <BinaryOpType binary_op_type>
-struct make_eltwise_binary {
-    Tensor operator()(
-        const Tensor &input_tensor_a,
-        const Tensor &input_tensor_b,
-        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
-        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        std::optional<const DataType> output_dtype = std::nullopt,
-        std::optional<Tensor> output_tensor = std::nullopt) const {
+inline Tensor run_eltwise_binary(
+    uint8_t queue_id,
+    const Tensor &input_tensor_a,
+    const Tensor &input_tensor_b,
+    std::optional<std::vector<UnaryWithParam>> fused_activations,
+    const MemoryConfig &output_mem_config,
+    std::optional<const DataType> output_dtype,
+    std::optional<Tensor> output_tensor,
+    BinaryOpType binary_op_type) {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
-
         operation::launch_op(
-            [fused_activations, output_mem_config, output_dtype, output_tensor] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            [fused_activations, output_mem_config, output_dtype, output_tensor, queue_id, binary_op_type] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
                 Tensor in_b = input_tensors.at(1);
                 Shape shape_a = in_a.get_legacy_shape();
@@ -132,19 +140,105 @@ struct make_eltwise_binary {
                     (in_a.get_legacy_shape() == in_b.get_legacy_shape()) or
                     (in_a.get_legacy_shape().without_padding() == in_b.get_legacy_shape().without_padding()),
                     "Input shapes must be the same!");
-                return operation::run(
+
+                auto output_tensors = operation::run(
                         EltwiseBinary{
                             binary_op_type,
                             fused_activations,
                             output_mem_config,
                             output_dtype.value_or(in_a.get_dtype()),
-                            false},
-                        {in_a, in_b}, {}, {output_tensor});
+                            false /*in place*/},
+                        {in_a, in_b}, {}, {output_tensor}, queue_id);
+                return output_tensors;
             },
         {input_tensor_a, input_tensor_b}, output_tensors, {}, {output_tensor});
         return output_tensors.at(0);
+}
+
+inline Tensor run_eltwise_binary(
+    const Tensor &input_tensor_a,
+    const Tensor &input_tensor_b,
+    std::optional<std::vector<UnaryWithParam>> fused_activations,
+    const MemoryConfig &output_mem_config,
+    std::optional<const DataType> output_dtype,
+    std::optional<Tensor> output_tensor,
+    BinaryOpType binary_op_type)  {
+        std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+        operation::launch_op(
+            [fused_activations, output_mem_config, output_dtype, output_tensor, binary_op_type] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+                Tensor in_a = input_tensors.at(0);
+                Tensor in_b = input_tensors.at(1);
+                Shape shape_a = in_a.get_legacy_shape();
+                Shape shape_b = in_b.get_legacy_shape();
+                if (shape_a[0] != shape_b[0])
+                {
+                    if (shape_a[0] > shape_b[0])
+                    {
+                        Shape shape ({shape_a[0],1,1,1});
+                        in_b = repeat(in_b, shape, output_mem_config);
+                    }
+                    else
+                    {
+                        Shape shape ({shape_b[0],1,1,1});
+                        in_a = repeat(in_a, shape, output_mem_config);
+                    }
+                }
+                TT_FATAL(
+                    (in_a.get_legacy_shape() == in_b.get_legacy_shape()) or
+                    (in_a.get_legacy_shape().without_padding() == in_b.get_legacy_shape().without_padding()),
+                    "Input shapes must be the same!");
+
+                auto output_tensors = operation::run(
+                        EltwiseBinary{
+                            binary_op_type,
+                            fused_activations,
+                            output_mem_config,
+                            output_dtype.value_or(in_a.get_dtype()),
+                            false /*in place*/},
+                        {in_a, in_b}, {}, {output_tensor});
+                return output_tensors;
+            },
+        {input_tensor_a, input_tensor_b}, output_tensors, {}, {output_tensor});
+        return output_tensors.at(0);
+}
+
+template <BinaryOpType binary_op_type>
+struct make_eltwise_binary {
+    Tensor operator()(
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) const {
+            return run_eltwise_binary(
+                 input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, binary_op_type
+                );
     }
 };
+
+inline Tensor eq(
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::EQ);
+}
+
+inline Tensor eq(
+        uint8_t queue_id,
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::EQ);
+}
 
 // arithmetic binary ops
 constexpr auto add = make_eltwise_binary<BinaryOpType::ADD>{};
@@ -162,7 +256,6 @@ constexpr auto lt = make_eltwise_binary<BinaryOpType::LT>{};
 constexpr auto gt = make_eltwise_binary<BinaryOpType::GT>{};
 constexpr auto lte = make_eltwise_binary<BinaryOpType::LTE>{};
 constexpr auto gte = make_eltwise_binary<BinaryOpType::GTE>{};
-constexpr auto eq = make_eltwise_binary<BinaryOpType::EQ>{};
 constexpr auto ne = make_eltwise_binary<BinaryOpType::NE>{};
 
 // logical ops
@@ -231,11 +324,3 @@ inline Tensor add(
 }  // namespace operations
 
 }  // namespace tt
-
-namespace eltwise_binary_op_utils {
-using namespace tt::tt_metal;
-
-std::map<string, string> get_defines(
-    BinaryOpType op_typee, const std::optional<std::vector<UnaryWithParam>> fused_activations);
-
-}  // namespace eltwise_binary_op_utils

@@ -392,7 +392,6 @@ inline Tensor to_host(const Tensor& tensor, bool blocking = true) {
             host_tensor.set_dtype(tensor.get_dtype());
             host_tensor.set_layout(tensor.get_layout());
             insert_buffer_and_shape_for_device(device, shard, host_tensor, device_index);
-            host_tensor.set_populated(device);
         }
         return host_tensor;
     } else {
@@ -800,9 +799,9 @@ inline void print_trailing_comma(std::ostream& ss, std::size_t index, std::size_
 template <typename T>
 inline void print_datum(std::ostream& ss, T datum) {
     if (std::is_integral<T>::value) {
-        ss << fmt::format("{:5}", datum);
+        ss << std::setw(5) << datum;
     } else {
-        ss << fmt::format("{:8.5f}", datum);
+        ss << std::fixed << std::setw(8) << std::setprecision(5) << datum;
     }
 }
 
@@ -942,7 +941,7 @@ inline std::string to_string(const Tensor& tensor, std::optional<DataType> origi
     }
 
     if (is_tensor_on_device(tensor)) {
-        return to_string<T>(to_host<T>(tensor));
+        return to_string<T>(tensor.cpu());
     }
 
     return std::visit(
@@ -985,7 +984,7 @@ inline std::string to_string(const Tensor& tensor, std::optional<DataType> origi
                 TT_THROW("Cannot print a device tensor!");
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
                 auto devices = get_devices(tensor);
-                auto host_tensor = to_host<T>(tensor);
+                auto host_tensor = tensor.cpu();
                 auto device_index = 0;
                 std::stringstream ss;
                 apply(host_tensor, [&](const Tensor& device_tensor) {

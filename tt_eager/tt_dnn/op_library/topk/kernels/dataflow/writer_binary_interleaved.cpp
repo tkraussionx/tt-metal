@@ -36,7 +36,9 @@ void kernel_main() {
         .data_format = data_format_ind
     };
 
+    // Get Kt rows of values and then Kt rows of indices from compute kernel
     for (uint32_t j = 0; j < Ht; ++j) {
+        // topk values
         for (uint32_t i = 0; i < Kt; ++i) {
             cb_wait_front(values_cb_index, onetile);
             uint32_t l1_read_addr = get_read_ptr(values_cb_index);
@@ -45,7 +47,7 @@ void kernel_main() {
             cb_pop_front(values_cb_index, onetile);
         }
 
-        // single-tile uint16 blocks
+        // topk indices
         for (uint32_t i = 0; i < Kt; ++i) {
             cb_wait_front(output_ind_cb_index, onetile);
             uint32_t l1_read_addr = get_read_ptr(output_ind_cb_index);

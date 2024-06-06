@@ -69,8 +69,8 @@ bool ActiveDevices::is_device_active(chip_id_t id) {
 }
 
 Device::Device(
-    chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) :
-    id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id) {
+    chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal, uint32_t worker_core) :
+    id_(device_id), num_hw_cqs_(num_hw_cqs), worker_thread_core(worker_core), work_executor(worker_core, device_id) {
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->build_key_ = tt::Cluster::instance().get_harvesting_mask(device_id);
@@ -1307,8 +1307,6 @@ bool Device::close() {
     if (not this->initialized_) {
         TT_THROW("Cannot close device {} that has not been initialized!", this->id_);
     }
-    this->deallocate_buffers();
-    watcher_detach(this);
 
     for (const std::unique_ptr<HWCommandQueue> &hw_command_queue : hw_command_queues_) {
         if (hw_command_queue->manager.get_bypass_mode()) {
@@ -1316,8 +1314,15 @@ bool Device::close() {
         }
         hw_command_queue->terminate();
     }
+
+    tt_metal::detail::DumpDeviceProfileResults(this, true);
+
     this->trace_buffer_pool_.clear();
     detail::EnableAllocs(this);
+
+    this->deallocate_buffers();
+    watcher_detach(this);
+
 
     std::unordered_set<CoreCoord> not_done_dispatch_cores;
     std::unordered_set<CoreCoord> cores_to_skip;

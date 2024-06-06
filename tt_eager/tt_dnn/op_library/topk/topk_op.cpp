@@ -7,6 +7,7 @@
 
 void TopK::validate(const std::vector<Tensor>& input_tensors) const {
     auto input_shape = input_tensors.at(0).get_legacy_shape();
+    TT_FATAL(input_shape.rank() == 4, fmt::format("Input shape must be 4D, got {}", input_shape.rank()));
     TT_FATAL(k == 32, fmt::format("K must be equal to 32, pad with -infinity if necessary"));
     TT_FATAL(input_shape[-1] >= 64, fmt::format("Input shape inner dim {} must be a multiple of 64, pad with -infinity if necessary", input_shape[-1]));
     TT_FATAL((input_shape[-1] & (input_shape[-1] - 1)) == 0, fmt::format("Input shape inner dim {} must be a power of 2, pad with -infinity if necessary", input_shape[-1]));

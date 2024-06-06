@@ -488,6 +488,10 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_heaviside,
         "pytorch_op": pytorch_ops.heaviside,
     },
+    "eltwise-right_shift": {
+        "tt_op": tt_lib_ops.eltwise_right_shift,
+        "pytorch_op": pytorch_ops.right_shift,
+    },
     "eltwise-unary_ne": {
         "tt_op": tt_lib_ops.eltwise_unary_ne,
         "pytorch_op": pytorch_ops.unary_ne,
@@ -567,6 +571,26 @@ op_map = {
     "eltwise-signbit": {
         "tt_op": tt_lib_ops.eltwise_signbit,
         "pytorch_op": pytorch_ops.signbit,
+    },
+    "eltwise-floor": {
+        "tt_op": tt_lib_ops.eltwise_floor,
+        "pytorch_op": pytorch_ops.floor,
+    },
+    "eltwise-trunc": {
+        "tt_op": tt_lib_ops.eltwise_trunc,
+        "pytorch_op": pytorch_ops.trunc,
+    },
+    "eltwise-floor_div": {
+        "tt_op": tt_lib_ops.eltwise_floor_div,
+        "pytorch_op": pytorch_ops.floor_div,
+    },
+    "eltwise-unary_floor_div": {
+        "tt_op": tt_lib_ops.eltwise_unary_floor_div,
+        "pytorch_op": pytorch_ops.unary_floor_div,
+    },
+    "eltwise-round": {
+        "tt_op": tt_lib_ops.eltwise_round,
+        "pytorch_op": pytorch_ops.round,
     },
     "eltwise-rpow": {
         "tt_op": tt_lib_ops.eltwise_rpow,
@@ -802,6 +826,14 @@ op_map = {
     "eltwise-where": {
         "tt_op": tt_lib_ops.where,
         "pytorch_op": pytorch_ops.where,
+    },
+    "eltwise-where-optional": {
+        "tt_op": tt_lib_ops.where_optional,
+        "pytorch_op": pytorch_ops.where,
+    },
+    "eltwise-where-scalar-optional": {
+        "tt_op": tt_lib_ops.where_scalar_optional,
+        "pytorch_op": pytorch_ops.where_scalar,
     },
     "where-bw": {
         "tt_op": tt_lib_ops.where_bw,

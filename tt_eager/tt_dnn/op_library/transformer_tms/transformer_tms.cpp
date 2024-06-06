@@ -292,10 +292,10 @@ const operation::Hash AttnMatmul::compute_program_hash(const std::vector<Tensor>
         this->transpose_hw,
         this->output_mem_config,
         this->output_dtype,
-        input_tensors.at(0).memory_config(),
-        input_tensors.at(0).get_dtype(),
-        input_tensors.at(1).memory_config(),
-        input_tensors.at(1).get_dtype());
+        std::get<DeviceStorage>(input_tensors.at(0).storage()).memory_config(),
+        input_tensors.at(0).dtype(),
+        std::get<DeviceStorage>(input_tensors.at(1).storage()).memory_config(),
+        input_tensors.at(1).dtype());
 }
 
 void GroupAttnMatmul::validate(const std::vector<Tensor>& input_tensors) const {
@@ -502,14 +502,14 @@ const operation::Hash GroupAttnMatmul::compute_program_hash(const std::vector<Te
         this->output_mem_config.buffer_type,
         this->output_dtype,
         this->row_major,
-        input_tensor_a.memory_config().memory_layout,
-        input_tensor_a.memory_config().buffer_type,
-        input_tensor_a.get_dtype(),
-        input_tensor_a.device()->id(),
-        input_tensor_b.memory_config().memory_layout,
-        input_tensor_b.memory_config().buffer_type,
-        input_tensor_b.get_dtype(),
-        input_tensor_b.device()->id());
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().buffer_type,
+        input_tensor_a.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().buffer_type,
+        input_tensor_b.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id());
 }
 
 // SSM eltwise mul
@@ -544,11 +544,8 @@ void SSMEltwiseMul::validate(const std::vector<Tensor>& input_tensors) const {
         "Unsupported data format for input a!");
     TT_FATAL(
         input_tensor_b.get_dtype() == tt::tt_metal::DataType::BFLOAT16 ||
-            input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
+            input_tensor_b.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
         "Unsupported data format for input b!");
-    TT_FATAL(
-        input_tensor_a.get_dtype() == input_tensor_b.get_dtype(),
-        "Input a and input b must have the same data format!");
 
     TT_FATAL(
         this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,

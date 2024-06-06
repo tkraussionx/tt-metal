@@ -56,7 +56,8 @@ void kernel_main() {
         .data_format = data_format
     };
 
-    // there's an argument to processing two tiles at once since llk requires two index and two value tiles at at ime
+    // Stream in input tensor, buffer has four tiles as we double-buffer to continue streaming while waiting for compute and we need two tiles for the bitonic sort llk
+    // We could load in an entire row of tiles at a time but that would require substantially more memory (we would be double buffering four Wt sized CBs)
     for (uint32_t i = 0; i < Ht; ++i) {
         for (uint32_t j = 0; j < Wt; ++j) {
             cb_reserve_back(cb_id_in0, onetile);

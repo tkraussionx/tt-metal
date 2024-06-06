@@ -96,6 +96,12 @@ def where(x, y, z, *args, **kwargs):
     return torch.where(x > 0, y, z)
 
 
+def where_scalar(x, *args, **kwargs):
+    y = kwargs.pop("scalar_true")
+    z = kwargs.pop("scalar_false")
+    return torch.where(x > 0, y, z)
+
+
 def where_bw(x, y, z, w, *args, **kwargs):
     grad_data = x
     in_data = y
@@ -521,6 +527,12 @@ def heaviside(x, *args, **kwargs):
     return result
 
 
+def right_shift(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    result = torch.bitwise_right_shift(x, value)
+    return result
+
+
 def unary_ne(x, *args, **kwargs):
     value = kwargs.pop("scalar")
     result = torch.ne(x, value)
@@ -582,6 +594,31 @@ def tanhshrink(x, *args, **kwargs):
 
 def signbit(x, *args, **kwargs):
     return torch.signbit(x)
+
+
+def floor(x, *args, **kwargs):
+    return torch.floor(x)
+
+
+def trunc(x, *args, **kwargs):
+    return torch.trunc(x)
+
+
+def floor_div(x, y, *args, **kwargs):
+    result = torch.floor_divide(x, y)
+    return result
+
+
+def unary_floor_div(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    result = torch.floor_divide(x, value)
+    return result
+
+
+def round(x, *args, **kwargs):
+    decimals = kwargs.pop("decimals")
+    result = torch.round(x, decimals=decimals)
+    return result
 
 
 def sin(x, *args, **kwargs):
@@ -1331,8 +1368,13 @@ def eltwise_identity(x, *args, **kwargs):
     return x
 
 
-def eltwise_typecast(x, *args, **kwargs):
-    return torch.relu(x.to(torch.int32))  # due to no uint32 support
+def eltwise_typecast(x, *args, tt_output_dtype, **kwargs):
+    if tt_output_dtype[0] == ttl.tensor.DataType.UINT16:
+        return torch.clamp(x.to(torch.int32), min=0, max=65535)  # due to no uint16 support
+    elif tt_output_dtype[0] == ttl.tensor.DataType.UINT32:
+        return torch.relu(x.to(torch.int32))  # due to no uint32 support
+    else:
+        return x
 
 
 def eltwise_rdiv(x, *args, **kwargs):

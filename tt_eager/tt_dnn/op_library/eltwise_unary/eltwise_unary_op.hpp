@@ -78,7 +78,9 @@ enum class UnaryOpType {
     UNARY_GT,
     UNARY_LT,
     TILED_PROD,
-    TYPECAST
+    TYPECAST,
+    RIGHT_SHIFT,
+    FLOOR
 };
 
 template <typename T>
@@ -104,7 +106,9 @@ bool is_parametrized_type(T val) {
         case UnaryOpType::DIV_UNARY_SFPU:
         case UnaryOpType::UNARY_NE:
         case UnaryOpType::UNARY_GT:
-        case UnaryOpType::UNARY_LT: return true;
+        case UnaryOpType::UNARY_LT:
+        case UnaryOpType::TYPECAST:
+        case UnaryOpType::RIGHT_SHIFT: return true;
         default: return false;
     }
     return false;
@@ -170,9 +174,9 @@ struct EltwiseUnary {
     bool fp32_dest_acc_en;
     DataType output_dtype;
 
-    void validate(const std::vector<Tensor>& input_tensors) const;
+    void validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &optional_output_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const;
     operation::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const;
     UnaryOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor>& input_tensors) const;
@@ -195,7 +199,7 @@ inline Tensor run_eltwise_unary(
     const std::vector<UnaryWithParam>& ops_chain,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     TT_FATAL(ops_chain.size() > 0, "At least 1 unary op must be specified");
-    DataType output_dtype = (ops_chain[0].op_type == UnaryOpType::TYPECAST) ? DataType::UINT32 : input_tensor.get_dtype();
+    DataType output_dtype = (ops_chain[0].op_type == UnaryOpType::TYPECAST) ? static_cast<DataType>(ops_chain[0].params[0]) : input_tensor.get_dtype();
     bool fp32_dest_acc_en =
         output_dtype == DataType::UINT32 or
         input_tensor.get_dtype() == DataType::UINT32 or
@@ -241,7 +245,7 @@ inline Tensor run_eltwise_unary(
     const std::vector<UnaryWithParam>& ops_chain,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     TT_FATAL(ops_chain.size() > 0, "At least 1 unary op must be specified");
-    DataType output_dtype = (ops_chain[0].op_type == UnaryOpType::TYPECAST) ? DataType::UINT32 : input_tensor.get_dtype();
+    DataType output_dtype = (ops_chain[0].op_type == UnaryOpType::TYPECAST) ? static_cast<DataType>(ops_chain[0].params[0]) : input_tensor.get_dtype();
     bool fp32_dest_acc_en =
         output_dtype == DataType::UINT32 or
         input_tensor.get_dtype() == DataType::UINT32 or
@@ -344,6 +348,7 @@ constexpr auto isneginf = make_eltwise_unary<UnaryOpType::ISNEGINF>{};
 constexpr auto isnan = make_eltwise_unary<UnaryOpType::ISNAN>{};
 constexpr auto sign = make_eltwise_unary<UnaryOpType::SIGN>{};
 constexpr auto signbit = make_eltwise_unary<UnaryOpType::SIGNBIT>{};
+constexpr auto floor = make_eltwise_unary<UnaryOpType::FLOOR>{};
 constexpr auto square = make_eltwise_unary<UnaryOpType::SQUARE>{};
 constexpr auto atan = make_eltwise_unary<UnaryOpType::ATAN>{};
 constexpr auto eqz = make_eltwise_unary<UnaryOpType::EQZ>{};
@@ -364,12 +369,13 @@ constexpr auto leaky_relu = make_eltwise_unary_with_param<UnaryOpType::LEAKY_REL
 constexpr auto prelu = leaky_relu;
 constexpr auto elu = make_eltwise_unary_with_param<UnaryOpType::ELU>{};
 constexpr auto heaviside = make_eltwise_unary_with_param<UnaryOpType::HEAVISIDE>{};
+constexpr auto right_shift = make_eltwise_unary_with_param<UnaryOpType::RIGHT_SHIFT>{};
 constexpr auto unary_ne = make_eltwise_unary_with_param<UnaryOpType::UNARY_NE>{};
 constexpr auto rsub = make_eltwise_unary_with_param<UnaryOpType::RSUB>{};
 constexpr auto silu = make_eltwise_unary<UnaryOpType::SILU>{};
 constexpr auto identity = make_eltwise_unary<UnaryOpType::IDENTITY>{};
 constexpr auto identity_uint32 = make_eltwise_unary<UnaryOpType::IDENTITY_UINT32>{};
-constexpr auto eltwise_typecast = make_eltwise_unary<UnaryOpType::TYPECAST>{};
+constexpr auto eltwise_typecast = make_eltwise_unary_with_param<UnaryOpType::TYPECAST, uint32_t>{};
 constexpr auto add_unary_sfpu = make_eltwise_symmetric_binop_unary_with_param<UnaryOpType::ADD_UNARY_SFPU>{};
 constexpr auto mul_unary_sfpu = make_eltwise_symmetric_binop_unary_with_param<UnaryOpType::MUL_UNARY_SFPU>{};
 constexpr auto unary_gt = make_eltwise_unary_with_param<UnaryOpType::UNARY_GT>{};
