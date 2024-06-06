@@ -75,10 +75,10 @@ operation::ProgramWithCallbacks moreh_sum_nc_impl(const Tensor &input, const Ten
     auto grid = device->compute_with_storage_grid_size();
     const auto num_cores_y = grid.y;
 
-    const uint32_t in0_t = 2;        // input
+    const uint32_t in0_t = 8;        // input
     const uint32_t in1_t = 1;        // zero
     const uint32_t intermed0_t = 1;  // accumulated sum
-    const uint32_t out0_t = 2;       // output
+    const uint32_t out0_t = 8;       // output
     const auto
         [num_cores_to_be_used,
          all_cores,

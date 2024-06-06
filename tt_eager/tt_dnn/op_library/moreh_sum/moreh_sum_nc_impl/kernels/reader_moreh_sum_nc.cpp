@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_eager/tt_dnn/kernels/dataflow/moreh_common.hpp"
+#include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 
 inline uint32_t get_read_tile_id(uint32_t output_tile_id, uint32_t reduce_tile_size, uint32_t inner_tile_size) {
     return ((output_tile_id / inner_tile_size) * reduce_tile_size) + (output_tile_id % inner_tile_size);
@@ -25,29 +26,38 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t scaler = 0;
+    constexpr uint32_t granularity = 4;
 
-    union {
-        float f;
-        uint32_t u;
-    } scaler;
-    scaler.f = 0.0f;
-    fill_cb_with_value(cb_id_in1, scaler.u);
+    generate_reduce_scaler(cb_id_in1, scaler);
 
     uint32_t l1_write_addr_in0;
     uint32_t input_tile_bytes = get_tile_size(cb_id_in0);
     const auto input_data_format = get_dataformat(cb_id_in0);
     const InterleavedAddrGenFast<input_is_dram> input_addrg = {
         .bank_base_address = input_addr, .page_size = input_tile_bytes, .data_format = input_data_format};
+    uint32_t granularity_index = 0;
 
     for (uint32_t i = start_id; i < start_id + num_output_tiles; i++) {
         auto read_tile_id = (dim == 0) ? (i) : (get_read_tile_id(i, reduce_tile_size, inner_tile_size));
         for (uint32_t j = 0; j < num_input_tiles; ++j) {
-            cb_reserve_back(cb_id_in0, onetile);
-            l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+            if (granularity_index == 0) {
+                cb_reserve_back(cb_id_in0, granularity);
+                l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+                DPRINT << "Reseted" << ENDL();
+            }
             noc_async_read_tile(read_tile_id, input_addrg, l1_write_addr_in0);
-            noc_async_read_barrier();
-            cb_push_back(cb_id_in0, onetile);
+            l1_write_addr_in0 += input_tile_bytes; // correctness error
             read_tile_id += inner_tile_size;
+            granularity_index++;
+            DPRINT << "granularity index " << granularity_index << ENDL();
+            DPRINT << "l1_write_addr_in0 " << l1_write_addr_in0 << ENDL();
+            if (granularity_index == granularity) {
+                noc_async_read_barrier();
+                cb_push_back(cb_id_in0, granularity);
+                granularity_index = 0;
+                DPRINT << "Pushed" << ENDL();
+            }
         }
     }
 }

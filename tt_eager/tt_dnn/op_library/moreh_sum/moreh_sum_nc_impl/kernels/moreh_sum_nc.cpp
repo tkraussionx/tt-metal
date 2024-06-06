@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_eager/tt_dnn/kernels/compute/moreh_common.hpp"
+#include "debug/dprint.h"  // required in all kernels using DPRINT
 
 namespace NAMESPACE {
 void MAIN {
@@ -19,43 +20,83 @@ void MAIN {
     constexpr uint32_t dst1 = 1;
     constexpr uint32_t first_tile = 0;
 
+    constexpr uint32_t granularity = 4;
+    constexpr uint32_t num_input_tiles_iter = num_input_tiles / granularity;
+
     binary_op_init_common(cb_in0, cb_in1, cb_out0);
     cb_wait_front(cb_in1, onetile);
 
+    DPRINT_PACK(DPRINT << "Checkpoint 1" << ENDL());
+    DPRINT_PACK(DPRINT << "num_output_tiles: " << num_output_tiles << ENDL());
+    DPRINT_PACK(DPRINT << "num_input_tiles: " << num_input_tiles << ENDL());
+    DPRINT_PACK(DPRINT << "num_input_tiles_iter: " << num_input_tiles_iter << ENDL());
+
     for (uint32_t i = 0; i < num_output_tiles; i++) {
-        bool enable_reload = false;
-        for (uint32_t j = 0; j < num_input_tiles; ++j) {
-            bool last_out = (j == num_input_tiles - 1);
-            uint32_t cb_add  = (enable_reload) ? (cb_intermed0) : (cb_in1);
 
-            cb_wait_front(cb_in0, onetile);
-            if (enable_reload) {
+        add_tiles_init(cb_in1, cb_in1);
+        #if defined FP32_DEST_ACC_EN
+            unpack_reconfig_data_format(cb_in1, cb_in1);
+        #endif
+        tile_regs_acquire();
+        add_tiles(cb_in1, cb_in1, first_tile, first_tile, dst0);
+        tile_regs_commit();
+        #if defined FP32_DEST_ACC_EN
+            pack_reconfig_data_format(cb_intermed0);
+        #endif
+        tile_regs_wait();
+        pack_tile(dst0, cb_intermed0);
+        tile_regs_release();
+        cb_push_back(cb_intermed0, onetile);
+
+        for (uint32_t j = 0; j < num_input_tiles_iter; ++j) {
+            bool last_out = (j == num_input_tiles_iter - 1);
+
+            cb_wait_front(cb_in0, granularity);
+            // DPRINT_PACK(DPRINT << "Iter: "<< i << "," << j << ". Checkpoint 2" << ENDL());
+
+            add_tiles_init(cb_in0, cb_intermed0);
+            for (uint32_t k = 0; k < granularity; k++) {
                 cb_wait_front(cb_intermed0, onetile);
+                #if defined FP32_DEST_ACC_EN
+                unpack_reconfig_data_format(cb_in0, cb_intermed0);
+                #endif
+                tile_regs_acquire();
+                add_tiles(cb_in0, cb_intermed0, k, first_tile, dst0);
+                tile_regs_commit();
+                if (k < granularity - 1) {
+                    cb_pop_front(cb_intermed0, onetile);
+                    #if defined FP32_DEST_ACC_EN
+                        pack_reconfig_data_format(cb_intermed0);
+                    #endif
+                    tile_regs_wait();
+                    pack_tile(dst0, cb_intermed0);
+                    tile_regs_release();
+                    cb_push_back(cb_intermed0, onetile);
+                }
             }
 
-            tile_regs_acquire();
-            #if defined FP32_DEST_ACC_EN
-                unpack_reconfig_data_format(cb_in0, cb_add);
-            #endif
-            add_tiles_init(cb_in0, cb_add);
-            add_tiles(cb_in0, cb_add, first_tile, first_tile, dst0);
-            tile_regs_commit();
+            // DPRINT << "Iter: "<< i << "," << j << ". Checkpoint 3" << ENDL();
 
-            cb_pop_front(cb_in0, onetile);
-            if (enable_reload) {
-                cb_pop_front(cb_intermed0, onetile);
-            }
+            cb_pop_front(cb_in0, granularity);
+            cb_pop_front(cb_intermed0, onetile);
 
             uint32_t cb_out = (last_out) ? (cb_out0) : (cb_intermed0);
             cb_reserve_back(cb_out, onetile);
-            tile_regs_wait();
             #if defined FP32_DEST_ACC_EN
                 pack_reconfig_data_format(cb_out);
             #endif
+            tile_regs_wait();
             pack_tile(dst0, cb_out);
             tile_regs_release();
+            // DPRINT << "Iter: "<< i << "," << j << ". Checkpoint 4" << ENDL();
+
+            // if (last_out) {
+            //     DPRINT_PACK(DPRINT << "Iter: "<< i << "," << j << ". last out" << ENDL());
+            // }
+
             cb_push_back(cb_out, onetile);
-            enable_reload = true;
+
+            // DPRINT_PACK(DPRINT << "Iter: "<< i << "," << j << ". Checkpoint 5" << ENDL());
         }
     }
 }
