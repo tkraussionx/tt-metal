@@ -408,7 +408,6 @@ void Device::compile_command_queue_programs() {
     constexpr uint32_t prefetch_d_sync_sem = 0;
     constexpr uint32_t prefetch_d_upstream_cb_sem = 1;
     constexpr uint32_t prefetch_d_downstream_cb_sem = 2;
-    constexpr uint32_t prefetch_h_exec_buf_sem = 2;
     constexpr uint32_t dispatch_downstream_cb_sem = 1;
 
     if (this->is_mmio_capable()) {
@@ -458,7 +457,6 @@ void Device::compile_command_queue_programs() {
                 0, //prefetch_downstream_cb_sem, // prefetch_d only
                 dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
                 dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
-                prefetch_h_exec_buf_sem,
                 true,   // is_dram_variant
                 true    // is_host_variant
             };
@@ -475,9 +473,9 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
+
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
 
             std::vector<uint32_t> dispatch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -495,6 +493,10 @@ void Device::compile_command_queue_programs() {
                 0, // unused
                 0, // unused
                 0, // unused
+                false,  // split_prefetcher
+                0,      // unused prefetch noc_xy
+                0,      // unused prefetch_local_downstream_sem_addr
+                0,      // unused prefetch_downstream_buffer_pages
                 true,   // is_dram_variant
                 true    // is_host_variant
             };
@@ -511,6 +513,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
+
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
@@ -572,7 +575,6 @@ void Device::compile_command_queue_programs() {
 
         tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
         tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages(), dispatch_core_type); // prefetch_sem
-        tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
 
         tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_core, 0, dispatch_core_type); // mux_sem
 
@@ -603,7 +605,6 @@ void Device::compile_command_queue_programs() {
             0, //prefetch_downstream_cb_sem, // prefetch_d only
             dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
             dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
-            prefetch_h_exec_buf_sem,
             false,  // is_dram_variant
             true    // is_host_variant
         };
@@ -620,6 +621,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
+
         log_debug(LogDevice, "run prefetch_h {}", prefetch_core.str());
 
         std::vector<uint32_t> mux_compile_args =
@@ -666,6 +668,7 @@ void Device::compile_command_queue_programs() {
             packet_switch_4B_pack(src_endpoint_start_id, 0, 0, 0), // 23: packetized input src id
             packet_switch_4B_pack(dest_endpoint_start_id, 0, 0, 0), // 24: packetized input dest id
         };
+
         log_debug(LogDevice, "run mux at {}", mux_core.str());
 
         configure_kernel_variant(
@@ -812,6 +815,10 @@ void Device::compile_command_queue_programs() {
             0, // unused: local ds semaphore
             0, // unused: remote ds semaphore
             0, // preamble size. unused unless tunneler is between h and d
+            true,    // split_prefetcher
+            NOC_XY_ENCODING(prefetch_physical_core.x, prefetch_physical_core.y),
+            prefetch_downstream_cb_sem,
+            dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages(), // XXXX should this be mux pages?
             false,   // is_dram_variant
             true     // is_host_variant
         };
@@ -828,6 +835,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
+
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_core.str());
 
         /////////////////Following section is for Remote Device
@@ -1004,7 +1012,6 @@ void Device::compile_command_queue_programs() {
             demux_sem, // prefetch_d only upstream
             dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
             dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
-            prefetch_h_exec_buf_sem,
             true,
             false
         };
@@ -1039,6 +1046,10 @@ void Device::compile_command_queue_programs() {
             dispatch_downstream_cb_sem, // unused on hd, filled in below for h and d
             mux_sem, // unused on hd, filled in below for h and d
             sizeof(dispatch_packet_header_t), // unused unless tunneler is between h and d
+            true,    // split_prefetcher
+            NOC_XY_ENCODING(prefetch_physical_core.x, prefetch_physical_core.y),
+            prefetch_downstream_cb_sem,
+            dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages(), // XXXX should this be mux pages?
             true,   // is_dram_variant
             false    // is_host_variant
         };
@@ -1055,6 +1066,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
+
         log_debug(LogDevice, "run dispatch at {}", dispatch_core.str());
 
         std::vector<uint32_t> mux_d_compile_args =
@@ -1770,6 +1782,7 @@ void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool bl
     constexpr bool check = false;
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance " + std::to_string(tid) + " must exist on device");
     if constexpr (check) {
+        std::cout << "Validating trace" << std::endl;
         Trace::validate_instance(*this->trace_buffer_pool_[tid]);
     }
     this->command_queue(cq_id).run_command(CommandInterface{
