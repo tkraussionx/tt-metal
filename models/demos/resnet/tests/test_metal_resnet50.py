@@ -8,7 +8,7 @@ from torchvision import models
 import pytest
 import tt_lib
 
-from models.utility_functions import is_e75, skip_for_wormhole_b0
+from models.utility_functions import is_e75, skip_for_wormhole_b0, divup
 
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
@@ -117,26 +117,107 @@ golden_pcc = {
 }
 
 
-@skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
-@pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
-@pytest.mark.parametrize("batch_size", [1, 2, 16, 20], ids=["batch_1", "batch_2", "batch_16", "batch_20"])
-@pytest.mark.parametrize(
-    "weights_dtype",
-    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
-    ids=["weights_BFLOAT16", "weights_BFLOAT8_B"],
-)
-@pytest.mark.parametrize(
-    "activations_dtype",
-    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
-    ids=["activations_BFLOAT16", "activations_BFLOAT8_B"],
-)
-@pytest.mark.parametrize(
-    "math_fidelity",
-    [tt_lib.tensor.MathFidelity.HiFi4, tt_lib.tensor.MathFidelity.HiFi2, tt_lib.tensor.MathFidelity.LoFi],
-    ids=["HiFi4", "HiFi2", "LoFi"],
-)
-def test_run_resnet50_inference(
-    device, use_program_cache, batch_size, weights_dtype, activations_dtype, math_fidelity, imagenet_sample_input
+def run_model(device, tt_image, tt_resnet50):
+    tt_output = tt_resnet50(tt_image)
+    return tt_output.cpu(blocking=True)
+
+
+def run_2cq_model(device, tt_image, tt_resnet50):
+    input_shape = tt_image.get_legacy_shape()
+    shard_spec = tt_lib.tensor.ShardSpec(
+        tt_lib.tensor.CoreRangeSet(
+            {
+                tt_lib.tensor.CoreRange(
+                    tt_lib.tensor.CoreCoord(0, 0),
+                    tt_lib.tensor.CoreCoord(7, 0),
+                )
+            }
+        ),
+        [
+            divup(tt_image.volume() // input_shape[3], 8),
+            input_shape[3],
+        ],
+        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    sharded_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
+    )
+    tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
+        tt_image.shape, tt_image.dtype, tt_image.layout, device, sharded_mem_config_DRAM
+    )
+    op_event = tt_lib.device.CreateEvent()
+    write_event = tt_lib.device.CreateEvent()
+    # Initialize the op event so we can write
+    tt_lib.device.RecordEvent(device, 0, op_event)
+
+    tt_lib.device.WaitForEvent(device, 1, op_event)
+    tt_lib.tensor.write_tensor(tt_image, tt_image_res, 1)
+    tt_lib.device.RecordEvent(device, 1, write_event)
+    _ = tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=True)
+
+    # Test overlapping write
+    outputs = []
+    for iter in range(0, 2):
+        tt_lib.device.WaitForEvent(device, 1, op_event)
+        tt_lib.tensor.write_tensor(tt_image, tt_image_res, 1)
+        tt_lib.device.RecordEvent(device, 1, write_event)
+        outputs.append(tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=False))
+    tt_lib.device.Synchronize(device)
+    return outputs[1]
+
+
+def run_trace_model(device, tt_image, tt_resnet50):
+    input_shape = tt_image.get_legacy_shape()
+    shard_spec = tt_lib.tensor.ShardSpec(
+        tt_lib.tensor.CoreRangeSet(
+            {
+                tt_lib.tensor.CoreRange(
+                    tt_lib.tensor.CoreCoord(0, 0),
+                    tt_lib.tensor.CoreCoord(7, 0),
+                )
+            }
+        ),
+        [
+            divup(tt_image.volume() // input_shape[3], 8),
+            input_shape[3],
+        ],
+        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    sharded_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
+    )
+    tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
+        tt_image.shape, tt_image.dtype, tt_image.layout, device, sharded_mem_config_DRAM
+    )
+    tt_lib.tensor.write_tensor(tt_image, tt_image_res)
+
+    # Compile
+    tt_resnet50(tt_image_res)
+    # Trace
+    tid = tt_lib.device.BeginTraceCapture(device, 0, 1500000)
+    tt_output_res = tt_resnet50(tt_image_res)
+    tt_lib.device.EndTraceCapture(device, 0, tid)
+
+    tt_lib.tensor.write_tensor(tt_image, tt_image_res)
+    tt_lib.device.ReplayTrace(device, 0, tid, True)
+
+    # Done with the trace, can deallocate the buffers now.
+    tt_lib.device.ReleaseTrace(device, tid)
+
+    return tt_output_res.cpu(blocking=True)
+
+
+def run_resnet50_inference(
+    device,
+    use_program_cache,
+    batch_size,
+    weights_dtype,
+    activations_dtype,
+    math_fidelity,
+    imagenet_sample_input,
+    run_fn,
 ):
     if is_e75(device):
         pytest.skip("Resnet50 is not supported on E75")
@@ -158,8 +239,6 @@ def test_run_resnet50_inference(
         image = torch.cat((image, image1), dim=0)
     with torch.no_grad():
         torch.manual_seed(1234)
-
-        tt_lib.device.EnableMemoryReports()
 
         torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         torch_resnet50.eval()
@@ -185,17 +264,8 @@ def test_run_resnet50_inference(
 
         torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
         tt_image = tt_resnet50.preprocessing(image)
-        tt_output = tt_resnet50(tt_image)
-        tt_output = tt_output.cpu().to_torch().to(torch.float)
-
-        # # run again to measure end to end perf
-        # start_time = datetime.now()
-        # tt_output = tt_resnet50(image)
-        # end_time = datetime.now()
-        # diff = end_time - start_time
-        # logger.info("End to end time (microseconds))", diff.microseconds)
-        # throughput_fps = (float) (1000000 / diff.microseconds)
-        # logger.info("Throughput (fps)", throughput_fps)
+        tt_output = run_fn(device, tt_image, tt_resnet50)
+        tt_output = tt_output.to_torch().to(torch.float)
 
         _, _, _, info = get_atol_rtol_pcc(torch_output, tt_output)
         logger.info(info)
@@ -219,3 +289,114 @@ def test_run_resnet50_inference(
         passing_pcc, _ = comp_pcc(torch_output, tt_output, pcc=valid_pcc)
         assert passing_pcc
         # assert passing # fails because of torch.allclose
+
+
+@skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+@pytest.mark.parametrize("batch_size", [1, 2, 16, 20], ids=["batch_1", "batch_2", "batch_16", "batch_20"])
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["weights_BFLOAT16", "weights_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["activations_BFLOAT16", "activations_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "math_fidelity",
+    [tt_lib.tensor.MathFidelity.HiFi4, tt_lib.tensor.MathFidelity.HiFi2, tt_lib.tensor.MathFidelity.LoFi],
+    ids=["HiFi4", "HiFi2", "LoFi"],
+)
+def test_run_resnet50_inference(
+    device, use_program_cache, batch_size, weights_dtype, activations_dtype, math_fidelity, imagenet_sample_input
+):
+    run_resnet50_inference(
+        device,
+        use_program_cache,
+        batch_size,
+        weights_dtype,
+        activations_dtype,
+        math_fidelity,
+        imagenet_sample_input,
+        run_model,
+    )
+
+
+@skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576, "num_hw_cqs": 2}], indirect=True)
+@pytest.mark.parametrize("batch_size", [20], ids=["batch_20"])
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["weights_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["activations_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "math_fidelity",
+    [tt_lib.tensor.MathFidelity.LoFi],
+    ids=["LoFi"],
+)
+def test_run_resnet50_2cqs_inference(
+    device, use_program_cache, batch_size, weights_dtype, activations_dtype, math_fidelity, imagenet_sample_input
+):
+    run_resnet50_inference(
+        device,
+        use_program_cache,
+        batch_size,
+        weights_dtype,
+        activations_dtype,
+        math_fidelity,
+        imagenet_sample_input,
+        run_2cq_model,
+    )
+
+
+@skip_for_wormhole_b0("This test is not supported on WHB0, please use the TTNN version.")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576, "num_hw_cqs": 2}], indirect=True)
+@pytest.mark.parametrize("batch_size", [20], ids=["batch_20"])
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["weights_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["activations_BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "math_fidelity",
+    [tt_lib.tensor.MathFidelity.LoFi],
+    ids=["LoFi"],
+)
+@pytest.mark.parametrize("enable_async", [True, False])
+def test_run_resnet50_trace_inference(
+    device,
+    use_program_cache,
+    batch_size,
+    weights_dtype,
+    activations_dtype,
+    math_fidelity,
+    imagenet_sample_input,
+    enable_async,
+):
+    device.enable_async(enable_async)
+
+    run_resnet50_inference(
+        device,
+        use_program_cache,
+        batch_size,
+        weights_dtype,
+        activations_dtype,
+        math_fidelity,
+        imagenet_sample_input,
+        run_trace_model,
+    )
+
+    device.enable_async(False)

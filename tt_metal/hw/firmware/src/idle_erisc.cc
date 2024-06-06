@@ -28,6 +28,8 @@
 #include "debug/status.h"
 #include "debug/dprint.h"
 
+uint8_t noc_index;
+
 uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
@@ -46,12 +48,15 @@ constexpr uint32_t num_cbs_to_early_init = 4;  // safe small number to overlap w
 
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
+#if defined(PROFILE_KERNEL)
 namespace kernel_profiler {
     uint32_t wIndex __attribute__((used));
     uint32_t stackSize __attribute__((used));
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
 }
+#endif
 
 //inline void RISC_POST_STATUS(uint32_t status) {
 //  volatile uint32_t* ptr = (volatile uint32_t*)(NOC_CFG(ROUTER_CFG_2));
@@ -99,9 +104,9 @@ int main() {
         DEBUG_STATUS("GD");
 
         {
-            DeviceZoneScopedMainN("ERISC-FW");
+            DeviceZoneScopedMainN("ERISC-IDLE-FW");
 
-            uint32_t noc_index = mailboxes->launch.brisc_noc_id;
+            noc_index = mailboxes->launch.brisc_noc_id;
 
             //UC FIXME: do i need this?
             setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
@@ -124,6 +129,7 @@ int main() {
             // Notify dispatcher core that it has completed
             if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
                 uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
+                DEBUG_SANITIZE_NOC_ADDR(dispatch_addr, 4);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
             }
 

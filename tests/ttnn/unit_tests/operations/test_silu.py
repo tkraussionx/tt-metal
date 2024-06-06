@@ -35,6 +35,7 @@ def run_elt_silu_relu(
     shard_strategy,
     shard_orientation,
     op,
+    dtype=ttnn.bfloat16,
 ):
     ## input shape is N C H W
     input_shape = [batch_size, input_channels, input_height, input_width]
@@ -45,7 +46,7 @@ def run_elt_silu_relu(
     tt_input = input.permute(0, 2, 3, 1)
     tt_input = tt_input.reshape(1, 1, batch_size * input_height * input_width, input_channels)
     input_tensor = ttnn.from_torch(
-        tt_input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG, layout=ttnn.TILE_LAYOUT
+        tt_input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG, layout=ttnn.TILE_LAYOUT, dtype=dtype
     )
     interleaved_mem_config = ttnn.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     input_tensor = ttnn.to_memory_config(input_tensor, interleaved_mem_config)
@@ -133,6 +134,7 @@ def run_elt_silu_relu(
     ),
 )
 @pytest.mark.parametrize("op", ["silu", "relu"])
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 def test_gs_silu_relu(
     device,
     batch_size,
@@ -144,6 +146,7 @@ def test_gs_silu_relu(
     shard_strategy,
     shard_orientation,
     op,
+    dtype,
 ):
     run_elt_silu_relu(
         device,
@@ -156,6 +159,7 @@ def test_gs_silu_relu(
         shard_strategy,
         shard_orientation,
         op,
+        dtype,
     )
 
 
@@ -174,6 +178,7 @@ def test_gs_silu_relu(
     ),
 )
 @pytest.mark.parametrize("op", ["silu", "relu"])
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 def test_wh_silu_relu(
     device,
     batch_size,
@@ -185,6 +190,7 @@ def test_wh_silu_relu(
     shard_strategy,
     shard_orientation,
     op,
+    dtype,
 ):
     if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
         if shard_strategy == ttnn.ShardStrategy.BLOCK:
@@ -201,6 +207,7 @@ def test_wh_silu_relu(
         shard_strategy,
         shard_orientation,
         op,
+        dtype,
     )
 
 

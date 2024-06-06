@@ -23,8 +23,6 @@ from ttnn.model_preprocessing import (
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import (
-    is_wormhole_b0,
-    is_grayskull,
     pad_and_fold_conv_filters_for_unity_stride,
     pad_and_fold_conv_activation_for_unity_stride,
     enable_memory_reports,
@@ -265,11 +263,13 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
     return ResNet50TestInfra(device, batch_size, act_dtype, weight_dtype, math_fidelity)
 
 
-@pytest.mark.parametrize("device_l1_small_size", [24576], indirect=True)
+@pytest.mark.parametrize(
+    "device_params", [{"l1_small_size": 24576}], ids=["device_params=l1_small_size_24576"], indirect=True
+)
 @pytest.mark.parametrize(
     "batch_size, act_dtype, weight_dtype, math_fidelity",
     (
-        (8, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
+        (8, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
         (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
         (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),  ## pass
         (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),  ## pass
@@ -278,8 +278,7 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
 )
 def test_resnet_50(device, batch_size, act_dtype, weight_dtype, math_fidelity):
     if batch_size == 8:
-        pytest.skip("Skipping batch_size=8 until 7599 is resolved.")
-
+        pytest.skip("Failing, issue #8555")
     ttnn.CONFIG.enable_logging = True
     ttnn.CONFIG.enable_detailed_buffer_report = True
     test_infra = create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity)

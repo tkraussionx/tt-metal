@@ -5,7 +5,7 @@
 import torch
 import pytest
 from loguru import logger
-import tt_lib
+import ttnn
 from models.demos.t3000.falcon40b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
@@ -104,7 +104,7 @@ def run_test_FalconModel_inference(
                     torch2tt_tensor(
                         tt_k_cache_host[j],
                         devices[j],
-                        tt_lib.tensor.Layout.TILE,
+                        ttnn.experimental.tensor.Layout.TILE,
                         model_config["KV_CACHE_MEMCFG"],
                         model_config["KV_CACHE_DTYPE"],
                     )
@@ -113,7 +113,7 @@ def run_test_FalconModel_inference(
                     torch2tt_tensor(
                         tt_v_cache_host[j],
                         devices[j],
-                        tt_lib.tensor.Layout.TILE,
+                        ttnn.experimental.tensor.Layout.TILE,
                         model_config["KV_CACHE_MEMCFG"],
                         model_config["KV_CACHE_DTYPE"],
                     )
@@ -151,7 +151,7 @@ def run_test_FalconModel_inference(
                     torch2tt_tensor(
                         tt_k_cache_host[j],
                         devices[j],
-                        tt_lib.tensor.Layout.TILE,
+                        ttnn.experimental.tensor.Layout.TILE,
                         model_config["KV_CACHE_MEMCFG"],
                         model_config["KV_CACHE_DTYPE"],
                     )
@@ -160,7 +160,7 @@ def run_test_FalconModel_inference(
                     torch2tt_tensor(
                         tt_v_cache_host[j],
                         devices[j],
-                        tt_lib.tensor.Layout.TILE,
+                        ttnn.experimental.tensor.Layout.TILE,
                         model_config["KV_CACHE_MEMCFG"],
                         model_config["KV_CACHE_DTYPE"],
                     )
@@ -191,7 +191,7 @@ def run_test_FalconModel_inference(
         use_global_cos_sin_cache=use_global_cos_sin_cache,
     )
     for device in devices:
-        tt_lib.device.Synchronize(device)
+        ttnn.device.synchronize_device(device)
 
     # TODO: Generate embeddings and attention_mask on device
     if llm_mode == "prefill":
@@ -292,7 +292,7 @@ def run_test_FalconModel_inference(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.parametrize("num_devices", (4, 8), ids=["4chips", "8chips"])
+@pytest.mark.parametrize("num_devices", (8,), ids=["8chips"])
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
@@ -339,7 +339,7 @@ def test_FalconModel_inference(
     model_location_generator,
     get_tt_cache_path,
     all_devices,
-    # use_program_cache, # TODO: remove workaround when low PCC issue 7159 is fixed
+    use_program_cache,
 ):
     if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM", "BFLOAT16-DRAM"] or num_devices != 8):
         pytest.skip("Prefill is only supported for DRAM memory config and 8 chips!")

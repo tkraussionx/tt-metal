@@ -8,13 +8,13 @@ import json
 import os
 import pathlib
 import pprint
+import subprocess
 from typing import Optional
 
 from loguru import logger
 
 import tt_lib as _tt_lib
 import ttnn._ttnn
-
 
 CPP_CONFIG: ttnn._ttnn.core.Config = ttnn._ttnn.CONFIG
 
@@ -25,7 +25,7 @@ class Config:
     model_cache_path: pathlib.Path = cache_path / "models"
     tmp_dir: pathlib.Path = pathlib.Path("/") / "tmp" / "ttnn"
     enable_model_cache: bool = False
-    enable_fast_runtime_mode: bool = False
+    enable_fast_runtime_mode: bool = True
     throw_exception_on_fallback: bool = False
     enable_logging: bool = False
     enable_graph_report: bool = False
@@ -57,7 +57,7 @@ class Config:
             if self.enable_fast_runtime_mode:
                 if self.enable_logging:
                     logger.warning(
-                        "Running in fast runtime mode without logging. Please disable fast runtime mode if you want to enable logging."
+                        "Logging cannot be enabled in fast runtime mode. Please disable fast runtime mode if you want to enable logging."
                     )
 
         if name in {
@@ -126,11 +126,15 @@ if CONFIG_PATH is not None:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         save_config_to_json_file(CONFIG_PATH)
 
-
 if CONFIG_OVERRIDES is not None:
     logger.debug(f"Loading ttnn configuration overrides from environment variable TTNN_CONFIG_OVERRIDES")
     load_config_from_dictionary(json.loads(CONFIG_OVERRIDES))
 
+
+import tt_lib as _tt_lib
+
+_tt_lib._check_so_rpath("_ttnn", pathlib.Path(__file__).parent.parent / "tt_lib" / "build" / "lib")
+import ttnn._ttnn
 
 logger.debug(f"Initial ttnn.CONFIG:\n{pprint.pformat(dataclasses.asdict(CONFIG))}")
 
@@ -146,7 +150,7 @@ def manage_config(name, value):
     logger.debug(f"Restored ttnn.CONFIG.{name} to {original_value}")
 
 
-from ttnn._ttnn.multi_device import get_device_tensors, aggregate_as_tensor
+from ttnn._ttnn.multi_device import get_device_tensor, get_device_tensors, aggregate_as_tensor
 
 from ttnn.types import (
     TILE_SIZE,
@@ -224,8 +228,10 @@ from ttnn.core import (
     is_sharded,
     get_memory_config,
     create_sharded_memory_config,
+    create_sharded_memory_config_,
     dump_memory_config,
     load_memory_config,
+    dump_stack_trace_on_segfault,
 )
 
 import ttnn.reflection
@@ -238,6 +244,8 @@ from ttnn.decorators import (
     query_registered_operations,
     register_pre_operation_hook,
     register_post_operation_hook,
+    get_golden_function,
+    get_fallback_function,
 )
 
 import ttnn.experimental
@@ -249,6 +257,7 @@ from ttnn.operations.core import (
     to_device,
     from_device,
     to_layout,
+    to_dtype,
     reshape,
     to_memory_config,
     deallocate,
@@ -259,13 +268,13 @@ from ttnn.operations.core import (
     squeeze,
     clone,
     as_tensor,
+    allocate_tensor_on_device,
+    copy_host_to_device_tensor,
 )
 
 from ttnn.operations.matmul import (
     matmul,
     linear,
-    create_matmul_program_config,
-    create_matmul_1d_systolic_array_program_config,
 )
 
 from ttnn.operations.embedding import (
@@ -279,6 +288,7 @@ from ttnn.operations.comparison import (
 from ttnn.operations.creation import (
     arange,
     empty,
+    empty_like,
     full,
     full_like,
     ones,
@@ -305,34 +315,94 @@ from ttnn.operations.data_movement import (
     concat,
     pad,
     permute,
-    split,
     repeat_interleave,
     repeat,
     upsample,
 )
 
 from ttnn.operations.unary import (
-    exp,
-    tanh,
-    gelu,
-    rsqrt,
-    relu,
-    silu,
-    log,
-    sin,
-    cos,
-    tan,
-    asin,
+    abs,
     acos,
-    atan,
-    sinh,
-    cosh,
-    asinh,
     acosh,
+    asin,
+    asinh,
+    atan,
     atanh,
+    cbrt,
+    celu,
+    clip,
+    cos,
+    cosh,
+    deg2rad,
+    digamma,
+    elu,
+    eqz,
+    erf,
+    erfc,
+    erfinv,
+    exp,
+    exp2,
+    expm1,
+    glu,
+    gelu,
+    geglu,
+    gez,
+    gtz,
+    hardshrink,
+    hardsigmoid,
+    hardswish,
+    hardtanh,
+    heaviside,
+    i0,
+    isfinite,
+    isinf,
+    isnan,
+    isneginf,
+    isposinf,
+    leaky_relu,
+    lez,
     logical_not,
+    ltz,
+    lgamma,
+    log,
+    log10,
+    log1p,
+    log2,
+    log_sigmoid,
     logit,
+    log_sigmoid,
+    mish,
+    multigammaln,
+    neg,
+    nez,
+    polygamma,
+    prelu,
+    rad2deg,
+    reciprocal,
+    relu,
+    reglu,
+    relu6,
+    rsqrt,
+    sigmoid,
+    sigmoid_accurate,
+    sign,
     signbit,
+    silu,
+    sin,
+    sinh,
+    softplus,
+    softshrink,
+    softsign,
+    sqrt,
+    square,
+    swiglu,
+    swish,
+    tan,
+    tanh,
+    tanhshrink,
+    threshold,
+    tril,
+    triu,
 )
 
 from ttnn.operations.binary import (
@@ -358,6 +428,16 @@ from ttnn.operations.binary import (
     polyval,
     maximum,
     minimum,
+    atan2,
+    hypot,
+    squared_difference,
+    gt,
+    ge,
+    lt,
+    le,
+    eq,
+    ne,
+    isclose,
 )
 
 from ttnn.operations.ternary import (
@@ -365,86 +445,7 @@ from ttnn.operations.ternary import (
     addcmul,
     mac,
     where,
-)
-
-from ttnn.operations.relational import (
-    gtz,
-    ltz,
-    gez,
-    lez,
-    nez,
-    eqz,
-    gt,
-    gte,
-    lt,
-    lte,
-    eq,
-    ne,
-    isclose,
-)
-
-from ttnn.operations.activation import (
-    clip,
-    elu,
-    hardshrink,
-    hardsigmoid,
-    hardswish,
-    hardtanh,
-    heaviside,
-    leaky_relu,
-    log_sigmoid,
-    mish,
-    prelu,
-    relu6,
-    sigmoid,
-    sigmoid_accurate,
-    sign,
-    softshrink,
-    softsign,
-    swish,
-    softplus,
-    tanhshrink,
-    threshold,
-    glu,
-    geglu,
-    reglu,
-    swiglu,
-    celu,
-)
-
-from ttnn.operations.math import (
-    i0,
-    isfinite,
-    isinf,
-    isnan,
-    isneginf,
-    isposinf,
-    lgamma,
-    log10,
-    log1p,
-    log2,
-    multigammaln,
-    neg,
-    abs,
-    cbrt,
-    deg2rad,
-    digamma,
-    erf,
-    erfc,
-    erfinv,
-    exp2,
-    expm1,
-    atan2,
-    hypot,
-    squared_difference,
     lerp,
-    polygamma,
-    rad2deg,
-    reciprocal,
-    sqrt,
-    square,
-    tril,
-    triu,
 )
 
 from ttnn.operations.normalization import (
@@ -458,12 +459,20 @@ from ttnn.operations.normalization import (
     get_group_norm_cores_accross_channel,
 )
 
+from ttnn.operations.trace import (
+    begin_trace_capture,
+    end_trace_capture,
+    execute_trace,
+    release_trace,
+)
+
 from ttnn.operations.ccl import all_gather
 
 from ttnn.operations import transformer
 from ttnn.operations import kv_cache
-from ttnn.operations.conv2d import Conv2d
-from ttnn.operations.maxpool2d import (
+from ttnn.operations.conv2d import Conv2d, conv2d, Conv2dConfig
+from ttnn.operations.pool import (
     MaxPool2d,
     global_avg_pool2d,
 )
+from ttnn.operations.copy import typecast

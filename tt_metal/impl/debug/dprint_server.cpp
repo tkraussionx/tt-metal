@@ -68,6 +68,30 @@ static inline int GetNumRiscs(int chip_id, const CoreCoord &core) {
     return (tt::llrt::is_ethernet_core(core, chip_id))? DPRINT_NRISCVS_ETH : DPRINT_NRISCVS;
 }
 
+// Helper function to get all physical printable cores on a device
+static map<CoreType, set<CoreCoord>> get_all_physical_printable_cores(Device *device) {
+    map<CoreType, set<CoreCoord>> all_physical_printable_cores;
+    // The set of all printable cores is Tensix + Eth cores
+    CoreCoord logical_grid_size = device->logical_grid_size();
+    for (uint32_t x = 0; x < logical_grid_size.x; x++) {
+        for (uint32_t y = 0; y < logical_grid_size.y; y++) {
+            CoreCoord logical_coord(x, y);
+            CoreCoord worker_core = device->worker_core_from_logical_core(logical_coord);
+            all_physical_printable_cores[CoreType::WORKER].insert(worker_core);
+        }
+    }
+    for (const auto& eth_core : device->get_active_ethernet_cores()) {
+        CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
+        all_physical_printable_cores[CoreType::ETH].insert(physical_core);
+    }
+    for (const auto& eth_core : device->get_inactive_ethernet_cores()) {
+        CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
+        all_physical_printable_cores[CoreType::ETH].insert(physical_core);
+    }
+
+    return all_physical_printable_cores;
+}
+
 // A null stream for when the print server is muted.
 class NullBuffer : public std::streambuf {
 public:
@@ -131,6 +155,8 @@ private:
 
     std::ofstream* outfile_ = nullptr; // non-cout
     std::ostream* stream_ = nullptr; // either == outfile_ or is &cout
+    std::ofstream* noc_log_ = nullptr;
+    std::map<uint32_t, uint32_t> noc_xfer_counts;
 
     // A map to from {device id, core coord x, y, hart index} to the signal code it's waiting for.
     std::map<tuple<uint32_t, uint32_t, uint32_t, uint32_t>, uint32_t> hart_waiting_on_signal_;
@@ -254,8 +280,12 @@ static void PrintTensixRegisterData(ostream& stream, int setwidth, uint32_t raw_
         case static_cast<std::uint8_t>(tt::DataFormat::UInt32):
             stream << setw(setwidth) << datum << " ";
             break;
+        case static_cast<std::uint8_t>(tt::DataFormat::UInt16):
+            stream << setw(setwidth) << (datum & 0xffff) << " ";
+            stream << setw(setwidth) << (datum >> 16) << " ";
+            break;
         default:
-            stream << "Unknown data format " << data_format;
+            stream << "Unknown data format " << data_format << " ";
             break;
    }
 }
@@ -293,7 +323,8 @@ void WriteInitMagic(Device *device, const CoreCoord& core, int hart_id, bool ena
 
     // TODO(AP): this could use a cleanup - need a different mechanism to know if a kernel is running on device.
     // Force wait for first kernel launch by first writing a non-zero and waiting for a zero.
-    vector<uint32_t> initbuf = { uint32_t(enabled ? DEBUG_PRINT_SERVER_STARTING_MAGIC : DEBUG_PRINT_SERVER_DISABLED_MAGIC) };
+    vector<uint32_t> initbuf = vector<uint32_t>(PRINT_BUFFER_SIZE / sizeof(uint32_t), 0);
+    initbuf[0] = uint32_t(enabled ? DEBUG_PRINT_SERVER_STARTING_MAGIC : DEBUG_PRINT_SERVER_DISABLED_MAGIC);
     tt::llrt::write_hex_vec_to_core(device->id(), core, initbuf, base_addr);
 } // WriteInitMagic
 
@@ -315,14 +346,15 @@ DebugPrintServerContext::DebugPrintServerContext() {
     inst = this;
 
     // Read hart mask + log file from rtoptions
-    uint32_t hart_mask = tt::llrt::OptionsG.get_dprint_riscv_mask();
-    string file_name = tt::llrt::OptionsG.get_dprint_file_name();
+    uint32_t hart_mask = tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDprint);
+    string file_name = tt::llrt::OptionsG.get_feature_file_name(tt::llrt::RunTimeDebugFeatureDprint);
 
     // Set the output stream according to RTOptions, either a file name or stdout if none specified.
     if (file_name != "") {
         outfile_ = new std::ofstream(file_name);
     }
     stream_ = outfile_ ? outfile_ : &cout;
+    noc_log_ = new std::ofstream("noc_log.csv");
 
     stop_print_server_ = false;
     mute_print_server_ = false;
@@ -351,6 +383,10 @@ DebugPrintServerContext::~DebugPrintServerContext() {
         outfile_->close();
         delete outfile_;
     }
+    for (auto &size_and_count : noc_xfer_counts)
+        *noc_log_ << size_and_count.first << "," << size_and_count.second << "\n";
+    noc_log_->close();
+    delete noc_log_;
     inst = nullptr;
 } // ~DebugPrintServerContext
 
@@ -380,24 +416,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
 
     // A set of all valid printable cores, used for checking the user input. Note that the coords
     // here are physical.
-    map<CoreType, set<CoreCoord>> all_physical_printable_cores;
-    // The set of all printable cores is Tensix + Eth cores
-    CoreCoord logical_grid_size = device->logical_grid_size();
-    for (uint32_t x = 0; x < logical_grid_size.x; x++) {
-        for (uint32_t y = 0; y < logical_grid_size.y; y++) {
-            CoreCoord logical_coord(x, y);
-            CoreCoord worker_core = device->worker_core_from_logical_core(logical_coord);
-            all_physical_printable_cores[CoreType::WORKER].insert(worker_core);
-        }
-    }
-    for (const auto& eth_core : device->get_active_ethernet_cores()) {
-        CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
-        all_physical_printable_cores[CoreType::ETH].insert(physical_core);
-    }
-    for (const auto& eth_core : device->get_inactive_ethernet_cores()) {
-        CoreCoord physical_core = device->ethernet_core_from_logical_core(eth_core);
-        all_physical_printable_cores[CoreType::ETH].insert(physical_core);
-    }
+    map<CoreType, set<CoreCoord>> all_physical_printable_cores = get_all_physical_printable_cores(device);
 
     // Initialize all print buffers on all cores on the device to have print disabled magic. We
     // will then write print enabled magic for only the cores the user has specified to monitor.
@@ -415,26 +434,14 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
 
     // If RTOptions doesn't enable DPRINT on this device, return here and don't actually attach it
     // to the server.
-    vector<chip_id_t> chip_ids = tt::llrt::OptionsG.get_dprint_chip_ids();
-    if (!tt::llrt::OptionsG.get_dprint_all_chips())
+    vector<chip_id_t> chip_ids = tt::llrt::OptionsG.get_feature_chip_ids(tt::llrt::RunTimeDebugFeatureDprint);
+    if (!tt::llrt::OptionsG.get_feature_all_chips(tt::llrt::RunTimeDebugFeatureDprint))
         if (std::find(chip_ids.begin(), chip_ids.end(), device->id()) == chip_ids.end())
             return;
 
-    // Helper lambda to convert CoreType to string for printing purposes.
-    auto core_type_to_str = [](CoreType core_type){
-        switch(core_type) {
-            case CoreType::WORKER:
-                return "worker";
-            case CoreType::ETH:
-                return "ethernet";
-            default:
-                TT_THROW("DPRINT server unrecognized CoreType");
-        }
-    };
-
     // Handle specifically disabled cores
     std::unordered_set<CoreCoord> disabled_phys_cores;
-    for (auto &type_and_cores : tt::llrt::OptionsG.get_dprint_disabled_cores()) {
+    for (auto &type_and_cores : tt::llrt::OptionsG.get_feature_disabled_cores(tt::llrt::RunTimeDebugFeatureDprint)) {
         for (auto &core : type_and_cores.second) {
             CoreCoord physical_core = device->physical_core_from_logical_core(core, type_and_cores.first);
             disabled_phys_cores.insert(physical_core);
@@ -444,7 +451,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
     // Core range depends on whether dprint_all_cores flag is set.
     vector<CoreCoord> print_cores_sanitized;
     for (CoreType core_type : {CoreType::WORKER, CoreType::ETH}) {
-        if (tt::llrt::OptionsG.get_dprint_all_cores(core_type)) {
+        if (tt::llrt::OptionsG.get_feature_all_cores(tt::llrt::RunTimeDebugFeatureDprint, core_type)) {
             // Print from all cores of the given type, cores returned here are guaranteed to be valid.
             for (CoreCoord phys_core: all_physical_printable_cores[core_type]) {
                 // Don't print on specifically disabled cores.
@@ -456,11 +463,11 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
                 tt::LogMetal,
                 "DPRINT enabled on device {}, all {} cores.",
                 device->id(),
-                core_type_to_str(core_type)
+                tt::llrt::get_core_type_name(core_type)
             );
         } else {
             // Only print from the cores specified by the user
-            vector<CoreCoord> print_cores = tt::llrt::OptionsG.get_dprint_cores()[core_type];
+            vector<CoreCoord> print_cores = tt::llrt::OptionsG.get_feature_cores(tt::llrt::RunTimeDebugFeatureDprint)[core_type];
 
             // We should also validate that the cores the user specified are valid worker cores.
             for (auto logical_core : print_cores) {
@@ -482,7 +489,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
                         tt::LogMetal,
                         "DPRINT enabled on device {}, {} core {} (physical {}).",
                         device->id(),
-                        core_type_to_str(core_type),
+                        tt::llrt::get_core_type_name(core_type),
                         logical_core.str(),
                         phys_core.str()
                     );
@@ -490,7 +497,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
                     log_warning(
                         tt::LogMetal,
                         "TT_METAL_DPRINT_CORES included {} core with logical coordinates {} (physical coordinates {}), which is not a valid core on device {}. This coordinate will be ignored by the dprint server.",
-                        core_type_to_str(core_type),
+                        tt::llrt::get_core_type_name(core_type),
                         logical_core.str(),
                         valid_logical_core? phys_core.str() : "INVALID",
                         device->id()
@@ -501,7 +508,7 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
     }
 
     // Write print enable magic for the cores the user specified.
-    uint32_t hart_mask = tt::llrt::OptionsG.get_dprint_riscv_mask();
+    uint32_t hart_mask = tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDprint);
     for (auto &core : print_cores_sanitized) {
         int hart_count = GetNumRiscs(device_id, core);
         for (int hart_index = 0; hart_index < hart_count; hart_index++) {
@@ -521,14 +528,14 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
 
 void DebugPrintServerContext::DetachDevice(Device* device) {
     // Don't detach the device if it's disabled by env vars - in this case it wasn't attached.
-    vector<chip_id_t> chip_ids = tt::llrt::OptionsG.get_dprint_chip_ids();
-    if (!tt::llrt::OptionsG.get_dprint_all_chips())
+    vector<chip_id_t> chip_ids = tt::llrt::OptionsG.get_feature_chip_ids(tt::llrt::RunTimeDebugFeatureDprint);
+    if (!tt::llrt::OptionsG.get_feature_all_chips(tt::llrt::RunTimeDebugFeatureDprint))
         if (std::find(chip_ids.begin(), chip_ids.end(), device->id()) == chip_ids.end())
             return;
 
     // When we detach a device, we should poll to make sure there's no outstanding prints.
     chip_id_t chip_id = device->id();
-    uint32_t risc_mask = tt::llrt::OptionsG.get_dprint_riscv_mask();
+    uint32_t risc_mask = tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDprint);
     bool outstanding_prints = true;
     while (outstanding_prints && !server_killed_due_to_hang_) {
         // Polling interval of 1ms
@@ -564,8 +571,19 @@ void DebugPrintServerContext::DetachDevice(Device* device) {
     device_to_core_range_lock_.lock();
     TT_ASSERT(device_to_core_range_.count(device) > 0, "Device {} not present in DPRINT server but tried removing it!", device->id());
     device_to_core_range_.erase(device);
-    device_to_core_range_lock_.unlock();
     log_info(tt::LogMetal, "DPRINT Server dettached device {}", device->id());
+
+    // When detaching a device, disable prints on it.
+    map<CoreType, set<CoreCoord>> all_physical_printable_cores = get_all_physical_printable_cores(device);
+    for (auto &type_and_cores : all_physical_printable_cores) {
+        for (auto &core : type_and_cores.second) {
+            int hart_count = GetNumRiscs(device->id(), core);
+            for (int hart_index = 0; hart_index < hart_count; hart_index++) {
+                WriteInitMagic(device, core, hart_index, false);
+            }
+        }
+    }
+    device_to_core_range_lock_.unlock();
 } // DetachDevice
 
 void DebugPrintServerContext::ClearLogFile() {
@@ -574,7 +592,7 @@ void DebugPrintServerContext::ClearLogFile() {
         outfile_->close();
         delete outfile_;
 
-        string file_name = tt::llrt::OptionsG.get_dprint_file_name();
+        string file_name = tt::llrt::OptionsG.get_feature_file_name(tt::llrt::RunTimeDebugFeatureDprint);
         outfile_ = new std::ofstream(file_name);
         stream_ = outfile_ ? outfile_ : &cout;
     }
@@ -680,7 +698,7 @@ bool DebugPrintServerContext::PeekOneHartNonBlocking(
                 case DPrintCSTR: // const char*
                     // terminating zero was included in size and should be present in the buffer
                     cptr = reinterpret_cast<const char*>(ptr);
-                    nlen = strnlen(cptr, 200);
+                    nlen = strnlen(cptr, sizeof(DebugPrintMemLayout::data));
                     if (nlen >= 200)
                         stream << "STRING BUFFER OVERFLOW DETECTED" << endl;
                     else
@@ -704,6 +722,11 @@ bool DebugPrintServerContext::PeekOneHartNonBlocking(
                 case DPrintSETPRECISION:
                     stream << std::setprecision(*ptr);
                     TT_ASSERT(sz == 1);
+                break;
+                case DPrintNOC_LOG_XFER:
+                    if (tt::llrt::OptionsG.get_dprint_noc_transfers())
+                        noc_xfer_counts[*reinterpret_cast<uint32_t*>(ptr)]++;
+                    TT_ASSERT(sz == 4);
                 break;
                 case DPrintFIXED:
                     stream << std::fixed;
@@ -856,7 +879,6 @@ void DebugPrintServerContext::PollPrintData(uint32_t hart_mask) {
         std::map<Device*, vector<CoreCoord>> device_to_core_range_copy;
         device_to_core_range_lock_.lock();
         device_to_core_range_copy = device_to_core_range_;
-        device_to_core_range_lock_.unlock();
 
         // Flag for whether any new print data was found in this round of polling.
         bool new_data_this_iter = false;
@@ -881,6 +903,7 @@ void DebugPrintServerContext::PollPrintData(uint32_t hart_mask) {
                             // re-throw the exception.
                             if (tt::llrt::OptionsG.get_test_mode_enabled()) {
                                 server_killed_due_to_hang_ = true;
+                                device_to_core_range_lock_.unlock();
                                 return; // Stop the print loop
                             } else {
                                 // Re-throw for instant exit
@@ -899,6 +922,7 @@ void DebugPrintServerContext::PollPrintData(uint32_t hart_mask) {
 
         // Signal whether the print server is currently processing data.
         new_data_last_iter_ = new_data_this_iter;
+        device_to_core_range_lock_.unlock();
         // Sleep for a few ms if no data was processed.
         if (!new_data_last_iter_)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -917,7 +941,7 @@ namespace tt {
 
 void DprintServerAttach(Device* device) {
     // Skip if DPRINT not enabled, and make sure profiler is not running.
-    if (!tt::llrt::OptionsG.get_dprint_enabled())
+    if (!tt::llrt::OptionsG.get_feature_enabled(tt::llrt::RunTimeDebugFeatureDprint))
         return;
     TT_FATAL(
        DebugPrintServerContext::ProfilerIsRunning == false,

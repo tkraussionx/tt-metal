@@ -19,7 +19,7 @@ namespace tt {
 namespace tt_metal {
 
 enum class CopyOpParallelizationStrategy {
-    MULTI_CORE = 0, SINGLE_CORE = 1
+    MULTI_CORE
 };
 
 struct Copy {
@@ -35,7 +35,6 @@ struct Copy {
 };
 
 operation::ProgramWithCallbacks copy_multi_core(const Tensor &input, const Tensor &output, bool backwards = false);
-operation::ProgramWithCallbacks copy_single_core(const Tensor &input, const Tensor &output, bool backwards = false);
 
 Tensor copy(const Tensor& src_tensor, const Tensor& dst_tensor);
 
@@ -48,6 +47,9 @@ Tensor assign(const Tensor& input, const MemoryConfig& output_mem_config, std::o
 
 // binary assign
 Tensor assign(const Tensor& input_a, const Tensor& input_b);
+
+// binary assign with queue_id
+Tensor assign(uint8_t queue_id, const Tensor& input_a, const Tensor& input_b);
 
 }  // namespace tt_metal
 

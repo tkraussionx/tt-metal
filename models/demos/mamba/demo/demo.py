@@ -3,13 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import time
-import argparse
 from typing import List, Optional
 from loguru import logger
 import ttnn
 import pytest
 import torch
-import json
 from tqdm import tqdm
 
 from transformers import AutoTokenizer
@@ -30,13 +28,8 @@ def get_tt_metal_model(
     from models.demos.mamba.tt import model_config
 
     reference_model = get_cpu_reference_model(version, batch_size=batch_size)
-    if cache_dir:
-        cache_path = model_config.get_weights_cache_path(version, cache_dir)
-    else:
-        cache_path = None
-
     config = model_config.create_model_config(batch_size, reference_model.args.d_model)
-    model = MambaTT(reference_model, device, config, tt_cache_path=cache_path)
+    model = MambaTT(reference_model, device, config, tt_cache_path=cache_dir)
 
     return model
 
@@ -91,6 +84,7 @@ def run_mamba_demo(
     assert batch_size == len(prompts), "32 prompts are required"
 
     logger.info(f"Running Mamba demo (weights='{model_version}') with batch={batch_size}")
+    logger.info(f"Using tensor cache at '{cache_dir}'")
 
     model = get_tt_metal_model(model_version, device, cache_dir, batch_size)
 
@@ -100,29 +94,29 @@ def run_mamba_demo(
 
     sequences: torch.Tensor = tokenizer(prompts, return_tensors="pt", padding=True).input_ids
 
-    # prefill
+    # Prefill
     prefill_iterations = sequences.shape[1] - 1
     for idx in tqdm(range(prefill_iterations), desc="Prefilling the prompt(s)..."):
         logits = model(sequences[:, idx].unsqueeze(1))
 
-    # Decode Starts
-    start = time.time()
-    token_counts = 0
+    # Decode
     total_iterations = generated_sequence_length + prefill_iterations
 
-    print("Starting decoding...")
+    logger.info("Starting decoding...")
     for idx in range(prefill_iterations, total_iterations):
         with torch.no_grad():
+            start = time.time()
             logits = model(sequences[:, idx].unsqueeze(1))
+            end = time.time()
+
         logits = apply_repetition_penalty_(logits.squeeze(1), sequences, penalty=1.2)  # Adjust penalty as needed
         probs = torch.nn.functional.softmax(logits, dim=-1)
         next_token = torch.argmax(probs, dim=-1)
-        sequences = torch.cat([sequences, next_token.unsqueeze(-1)], dim=1)
 
+        sequences = torch.cat([sequences, next_token.unsqueeze(-1)], dim=1)
         decoded = tokenizer.batch_decode(sequences, skip_special_tokens=False)
 
-        token_counts += sequences.shape[0]
-        throughput = token_counts / (time.time() - start)
+        throughput = batch_size / (end - start)
 
         if display:
             display_tokens(decoded)
@@ -131,8 +125,18 @@ def run_mamba_demo(
 
 
 @pytest.mark.parametrize(
-    "max_gen_len",
-    ([100]),
+    "model_version, max_gen_len",
+    (
+        (
+            "state-spaces/mamba-2.8b-slimpj",
+            100,
+        ),
+    ),
 )
-def test_demo(user_input, device, use_program_cache, max_gen_len):
-    return run_mamba_demo(prompts=user_input, device=device, generated_sequence_length=max_gen_len)
+def test_demo(user_input, device, use_program_cache, get_tt_cache_path, model_version, max_gen_len):
+    return run_mamba_demo(
+        prompts=user_input,
+        device=device,
+        cache_dir=get_tt_cache_path(model_version),
+        generated_sequence_length=max_gen_len,
+    )

@@ -111,7 +111,7 @@ build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 81
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -x $max_x -y $max_y -c 32
 
 #all processors, 1 core, 1 rt arg
-echo "###" all procesors 1 core 1 rt
+echo "###" all procesors 1 core 1 rta
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -a 1
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -a 1
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -a 1
@@ -122,8 +122,32 @@ build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 81
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 12880 -a 1
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -a 1
 
+#1 processors, alls core, 128 rt arg
+echo "###" all procesors all cores 128 rta
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -n -t -x $max_x -y $max_y -a 128
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -n -t -x $max_x -y $max_y -a 128
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -n -t -x $max_x -y $max_y -a 128
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 2048 -n -t -x $max_x -y $max_y -a 128
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 4096 -n -t -x $max_x -y $max_y -a 128
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 8192 -n -t -x $max_x -y $max_y -a 128
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 10240 -n -t -x $max_x -y $max_y -a 128
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 12880 -n -t -x $max_x -y $max_y -a 128
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -n -t -x $max_x -y $max_y -a 128
+
+#1 processors, alls core, 1 rt arg
+echo "###" all procesors all cores 1 rta
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -n -t -x $max_x -y $max_y -a 1
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -n -t -x $max_x -y $max_y -a 1
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -n -t -x $max_x -y $max_y -a 1
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 2048 -n -t -x $max_x -y $max_y -a 1
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 4096 -n -t -x $max_x -y $max_y -a 1
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 8192 -n -t -x $max_x -y $max_y -a 1
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 10240 -n -t -x $max_x -y $max_y -a 1
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 12880 -n -t -x $max_x -y $max_y -a 1
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -n -t -x $max_x -y $max_y -a 1
+
 #all processors, alls core, 1 rt arg
-echo "###" all procesors all cores 1 rt
+echo "###" all procesors all cores 1 rta
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -x $max_x -y $max_y -a 1
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -x $max_x -y $max_y -a 1
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -x $max_x -y $max_y -a 1
@@ -135,7 +159,7 @@ build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 81
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -x $max_x -y $max_y -a 1
 
 #all processors, all cores, 32 args
-echo "###" all procesors all cores 32 rt
+echo "###" all procesors all cores 32 rta
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -x $max_x -y $max_y -a 32
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -x $max_x -y $max_y -a 32
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -x $max_x -y $max_y -a 32
@@ -147,7 +171,7 @@ build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 81
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -x $max_x -y $max_y -a 32
 
 #all processors, all cores, 128 args
-echo "###" all procesors all cores 128 rt
+echo "###" all procesors all cores 128 rta
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -x $max_x -y $max_y -a 128
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -x $max_x -y $max_y -a 128
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -x $max_x -y $max_y -a 128
@@ -184,3 +208,13 @@ build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 20
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 4096 -x $max_x -y $max_y -S 4 -c 32 -a 128
 build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 8192 -x $max_x -y $max_y -S 4 -c 32 -a 128
 #build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -x $max_x -y $max_y -S 4 -c 32 -a 128
+
+# Kernel groups (perhaps even worse)
+echo "###" worst case
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 256 -x $max_x -y $max_y -kg $max_x
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 512 -x $max_x -y $max_y -kg $max_x
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 1024 -x $max_x -y $max_y -kg $max_x
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 2048 -x $max_x -y $max_y -kg $max_x
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 4096 -x $max_x -y $max_y -kg $max_x
+build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 8192 -x $max_x -y $max_y -kg $max_x
+#build/test/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch -w 5000 -s 14336 -x $max_x -y $max_y -kg $max_x

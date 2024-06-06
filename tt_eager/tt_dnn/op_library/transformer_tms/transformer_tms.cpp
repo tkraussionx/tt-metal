@@ -78,15 +78,15 @@ std::vector<Tensor> SplitFusedQKVAndSplitHeads::create_output_tensors(const std:
         mem_config_qv.shard_spec = shard_spec_qv;
         auto mem_config_k = this->output_mem_config;
         mem_config_k.shard_spec = shard_spec_k;
-        auto out_tensor_q = create_sharded_device_tensor(
+        auto out_tensor_q = create_device_tensor(
             Shape{batch, num_heads, M, K},
             input_tensor.get_dtype(),
             Layout::TILE,
             input_tensor.device(),
             mem_config_qv);
-        auto out_tensor_k = create_sharded_device_tensor(
+        auto out_tensor_k = create_device_tensor(
             Shape{batch, num_heads, K, M}, input_tensor.get_dtype(), Layout::TILE, input_tensor.device(), mem_config_k);
-        auto out_tensor_v = create_sharded_device_tensor(
+        auto out_tensor_v = create_device_tensor(
             Shape{batch, num_heads, M, K},
             input_tensor.get_dtype(),
             Layout::TILE,
@@ -292,10 +292,10 @@ const operation::Hash AttnMatmul::compute_program_hash(const std::vector<Tensor>
         this->transpose_hw,
         this->output_mem_config,
         this->output_dtype,
-        input_tensors.at(0).memory_config(),
-        input_tensors.at(0).get_dtype(),
-        input_tensors.at(1).memory_config(),
-        input_tensors.at(1).get_dtype());
+        std::get<DeviceStorage>(input_tensors.at(0).storage()).memory_config(),
+        input_tensors.at(0).dtype(),
+        std::get<DeviceStorage>(input_tensors.at(1).storage()).memory_config(),
+        input_tensors.at(1).dtype());
 }
 
 void GroupAttnMatmul::validate(const std::vector<Tensor>& input_tensors) const {
@@ -443,7 +443,7 @@ std::vector<Tensor> GroupAttnMatmul::create_output_tensors(const std::vector<Ten
             ShardSpec shard_spec = ShardSpec{all_cores, {output_shape[2], output_shape[3]}, shard_orientation};
             output_mem_config.shard_spec = shard_spec;
         }
-        return {create_sharded_device_tensor(
+        return {create_device_tensor(
             this->compute_output_shapes(input_tensors).at(0),
             this->output_dtype,
             Layout::TILE,
@@ -502,14 +502,14 @@ const operation::Hash GroupAttnMatmul::compute_program_hash(const std::vector<Te
         this->output_mem_config.buffer_type,
         this->output_dtype,
         this->row_major,
-        input_tensor_a.memory_config().memory_layout,
-        input_tensor_a.memory_config().buffer_type,
-        input_tensor_a.get_dtype(),
-        input_tensor_a.device()->id(),
-        input_tensor_b.memory_config().memory_layout,
-        input_tensor_b.memory_config().buffer_type,
-        input_tensor_b.get_dtype(),
-        input_tensor_b.device()->id());
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_a.storage()).memory_config().buffer_type,
+        input_tensor_a.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().memory_layout,
+        std::get<DeviceStorage>(input_tensor_b.storage()).memory_config().buffer_type,
+        input_tensor_b.dtype(),
+        std::get<DeviceStorage>(input_tensor_b.storage()).buffer->device()->id());
 }
 
 // SSM eltwise mul
@@ -538,13 +538,22 @@ void SSMEltwiseMul::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL(
         input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED,
         "Unsupported memory layout for input b!");
-    TT_FATAL(input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16, "Unsupported data format for input a!");
-    TT_FATAL(input_tensor_b.get_dtype() == tt::tt_metal::DataType::BFLOAT16, "Unsupported data format for input b!");
+    TT_FATAL(
+        input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16 ||
+            input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
+        "Unsupported data format for input a!");
+    TT_FATAL(
+        input_tensor_b.get_dtype() == tt::tt_metal::DataType::BFLOAT16 ||
+            input_tensor_b.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
+        "Unsupported data format for input b!");
 
     TT_FATAL(
         this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
         "Unsupported memory layout for output!");
-    TT_FATAL(this->output_dtype == tt::tt_metal::DataType::BFLOAT16, "Unsupported data format for output!");
+    TT_FATAL(
+        this->output_dtype == tt::tt_metal::DataType::BFLOAT16 ||
+            this->output_dtype == tt::tt_metal::DataType::BFLOAT8_B,
+        "Unsupported data format for output!");
 
     const auto ashape = input_tensor_a.get_legacy_shape();
     const auto bshape = input_tensor_b.get_legacy_shape();
@@ -553,8 +562,10 @@ void SSMEltwiseMul::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL((ashape[2] == TILE_HEIGHT), "Num of users must be 32 for input a!");
     TT_FATAL((bshape[2] == TILE_HEIGHT), "Num of users must be 32 for input b!");
     TT_FATAL((ashape[3] != bshape[3]), "Use eltwise mul for same size inputs!");
-    TT_FATAL((ashape[3] == TILE_WIDTH || ashape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input a width must be 32 or 32*5120!");
-    TT_FATAL((bshape[3] == HIDDEN_SIZE || bshape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input b width must be 32 or 32*5120!");
+    TT_FATAL(
+        (ashape[3] == TILE_WIDTH || ashape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input a width must be 32 or 32*5120!");
+    TT_FATAL(
+        (bshape[3] == HIDDEN_SIZE || bshape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input b width must be 32 or 32*5120!");
 }
 
 std::vector<Shape> SSMEltwiseMul::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
@@ -597,7 +608,7 @@ void SSM1DSumReduce::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     TT_FATAL((input_tensor_a.get_layout() == Layout::TILE), "Inputs to ssm_1d_sum_reduce must be tilized");
 
-    // TODO: Uplift to support BFLOAT8_B and mixed precision
+    // TODO: Uplift to support mixed precision
     TT_FATAL(
         input_tensor_a.storage_type() == StorageType::DEVICE, "Operands to ssm_1d_sum_reduce need to be on device!");
     TT_FATAL(
@@ -606,12 +617,18 @@ void SSM1DSumReduce::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL(
         input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED,
         "Unsupported memory layout for input a!");
-    TT_FATAL(input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16, "Unsupported data format for input a!");
+    TT_FATAL(
+        input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16 ||
+            input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
+        "Unsupported data format for input a!");
 
     TT_FATAL(
         this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
         "Unsupported memory layout for output!");
-    TT_FATAL(this->output_dtype == tt::tt_metal::DataType::BFLOAT16, "Unsupported data format for output!");
+    TT_FATAL(
+        this->output_dtype == tt::tt_metal::DataType::BFLOAT16 ||
+            this->output_dtype == tt::tt_metal::DataType::BFLOAT8_B,
+        "Unsupported data format for output!");
 
     constexpr uint32_t latent = 32;
     const auto ashape = input_tensor_a.get_legacy_shape();

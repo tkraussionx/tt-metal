@@ -24,6 +24,8 @@
 #include "tt_dnn/op_library/sharded/sharded_op.hpp"
 #include "tt_dnn/op_library/sharded_partial/sharded_op_partial.hpp"
 #include "tt_dnn/op_library/all_gather/all_gather_op.hpp"
+#include "tt_dnn/op_library/ccl/reduce_scatter/reduce_scatter_op.hpp"
+#include "tt_dnn/op_library/risc_v/risc_v_op.hpp"
 
 
 namespace tt::tt_metal::detail{
@@ -50,7 +52,7 @@ namespace tt::tt_metal::detail{
         detail::export_enum<BcastOpDim>(m_tensor);
 
         detail::bind_unary_op<true, true>(m_tensor, "clone", &clone, R"doc(  Returns a new tensor which is a new copy of input tensor ``{0}``.)doc");
-        detail::bind_binary_op<false, false, false>(m_tensor, "copy", &copy, R"doc(  Copies the elements from ``{0}`` into ``{1}``. ``{1}`` is modified in place.)doc");
+        detail::bind_binary_op<false, false, false, false>(m_tensor, "copy", &copy, R"doc(  Copies the elements from ``{0}`` into ``{1}``. ``{1}`` is modified in place.)doc");
         detail::bind_unary_op<true, true>(m_tensor, "assign", py::overload_cast<const Tensor&, const MemoryConfig&, std::optional<const DataType>>(&assign), R"doc(  Returns a new tensor which is a new copy of input tensor ``{0}``.)doc");
 
         // *** tensor manipulation ***
@@ -118,6 +120,23 @@ namespace tt::tt_metal::detail{
                 "input_b", "Input tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
         )doc");
 
+        m_tensor.def("assign", py::overload_cast<uint8_t, const Tensor&, const Tensor& >(&assign),
+            py::arg("queue_id").noconvert() = 0, py::arg("input_a").noconvert(), py::arg("input_b").noconvert(), R"doc(
+            Copies input tensor ``arg0`` (given by input_a) to ``arg1`` (given by input_b) if their
+            shapes and memory layouts match, and returns input_b tensor.
+
+            Input tensors can be of any data type.
+
+            Output tensor will be of same data type as Input tensor.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "queue_id", "queue_id", "uint8_t", "Default is 0", "No"
+                "input_a", "Tensor assign is applied to", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "input_b", "Input tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+        )doc");
+
         m_tensor.def("reshape", &reshape,
             py::arg("input").noconvert(), py::arg("W"), py::arg("Z"), py::arg("Y"), py::arg("X"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
             Returns a tensor with the new shape of ``[W, Z, Y, X]``. The X dimension of input and output tensor must have same size.
@@ -168,7 +187,8 @@ namespace tt::tt_metal::detail{
         )doc");
 
         m_tensor.def("tilize_with_zero_padding", &tilize_with_zero_padding,
-            py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("output_dtype").noconvert() = std::nullopt, R"doc(
+            py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("output_dtype").noconvert() = std::nullopt,
+            py::arg("use_multicore").noconvert() = false, R"doc(
             Tilizes a given tensor across memory on device. Pads zeroes height-wise and width-wise if required.
 
             .. csv-table::
@@ -177,10 +197,12 @@ namespace tt::tt_metal::detail{
                 "input", "Input tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
                 "output_dtype", "Output tensor data type", "DataType", "Default is None (Use input dtype)", "No"
+                "use_multicore", "Whether to use multi-core parallelization", "bool", "Default is false", "Yes"
         )doc");
 
         m_tensor.def("tilize_with_val_padding", &tilize_with_val_padding,
-            py::arg("input").noconvert(), py::arg("output_tensor_shape"), py::arg("input_tensor_start"), py::arg("pad_value"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("output_dtype").noconvert() = std::nullopt, R"doc(
+            py::arg("input").noconvert(), py::arg("output_tensor_shape"), py::arg("pad_value"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("output_dtype").noconvert() = std::nullopt,
+            py::arg("use_multicore").noconvert() = false, R"doc(
             Tilizes a given tensor across memory on device. Pads to specified shape before tilizing.
 
             .. csv-table::
@@ -188,10 +210,10 @@ namespace tt::tt_metal::detail{
 
                 "input", "Input tensor", "Tensor", "", "Yes"
                 "output_tensor_shape", "Shape of output tensor", "List[int[4]]", "Shape [W, Z, Y, X] where Y%32=0 and X%32=0", "Yes"
-                "input_tensor_start", "Start indices to place input tensor in output tensor", "List[int[4]]", "Must be all 0s", "Yes"
                 "pad_value", "Value to pad input tensor", "float", "", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
                 "output_dtype", "Output tensor data type", "DataType", "Default is None (Use input dtype)", "No"
+                "use_multicore", "Whether to use multi-core parallelization", "bool", "Default is false", "Yes"
         )doc");
 
         m_tensor.def("untilize", &untilize,
@@ -211,6 +233,8 @@ namespace tt::tt_metal::detail{
 
                 "input", "Input tensor", "Tensor", "Tensor of shape [W, Z, Y, X] where Y%32=0 and X%32=0", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                "use_multicore", "Whether to use multi-core parallelization", "bool", "Default is true", "No"
+                "use_pack_untilize", "Whether to use pack untilize", "bool", "Default is true", "No"
         )doc");
 
         m_tensor.def(
@@ -243,8 +267,8 @@ namespace tt::tt_metal::detail{
             )doc");
 
         m_tensor.def("untilize_with_unpadding", &untilize_with_unpadding,
-            py::arg("input").noconvert(), py::arg("output_tensor_start"), py::arg("output_tensor_end"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-            py::arg("use_pack_untilize").noconvert() = true,
+            py::arg("input").noconvert(), py::arg("output_tensor_end"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+            py::arg("use_multicore").noconvert() = false, py::arg("use_pack_untilize").noconvert() = true,
             R"doc(
             Changes data layout of input tensor to ROW_MAJOR and unpads/removes elements from the tensor.
 
@@ -256,10 +280,10 @@ namespace tt::tt_metal::detail{
                 :header: "Argument", "Description", "Data type", "Valid range", "Required"
 
                 "input", "Input tensor", "Tensor", "Tensor of shape [W, Z, Y, X] where Y%32=0 and X%32=0", "Yes"
-                "output_tensor_start", "Start indices of input tensor", "List[int[4]]", "Values along each dim must be < input_tensor_shape[i]", "Yes"
                 "output_tensor_end", "End indices of input tensor in output tensor", "List[int[4]]", "Values along each dim must be < input_tensor_shape[i]", "Yes"
-                "pad_value", "Value to pad input tensor", "float", "", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                "use_multicore", "Whether to use multi-core parallelization", "bool", "Default is false", "No"
+                "use_pack_untilize", "Whether to use pack untilize", "bool", "Default is true", "No"
         )doc");
 
         m_tensor.def("pad", &pad,
@@ -296,8 +320,8 @@ namespace tt::tt_metal::detail{
                 :header: "Argument", "Description", "Data type", "Valid range", "Required"
 
                 "input", "Input tensor", "Tensor", "", "Yes"
-                "output_tensor_start", "Start indices of input tensor", "List[int[4]]", "Must be all 0s", "Yes"
-                "output_tensor_end", "End indices of input tensor in output tensor", "List[int[4]]", "Values along each dim must be < input_tensor_shape[i]", "Yes"
+                "output_tensor_start", "Start indices of input tensor", "List[int[tensor rank]]", "Values along each dim must be < input_tensor_shape[i]", "Yes"
+                "output_tensor_end", "End indices of input tensor in output tensor", "List[int[tensor rank]]", "Values along each dim must be < input_tensor_shape[i]", "Yes"
                 "pad_value", "Value to pad input tensor", "float", "", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
@@ -367,6 +391,23 @@ namespace tt::tt_metal::detail{
                 "dim", "Dimension on which reduction is performed", "ReduceOpDim", "W, H, HW", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
                 "output_dtype", "DataType of output tensor", "DataType", "Default is None (use input dtype)", "No"
+        )doc");
+
+        m_tensor.def("argmax_int", &argmax_int,
+            py::arg("input").noconvert(), py::arg("dim").noconvert() = std::nullopt, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Returns the indices of the maximum value of elements in the ``input`` tensor
+            If no ``dim`` is provided, it will return the indices of maximum value of all elements in given ``input``
+
+            Input tensor must have BFLOAT16 data type.
+
+            Output tensor will have UINT16 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "input", "Tensor argmax is applied to", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "dim", "Dimension to perform argmax", "int", "", "No"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
         // *** experimental operations ***
@@ -522,7 +563,8 @@ namespace tt::tt_metal::detail{
             R"doc(Converts a partial tensor from sharded_to_interleaved memory layout)doc"
         );
 
-        // Multi-Device ops
+        // ---------- Multi-Device ops ----------
+        // All Gather
         m_tensor.def("all_gather", &all_gather,
             py::arg("input_tensors"), py::arg("dim"), py::arg("num_links") = 1, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
             R"doc(Performs all gather on a list of tensors that form one tensor that is distributed across devices. The output is a list of a tensor which has been duplciated across the input devices.)doc"
@@ -531,6 +573,27 @@ namespace tt::tt_metal::detail{
             py::arg("input_tensors"), py::arg("dim"), py::arg("num_links") = 1, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
             R"doc(Performs all gather on a list of tensors that form one tensor that is distributed across devices. The output is a list of a tensor which has been duplciated across the input devices.)doc"
         );
+
+        // Reduce Scatter
+        m_tensor.def("reduce_scatter", &reduce_scatter,
+            py::arg("input_tensors"), py::arg("scatter_split_dim"), py::arg("reduce_op"), py::arg("num_links") = 1, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+            R"doc(
+                Performs reduce scatter across chips, where the input tensors are sliced along the scatter dim, and pairwise reduced as they propagate and reduce through the cluster.
+
+                For example, a reduce scatter on a ring of rank 8 and input tensor shapes (per rank) of [1,1,1024,8096] and scatter_dim=3, will split each input tensor
+                on width into 8 parts of size [1,1,1024,1024]. Each of those parts will reduce with the corresponding chunk from the other ranks. All chips will collectively
+                reduce the first incoming [1,1,1024,1024] chunk with their local first [1,1,1024,1024] chunk and be forwarded. The second incoming [1,1,1024,1024] chunk will
+                be reduced with the second local [1,1,1024,1024] chunk and be forwarded and so on. Each rank in the ring will start on a different offset into the chunk such
+                that by the end, they will finish with a different reduced chunk offset from the original tensor shape.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "scatter_split_dim", "Dimension to evenly slice input tensor along for each rank", "int", "0..3", "Yes"
+                "reduce_op", "reduction math operation", " ReduceOpMath", "SUM", "No"
+                "num_links", "Number of ethernet links to allow the op to use to send data chip to chip for the operation. Default=1", "int", "1..max_num_links", "No"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+            )doc");
     }
 
 }

@@ -5,9 +5,9 @@
 import torch
 import pytest
 import time
+import ttnn
 from loguru import logger
 
-import tt_lib
 from models.demos.t3000.falcon40b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
@@ -54,7 +54,6 @@ def run_test_FalconCausalLM_end_to_end(
 ):
     model_name = model_location_generator(model_version, model_subdir="Falcon")
 
-    # profiler.start("hugging_face_model_setup")
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(
         model_name, low_cpu_mem_usage=True, num_hidden_layers=num_layers
     )
@@ -62,7 +61,6 @@ def run_test_FalconCausalLM_end_to_end(
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
     pytorch_FalconCausalLM = PytorchFalconCausalLM(hugging_face_reference_model, num_layers)
-    # profiler.end("hugging_face_model_setup")
 
     # Prepare input ------------------------------------------------------------------------
     torch.manual_seed(0)
@@ -86,99 +84,15 @@ def run_test_FalconCausalLM_end_to_end(
         assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
         assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
-        past_key_values = None
-        tt_layer_past = ()
-        tt_k_cache_host = torch.zeros(batch, num_kv_heads, max_position_embeddings, head_dim)
-        tt_v_cache_host = torch.zeros(batch, num_kv_heads, max_position_embeddings, head_dim)
-        tt_k_cache_host = torch.chunk(tt_k_cache_host, len(devices), 1)
-        tt_v_cache_host = torch.chunk(tt_v_cache_host, len(devices), 1)
-
-        for i in range(num_layers):
-            tt_k_cache = []
-            tt_v_cache = []
-            for i in range(len(devices)):
-                tt_k_cache.append(
-                    torch2tt_tensor(
-                        tt_k_cache_host[i],
-                        devices[i],
-                        tt_lib.tensor.Layout.TILE,
-                        model_config["KV_CACHE_MEMCFG"],
-                        model_config["KV_CACHE_DTYPE"],
-                    )
-                )
-                tt_v_cache.append(
-                    torch2tt_tensor(
-                        tt_v_cache_host[i],
-                        devices[i],
-                        tt_lib.tensor.Layout.TILE,
-                        model_config["KV_CACHE_MEMCFG"],
-                        model_config["KV_CACHE_DTYPE"],
-                    )
-                )
-            tt_layer_past += ((tt_k_cache, tt_v_cache),)
-
     elif llm_mode == "decode":
         q_len, kv_len = seq_len, kv_cache_len + 1
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
 
-        past_key_values = ()
-        tt_layer_past = ()
-        for i in range(num_layers):
-            k_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
-            v_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
-            past_key_values += (
-                (
-                    torch.repeat_interleave(k_cache, num_attention_heads // num_kv_heads, 1),
-                    (torch.repeat_interleave(v_cache, num_attention_heads // num_kv_heads, 1)),
-                ),
-            )
-
-            tt_k_cache_host = torch.zeros(batch, num_kv_heads, max_position_embeddings, head_dim)
-            tt_v_cache_host = torch.zeros(batch, num_kv_heads, max_position_embeddings, head_dim)
-            tt_k_cache_host[:, :, :kv_cache_len, :] = k_cache
-            tt_v_cache_host[:, :, :kv_cache_len, :] = v_cache
-            tt_k_cache_host = torch.chunk(tt_k_cache_host, len(devices), 1)
-            tt_v_cache_host = torch.chunk(tt_v_cache_host, len(devices), 1)
-
-            tt_k_cache = []
-            tt_v_cache = []
-            for j in range(len(devices)):
-                tt_k_cache.append(
-                    torch2tt_tensor(
-                        tt_k_cache_host[j],
-                        devices[j],
-                        tt_lib.tensor.Layout.TILE,
-                        model_config["KV_CACHE_MEMCFG"],
-                        model_config["KV_CACHE_DTYPE"],
-                    )
-                )
-                tt_v_cache.append(
-                    torch2tt_tensor(
-                        tt_v_cache_host[j],
-                        devices[j],
-                        tt_lib.tensor.Layout.TILE,
-                        model_config["KV_CACHE_MEMCFG"],
-                        model_config["KV_CACHE_DTYPE"],
-                    )
-                )
-            tt_layer_past += ((tt_k_cache, tt_v_cache),)
-
     else:
         raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
     for device in devices:
-        tt_lib.device.Synchronize(device)
-
-    # Prepare output -----------------------------------------------------------------------
-    # profiler.start("hugging_face_reference_model")
-    pytorch_out, pytorch_layer_present = pytorch_FalconCausalLM(
-        input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
-    )
-    # profiler.end("hugging_face_reference_model")
-    del past_key_values
-    del pytorch_layer_present
-    del pytorch_out
-    del pytorch_FalconCausalLM
+        ttnn.device.synchronize_device(device)
 
     # NOTE: Passing in pytorch tensor here instead of ll buda tensor
     # since we don't yet have embedding support on device
@@ -196,12 +110,13 @@ def run_test_FalconCausalLM_end_to_end(
         use_global_cos_sin_cache,
     )
     for device in devices:
-        tt_lib.device.Synchronize(device)
-    # profiler.end("TtFalcon_model_setup")
+        ttnn.device.synchronize_device(device)
 
     del state_dict
 
-    # profiler.start("processing_of_input")
+    # Initialize past layer values
+    tt_layer_past = tt_FalconCausalLM.initialize_kv_cache()
+
     if llm_mode == "prefill":
         model_inputs = torch.split(model_input, 1)
         tt_inputs, tt_attention_mask = zip(
@@ -214,14 +129,11 @@ def run_test_FalconCausalLM_end_to_end(
         tt_inputs, tt_attention_mask_host = tt_FalconCausalLM.model_preprocessing(
             llm_mode, model_input, kv_cache_len, num_input_tokens=kv_len
         )
-    # profiler.end("processing_of_input")
 
     # First run to fill compile cache ----------------------------------------------------
     logger.info(f"Running Falcon model once to fill caches")
-    # profiler.disable()
 
     # Use force enable to only record this profiler call while others are disabled
-    # profiler.start("first_model_run_with_compile", force_enable=True)
     compile_time_start = time.time()
     if llm_mode == "prefill":
         tt_outs = []
@@ -250,9 +162,8 @@ def run_test_FalconCausalLM_end_to_end(
         )
         tt_out = [tt_o.cpu() for tt_o in tt_out]
     compile_duration = time.time() - compile_time_start
-    # profiler.end("first_model_run_with_compile", force_enable=True)
     for device in devices:
-        tt_lib.device.Synchronize(device)
+        ttnn.device.synchronize_device(device)
 
     del tt_out
     del tt_layer_present
@@ -274,7 +185,6 @@ def run_test_FalconCausalLM_end_to_end(
         )
 
     # Run warmup interations - profiler still disabled
-    # profiler.start(f"model_warmup_run_for_inference")
     for _ in range(inference_iterations - 1):
         if llm_mode == "prefill":
             tt_outs = []
@@ -308,9 +218,8 @@ def run_test_FalconCausalLM_end_to_end(
                 use_cache=use_cache,
             )
             tt_out = [tt_o.cpu() for tt_o in tt_out]
-    # profiler.end(f"model_warmup_run_for_inference")
     for device in devices:
-        tt_lib.device.Synchronize(device)
+        ttnn.device.synchronize_device(device)
 
     logger.info(f"Enable binary and compile cache, and start timing.")
     enable_persistent_kernel_cache()
@@ -344,7 +253,7 @@ def run_test_FalconCausalLM_end_to_end(
     inference_duration = time.time() - start_time
 
     for device in devices:
-        tt_lib.device.Synchronize(device)
+        ttnn.device.synchronize_device(device)
 
     logger.info(f"falcon 40b compile time: {compile_duration}")
     logger.info(f"falcon 40b inference time: {inference_duration}")
@@ -366,7 +275,7 @@ def run_test_FalconCausalLM_end_to_end(
 
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.models_performance_bare_metal
-@pytest.mark.parametrize("num_devices", (4, 8), ids=["4chips", "8chips"])
+@pytest.mark.parametrize("num_devices", (8,), ids=["8chips"])
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len, expected_compile_time, expected_inference_time, inference_iterations",
     (
@@ -395,7 +304,7 @@ def run_test_FalconCausalLM_end_to_end(
     ("tiiuae/falcon-40b-instruct",),
     ids=["falcon_40b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT8_B-SHARDED", "BFLOAT8_B-DRAM"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT8_B-SHARDED", "BFLOAT8_B-DRAM", "BFLOAT16-DRAM"))
 def test_perf_bare_metal(
     num_devices,
     model_version,
@@ -414,8 +323,8 @@ def test_perf_bare_metal(
     all_devices,
     use_program_cache,
 ):
-    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM"] or num_devices != 8):
-        pytest.skip("Prefill is only supported for BFLOAT8_B-DRAM memory config and 8 chips!")
+    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM", "BFLOAT16-DRAM"] or num_devices != 8):
+        pytest.skip("Prefill is only supported for DRAM memory config and 8 chips!")
     if llm_mode == "decode" and model_config_str not in ["BFLOAT8_B-SHARDED"]:
         pytest.skip("Decode is only supported for SHARDED memory config!")
 

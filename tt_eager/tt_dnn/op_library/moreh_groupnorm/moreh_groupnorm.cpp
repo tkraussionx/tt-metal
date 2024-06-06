@@ -101,9 +101,8 @@ operation::ProgramWithCallbacks moreh_groupnorm_impl(
     ////////////////////////////////////////////////////////////////////////////
     //                         Core Setup
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CoreGridDesc core_grid(device);
-    const auto num_cores_y = core_grid.y_;
-    CoreCoord core_grid_coord(core_grid.x_, num_cores_y);
+    auto grid = device->compute_with_storage_grid_size();
+    const auto num_cores_y = grid.y;
 
     const auto
         [num_cores_to_be_used,
@@ -111,7 +110,7 @@ operation::ProgramWithCallbacks moreh_groupnorm_impl(
          core_group_1,
          core_group_2,
          num_rows_per_core_group_1,
-         num_rows_per_core_group_2] = tt_metal::split_work_to_cores(core_grid_coord, num_rows);
+         num_rows_per_core_group_2] = tt_metal::split_work_to_cores(grid, num_rows);
 
     log_debug(LogTest, fmt::format("num_cores_to_be_used: {}", num_cores_to_be_used).c_str());
     log_debug(LogTest, fmt::format("num_rows_per_core_group_1: {}", num_rows_per_core_group_1).c_str());
@@ -336,7 +335,7 @@ operation::ProgramWithCallbacks moreh_groupnorm_impl(
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
             {
-                auto runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, reader_kernels_id, core);
                 runtime_args[0] = input_buffer->address();
                 if (gamma_buffer != nullptr) {
                     runtime_args[2] = gamma_buffer->address();
@@ -344,11 +343,10 @@ operation::ProgramWithCallbacks moreh_groupnorm_impl(
                 if (beta_buffer != nullptr) {
                     runtime_args[5] = beta_buffer->address();
                 }
-                SetRuntimeArgs(program, reader_kernels_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, writer_kernels_id, core);
                 runtime_args[0] = ouput_buffer->address();
                 if (mean_buffer != nullptr) {
                     runtime_args[2] = mean_buffer->address();
@@ -356,7 +354,6 @@ operation::ProgramWithCallbacks moreh_groupnorm_impl(
                 if (rstd_buffer != nullptr) {
                     runtime_args[5] = rstd_buffer->address();
                 }
-                SetRuntimeArgs(program, writer_kernels_id, core, runtime_args);
             }
         }
     };

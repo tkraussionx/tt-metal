@@ -71,9 +71,9 @@ def get_atol_rtol_pcc(golden, calculated):
             if golden.numel() == 1:
                 return float(torch.equal(golden, calculated))
 
-            # one tensor is constant
-            if torch.max(golden) == torch.min(golden) or torch.max(calculated) == torch.min(calculated):
-                return float(torch.equal(golden, calculated))
+            # If both tensors are contant
+            if torch.max(golden) == torch.min(golden) and torch.max(calculated) == torch.min(calculated):
+                return torch.isclose(torch.max(golden), torch.max(calculated)).item()
 
             cal_pcc = np.ma.corrcoef(
                 np.ma.masked_invalid(torch.squeeze(golden).detach().numpy()).flatten(),
@@ -142,6 +142,16 @@ def comp_pcc(golden, calculated, pcc=0.99):
     if not passing:
         output_str += ", PCC check failed"
     return passing, output_str
+
+
+def comp_and_get_pcc(golden, calculated, pcc=0.99):
+    if golden.dtype != calculated.dtype:
+        calculated = calculated.type(golden.dtype)
+    _, _, cal_pcc, output_str = get_atol_rtol_pcc(golden, calculated)
+    passing = cal_pcc >= pcc
+    if not passing:
+        output_str += f", PCC check failed (target: {pcc})"
+    return passing, output_str, cal_pcc
 
 
 def comp_pcc_list(golden, calculated, pcc=0.99):

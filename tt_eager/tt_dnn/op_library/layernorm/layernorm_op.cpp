@@ -154,7 +154,7 @@ std::vector<Tensor> LayerNorm::create_output_tensors(const std::vector<Tensor> &
                 } else {
                     auto mem_config = this->output_mem_config;
                     mem_config.shard_spec = input_tensor.shard_spec().value();
-                    return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensors.at(0).get_dtype(), Layout::TILE, input_tensor.device(), mem_config)};
+                    return {create_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensors.at(0).get_dtype(), Layout::TILE, input_tensor.device(), mem_config)};
                 }
             } else {
                 return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
@@ -198,15 +198,6 @@ operation::ProgramWithCallbacks LayerNorm::create_program(
         },
         this->program_config
     );
-}
-
-tt::stl::reflection::Attributes LayerNorm::attributes() const {
-    return {
-        {"norm_type", this->norm_type},
-        {"eps", this->eps},
-        {"output_mem_config", this->output_mem_config},
-        {"program_config", this->program_config}
-    };
 }
 
 }  // namespace tt_metal

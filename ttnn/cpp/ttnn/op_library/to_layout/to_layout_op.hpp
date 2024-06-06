@@ -9,7 +9,7 @@
 
 #include "tensor/tensor.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
-#include "tt_eager/tensor/owned_buffer_functions.hpp"
+#include "tt_eager/tensor/host_buffer/functions.hpp"
 #include "tt_eager/tensor/tensor_utils.hpp"
 #include "tt_eager/tt_dnn/op_library/compute_kernel_config.hpp"
 #include "tt_eager/tt_dnn/op_library/run_operation.hpp"
@@ -39,15 +39,22 @@ struct ToLayout {
 
     template <typename... Args>
     static auto input_tensors_to_validate(const Tensor& tensor_arg, Args&&... args) {
-        return std::make_tuple(tensor_arg);
+        return std::forward_as_tuple(tensor_arg);
     }
 
-    static Tensor execute(
+    static Tensor execute_on_worker_thread(
         const ttnn::Tensor& tensor_arg,
         const ttnn::Layout layout,
-        const std::optional<ttnn::DataType>& dtype,
-        const std::optional<ttnn::MemoryConfig>& memory_config,
-        std::variant<DeviceMesh*, Device*> device);
+        const std::optional<ttnn::DataType>& dtype = std::nullopt,
+        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
+        Device* device = nullptr);
+
+    static Tensor execute_on_worker_thread(
+        const ttnn::Tensor& tensor_arg,
+        const ttnn::Layout layout,
+        const std::optional<ttnn::DataType>& dtype = std::nullopt,
+        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
+        DeviceMesh* device = nullptr);
 };
 
 }  // namespace core

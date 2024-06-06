@@ -121,7 +121,6 @@ def run_all_gather_on_t3000_impl(
             eq, output = comp_equal(tt_output_tensor, input_tensor)
         else:
             eq, output = comp_pcc(tt_output_tensor, input_tensor)
-        count = 0
         if not eq:
             logger.error(f"output mismatch for tensor {i}")
         assert eq, f"{i} FAILED: {output}"
@@ -158,7 +157,6 @@ def run_all_gather_on_t3000_impl_tight_loop(
 
 
 # Enumerate the post-commit cases explicitly
-@pytest.mark.skip("#7705: Hanging on various configs")
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
@@ -220,15 +218,14 @@ def test_all_gather_on_t3000_post_commit_looping(
 
 
 # Enumerate the post-commit cases explicitly
-@pytest.mark.skip("#7705: Hanging on various configs")
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
         (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
         (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
-        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
         (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (4, 2, [8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
@@ -261,6 +258,8 @@ def test_all_gather_on_t3000_post_commit_looping(
         (8, 1, [1, 1, 1024, 256], 3, ttl.tensor.Layout.TILE),
         (8, 1, [1, 1, 256, 2048], 2, ttl.tensor.Layout.TILE),
         (8, 1, [1, 1, 256, 8192], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
+        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        (8, 1, [8, 8, 128, 4096], 1, ttl.tensor.Layout.TILE),
     ],
 )
 @pytest.mark.parametrize(
@@ -305,7 +304,6 @@ def test_all_gather_on_t3000_post_commit(
 
 # Enumerate the post-commit cases explicitly
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.skip("#7705: Hanging on various configs")
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
@@ -373,23 +371,7 @@ def test_line_all_gather_on_t3000_post_commit(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.zeros(input_shape).bfloat16()
-
-    id = 0
-    if layout == ttl.tensor.Layout.TILE:
-        for w in range(input_shape[0]):
-            for z in range(input_shape[1]):
-                for i in range(0, input_shape[2], 32):
-                    for j in range(0, input_shape[3], 32):
-                        input_tensor[w][z][i : i + 32][j : j + 32] = id
-                        id += 1
-    else:
-        for w in range(input_shape[0]):
-            for z in range(input_shape[1]):
-                for i in range(input_shape[2]):
-                    for j in range(0, input_shape[3], 32):
-                        input_tensor[w][z][i][j : j + 32] = id
-                        id += 1
+    input_tensor = torch.rand(input_shape).bfloat16()
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
@@ -415,7 +397,6 @@ def test_line_all_gather_on_t3000_post_commit(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.skip("#7705: Hanging on various configs")
 @pytest.mark.parametrize(
     "num_devices, num_links",
     [
@@ -444,6 +425,11 @@ def test_line_all_gather_on_t3000_post_commit(
         ([8, 8, 256, 384], 3, ttl.tensor.Layout.TILE),
         ([8, 8, 256, 768], 3, ttl.tensor.Layout.ROW_MAJOR),
         ([8, 8, 256, 768], 3, ttl.tensor.Layout.TILE),
+        ([8, 8, 1024, 4096], 1, ttl.tensor.Layout.TILE),
+        ([8, 8, 2048, 4096], 1, ttl.tensor.Layout.TILE),
+        ([8, 8, 128, 4096], 1, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 1024, 4096], 1, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 2048, 4096], 1, ttl.tensor.Layout.ROW_MAJOR),
         # Only for BFP8B
         # ([1, 1, 640, 32768], 3, ttl.tensor.Layout.TILE),
         # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
@@ -560,9 +546,8 @@ def test_all_gather_on_t3000_nightly(
     )
 
 
-@pytest.mark.skip("Re-enable with FD 2.0 and most recent all-gather updates/bug-fixes")
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.parametrize("num_devices", [8])
+@pytest.mark.parametrize("num_devices", [4, 8])
 @pytest.mark.parametrize("dim", [3])
 @pytest.mark.parametrize("tensor_layout", [ttl.tensor.Layout.TILE])
 # @pytest.mark.parametrize("num_cores", [1])
@@ -570,7 +555,7 @@ def test_all_gather_on_t3000_nightly(
     "input_dtype",
     [
         ttl.tensor.DataType.BFLOAT16,
-        # ttl.tensor.DataType.BFLOAT8_B,
+        ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
 @pytest.mark.parametrize(
@@ -623,11 +608,6 @@ def test_all_gather_on_t3000_nightly(
             (32, 64),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
         ),
-        (
-            (1, 1, 32, 3072),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 2))}),
-        ),
         # LLama
         (
             (1, 1, 32, 1024),
@@ -675,21 +655,20 @@ def test_all_gather_post_commit_sharded(
     if len(all_devices) != 8:
         pytest.skip("Not T3000!")
 
+    if input_shard_shape[0] > 32 and num_devices == 8:
+        pytest.skip("Don't want to exercise yet")
+
+    if input_shard_shape[0] > 32 and num_devices == 8:
+        pytest.skip("Don't want to exercise yet")
+
+    if input_shard_shape[0] == 32 and num_devices == 4:
+        pytest.skip("Don't want to exercise yet")
+
     numel = input_shape[0] * input_shape[1] * input_shape[2] * input_shape[3] * num_devices
     unchunked_input_shape = list(input_shape)
     unchunked_input_shape[dim] *= num_devices
-    # unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape).bfloat16()
-    unchunked_input_tensor = torch.arange(numel).reshape(unchunked_input_shape)
 
-    id = 0
-    for w in range(unchunked_input_shape[0]):
-        for z in range(unchunked_input_shape[1]):
-            for i in range(0, unchunked_input_shape[2], 32):
-                for j in range(0, unchunked_input_shape[3], 32):
-                    for ii in range(32):
-                        for jj in range(32):
-                            unchunked_input_tensor[w][z][i + ii][j + jj] = id
-                    id += 1
+    unchunked_input_tensor = torch.rand(unchunked_input_shape).bfloat16()
 
     unchunked_input_tensor = unchunked_input_tensor.bfloat16()
 

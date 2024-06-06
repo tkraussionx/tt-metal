@@ -5,8 +5,7 @@
 #include <chrono>
 #include <memory>
 
-#include "tensor/borrowed_buffer.hpp"
-#include "tensor/owned_buffer.hpp"
+#include "tensor/host_buffer/types.hpp"
 #include "tensor/tensor_impl.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_lib_bindings_tensor.hpp"
@@ -1314,15 +1313,30 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
                     storage_type = tt_tensor.storage_type()
 
             )doc")
-            .def(
-                "device", [](const Tensor &self) { return self.device(); }, R"doc(
+        .def(
+            "device",
+            [](const Tensor &self) { return self.device(); },
+            R"doc(
                 Get the device of the tensor.
 
                 .. code-block:: python
 
                     device = tt_tensor.device()
 
-            )doc")
+            )doc",
+            py::return_value_policy::reference)
+        .def(
+            "devices",
+            [](const Tensor &self) { return self.get_workers(); },
+            R"doc(
+                Get devices tensor is mapped on to.
+
+                .. code-block:: python
+
+                    devices = tt_tensor.devices()
+
+            )doc",
+            py::return_value_policy::reference)
             .def(
                 "to_torch",
                 [](const Tensor &self) -> py::object { return detail::convert_tt_tensor_to_torch_tensor(self); },

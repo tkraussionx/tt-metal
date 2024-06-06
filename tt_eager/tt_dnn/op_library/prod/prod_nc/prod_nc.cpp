@@ -55,9 +55,8 @@ operation::ProgramWithCallbacks prod_nc_format(const Tensor &input, const Tensor
     ////////////////////////////////////////////////////////////////////////////
     //                         Core Setup
     ////////////////////////////////////////////////////////////////////////////
-    CoreGridDesc core_grid(device);
-    const auto num_cores_y = core_grid.y_;
-    CoreCoord core_grid_coord = {core_grid.x_, num_cores_y};
+    auto grid = device->compute_with_storage_grid_size();
+    const auto num_cores_y = grid.y;
 
     const uint32_t in0_t = 2;        // input
     const uint32_t in1_t = 1;        // zero
@@ -69,7 +68,7 @@ operation::ProgramWithCallbacks prod_nc_format(const Tensor &input, const Tensor
          core_group_1,
          core_group_2,
          num_cols_per_core_group_1,
-         num_cols_per_core_group_2] = tt_metal::split_work_to_cores(core_grid_coord, num_output_tiles);
+         num_cols_per_core_group_2] = tt_metal::split_work_to_cores(grid, num_output_tiles);
 
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup
@@ -180,15 +179,13 @@ operation::ProgramWithCallbacks prod_nc_format(const Tensor &input, const Tensor
         for (uint32_t i = 0; i < num_cores_to_be_used; ++i) {
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
             {
-                auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                 runtime_args[0] = input_buffer->address();
-                SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
                 runtime_args[0] = output_buffer->address();
-                SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
             }
         }
     };

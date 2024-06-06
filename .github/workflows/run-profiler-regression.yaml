@@ -13,18 +13,16 @@ jobs:
       fail-fast: false
       matrix:
         runner-info: [
-          # No GS as tests now require synced starts. GS profiler tests will run on dedicated BMs
+          # E150
+          {arch: grayskull, runs-on: ["grayskull"], name: E150},
           # N150
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"], name: N150},
           # N300
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
-          # N300 2x4
-          {name: "n300-2x4", arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-4", "multi-chip-num-chips-8"]},
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"], name: N300},
         ]
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ matrix.runner-info.arch }}
-      CONFIG: ci
       LOGURU_LEVEL: INFO
     environment: dev
     runs-on: ${{ matrix.runner-info.runs-on }}
@@ -40,3 +38,8 @@ jobs:
         timeout-minutes: 30
         run: |
           ./tests/scripts/run_profiler_regressions.sh
+      - uses: ./.github/actions/slack-report
+        if: ${{ failure() }}
+        with:
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          owner: U0593J2RQRZ # Bill Teng

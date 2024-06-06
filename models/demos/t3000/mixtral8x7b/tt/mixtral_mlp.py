@@ -4,25 +4,39 @@
 
 import torch
 import ttnn
+from ttnn import ShardTensorToMesh
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import LightweightModule
 
 
-class TtMixtralMLP(torch.nn.Module):
-    def __init__(self, device, state_dict, args, layer_num, expert_num, dtypes):
+class TtMixtralMLP(LightweightModule):
+    def __init__(self, device_mesh, state_dict, args, layer_num, dtypes):
         super().__init__()
 
         self.state_dict = state_dict
-        self.device = device
+        self.device_mesh = device_mesh
         self.dtypes = dtypes
         self.model_args = args
         self.model_config = args.get_model_config()
 
-        base_name = f"layers.{layer_num}.feed_forward.experts.{expert_num}"
-        torch_weight = lambda name: self.state_dict[f"{base_name}.{name}.weight"].permute(1, 0)
-        cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (f"{base_name}.{expert_num}.{name}")
+        base_name = lambda expert_num: f"layers.{layer_num}.feed_forward.experts.{expert_num}"
+        torch_weight = lambda name: torch.concat(
+            [
+                self.state_dict[f"{base_name(expert_num)}.{name}.weight"].permute(1, 0).unsqueeze(0).unsqueeze(0)
+                for expert_num in range(8)
+            ],
+            dim=0,
+        )
+        if args.dummy_weights:
+            cache_name = lambda _: None
+        else:
+            cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (
+                f"layers.{layer_num}.feed_forward_multidevice_unsqueezed.experts.{name}"
+            )
         as_tensor = lambda name: ttnn.as_tensor(
             torch_weight(name),
             dtype=dtypes[name],
-            device=self.device,
+            device=self.device_mesh,
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=0),
             layout=self.model_config["MLP_W_LAYOUT_TILE"],
             memory_config=self.model_config["MLP_WEIGHTS_MEMCFG"],
             cache_file_name=cache_name(name),
@@ -39,32 +53,31 @@ class TtMixtralMLP(torch.nn.Module):
         w3 -> up_proj
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
-        w1_out = ttnn.linear(
+        w1_out = ttnn.experimental.operations.primary.matmul_1d(
             x,
             self.w1,
-            activation="silu",
-            core_grid=self.model_args.max_grid_size,
-            use_1d_systolic_array=True,
-            memory_config=self.model_config["FF1_OUTPUT_MEMCFG"],
+            program_config=self.model_config["FF1_OUTPUT_PROGCFG"],  # SILu activation fused in the op
+            output_mem_config=self.model_config["FF1_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
         )
-
-        w3_out = ttnn.matmul(
+        w3_out = ttnn.experimental.operations.primary.matmul_1d(
             x,
             self.w3,
-            core_grid=self.model_args.max_grid_size,
-            use_1d_systolic_array=True,
-            memory_config=self.model_config["FF3_OUTPUT_MEMCFG"],
+            program_config=self.model_config["FF3_OUTPUT_PROGCFG"],
+            output_mem_config=self.model_config["FF3_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
         )
-        w2_in = ttnn.mul(w1_out, w3_out)
-        w2_out = ttnn.matmul(
+        w2_in = ttnn.experimental.tensor.mul(w1_out, w3_out)
+
+        w2_out = ttnn.experimental.operations.primary.matmul_1d(
             w2_in,
             self.w2,
-            core_grid=self.model_args.max_grid_size,
-            use_1d_systolic_array=True,
-            memory_config=self.model_config["FF2_OUTPUT_MEMCFG"],
+            program_config=self.model_config["FF2_OUTPUT_PROGCFG"],
+            output_mem_config=self.model_config["FF2_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_args.get_compute_kernel_config(),
+            output_dtype=ttnn.bfloat8_b,
         )
 
         return w2_out

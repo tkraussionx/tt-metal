@@ -37,15 +37,13 @@ operation::ProgramWithCallbacks moreh_adam_(
     //                      Device Setup
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Device *device = param.device();
-
-    tt_metal::CoreGridDesc core_grid(device);
-    const auto num_cores_y = core_grid.y_;
-    CoreCoord core_grid_coord(core_grid.x_, num_cores_y);
+    auto grid = device->compute_with_storage_grid_size();
+    const auto num_cores_y = grid.y;
 
     // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     // uint32_t num_cores_x = compute_with_storage_grid_size.x;
     // uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] = tt_metal::split_work_to_cores(core_grid_coord, num_tiles);
+    auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] = tt_metal::split_work_to_cores(grid, num_tiles);
 
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup
@@ -213,7 +211,7 @@ operation::ProgramWithCallbacks moreh_adam_(
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
             {
-                auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                 runtime_args[0] = param_buffer->address();
                 runtime_args[1] = grad_buffer->address();
                 runtime_args[2] = exp_avg_buffer->address();
@@ -221,11 +219,10 @@ operation::ProgramWithCallbacks moreh_adam_(
                 if (max_exp_avg_sq_buffer != nullptr) {
                     runtime_args[4] = max_exp_avg_sq_buffer->address();
                 }
-                tt_metal::SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
             }
 
             {
-                auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+                auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
                 runtime_args[0] = param_buffer->address();
                 runtime_args[1] = grad_buffer->address();
                 runtime_args[2] = exp_avg_buffer->address();
@@ -233,7 +230,6 @@ operation::ProgramWithCallbacks moreh_adam_(
                 if (max_exp_avg_sq_buffer != nullptr) {
                     runtime_args[4] = max_exp_avg_sq_buffer->address();
                 }
-                tt_metal::SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
             }
         }
     };

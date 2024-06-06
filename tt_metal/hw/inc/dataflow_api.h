@@ -24,6 +24,7 @@
 #include "risc_attribs.h"
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
 #include "debug/assert.h"
+#include "dev_msgs.h"
 
 extern uint8_t noc_index;
 
@@ -475,7 +476,7 @@ uint64_t get_l1_noc_addr(const uint32_t id, const uint32_t page_size, const uint
 }
 
 uint64_t get_system_memory_noc_addr(const uint32_t id, const uint32_t page_size, const uint32_t base_addr, const uint32_t offset = 0) {
-    constexpr static uint64_t pcie_core_noc_encoding = uint64_t(NOC_XY_ENCODING(PCIE_NOC_X, PCIE_NOC_Y)) << 32;
+    uint64_t pcie_core_noc_encoding = uint64_t(NOC_XY_PCIE_ENCODING(NOC_X(PCIE_NOC_X), NOC_Y(PCIE_NOC_Y), noc_index)) << 32;
     uint32_t addr = base_addr + page_size * id + offset;
     uint64_t noc_addr = pcie_core_noc_encoding | addr;
     return noc_addr;
@@ -558,7 +559,6 @@ void noc_async_read_one_packet_set_state(std::uint64_t src_noc_addr, std::uint32
     DEBUG_STATUS("RPD");
 
     DEBUG_STATUS("NARW");
-    DEBUG_SANITIZE_NOC_ADDR(src_noc_addr, size);
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
@@ -582,8 +582,8 @@ void noc_async_read_one_packet_with_state(std::uint32_t src_noc_addr, std::uint3
 
     DEBUG_STATUS("NARW");
 
-    // TODO: need a way sanitize size + addr w/o directly providing x/y here (grab x/y form state?)
-    // DEBUG_SANITIZE_READ_NOC_TRANSACTION(src_noc_addr, dst_local_l1_addr, size);
+    // In order to sanitize, need to grab full noc addr + xfer size from state.
+    DEBUG_SANITIZE_NOC_READ_TRANSACTION_WITH_ADDR_AND_SIZE_STATE(noc_index, src_noc_addr, dst_local_l1_addr);
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_noc_addr);
@@ -609,9 +609,6 @@ void noc_async_read_set_state(std::uint64_t src_noc_addr) {
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
     DEBUG_STATUS("RPD");
 
-    // TODO: need to sanitize in noc_async_read_with_state
-    // DEBUG_SANITIZE_NOC_ADDR(src_noc_addr, size);
-
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
 
     DEBUG_STATUS("NARD");
@@ -627,9 +624,8 @@ void noc_async_read_with_state(std::uint32_t src_noc_addr, std::uint32_t dst_loc
     */
     DEBUG_STATUS("NARW");
 
-    // TODO: need a way sanitize size + addr w/o directly providing x/y here (grab x/y form state?)
-    // DEBUG_SANITIZE_NOC_ADDR(src_noc_addr, size);
-    DEBUG_SANITIZE_WORKER_ADDR(dst_local_l1_addr, size);
+    // In order to sanitize, need to grab full noc addr + xfer size from state.
+    DEBUG_SANITIZE_NOC_READ_TRANSACTION_WITH_ADDR_STATE(noc_index, src_noc_addr, dst_local_l1_addr, size);
 
     while (size > NOC_MAX_BURST_SIZE) {
         DEBUG_STATUS("RPW");
@@ -692,7 +688,40 @@ void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t d
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     noc_nonposted_writes_num_issued[noc_index] += 1;
     noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
- }
+}
+
+// TODO: write docs
+// this issues only a single packet with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
+FORCE_INLINE
+void noc_async_write_multicast_one_packet(
+    std::uint32_t src_local_l1_addr,
+    std::uint64_t dst_noc_addr_multicast,
+    std::uint32_t size,
+    std::uint32_t num_dests,
+    bool linked = false,
+    bool multicast_path_reserve = true) {
+    DEBUG_STATUS("NMPW");
+    DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr, size);
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
+    DEBUG_STATUS("NWPD");
+
+    uint32_t noc_cmd_field =
+                            NOC_CMD_CPY | NOC_CMD_WR |
+                            NOC_CMD_VC_STATIC |
+                            NOC_CMD_STATIC_VC(NOC_MULTICAST_WRITE_VC) |
+                            (linked ? NOC_CMD_VC_LINKED : 0x0) |
+                            ((multicast_path_reserve ? NOC_CMD_PATH_RESERVE : 0) | NOC_CMD_BRCST_PACKET) |
+                            NOC_CMD_RESP_MARKED;
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_noc_addr_multicast);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr_multicast >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_nonposted_writes_num_issued[noc_index] += 1;
+    noc_nonposted_writes_acked[noc_index] += num_dests;
+}
 
 // TODO: write docs
 // this sets the state for issuing a single packet with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
@@ -701,7 +730,6 @@ FORCE_INLINE
 void noc_async_write_one_packet_set_state(std::uint64_t dst_noc_addr, std::uint32_t size) {
 
     DEBUG_STATUS("NWPW");
-    DEBUG_SANITIZE_NOC_ADDR(dst_noc_addr, size);
     while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
     DEBUG_STATUS("NWPD");
 
@@ -713,7 +741,7 @@ void noc_async_write_one_packet_set_state(std::uint64_t dst_noc_addr, std::uint3
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  size);
- }
+}
 
 // TODO: write docs
 // this issues only a single packet with cmd buf state with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
@@ -722,10 +750,11 @@ FORCE_INLINE
 void noc_async_write_one_packet_with_state(std::uint32_t src_local_l1_addr, std::uint32_t dst_noc_addr) {
 
     DEBUG_STATUS("NWPW");
-    // TODO: need a way sanitize size + addr w/o directly providing x/y here (grab x/y form state?)
-    // DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr, size);
     while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
     DEBUG_STATUS("NWPD");
+
+    // In order to sanitize, need to grab full noc addr + xfer size from state.
+    DEBUG_SANITIZE_NOC_WRITE_TRANSACTION_WITH_ADDR_AND_SIZE_STATE(noc_index, dst_noc_addr, src_local_l1_addr);
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, dst_noc_addr);
@@ -735,7 +764,7 @@ void noc_async_write_one_packet_with_state(std::uint32_t src_local_l1_addr, std:
         noc_nonposted_writes_num_issued[noc_index] += 1;
         noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
     }
- }
+}
 
 template <bool DRAM>
 struct InterleavedAddrGen {
@@ -1004,7 +1033,7 @@ struct InterleavedPow2AddrGenFast {
         }
 
         DEBUG_STATUS("NRPW");
-        DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, log_base_2_of_page_size);
+        DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, 1 << log_base_2_of_page_size);
         while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
         DEBUG_STATUS("NRPD");
 
@@ -1047,6 +1076,7 @@ struct InterleavedPow2AddrGenFast {
         DEBUG_STATUS("RPW");
         while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
         DEBUG_STATUS("RPD");
+        DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, size);
 
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
@@ -1191,22 +1221,27 @@ FORCE_INLINE void noc_async_read_tile(
  * | dst_noc_addr      | Encoding of the destination DRAM location (x,y)+address | uint64_t | DOX-TODO(insert a reference  to what constitutes valid coords) | True     |
  * | size              | Size of data transfer in bytes | uint32_t | 0..1MB                                                    | True     |
  */
+template<uint32_t max_page_size=NOC_MAX_BURST_SIZE + 1>
 inline
 void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
-    DEBUG_STATUS("NAWW");
-    DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr,size);
-    ncrisc_noc_fast_write_any_len(
-        noc_index,
-        NCRISC_WR_CMD_BUF,
-        src_local_l1_addr,
-        dst_noc_addr,
-        size,
-        NOC_UNICAST_WRITE_VC,
-        false,
-        false,
-        1,
-        true);
-    DEBUG_STATUS("NAWD");
+    if constexpr (max_page_size <= NOC_MAX_BURST_SIZE) {
+        noc_async_write_one_packet(src_local_l1_addr, dst_noc_addr, size);
+    } else {
+        DEBUG_STATUS("NAWW");
+        DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr,size);
+        ncrisc_noc_fast_write_any_len(
+            noc_index,
+            NCRISC_WR_CMD_BUF,
+            src_local_l1_addr,
+            dst_noc_addr,
+            size,
+            NOC_UNICAST_WRITE_VC,
+            false,
+            false,
+            1,
+            true);
+        DEBUG_STATUS("NAWD");
+    }
 }
 
 template <bool DRAM>
@@ -1274,6 +1309,7 @@ void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst
  * | size                   | Size of data transfer in bytes | uint32_t | 0..1MB | True     |
  * | num_dests              | Number of destinations that the multicast source is targetting           | uint32_t | 0..119                                                        | True     |
  */
+template<uint32_t max_page_size=NOC_MAX_BURST_SIZE + 1>
 inline
 void noc_async_write_multicast(
     std::uint32_t src_local_l1_addr,
@@ -1282,20 +1318,24 @@ void noc_async_write_multicast(
     std::uint32_t num_dests,
     bool linked = false,
     bool multicast_path_reserve = true) {
-    DEBUG_STATUS("NMWW");
-    DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr,size);
-    ncrisc_noc_fast_write_any_len(
-        noc_index,
-        NCRISC_WR_CMD_BUF,
-        src_local_l1_addr,
-        dst_noc_addr_multicast,
-        size,
-        NOC_MULTICAST_WRITE_VC,
-        true,
-        linked,
-        num_dests,
-        multicast_path_reserve);
-    DEBUG_STATUS("NMWD");
+    if constexpr (max_page_size <= NOC_MAX_BURST_SIZE) {
+        noc_async_write_multicast_one_packet(src_local_l1_addr, dst_noc_addr_multicast, size, num_dests, linked, multicast_path_reserve);
+    } else {
+        DEBUG_STATUS("NMWW");
+        DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(dst_noc_addr_multicast, src_local_l1_addr,size);
+        ncrisc_noc_fast_write_any_len(
+            noc_index,
+            NCRISC_WR_CMD_BUF,
+            src_local_l1_addr,
+            dst_noc_addr_multicast,
+            size,
+            NOC_MULTICAST_WRITE_VC,
+            true,
+            linked,
+            num_dests,
+            multicast_path_reserve);
+        DEBUG_STATUS("NMWD");
+    }
 }
 
 /**
@@ -1563,6 +1603,7 @@ void noc_semaphore_inc(uint64_t addr, uint32_t incr) {
   */
     DEBUG_STATUS("NSIW");
     DEBUG_SANITIZE_NOC_ADDR(addr, 4);
+    DEBUG_INSERT_DELAY(TransactionAtomic);
     noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/, false /*posted*/);
     DEBUG_STATUS("NSID");
 }
@@ -1776,3 +1817,71 @@ class Buffer {
         }
     }
 };
+
+template <uint32_t page_size, bool use_vc>
+FORCE_INLINE
+uint32_t noc_async_read_tile_dram_sharded_set_state(uint32_t bank_base_address, uint32_t bank_id = 0, const uint32_t vc = 0) {
+    uint32_t src_addr_;
+    uint32_t src_noc_xy;
+
+    src_addr_ = bank_base_address + bank_to_dram_offset[bank_id];
+    src_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+
+    DEBUG_STATUS("NRTW");
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+    DEBUG_STATUS("NRTD");
+
+    if constexpr(use_vc) {
+        uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+    }
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, page_size);  // len_bytes
+
+    return src_addr_;
+}
+
+FORCE_INLINE
+void noc_async_read_tile_dram_sharded_with_state(uint32_t src_base_addr, uint32_t src_addr, uint32_t dest_addr, uint32_t trid = 0) {
+    uint32_t src_addr_;
+
+    src_addr_ = src_base_addr + src_addr;
+
+    DEBUG_STATUS("NRTW");
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+    DEBUG_STATUS("NRTD");
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr_);      // (uint32_t)src_addr
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_reads_num_issued[noc_index] += 1;
+}
+
+FORCE_INLINE
+void noc_async_read_tile_dram_sharded_with_state_with_trid(uint32_t src_base_addr, uint32_t src_addr, uint32_t dest_addr, uint32_t trid = 0) {
+    DEBUG_STATUS("NRDW");
+    #ifndef ARCH_GRAYSKULL
+    ncrisc_noc_fast_read_with_transaction_id(noc_index, NCRISC_RD_CMD_BUF, src_base_addr, src_addr, dest_addr, trid);
+    #endif
+    DEBUG_STATUS("NRDD");
+}
+
+FORCE_INLINE
+void noc_async_read_tile_dram_sharded_set_trid(uint32_t trid = 0) {
+    DEBUG_STATUS("NSTW");
+    #ifndef ARCH_GRAYSKULL
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
+    #endif
+    DEBUG_STATUS("NSTD");
+}
+
+FORCE_INLINE
+void noc_async_read_barrier_with_trid(uint32_t trid) {
+    DEBUG_STATUS("NBTW");
+    #ifndef ARCH_GRAYSKULL
+    while (!ncrisc_noc_read_with_transaction_id_flushed(noc_index, trid))
+        ;
+    #endif
+    DEBUG_STATUS("NBTD");
+}

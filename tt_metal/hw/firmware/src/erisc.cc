@@ -24,12 +24,15 @@ void ApplicationHandler(void) __attribute__((__section__(".init")));
 }
 #endif
 
+#if defined(PROFILE_KERNEL)
 namespace kernel_profiler {
     uint32_t wIndex __attribute__((used));
     uint32_t stackSize __attribute__((used));
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
+    uint16_t core_flat_id __attribute__((used));
 }
+#endif
 
 uint8_t noc_index = 0;  // TODO: remove hardcoding
 uint8_t my_x[NUM_NOCS] __attribute__((used));
@@ -41,14 +44,6 @@ uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_atomics_acked[NUM_NOCS] __attribute__((used));
 uint32_t noc_posted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t atomic_ret_val __attribute__ ((section ("l1_data"))) __attribute__((used));
-
-void __attribute__((section("code_l1"))) risc_init() {
-    for (uint32_t n = 0; n < NUM_NOCS; n++) {
-        uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(n, 0, NOC_NODE_ID);
-        my_x[n] = noc_id_reg & NOC_NODE_ID_MASK;
-        my_y[n] = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
-    }
-}
 
 void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     DEBUG_STATUS("I");

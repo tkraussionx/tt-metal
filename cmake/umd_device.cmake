@@ -22,11 +22,21 @@ if($ENV{ENABLE_TRACY})
 endif()
 
 # MUST have the RPATH set, or else can't find the tracy lib
-set(LDFLAGS_ "-L${CMAKE_BINARY_DIR}/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/lib ${CONFIG_LDFLAGS} -ldl -lz -lboost_thread -lboost_filesystem -lboost_system -lboost_regex -lpthread -latomic -lhwloc -lstdc++")
+set(LDFLAGS_ "-L${CMAKE_BINARY_DIR}/lib -Wl,-rpath,${CMAKE_BINARY_DIR}/lib ${CONFIG_LDFLAGS} -ldl -lz -lpthread -latomic -lhwloc -lstdc++")
 set(SHARED_LIB_FLAGS_ "-shared -fPIC")
 set(STATIC_LIB_FLAGS_ "-fPIC")
 
 set (CMAKE_CXX_FLAGS_ "--std=c++17 -fvisibility-inlines-hidden")
+foreach(lib ${BoostPackages})
+    set(CMAKE_CXX_FLAGS_ "${CMAKE_CXX_FLAGS_} -I${Boost${lib}_SOURCE_DIR}/include")
+endforeach()
+
+set(UMD_OUTPUT > /dev/null 2>&1)
+if(DEFINED ENV{VERBOSE})
+    if($ENV{VERBOSE} STREQUAL 1)
+        set(UMD_OUTPUT "")
+    endif()
+endif()
 
 # This will build the shared library libdevice.so in build/lib where tt_metal can then find and link it
 include(ExternalProject)
@@ -55,21 +65,22 @@ ExternalProject_Add(
         STATIC_LIB_FLAGS=${STATIC_LIB_FLAGS_}
         LDFLAGS=${LDFLAGS_}
         CXXFLAGS=${CMAKE_CXX_FLAGS_}
+        DEVICE_CXX=${CMAKE_CXX_COMPILER}
+        ${UMD_OUTPUT}
 )
+# add_dependencies(umd_device umd_boost)
 if($ENV{ENABLE_TRACY})
     add_dependencies(umd_device TracyClient)
 endif()
 
 # If in production build for python packaging, need to use objs built by umd_device
 if(NOT BUILD_SHARED_LIBS)
-    if($ENV{ARCH_NAME} STREQUAL "wormhole_b0")
-        set(UMD_OBJS ${CMAKE_BINARY_DIR}/obj/umd/device/wormhole/impl_device.o)
-    else()
-        set(UMD_OBJS ${CMAKE_BINARY_DIR}/obj/umd/device/$ENV{ARCH_NAME}/impl_device.o)
-    endif()
     set(UMD_OBJS
         ${UMD_OBJS}
+        ${CMAKE_BINARY_DIR}/obj/umd/device/architecture_implementation.o
+        ${CMAKE_BINARY_DIR}/obj/umd/device/blackhole_implementation.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/cpuset_lib.o
+        ${CMAKE_BINARY_DIR}/obj/umd/device/grayskull_implementation.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_cluster_descriptor.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_device.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_emulation_stub.o
@@ -77,7 +88,8 @@ if(NOT BUILD_SHARED_LIBS)
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_silicon_driver.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_soc_descriptor.o
         ${CMAKE_BINARY_DIR}/obj/umd/device/tt_versim_stub.o
-        ${CMAKE_BINARY_DIR}/obj/umd/device/util.o
+        ${CMAKE_BINARY_DIR}/obj/umd/device/tlb.o
+        ${CMAKE_BINARY_DIR}/obj/umd/device/wormhole_implementation.o
     )
     set(UMD_STATIC_LIB ${CMAKE_BINARY_DIR}/lib/libdevice.a)
 

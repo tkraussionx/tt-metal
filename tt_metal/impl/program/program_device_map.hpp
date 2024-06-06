@@ -16,9 +16,11 @@ struct transfer_info {
     bool linked;
 };
 
+using transfer_info_cores = std::variant<CoreCoord, CoreRange>;
+
 struct transfer_info_2 {
     std::uint32_t dst_base_addr;
-    vector<pair<uint32_t, uint32_t>> dst_noc_info;  // noc_encoding, num_mcast_dests
+    vector<pair<transfer_info_cores, uint32_t>> dst_noc_info;  // noc_encoding, num_mcast_dests
     bool linked;
     vector<std::uint32_t> data;
 };
@@ -26,7 +28,7 @@ struct kernel_bins_transfer_info {
     vector<std::uint32_t> dst_base_addrs;           // BRISC, NCRISC, TRISC etc..
     vector<std::uint32_t> page_offsets;             // offsets into paged buffer in DRAM
     vector<std::uint32_t> lengths;                  // WriteLinear lengths
-    vector<pair<uint32_t, uint32_t>> dst_noc_info;  // noc_encoding, num_mcast_dests
+    vector<pair<transfer_info_cores, uint32_t>> dst_noc_info;  // noc_encoding, num_mcast_dests
     bool linked;
     vector<std::uint32_t> data;                     // all binaries' data for kernel group
 };
@@ -38,12 +40,4 @@ struct ProgramTransferInfo {
     std::unordered_map<uint32_t, vector<transfer_info_2>> multicast_semaphores;    // WritePacked, sorted by dst
     std::unordered_map<uint32_t, vector<transfer_info_2>> unicast_semaphores;      // WritePacked, sorted by dst
     vector<kernel_bins_transfer_info> kernel_bins;                                 // RelayPaged, WriteLinear
-};
-
-struct ProgramCommandIndices {
-    std::uint32_t cb_configs_payload_start;    // device_commands
-    // pair of cmd idx, rt arg offset
-    // Currently we only really need the base cmd idx since they are sequential, and the rt arg len is currently the same for all splits
-    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> processor_to_cmd_mapping;
-    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> kernel_to_cmd_mapping;
 };

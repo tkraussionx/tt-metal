@@ -213,6 +213,11 @@ operation::ProgramWithCallbacks moreh_getitem_tilized(
                 input_noc_id_stride_c,
                 input_noc_id_stride_h,
 
+                input_shape_without_padding[0],
+                input_shape_without_padding[1],
+                input_shape_without_padding[2],
+                input_shape_without_padding[3],
+
                 // index
                 index_info[0].is_defined,
                 index_info[1].is_defined,
@@ -293,19 +298,17 @@ operation::ProgramWithCallbacks moreh_getitem_tilized(
                 CoreCoord core = {icore / core_h, icore % core_h};
 
                 {
-                    auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+                    auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                     runtime_args[0] = src_buffer->address();
                     runtime_args[1] = index_info[0].address;
                     runtime_args[2] = index_info[1].address;
                     runtime_args[3] = index_info[2].address;
                     runtime_args[4] = index_info[3].address;
-                    SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
                 }
 
                 {
-                    auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+                    auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
                     runtime_args[0] = dst_buffer->address();
-                    SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
                 }
             }
         };
@@ -468,6 +471,11 @@ operation::ProgramWithCallbacks moreh_getitem_tilized(
                 input_noc_id_stride_h,
                 input_num_stick_width,
 
+                input_shape_without_padding[0],
+                input_shape_without_padding[1],
+                input_shape_without_padding[2],
+                input_shape_without_padding[3],
+
                 // index
                 index_info[0].is_defined,
                 index_info[1].is_defined,
@@ -545,19 +553,17 @@ operation::ProgramWithCallbacks moreh_getitem_tilized(
                 CoreCoord core = {icore / core_h, icore % core_h};
 
                 {
-                    auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+                    auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                     runtime_args[0] = src_buffer->address();
                     runtime_args[1] = index_info[0].address;
                     runtime_args[2] = index_info[1].address;
                     runtime_args[3] = index_info[2].address;
                     runtime_args[4] = index_info[3].address;
-                    SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
                 }
 
                 {
-                    auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+                    auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
                     runtime_args[0] = dst_buffer->address();
-                    SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
                 }
             }
         };

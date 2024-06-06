@@ -2,34 +2,41 @@ name: "Build tt-metal artifacts"
 
 on:
   workflow_call:
+    inputs:
+      arch:
+        required: false
+        type: string
+        default: '["grayskull", "wormhole_b0"]'
   workflow_dispatch:
 
 jobs:
   build-artifact:
     strategy:
       matrix:
-        arch: ["grayskull", "wormhole_b0"]
+        arch: ${{ fromJson(inputs.arch || '["grayskull", "wormhole_b0", "blackhole"]') }}
+
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ matrix.arch }}
-      CONFIG: ci
       SILENT: 0
       VERBOSE: 1
     environment: dev
     runs-on: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
       - name: Set up dynamic env vars for build
         run: |
           echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
-      - uses: ./.github/actions/install-python-deps
+      - name: Update submodules
+        run: |
+          git submodule update --init --recursive
       - name: Build tt-metal and libs
         run: |
-          cmake -B build
-          cmake --build build --target tests -- -j`nproc`
-          cmake --build build --target metal-install
+          cmake -B build -G Ninja
+          cmake --build build --target tests
+          cmake --build build --target install
       - name: 'Tar files'
-        run: tar -cvf ttm_${{ matrix.arch }}.tar build/hw build/lib tt_eager/tt_lib/*.so ttnn/ttnn/*.so build/programming_examples build/test build/tools
+        run: tar -cvf ttm_${{ matrix.arch }}.tar build/hw build/lib tt_eager/tt_lib/*.so ttnn/ttnn/*.so build/programming_examples build/test build/tools runtime
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v4
         with:

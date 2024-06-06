@@ -6,12 +6,9 @@ import torch
 import pytest
 from loguru import logger
 
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.demos.falcon7b.tt.model_config import get_model_config
-from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs
+from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs, load_hf_model
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
@@ -52,12 +49,9 @@ def run_test_FalconDecoder_inference(
 ):
     num_devices = len(devices)
     global_batch = batch * num_devices
-    model_name = model_location_generator(model_version, model_subdir="Falcon")
 
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name)
-    hugging_face_reference_model.eval()
+    hugging_face_reference_model, state_dict = load_hf_model(model_location_generator, model_version)
     configuration = hugging_face_reference_model.config
-    state_dict = hugging_face_reference_model.state_dict()
 
     # Prepare input ========================================================================
     torch.manual_seed(0)
@@ -78,7 +72,16 @@ def run_test_FalconDecoder_inference(
         tt_layer_past,
         kv_len,
     ) = get_rand_falcon_inputs(
-        llm_mode, seq_len, batch, kv_cache_len, devices, global_batch, head_dim, max_position_embeddings, configuration
+        llm_mode,
+        seq_len,
+        batch,
+        kv_cache_len,
+        devices,
+        global_batch,
+        head_dim,
+        max_position_embeddings,
+        configuration,
+        model_config,
     )
     if layer_past is not None:
         layer_past = layer_past[0]

@@ -21,7 +21,7 @@ import os
 #     plt.figure(figsize=(100, 50))
 #     plt.xticks(torch.arange(0, stick_len) + 0.5, range(0, stick_len))
 #     plt.yticks(torch.arange(0, nsticks) + 0.5, range(0, nsticks))
-#     # plt.grid()
+#     plt.grid()
 #     bool_vals = vals > 0
 #     plt.imshow(bool_vals, interpolation="none", vmin=0, vmax=1, cmap="Blues")
 #     plt.savefig(f"diff_core_{fid}.png", bbox_inches="tight", pad_inches=0.1)
@@ -321,7 +321,7 @@ def run_conv_with_split(
 @skip_for_wormhole_b0(
     "Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range"
 )
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array",
     (
@@ -413,7 +413,7 @@ def test_resnet50_conv_gs(
 
 
 @skip_for_grayskull()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -533,7 +533,7 @@ def test_resnet50_conv_wh(
 
 
 @skip_for_grayskull()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -654,7 +654,7 @@ def test_resnet50_conv_wh_fp32(
 
 
 @skip_for_wormhole_b0()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -788,7 +788,7 @@ def test_sd_conv(
 
 # @skip_for_wormhole_b0("Issue #7179: non-deterministically fails on N150 regression")
 @skip_for_grayskull()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -817,7 +817,7 @@ def test_sd_conv(
         # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
         # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
         # # sd convs with HxW=64x64 with batch size=2
-        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),     ## TODO: DISABLED DUE TO FLAKY HANG issue #7179
+        (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
         (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
         (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
         (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
@@ -948,7 +948,7 @@ def test_sd_conv_wh(
 
 
 @skip_for_wormhole_b0()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
     (
@@ -1049,7 +1049,7 @@ def test_unet_conv(
 
 
 @skip_for_grayskull()
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
     (
@@ -1152,7 +1152,7 @@ def test_unet_conv_wh(
     )
 
 
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, config_override",
     (
@@ -1211,7 +1211,7 @@ def test_halo_reshard_conv(
     )
 
 
-@pytest.mark.parametrize("device_l1_small_size", [16384], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, config_override, xfail",
     (

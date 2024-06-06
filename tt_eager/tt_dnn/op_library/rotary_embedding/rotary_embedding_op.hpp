@@ -16,10 +16,8 @@ namespace tt {
 
 namespace tt_metal {
 
-enum class RotaryEmbeddingOpParallelizationStrategy { MULTI_CORE = 0, SINGLE_CORE = 1 };
+enum class RotaryEmbeddingOpParallelizationStrategy { MULTI_CORE };
 
-operation::ProgramWithCallbacks rotary_embedding_single_core(
-    const Tensor &input, const Tensor &cos, const Tensor &sin, Tensor &output, std::optional<uint32_t> token_idx, DeviceComputeKernelConfig compute_kernel_config);
 operation::ProgramWithCallbacks rotary_embedding_multi_core(
     const Tensor &input, const Tensor &cos, const Tensor &sin, Tensor &output, std::optional<uint32_t> token_idx, DeviceComputeKernelConfig compute_kernel_config);
 
@@ -52,7 +50,7 @@ inline Tensor rotary_embedding(
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor, cos, sin}))};
     operation::launch_with_autoformat(
-        [token_idx, output_mem_config, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        [token_idx, output_mem_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& input_tensor = input_tensors.at(0);
             auto& cos = input_tensors.at(1);
             auto& sin = input_tensors.at(2);

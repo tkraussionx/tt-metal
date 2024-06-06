@@ -22,7 +22,8 @@ enum class LayerNormType {
 };
 
 struct LayerNormDefaultProgramConfig{
-    tt::stl::reflection::Attributes attributes() const { return {}; };
+    static constexpr auto attribute_names = std::forward_as_tuple();
+    static constexpr auto attribute_values() { return std::forward_as_tuple(); }
 };
 struct LayerNormShardedMultiCoreProgramConfig {
     CoreCoord compute_with_storage_grid_size;
@@ -31,15 +32,12 @@ struct LayerNormShardedMultiCoreProgramConfig {
     std::size_t block_w;
     bool inplace;
 
-    tt::stl::reflection::Attributes attributes() const {
-        return {
-            {"compute_with_storage_grid_size", compute_with_storage_grid_size},
-            {"subblock_w", subblock_w},
-            {"block_h", block_h},
-            {"block_w", block_w},
-            {"inplace", inplace},
-        };
-    };
+    static constexpr auto attribute_names =
+        std::forward_as_tuple("compute_with_storage_grid_size", "subblock_w", "block_h", "block_w", "inplace");
+
+    const auto attribute_values() const {
+        return std::forward_as_tuple(compute_with_storage_grid_size, subblock_w, block_h, block_w, inplace);
+    }
 };
 
 using LayerNormProgramConfig = std::variant<
@@ -88,7 +86,12 @@ struct LayerNorm {
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         std::vector<Tensor> &output_tensors
     ) const;
-    tt::stl::reflection::Attributes attributes() const;
+
+    static constexpr auto attribute_names =
+        std::forward_as_tuple("norm_type", "eps", "output_mem_config", "program_config", "compute_kernel_config");
+    const auto attribute_values() const {
+        return std::forward_as_tuple(norm_type, eps, output_mem_config, program_config, compute_kernel_config);
+    }
 };
 
 template <LayerNormType norm_type>
@@ -97,7 +100,7 @@ struct make_layernorm {
         const Tensor &a, float eps, std::optional<const Tensor> gamma = std::nullopt, std::optional<const Tensor> beta = std::nullopt, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
         operation::launch_with_autoformat(
-            [eps, mem_config, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            [eps, mem_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 auto& a = input_tensors.at(0);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
@@ -202,7 +205,7 @@ struct make_layernorm {
         std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
         operation::launch_op(
-            [eps, mem_config, program_config, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            [eps, mem_config, program_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 const auto& a = input_tensors.at(0);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
@@ -228,7 +231,7 @@ struct make_add_layernorm {
         const Tensor &a, const Tensor& b, float eps, std::optional<const Tensor> gamma = std::nullopt, std::optional<const Tensor> beta = std::nullopt, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, const LayerNormProgramConfig& program_config = LayerNormDefaultProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a, b}))};
         operation::launch_op(
-            [eps, mem_config, program_config, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            [eps, mem_config, program_config, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 const auto& a = input_tensors.at(0);
                 const auto& b = input_tensors.at(1);
                 const auto& gamma = optional_input_tensors.at(0);

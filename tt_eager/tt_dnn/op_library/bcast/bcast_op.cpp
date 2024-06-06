@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
+#include "tt_eager/tensor/tensor_utils.hpp"
 #include "tt_metal/common/assert.hpp"
 #include "impl/buffers/buffer.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
@@ -17,42 +18,6 @@
 #include "third_party/magic_enum/magic_enum.hpp"
 
 namespace bcast_op_utils {
-using namespace tt::tt_metal;
-using namespace tt::constants;
-
-// FIXME:copy pasted the args here from the kernel file,  we could refactor the HLK file
-const char* get_reader_name(BcastOpDim bcast_dim, BcastOpParallelizationStrategy bcast_parallelization_strategy) {
-    if (bcast_parallelization_strategy == BcastOpParallelizationStrategy::SINGLE_CORE) {
-        if (bcast_dim == BcastOpDim::H) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_h_interleaved.cpp";
-        } else if (bcast_dim == BcastOpDim::W) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_w_interleaved.cpp";
-        } if (bcast_dim == BcastOpDim::HW) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_hw_interleaved.cpp";
-        }
-    }
-    else {
-        if (bcast_dim == BcastOpDim::H) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_h_interleaved_input_rows_partitioned.cpp";
-        } else if (bcast_dim == BcastOpDim::W) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_w_interleaved_input_cols_partitioned.cpp";
-        } if (bcast_dim == BcastOpDim::HW) {
-            return "tt_eager/tt_dnn/op_library/bcast/kernels/dataflow/reader_bcast_hw_interleaved_partitioned.cpp";
-        }
-    }
-    TT_ASSERT(false && "Unexpected bcast_dim!");
-    return "";
-}
-
-const char* get_compute_name(BcastOpDim bcast_dim) {
-    switch (bcast_dim) {
-        case BcastOpDim::H:  return "tt_eager/tt_dnn/op_library/bcast/kernels/compute/bcast_h.cpp";
-        case BcastOpDim::W:  return "tt_eager/tt_dnn/op_library/bcast/kernels/compute/bcast_w.cpp";
-        case BcastOpDim::HW: return "tt_eager/tt_dnn/op_library/bcast/kernels/compute/bcast_hw.cpp";
-        default:  TT_ASSERT(false && "Unexpected bcast_dim!");
-    }
-    return "";
-}
 
 std::map<std::string, std::string> get_defines(BcastOpDim bcast_dim, BcastOpMath bcast_math)
 {
@@ -91,17 +56,27 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
 
     TT_FATAL(input_tensor_a.get_layout() == Layout::TILE);
     TT_FATAL(input_tensor_b.get_layout() == Layout::TILE);
-    TT_FATAL(input_tensor_a.get_dtype() == input_tensor_b.get_dtype());
-    TT_FATAL(input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    TT_FATAL(is_floating_point(input_tensor_a.get_dtype()), "Unsupported data format");
     if (this->in_place) {
         TT_FATAL(input_tensor_a.memory_config().memory_layout == this->output_mem_config.memory_layout);
         TT_FATAL(input_tensor_a.memory_config().buffer_type == this->output_mem_config.buffer_type);
     }
-    if (this->dim != BcastOpDim::HW) {
+    if (this->dim == BcastOpDim::W){
         TT_FATAL(
             input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED &&
                 this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
+            "Bcast does not currently support input0 sharding, except if dim is W");
+    } else if (this->dim == BcastOpDim::H) {
+        if(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED){
+            TT_FATAL(
+            input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED &&
+                this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
             "Bcast does not currently support input0 sharding, except if dim is HW");
+        }else{
+            TT_FATAL(
+            input_tensor_a.memory_config().is_sharded() && this->output_mem_config.is_sharded(),
+            "Input and output mem layouts must be the same for bcast H op!");
+        }
     } else {
         TT_FATAL(
             input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED ||
@@ -112,16 +87,22 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
             "Input and output mem layouts must be the same for bcast HW op!");
     }
 
-    auto batch_size_a = input_shape_a[0];
-    auto num_channels_a = input_shape_a[1];
-    auto height_a = input_shape_a[2];
-    auto width_a = input_shape_a[3];
-    auto batch_size_b = input_shape_b[0];
-    auto num_channels_b = input_shape_b[1];
-    auto height_b = input_shape_b[2];
-    auto width_b = input_shape_b[3];
+    auto height_a = input_shape_a[-2];
+    auto width_a = input_shape_a[-1];
+    auto height_b = input_shape_b[-2];
+    auto width_b = input_shape_b[-1];
+    if((input_tensor_a.is_sharded() && this->dim == BcastOpDim::H) == false){
 
-    TT_FATAL((batch_size_b * num_channels_b == 1 || (batch_size_b == batch_size_a && num_channels_b == num_channels_a)) && "Broadcast is currently only supported when bN*bC=1 or N & C match");
+        uint32_t batch_size_b = get_batch_size(input_shape_b);
+        if (batch_size_b != 1) {
+            TT_FATAL(input_shape_a.rank() == input_shape_b.rank() && "Broadcast with batch is currently only supported when input tensor ranks are the same");
+            for (auto i = 0; i < input_shape_a.rank() - 2; i++) {
+                TT_FATAL(
+                        input_shape_a[i] == input_shape_b[i] &&
+                        "Broadcast with batch is currently only supported when bN*bC=1 or N & C match or equivalent"); // for H multi-batch weight is supported
+            }
+        }
+    }
 
     // validate input dimensions
     if (this->dim == BcastOpDim::W)
@@ -152,7 +133,7 @@ std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vec
         }
         auto mem_config = this->output_mem_config;
         mem_config.shard_spec = shard_spec;
-        return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensor.get_dtype(), Layout::TILE, input_tensor.device(), mem_config)};
+        return {create_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensor.get_dtype(), Layout::TILE, input_tensor.device(), mem_config)};
     } else {
         return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
     }
@@ -164,17 +145,17 @@ operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std
     const auto& output_tensor = this->in_place ? input_tensor_a : output_tensors.at(0);
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
-
     switch (parallelization_strategy){
+        case BcastOpParallelizationStrategy::MULTI_CORE_H_SHARDED:
+            return bcast_sharded_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op);
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
-            return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
+            return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op);
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
-            return bcast_multi_core_w(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
+            return bcast_multi_core_w(input_tensor_a, input_tensor_b, output_tensor, this->math_op);
         case BcastOpParallelizationStrategy::MULTI_CORE_HW:
-            return bcast_multi_core_hw(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
-        case BcastOpParallelizationStrategy::SINGLE_CORE:
+            return bcast_multi_core_hw(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->in_place);
         default:
-            return bcast_single_core(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
+            TT_THROW("Unsupported Parallelization Strategy");
     }
 }
 
@@ -185,10 +166,10 @@ const operation::Hash EltwiseBinaryBroadcast::compute_program_hash(
     return operation::hash_operation<EltwiseBinaryBroadcast>(
         *this,
         parallelization_strategy,
-        input_tensors.at(0).memory_config(),
-        input_tensors.at(0).get_dtype(),
-        input_tensors.at(1).memory_config(),
-        input_tensors.at(1).get_dtype(),
+        std::get<DeviceStorage>(input_tensors.at(0).storage()).memory_config(),
+        input_tensors.at(0).dtype(),
+        std::get<DeviceStorage>(input_tensors.at(1).storage()).memory_config(),
+        input_tensors.at(1).dtype(),
         bcast_scalar,
         this->in_place);
 }
@@ -197,20 +178,23 @@ BcastOpParallelizationStrategy EltwiseBinaryBroadcast::get_parallelization_strat
     const auto& input_tensor_a = input_tensors.at(0);
 
     uint32_t num_tiles = input_tensor_a.volume() / TILE_HW;
-    uint32_t Ht = input_tensor_a.get_legacy_shape()[2] / TILE_HEIGHT;
-    uint32_t Wt = input_tensor_a.get_legacy_shape()[3] / TILE_WIDTH;
+    uint32_t Ht = input_tensor_a.get_legacy_shape()[-2] / TILE_HEIGHT;
+    uint32_t Wt = input_tensor_a.get_legacy_shape()[-1] / TILE_WIDTH;
 
-    if(Ht > 1 and this->dim == BcastOpDim::H){
-        return BcastOpParallelizationStrategy::MULTI_CORE_H;
+    if(this->dim == BcastOpDim::H){
+        if(input_tensor_a.is_sharded())
+            return BcastOpParallelizationStrategy::MULTI_CORE_H_SHARDED;
+        else
+            return BcastOpParallelizationStrategy::MULTI_CORE_H;
     }
-    else if(Wt > 1 and this->dim == BcastOpDim::W){
+    else if(this->dim == BcastOpDim::W){
         return BcastOpParallelizationStrategy::MULTI_CORE_W;
     }
-    else if(num_tiles > 1 and this->dim == BcastOpDim::HW){
+    else if(this->dim == BcastOpDim::HW){
         return BcastOpParallelizationStrategy::MULTI_CORE_HW;
     }
     else{
-        return BcastOpParallelizationStrategy::SINGLE_CORE;
+        TT_THROW("Unsupported Bcast Dim");
     }
 }
 

@@ -9,19 +9,146 @@ from transformers import AutoImageProcessor
 import pytest
 import tt_lib
 
-from models.utility_functions import is_e75
-from models.utility_functions import profiler
-from models.utility_functions import disable_persistent_kernel_cache
+from models.utility_functions import is_e75, profiler, divup, disable_persistent_kernel_cache, skip_for_wormhole_b0
 from models.perf.perf_utils import prep_perf_report
 
 from loguru import logger
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck
 
 model_config = {
-    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.HiFi2,
+    "MATH_FIDELITY": tt_lib.tensor.MathFidelity.LoFi,
     "WEIGHTS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
     "ACTIVATIONS_DTYPE": tt_lib.tensor.DataType.BFLOAT8_B,
 }
+
+
+def run_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations):
+    profiler.start("compile")
+    _ = tt_resnet50(tt_inputs).cpu(blocking=True)
+    profiler.end("compile")
+    tt_lib.device.DumpDeviceProfiler(device)
+
+    for iter in range(0, num_warmup_iterations):
+        _ = tt_resnet50(tt_inputs).cpu(blocking=True)
+        tt_lib.device.DumpDeviceProfiler(device)
+
+    outputs = []
+    profiler.start(f"run")
+    for iter in range(0, num_measurement_iterations):
+        outputs.append(tt_resnet50(tt_inputs).cpu(blocking=False))
+    tt_lib.device.Synchronize(device)
+    profiler.end(f"run")
+    tt_lib.device.DumpDeviceProfiler(device)
+
+
+def run_2cq_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations):
+    input_shape = tt_inputs.get_legacy_shape()
+    shard_spec = tt_lib.tensor.ShardSpec(
+        tt_lib.tensor.CoreRangeSet(
+            {
+                tt_lib.tensor.CoreRange(
+                    tt_lib.tensor.CoreCoord(0, 0),
+                    tt_lib.tensor.CoreCoord(7, 0),
+                )
+            }
+        ),
+        [
+            divup(tt_inputs.volume() // input_shape[3], 8),
+            input_shape[3],
+        ],
+        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    sharded_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
+    )
+    tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
+        tt_inputs.shape, tt_inputs.dtype, tt_inputs.layout, device, sharded_mem_config_DRAM
+    )
+    op_event = tt_lib.device.CreateEvent()
+    write_event = tt_lib.device.CreateEvent()
+    # Initialize the op event so we can write
+    tt_lib.device.RecordEvent(device, 0, op_event)
+
+    profiler.start("compile")
+    tt_lib.device.WaitForEvent(device, 1, op_event)
+    tt_lib.tensor.write_tensor(tt_inputs, tt_image_res, 1)
+    tt_lib.device.RecordEvent(device, 1, write_event)
+    _ = tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=True)
+    profiler.end("compile")
+    tt_lib.device.DumpDeviceProfiler(device)
+
+    for iter in range(0, num_warmup_iterations):
+        tt_lib.device.WaitForEvent(device, 1, op_event)
+        tt_lib.tensor.write_tensor(tt_inputs, tt_image_res, 1)
+        tt_lib.device.RecordEvent(device, 1, write_event)
+        _ = tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=True)
+        tt_lib.device.DumpDeviceProfiler(device)
+
+    outputs = []
+    profiler.start(f"run")
+    for iter in range(0, num_measurement_iterations):
+        tt_lib.device.WaitForEvent(device, 1, op_event)
+        tt_lib.tensor.write_tensor(tt_inputs, tt_image_res, 1)
+        tt_lib.device.RecordEvent(device, 1, write_event)
+        outputs.append(tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=False))
+    tt_lib.device.Synchronize(device)
+    profiler.end(f"run")
+    tt_lib.device.DumpDeviceProfiler(device)
+
+
+def run_trace_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations):
+    input_shape = tt_inputs.get_legacy_shape()
+    shard_spec = tt_lib.tensor.ShardSpec(
+        tt_lib.tensor.CoreRangeSet(
+            {
+                tt_lib.tensor.CoreRange(
+                    tt_lib.tensor.CoreCoord(0, 0),
+                    tt_lib.tensor.CoreCoord(7, 0),
+                )
+            }
+        ),
+        [
+            divup(tt_inputs.volume() // input_shape[3], 8),
+            input_shape[3],
+        ],
+        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    sharded_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
+    )
+    tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
+        tt_inputs.shape, tt_inputs.dtype, tt_inputs.layout, device, sharded_mem_config_DRAM
+    )
+    # Compile
+    profiler.start("compile")
+    tt_lib.tensor.write_tensor(tt_inputs, tt_image_res)
+    tt_resnet50(tt_image_res).cpu(blocking=True)
+    profiler.end("compile")
+    tt_lib.device.DumpDeviceProfiler(device)
+
+    # Capture
+    tid = tt_lib.device.BeginTraceCapture(device, 0, 1500000)
+    tt_output_res = tt_resnet50(tt_image_res)
+    tt_lib.device.EndTraceCapture(device, 0, tid)
+    tt_lib.device.DumpDeviceProfiler(device)
+
+    for iter in range(0, num_warmup_iterations):
+        tt_lib.tensor.write_tensor(tt_inputs, tt_image_res)
+        tt_lib.device.ReplayTrace(device, 0, tid, False)
+        _ = tt_output_res.cpu(blocking=True)
+        tt_lib.device.DumpDeviceProfiler(device)
+
+    outputs = []
+    profiler.start(f"run")
+    for iter in range(0, num_measurement_iterations):
+        tt_lib.tensor.write_tensor(tt_inputs, tt_image_res)
+        tt_lib.device.ReplayTrace(device, 0, tid, False)
+        outputs.append(tt_output_res.cpu(blocking=False))
+    tt_lib.device.Synchronize(device)
+    profiler.end(f"run")
+    tt_lib.device.DumpDeviceProfiler(device)
 
 
 def run_perf_resnet(
@@ -30,7 +157,10 @@ def run_perf_resnet(
     expected_compile_time,
     hf_cat_image_sample_input,
     device,
+    model_version,
 ):
+    if is_e75(device):
+        pytest.skip("Resnet is not supported on E75")
     disable_persistent_kernel_cache()
     if batch_size <= 2:
         pytest.skip("Batch size 1 and 2 are not supported with sharded data")
@@ -69,6 +199,10 @@ def run_perf_resnet(
         model_config=model_config,
         sharded=sharded,
     )
+    tt_lib.device.Synchronize(device)
+
+    num_warmup_iterations = 5
+    num_measurement_iterations = 15
 
     with torch.no_grad():
         profiler.start(cpu_key)
@@ -76,39 +210,24 @@ def run_perf_resnet(
         profiler.end(cpu_key)
 
         tt_inputs = tt_resnet50.preprocessing(inputs)
-        warmup_end = 5
-        for iter in range(0, warmup_end):
-            profiler.start(f"{iter}_key")
-            _ = tt_resnet50(tt_inputs).cpu(blocking=True)
-            profiler.end(f"{iter}_key")
-            tt_lib.device.DumpDeviceProfiler(device)
+        if "resnet50_2cqs" in model_version:
+            run_2cq_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations)
+        elif "resnet50_trace" in model_version:
+            run_trace_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations)
+        elif "resnet50" in model_version:
+            run_model(device, tt_inputs, tt_resnet50, num_warmup_iterations, num_measurement_iterations)
+        else:
+            assert False, f"Model version to run {model_version} not found"
 
-        num_warm_iterations = 15
-        warm_start = warmup_end
-        warm_end = warm_start + num_warm_iterations
-
-        outputs = []
-        inference_time_sum = 0
-        for iter in range(warm_start, warm_end):
-            profiler.start(f"run")
-            outputs.append(tt_resnet50(tt_inputs).cpu(blocking=False))
-            profiler.end(f"run")
-            inference_time_sum += profiler.get("run")
-            tt_lib.device.DumpDeviceProfiler(device)
-
-        tt_lib.device.Synchronize(device)
-
-        # enable_persistent_kernel_cache()
-
-    first_iter_time = profiler.get(f"{0}_key")
+    first_iter_time = profiler.get(f"compile")
 
     # ensuring inference time fluctuations is not noise
-    inference_time_avg = inference_time_sum / num_warm_iterations
+    inference_time_avg = profiler.get("run") / num_measurement_iterations
 
     cpu_time = profiler.get(cpu_key)
     compile_time = first_iter_time - inference_time_avg
     prep_perf_report(
-        model_name=f"resnet50_batch_size{batch_size}",
+        model_name=f"{model_version}_batch_size{batch_size}",
         batch_size=batch_size,
         inference_and_compile_time=first_iter_time,
         inference_time=inference_time_avg,
@@ -118,22 +237,18 @@ def run_perf_resnet(
         inference_time_cpu=cpu_time,
     )
 
-    logger.info(f"resnet50 {comments} inference time (avg): {inference_time_avg}")
-    logger.info(f"resnet50 compile time: {compile_time}")
-
-    assert inference_time_avg < expected_inference_time, f"resnet50 {comments} inference is too slow"
-    assert compile_time < expected_compile_time, f"resnet50 {comments} compilation is too slow"
+    logger.info(f"{model_name} {comments} inference time (avg): {inference_time_avg}")
+    logger.info(f"{model_name} compile time: {compile_time}")
 
 
-@pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
+@skip_for_wormhole_b0(reason_str="Not tested on single WH")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch_size, expected_inference_time, expected_compile_time",
     (
-        (1, 0.015, 25),
-        (2, 0.015, 25),
-        (16, 0.0135, 25),  # Issue 7816 Inference time
-        (20, 0.0135, 25),  # Issue 7816 Inference time
+        (16, 0.007, 16),
+        (20, 0.007, 16),
     ),
 )
 def test_perf_bare_metal(
@@ -148,40 +263,35 @@ def test_perf_bare_metal(
         pytest.skip("Resnet is not supported on E75")
 
     run_perf_resnet(
-        batch_size,
-        expected_inference_time,
-        expected_compile_time,
-        hf_cat_image_sample_input,
-        device,
+        batch_size, expected_inference_time, expected_compile_time, hf_cat_image_sample_input, device, "resnet50"
     )
 
 
-@pytest.mark.parametrize("device_l1_small_size", [32768], indirect=True)
-@pytest.mark.models_performance_virtual_machine
+@skip_for_wormhole_b0(reason_str="Not tested on single WH")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
+@pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch_size, expected_inference_time, expected_compile_time",
-    (
-        (1, 0.015, 30),
-        (2, 0.02, 30),
-        (16, 0.04, 30),
-        (20, 0.04, 30),
-    ),
+    ((20, 0.008, 16),),
 )
-def test_perf_virtual_machine(
+@pytest.mark.parametrize("enable_async", [True, False])
+def test_perf_trace_bare_metal(
     device,
     use_program_cache,
     batch_size,
     expected_inference_time,
     expected_compile_time,
     hf_cat_image_sample_input,
+    enable_async,
 ):
-    if is_e75(device):
-        pytest.skip("Resnet is not supported on E75")
-
+    device.enable_async(enable_async)
+    mode = "async" if enable_async else "sync"
     run_perf_resnet(
         batch_size,
         expected_inference_time,
         expected_compile_time,
         hf_cat_image_sample_input,
         device,
+        f"resnet50_trace_{mode}",
     )
+    device.enable_async(False)

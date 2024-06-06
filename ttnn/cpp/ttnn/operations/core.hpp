@@ -14,9 +14,12 @@
 #include "tt_eager/tt_dnn/op_library/tilize/tilize_op.hpp"
 #include "tt_eager/tt_dnn/op_library/untilize/untilize_op.hpp"
 #include "tt_metal/impl/dispatch/command_queue.hpp"
+#include "tt_metal/impl/trace/trace.hpp"
 #include "ttnn/core.hpp"
 #include "ttnn/decorators.hpp"
 #include "ttnn/op_library/to_layout/to_layout_op.hpp"
+#include "ttnn/op_library/to_dtype/to_dtype_op.hpp"
+#include "ttnn/op_library/to_memory_config/to_memory_config_op.hpp"
 #include "ttnn/types.hpp"
 #include "ttnn/validation.hpp"
 
@@ -154,57 +157,6 @@ inline ttnn::Tensor squeeze_from_4D(const ttnn::Tensor& tensor, const int rank) 
     }
 }
 
-inline ttnn::Tensor to_memory_config(
-    const ttnn::Tensor& tensor,
-    const ttnn::MemoryConfig& memory_config,
-    std::optional<ttnn::DataType> dtype = std::nullopt) {
-    const auto original_memory_config = ttnn::get_memory_config(tensor);
-    if (original_memory_config.has_value() && original_memory_config.value() == memory_config) {
-        return tensor;
-    }
-
-    const auto original_shape = tensor.get_shape();
-    const auto tensor_4D = unsqueeze_to_4D(tensor);
-
-    if (memory_config.is_sharded()) {
-        // to_sharded path
-        if (tensor_4D.is_sharded()) {
-            // reshard
-            const auto input_memory_config = ttnn::get_memory_config(tensor_4D);
-            const auto input_shard_spec = input_memory_config.value().shard_spec.value();
-            const auto output_shard_spec = memory_config.shard_spec.value();
-            if (tensor_4D.get_layout() == ttnn::TILE_LAYOUT ||
-                input_shard_spec.shape[1] == output_shard_spec.shape[1]) {
-                if (dtype.has_value()) {
-                    throw runtime_error("dtype cannot be specified when converting sharded tensor to sharded tensor");
-                }
-                return reshape(tt::tt_metal::reshard(tensor_4D, memory_config), original_shape);
-            } else {
-                // for row-major tensors where shard-spec[1] is different for input shard and output shard
-                return reshape(
-                    tt::tt_metal::interleaved_to_sharded(
-                        tt::tt_metal::sharded_to_interleaved(tensor_4D, ttnn::DRAM_MEMORY_CONFIG, dtype),
-                        memory_config,
-                        dtype),
-                    original_shape);
-            }
-        } else {
-            return reshape(tt::tt_metal::interleaved_to_sharded(tensor_4D, memory_config, dtype), original_shape);
-        }
-    } else {
-        // to_interleaved path
-        if (tensor_4D.is_sharded()) {
-            return reshape(
-                tt::tt_metal::sharded_to_interleaved(tensor_4D, memory_config, dtype), original_shape);
-        } else {
-            // L1 to DRAM or DRAM to L1
-            return reshape(tt::tt_metal::clone(tensor_4D, memory_config, dtype), original_shape);
-        }
-    }
-
-    return reshape(tensor_4D, original_shape);
-}
-
 inline ttnn::Tensor to_device(
     const ttnn::Tensor& tensor, Device* device, const std::optional<MemoryConfig>& memory_config) {
     return tensor.to(device, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
@@ -215,7 +167,21 @@ inline ttnn::Tensor to_device(
     return tensor.to(device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
 }
 
-inline ttnn::Tensor from_device(const ttnn::Tensor& tensor, bool blocking=true) { return tensor.cpu(blocking); }
+inline ttnn::Tensor allocate_tensor_on_device(
+    const Shape& shape, DataType data_type, Layout layout, Device *device, const std::optional<MemoryConfig>& memory_config) {
+    return tt::tt_metal::allocate_tensor_on_device(shape, data_type, layout, device, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+}
+
+inline ttnn::Tensor allocate_tensor_on_device(
+    const Shape& shape, DataType data_type, Layout layout, DeviceMesh *device_mesh, const std::optional<MemoryConfig>& memory_config) {
+    return tt::tt_metal::allocate_tensor_on_device(shape, data_type, layout, device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+}
+
+inline void copy_host_to_device_tensor(ttnn::Tensor host_tensor, ttnn::Tensor device_tensor, uint8_t cq_id = 0) {
+    tt::tt_metal::write_tensor(host_tensor, device_tensor, cq_id);
+}
+
+inline ttnn::Tensor from_device(const ttnn::Tensor& tensor, bool blocking = true) { return tensor.cpu(blocking); }
 
 inline void deallocate(Tensor& tensor, bool force = true) { tensor.deallocate(force); }
 
@@ -224,6 +190,95 @@ inline Tensor reallocate(const Tensor& input_tensor, const std::optional<MemoryC
         return move_sharded(input_tensor, memory_config);
     } else {
         return move(input_tensor, memory_config);
+    }
+}
+
+// Trace APIs - Single Device
+inline uint32_t begin_trace_capture(Device* device, const uint32_t trace_buff_size, const uint8_t cq_id) {
+    uint32_t tid = Trace::next_id();
+    device->push_work(
+        [device, trace_buff_size, cq_id, tid] () mutable {
+            device->begin_trace(cq_id, tid, trace_buff_size);
+        });
+    return tid;
+}
+
+inline void end_trace_capture(Device* device, const uint32_t tid, const uint8_t cq_id) {
+    device->push_work(
+        [device, cq_id, tid] () mutable {
+            device->end_trace(cq_id, tid);
+        }
+    );
+}
+
+inline void execute_trace(Device* device, const uint32_t tid, const uint8_t cq_id, bool blocking) {
+    // If blocking, ensure that worker thread blocks until trace is completed
+    device->push_work(
+        [device, cq_id, tid, blocking] () mutable {
+            device->replay_trace(cq_id, tid, blocking);
+        }
+    );
+    // If blocking, wait until worker threads have completed
+    if (blocking) {
+        device->synchronize();
+    }
+}
+
+inline void release_trace(Device* device, const uint32_t tid) {
+    device->push_work(
+        [device, tid] () mutable {
+            device->release_trace(tid);
+        }
+    );
+}
+
+// Trace APIs - Multi Device
+inline uint32_t begin_trace_capture(DeviceMesh* device, const uint32_t trace_buff_size, const uint8_t cq_id = 0) {
+    auto workers = device->get_devices();
+    uint32_t tid = Trace::next_id();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, trace_buff_size, cq_id, tid] () mutable {
+                worker->begin_trace(cq_id, tid, trace_buff_size);
+            });
+    }
+    return tid;
+}
+
+inline void end_trace_capture(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id = 0) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, cq_id, tid] () mutable {
+                worker->end_trace(cq_id, tid);
+            });
+    }
+}
+
+inline void execute_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id = 0, bool blocking = true) {
+    auto workers = device->get_devices();
+    // If blocking, ensure that each worker thread blocks until device-local trace is completed
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, cq_id, tid, blocking] () mutable {
+                worker->replay_trace(cq_id, tid, blocking);
+            });
+    }
+    // If blocking, wait until worker threads have completed
+    if (blocking) {
+        for (auto& worker : workers) {
+            worker->synchronize();
+        }
+    }
+}
+
+inline void release_trace(DeviceMesh* device, const uint32_t tid) {
+    auto workers = device->get_devices();
+    for (auto& worker : workers) {
+        worker->push_work(
+            [worker, tid] () mutable {
+                worker->release_trace(tid);
+            });
     }
 }
 
@@ -238,6 +293,8 @@ using operations::core::squeeze_from_4D;
 using operations::core::to_device;
 using operations::core::unsqueeze_to_4D;
 
+constexpr auto to_dtype = ttnn::register_operation<ttnn::operations::core::ToDtype>("ttnn::to_dtype");
+constexpr auto to_memory_config = ttnn::register_operation<ttnn::operations::core::ToMemoryConfig>("ttnn::to_memory_config");
 constexpr auto to_layout = ttnn::register_operation<ttnn::operations::core::ToLayout>("ttnn::to_layout");
 
 }  // namespace ttnn
