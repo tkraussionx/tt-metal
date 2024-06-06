@@ -13,7 +13,8 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count)
 
     CoreCoord compute_with_storage_size = device->compute_with_storage_grid_size();
     CoreCoord start_core = {0, 0};
-    CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
+    CoreCoord end_core = {1, 1};
+    //CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
     CoreRange all_cores(start_core, end_core);
 
     tt_metal::Program program = tt_metal::CreateProgram();
@@ -60,6 +61,7 @@ int main(int argc, char **argv) {
             tt_metal::CreateDevice(device_id);
 
         int loop_count = 2000;
+        pass &= RunCustomCycle(device, loop_count);
         pass &= RunCustomCycle(device, loop_count);
 
         pass &= tt_metal::CloseDevice(device);
