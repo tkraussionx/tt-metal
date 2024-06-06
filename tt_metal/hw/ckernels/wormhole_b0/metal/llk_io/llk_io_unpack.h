@@ -12,11 +12,17 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+// MT: Temp extern declaration
+extern uint32_t tiles_proc_delay;
+extern uint32_t wait_tiles_cnt;
+extern uint32_t apply_cnt;
+extern uint32_t my_noc_x;
+extern uint32_t my_noc_y;
 
 using namespace ckernel;
 
 // "llk_setup_operands" is the old function name that HLKC emits
-inline void llk_setup_operands() {
+inline void llk_setup_operands(bool is_matmul=false) {
     volatile tt_l1_ptr std::uint32_t* circular_buffer_config_addr = (volatile uint32_t*)(CIRCULAR_BUFFER_CONFIG_BASE);
 
     for (uint32_t cb_id = 0; cb_id < NUM_CIRCULAR_BUFFERS; cb_id++) {
@@ -35,6 +41,43 @@ inline void llk_setup_operands() {
 
         circular_buffer_config_addr += UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; // move by 3 uint32's
     }
+
+    // Identify noc coordinates
+    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(0, 0, NOC_NODE_ID);
+    my_noc_x = noc_id_reg & NOC_NODE_ID_MASK;
+    my_noc_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    volatile uint32_t* dbg_noc_id = (volatile uint32_t*) 0x15200;
+    *(dbg_noc_id+0) = ((my_noc_x&0xffff)) << 0 | ((my_noc_y&0xffff) << 16);
+    if (is_matmul) {
+        tiles_proc_delay = ((my_noc_y & 0x1) == 1) ? 6144 : 0;  // Delay odd rows of cores
+        // *(dbg_noc_id+1) = 0xdeda99;
+        // switch (my_noc_y) {
+        //     case 0:
+        //     case 1: tiles_proc_delay = 0; break;
+        //     case 2: tiles_proc_delay = 6144; break;
+        //     case 3:
+        //     case 4: tiles_proc_delay = 0; break;
+        //     case 5: tiles_proc_delay = 6144; break;
+        //     case 6:
+        //     case 7:
+        //     case 8: tiles_proc_delay = 0; break;
+        //     case 9: tiles_proc_delay = 6144; break;
+        //     case 10: tiles_proc_delay = 0; break;
+        //     case 11: tiles_proc_delay = 6144; break;
+        //     // case 1: tiles_proc_delay = 5120; break;
+        //     // case 2: tiles_proc_delay = 0; break;
+        //     // case 3:
+        //     // case 4: tiles_proc_delay = 5120; break;
+        //     // case 5: tiles_proc_delay = 0; break;
+        //     // case 6:
+        //     // case 7:
+        //     // case 8: tiles_proc_delay = 0; break;
+        //     // case 9: tiles_proc_delay = 5120; break;
+        //     // case 10: tiles_proc_delay = 0; break;
+        //     // case 11: tiles_proc_delay = 5120; break;
+        // }
+        // *(dbg_noc_id+2) = tiles_proc_delay;
+    }
 }
 
 // Wait for N tiles available in the incoming stream
@@ -48,10 +91,18 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     std::uint16_t tiles_received;
 
     uint16_t num_tiles_recv;
+    uint64_t time_start = read_wall_clock();
     do {
         tiles_received = (std::uint16_t) reg_read((std::uint32_t)tiles_received_ptr);
         num_tiles_recv = tiles_received - cb_interface[input].tiles_acked;
     } while (num_tiles_recv < num_tiles_u);
+    uint64_t time_end = read_wall_clock();
+    uint64_t time_delta = time_end - time_start;
+    wait_tiles_cnt++;
+    if (time_delta > 0 && (wait_tiles_cnt==2) && (apply_cnt == 0)) {        // Apply delay only if second operand has arrived
+        apply_cnt++;
+        wait(tiles_proc_delay);
+    }
 }
 
 // Pop N tiles from the incoming stream
@@ -72,6 +123,8 @@ inline void llk_pop_tiles(
     if (cb_interface[input].fifo_rd_ptr >= cb_interface[input].fifo_limit) {
         cb_interface[input].fifo_rd_ptr -= cb_interface[input].fifo_size;
     }
+
+    wait_tiles_cnt--;
 }
 
 inline void llk_wait_blocks(int operand, std::int32_t num_blocks) { llk_wait_tiles(operand, num_blocks); }
