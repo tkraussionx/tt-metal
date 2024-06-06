@@ -41,7 +41,6 @@ def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_s
     state_dict = model_args.load_state_dict()
     batch = 1
     model_args.max_batch_size = batch
-    model_args.max_seq_len = seq_len
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[19:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention."))}
 

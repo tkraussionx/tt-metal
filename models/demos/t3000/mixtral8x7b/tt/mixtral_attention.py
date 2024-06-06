@@ -98,20 +98,20 @@ class TtMixtralAttention(LightweightModule):
         )
 
         self.wo = ttnn.to_device(self.wo, self.device_mesh)
-        self.wo_prefill = ttnn.as_tensor(
-            torch.transpose(
-                self.state_dict[wo_str],
-                -2,
-                -1,
-            ),
-            device=self.device_mesh,
-            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
-            dtype=self.dtype,
-            memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
-            layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wo_prefill"),
-        )
-        self.wo_prefill = ttnn.to_device(self.wo_prefill, self.device_mesh)
+        # self.wo_prefill = ttnn.as_tensor(
+        #     torch.transpose(
+        #         self.state_dict[wo_str],
+        #         -2,
+        #         -1,
+        #     ),
+        #     device=self.device_mesh,
+        #     mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+        #     dtype=self.dtype,
+        #     memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+        #     layout=self.model_config["ATTN_W_LAYOUT_TILE"],
+        #     cache_file_name=cache_name(f"wo_prefill"),
+        # )
+        # self.wo_prefill = ttnn.to_device(self.wo_prefill, self.device_mesh)
         cache_k = torch.zeros(
             (
                 self.n_kv_heads,
@@ -392,11 +392,10 @@ class TtMixtralAttention(LightweightModule):
             q_chunk_size=128,
             k_chunk_size=128,
         )
-
         attn_output_14SD = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention(
             q_heads_14SD,
-            keys_11SD,
-            values_11SD,
+            k_heads_11SD,
+            v_heads_11SD,
             attn_masks,
             is_causal=True,
             scale=self.scale,
@@ -411,24 +410,20 @@ class TtMixtralAttention(LightweightModule):
         ###
         # Output matmul
         ###
+
         attn_output_11SH = ttnn.experimental.tensor.nlp_concat_heads(
             attn_output_14SD,
-            output_mem_config=ttnn.DRAM_MEMORY_CONFIG,
+            output_mem_config=ttnn.L1_MEMORY_CONFIG,
         )
 
-        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo, core_grid=ttnn.CoreGrid(y=8, x=8))
-
-        print("attn_output_11SH", attn_output_11SH.shape)
         attn_output_11SH = ttnn.all_gather(
             attn_output_11SH,
-            dim=1,
+            dim=3,
             num_links=1,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
         )
-        # attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo_prefill, core_grid=ttnn.CoreGrid(y=8, x=8))
-        attn_output_11SH = ttnn.experimental.operations.primary.moreh_sum(
-            attn_output_11SH, dims=[1], output=None, compute_kernel_config=None
-        )
+        print("done all gather", attn_output_11SH.shape, self.wo.shape)
+        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo, core_grid=ttnn.CoreGrid(y=7, x=6))
 
         print("attn_output_11SH", attn_output_11SH.shape)
 

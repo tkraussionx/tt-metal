@@ -189,17 +189,11 @@ class TransformerBlock(nn.Module):
         self, x: torch.Tensor, freqs_cis: torch.Tensor, positions: torch.Tensor, mask: Optional[torch.Tensor]
     ) -> torch.Tensor:
         x1 = self.attention_norm(x)
-        self.comps.append(x1)
         r = self.attention.forward(x1, freqs_cis, positions, mask)
-        self.comps.append(r)
         h = x + r
-        self.comps.append(h)
         h1 = self.ffn_norm(h)
-        self.comps.append(h1)
         r = self.feed_forward.forward(h1)
-        self.comps.append(r)
         out = h + r
-        self.comps.append(out)
         return out
 
 
@@ -227,11 +221,14 @@ class Transformer(nn.Module):
         self.freqs_cis = precompute_freqs_cis(self.args.head_dim, 128_000)
         self.tok_embeddings = nn.Embedding(args.vocab_size, args.dim)
 
-    def forward(self, input_ids: torch.Tensor, positions: torch.Tensor, mask: Optional[torch.Tensor] = None):
+    def forward(
+        self, input_ids: torch.Tensor, positions: torch.Tensor, mask: Optional[torch.Tensor] = None, mode="decode"
+    ):
         h = input_ids
         freqs_cis = self.freqs_cis[positions]
 
         for layer in self.layers:
             h = layer(h, freqs_cis, positions, mask)
-
+        if mode == "prefill":
+            return h.float()
         return self.output(self.norm(h)).float()

@@ -84,26 +84,20 @@ class TtTransformer(LightweightModule):
                 x = layer.forward_prefill(x, start_pos, current_pos, attn_masks, rot_mats)
             else:
                 x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
+
         attn_masks.deallocate(True)
 
-        x_norm = self.norm(x)
-        if self.mode == "prefill":
-            matmul_prg_cfg = self.model_config["OUTPUT_MM_PROGCFG_PREFILL"](seqlen)
+        if self.mode != "prefill":
+            x_norm = self.norm(x)
+            outputs = ttnn.matmul(
+                x_norm,
+                self.output_weight,
+                # compute_with_storage_grid_size=(8, 8),
+                program_config=self.model_config["OUTPUT_MM_PROGCFG"],
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+            )
         else:
-            matmul_prg_cfg = self.model_config["OUTPUT_MM_PROGCFG"]
-        outputs = ttnn.matmul(
-            x_norm,
-            self.output_weight,
-            # compute_with_storage_grid_size=(8, 8),
-            # program_config=matmul_prg_cfg,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            compute_kernel_config=ttnn.experimental.tensor.WormholeComputeKernelConfig(
-                math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
-                math_approx_mode=True,
-                fp32_dest_acc_en=False,
-                packer_l1_acc=True,
-            ),
-            core_grid=ttnn.CoreGrid(y=8, x=8),
-        )
+            outputs = x
 
         return outputs
