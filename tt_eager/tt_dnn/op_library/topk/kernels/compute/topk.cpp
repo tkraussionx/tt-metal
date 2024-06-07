@@ -36,8 +36,8 @@ void MAIN {
     constexpr uint32_t index_dest_end = 3;
     // init pack, compute and unpack
 
-    ckernel::topk_tile_init();
-    transpose_wh_init(input_cb_index, input_transposed_cb_index);
+    // ckernel::topk_tile_init();
+    // transpose_wh_init(input_cb_index, input_transposed_cb_index);
 
     for(uint32_t ht = 0; ht < Ht; ++ht) {
         bool ascending = false;
@@ -51,28 +51,28 @@ void MAIN {
             cb_wait_front(input_cb_index, 2);
             cb_wait_front(index_cb_index, 2);
 
-            unpack_reconfig_data_format_srca(input_cb_index);
-            transpose_wh_init_short(input_cb_index);
-            transpose_wh_tile(input_cb_index, 0, 0);
-            transpose_wh_tile(input_cb_index, 1, 1);
+            // unpack_reconfig_data_format_srca(input_cb_index);
+            // transpose_wh_init_short(input_cb_index);
+            // transpose_wh_tile(input_cb_index, 0, 0);
+            // transpose_wh_tile(input_cb_index, 1, 1);
 
-            unpack_reconfig_data_format_srca(index_cb_index);
-            transpose_wh_init_short(index_cb_index);
-            transpose_wh_tile(index_cb_index, 0, 2);
-            transpose_wh_tile(index_cb_index, 1, 3);
+            // unpack_reconfig_data_format_srca(index_cb_index);
+            // transpose_wh_init_short(index_cb_index);
+            // transpose_wh_tile(index_cb_index, 0, 2);
+            // transpose_wh_tile(index_cb_index, 1, 3);
 
-            // llk_topk_sort -> inplace
-            ckernel::topk_local_sort(0, (int) ascending, logk - 1);
+            // // llk_topk_sort -> inplace
+            // ckernel::topk_local_sort(0, (int) ascending, logk - 1);
 
-            // pack value tiles into cb_intermed0
-            pack_reconfig_data_format(input_transposed_cb_index);
-            pack_tile(0, input_transposed_cb_index);
-            pack_tile(1, input_transposed_cb_index);
+            // // pack value tiles into cb_intermed0
+            // pack_reconfig_data_format(input_transposed_cb_index);
+            // pack_tile(0, input_transposed_cb_index);
+            // pack_tile(1, input_transposed_cb_index);
 
-            // pack index tiles into cb_intermed1
-            pack_reconfig_data_format(index_transposed_cb_index);
-            pack_tile(2, index_transposed_cb_index);
-            pack_tile(3, index_transposed_cb_index);
+            // // pack index tiles into cb_intermed1
+            // pack_reconfig_data_format(index_transposed_cb_index);
+            // pack_tile(2, index_transposed_cb_index);
+            // pack_tile(3, index_transposed_cb_index);
 
             cb_pop_front(input_cb_index, 2);
             cb_pop_front(index_cb_index, 2);
@@ -96,28 +96,28 @@ void MAIN {
                 uint32_t right_ind = left_ind + (1 << m_iter);
                 acquire_dst(tt::DstMode::Half);
 
-                copy_tile_to_dst_init_short_with_dt(index_transposed_cb_index, input_transposed_cb_index);
-                copy_tile(input_transposed_cb_index, left_ind, input_dest_start);
-                copy_tile(input_transposed_cb_index, right_ind, input_dest_end);
+                // copy_tile_to_dst_init_short_with_dt(index_transposed_cb_index, input_transposed_cb_index);
+                // copy_tile(input_transposed_cb_index, left_ind, input_dest_start);
+                // copy_tile(input_transposed_cb_index, right_ind, input_dest_end);
 
-                // unpack indices into dest
-                copy_tile_to_dst_init_short_with_dt(input_transposed_cb_index, index_transposed_cb_index);
-                copy_tile(index_transposed_cb_index, left_ind, index_dest_start);
-                copy_tile(index_transposed_cb_index, right_ind, index_dest_end);
+                // // unpack indices into dest
+                // copy_tile_to_dst_init_short_with_dt(input_transposed_cb_index, index_transposed_cb_index);
+                // copy_tile(index_transposed_cb_index, left_ind, index_dest_start);
+                // copy_tile(index_transposed_cb_index, right_ind, index_dest_end);
 
-                // merge values - move larger 32 values into 0th dest and lower 32 values into 1st dest
-                ckernel::topk_merge(0, m_iter, K);
-                // sort within the larger 32 values
-                ckernel::topk_rebuild(0, (uint32_t) a, m_iter, K, logk, true);
+                // // merge values - move larger 32 values into 0th dest and lower 32 values into 1st dest
+                // ckernel::topk_merge(0, m_iter, K);
+                // // sort within the larger 32 values
+                // ckernel::topk_rebuild(0, (uint32_t) a, m_iter, K, logk, true);
 
 
-                // pack value tiles in-place in the single-buffered cb_intermed0, we only need the upper 32 values for topk, which was in input_dest_start
-                pack_reconfig_data_format(input_transposed_cb_index);
-                pack_tile<true>(input_dest_start, input_transposed_cb_index, left_ind);
+                // // pack value tiles in-place in the single-buffered cb_intermed0, we only need the upper 32 values for topk, which was in input_dest_start
+                // pack_reconfig_data_format(input_transposed_cb_index);
+                // pack_tile<true>(input_dest_start, input_transposed_cb_index, left_ind);
 
-                // pack index tiles in-place in the single-buffered cb_intermed1, we only need the upper 32 values for topk, which was in index_dest_start
-                pack_reconfig_data_format(index_transposed_cb_index);
-                pack_tile<true>(index_dest_start, index_transposed_cb_index, left_ind);
+                // // pack index tiles in-place in the single-buffered cb_intermed1, we only need the upper 32 values for topk, which was in index_dest_start
+                // pack_reconfig_data_format(index_transposed_cb_index);
+                // pack_tile<true>(index_dest_start, index_transposed_cb_index, left_ind);
                 release_dst(tt::DstMode::Half);
                 a = !a;
             }
@@ -141,8 +141,8 @@ void MAIN {
         for (uint32_t i = 0; i < Kt; ++i) {
             acquire_dst(tt::DstMode::Half);
             cb_reserve_back(values_cb_index, 1);
-            transpose_wh_tile(input_transposed_cb_index, i, 0);
-            pack_tile(0, values_cb_index);
+            // transpose_wh_tile(input_transposed_cb_index, i, 0);
+            // pack_tile(0, values_cb_index);
             cb_push_back(values_cb_index, 1);
             release_dst(tt::DstMode::Half);
         }
@@ -157,8 +157,8 @@ void MAIN {
         for (uint32_t i = 0; i < Kt; ++i) {
             acquire_dst(tt::DstMode::Half);
             cb_reserve_back(output_ind_cb_index, 1);
-            transpose_wh_tile(index_transposed_cb_index, i, 0);
-            pack_tile(0, output_ind_cb_index);
+            // transpose_wh_tile(index_transposed_cb_index, i, 0);
+            // pack_tile(0, output_ind_cb_index);
             cb_push_back(output_ind_cb_index, 1);
             release_dst(tt::DstMode::Half);
         }
