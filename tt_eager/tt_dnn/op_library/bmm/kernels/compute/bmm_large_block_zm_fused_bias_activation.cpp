@@ -121,7 +121,7 @@ void MAIN {
 
     constexpr bool spill = num_blocks > 1;
 
-    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w );
+    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, warmup_out_subblock_w, warmup_out_subblock_h, in0_block_w );
     for (uint32_t b = 0; b < batch; b++){
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
@@ -172,7 +172,7 @@ void MAIN {
         tile_regs_wait();
         tile_regs_release();
 
-        mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w );
+        mm_block_init_short(in0_cb_id, in1_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w );
 
         for(uint32_t block = 0; block < num_blocks; block++)
         {
