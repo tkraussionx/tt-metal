@@ -23,7 +23,7 @@ def run_test_concat_head(
     head_dim,
 ):
     ## Split Heads
-    batch = 32
+    batch = 16
     seq_len = 1
 
     # Prepare input
@@ -33,7 +33,7 @@ def run_test_concat_head(
         {
             ttl.tensor.CoreRange(
                 ttl.tensor.CoreCoord(0, 0),
-                ttl.tensor.CoreCoord(7, 3),
+                ttl.tensor.CoreCoord(7, 1),
             ),
         }
     )
@@ -43,7 +43,7 @@ def run_test_concat_head(
         ttl.tensor.ShardSpec(
             shard_spec_32_cores_grid,
             [
-                batch,  # Each core has padded_local_heads
+                padded_local_heads,  # Each core has padded_local_heads
                 head_dim,  # head dim
             ],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
@@ -72,7 +72,8 @@ def run_test_concat_head(
 
     # compare
     concat_head_output_tt_cpu = tt2torch_tensor(concat_head_output)
-    out_pass_q, output_pcc_q = comp_pcc(concat_head_output_tt_cpu, concat_head_output_torch)
+    concat_head_output_tt_unpadded = concat_head_output_tt_cpu[:, :, :batch, :]
+    out_pass_q, output_pcc_q = comp_pcc(concat_head_output_tt_unpadded, concat_head_output_torch)
     logger.info(f"PCC value: {output_pcc_q}")
     assert out_pass_q
 

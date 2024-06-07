@@ -24,10 +24,11 @@ def run_test_create_head_max_width_shard(
 ):
     ## Split Heads
     batch = 32
+    unpadded_batch = 16
     seq_len = 1
     total_heads = n_local_heads + n_local_kv_heads * 2
     # Prepare input
-    proj_output = torch.rand(1, seq_len, batch, head_dim * total_heads)
+    proj_output = torch.rand(1, seq_len, unpadded_batch, head_dim * total_heads)
 
     # TT configs
     shard_spec_1_cores_grid = ttl.tensor.CoreRangeSet(
@@ -56,7 +57,10 @@ def run_test_create_head_max_width_shard(
     )
 
     # Prepare tt input
-    proj_output_tt = torch2tt_tensor(proj_output, tt_device=None).to(
+    proj_output_padded = torch.cat(
+        [proj_output, torch.zeros(1, seq_len, batch - unpadded_batch, head_dim * total_heads)], dim=-2
+    )
+    proj_output_tt = torch2tt_tensor(proj_output_padded, tt_device=None).to(
         device=devices[0], mem_config=CREATE_HEAD_INPUT_MEMCFG
     )
 
@@ -70,6 +74,7 @@ def run_test_create_head_max_width_shard(
         num_heads=n_local_heads,
         num_kv_heads=n_local_kv_heads,
         output_mem_config=HEIGHT_SHARDED_MEMCFG,
+        unpadded_batch_size=unpadded_batch,
     )
     logger.info(f"q_heads_tt: {q_heads_tt.memory_config()}")
     logger.info(f"k_heads_tt: {k_heads_tt.memory_config()}")
@@ -78,26 +83,26 @@ def run_test_create_head_max_width_shard(
     # torch operation
     q_heads_torch = torch.cat(
         [
-            proj_output[:, :, :, : head_dim * n_local_heads].view(seq_len, batch, n_local_heads, head_dim),
-            torch.zeros(seq_len, batch, 32 - n_local_heads, head_dim),
+            proj_output[:, :, :, : head_dim * n_local_heads].view(seq_len, unpadded_batch, n_local_heads, head_dim),
+            torch.zeros(seq_len, unpadded_batch, 32 - n_local_heads, head_dim),
         ],
         dim=-2,
     )
     k_heads_torch = torch.cat(
         [
             proj_output[:, :, :, head_dim * n_local_heads : head_dim * (n_local_heads + n_local_kv_heads)].view(
-                seq_len, batch, n_local_kv_heads, head_dim
+                seq_len, unpadded_batch, n_local_kv_heads, head_dim
             ),
-            torch.zeros(seq_len, batch, 32 - n_local_kv_heads, head_dim),
+            torch.zeros(seq_len, unpadded_batch, 32 - n_local_kv_heads, head_dim),
         ],
         dim=-2,
     )
     v_heads_torch = torch.cat(
         [
             proj_output[:, :, :, head_dim * (n_local_heads + n_local_kv_heads) :].view(
-                seq_len, batch, n_local_kv_heads, head_dim
+                seq_len, unpadded_batch, n_local_kv_heads, head_dim
             ),
-            torch.zeros(seq_len, batch, 32 - n_local_kv_heads, head_dim),
+            torch.zeros(seq_len, unpadded_batch, 32 - n_local_kv_heads, head_dim),
         ],
         dim=-2,
     )
