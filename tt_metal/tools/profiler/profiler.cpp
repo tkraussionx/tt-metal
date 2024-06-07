@@ -470,17 +470,8 @@ void DeviceProfiler::pushTracyDeviceResults()
             tracyCtx
         );
 
-    int zoneCount = -1;
-    for (auto& event: device_events)
-    {
-        if (event.core_y != 11)
-        {
-            zoneCount ++;
-        }
-
-    }
-    int i = 0;
     tracy::TTDeviceEvent modEvent;
+    uint32_t zoneStack = 0;
     for (auto& event: device_events)
     {
         if (event.core_y == 11)
@@ -498,32 +489,60 @@ void DeviceProfiler::pushTracyDeviceResults()
         else
         {
             std::pair<uint32_t, CoreCoord> device_core = {0, (CoreCoord){120,120}};
+            tracy::TTDeviceEventPhase prePhase = modEvent.zone_phase;
             modEvent = event;
             modEvent.chip_id = 0;
             modEvent.core_x = 120;
             modEvent.core_y = 120;
             modEvent.risc = 0;
-            modEvent.zone_name = "AGG";
-            if (i > 0 && i < zoneCount)
+            if (zoneStack == 0 && event.zone_phase == tracy::TTDeviceEventPhase::begin)
             {
-                std::cout << modEvent.timestamp << std::endl;
+                modEvent.zone_name = ">>";
+                TracyTTPushStartZone(device_tracy_contexts[device_core], modEvent);
+                zoneStack ++;
+            }
+            else if (zoneStack == 1 && event.zone_phase == tracy::TTDeviceEventPhase::end)
+            {
                 TracyTTPushEndZone(device_tracy_contexts[device_core], modEvent);
+                zoneStack --;
+            }
+            else
+            {
+                TracyTTPushEndZone(device_tracy_contexts[device_core], modEvent);
+                if (prePhase == tracy::TTDeviceEventPhase::begin)
+                {
+                    if (modEvent.zone_phase == tracy::TTDeviceEventPhase::begin)
+                    {
+                        modEvent.zone_name = ">>";
+                    }
+                    else
+                    {
+                        modEvent.zone_name = "><";
+                    }
+                }
+                else
+                {
+                    if (modEvent.zone_phase == tracy::TTDeviceEventPhase::begin)
+                    {
+                        modEvent.zone_name = "<>";
+                    }
+                    else
+                    {
+                        modEvent.zone_name = "<<";
+                    }
+                }
                 modEvent.timestamp += 1;
                 modEvent.zone_phase = tracy::TTDeviceEventPhase::begin;
-                std::cout << modEvent.timestamp << std::endl;
                 TracyTTPushStartZone(device_tracy_contexts[device_core], modEvent);
+                if (event.zone_phase == tracy::TTDeviceEventPhase::begin)
+                {
+                    zoneStack ++;
+                }
+                else
+                {
+                    zoneStack --;
+                }
             }
-            else if (i == 0)
-            {
-                std::cout << modEvent.timestamp << std::endl;
-                TracyTTPushStartZone(device_tracy_contexts[device_core], modEvent);
-            }
-            else if (i == zoneCount)
-            {
-                std::cout << modEvent.timestamp << "," << zoneCount << std::endl;
-                TracyTTPushEndZone(device_tracy_contexts[device_core], modEvent);
-            }
-            i++;
         }
 
     }

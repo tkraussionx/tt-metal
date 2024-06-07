@@ -62,7 +62,6 @@ int main(int argc, char **argv) {
 
         int loop_count = 2000;
         pass &= RunCustomCycle(device, loop_count);
-        pass &= RunCustomCycle(device, loop_count);
 
         pass &= tt_metal::CloseDevice(device);
 
