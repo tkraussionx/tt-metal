@@ -1753,6 +1753,7 @@ void Device::begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t
     auto desc = std::make_shared<detail::TraceDescriptor>();
     detail::EnableAllocs(this);
     this->trace_buffer_pool_.insert({tid, Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size)});
+    this->trace_buffer_pool_.insert({500, Trace::create_trace_buffer(this->command_queue(cq_id), desc, 26624)});
     this->hw_command_queues_[cq_id]->record_begin(tid, desc);
 }
 
@@ -1769,11 +1770,12 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
         data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
     Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
+    this->trace_buffer_pool_.erase(500);
     detail::DisableAllocs(this);
 }
 
 void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking) {
-    constexpr bool check = false;
+    constexpr bool check = true;
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance " + std::to_string(tid) + " must exist on device");
     if constexpr (check) {
         Trace::validate_instance(*this->trace_buffer_pool_[tid]);
