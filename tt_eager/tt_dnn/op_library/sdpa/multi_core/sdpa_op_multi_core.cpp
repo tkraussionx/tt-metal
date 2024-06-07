@@ -35,7 +35,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     std::size_t q_chunk_size,
     std::size_t k_chunk_size,
     DeviceComputeKernelConfig compute_kernel_config,
-    transformers::SDPAProgramConfig program_config
+    transformers::SDPAProgramConfig program_config,
+    std::optional<const uint32_t> valid_seq_len
 ) {
 
     /*
@@ -100,7 +101,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     }, compute_kernel_config);
 
-    TT_FATAL(!fp32_dest_acc_en, "fp32_dest_acc_en not supported yet");
+    // TT_FATAL(!fp32_dest_acc_en, "fp32_dest_acc_en not supported yet");
 
     auto q_buffer = input_tensor_q.buffer();
     auto k_buffer = input_tensor_k.buffer();

@@ -308,7 +308,8 @@ void matmul_blocks(const uint32_t& in0_cb, const uint32_t& in1_cb, const uint32_
             }
             tile_regs_release();
             cb_push_back(out_cb, out_subblock_num_tiles);
-            in1_index_offset += in1_subblock * subblock_w;
+            // in1_index_offset += in1_subblock * subblock_w;
+            in1_index_offset = in1_subblock * subblock_w;
         }
         in0_index_offset += subblock_h * in0_block_w;
     }
