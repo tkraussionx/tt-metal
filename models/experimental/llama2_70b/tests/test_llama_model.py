@@ -63,6 +63,7 @@ def run_test_LlamaModel_inference(
     t3k_device_mesh,
     batch,
     seq_len,
+    max_context,
     pcc,
     model_config,
     n_layers,
@@ -80,7 +81,7 @@ def run_test_LlamaModel_inference(
     hugging_face_reference_model = Llama.build(
         ckpt_dir,
         tokenizer_path,
-        max_seq_len=MAX_SEQ_LEN,
+        max_seq_len=max_context,  # MAX_SEQ_LEN,
         max_batch_size=batch,
         n_layers=n_layers,
         skip_model_load=skip_model_load,
@@ -102,9 +103,10 @@ def run_test_LlamaModel_inference(
         n_layers,
         model_config,
         configuration,
-        batch,
+        batch,  # TODO: Must be max batch size, since this would be 1 for prefill but you want 16 or 32 actually.
         emulated=emulated,
         cache_path=cache_path,
+        max_context_len=max_context,
     )
 
     if model_config["LLM_MODE"] == "prefill":
@@ -140,7 +142,7 @@ def run_test_LlamaModel_inference(
 
         tt_out = ttnn.from_device(tt_out)
         tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=3))
-        tt_out = tt_out[..., : configuration.vocab_size]
+        tt_out = tt_out[..., :batch, : configuration.vocab_size]
         tt_out = tt_out.permute(2, 1, 0, 3).squeeze()  # [batch, hidden_dim]
         tt_out = tt_out.float()
         pytorch_out = pytorch_out.squeeze()  # [batch, hidden_dim]
@@ -240,20 +242,22 @@ def run_test_LlamaModel_inference(
     ),
 )
 @pytest.mark.parametrize(
-    "batch, seq_len",
-    ((32, 1), (1, 128), (1, 2048)),
-    ids=("decode", "prefill_128", "prefill_2k"),
+    "batch, seq_len, max_context",
+    ((32, 1, 2048), (16, 1, 8192), (1, 128, 2048), (1, 2048, 2048), (1, 8192, 8192)),
+    ids=("decode", "decode_b16", "prefill_128", "prefill_2k", "prefill_8k"),
 )
 def test_LlamaModel_inference(
     batch,
     seq_len,
+    max_context,
     pcc,
     n_layers,
     n_devices,
     t3k_device_mesh,
     emulated,
 ):
-    model_config = get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=n_devices, seq_len=seq_len)
+    config_seq_len = seq_len if seq_len <= 2048 else 2048
+    model_config = get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=n_devices, seq_len=config_seq_len)
 
     if t3k_device_mesh.get_num_devices() < n_devices and not emulated:
         pytest.skip(f"Requires at {n_devices} devices to run")
@@ -270,6 +274,7 @@ def test_LlamaModel_inference(
         t3k_device_mesh,
         batch,
         seq_len,
+        max_context,
         pcc,
         model_config,
         n_layers,

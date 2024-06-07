@@ -143,11 +143,12 @@ class TtLlamaMLP_optimized:
 
     def prefill_forward(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         # TODO: Use FP32 accumulate after the issue with primary.matmul with FP32 accumulate is fixed
+        x = ttnn.reshape(x, (1, 4, 2048, 8192))
         w1_out = tt_lib.operations.primary.matmul(
             x,
             self.w1,
             program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
-            output_mem_config=self.model_config["MLP_BLOCK_SHARDED_MEMCFG"],
+            # output_mem_config=self.model_config["MLP_BLOCK_SHARDED_MEMCFG"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG_LOFI"],
             # output_dtype=self.model_config["BFP8_DTYPE"],
             output_dtype=self.model_config["BFLOAT16_DTYPE"],
@@ -157,7 +158,7 @@ class TtLlamaMLP_optimized:
             x,
             self.w3,
             program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
-            output_mem_config=self.model_config["MLP_BLOCK_SHARDED_MEMCFG"],
+            # output_mem_config=self.model_config["MLP_BLOCK_SHARDED_MEMCFG"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG_LOFI"],
             # output_dtype=self.model_config["BFP8_DTYPE"],
             output_dtype=self.model_config["BFLOAT16_DTYPE"],
@@ -181,6 +182,8 @@ class TtLlamaMLP_optimized:
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG"],
             output_dtype=self.model_config["BFLOAT16_DTYPE"],
         )
+
+        hidden_states = ttnn.reshape(hidden_states, (1, 1, 8192, 1024))
 
         return hidden_states
 

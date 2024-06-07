@@ -333,7 +333,9 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttl.tensor.BufferType.L1,
                 ttl.tensor.ShardSpec(
-                    shard_spec_32_cores_grid,
+                    # shard_spec_32_cores_grid,
+                    shard_spec_16_cores_grid,
+                    # TODO: Pick based on batch size
                     [
                         shard_height,
                         1,  # Dynamic - must set before using this config
@@ -448,6 +450,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             per_core_N=16,  # N / TILE_WIDTH / Grid_Size
             transpose_mcast=False,
             fused_activation=None,
+            fuse_batch=False,
         )
 
         model_config["LLAMA3_LM_HEAD_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -460,6 +463,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             per_core_N=64,  # 16 * 1024 // 32 // (8 if seq_len == 128 else 4) ,  # N / TILE_WIDTH / Grid_Size
             transpose_mcast=False,
             fused_activation=None,
+            fuse_batch=False,
         )
     model_config["LN_F_OUTPUT_MEMCFG"] = model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"]
 
@@ -560,6 +564,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             per_core_N=5,  # N / TILE_WIDTH / Grid_Size
             transpose_mcast=False,
             fused_activation=None,
+            fuse_batch=False,
         )
     else:
         model_config["FUSED_QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -594,7 +599,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
         packer_l1_acc=True,
     )
     model_config["ROT_MAT_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
-        compute_with_storage_grid_size=[8, 4],
+        # compute_with_storage_grid_size=[8, 4],
+        compute_with_storage_grid_size=[8, 2],  # TODO: Choose depending on batch size
         in0_block_w=4,  # 128 // TILE_SIZE (dynamic)
         out_subblock_h=1,
         out_subblock_w=4,
@@ -605,7 +611,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(
-            shard_spec_32_cores_grid,
+            # shard_spec_32_cores_grid,
+            shard_spec_16_cores_grid,  # TODO: Pick based on batch size
             [
                 head_dim,
                 head_dim,  # head dim
@@ -645,7 +652,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "ATTN_BATCHED_MM_PROGCFG_LAMBDA"
             ] = lambda seq_tiles: ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
-                compute_with_storage_grid_size=[8, 4],
+                # compute_with_storage_grid_size=[8, 4],
+                compute_with_storage_grid_size=[8, 2],  # HACK
                 in0_block_w=head_dim // 32,  # HEAD_DIM // TILE_SIZE
                 out_subblock_h=1,  # TODO: Maximize
                 out_subblock_w=1,  # TODO: Maximize
@@ -656,7 +664,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttl.tensor.BufferType.L1,
                 ttl.tensor.ShardSpec(
-                    shard_spec_32_cores_grid,
+                    # shard_spec_32_cores_grid,
+                    shard_spec_16_cores_grid,  # HACK
                     [
                         shard_height,  # Each core has 32 users
                         1,  # Dynamic (padded seqlen)
@@ -668,7 +677,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "SCORES_BATCHED_MM_PROGCFG_LAMBDA"
             ] = lambda seq_tiles: ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
-                compute_with_storage_grid_size=[8, 4],
+                # compute_with_storage_grid_size=[8, 4],
+                compute_with_storage_grid_size=[8, 2],  # HACK
                 in0_block_w=seq_tiles,  # SEQ_LEN // TILE_SIZE (dynamic)
                 out_subblock_h=1,  # TODO: Maximize
                 out_subblock_w=1,  # TODO: Maximize
@@ -679,7 +689,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
                 ttl.tensor.BufferType.L1,
                 ttl.tensor.ShardSpec(
-                    shard_spec_32_cores_grid,
+                    # shard_spec_32_cores_grid,
+                    shard_spec_16_cores_grid,  # HACK
                     [
                         shard_height,  # Each core has 32 users
                         head_dim,  # head dim
@@ -793,7 +804,8 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "BATCHED_SOFTMAX_PROGCFG"
             ] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                compute_with_storage_grid_size=(8, 4),  # In-place softmax on 32 cores sharded on batch dim
+                # compute_with_storage_grid_size=(8, 4),  # In-place softmax on 32 cores sharded on batch dim
+                compute_with_storage_grid_size=(8, 2),  # HACK
                 subblock_w=1,
                 block_h=shard_height // 32,
                 block_w=1,  # Dynamic
@@ -852,6 +864,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             per_core_N=4,  # N / TILE_WIDTH / Grid_Size
             transpose_mcast=False,
             fused_activation=None,
+            fuse_batch=False,
         )
     # Example code of using 2d multicast for MLP matmul
     """
@@ -926,6 +939,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 per_core_N=16,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=ttl.tensor.FusibleActivation.SILU,
+                fuse_batch=False,
             )
 
             model_config["PADDED_FF3_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -937,6 +951,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 per_core_N=16,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,
+                fuse_batch=False,
             )
 
             # input0: [1,32,128,32k]
@@ -950,6 +965,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
                 per_core_N=4,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,
+                fuse_batch=False,
             )
             model_config["MLP_BLOCK_SHARDED_MEMCFG"] = ttl.tensor.MemoryConfig(
                 ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,

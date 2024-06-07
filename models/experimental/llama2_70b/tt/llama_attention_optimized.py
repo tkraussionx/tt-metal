@@ -35,6 +35,7 @@ class TtLlamaAttention_optimized:
         cache_path=None,
         batch_size=None,
         read_cache=False,
+        max_context_len=2048,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -50,6 +51,12 @@ class TtLlamaAttention_optimized:
         self.max_seq_len = configuration.max_seq_len
         self.max_batch_size = configuration.max_batch_size if batch_size is None else batch_size
         self.scale = 1 / math.sqrt(self.head_dim)
+
+        if max_context_len > 2048:
+            assert batch_size <= 16, "Llama3 long context only supports batch size <= 16"
+            assert max_context_len % 2048 == 0, "Llama3 long context only supports context length as a multiple of 2048"
+            assert max_context_len <= 8192, "Llama3 long context only supports context length <= 8192"
+        self.max_context_len = max_context_len
 
         # when splitting the devices, we need to make sure that the number of heads is divisible by the number of devices
         assert self.n_heads % self.num_devices == 0
@@ -77,8 +84,10 @@ class TtLlamaAttention_optimized:
             (
                 self.n_kv_heads,
                 self.max_batch_size,
+                self.max_context_len,
                 # self.max_seq_len,
-                2048 + 128,  # Meets benchmarking spec needs
+                # 2048 + 128,  # Meets benchmarking spec needs
+                # 8192,
                 self.head_dim,
             )
         )
@@ -86,11 +95,14 @@ class TtLlamaAttention_optimized:
             (
                 self.n_kv_heads,
                 self.max_batch_size,
+                self.max_context_len,
                 # self.max_seq_len,
-                2048 + 128,  # Meets benchmarking spec needs
+                # 2048 + 128,  # Meets benchmarking spec needs
+                # 8192,
                 self.head_dim,
             )
         )
+        logger.info(f"Created KV cache of shape {cache_k.shape}")
         layer_past = [cache_k, cache_v]
         # self.layer_past = [
         #     ttnn.from_torch(
@@ -263,10 +275,10 @@ class TtLlamaAttention_optimized:
 
             attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
 
-            repeat_shape = (self.n_local_heads, 1, 1, 1)
-            attn_masks = tt_lib.tensor.repeat(
-                attn_masks, repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
-            )
+            # repeat_shape = (self.n_local_heads, 1, 1, 1)
+            # attn_masks = tt_lib.tensor.repeat(
+            #     attn_masks, repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
+            # )
 
         elif self.model_config["LLM_MODE"] == "decode":
             assert seq_len == 1, "Only supporting decode mode"
@@ -386,14 +398,15 @@ class TtLlamaAttention_optimized:
 
         # TMs
         (
-            query_layer,  # [seqlen, n_local_heads, bsz, head_dim]
-            key_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
-            value_layer,  # [seqlen, n_local_kv_heads, bsz, head_dim]
+            query_layer,  # [seqlen, bsz, padded_head, head_dim]
+            key_layer,  # [seqlen, bsz, padded_head, head_dim]
+            value_layer,  # [seqlen, bsz, padded_head, head_dim]
         ) = tt_lib.tensor.nlp_create_qkv_heads_decode(
             fused_query_key_value,
             num_heads=self.n_local_heads,
             num_kv_heads=self.n_local_kv_heads,
             output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+            unpadded_batch_size=self.max_batch_size,
         )
 
         fused_query_key_value.deallocate(True)
@@ -567,6 +580,7 @@ class TtLlamaAttention_optimized:
         assert xs.shape[2] % 128 == 0 and xs.shape[2] > 0, "Seqlen must be divisible by 128"
 
         # Fused QKV
+        # xs = ttnn.reshape(xs, (1, 4, 2048, 8192))
         fused_query_key_value = tt_lib.operations.primary.matmul(
             xs,
             self.qkv,
@@ -577,6 +591,7 @@ class TtLlamaAttention_optimized:
         )
 
         xs.deallocate(True)
+        # fused_query_key_value = ttnn.reshape(fused_query_key_value, (1, 1, 8192, 1280))
 
         (
             query_layer,  # [bsz, n_local_heads, seq_len, head_dim]
@@ -597,7 +612,11 @@ class TtLlamaAttention_optimized:
         # query_layer: ttnn.Shape([1, 8, seq_len, 128]) -> [bsz, n_local_heads, seq_len, head_dim]
 
         query_layer_ret = ttnn.experimental.tensor.rotary_embedding_llama(
-            query_layer, rot_mats[0], rot_mats[1], self.transformation_mats
+            query_layer,
+            rot_mats[0],
+            rot_mats[1],
+            self.transformation_mats,
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )
         query_layer.deallocate(True)
 
@@ -605,7 +624,11 @@ class TtLlamaAttention_optimized:
 
         # key_layer: ttnn.Shape([1, 1, seq_len, 128])
         key_layer_ret = ttnn.experimental.tensor.rotary_embedding_llama(
-            key_layer, rot_mats[0], rot_mats[1], self.transformation_mats
+            key_layer,
+            rot_mats[0],
+            rot_mats[1],
+            self.transformation_mats,
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )
         key_layer.deallocate(True)
 
@@ -655,6 +678,7 @@ class TtLlamaAttention_optimized:
             is_causal=True,
             scale=self.scale,
             program_config=self.model_config["SDPA_PROGCFG"],
+            # compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )
 
         # deallocate keys and values
@@ -680,6 +704,7 @@ class TtLlamaAttention_optimized:
 
         dense_out_prog_cfg = self.model_config["SELFOUT_MM_PROGCFG"]
         # print('wo matmul')
+        # attn_output = ttnn.reshape(attn_output, (1, 4, 2048, 8192))
         attn_output = tt_lib.operations.primary.matmul(
             attn_output,
             self.wo,
@@ -688,5 +713,7 @@ class TtLlamaAttention_optimized:
             output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )  # seqlen, 1, batch, hidden_size
+
+        # attn_output = ttnn.reshape(attn_output, (1, 1, 8192, 1024))
 
         return attn_output
