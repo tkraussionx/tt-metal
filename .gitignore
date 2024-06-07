@@ -13,6 +13,8 @@ build
 build_debug
 /python_env/
 
+python_env/
+gdb*
 /llk_out/
 /out/
 
