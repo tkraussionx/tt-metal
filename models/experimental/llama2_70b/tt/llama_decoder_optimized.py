@@ -38,6 +38,7 @@ class TtLlamaDecoder_optimized:
         emulated=False,
         cache_path=None,
         read_cache=False,
+        max_context_len=None,
     ):
         super().__init__()
 
@@ -56,6 +57,7 @@ class TtLlamaDecoder_optimized:
         self.max_seq_len = configuration.max_seq_len
         self.norm_eps = configuration.norm_eps
         self.rope_theta = configuration.rope_theta
+        self.max_context_len = max_context_len
 
         self.llama3 = configuration.vocab_size == 128256
 
@@ -70,9 +72,11 @@ class TtLlamaDecoder_optimized:
             model_config,
             configuration,
             transformation_mats,
+            batch_size=batch,
             emulated=emulated,
             cache_path=cache_path,
             read_cache=read_cache,
+            max_context_len=max_context_len,
         )
 
         self.mlp = TtLlamaMLP_optimized(
@@ -193,6 +197,7 @@ class TtLlamaDecoder_optimized:
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 device=self.device_mesh,
+                memory_config=self.model_config["DRAM_MEMCFG"],
             )
             attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
 

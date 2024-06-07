@@ -39,6 +39,7 @@ class TtLlamaModel_optimized:
         emulated=False,
         cache_path=None,
         read_cache=False,
+        max_context_len=2048,
     ):
         self.state_dict = state_dict
         self.device_mesh = device_mesh
@@ -51,12 +52,15 @@ class TtLlamaModel_optimized:
         self.n_heads = configuration.n_heads
         self.n_local_heads = self.n_heads // self.num_devices
         self.padded_local_heads = 32
+        self.padded_decode_batch = 32  # Used for decode when batch < 32
+        self.unpadded_decode_batch = batch
         self.head_dim = self.hidden_size // self.n_heads
         self.max_seq_len = configuration.max_seq_len
         self.vocab_size = configuration.vocab_size
         self.norm_eps = configuration.norm_eps
         self.llama3 = self.vocab_size == 128256
         self.rope_theta = configuration.rope_theta if self.llama3 else 10000.0
+        self.max_context_len = max_context_len
 
         self.cache_path = cache_path
         # Transformation matrix for rotary embeddings
@@ -85,6 +89,7 @@ class TtLlamaModel_optimized:
                 emulated=emulated,
                 cache_path=cache_path,
                 read_cache=read_cache,
+                max_context_len=max_context_len,
             )
             for layer_num in tqdm(range(n_layers))
         ]
@@ -169,6 +174,8 @@ class TtLlamaModel_optimized:
 
         if self.model_config["LLM_MODE"] == "decode":
             inp_ids = inp_ids.reshape(seq_len, 1, 1, batch)
+            if batch < self.padded_decode_batch:
+                inp_ids = torch.cat([inp_ids, torch.zeros(seq_len, 1, 1, self.padded_decode_batch - batch)], dim=-1)
         else:
             inp_ids = inp_ids.reshape(batch, 1, 1, seq_len)
 
@@ -181,12 +188,11 @@ class TtLlamaModel_optimized:
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )
         x = ttnn.to_device(x, self.device_mesh)
-
         xs = self.tt_embd(x)
 
         if self.model_config["LLM_MODE"] == "prefill":
             assert (
-                seq_len % 128 == 0 and seq_len > 0 and seq_len <= 2048
+                seq_len % 128 == 0 and seq_len > 0 and seq_len <= 8192
             ), "Prefill mode only supports seqlen as a multiple of 128 up to 2k"
             assert batch == 1, "prefill mode only supports batch size 1"
             assert xs.shape == (batch, 1, seq_len, self.hidden_size // self.num_devices)
@@ -243,7 +249,7 @@ class TtLlamaModel_optimized:
 
         elif self.model_config["LLM_MODE"] == "decode":
             assert seq_len == 1, "Decode mode only supports seq_len=1"
-            assert xs.shape == (seq_len, 1, batch, self.hidden_size // self.num_devices)
+            assert xs.shape == (seq_len, 1, self.padded_decode_batch, self.hidden_size // self.num_devices)
 
             xs = tt_lib.tensor.interleaved_to_sharded(
                 xs, sharded_mem_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"]
@@ -257,7 +263,7 @@ class TtLlamaModel_optimized:
                 dtype=ttnn.bfloat16,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device_mesh,
-                cache_file_name=cache_name(f"rot_mat_decode_{start_pos}"),
+                # cache_file_name=cache_name(f"rot_mat_decode_{start_pos}"),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
             )
@@ -278,7 +284,7 @@ class TtLlamaModel_optimized:
                 attn_mask,
                 dtype=ttnn.bfloat16,
                 layout=ttnn.TILE_LAYOUT,
-                cache_file_name=cache_name(f"attn_masks_decode_{start_pos}"),
+                # cache_file_name=cache_name(f"attn_masks_decode_{start_pos}"),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 device=self.device_mesh,
@@ -478,6 +484,7 @@ class TtLlamaModel_optimized:
         if self.llama3:
             self.model_config["LM_HEAD_MM_PROGCFG"] = self.model_config["LLAMA3_LM_HEAD_MM_PROGCFG"]
 
+        # norm_out_replicated = ttnn.reshape(norm_out_replicated, (1, 4, 2048, 8192))
         lm_head_out = tt_lib.operations.primary.matmul(
             norm_out_replicated,
             self.lm_head,
@@ -486,5 +493,6 @@ class TtLlamaModel_optimized:
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG"],
         )
         norm_out_replicated.deallocate(True)
+        # lm_head_out = ttnn.reshape(lm_head_out, (1, 1, 8192, -1))
 
         return lm_head_out
