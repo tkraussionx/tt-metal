@@ -1,67 +1,18 @@
-body {
-    position: relative;
-    color: white;
-    height: 100vh;
-    background: linear-gradient(
-            200.96deg,
-            #fedc2a -29.09%,
-            #dd5789 51.77%,
-            #7a2c9e 129.35%
-    );
-    margin-top: 10px;
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+@use 'definitions/colours' as *;
+
+body{
+    background: $tt-background;
 }
 
-@import "scss/variables";
-@import "scss/common";
-.App {
-    padding: 20px;
-}
-
-button {
-    background-color: white;
-    padding: 10px 20px;
-    border-radius: 10px;
-    border: none;
-    appearance: none;
-    font-size: 1.3rem;
-    box-shadow: 0px 8px 28px -6px rgba(24, 39, 75, 0.12),
-    0px 18px 88px -4px rgba(24, 39, 75, 0.14);
-    transition: all ease-in 0.1s;
-    cursor: pointer;
-    opacity: 0.9;
-}
-
-//button:hover {
-//    transform: scale(1.05);
-//    opacity: 1;
-//}
-
-li {
-    list-style: none;
-}
-
-a {
-    text-decoration: none;
-    height: fit-content;
-    width: fit-content;
-    margin: 10px;
-}
-
-a:hover {
-    opacity: 1;
-    text-decoration: none;
-}
-
-.Hello {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin: 20px 0;
+.app-header {
+    margin-bottom: 1rem;
 }
 
 .ops {
     margin-top: 10px;
-
 }
 
 .operations-wrap {
@@ -81,43 +32,38 @@ a:hover {
         color: #fefef6;
     }
 
-    .collapsible-content{
+    .collapsible-content {
         display: flex;
         flex-direction: column;
         gap: 10px;
     }
 }
 
-
-
 .op {
     display: flex;
     align-items: center;
     gap: 5px;
+    margin-bottom: 15px;
 
     .bp5-control {
         margin-bottom: 0;
     }
 
-    margin-bottom: 15px;
-
     .collapsible-component {
-
         .bp5-button-text {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-
     }
 }
 
 .op-params {
-    li{
+    li {
         display: flex;
         gap: 5px;
 
-        &::marker{
+        &::marker {
             color: $tt-yellow;
         }
     }
@@ -126,7 +72,6 @@ a:hover {
 .search-field {
     display: flex;
     min-width: 250px;
-
     margin-bottom: 30px;
 
     .bp5-input-group .bp5-input:not(:last-child) {
@@ -138,7 +83,6 @@ a:hover {
         align-items: center;
         min-width: 270px;
 
-
         .bp5-input-action {
             top: unset;
 
@@ -146,7 +90,7 @@ a:hover {
                 margin-right: 5px;
 
                 svg {
-                    fill: $tt-dark-gray
+                    fill: $tt-dark-gray;
                 }
             }
         }

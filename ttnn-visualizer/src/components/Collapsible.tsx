@@ -6,8 +6,7 @@ import { Button, Collapse } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import React, { useEffect } from 'react';
 import { JSX } from 'react/jsx-runtime';
-
-import './Collapsible.scss';
+import '../scss/components/Collapsible.scss';
 
 interface CollapsibleProps {
     label: string | JSX.Element;
@@ -17,12 +16,12 @@ interface CollapsibleProps {
 }
 
 const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
-                                                                              label,
-                                                                              isOpen = true,
-                                                                              styles = {},
-                                                                              contentStyles = {},
-                                                                              children,
-                                                                          }) => {
+    label,
+    isOpen = true,
+    styles = {},
+    contentStyles = {},
+    children,
+}) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     useEffect(() => {
         setIsOpenState(isOpen);
@@ -36,7 +35,11 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                     {label}
                 </Button>
             )}
-            {!children && <div className='collapsible-label-wrap'><div className={'collapsible-label'}>{label}</div></div>}
+            {!children && (
+                <div className='collapsible-label-wrap'>
+                    <div className='collapsible-label'>{label}</div>
+                </div>
+            )}
             {children && (
                 <Collapse isOpen={isOpenState} keepChildrenMounted>
                     <div style={contentStyles}>{children}</div>

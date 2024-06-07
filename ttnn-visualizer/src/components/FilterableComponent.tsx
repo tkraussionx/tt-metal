@@ -12,9 +12,11 @@ interface FilterableComponentProps {
 
 const FilterableComponent: FC<FilterableComponentProps> = ({ filterableString, filterQuery, component }) => {
     const includes = filterableString.toLowerCase().includes(filterQuery.toLowerCase());
+
     if (!includes && filterQuery !== '') {
         return null;
     }
+
     return component;
 };
 
