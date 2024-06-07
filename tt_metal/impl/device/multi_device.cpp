@@ -14,7 +14,7 @@ namespace ttnn {
 namespace multi_device {
 
 
-DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_ids, size_t l1_small_size)
+DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_ids, size_t l1_small_size, size_t trace_region_size)
     : device_grid(device_grid)
 {
     auto [num_rows, num_cols] = device_grid;
@@ -26,7 +26,7 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
 
     //TODO: for DevicePool feature delete CreateDevices and merge with this function
     //TODO: should there be an explicit CloseDevices call somewhere?
-    managed_devices = tt::tt_metal::detail::CreateDevices(device_ids, 1, l1_small_size);
+    managed_devices = tt::tt_metal::detail::CreateDevices(device_ids, 1, l1_small_size, trace_region_size);
     for (int i = 0; i < num_requested_devices; i++) {
         mesh_devices.emplace_back(device_ids[i], std::unique_ptr<Device>(managed_devices.at(device_ids[i])));
     }

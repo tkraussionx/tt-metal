@@ -265,6 +265,7 @@ std::map<chip_id_t, Device *> CreateDevices(
     std::vector<chip_id_t> device_ids,
     const uint8_t num_hw_cqs,
     const size_t l1_small_size,
+    const size_t trace_region_size,
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
     std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
@@ -291,6 +292,7 @@ std::map<chip_id_t, Device *> CreateDevices(
             device_id,
             num_hw_cqs,
             l1_small_size,
+            trace_region_size,
             l1_bank_remap,
             false,
             core_assigned_to_device);
@@ -457,12 +459,13 @@ void ReadFromDeviceInterleavedContiguous(const Buffer &buffer, std::vector<uint3
         std::vector<uint32_t> page;
         switch (buffer.buffer_type()) {
             case BufferType::DRAM:
+            case BufferType::TRACE:
             case BufferType::L1:
             case BufferType::L1_SMALL: {
                 auto noc_coordinates = buffer.noc_coordinates(bank_index);
                 page = llrt::read_hex_vec_from_core(device->id(), noc_coordinates, absolute_address, page_size);
             } break;
-            default: TT_FATAL(false && "Unsupported buffer type to write to device!");
+            default: TT_FATAL(false && "Unsupported buffer type to read from device!");
         }
 
         // Copy page into host buffer
@@ -542,9 +545,10 @@ void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bo
     Device *device = buffer.device();
     switch (buffer.buffer_type()) {
         case BufferType::DRAM:
+        case BufferType::TRACE:
         case BufferType::L1:  // fallthrough
         case BufferType::L1_SMALL: {
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.is_dram()) {
                 tt::Cluster::instance().dram_barrier(device->id());
             } else {
                 tt::Cluster::instance().l1_barrier(device->id());
@@ -826,12 +830,13 @@ Device *CreateDevice(
     chip_id_t device_id,
     const uint8_t num_hw_cqs,
     const size_t l1_small_size,
+    const size_t trace_region_size,
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
     static bool use_numa_node_based_thread_binding = parse_env("TT_METAL_NUMA_BASED_AFFINITY", false);
     std::unordered_set<uint32_t> free_cores = {};
     int core_assigned_to_device = device_cpu_allocator::get_device_id_to_core_map({device_id}, free_cores, use_numa_node_based_thread_binding)[device_id];
-    Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, core_assigned_to_device);
+    Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, trace_region_size, l1_bank_remap, false, core_assigned_to_device);
     if (use_numa_node_based_thread_binding) {
         // Bind main thread to cores not being used by workers.
         device_cpu_allocator::bind_current_thread_to_free_cores(free_cores);
@@ -843,7 +848,7 @@ Device *CreateDevice(
 
 Device *CreateDeviceMinimal(chip_id_t device_id) {
     ZoneScoped;
-    Device *dev = new Device(device_id, 1, DEFAULT_L1_SMALL_SIZE, {}, true);
+    Device *dev = new Device(device_id, 1, DEFAULT_L1_SMALL_SIZE, DEFAULT_TRACE_REGION_SIZE, {}, true);
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     return dev;
 }
@@ -1061,9 +1066,9 @@ RuntimeArgsData &GetCommonRuntimeArgs(const Program &program, KernelHandle kerne
     return detail::GetKernel(program, kernel_id)->common_runtime_args_data();
 }
 
-uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id, const uint32_t trace_buff_size) {
+uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id) {
     const uint32_t tid = Trace::next_id();
-    device->begin_trace(cq_id, tid, trace_buff_size);
+    device->begin_trace(cq_id, tid);
     return tid;
 }
 
