@@ -114,7 +114,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
                 .set_page_size(act_cb_second_reader, act_tile_size);
                 auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
             }
-
+            cout << "num_cb0_tiles : " << num_cb0_tiles << endl;
             CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb, act_df}})
             .set_page_size(act_cb, act_tile_size);
             auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
@@ -123,6 +123,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         TT_ASSERT(false, "Input must be sharded!");
     }
 
+    cout << " weight cb tiles : " << num_cb1_tiles << endl;
     CircularBufferConfig cb_weight_config = CircularBufferConfig(num_cb1_tiles * weight_tile_size, {{weight_cb, weight_df}})
 		.set_page_size(weight_cb, weight_tile_size);
     auto cb_weight = tt_metal::CreateCircularBuffer(program, core, cb_weight_config);
@@ -169,9 +170,9 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
                 .set_page_size(transpose_cb, out_tile_size);
             auto cb_transpose = tt_metal::CreateCircularBuffer(program, core, cb_transpose_config);
 
-            CircularBufferConfig cb_prev_eltwise_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{prev_eltwise_cb, out_df}})
-                .set_page_size(prev_eltwise_cb, out_tile_size);
-            auto cb_prev_eltwise = tt_metal::CreateCircularBuffer(program, core, cb_prev_eltwise_config);
+            // CircularBufferConfig cb_prev_eltwise_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{prev_eltwise_cb, out_df}})
+            //     .set_page_size(prev_eltwise_cb, out_tile_size);
+            // auto cb_prev_eltwise = tt_metal::CreateCircularBuffer(program, core, cb_prev_eltwise_config);
 
             std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
                 {out0_cb, out_df}
@@ -691,17 +692,18 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     }
     uint32_t num_cb0_tilized_tiles = num_act_cb_tiles;
 
+    fully_buffer_weights = false;
     if (fully_buffer_weights) {
         num_weight_cb_tiles *= window_outer;
     } else if (per_core_out_matrix_width_ntiles < 5 && per_core_out_matrix_height_ntiles < 22) {    // Q: where are these numbers from?
-        num_weight_cb_tiles = num_weight_cb_tiles * 2;
+        num_weight_cb_tiles = num_weight_cb_tiles * 1;
     }
 
     if (conv_act_size_c / conv_act_c_blocks < 160 && per_core_out_matrix_height_ntiles < 22) {      // Q: where are these numbers from?
         num_act_cb_tiles = num_act_cb_tiles * 2; // double buffered
     }
 
-    uint32_t writer_output_block_num_tiles = out_block_h_ntiles * 80; // out_block_h_ntiles * weight_block_w_ntiles;
+    uint32_t writer_output_block_num_tiles = out_block_h_ntiles * weight_block_h_ntiles; // out_block_h_ntiles * weight_block_w_ntiles;
 
     std::vector<uint32_t> reader_rt_args;
     std::vector<uint32_t> reader_compile_time_args;

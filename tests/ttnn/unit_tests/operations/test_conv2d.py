@@ -122,7 +122,8 @@ def run_conv(
     reader_patterns_cache = {}
     torch_weight_tensor = torch_weight_tensor.repeat(32, 1, 1, 1)
     tt_weight_tensor = ttnn.from_torch(
-        torch_weight_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
+        torch_weight_tensor,
+        weights_dtype if weights_dtype != ttnn.bfloat8_b and weights_dtype != ttnn.bfloat4_b else ttnn.float32,
     )
     tt_bias_tensor = None
     if has_bias:
@@ -144,7 +145,7 @@ def run_conv(
         kernel_size=(filter_height, filter_width),
         stride=(stride_h, stride_w),
         padding=(pad_h, pad_w),
-        dtype=activations_dtype,
+        dtype=weights_dtype,
         device=device,
         use_1d_systolic_array=use_1d_systolic_array,
         batch_size=batch_size,
@@ -852,12 +853,12 @@ def test_sd_conv(
         # # 1x1 conv
         # (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
         # Small conv
-        (1, 1, 2560, 1760, 1, 4, 1, 1, 1, 3, 0, True, None),
+        (1, 1, 5120, 1760, 1, 4, 1, 1, 1, 3, 0, True, None),
     ),
 )
 @pytest.mark.parametrize(
     "weights_dtype",
-    [ttnn.bfloat16],
+    [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize(
     "activations_dtype",

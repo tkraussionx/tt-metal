@@ -7,7 +7,7 @@
 #include "firmware_common.h"
 #include "debug/dprint.h"
 
-
+// conv1D reader kernel
 void kernel_main() {
     constexpr uint32_t LOCAL_PACKED_READER_INDICES_MAX_SIZE = 128;
     uint32_t local_packed_reader_indices[LOCAL_PACKED_READER_INDICES_MAX_SIZE];
@@ -123,11 +123,13 @@ void kernel_main() {
                     uint32_t reader_idx_2 = two_reader_indices >> 16;
 
                     act_l1_offset = reader_offset + (reader_idx_1 * conv_act_c_read_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    // noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read(get_noc_addr(act_l1_offset), l1_write_addr_act, coalesced_read_bytes);
                     l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
 
                     act_l1_offset = reader_offset + (reader_idx_2 * conv_act_c_read_bytes);
-                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    // noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    noc_async_read(get_noc_addr(act_l1_offset), l1_write_addr_act, coalesced_read_bytes);
                     l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
 
                     reader_idx++;

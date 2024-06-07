@@ -207,7 +207,7 @@ void kernel_main() {
                     weight_h_offset += weight_inner_block_stride_h;
                 } // for weight_block_height_num_outer
 
-                read_weights = false;
+                read_weights = true;
             } else {
                 cb_reserve_back(cb_id_weight, total_weight_num_tiles);
                 cb_push_back(cb_id_weight, total_weight_num_tiles);
@@ -222,6 +222,6 @@ void kernel_main() {
     #ifdef SHARDED_OUT
     //cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
     //DPRINT << "cb_wait_front(cb_id_out0, " << out_subblock_tile_count << " * " << out_num_subblocks_h << " * " << out_num_subblocks_w << " * " << out_num_blocks_w << " * " << out_num_blocks_h << ")" << ENDL();
-    cb_wait_front(cb_id_out0, 80);
+    cb_wait_front(cb_id_out0, weight_block_num_tiles);
     #endif
 }

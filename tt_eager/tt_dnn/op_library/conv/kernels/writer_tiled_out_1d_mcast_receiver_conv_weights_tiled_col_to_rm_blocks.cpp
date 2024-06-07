@@ -155,7 +155,7 @@ void kernel_main() {
                     load_bias = false;
                 }
                 #endif
-                read_weights = false;
+                read_weights = true;
             } else {
                 cb_reserve_back(cb_id_weight, total_weight_num_tiles);
                 cb_push_back(cb_id_weight, total_weight_num_tiles);

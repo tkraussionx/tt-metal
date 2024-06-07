@@ -737,7 +737,9 @@ class TTPyCompositeConv(TTPyOp):
             if weights_dtype is None:
                 weights_dtype = weight.get_dtype()
             weights_untiled_dtype = (
-                weights_dtype if weights_dtype != ttl.tensor.DataType.BFLOAT8_B else ttl.tensor.DataType.FLOAT32
+                weights_dtype
+                if weights_dtype != ttl.tensor.DataType.BFLOAT8_B and weights_dtype != ttl.tensor.DataType.BFLOAT4_B
+                else ttl.tensor.DataType.FLOAT32
             )
             assert weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
             assert weight.get_dtype() == weights_untiled_dtype
