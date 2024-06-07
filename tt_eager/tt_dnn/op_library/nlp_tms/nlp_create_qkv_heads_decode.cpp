@@ -15,7 +15,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(const Tensor &input_tensor, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
+operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(const Tensor &input_tensor, const uint32_t num_q_heads, const uint32_t num_kv_heads, const uint32_t head_dim, const uint32_t unpadded_batch_size, std::vector<Tensor>& output, CoreCoord compute_with_storage_grid_size) {
 
     tt_metal::Program program = tt_metal::CreateProgram();
 

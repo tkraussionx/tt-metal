@@ -13,21 +13,22 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, skip_for_grayskull, get_devices_for_t3000
+from models.utility_functions import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+    skip_for_grayskull,
+    get_devices_for_t3000,
+    nearest_32,
+)
 
 
-def run_test_create_head_max_width_shard(
-    devices,
-    n_local_heads,
-    n_local_kv_heads,
-    head_dim,
-):
+def run_test_create_head_max_width_shard(devices, n_local_heads, n_local_kv_heads, head_dim, batch):
     ## Split Heads
-    batch = 32
+    padded_batch = nearest_32(batch)
     seq_len = 1
     total_heads = n_local_heads + n_local_kv_heads * 2
     # Prepare input
-    proj_output = torch.rand(1, seq_len, batch, head_dim * total_heads)
+    proj_output = torch.rand(1, seq_len, padded_batch, head_dim * total_heads)
 
     # TT configs
     shard_spec_1_cores_grid = ttl.tensor.CoreRangeSet(
@@ -44,7 +45,7 @@ def run_test_create_head_max_width_shard(
         ttl.tensor.ShardSpec(
             shard_spec_1_cores_grid,
             [
-                batch,
+                padded_batch,
                 head_dim * total_heads,
             ],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
@@ -56,6 +57,9 @@ def run_test_create_head_max_width_shard(
     )
 
     # Prepare tt input
+    # proj_output_padded = torch.cat(
+    #     [proj_output, torch.zeros(1, seq_len, batch - unpadded_batch, head_dim * total_heads)], dim=-2
+    # )
     proj_output_tt = torch2tt_tensor(proj_output, tt_device=None).to(
         device=devices[0], mem_config=CREATE_HEAD_INPUT_MEMCFG
     )
@@ -70,6 +74,7 @@ def run_test_create_head_max_width_shard(
         num_heads=n_local_heads,
         num_kv_heads=n_local_kv_heads,
         output_mem_config=HEIGHT_SHARDED_MEMCFG,
+        unpadded_batch_size=batch if batch != padded_batch else None,
     )
     logger.info(f"q_heads_tt: {q_heads_tt.memory_config()}")
     logger.info(f"k_heads_tt: {k_heads_tt.memory_config()}")
@@ -78,14 +83,14 @@ def run_test_create_head_max_width_shard(
     # torch operation
     q_heads_torch = torch.cat(
         [
-            proj_output[:, :, :, : head_dim * n_local_heads].view(seq_len, batch, n_local_heads, head_dim),
+            proj_output[:, :, :batch, : head_dim * n_local_heads].view(seq_len, batch, n_local_heads, head_dim),
             torch.zeros(seq_len, batch, 32 - n_local_heads, head_dim),
         ],
         dim=-2,
     )
     k_heads_torch = torch.cat(
         [
-            proj_output[:, :, :, head_dim * n_local_heads : head_dim * (n_local_heads + n_local_kv_heads)].view(
+            proj_output[:, :, :batch, head_dim * n_local_heads : head_dim * (n_local_heads + n_local_kv_heads)].view(
                 seq_len, batch, n_local_kv_heads, head_dim
             ),
             torch.zeros(seq_len, batch, 32 - n_local_kv_heads, head_dim),
@@ -94,7 +99,7 @@ def run_test_create_head_max_width_shard(
     )
     v_heads_torch = torch.cat(
         [
-            proj_output[:, :, :, head_dim * (n_local_heads + n_local_kv_heads) :].view(
+            proj_output[:, :, :batch, head_dim * (n_local_heads + n_local_kv_heads) :].view(
                 seq_len, batch, n_local_kv_heads, head_dim
             ),
             torch.zeros(seq_len, batch, 32 - n_local_kv_heads, head_dim),
@@ -120,13 +125,14 @@ def run_test_create_head_max_width_shard(
 
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
-    "n_local_heads, n_local_kv_heads, head_dim",
-    ((8, 1, 128), (8, 4, 96), (16, 2, 64)),
+    "n_local_heads, n_local_kv_heads, head_dim, batch",
+    ((8, 1, 128, 32), (8, 4, 96, 32), (16, 2, 64, 32), (8, 1, 128, 16)),
 )
 def test_create_head_max_width_shard(
     n_local_heads,
     n_local_kv_heads,
     head_dim,
+    batch,
     all_devices,
     use_program_cache,
 ):
@@ -135,12 +141,7 @@ def test_create_head_max_width_shard(
 
     for i in range(3):
         # multiple loops to test program caching
-        run_test_create_head_max_width_shard(
-            devices,
-            n_local_heads,
-            n_local_kv_heads,
-            head_dim,
-        )
+        run_test_create_head_max_width_shard(devices, n_local_heads, n_local_kv_heads, head_dim, batch)
 
 
 def run_test_create_min_width_shard(
