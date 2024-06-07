@@ -909,7 +909,9 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     // Assume the dispatch buffer is big relative to cmddat command size that we can
     // grab what we need in one chunk
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
+    // DPRINT << "Is Exec Buf: " << is_exec_buf << ENDL();
     if (is_exec_buf) {
+        DPRINT << "EXEC BUF SEEN" << ENDL();
         // swipe all the downstream page credits from ourselves...
         // prefetch_h stalls sending commands to prefetch_d until notified by dispatch_d that the exec_buf is done
         // exec_buf completing on dispatch_h will free the pages and allow sending again
@@ -923,23 +925,26 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
 
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
     if (downstream_pages_left >= npages) {
+        // DPRINT << "NOC WRITE0: " << length << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
         uint32_t tail_pages = npages - downstream_pages_left;
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
+            // DPRINT << "NOC WRITE1: " << length << ENDL();
             noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
             data_ptr += available;
             length -= available;
         }
-
+        // DPRINT << "NOC WRITE2: " << length << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length);
         downstream_data_ptr = downstream_cb_base + tail_pages * downstream_cb_page_size;
     }
 
     // XXXXX - painful syncing right now?  move this into get_cmds
     noc_async_writes_flushed();
+    DPRINT << "WRITES FLUSHED" <<ENDL();
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages);
 
     return fence;
@@ -1011,6 +1016,7 @@ void kernel_main_h() {
         uint32_t cmd_id = cmd->base.cmd_id;
 
         bool is_exec_buf = (cmd_id == CQ_PREFETCH_CMD_EXEC_BUF);
+        DPRINT << "Cmd: " << cmd_id <<ENDL();
         cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
 
         // Note: one fetch_q entry can contain multiple commands

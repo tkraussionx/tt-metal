@@ -472,7 +472,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "prefetch core local: " << prefetch_physical_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
 
@@ -512,7 +512,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Dispatch core local: " << dispatch_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
@@ -620,7 +620,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        std::cout << "PrefetchH core: " << prefetch_core.str() << " " << prefetch_physical_core.str() << std::endl;
         log_debug(LogDevice, "run prefetch_h {}", prefetch_core.str());
 
         std::vector<uint32_t> mux_compile_args =
@@ -667,7 +667,7 @@ void Device::compile_command_queue_programs() {
             packet_switch_4B_pack(src_endpoint_start_id, 0, 0, 0), // 23: packetized input src id
             packet_switch_4B_pack(dest_endpoint_start_id, 0, 0, 0), // 24: packetized input dest id
         };
-
+        std::cout << "Mux core: " << mux_physical_core.str() << std::endl;
         log_debug(LogDevice, "run mux at {}", mux_core.str());
 
         configure_kernel_variant(
@@ -834,7 +834,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        std::cout << "Remote dispatch handler core: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_core.str());
 
         /////////////////Following section is for Remote Device
@@ -1027,8 +1027,8 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
-        log_debug(LogDevice, "run prefertch_d at {}", prefetch_d_core.str());
+        std::cout << "prefetchD " << prefetch_d_core.str() << std::endl;
+        log_info(LogDevice, "run prefetch_d at {}", prefetch_d_core.str());
 
         std::vector<uint32_t> dispatch_d_compile_args = {
             dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1066,7 +1066,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        td:;cout << "Dispatch core remote chip: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch at {}", dispatch_core.str());
 
         std::vector<uint32_t> mux_d_compile_args =
