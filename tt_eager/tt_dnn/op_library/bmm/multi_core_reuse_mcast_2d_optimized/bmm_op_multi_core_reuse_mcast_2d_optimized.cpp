@@ -21,6 +21,53 @@ using namespace tt::constants;
 using namespace tt;
 using namespace tt_metal;
 
+std::vector<uint32_t> get_rows_to_delay_wormhole_b0(
+    tt_metal::Device* device) {
+    // hardcoded for wh_b0
+    uint32_t full_grid_size_y = 12;
+    uint32_t x_step = 3;
+
+    // get all the logical coord
+    auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    uint32_t num_cores_x = compute_with_storage_grid_size.x;
+    uint32_t num_cores_y = compute_with_storage_grid_size.y;
+
+    // get dram banks and coords
+    uint32_t num_banks = device->num_dram_channels();
+    uint32_t max_bank_id = num_banks - 1;
+    std::vector<CoreCoord> dram_coord_phy; dram_coord_phy.reserve(num_banks);
+    for (int i = 0; i < num_banks; ++i) {
+        dram_coord_phy.push_back(device->dram_core_from_dram_channel(i));
+    }
+
+    // get worker logical coords
+    std::vector<CoreCoord> all_worker_cores_logical;
+    all_worker_cores_logical.reserve(num_cores_x * num_cores_y);
+    for (int i = 0; i < num_cores_x; ++i) {
+        for (int j = 0; j < num_cores_y; ++j) {
+            all_worker_cores_logical.push_back(CoreCoord(i, j));
+        }
+    }
+
+    // get y coords of the workers
+    std::vector<uint32_t> all_worker_cores_y_physical;
+    all_worker_cores_y_physical.reserve(num_cores_y);
+    for (int i = 0; i < num_cores_y; ++i) {
+        auto core_phy = device->worker_core_from_logical_core(CoreCoord(0, i));
+        all_worker_cores_y_physical.push_back(core_phy.y);
+    }
+
+    std::vector<uint32_t> worker_cores_to_delay;
+    worker_cores_to_delay.reserve(4);
+    for (int i = 0; i < num_cores_y; ++i) {
+        if (i % 2 == 1) {
+            worker_cores_to_delay.push_back(all_worker_cores_y_physical[i]);
+        }
+    }
+
+    return worker_cores_to_delay;
+}
+
 operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt_metal::Device* device,
     MathFidelity math_fidelity,
@@ -690,6 +737,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t curr_worker_core = 0; // current worker core
     uint32_t curr_storage_core = 0; // current read dram bank
     uint32_t vc = 0;
+
+    std::vector<uint32_t> rows_to_delay = get_rows_to_delay_wormhole_b0(device);
+    std::vector<uint32_t> mm_compute_args;
+    mm_compute_args.push_back((std::uint32_t) is_worker_core);
+
+    tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_compute_args);
 
     const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
     const auto& in0_sender_cores = grid_to_cores(in0_sender.start, in0_sender.end, true);

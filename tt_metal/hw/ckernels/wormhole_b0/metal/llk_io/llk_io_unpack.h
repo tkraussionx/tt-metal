@@ -12,6 +12,8 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+// #include "debug/dprint.h"
+
 // MT: Temp extern declaration
 extern uint32_t tiles_proc_delay;
 extern uint32_t wait_tiles_cnt;
@@ -22,7 +24,7 @@ extern uint32_t my_noc_y;
 using namespace ckernel;
 
 // "llk_setup_operands" is the old function name that HLKC emits
-inline void llk_setup_operands(bool is_matmul=false) {
+inline void llk_setup_operands(bool apply_delay=false) {
     volatile tt_l1_ptr std::uint32_t* circular_buffer_config_addr = (volatile uint32_t*)(CIRCULAR_BUFFER_CONFIG_BASE);
 
     for (uint32_t cb_id = 0; cb_id < NUM_CIRCULAR_BUFFERS; cb_id++) {
@@ -41,15 +43,15 @@ inline void llk_setup_operands(bool is_matmul=false) {
 
         circular_buffer_config_addr += UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; // move by 3 uint32's
     }
-
+    // 1, 4, 7, 9
     // Identify noc coordinates
     uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(0, 0, NOC_NODE_ID);
     my_noc_x = noc_id_reg & NOC_NODE_ID_MASK;
     my_noc_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
     volatile uint32_t* dbg_noc_id = (volatile uint32_t*) 0x15200;
     *(dbg_noc_id+0) = ((my_noc_x&0xffff)) << 0 | ((my_noc_y&0xffff) << 16);
-    if (is_matmul) {
-        tiles_proc_delay = ((my_noc_y & 0x1) == 1) ? 6144 : 0;  // Delay odd rows of cores
+    if (apply_delay) {
+        tiles_proc_delay = 6144*2; // Delay odd rows of cores
         // *(dbg_noc_id+1) = 0xdeda99;
         // switch (my_noc_y) {
         //     case 0:
@@ -99,9 +101,16 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     uint64_t time_end = read_wall_clock();
     uint64_t time_delta = time_end - time_start;
     wait_tiles_cnt++;
-    if (time_delta > 0 && (wait_tiles_cnt==2) && (apply_cnt == 0)) {        // Apply delay only if second operand has arrived
+    if (time_delta > 0 && (wait_tiles_cnt==2)) {        // Apply delay only if second operand has arrived
         apply_cnt++;
         wait(tiles_proc_delay);
+
+        // uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(0, 0, NOC_NODE_ID);
+        // my_noc_x = noc_id_reg & NOC_NODE_ID_MASK;
+        // my_noc_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+        // if (tiles_proc_delay != 0) {
+        //      DPRINT << "wait " << my_noc_y << ", " << my_noc_x <<  ENDL();
+        // }
     }
 }
 

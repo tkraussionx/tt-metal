@@ -77,6 +77,8 @@ void MAIN {
     }
     #endif
 
+    const bool apply_delay = get_arg_val<uint32_t>(1) == 1;
+
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(0); // inner block size in tiles
     constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
     constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
@@ -114,7 +116,7 @@ void MAIN {
 
     constexpr bool spill = num_blocks > 1;
 
-    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w );
+    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w, apply_delay);
     for (uint32_t b = 0; b < batch; b++){
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;

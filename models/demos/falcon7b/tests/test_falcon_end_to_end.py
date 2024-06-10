@@ -207,37 +207,39 @@ def run_test_FalconCausalLM_end_to_end(
         llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
     )
 
-    profiler.start(f"model_run_for_inference")
-    if llm_mode == "prefill":
-        tt_outs = []
-        # Device transfer time is included in model run time for prefill
-        tt_input_ids, tt_attention_mask = get_inputs_on_device(
-            llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
-        )
-        for user_id in range(batch):
+    for i in range(100):
+        print(f"Running iteration {i}")
+        profiler.start(f"model_run_for_inference")
+        if llm_mode == "prefill":
+            tt_outs = []
+            # Device transfer time is included in model run time for prefill
+            tt_input_ids, tt_attention_mask = get_inputs_on_device(
+                llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
+            )
+            for user_id in range(batch):
+                tt_out, tt_layer_present = tt_FalconCausalLM(
+                    input_ids=tt_input_ids[user_id],
+                    llm_mode=llm_mode,
+                    attention_mask=tt_attention_mask[user_id],
+                    user_id=user_id,
+                    layer_past=tt_layer_past,
+                    layer_past_len=kv_cache_len,
+                    use_cache=use_cache,
+                )
+                tt_outs.append(tt_out)
+
+        elif llm_mode == "decode":
             tt_out, tt_layer_present = tt_FalconCausalLM(
-                input_ids=tt_input_ids[user_id],
+                input_ids=tt_input_ids,
                 llm_mode=llm_mode,
-                attention_mask=tt_attention_mask[user_id],
-                user_id=user_id,
+                attention_mask=tt_attention_mask,
                 layer_past=tt_layer_past,
                 layer_past_len=kv_cache_len,
                 use_cache=use_cache,
             )
-            tt_outs.append(tt_out)
-
-    elif llm_mode == "decode":
-        tt_out, tt_layer_present = tt_FalconCausalLM(
-            input_ids=tt_input_ids,
-            llm_mode=llm_mode,
-            attention_mask=tt_attention_mask,
-            layer_past=tt_layer_past,
-            layer_past_len=kv_cache_len,
-            use_cache=use_cache,
-        )
-    for device in devices:
-        tt_lib.device.Synchronize(device)
-    profiler.end(f"model_run_for_inference")
+        for device in devices:
+            tt_lib.device.Synchronize(device)
+        profiler.end(f"model_run_for_inference")
 
     if llm_mode == "prefill":
         tt_out_tmp = torch.zeros(global_batch, seq_len, configuration.vocab_size)  # Output tensor to overwrite
