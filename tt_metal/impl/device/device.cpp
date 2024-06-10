@@ -137,7 +137,7 @@ void Device::initialize_build() {
 }
 
 void Device::build_firmware() {
-  std::cout << " BUILDING FIRMWARE " << this->id() << std::endl;
+    log_info(tt::LogMetal, "Building base firmware for device {}", this->id_);
     ZoneScoped;
 
     detail::GenerateDeviceHeaders(this, this->build_env_.get_out_firmware_root_path());
@@ -1260,10 +1260,8 @@ bool Device::close() {
     this->deallocate_buffers();
     watcher_detach(this);
 
-
     std::unordered_set<CoreCoord> not_done_dispatch_cores;
     std::unordered_set<CoreCoord> cores_to_skip;
-
 
     if (this->is_mmio_capable()) {
         for (const chip_id_t &device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(this->id_)) {
@@ -1397,7 +1395,6 @@ bool Device::close() {
         }
     }
 
-    this->trace_buffer_pool_.clear();
     this->compute_cores_.clear();
     this->storage_only_cores_.clear();
     this->ethernet_cores_.clear();
@@ -1410,13 +1407,12 @@ bool Device::close() {
     this->allocator_.reset();
 
     this->initialized_ = false;
-    std::cout << " device close " << std::endl;
 
     return true;
 }
 
 Device::~Device() {
-    std::cout << " device dtor " << std::endl;
+    log_debug(tt::LogMetal, "Device {} destructor", this->id_);
     if (this->initialized_) {
         this->close();
     }

@@ -177,7 +177,6 @@ std::map<chip_id_t, Device *> CreateDevices(
     std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     std::map<chip_id_t, Device *> ret_devices;
     for (Device * dev: devices) {
-        detail::InitDeviceProfiler(dev);
         ret_devices.insert({dev->id(), dev});
     }
 
@@ -185,7 +184,6 @@ std::map<chip_id_t, Device *> CreateDevices(
 }
 
 void CloseDevices(std::map<chip_id_t, Device *> devices) {
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     for (const auto &[device_id, dev] : devices) {
         tt::DevicePool::instance().close_device(device_id);
     }
@@ -697,7 +695,6 @@ Device *CreateDevice(
     ZoneScoped;
     tt::DevicePool::initialize({device_id}, num_hw_cqs, l1_small_size, l1_bank_remap);
     auto dev = tt::DevicePool::instance().get_active_device(device_id);
-    detail::InitDeviceProfiler(dev);
     return dev;
 }
 
@@ -710,7 +707,6 @@ Device *CreateDeviceMinimal(chip_id_t device_id) {
 
 bool CloseDevice(Device *device) {
     ZoneScoped;
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     auto device_id = device->id();
     return tt::DevicePool::instance().close_device(device_id);
 }

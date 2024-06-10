@@ -29,10 +29,8 @@ class DevicePool {
         const uint8_t num_hw_cqs,
         size_t l1_small_size,
         const std::vector<uint32_t> &l1_bank_remap = {}) noexcept {
-      std::cout << " DP initialize " << std::endl;
-      std::cout << " device ids ";
+      log_debug(tt::LogMetal, "DevicePool initialize");
       for (const auto &chip: device_ids) { std::cout << chip << " " << std::endl; }
-      std::cout << " num hw cqs " << num_hw_cqs << " l1 small " << l1_small_size << std::endl;
         if (_inst == nullptr) {
             static DevicePool device_pool(device_ids, num_hw_cqs, l1_small_size, l1_bank_remap);
             _inst = &device_pool;

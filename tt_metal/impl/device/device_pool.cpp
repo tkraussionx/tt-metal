@@ -124,13 +124,14 @@ void DevicePool::activate_device(chip_id_t id) {
        this->devices.resize(id + 1);
     }
     if (this->devices[id] == nullptr) {
+        log_debug(tt::LogMetal, "DevicePool new device {}", id);
         int core_assigned_to_device = device_to_core_map.at(id);
         auto dev = new Device(id, this->num_hw_cqs, this->l1_small_size, this->l1_bank_remap, false, core_assigned_to_device);
         dev->build_firmware();
         this->devices[id] = std::unique_ptr<Device>(dev);
     } else {
       const auto& dev = this->devices[id];
-      std::cout << " DP re-init device " << id << std::endl;
+      log_debug(tt::LogMetal, "DevicePool re-initialize device {}", id);
       if (not dev->is_initialized()) {
           dev->initialize(num_hw_cqs, this->l1_small_size, this->l1_bank_remap);
       } else {
@@ -171,12 +172,13 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids, const ui
 void DevicePool::init_firmware_on_active_devices() const {
     for (const auto& dev: this->get_all_active_devices()) {
         this->initialize_device(dev);
+        detail::InitDeviceProfiler(dev);
     }
 }
 
 DevicePool::DevicePool(std::vector<chip_id_t> device_ids, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
-  std::cout << " device pool ctor  " << std::endl;
+    log_debug(tt::LogMetal, "DevicePool constructor");
     bool use_numa_node_based_thread_binding = parse_env("TT_METAL_NUMA_BASED_AFFINITY", false);
     std::vector<chip_id_t> all_device_ids;
     for (int i=0; i< tt::tt_metal::GetNumAvailableDevices(); i++) {
@@ -209,6 +211,7 @@ std::vector<Device*> DevicePool::get_all_active_devices() const {
 }
 
 bool DevicePool::close_device(chip_id_t device_id) const {
+  tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
   bool pass = true;
   const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
   for (const auto& mmio_controlled_device_id :
@@ -221,16 +224,14 @@ bool DevicePool::close_device(chip_id_t device_id) const {
 }
 
 DevicePool::~DevicePool() {
-  std::cout << " Device pool destructor " << std::endl;
+    log_debug(tt::LogMetal, "DevicePool destructor");
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-    // TODO: should this be done explicitly here?
 
     for (const auto& dev : this->devices) {
           if (dev != nullptr and dev->is_initialized()) {
               dev->close();
         }
     }
-    //detail::ClearDeviceProfiler();
     this->devices.clear();
 }
 
