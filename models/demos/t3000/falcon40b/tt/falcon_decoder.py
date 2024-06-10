@@ -77,10 +77,14 @@ class TtFalconDecoderLayer:
                 ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
             ]
         else:
+            ln_mlp_gamma_torch = self.state_dict[ln_mlp_weights_str].reshape(1, 1, 1, -1)
+            ln_mlp_gamma_torch_padded = torch.cat(
+                [ln_mlp_gamma_torch, torch.zeros(1, 1, 31, ln_mlp_gamma_torch.shape[-1])], dim=2
+            )
             ln_mlp_gamma_host = torch2tt_tensor(
-                self.state_dict[ln_mlp_weights_str],
+                ln_mlp_gamma_torch_padded,
                 None,
-                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimental.tensor.Layout.TILE,
                 tt_memory_config=self.model_config["LN_MLP_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
             )
@@ -101,10 +105,14 @@ class TtFalconDecoderLayer:
                 ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
             ]
         else:
+            ln_mlp_beta_torch = self.state_dict[ln_mlp_bias_str].reshape(1, 1, 1, -1)
+            ln_mlp_beta_torch_padded = torch.cat(
+                [ln_mlp_beta_torch, torch.zeros(1, 1, 31, ln_mlp_beta_torch.shape[-1])], dim=2
+            )
             ln_mlp_beta_host = torch2tt_tensor(
-                self.state_dict[ln_mlp_bias_str],
+                ln_mlp_beta_torch_padded,
                 None,
-                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimental.tensor.Layout.TILE,
                 tt_memory_config=self.model_config["LN_MLP_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
             )
@@ -128,10 +136,14 @@ class TtFalconDecoderLayer:
                 ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
             ]
         else:
+            ln_attn_gamma_torch = self.state_dict[ln_attn_weights_str].reshape(1, 1, 1, -1)
+            ln_attn_gamma_torch_padded = torch.cat(
+                [ln_attn_gamma_torch, torch.zeros(1, 1, 31, ln_attn_gamma_torch.shape[-1])], dim=2
+            )
             ln_attn_gamma_host = torch2tt_tensor(
-                self.state_dict[ln_attn_weights_str],
+                ln_attn_gamma_torch_padded,
                 None,
-                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimental.tensor.Layout.TILE,
                 tt_memory_config=self.model_config["LN_ATTN_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
             )
@@ -152,10 +164,14 @@ class TtFalconDecoderLayer:
                 ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
             ]
         else:
+            ln_attn_beta_torch = self.state_dict[ln_attn_bias_str].reshape(1, 1, 1, -1)
+            ln_attn_beta_torch_padded = torch.cat(
+                [ln_attn_beta_torch, torch.zeros(1, 1, 31, ln_attn_beta_torch.shape[-1])], dim=2
+            )
             ln_attn_beta_host = torch2tt_tensor(
-                self.state_dict[ln_attn_bias_str],
+                ln_attn_beta_torch_padded,
                 None,
-                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimental.tensor.Layout.TILE,
                 tt_memory_config=self.model_config["LN_ATTN_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
             )
