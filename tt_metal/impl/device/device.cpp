@@ -1283,8 +1283,7 @@ bool Device::close() {
                         not_done_dispatch_cores.insert(phys_core);
                         log_debug(tt::LogMetal, "MMIO Device Prefetch core: Logical: {} - Physical: {}", prefetch_location.str(), phys_core.str());
                     }
-                } else  {
-                    // Assume that R chip is always open
+                } else if (tt::DevicePool::instance().is_device_active(device_id)) {
                     //non mmio devices serviced by this mmio capable device.
                     //skip remote dispatch cores only if respective remote device is active.
                     if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {

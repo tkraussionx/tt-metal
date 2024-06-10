@@ -157,8 +157,6 @@ namespace tt::tt_metal{
          * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
          * */
 	    void InitDeviceProfiler(Device *device);
-      // API to clear all device profilers
-	    void ClearDeviceProfiler();
 
         /**
          * Read device side profiler data and dump results into device side CSV log
