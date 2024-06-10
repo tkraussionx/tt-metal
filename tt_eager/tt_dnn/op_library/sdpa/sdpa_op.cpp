@@ -40,7 +40,6 @@ void ScaledDotProductAttention::validate(
         TT_FATAL(
             input_tensor.get_dtype() == DataType::BFLOAT16 ||
             input_tensor.get_dtype() == DataType::BFLOAT8_B);
-        TT_FATAL(input_tensor.is_sharded() == false);
 
     }
 
@@ -88,6 +87,8 @@ void ScaledDotProductAttention::validate(
 
         TT_FATAL(mask_shape[-3] == 1);
 
+        TT_FATAL(this->output_mem_config.buffer_type == tt_metal::BufferType::DRAM);
+
     } else {
         // Input 0 must be sharded by height. All other inputs must be in DRAM.
         const auto Q_memcfg = input_tensors.at(0).memory_config();
@@ -98,6 +99,7 @@ void ScaledDotProductAttention::validate(
             TT_FATAL(input_tensors.at(i).buffer()->buffer_type() == tt_metal::BufferType::DRAM);
         }
         // Output memconfig must be height sharded, same as input
+        TT_FATAL(this->output_mem_config.is_sharded());
         TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
 
         // Assert we are in decode mode if not causal
@@ -106,12 +108,12 @@ void ScaledDotProductAttention::validate(
         // V: [1, B, S, D]
         // mask: [1, B, NH, VS]
 
-        TT_FATAL(Q_memcfg.shard_spec.value().grid.num_cores() == q_shape[2], "Q must be height sharded by batch ");
         // Batch must match
         const auto B = q_shape[1];
         TT_FATAL(k_shape[1] == B);
         TT_FATAL(v_shape[1] == B);
         TT_FATAL(mask_shape[1] == B);
+        TT_FATAL(Q_memcfg.shard_spec.value().grid.num_cores() == B, "Q must be height sharded by batch ");
 
         // NKV must be 1 if we are running in this decode mode
         TT_FATAL(q_shape[0] == 1);
@@ -134,6 +136,8 @@ void ScaledDotProductAttention::validate(
         TT_FATAL(valid_seq_len.has_value(), "Non-causal SDPA must set valid_seq_len");
         TT_FATAL(valid_seq_len.value() == mask_shape[-1], "Mask sequence dim must match valid_seq_len");
         TT_FATAL(valid_seq_len.value() <= k_shape[-2], "valid_seq_len must be <= K sequence dim");
+
+
     }
 
     std::visit(
@@ -148,6 +152,11 @@ void ScaledDotProductAttention::validate(
                 TT_FATAL(q_shape[-2] % q_chunk_size == 0);
                 TT_FATAL(k_shape[-2] % k_chunk_size == 0);
 
+                if (! this->is_causal) {
+                    TT_FATAL(q_chunk_size == q_shape[-2], "Non-causal SDPA must have q_chunk_size == q_shape[-2]");
+                    TT_FATAL(this->valid_seq_len.value() % k_chunk_size == 0, "valid_seq_len must be divisible by k_chunk_size");
+                }
+
                 // For now, assert that chunk sizes are the same
                 // TT_FATAL(q_chunk_size == k_chunk_size);
 
@@ -155,6 +164,10 @@ void ScaledDotProductAttention::validate(
                 // auto b_nh = q_shape[-4] * q_shape[-3];
                 // auto num_cores = program_config.compute_with_storage_grid_size.x *
                 // program_config.compute_with_storage_grid_size.y; TT_FATAL((num_cores / b_nh) * b_nh == num_cores);
+            } else {
+                if (! this->is_causal) {
+                    TT_FATAL(false, "Non-causal SDPA must use multi-core program config");
+                }
             }
         },
         this->program_config);
@@ -249,7 +262,7 @@ Tensor scaled_dot_product_attention(
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             // make sure output is dram
-            TT_FATAL(output_mem_config.buffer_type == tt_metal::BufferType::DRAM);
+            // TT_FATAL(output_mem_config.buffer_type == tt_metal::BufferType::DRAM);
             const auto& input_tensor_q = input_tensors.at(0);
             const auto& input_tensor_k = input_tensors.at(1);
             const auto& input_tensor_v = input_tensors.at(2);

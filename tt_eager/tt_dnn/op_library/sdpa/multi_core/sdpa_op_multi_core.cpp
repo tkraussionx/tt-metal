@@ -47,7 +47,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     */
 
     const auto q_shape = input_tensor_q.get_legacy_shape();
-    uint32_t B = q_shape[0], NQH = q_shape[1], S = q_shape[2], DH = q_shape[3];
+    const auto k_shape = input_tensor_k.get_legacy_shape();
+    // Use k_shape for S and DH since Q might be different for decode
+    uint32_t B = q_shape[0], NQH = q_shape[1], S = k_shape[2], DH = k_shape[3];
     uint32_t St = S/TILE_HEIGHT;
     uint32_t DHt = DH/TILE_WIDTH;
 
@@ -55,8 +57,12 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t Sk_chunk_t = k_chunk_size / TILE_HEIGHT;
     uint32_t q_num_chunks = S / q_chunk_size;
     uint32_t k_num_chunks = S / k_chunk_size;
+    if (!is_causal) {
+        q_num_chunks = q_shape[2] / q_chunk_size;
+        TT_FATAL(q_num_chunks == 1, "Non-causal mode only supports one chunk");
+        k_num_chunks = valid_seq_len.value() / k_chunk_size;
+    }
 
-    const auto k_shape = input_tensor_k.get_legacy_shape();
     uint32_t NKH = k_shape[1];
 
     // log_debug all of the above
@@ -69,6 +75,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("DHt: {}", DHt);
     log_debug("Sq_chunk_t: {}", Sq_chunk_t);
     log_debug("Sk_chunk_t: {}", Sk_chunk_t);
+    log_debug("q_chunk_size: {}", q_chunk_size);
+    log_debug("k_chunk_size: {}", k_chunk_size);
     log_debug("q_num_chunks: {}", q_num_chunks);
     log_debug("k_num_chunks: {}", k_num_chunks);
     log_debug("NKH: {}", NKH);
@@ -289,21 +297,27 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("BALANCED_Q_PARALLEL: {}", balanced_q_parallel);
 
     auto reader_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp", core_grid,
+        program,
+        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_noncausal_interleaved.cpp",
+        core_grid,
         tt_metal::ReaderDataMovementConfig(
             reader_compile_time_args,
             defines
     ));
 
     auto writer_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp", core_grid,
+        program,
+        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_noncausal_interleaved.cpp",
+        core_grid,
         tt_metal::WriterDataMovementConfig(
             writer_compile_time_args,
             defines
     ));
 
     auto compute_kernels_id = CreateKernel(
-        program, "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp", core_grid,
+        program,
+        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa_noncausal.cpp",
+        core_grid,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
             .compile_args = compute_compile_time_args,
@@ -318,8 +332,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     tt::DataFormat mask_df = attn_mask.has_value() ? tt_metal::datatype_to_dataformat_converter(attn_mask.value().get_dtype()) : tt::DataFormat::Float16_b;
     tt::DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output_tensor.get_dtype());
     tt::DataFormat scalar_df = tt::DataFormat::Float16_b;
-    // tt::DataFormat im_df = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
-    tt::DataFormat im_df = tt::DataFormat::Float16_b;
+    tt::DataFormat im_df = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    // tt::DataFormat im_df = tt::DataFormat::Float16_b;
     tt::DataFormat stats_df = tt::DataFormat::Float16_b;
 
     uint32_t q_tile_size = tt_metal::detail::TileSize(q_df);
@@ -343,6 +357,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     // Q input
     auto c_in0_config = CircularBufferConfig(q_tiles * q_tile_size, {{CB::c_in0, q_df}}).set_page_size(CB::c_in0, q_tile_size);
+    if (!is_causal) {
+        c_in0_config.set_globally_allocated_address(*q_buffer);
+    }
     auto cb_in0_id = CreateCircularBuffer(program, core_grid, c_in0_config);
     // K input
     auto c_in1_config = CircularBufferConfig(k_tiles * k_tile_size, {{CB::c_in1, k_df}}).set_page_size(CB::c_in1, k_tile_size);
@@ -397,6 +414,9 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
     // Output
     auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
+    if (!is_causal) {
+        c_out0_config.set_globally_allocated_address(*out0_buffer);
+    }
     auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
 
 
@@ -430,6 +450,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
         // log the above
         log_debug("core: {}", i);
+        log_debug("x={},y={}", core.x, core.y);
         log_debug("local_batch_start: {}", local_batch_start);
         log_debug("local_batch_end: {}", local_batch_end);
         log_debug("local_nh_start: {}", local_nh_start);
