@@ -69,6 +69,7 @@ class TtTransformerBlock(LightweightModule):
             layer_num=layer_num,
             weight_key="ffn_norm",
         )
+        self.comps = []
 
     def forward(
         self, xs_1SBH, start_pos, current_pos, attn_masks, rot_mats, transformation_mats=None, user_id=0, mode="decode"
@@ -81,6 +82,9 @@ class TtTransformerBlock(LightweightModule):
         H: hidden dim (4096)
         """
         attn_norm_1SBH = self.attention_norm(xs_1SBH)
+        self.comps.append(
+            ttnn.to_torch(attn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
+        )
 
         attn_1SBH = self.attention(
             attn_norm_1SBH,
@@ -92,8 +96,20 @@ class TtTransformerBlock(LightweightModule):
             user_id,
             mode,
         )
+        self.comps.append(ttnn.to_torch(attn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+
         hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH)
+        self.comps.append(ttnn.to_torch(hs_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+
         ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
+        self.comps.append(
+            ttnn.to_torch(ffn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
+        )
+
         ffn_1SBH = self.feed_forward(ffn_norm_1SBH, mode=mode)
+        self.comps.append(ttnn.to_torch(ffn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+
         out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH)
+        self.comps.append(ttnn.to_torch(out_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+
         return out_1SBH

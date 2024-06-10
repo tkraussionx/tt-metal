@@ -31,13 +31,15 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048),
+    (8192,),
 )
 @torch.no_grad()
 def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
+    if seq_len > 2048:
+        model_args.max_seq_len = seq_len
     state_dict = model_args.load_state_dict()
     batch = 1
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names

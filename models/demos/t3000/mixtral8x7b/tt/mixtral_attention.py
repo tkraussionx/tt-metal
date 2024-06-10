@@ -90,18 +90,18 @@ class TtMixtralAttention(LightweightModule):
             .unsqueeze(0)
             .unsqueeze(0),
             device=self.device_mesh,
-            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=-2),
             dtype=self.dtype,
             memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
             layout=self.model_config["ATTN_W_LAYOUT_TILE"],
-            cache_file_name=cache_name(f"wo_multidevice4d_H"),
+            cache_file_name=cache_name(f"wo_multidevice4d"),
         )
 
         cache_k = torch.zeros(
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -109,7 +109,7 @@ class TtMixtralAttention(LightweightModule):
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -318,12 +318,13 @@ class TtMixtralAttention(LightweightModule):
         ###
         # QKV matmuls
         ###
+
         xqkv_fused = ttnn.linear(
             xs_11SH,
             self.wqkv,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            core_grid=self.core_grid_attention,
+            core_grid=ttnn.CoreGrid(y=8, x=8),
             compute_kernel_config=self.compute_kernel,
         )
 
@@ -397,15 +398,24 @@ class TtMixtralAttention(LightweightModule):
             output_mem_config=ttnn.L1_MEMORY_CONFIG,
         )
 
-        attn_output_11SH = ttnn.all_gather(
+        attn_output_11SH = ttnn.experimental.tensor.typecast(attn_output_11SH, dtype=ttnn.bfloat8_b)
+        output_11SH = ttnn.linear(
             attn_output_11SH,
-            dim=3,
-            num_links=1,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            self.wo,
+            core_grid=ttnn.CoreGrid(y=8, x=8),
+            compute_kernel_config=self.model_config["PREFILL_MLP_COMPUTE_CONFIG"],
+            dtype=ttnn.bfloat8_b,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-        attn_output_11SH = ttnn.linear(attn_output_11SH, self.wo, core_grid=ttnn.CoreGrid(y=7, x=6))
+        attn_output_11SH.deallocate(True)
 
-        return attn_output_11SH
+        output_11BH_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1)
+        output_11SH.deallocate(True)
+        output_11BH_gathered = ttnn.experimental.tensor.typecast(output_11BH_gathered, dtype=ttnn.bfloat16)
+        output_11BH_gathered = ttnn.experimental.operations.primary.moreh_sum(
+            output_11BH_gathered, dims=[1], output=None, compute_kernel_config=None
+        )
+        return output_11BH_gathered
 
     def forward(
         self, xs, start_pos, current_pos, attn_masks, rot_mats, transformation_mats=None, user_id=0, mode="decode"

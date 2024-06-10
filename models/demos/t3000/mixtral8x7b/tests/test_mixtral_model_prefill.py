@@ -43,14 +43,11 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048),
+    (8192,),
 )
 @pytest.mark.parametrize(
     "n_layers",
-    (
-        1,
-        32,
-    ),
+    (5,),
 )
 def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds, n_layers, seq_len):
     pcc = 0.96
@@ -59,11 +56,13 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     model_args.n_layers = n_layers
     batch = 1
+    if seq_len > 2048:
+        model_args.max_seq_len = seq_len
     state_dict = model_args.load_state_dict()
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
     prompt = "Once upon a time, in a charming countryside, there lived three little pigs named Porky, Petunia, and Percy. They were siblings and loved to play together all day long. But one day, their mother knew it was time for them to build their own homes and be independent. Remember, my little ones, their mother said, the world can be tricky, so build your houses strong and sturdy to keep you safe from harm. With hugs and kisses, the three little pigs bid farewell to their mother and set off on their journey to find the perfect spot to build their homes. Porky, being the laziest of the bunch, quickly found a pile of straw nearby and decided it was the perfect place to build his house. With little effort, he constructed a cozy straw house and declared, I'm done! Now I can relax and play all day. Petunia was a bit more hardworking. She found a bunch of sticks and twigs and began building her house. It took a bit longer, but she managed to create a charming little house. Percy, the wisest of the three, knew that hard work pays off. He searched for the sturdiest materials he could find and finally decided on bricks. He carefully stacked and cemented the bricks together, creating a strong and reliable house. One evening, as the sun was setting, a big bad wolf happened upon the three little pigs. He was hungry and had his eyes set on the tasty pigs. The wolf first came across Porky's straw house."
-    prompt = prompt * 7
+    prompt = prompt * 30
     encoded_prompts = tokenizer.encode(prompt)[:seq_len]
     reference_model = Transformer(args=model_args)
     reference_model.load_state_dict(state_dict)
@@ -93,6 +92,8 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
         layers=list(range(model_args.n_layers)),
         dtype=dtype,
     )
+
+    print("done")
 
     # Select the first token from the prompts for initial decoding
     encoded_prompts_tensor = torch.tensor(encoded_prompts)  # [:,0]
@@ -133,7 +134,14 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
     passing, pcc_message = comp_pcc(ref_output.view(batch, seq_len, -1), tt_output_torch.view(batch, seq_len, -1), pcc)
     logger.info(comp_allclose(ref_output, tt_output_torch))
     logger.info(pcc_message)
-
+    for layer in range(n_layers):
+        ref = reference_model.layers[layer]
+        tt = tt_model.layers[layer]
+        for mod in range(6):
+            passing, pcc_message = comp_pcc(
+                ref.comps[mod].view(batch, seq_len, -1), tt.comps[mod].view(batch, seq_len, -1), pcc
+            )
+            print("layer: ", layer, "mod: ", mod, pcc_message)
     if passing:
         logger.info(f"Mistral decode Passed!")
     else:

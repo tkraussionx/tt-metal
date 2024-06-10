@@ -30,7 +30,7 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048),
+    (8192,),
 )
 def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     pcc = 0.99

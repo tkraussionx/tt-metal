@@ -56,31 +56,77 @@ class TtMixtralMLP(LightweightModule):
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
         if mode == "prefill":
+            x = ttnn.reshape(x, (1, 4, 2048, 4096))
+            # from models.demos.t3000.mixtral8x7b.tt.create_program_config import create_matmul_program_config
+            # pc = create_matmul_program_config(input_tensor_a=x, input_tensor_b=self.w1, core_grid=ttnn.CoreGrid(y=8, x=8), activation="silu", use_1d_systolic_array=False, compute_kernel_config=self.prefill_mlp_config)
+            # print(pc)
+            pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=(8, 8),
+                in0_block_w=2,  # how much inner dim you take each time
+                out_subblock_h=1,  # Must be divisible by per_core_M
+                out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_N=56,  # N / TILE_WIDTH / Grid_Size
+                transpose_mcast=False,
+                fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
+                fuse_batch=False,
+            )
             w1_out = ttnn.linear(
                 x,
                 self.w1,
                 compute_kernel_config=self.prefill_mlp_config,
-                core_grid=ttnn.CoreGrid(y=8, x=8),
-                dtype=ttnn.bfloat16,
-                activation="silu",
+                # core_grid=ttnn.CoreGrid(y=8, x=8),
+                dtype=ttnn.bfloat8_b,
+                # activation="silu",
+                program_config=pc,
+            )
+
+            print("w1_out shape: ", w1_out.shape)
+
+            pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=(8, 8),
+                in0_block_w=2,  # how much inner dim you take each time
+                out_subblock_h=1,  # Must be divisible by per_core_M
+                out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_N=56,  # N / TILE_WIDTH / Grid_Size
+                transpose_mcast=False,
+                fused_activation=None,
+                fuse_batch=False,
             )
 
             w3_out = ttnn.linear(
                 x,
                 self.w3,
                 compute_kernel_config=self.prefill_mlp_config,
-                core_grid=ttnn.CoreGrid(y=8, x=8),
-                dtype=ttnn.bfloat16,
+                # core_grid=ttnn.CoreGrid(y=8, x=8),
+                program_config=pc,
+                dtype=ttnn.bfloat8_b,
             )
+
+            print("w3_out shape: ", w3_out.shape)
             w2_in = ttnn.experimental.tensor.mul(w1_out, w3_out)
 
+            pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=(8, 8),
+                in0_block_w=2,  # how much inner dim you take each time
+                out_subblock_h=1,  # Must be divisible by per_core_M
+                out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_N=16,  # N / TILE_WIDTH / Grid_Size
+                transpose_mcast=False,
+                fused_activation=None,
+                fuse_batch=False,
+            )
             w2_out = ttnn.linear(
                 w2_in,
                 self.w2,
                 compute_kernel_config=self.prefill_mlp_config,
-                core_grid=ttnn.CoreGrid(y=8, x=8),
+                # core_grid=ttnn.CoreGrid(y=8, x=8),
+                program_config=pc,
                 dtype=ttnn.bfloat16,
             )
+            w2_out = ttnn.reshape(w2_out, (1, 1, 8192, 4096))
             return w2_out
 
         else:

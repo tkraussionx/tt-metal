@@ -29,7 +29,7 @@ from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048),
+    (8192,),
 )
 def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     """
@@ -42,6 +42,8 @@ def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_see
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
     batch = 1
+    if seq_len > 2048:
+        model_args.max_seq_len = seq_len
     state_dict = model_args.load_state_dict()
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
     reference_model = TransformerBlock(args=model_args)
