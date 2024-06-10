@@ -564,7 +564,7 @@ void process_write_packed(uint32_t flags) {
 
     DPRINT << "dispatch_write_packed: " << xfer_size << " " << stride << " " << data_ptr << " " << count << ENDL();
     uint32_t writes = 0;
-    uint32_t mcasts = 0;
+    uint32_t mcasts = noc_nonposted_writes_acked[noc_index];
     WritePackedSubCmd *sub_cmd_ptr = (WritePackedSubCmd *)l1_cache;
     while (count != 0) {
         uint32_t dst_noc = sub_cmd_ptr->noc_xy_addr;
@@ -591,9 +591,7 @@ void process_write_packed(uint32_t flags) {
 
                 block_noc_writes_to_clear[rd_block_idx] += writes;
                 noc_nonposted_writes_num_issued[noc_index] += writes;
-                noc_nonposted_writes_acked[noc_index] += mcasts;
                 writes = 0;
-                mcasts = 0;
                 move_rd_to_next_block<dispatch_cb_blocks>(block_noc_writes_to_clear, rd_block_idx);
             }
 
@@ -630,7 +628,7 @@ void process_write_packed(uint32_t flags) {
 
     block_noc_writes_to_clear[rd_block_idx] += writes;
     noc_nonposted_writes_num_issued[noc_index] += writes;
-    noc_nonposted_writes_acked[noc_index] += mcasts;
+    noc_nonposted_writes_acked[noc_index] = mcasts;
     // Release pages for prefetcher
     // write_packed releases pages at the end so the first page (w/ the sub_cmds) remains valid
     cb_block_release_pages<
