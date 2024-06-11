@@ -50,19 +50,12 @@ def torch_model():
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 @pytest.mark.parametrize(
-    "device_mesh",
-    [
-        1,
-        2,
-    ],
-    indirect=True,
-)
-@pytest.mark.parametrize(
     "enable_async",
     [True, False],
 )
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 16384}], indirect=True)
 def test_falcon_mlp(
-    device_mesh,
+    pcie_device_mesh,
     model_name,
     batch,
     seq_len,
@@ -71,25 +64,28 @@ def test_falcon_mlp(
     torch_model,
     enable_async,
 ):
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(enable_async)
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(enable_async)
+        pcie_device_mesh.get_device(device).enable_program_cache()
 
     torch.manual_seed(0)
 
     configuration = transformers.FalconConfig.from_pretrained(PRETRAINED_MODEL_NAME)
-    torch_input = (torch.rand(batch * device_mesh.get_num_devices(), 1, seq_len, configuration.hidden_size) * 2) - 1
+    torch_input = (
+        torch.rand(batch * pcie_device_mesh.get_num_devices(), 1, seq_len, configuration.hidden_size) * 2
+    ) - 1
     torch_output = torch_model(torch_input)
 
     model_config = get_model_config(model_config_str)
     parameters = preprocess_model_parameters(
         initialize_model=lambda: torch_model,
-        device=device_mesh,
+        device=pcie_device_mesh,
         custom_preprocessor=create_custom_preprocessor(
             model_config,
             tt_cache_path=get_tt_cache_path(f"{model_name}"),
-            device=device_mesh,
+            device=pcie_device_mesh,
             base_file_name=get_model_prefix(),
-            weights_mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            weights_mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
         ),
     )
 
@@ -97,20 +93,40 @@ def test_falcon_mlp(
     ttnn_input = ttnn.from_torch(
         torch_input,
         dtype=model_config["DEFAULT_DTYPE"],
-        device=device_mesh,
+        device=pcie_device_mesh,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
     )
+    logger.info("Compiling Model")
+    ttnn_model(ttnn_input)
+    logger.info("Capturing Trace")
+    trace_id = ttnn.begin_trace_capture(pcie_device_mesh, cq_id=0)
     ttnn_output = ttnn_model(ttnn_input)
+    ttnn.end_trace_capture(pcie_device_mesh, trace_id, cq_id=0)
 
-    passed, pcc = assert_with_pcc(
-        torch_output,
-        ttnn.to_torch(ttnn_output, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
-            torch_output.dtype
-        ),
-        expected_pcc,
-    )
-    logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+    logger.info("Executing Traced Model")
+    for i in range(10):
+        torch_input = (
+            torch.rand(batch * pcie_device_mesh.get_num_devices(), 1, seq_len, configuration.hidden_size) * 2
+        ) - 1
+        torch_output = torch_model(torch_input)
 
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(False)
+        ttnn_input_updated = ttnn.from_torch(
+            torch_input,
+            dtype=model_config["DEFAULT_DTYPE"],
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
+        )
+        ttnn.copy_host_to_device_tensor(ttnn_input_updated, ttnn_input)
+        ttnn.execute_trace(pcie_device_mesh, trace_id, cq_id=0, blocking=False)
+        passed, pcc = assert_with_pcc(
+            torch_output,
+            ttnn.to_torch(
+                ttnn_output, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0), device=pcie_device_mesh
+            ).to(torch_output.dtype),
+            expected_pcc,
+        )
+        logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(False)

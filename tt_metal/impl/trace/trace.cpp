@@ -86,7 +86,7 @@ void Trace::initialize_buffer(CommandQueue& cq, std::shared_ptr<TraceBuffer> tra
     // Commit trace to device DRAM
     trace_buffer->buffer = std::make_shared<Buffer>(
                             cq.device(), padded_size, page_size, BufferType::TRACE, TensorMemoryLayout::INTERLEAVED);
-    EnqueueWriteBuffer(cq, trace_buffer->buffer, trace_data, kBlocking);
+    EnqueueWriteBuffer(cq, trace_buffer->buffer, trace_data, kNonBlocking);
     log_trace(
         LogMetalTrace,
         "Trace issue buffer unpadded size={}, padded size={}, num_pages={}",

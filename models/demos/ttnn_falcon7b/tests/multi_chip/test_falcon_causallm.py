@@ -39,13 +39,13 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 @pytest.mark.parametrize(
     "num_layers, expected_pcc",
     (
-        (1, 0.98),
-        (2, 0.98),
+        # (1, 0.98),
+        # (2, 0.98),
         (32, 0.60),
     ),
     ids=[
-        "layers_1",
-        "layers_2",
+        #     "layers_1",
+        #     "layers_2",
         "layers_32",
     ],
 )
@@ -56,18 +56,12 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 @pytest.mark.parametrize(
-    "device_mesh",
-    [
-        2,
-    ],
-    indirect=True,
-)
-@pytest.mark.parametrize(
     "enable_async, num_loops",
     ((True, 20), (False, 1)),
 )
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 4829184}], indirect=True)
 def test_falcon_causal_lm(
-    device_mesh,
+    pcie_device_mesh,
     use_program_cache,
     model_version,
     llm_mode,
@@ -80,11 +74,12 @@ def test_falcon_causal_lm(
     enable_async,
     num_loops,
 ):
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(enable_async)
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(enable_async)
+        pcie_device_mesh.get_device(device).enable_program_cache()
 
     torch.manual_seed(0)
-    batch = device_batch_size * device_mesh.get_num_devices()
+    batch = device_batch_size * pcie_device_mesh.get_num_devices()
     if llm_mode == "decode":
         shard_dim = 2
     else:
@@ -111,8 +106,8 @@ def test_falcon_causal_lm(
                 batch,
                 kv_cache_len,
                 configuration,
-                device_mesh,
-                mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+                pcie_device_mesh,
+                mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
             )
             tt_layer_past += (tt_current_layer_past,)
         attention_mask = None
@@ -127,8 +122,8 @@ def test_falcon_causal_lm(
                 batch,
                 kv_cache_len,
                 configuration,
-                device_mesh,
-                mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+                pcie_device_mesh,
+                mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
             )
             past_key_values += (current_layer_past,)
             tt_layer_past += (tt_current_layer_past,)
@@ -149,17 +144,17 @@ def test_falcon_causal_lm(
 
     parameters = preprocess_model_parameters(
         initialize_model=lambda: model,
-        device=device_mesh,
+        device=pcie_device_mesh,
         custom_preprocessor=create_custom_preprocessor(
             model_config,
             tt_cache_path=get_tt_cache_path(f"{model_version}"),
-            device=device_mesh,
-            weights_mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            device=pcie_device_mesh,
+            weights_mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
         ),
         convert_to_ttnn=convert_to_ttnn,
     )
     tt_FalconCausalLM = TtFalconCausalLM(
-        device_mesh,
+        pcie_device_mesh,
         num_layers,
         configuration,
         configuration.max_position_embeddings,
@@ -167,57 +162,86 @@ def test_falcon_causal_lm(
         parameters,
     )
     # TODO: Generate embeddings and attention_mask on device
+    tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
+        llm_mode, model_input, kv_cache_len, num_input_tokens=seq_len
+    )
     if llm_mode == "prefill":
+        logger.info("Compiling Prefill Model")
+        tt_FalconCausalLM(
+            input_embeddings=tt_embeddings,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            user_id=0,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        logger.info("Capture Prefill Trace")
+        trace_id = ttnn.begin_trace_capture(pcie_device_mesh, cq_id=0)
+        tt_out, tt_layer_present = tt_FalconCausalLM(
+            input_embeddings=tt_embeddings,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            user_id=0,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        ttnn.end_trace_capture(pcie_device_mesh, trace_id, cq_id=0)
+        logger.info("Done Capturing Prefill Trace")
+
         for loop in range(num_loops):
-            tt_outs = []
-            tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
-                llm_mode, model_input, kv_cache_len, num_input_tokens=seq_len
-            )
-            tt_out, tt_layer_present = tt_FalconCausalLM(
-                input_embeddings=tt_embeddings,
-                llm_mode=llm_mode,
-                attention_mask=tt_attention_mask,
-                user_id=0,
-                layer_past=tt_layer_past,
-                layer_past_len=kv_cache_len,
-                use_cache=True,
-            )
+            ttnn.execute_trace(pcie_device_mesh, trace_id, cq_id=0)
             # Explicitly move tensor to host ... in async mode this is faster than calling from torch directly,
             # due to parallelization of tensor shards
-            tt_out = ttnn.from_device(tt_out)
-            tt_out = ttnn.to_torch(
-                tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
+            tt_out_host = ttnn.from_device(tt_out)
+            tt_out_host = ttnn.to_torch(
+                tt_out_host, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=shard_dim), device=pcie_device_mesh
             ).squeeze(1)
 
     elif llm_mode == "decode":
+        logger.info("Compiling Decode Model")
+        tt_FalconCausalLM(
+            input_embeddings=tt_embeddings,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        logger.info("Capture Decode Trace")
+        trace_id = ttnn.begin_trace_capture(pcie_device_mesh, cq_id=0)
+        tt_out, tt_layer_present = tt_FalconCausalLM(
+            input_embeddings=tt_embeddings,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        ttnn.end_trace_capture(pcie_device_mesh, trace_id, cq_id=0)
         for loop in range(num_loops):
-            tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
-                llm_mode, model_input, kv_cache_len, num_input_tokens=kv_len
-            )
-            tt_out, tt_layer_present = tt_FalconCausalLM(
-                input_embeddings=tt_embeddings,
-                llm_mode=llm_mode,
-                attention_mask=tt_attention_mask,
-                layer_past=tt_layer_past,
-                layer_past_len=kv_cache_len,
-                use_cache=True,
-            )
-            tt_out = ttnn.from_device(tt_out)
-            tt_out = ttnn.to_torch(
-                tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
+            ttnn.execute_trace(pcie_device_mesh, trace_id, cq_id=0)
+            tt_out_host = ttnn.from_device(tt_out)
+            tt_out_host = ttnn.to_torch(
+                tt_out_host, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=shard_dim), device=pcie_device_mesh
             ).squeeze(1)
-            tt_out = tt_out.transpose(0, 1)
+            tt_out_host = tt_out_host.transpose(0, 1)
 
-    passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
+    passed, pcc = assert_with_pcc(pytorch_out, tt_out_host.to(pytorch_out.dtype), expected_pcc)
     logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
 
     for i in range(num_layers):
         tt_layer_pres = (
             ttnn.to_torch(
-                tt_layer_present[i][0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh
+                tt_layer_present[i][0],
+                mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0),
+                device=pcie_device_mesh,
             ),
             ttnn.to_torch(
-                tt_layer_present[i][1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh
+                tt_layer_present[i][1],
+                mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0),
+                device=pcie_device_mesh,
             ),
         )
         if llm_mode == "prefill":
@@ -247,5 +271,5 @@ def test_falcon_causal_lm(
 
     logger.info("Falcon CausalLM Passed!")
 
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(False)
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(False)

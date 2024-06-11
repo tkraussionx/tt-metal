@@ -1651,10 +1651,11 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
 
     if (blocking) {
         this->finish();
-    } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
     }
+    // else {
+    //     std::shared_ptr<Event> event = std::make_shared<Event>();
+    //     this->enqueue_record_event(event);
+    // }
 }
 
 void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
@@ -1775,10 +1776,11 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     if (blocking) {
         this->finish();
-    } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
     }
+    // else {
+    //     std::shared_ptr<Event> event = std::make_shared<Event>();
+    //     this->enqueue_record_event(event);
+    // }
 }
 
 void HWCommandQueue::copy_into_user_space(

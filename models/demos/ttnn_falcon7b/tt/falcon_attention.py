@@ -6,6 +6,7 @@ import math
 from typing import Optional, Tuple
 
 import ttnn
+import tt_lib as ttl
 
 from models.utility_functions import (
     nearest_32,
@@ -179,8 +180,10 @@ class TtFalconAttention:
         ttnn.deallocate(query_layer)
         ttnn.deallocate(key_layer_transposed)
 
-        attn_weights = ttnn.mul(
-            attn_weights, self.scalar, memory_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"]
+        attn_weights = ttl.tensor.unary_chain(
+            attn_weights,
+            [[ttl.tensor.FusibleActivation.MUL_UNARY_SFPU, self.scalar]],
+            self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
         )
 
         if attention_mask is not None:
