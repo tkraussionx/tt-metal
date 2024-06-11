@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "impl/buffers/circular_buffer_types.hpp"
 #include "tt_eager/tt_dnn/op_library/layernorm/layernorm_op.hpp"
 #include "tt_eager/tt_dnn/op_library/work_split.hpp"
 #include "tt_dnn/op_library/math.hpp"
@@ -943,6 +944,11 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     tt_metal::CircularBufferConfig xmm_cb_config = tt_metal::CircularBufferConfig(xmm_CB_size, {{xmm_cb_index, cb_data_format}})
         .set_page_size(xmm_cb_index, single_tile_size);
     auto cb_xmm = tt_metal::CreateCircularBuffer(program, all_cores, xmm_cb_config);
+    uint32_t cb_padding_zero_index;
+    cb_padding_zero_index = CB::c_intermed2;
+    tt_metal::CircularBufferConfig cb_padding_zero_config = tt_metal::CircularBufferConfig(single_tile_size, {{cb_padding_zero_index, cb_data_format}})
+        .set_page_size(cb_padding_zero_index, single_tile_size);
+    auto cb_padding_zero = tt_metal::CreateCircularBuffer(program, all_cores, cb_padding_zero_config);
     // ex_partial
     if(!rms_norm) {
         uint32_t ex_cb_partial_index = CB::dataflow0;
@@ -981,6 +987,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
 		.set_page_size(ex_global_cb_index, single_tile_size);
     auto cb_ex_global = tt_metal::CreateCircularBuffer(program, all_cores, ex_global_cb_config);
     // ex2pe
+
     uint32_t cb_ex2pe_index;
     cb_ex2pe_index = CB::c_intermed3;
     tt_metal::CircularBufferConfig ex2pe_cb_config = tt_metal::CircularBufferConfig(ex2pe_CB_size, {{cb_ex2pe_index, cb_data_format}})
@@ -1046,6 +1053,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
             arg_val_block_w = 16;
         }
         compute_args.push_back(arg_val_block_w);
+        compute_args.push_back(width_index);
 
         if (width_index < num_cores_all_to_all) {
             uint32_t num_rows = width_index == num_cores_all_to_all - 1 ? num_rows_per_all_to_all_worker_last : num_rows_per_all_to_all_worker;
@@ -1163,6 +1171,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
             writer_mcast_sender_args.push_back(beta_dram_addr);
             writer_mcast_sender_args.push_back(gamma_tile_start_id);
             writer_mcast_sender_args.push_back(beta_tile_start_id);
+            writer_mcast_sender_args.push_back(arg_val_block_w);
             tt_metal::SetRuntimeArgs(program, writer_mcast_sender_kernels_id, core, writer_mcast_sender_args);
             writer_kernel_ids.push_back(writer_mcast_sender_kernels_id);
         } else {
@@ -1174,6 +1183,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
             writer_mcast_receiver_args.push_back(beta_dram_addr);
             writer_mcast_receiver_args.push_back(gamma_tile_start_id);
             writer_mcast_receiver_args.push_back(beta_tile_start_id);
+            writer_mcast_receiver_args.push_back(arg_val_block_w);
             tt_metal::SetRuntimeArgs(program, writer_mcast_receiver_kernels_id, core, writer_mcast_receiver_args);
             writer_kernel_ids.push_back(writer_mcast_receiver_kernels_id);
         }

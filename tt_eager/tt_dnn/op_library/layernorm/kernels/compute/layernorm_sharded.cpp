@@ -30,17 +30,21 @@ void MAIN {
     volatile uint32_t block_h_volatile                = get_compile_time_arg_val(4);
     constexpr uint32_t subblock_w_const               = get_compile_time_arg_val(6);
     volatile uint32_t subblock_w_volatile             = get_compile_time_arg_val(6);
-    constexpr uint32_t num_subblocks_w                = get_compile_time_arg_val(7);
+    uint32_t num_subblocks_w                = get_compile_time_arg_val(7);
     const bool is_allgather_worker                    = get_compile_time_arg_val(8) == 1;
-    constexpr uint32_t num_tiles_per_block            = get_compile_time_arg_val(9);
+    uint32_t num_tiles_per_block            = get_compile_time_arg_val(9);
     constexpr bool FLOAT32_DTYPE                    = get_compile_time_arg_val(10) == 1;
 
     const uint32_t block_w_arg_val = get_arg_val<uint32_t>(0);
     block_w = block_w_arg_val;
 
-    DPRINT << "LN compute kernel, block_w runtime_arg = " << block_w_arg_val << " block_w compile_time_arg: " << block_w <<  ENDL();
+    // DPRINT_UNPACK({DPRINT << "Hello from layernorm compute_kernel!" << ENDL(); });
 
-    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(1) : 0;
+    // DPRINT << "LN compute kernel, block_w runtime_arg = " << block_w_arg_val << " block_w compile_time_arg: " << block_w <<  ENDL();
+
+    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(2) : 0;
+
+    const uint32_t width_index = get_arg_val<uint32_t>(1);
 
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t scaler0 = 0;
@@ -68,13 +72,21 @@ void MAIN {
     constexpr uint32_t cb_xmm2 = cb_x; // xmm^2
     constexpr uint32_t cb_ex2pe = tt::CB::c_intermed3; // E[(x-E[x])^2]+eps
     constexpr uint32_t cb_fusion = tt::CB::c_intermed1; // stream gamma/beta
+    constexpr uint32_t cb_padding_zero = tt::CB::c_intermed2;
     constexpr uint32_t cb_out = tt::CB::c_out0;
 
     binary_op_init_common(cb_in0, cb_in0, cb_x);
 
     // set block_h to volatile to disable automatically unroll of the loops, avoid code overflow
     const uint32_t block_h = (block_w == 1) ? block_h_volatile : block_h_const;
-    const uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
+    uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
+
+    if (block_w == 16) {
+        subblock_w = 16;
+        num_subblocks_w = 16;
+        num_tiles_per_block = 16;
+        // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
+    }
 
     // DPRINT << "In LN compute kernel, block_h: " << block_h  << ", block_w: " << block_w << ", num_subblocks_w: " << num_subblocks_w << ", subblock_w: " << subblock_w_volatile << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
 
@@ -149,6 +161,10 @@ void MAIN {
     }
     reduce_revert_delta();
     cb_push_back(cb_ex_partial, block_h);
+    cb_wait_front(cb_ex_partial, block_h);
+
+    constexpr uint32_t tile_index_to_inspect = 0;
+    // DPRINT_UNPACK({ DPRINT  << "WidthIndex: " << width_index << " BlockW: " << block_w << "TileRow: " <<  TSLICE(cb_ex_partial, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
 
     unpack_reconfig_data_format_srca(cb_in, cb_ex_external);
 
@@ -162,6 +178,7 @@ void MAIN {
             tile_regs_acquire();
             for (uint32_t w = 0; w < num_blocks; w++) {
                 cb_wait_front(cb_ex_external, 1);
+                DPRINT_UNPACK({ DPRINT << TSLICE(cb_ex_external, 0, SliceRange::h0_w0_32()) << ENDL(); });
                 reduce_tile(cb_ex_external, cb_scaler_global, 0, scaler0, dst0);
                 cb_pop_front(cb_ex_external, 1);
             }
@@ -186,6 +203,14 @@ void MAIN {
     for (uint32_t i = 0; i < block_h; i++) {
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
+        constexpr uint32_t tile_index_to_inspect = 0;
+        //DPRINT_UNPACK({ DPRINT <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        // if (width_index == 7 && block_w == 18) {
+        //     DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        // }
+        // if (block_w == 16) {
+        //     DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        // }
         for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
@@ -409,6 +434,7 @@ void MAIN {
                 }
                 tile_regs_release();
                 index_subblock_w_offset += subblock_w;
+
             }
             index_h_offset += block_w;
         }
@@ -417,6 +443,33 @@ void MAIN {
         cb_wait_front(cb_out, num_tiles_per_block);
     }
 
-}
+    if (width_index == 7 && block_w == 18) {
+        // DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    }
 
+    if (block_w == 16) {
+       // DPRINT << "BEGIN" << ENDL();
+        uint32_t pad_remainder = 2;
+        unpack_reconfig_data_format_srca(cb_padding_zero);
+        pack_reconfig_data_format(cb_out);
+        // DPRINT_UNPACK({ DPRINT  << "before: " <<  TSLICE(cb_out, 17, SliceRange::h0_w0_32()) << ENDL(); });
+        copy_tile_init();
+        cb_wait_front(cb_padding_zero, 1);
+        cb_reserve_back(cb_out, pad_remainder);
+        //cb_reserve_back(cb_out, 18);
+        tile_regs_acquire();
+        copy_tile(cb_padding_zero, 0, 0);
+        tile_regs_commit();
+        tile_regs_wait();
+        for (uint32_t i = 0; i < pad_remainder; i++) {
+            pack_tile(0, cb_out);
+        }
+        tile_regs_release();
+        cb_push_back(cb_out, pad_remainder);
+        cb_pop_front(cb_padding_zero, 1);
+        //DPRINT << "END" << ENDL();
+        cb_wait_front(cb_out, 18);
+        // DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    }
+}
 }

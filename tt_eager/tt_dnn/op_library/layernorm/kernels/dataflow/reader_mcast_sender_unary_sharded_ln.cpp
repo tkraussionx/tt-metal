@@ -46,8 +46,6 @@ void kernel_main() {
     const uint32_t single_tile_size_bytes = get_tile_size(cb_ex_partial2);
     const DataFormat data_format = get_dataformat(cb_ex_partial2);
 
-    // DPRINT << "In mcast sender unary sharder ln, num_blocks: " << num_blocks << " block_h: " << block_h <<  " num_x:" << num_x << " num_y: " << num_y << ENDL();
-
     uint64_t remote_noc_addrs[num_blocks];
 
     uint32_t x = start_x, y = start_y;
@@ -91,6 +89,9 @@ void kernel_main() {
         // global reduce
         // wait for local data ready
         cb_wait_front(cb_partial, block_h);
+        // if (cb_partial == tt::CB::dataflow0) {
+        //     DPRINT << TSLICE(cb_partial, 0, SliceRange::h0_w0_32()) << ENDL();
+        // }
         // inc semaphore of other cores
         if constexpr(num_blocks > 1) {
             *reduce_sender_semaphore_addr_ptr = VALID;
@@ -111,6 +112,9 @@ void kernel_main() {
                 noc_async_read_barrier();
 
                 cb_push_back(cb_external, 1);
+                if (cb_partial == tt::CB::dataflow0) {
+                    DPRINT << "a " << TSLICE(cb_external, block, SliceRange::h0_w0_32()) << ENDL();
+                }
             }
             l1_read_addr_ex_par += single_tile_size_bytes;
         }

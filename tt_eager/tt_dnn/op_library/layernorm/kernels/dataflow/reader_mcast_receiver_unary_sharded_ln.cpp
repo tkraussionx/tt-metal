@@ -81,7 +81,9 @@ void kernel_main() {
         // global reduce
         // wait for local data ready
         cb_wait_front(cb_partial, block_h);
-
+        // if (cb_partial == tt::CB::dataflow0) {
+        //     DPRINT << TSLICE(cb_partial, 0, SliceRange::h0_w0_32()) << ENDL();
+        // }
         // inc top core
         noc_semaphore_set(reduce_sender_semaphore_addr_ptr, INVALID);
         noc_semaphore_inc(reduce_receiver_semaphore_noc_addr, 1);
@@ -121,6 +123,8 @@ void kernel_main() {
             noc_semaphore_wait(reduce_sender_semaphore_addr_ptr, block+1);
             cb_push_back(cb_ex_global, num_tiles);
         }
+        cb_wait_front(cb_ex_global, 1);
+
     };
     #ifndef RMSNORM
     global_reduce_receiver(cb_ex_partial, cb_ex_external, cb_ex, cb_ex_global);
