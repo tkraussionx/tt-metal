@@ -24,18 +24,17 @@ void MAIN {
         for(uint32_t j = 0 ; j<Nt; j++)
         {
             acquire_dst(tt::DstMode::Full);
-
-            cb_wait_front(tt::CB::c_in0, onetile);
-            cb_wait_front(tt::CB::c_in1, onetile);
-
-            matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, 0, false);
-            cb_pop_front(tt::CB::c_in1, onetile);
-
+            for(uint32_t k = 0; k<Kt; k++)
+            {
+                cb_wait_front(tt::CB::c_in0, onetile);
+                cb_wait_front(tt::CB::c_in1, onetile);
+                matmul_tiles(tt::CB::c_in0, tt::CB::c_in1, 0, 0, 0, false);
+                cb_pop_front(tt::CB::c_in0, onetile);
+                cb_pop_front(tt::CB::c_in1, onetile);
+            }
             cb_reserve_back(tt::CB::c_out0, onetile);
             pack_tile(0, tt::CB::c_out0);
             cb_push_back(tt::CB::c_out0, onetile);
-
-            cb_pop_front(tt::CB::c_in0, onetile);
             release_dst(tt::DstMode::Full);
         }
     }

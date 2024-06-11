@@ -48,33 +48,32 @@ void kernel_main() {
 
     for(uint32_t i=0; i<Mt; i++)
     {
-
-        // cb_reserve_back(cb_id_in0, 1);
-        // uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-        // noc_async_read_tile(i, s0, l1_write_addr_in0);
-
-        // noc_async_read_barrier();
-        // cb_push_back(cb_id_in0, 1);
-
         for(uint32_t j=0; j<Nt; j++)
         {
+            for(uint32_t k = 0; k<Kt; k++)
+            {
+                cb_reserve_back(cb_id_in0, 1);
+                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+                noc_async_read_tile(i*Kt + k, s0, l1_write_addr_in0);
 
-            cb_reserve_back(cb_id_in0, 1);
-            uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-            noc_async_read_tile(i, s0, l1_write_addr_in0);
+                // noc_async_read_barrier();
+                cb_push_back(cb_id_in0, 1);
 
-            noc_async_read_barrier();
-            cb_push_back(cb_id_in0, 1);
+                cb_reserve_back(cb_id_in1, 1);
+                uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+                noc_async_read_tile(k*Nt + j, s1, l1_write_addr_in1);
 
-            cb_reserve_back(cb_id_in1, 1);
-            uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-            noc_async_read_tile(j, s1, l1_write_addr_in1);
+                noc_async_read_barrier();
+                cb_push_back(cb_id_in1, 1);
+            }
+            // cb_reserve_back(cb_id_in0, 1);
+            // uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+            // noc_async_read_tile(i, s0, l1_write_addr_in0);
 
-            noc_async_read_barrier();
-            cb_push_back(cb_id_in1, 1);
+            // noc_async_read_barrier();
+            // cb_push_back(cb_id_in0, 1);
 
-
-            cb_wait_front(cb_id_out0,1);
+             cb_wait_front(cb_id_out0,1);
             noc_async_write_tile(i*Nt + j, d1, get_read_ptr(cb_id_out0));
             noc_async_write_barrier();
             cb_pop_front(cb_id_out0, 1);

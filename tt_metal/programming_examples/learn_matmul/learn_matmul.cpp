@@ -88,43 +88,47 @@ void matmul(Device* device, int argc, char** argv)
     //     val = (index++);
     // }
 
-    std::cout<<std::fixed << std::setprecision(2)<<"\nInput A "<<std::endl;
-    for(int i = 0; i< M;i++)
-    {
-        for(int j = 0; j< K; j++)
-        {
-            // input_a[i*K+j] = bfloat16((float)(i%3)-1);
-            std::cout<<input_a[i*K+j].to_float()<<" ";
-        }
-        std::cout<<std::endl;
-    }
+    // std::cout<<std::fixed << std::setprecision(2)<<"\nInput A "<<std::endl;
+    // for(int i = 0; i< M;i++)
+    // {
+    //     for(int j = 0; j< K; j++)
+    //     {
+    //         // input_a[i*K+j] = bfloat16((float)(i%3)-1);
+    //         std::cout<<input_a[i*K+j].to_float()<<" ";
+    //     }
+    //     std::cout<<std::endl;
+    // }
 
 
-    std::cout<<"\nInput B "<<std::endl;
-    for(int i = 0; i< K;i++)
-    {
-        for(int j = 0; j< N; j++)
-        {
-            // input_b[i*N+j] = bfloat16((float)(j%5)-2);
-            std::cout<<input_b[i*N+j].to_float()<<" ";
-        }
-        std::cout<<std::endl;
-    }
+    // std::cout<<"\nInput B "<<std::endl;
+    // for(int i = 0; i< K;i++)
+    // {
+    //     for(int j = 0; j< N; j++)
+    //     {
+    //         // input_b[i*N+j] = bfloat16((float)(j%5)-2);
+    //         std::cout<<input_b[i*N+j].to_float()<<" ";
+    //     }
+    //     std::cout<<std::endl;
+    // }
 
+    printf("Computing Reference Output\n");
     golden_matmul(input_a, input_b, ref_output, M, N, K);
 
-    std::cout<<"\nRef Output "<<std::endl;
-    for(int i = 0; i< M;i++)
-    {
-        for(int j = 0; j< N; j++)
-        {
-            std::cout<<ref_output[i*N+j].to_float()<<" ";
-        }
-        std::cout<<std::endl;
-    }
+    // std::cout<<"\nRef Output "<<std::endl;
+    // for(int i = 0; i< M;i++)
+    // {
+    //     for(int j = 0; j< N; j++)
+    //     {
+    //         std::cout<<ref_output[i*N+j].to_float()<<" ";
+    //     }
+    //     std::cout<<std::endl;
+    // }
 
+    printf("Tilizing Input \n");
     tilize(input_a,M,K);
     tilize(input_b,K,N);
+    printf("Done Tilizing Input\n");
+
     // std::cout<<"\nOutput "<<std::endl;
     // for(int i = 0; i< M;i++)
     // {
@@ -230,16 +234,18 @@ void matmul(Device* device, int argc, char** argv)
 
     untilize(output,M,N);
     std::cout<<"\nOutput "<<std::endl;
+    double diff_sum = 0;
+    int count = 0;
     for(int i = 0; i< M;i++)
     {
         for(int j = 0; j< N; j++)
         {
-            std::cout<<output[i*N+j].to_float() - ref_output[i*N+j].to_float()<<" ";
+            diff_sum += std::abs(output[i*N+j].to_float() - ref_output[i*N+j].to_float());
+            count++;
         }
-        std::cout<<std::endl;
     }
 
-
+    printf("Average Diff = %f\n", diff_sum/count);
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout<<"Kernel Execution Time "<<duration.count()<<std::endl;
