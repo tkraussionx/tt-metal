@@ -51,7 +51,8 @@ void kernel_main() {
      * Iterate over number of heads in each group (n Q, 1 K, 1 V) where total number of groups = total number of KV heads
      * block_ht is the number of tiles along the batch * seq_len dimension shard
     */
-
+//    while (true) {
+//    }
     uint64_t src_noc_addr = get_noc_addr(get_read_ptr(cb_in0));
     // re-order q
     cb_reserve_back(cb_outq, q_num_tiles);

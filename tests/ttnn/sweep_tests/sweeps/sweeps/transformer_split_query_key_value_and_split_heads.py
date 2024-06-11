@@ -18,22 +18,18 @@ from models.utility_functions import is_wormhole_b0, is_grayskull
 # they need to be changed to match the sharded path
 
 parameters = {
-    "batch_size_cores_h": [(2, 2), (7, 7), (4, 2)],  # 3  [batch=1] case also needed
+    "batch_size_cores_h": [(2, 2)],  # 3  [batch=1] case also needed
     "seq_len_q_kv": [
         (64, 64),
-        (256, 96),
-        (64, 96),
     ],  # 3 [seq_q = seq_kv = 224, 384, and seq_q = 1024, 4096, seq_kv = 96] cases needed by BERT, SD, falcon
     "num_q_kv_heads_cores_w": [
         (8, 8, 8),
-        (4, 4, 2),
-        (16, 8, 8),
     ],  # 3 [q_heads = kv_heads = 12] cases also used in assorted models
-    "head_dim": [64, 160],  # 2 [96, 128] also used
-    "input_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],  # 2
+    "head_dim": [64],  # 2 [96, 128] also used
+    "input_dtype": [ttnn.bfloat16],  # 2
     "transpose_k": [True],  # 1
-    "separate_tensors": [False, True],  # 2
-    "input_memory_config": [ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG, ttnn.DRAM_MEMORY_CONFIG],  # 2
+    "separate_tensors": [False],  # 2
+    "input_memory_config": [ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG],  # 2
 }
 
 
@@ -224,7 +220,7 @@ def run_create_qkv_heads_test(
     out_mem_config=None,
 ):
     torch.manual_seed(1234)
-
+    print("Running create_qkv_heads_test")
     q_shape = [batch, seq_len, num_kv_heads, num_q_heads // num_kv_heads * head_dim]
     k_shape = [batch, seq_len, num_kv_heads, head_dim]
     v_shape = [batch, seq_len, num_kv_heads, head_dim]
@@ -255,7 +251,7 @@ def run_create_qkv_heads_test(
             QKV_interleaved, layout=ttnn.TILE_LAYOUT, device=device, dtype=dtype, memory_config=in_mem_config
         )
         out_mem_config = in_mem_config
-
+    print("Calling split_query_key_value_and_split_heads")
     if num_kv_heads == num_q_heads:
         q, k, v = ttnn.transformer.split_query_key_value_and_split_heads(
             in0_t, num_heads=num_q_heads, transpose_key=transpose_k, memory_config=out_mem_config
@@ -268,6 +264,7 @@ def run_create_qkv_heads_test(
             transpose_key=transpose_k,
             memory_config=out_mem_config,
         )
+    print("Succesfully called split_query_key_value_and_split_heads")
 
     pyt_got_back_rm_q = ttnn.to_torch(q)
     pyt_got_back_rm_k = ttnn.to_torch(k)

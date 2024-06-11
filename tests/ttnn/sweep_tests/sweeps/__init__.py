@@ -93,29 +93,111 @@ def get_parameter_values(parameter_names, permutation):
         yield parameter_value
 
 
-def _run_single_test(run, skip, xfail, permutation, *, device):
+import multiprocessing
+import subprocess
+import tt_lib as ttl
+import psutil
+
+
+def kill_process_tree(pid):
+    try:
+        parent = psutil.Process(pid)
+        for child in parent.children(recursive=True):
+            child.kill()
+        parent.kill()
+    except psutil.NoSuchProcess:
+        pass
+
+
+def run_test_in_process(run, result_queue, permutation, device):
+    try:
+        print("Running test")
+        passed, message = run(**permutation, device=device)
+        print("Test done")
+        status = "passed" if passed else "failed"
+        if passed:
+            message = None
+        result_queue.put((status, message))
+    except Exception as e:
+        status = "crashed"
+        message = f"Exception: {e}"
+        result_queue.put((status, message))
+
+
+def _run_single_test(run, xfail, skip, permutation, *, device):
+    timelimit = 5
+
+    def run_with_timelimit(func, timelimit, **kwargs):
+        result_queue = multiprocessing.Queue()
+        test_process = multiprocessing.Process(
+            target=run_test_in_process, args=(func, result_queue, kwargs["permutation"], kwargs["device"])
+        )
+
+        test_process.start()
+        test_process.join(timeout=timelimit)
+        if test_process.is_alive():
+            kill_process_tree(test_process.pid)
+            test_process.join()
+            # Execute the shell command to reset the device
+            print("TIMED OUT")
+            reset = subprocess.call(["tt-smi", "-wr", "all", "wait"])
+            status, result = "failed", f"timeout: longer than the time limit {timelimit}"
+            print(status, result)
+            return status, result
+
+        if not result_queue.empty():
+            status, result = result_queue.get()
+        else:
+            status, result = "failed", "Failed to get the result from the test process"
+        return status, result
+
+    # Check if the test should be skipped
     try:
         should_be_skipped, message = skip(**permutation)
         if should_be_skipped:
             return "skipped", message
-
-        passed, message = run(**permutation, device=device)
-        status = "passed" if passed else "failed"
-        if passed:
-            message = None
     except Exception as e:
-        should_fail, expected_exception = xfail(**permutation)
-        if should_fail:
-            status = "xfailed"
-            message = f"Exception: {e}"
-        else:
-            status = "crashed"
-            message = f"Exception: {e}"
-    finally:
-        import tt_lib as ttl
+        return "failed", f"skip check failed: {str(e)}"
 
-        ttl.device.DeallocateBuffers(device)
+    # Execute the test
+    status, message = run_with_timelimit(run, timelimit, permutation=permutation, device=device)
+    ttl.device.DeallocateBuffers(device)
+
+    # Check for expected failure
+    try:
+        if status == "crashed":
+            should_fail, expected_exception = xfail(**permutation)
+            if should_fail:
+                return "xfailed", message
+    except Exception as e:
+        return "failed", f"xfail check failed: {str(e)}"
+
     return status, message
+
+
+# def _run_single_test(run, skip, xfail, permutation, *, device):
+#     try:
+#         should_be_skipped, message = skip(**permutation)
+#         if should_be_skipped:
+#             return "skipped", message
+
+#         passed, message = run(**permutation, device=device)
+#         status = "passed" if passed else "failed"
+#         if passed:
+#             message = None
+#     except Exception as e:
+#         should_fail, expected_exception = xfail(**permutation)
+#         if should_fail:
+#             status = "xfailed"
+#             message = f"Exception: {e}"
+#         else:
+#             status = "crashed"
+#             message = f"Exception: {e}"
+#     finally:
+#         import tt_lib as ttl
+
+#         ttl.device.DeallocateBuffers(device)
+#     return status, message
 
 
 def run_single_test(file_name, index, *, device):
