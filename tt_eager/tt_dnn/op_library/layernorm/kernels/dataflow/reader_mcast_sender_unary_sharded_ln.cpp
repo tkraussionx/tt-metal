@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
 
 // split REDUCE across cores
 void kernel_main() {
@@ -44,6 +45,8 @@ void kernel_main() {
 
     const uint32_t single_tile_size_bytes = get_tile_size(cb_ex_partial2);
     const DataFormat data_format = get_dataformat(cb_ex_partial2);
+
+    // DPRINT << "In mcast sender unary sharder ln, num_blocks: " << num_blocks << " block_h: " << block_h <<  " num_x:" << num_x << " num_y: " << num_y << ENDL();
 
     uint64_t remote_noc_addrs[num_blocks];
 

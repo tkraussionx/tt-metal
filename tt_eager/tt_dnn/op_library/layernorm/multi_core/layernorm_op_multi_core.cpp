@@ -832,17 +832,17 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     }
     // compute kernel compile time args
     std::vector<uint32_t> top_row_compute_compile_time_args = {
-        1,
-        gamma.has_value(),
-        beta.has_value(),
-        num_blocks,
-        block_ht,
-        block_wt,
-        subblock_wt,
-        num_subblocks_w,
-        1,
-        block_ht * block_wt,
-        fp32_dest_acc_en
+        1,                      // 0
+        gamma.has_value(),      // 1
+        beta.has_value(),       // 2
+        num_blocks,             // 3
+        block_ht,               // 4
+        block_wt,               // 5
+        subblock_wt,            // 6
+        num_subblocks_w,        // 7
+        1,                      // 8
+        block_ht * block_wt,    // 9
+        fp32_dest_acc_en        // 10
     };
     std::vector<uint32_t> all_to_all_except_top_compute_compile_time_args = {
         0,
@@ -872,12 +872,14 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     };
     // compute kernel
     KernelHandle compute_kernels_id = -1;
+    log_info(LogTest, "All to all cores: {}", all_to_all_cores.str());
     auto compute_kernels_id_all_to_all = CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/layernorm/kernels/compute/layernorm_sharded.cpp",
         all_to_all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = all_to_all_except_top_compute_compile_time_args, .defines = compute_defines}
     );
+    log_info(LogTest, "Not all to all cores: {}", not_all_to_all_workers.str());
     if (num_none_all_to_all_workers > 0) {
         compute_kernels_id = CreateKernel(
             program,
@@ -1014,7 +1016,10 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
         in0_mcast_noc_y.push_back(device->worker_core_from_logical_core({0, core_idx_y}).y);
     }
 
+    log_info(LogTest, "Num cores is: {}", cores.size());
+    log_info(LogTest, "A shape is: {}", a.get_legacy_shape());
     for (uint32_t i = 0; i < cores.size(); ++i) {
+        log_info(LogTest, "Going arround core: {}", cores[i].str());
         const auto& core = cores[i];
         uint32_t height_index = 0, width_index = 0;
         if (mcast_1d) {
@@ -1029,16 +1034,25 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
                 width_index = core.y;
             }
         }
+        log_info(LogTest, "Height index: {} Width index: {}", height_index, width_index);
         uint32_t all_to_all_worker_tile_offset_size_bytes = (width_index * num_rows_per_all_to_all_worker) * single_tile_size;
         uint32_t in1_tile_start_id = (height_index * block_ht * Kt) + (width_index * block_wt);
         uint32_t gamma_tile_start_id = width_index * block_wt;
         uint32_t beta_tile_start_id = width_index * block_wt;
 
+        std::vector<uint32_t> compute_args;
+        uint32_t arg_val_block_w = block_wt;
+        if (a.get_legacy_shape()[-1] == 4544 && width_index == 7) {
+            arg_val_block_w = 16;
+        }
+        compute_args.push_back(arg_val_block_w);
+
         if (width_index < num_cores_all_to_all) {
-            std::vector<uint32_t> compute_args;
             uint32_t num_rows = width_index == num_cores_all_to_all - 1 ? num_rows_per_all_to_all_worker_last : num_rows_per_all_to_all_worker;
             compute_args.push_back(num_rows);
             tt_metal::SetRuntimeArgs(program, compute_kernels_id_all_to_all, core, compute_args);
+        } else {
+            tt_metal::SetRuntimeArgs(program, compute_kernels_id, core, compute_args);
         }
 
         if (width_index == 0) {

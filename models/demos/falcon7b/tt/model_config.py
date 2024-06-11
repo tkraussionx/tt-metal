@@ -151,6 +151,7 @@ def get_model_config(model_config_str, prefill_seq_len=0):
     hidden_dim = 4544
     num_tiles_per_core_h = math.ceil(prefill_seq_len / ln_num_cores_y / 32)
     num_tiles_per_core_w = math.ceil(hidden_dim / ln_num_cores_x / 32)
+    print("Num tiles w = ", num_tiles_per_core_w)
     ln_shard_height_hidden_dim = num_tiles_per_core_h * 32
     ln_shard_width_hidden_dim = num_tiles_per_core_w * 32
 

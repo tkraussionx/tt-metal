@@ -6,6 +6,8 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+#include "debug/dprint.h"
+
 void kernel_main() {
     // READER
     // in1 mcast args
@@ -136,15 +138,20 @@ void kernel_main() {
                 uint32_t subblock_tiles_addr_skip = 0;
                 if (sbh == out_num_nonzero_subblocks_h - 1) {
                     out_subblock_h_ = out_last_subblock_h;
+                    // DPRINT << out_last_subblock_h << ENDL();
                 }
                 if (sbw == out_num_nonzero_subblocks_w - 1) {
                     out_subblock_w_ = out_last_subblock_w;
                     subblock_tiles_addr_skip = padded_subblock_tiles_addr_skip;
+                    if (subblock_tiles_addr_skip != 0) {
+                        DPRINT << "reader_bmm_tile_layout_in1_receiver_writer_padding.cpp hit!  Addr skip is: " << subblock_tiles_addr_skip << ENDL();
+                    }
                 }
 
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
+                DPRINT << "Writer : " << out_subblock_h_ << ENDL();
                 for(uint32_t h = 0; h < out_subblock_h_; ++h) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; ++w) {

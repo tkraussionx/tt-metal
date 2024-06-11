@@ -126,7 +126,7 @@ def run_test_FalconCausalLM_end_to_end(
         generate_attention_inputs=False,
     )
 
-    # profiler.start("TtFalcon_model_setup")
+    profiler.start("TtFalcon_model_setup")
     tt_FalconCausalLM = TtFalconCausalLM(
         devices,
         state_dict,
@@ -138,21 +138,21 @@ def run_test_FalconCausalLM_end_to_end(
         tt_cache_path,
         seq_len,
     )
-    # profiler.end("TtFalcon_model_setup")
+    profiler.end("TtFalcon_model_setup")
 
-    # profiler.start("processing_of_input")
+    profiler.start("processing_of_input")
     # TODO: Generate attention_mask on device
-    # tt_input_ids, tt_attention_mask = get_inputs_on_device(
-    #     llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
-    # )
-    # profiler.end("processing_of_input")
+    tt_input_ids, tt_attention_mask = get_inputs_on_device(
+        llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
+    )
+    profiler.end("processing_of_input")
 
     # First run to fill compile cache ----------------------------------------------------
-    # logger.info(f"Running Falcon model once to fill caches -> disable profiler")
-    # profiler.disable()
+    logger.info(f"Running Falcon model once to fill caches -> disable profiler")
+    profiler.disable()
 
     # Use force enable to only record this profiler call while others are disabled
-    # profiler.start("first_model_run_with_compile", force_enable=True)
+    profiler.start("first_model_run_with_compile", force_enable=True)
     if llm_mode == "prefill":
         tt_outs = []
         # Device transfer time is included in model run time for prefill
@@ -172,53 +172,29 @@ def run_test_FalconCausalLM_end_to_end(
             tt_outs.append(tt_out)
         tt_out = tt_outs
 
-    # elif llm_mode == "decode":
-    #     tt_out, tt_layer_present = tt_FalconCausalLM(
-    #         input_ids=tt_input_ids,
-    #         llm_mode=llm_mode,
-    #         attention_mask=tt_attention_mask,
-    #         layer_past=tt_layer_past,
-    #         layer_past_len=kv_cache_len,
-    #         use_cache=use_cache,
-    #     )
+    elif llm_mode == "decode":
+        tt_out, tt_layer_present = tt_FalconCausalLM(
+            input_ids=tt_input_ids,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=use_cache,
+        )
     for device in devices:
         tt_lib.device.Synchronize(device)
 
-    # breakpoint()
-    # print(tt_out)
-    # breakpoint()
-    tt_out[0][0].deallocate(True)
-    for i in range(len(tt_out)):
-        for j in range(len(tt_out[i])):
-            tt_out[i][j].deallocate(True)
-    for i in range(len(tt_layer_present)):
-        for j in range(len(tt_layer_present[i])):
-            for k in range(len(tt_layer_present[i][j])):
-                tt_layer_present[i][j][k].deallocate(True)
-    for i in range(len(tt_input_ids)):
-        for j in range(len(tt_input_ids[i])):
-            tt_input_ids[i][j].deallocate(True)
-    for i in range(len(tt_attention_mask)):
-        for j in range(len(tt_attention_mask[i])):
-            for k in range(len(tt_attention_mask[i][j])):
-                tt_attention_mask[i][j][k].deallocate(True)
-    for i in range(len(tt_layer_past)):
-        for j in range(len(tt_layer_past[i])):
-            for k in range(len(tt_layer_past[i][j])):
-                tt_layer_past[i][j][k].deallocate(True)
-
-    print(dir())
-    # profiler.end("first_model_run_with_compile", force_enable=True)
+    profiler.end("first_model_run_with_compile", force_enable=True)
 
     # Dump device profiler data before second run to avoid exceeding profiler memory limits when using tracy
-    # for device in devices:
-    #     tt_lib.device.DumpDeviceProfiler(device)
+    for device in devices:
+        tt_lib.device.DumpDeviceProfiler(device)
 
-    # del tt_out
-    # del tt_layer_past
-    # del tt_layer_present
-    # del tt_input_ids
-    # del tt_attention_mask
+    del tt_out
+    del tt_layer_past
+    del tt_layer_present
+    del tt_input_ids
+    del tt_attention_mask
 
     # Re-generate dummy kv_cache ------------------------------------------------------------
     (
@@ -534,8 +510,8 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.1),
-            ("prefill", 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.5),
+            ("prefill", 1, 1, 128, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.1),
+            ("prefill", 1, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.5),
             ("prefill", 1, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 1.1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),

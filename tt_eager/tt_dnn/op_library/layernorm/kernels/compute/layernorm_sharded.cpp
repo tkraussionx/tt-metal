@@ -15,7 +15,7 @@
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/layernorm.h"
 #include "compute_kernel_api/tile_move_copy.h"
-
+#include "debug/dprint.h"
 
 // SPLIT REDUCE across Cores
 namespace NAMESPACE {
@@ -25,7 +25,7 @@ void MAIN {
     constexpr uint32_t do_gamma                       = get_compile_time_arg_val(1);
     constexpr uint32_t do_beta                        = get_compile_time_arg_val(2);
     constexpr uint32_t num_blocks                     = get_compile_time_arg_val(3);
-    constexpr uint32_t block_w                        = get_compile_time_arg_val(5);
+    uint32_t block_w                        = get_compile_time_arg_val(5);
     constexpr uint32_t block_h_const                  = get_compile_time_arg_val(4);
     volatile uint32_t block_h_volatile                = get_compile_time_arg_val(4);
     constexpr uint32_t subblock_w_const               = get_compile_time_arg_val(6);
@@ -35,7 +35,12 @@ void MAIN {
     constexpr uint32_t num_tiles_per_block            = get_compile_time_arg_val(9);
     constexpr bool FLOAT32_DTYPE                    = get_compile_time_arg_val(10) == 1;
 
-    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(0) : 0;
+    const uint32_t block_w_arg_val = get_arg_val<uint32_t>(0);
+    block_w = block_w_arg_val;
+
+    DPRINT << "LN compute kernel, block_w runtime_arg = " << block_w_arg_val << " block_w compile_time_arg: " << block_w <<  ENDL();
+
+    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(1) : 0;
 
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t scaler0 = 0;
@@ -70,6 +75,8 @@ void MAIN {
     // set block_h to volatile to disable automatically unroll of the loops, avoid code overflow
     const uint32_t block_h = (block_w == 1) ? block_h_volatile : block_h_const;
     const uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
+
+    // DPRINT << "In LN compute kernel, block_h: " << block_h  << ", block_w: " << block_w << ", num_subblocks_w: " << num_subblocks_w << ", subblock_w: " << subblock_w_volatile << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
 
     int index_subblock_w_offset = 0;
     int index_h_offset = 0;

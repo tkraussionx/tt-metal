@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // in0 tensor args
@@ -105,6 +106,8 @@ void kernel_main() {
                 for(uint32_t w = 0; w < in0_block_w; ++w) {
                     if (h < last_block_h) {
                         noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
+                    } else {
+                        DPRINT << "reader_bmm_tile_layout_in0_sender_padding path hit! " << ENDL();
                     }
                     l1_write_addr_in0 += in0_single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;

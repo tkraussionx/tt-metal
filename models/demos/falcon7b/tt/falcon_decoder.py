@@ -151,9 +151,13 @@ class TtFalconDecoderLayer(nn.Module):
         #         #output_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_OUTPUT_MEMCFG"],
         #     )
 
-        if self.flag == False:
+        if self.flag == True:
             # First run
             print("Running first run - no padding")
+            print("Beta shape: ", self.layernorm_beta[0].get_legacy_shape())
+            print("Beta layout: ", self.layernorm_beta[0].get_layout())
+            print("Gamma shape: ", self.layernorm_gamma[0].get_legacy_shape())
+            print("Gamma layout: ", self.layernorm_gamma[0].get_layout())
             # self.flag = True
             for i in range(self.num_devices):
                 layernorm_output.append(
@@ -188,7 +192,7 @@ class TtFalconDecoderLayer(nn.Module):
             seq_len = hidden_states[0].get_legacy_shape()[2]
             for i in range(self.num_devices):
                 hidden_states_padded.append(
-                    ttnn.experimental.tensor.pad(hidden_states[i], [1, 1, seq_len, 4608], [0, 0, 0, 0], 0.0)
+                    ttnn.experimental.tensor.pad(hidden_states[i], [1, 1, seq_len, 4608], [0, 0, 0, 0], 0)
                 )
                 gamma.append(ttnn.experimental.tensor.pad(self.layernorm_gamma[i], [1, 1, 32, 4608], [0, 0, 0, 0], 0.0))
                 beta.append(ttnn.experimental.tensor.pad(self.layernorm_beta[i], [1, 1, 32, 4608], [0, 0, 0, 0], 0.0))

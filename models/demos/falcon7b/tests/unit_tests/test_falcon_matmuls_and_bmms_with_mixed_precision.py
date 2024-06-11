@@ -494,7 +494,6 @@ def test_falcon7b_attnention_sliced(
 
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 @pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
 def test_falcon7b_attention_softmax_sequence(
     device,
@@ -757,6 +756,151 @@ def test_falcon7b_attention_softmax_sequence(
     passing = entire_tensor_passing and passing
 
     print(output)
+    assert passing
+
+
+@pytest.mark.parametrize(
+    "seq_len", [32, 128, 1024, 2048], ids=["seq_len_32", "seq_len_128", "seq_len_1024", "seq_len_2048"]
+)
+@pytest.mark.parametrize("num_cores", [64])
+def test_sharded_ln(device, num_cores, seq_len):
+    compute_grid_size = device.compute_with_storage_grid_size()
+    if num_cores > (compute_grid_size.x * compute_grid_size.y):
+        pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
+    grid_size = (8, 8)
+    torch.manual_seed(0)
+
+    hidden_dim = 4544
+    input_shape = [1, 1, seq_len, hidden_dim]
+    gamma_beta_shape = [1, 1, 32, hidden_dim]
+
+    ln_epsilon = 1e-5
+    torch_input = torch.randn(input_shape).bfloat16().float()
+    torch_gamma = torch.randn(gamma_beta_shape).bfloat16().float()
+    torch_betta = torch.randn(gamma_beta_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.experimental.tensor.BufferType.DRAM,
+    )
+
+    tt_input = torch2tt_tensor(
+        torch_input,
+        device,
+        ttnn.experimental.tensor.Layout.TILE,
+        dram_interleaved_memory_config,
+        ttnn.experimental.tensor.DataType.BFLOAT16,
+    )
+
+    tt_gamma = torch2tt_tensor(
+        torch_gamma,
+        device,
+        ttnn.experimental.tensor.Layout.TILE,
+        dram_interleaved_memory_config,
+        ttnn.experimental.tensor.DataType.BFLOAT16,
+    )
+
+    tt_betta = torch2tt_tensor(
+        torch_betta,
+        device,
+        ttnn.experimental.tensor.Layout.TILE,
+        dram_interleaved_memory_config,
+        ttnn.experimental.tensor.DataType.BFLOAT16,
+    )
+
+    ln_max_num_cores_y = 8
+    for i in range(ln_max_num_cores_y, 0, -1):
+        if (seq_len // 32) % i == 0:
+            ln_num_cores_y = i
+            break
+
+    ln_num_cores_x = 8
+
+    num_tiles_per_core_h = math.ceil(seq_len / ln_num_cores_y / 32)
+    num_tiles_per_core_w = math.ceil(hidden_dim / ln_num_cores_x / 32)
+    print("Num tiles w = ", num_tiles_per_core_w)
+    ln_shard_height_hidden_dim = num_tiles_per_core_h * 32
+    ln_shard_width_hidden_dim = num_tiles_per_core_w * 32
+
+    core_range_block_sharded_layernorm = ttnn.experimental.tensor.CoreRangeSet(
+        {
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 0),
+                ttnn.experimental.tensor.CoreCoord(ln_num_cores_x - 1, ln_num_cores_y - 1),
+            ),
+        }
+    )
+
+    block_sharded_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.BufferType.L1,
+        ttnn.experimental.tensor.ShardSpec(
+            core_range_block_sharded_layernorm,
+            [
+                ln_shard_height_hidden_dim,
+                ln_shard_width_hidden_dim,
+            ],
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    layernorm_block_sharded_prg_config_inplace = (
+        ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[ln_num_cores_x, ln_num_cores_y],
+            subblock_w=1,
+            block_h=num_tiles_per_core_h,
+            block_w=num_tiles_per_core_w,
+            inplace=True,
+        )
+    )
+
+    # LN Config
+    # Unpadded version - make this work
+    tt_input_sharded_unpadded = ttnn.experimental.tensor.interleaved_to_sharded(
+        tt_input, sharded_mem_config=block_sharded_mem_config
+    )
+    tt_out_unpadded_sharded = ttnn.experimental.operations.primary.layernorm(
+        tt_input_sharded_unpadded,
+        ln_epsilon,
+        tt_gamma,
+        tt_betta,
+        block_sharded_mem_config,
+        layernorm_block_sharded_prg_config_inplace,
+    )
+    tt_out_unpadded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_unpadded_sharded)
+
+    hidden_dim_padded = 4608
+    tt_input_padded = ttnn.experimental.tensor.pad(
+        tt_input, [1, 1, seq_len, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+    )
+    tt_gamma_padded = ttnn.experimental.tensor.pad(
+        tt_gamma, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+    )
+    tt_betta_padded = ttnn.experimental.tensor.pad(
+        tt_betta, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+    )
+
+    tt_input_sharded_padded = ttnn.experimental.tensor.interleaved_to_sharded(
+        tt_input_padded, sharded_mem_config=block_sharded_mem_config
+    )
+    tt_out_padded_sharded = ttnn.experimental.operations.primary.layernorm(
+        tt_input_sharded_padded,
+        ln_epsilon,
+        tt_gamma_padded,
+        tt_betta_padded,
+        block_sharded_mem_config,
+        layernorm_block_sharded_prg_config_inplace,
+    )
+    tt_out_padded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_padded_sharded)
+    tt_out_padded = ttnn.experimental.tensor.unpad(tt_out_padded, [0, 0, 0, 0], [0, 0, seq_len - 1, hidden_dim - 1])
+
+    # Compare unpadded & padded versions
+    torch_out_unpadded = tt2torch_tensor(tt_out_unpadded)
+    torch_out_padded = tt2torch_tensor(tt_out_padded)
+
+    passing, out = comp_pcc(torch_out_unpadded, torch_out_padded)
+    print("PCC comp is: ", out)
     assert passing
 
 
