@@ -532,7 +532,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     uint32_t ex_partial_CB_size = in0_block_tiles * single_tile_size / block_wt;
     uint32_t ex_CB_size = ex_partial_CB_size;
     uint32_t ex_global_CB_size = ex_partial_CB_size;
-    uint32_t ex_external_CB_size = Kt / block_wt * single_tile_size;
+    uint32_t ex_external_CB_size = 8 * single_tile_size;
     uint32_t xmm2_CB_size = in0_block_tiles * single_tile_size / block_ht;
     uint32_t ex2pe_CB_size = num_rows_per_all_to_all_worker * single_tile_size;
     // output buffer size

@@ -163,7 +163,7 @@ void MAIN {
     cb_push_back(cb_ex_partial, block_h);
     cb_wait_front(cb_ex_partial, block_h);
 
-    constexpr uint32_t tile_index_to_inspect = 0;
+    // constexpr uint32_t tile_index_to_inspect = 0;
     // DPRINT_UNPACK({ DPRINT  << "WidthIndex: " << width_index << " BlockW: " << block_w << "TileRow: " <<  TSLICE(cb_ex_partial, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
 
     unpack_reconfig_data_format_srca(cb_in, cb_ex_external);
@@ -178,7 +178,7 @@ void MAIN {
             tile_regs_acquire();
             for (uint32_t w = 0; w < num_blocks; w++) {
                 cb_wait_front(cb_ex_external, 1);
-                DPRINT_UNPACK({ DPRINT << TSLICE(cb_ex_external, 0, SliceRange::h0_w0_32()) << ENDL(); });
+                //DPRINT_UNPACK({ DPRINT << TSLICE(cb_ex_external, 0, SliceRange::h0_w0_32()) << ENDL(); });
                 reduce_tile(cb_ex_external, cb_scaler_global, 0, scaler0, dst0);
                 cb_pop_front(cb_ex_external, 1);
             }
@@ -203,14 +203,6 @@ void MAIN {
     for (uint32_t i = 0; i < block_h; i++) {
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
-        constexpr uint32_t tile_index_to_inspect = 0;
-        //DPRINT_UNPACK({ DPRINT <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-        // if (width_index == 7 && block_w == 18) {
-        //     DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-        // }
-        // if (block_w == 16) {
-        //     DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-        // }
         for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
@@ -233,6 +225,13 @@ void MAIN {
     unpack_reconfig_data_format_srca(cb_in, cb_xmm);
     #endif
     cb_wait_front(cb_xmm, num_tiles_per_block);
+    constexpr uint32_t tile_index_to_inspect = 0;
+    if (width_index == 7 && block_w == 18) {
+        DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    }
+    if (block_w == 16) {
+        DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    }
     #endif
 
     // (x - E[x])^2, cb_mm2 <-- cb_xmm
