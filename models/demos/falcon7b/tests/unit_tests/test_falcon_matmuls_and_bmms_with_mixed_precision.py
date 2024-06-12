@@ -760,7 +760,9 @@ def test_falcon7b_attention_softmax_sequence(
 
 
 @pytest.mark.parametrize(
-    "seq_len", [32, 128, 1024, 2048], ids=["seq_len_32", "seq_len_128", "seq_len_1024", "seq_len_2048"]
+    "seq_len",
+    [32, 64, 128, 256, 512, 1024, 2048],
+    ids=["seq_len_32", "seq_len_64", "seq_len_128", "seq_len_256", "seq_len_512", "seq_len_1024", "seq_len_2048"],
 )
 @pytest.mark.parametrize("num_cores", [64])
 def test_sharded_ln(device, num_cores, seq_len):
@@ -814,6 +816,9 @@ def test_sharded_ln(device, num_cores, seq_len):
             ln_num_cores_y = i
             break
 
+    if seq_len == 64:
+        ln_num_cores_y = 1
+
     ln_num_cores_x = 8
 
     num_tiles_per_core_h = math.ceil(seq_len / ln_num_cores_y / 32)
@@ -821,6 +826,9 @@ def test_sharded_ln(device, num_cores, seq_len):
     print("Num tiles w = ", num_tiles_per_core_w)
     ln_shard_height_hidden_dim = num_tiles_per_core_h * 32
     ln_shard_width_hidden_dim = num_tiles_per_core_w * 32
+
+    print("Num cores x: ", ln_num_cores_x)
+    print("Num cores y: ", ln_num_cores_y)
 
     core_range_block_sharded_layernorm = ttnn.experimental.tensor.CoreRangeSet(
         {
@@ -855,51 +863,56 @@ def test_sharded_ln(device, num_cores, seq_len):
         )
     )
 
+    print("LN config is: ", layernorm_block_sharded_prg_config_inplace)
+
     # LN Config
     # Unpadded version - make this work
-    tt_input_sharded_unpadded = ttnn.experimental.tensor.interleaved_to_sharded(
-        tt_input, sharded_mem_config=block_sharded_mem_config
-    )
-    tt_out_unpadded_sharded = ttnn.experimental.operations.primary.layernorm(
-        tt_input_sharded_unpadded,
-        ln_epsilon,
-        gamma=tt_gamma,
-        # beta=tt_betta,
-        beta=None,
-        output_mem_config=block_sharded_mem_config,
-        program_config=layernorm_block_sharded_prg_config_inplace,
-    )
-    tt_out_unpadded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_unpadded_sharded)
+    for i in range(1):
+        tt_input_sharded_unpadded = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input, sharded_mem_config=block_sharded_mem_config
+        )
+        tt_out_unpadded_sharded = ttnn.experimental.operations.primary.layernorm(
+            tt_input_sharded_unpadded,
+            ln_epsilon,
+            # gamma=tt_gamma,
+            # beta=tt_betta,
+            gamma=None,
+            beta=None,
+            output_mem_config=block_sharded_mem_config,
+            program_config=layernorm_block_sharded_prg_config_inplace,
+        )
+        tt_out_unpadded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_unpadded_sharded)
 
-    hidden_dim_padded = 4608
-    tt_input_padded = ttnn.experimental.tensor.pad(
-        tt_input, [1, 1, seq_len, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
-    )
-    tt_gamma_padded = ttnn.experimental.tensor.pad(
-        tt_gamma, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
-    )
-    tt_betta_padded = ttnn.experimental.tensor.pad(
-        tt_betta, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
-    )
+        hidden_dim_padded = 4608
+        tt_input_padded = ttnn.experimental.tensor.pad(
+            tt_input, [1, 1, seq_len, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+        )
+        tt_gamma_padded = ttnn.experimental.tensor.pad(
+            tt_gamma, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+        )
+        tt_betta_padded = ttnn.experimental.tensor.pad(
+            tt_betta, [1, 1, 32, hidden_dim_padded], [0, 0, 0, 0], 0.0, dram_interleaved_memory_config, True
+        )
 
-    tt_input_sharded_padded = ttnn.experimental.tensor.interleaved_to_sharded(
-        tt_input_padded, sharded_mem_config=block_sharded_mem_config
-    )
-    tt_out_padded_sharded = ttnn.experimental.operations.primary.layernorm(
-        tt_input_sharded_padded,
-        ln_epsilon,
-        gamma=tt_gamma_padded,
-        # beta=tt_betta_padded,
-        beta=None,
-        output_mem_config=block_sharded_mem_config,
-        program_config=layernorm_block_sharded_prg_config_inplace,
-    )
-    tt_out_padded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_padded_sharded)
-    tt_out_padded = ttnn.experimental.tensor.unpad(tt_out_padded, [0, 0, 0, 0], [0, 0, seq_len - 1, hidden_dim - 1])
+        tt_input_sharded_padded = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input_padded, sharded_mem_config=block_sharded_mem_config
+        )
+        tt_out_padded_sharded = ttnn.experimental.operations.primary.layernorm(
+            tt_input_sharded_padded,
+            ln_epsilon,
+            # gamma=tt_gamma_padded,
+            # beta=tt_betta_padded,
+            gamma=None,
+            beta=None,
+            output_mem_config=block_sharded_mem_config,
+            program_config=layernorm_block_sharded_prg_config_inplace,
+        )
+        tt_out_padded = ttnn.experimental.tensor.sharded_to_interleaved(tt_out_padded_sharded)
+        tt_out_padded = ttnn.experimental.tensor.unpad(tt_out_padded, [0, 0, 0, 0], [0, 0, seq_len - 1, hidden_dim - 1])
 
-    # Compare unpadded & padded versions
-    torch_out_unpadded = tt2torch_tensor(tt_out_unpadded)
-    torch_out_padded = tt2torch_tensor(tt_out_padded)
+        # Compare unpadded & padded versions
+        torch_out_unpadded = tt2torch_tensor(tt_out_unpadded)
+        torch_out_padded = tt2torch_tensor(tt_out_padded)
 
     passing, out = comp_pcc(torch_out_unpadded, torch_out_padded)
     print("PCC comp is: ", out)

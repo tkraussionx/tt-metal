@@ -873,14 +873,14 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     };
     // compute kernel
     KernelHandle compute_kernels_id = -1;
-    log_info(LogTest, "All to all cores: {}", all_to_all_cores.str());
+    // log_info(LogTest, "All to all cores: {}", all_to_all_cores.str());
     auto compute_kernels_id_all_to_all = CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/layernorm/kernels/compute/layernorm_sharded.cpp",
         all_to_all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = all_to_all_except_top_compute_compile_time_args, .defines = compute_defines}
     );
-    log_info(LogTest, "Not all to all cores: {}", not_all_to_all_workers.str());
+    // log_info(LogTest, "Not all to all cores: {}", not_all_to_all_workers.str());
     if (num_none_all_to_all_workers > 0) {
         compute_kernels_id = CreateKernel(
             program,
@@ -1023,10 +1023,10 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
         in0_mcast_noc_y.push_back(device->worker_core_from_logical_core({0, core_idx_y}).y);
     }
 
-    log_info(LogTest, "Num cores is: {}", cores.size());
-    log_info(LogTest, "A shape is: {}", a.get_legacy_shape());
+    // log_info(LogTest, "Num cores is: {}", cores.size());
+    // log_info(LogTest, "A shape is: {}", a.get_legacy_shape());
     for (uint32_t i = 0; i < cores.size(); ++i) {
-        log_info(LogTest, "Going arround core: {}", cores[i].str());
+        // log_info(LogTest, "Going arround core: {}", cores[i].str());
         const auto& core = cores[i];
         uint32_t height_index = 0, width_index = 0;
         if (mcast_1d) {
@@ -1041,7 +1041,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
                 width_index = core.y;
             }
         }
-        log_info(LogTest, "Height index: {} Width index: {}", height_index, width_index);
+        // log_info(LogTest, "Height index: {} Width index: {}", height_index, width_index);
         uint32_t all_to_all_worker_tile_offset_size_bytes = (width_index * num_rows_per_all_to_all_worker) * single_tile_size;
         uint32_t in1_tile_start_id = (height_index * block_ht * Kt) + (width_index * block_wt);
         uint32_t gamma_tile_start_id = width_index * block_wt;

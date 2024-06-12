@@ -112,9 +112,9 @@ void kernel_main() {
                 noc_async_read_barrier();
 
                 cb_push_back(cb_external, 1);
-                if (cb_partial == tt::CB::dataflow0) {
-                    DPRINT << "a " << TSLICE(cb_external, block, SliceRange::h0_w0_32()) << ENDL();
-                }
+                // if (cb_partial == tt::CB::dataflow0) {
+                //     DPRINT << "a " << TSLICE(cb_external, block, SliceRange::h0_w0_32()) << ENDL();
+                // }
             }
             l1_read_addr_ex_par += single_tile_size_bytes;
         }

@@ -80,13 +80,23 @@ void MAIN {
     // set block_h to volatile to disable automatically unroll of the loops, avoid code overflow
     const uint32_t block_h = (block_w == 1) ? block_h_volatile : block_h_const;
     uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
+    uint32_t num_valid_tiles_per_block_h = block_w;
+    uint32_t num_valid_subblocks_w = num_subblocks_w;
 
     if (block_w == 16) {
-        subblock_w = 16;
+        subblock_w = 1;
         num_subblocks_w = 16;
-        num_tiles_per_block = 16;
-        // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
+        // num_tiles_per_block = block_w * block_h_const;
+        //num_valid_tiles_per_block_h = block_w;
+
+
+        DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
+    } else if (width_index == 7) {
+        DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
     }
+
+    // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
+
 
     // DPRINT << "In LN compute kernel, block_h: " << block_h  << ", block_w: " << block_w << ", num_subblocks_w: " << num_subblocks_w << ", subblock_w: " << subblock_w_volatile << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
 
@@ -203,6 +213,10 @@ void MAIN {
     for (uint32_t i = 0; i < block_h; i++) {
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
+        constexpr uint32_t tile_index_to_inspect = 0;
+        // DPRINT_UNPACK({ DPRINT  << "cb_ex_global, width_index=" << width_index << "Tile index:" << tile_index_to_inspect << " Tile content: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        // DPRINT_UNPACK({ DPRINT  << "checking, width_index=" << width_index << "num_subblocks_w:" << num_subblocks_w << " sublock_w: " << subblock_w << ENDL(); });
+
         for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
@@ -225,13 +239,17 @@ void MAIN {
     unpack_reconfig_data_format_srca(cb_in, cb_xmm);
     #endif
     cb_wait_front(cb_xmm, num_tiles_per_block);
-    constexpr uint32_t tile_index_to_inspect = 0;
-    if (width_index == 7 && block_w == 18) {
-        DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    }
-    if (block_w == 16) {
-        DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    }
+    // constexpr uint32_t tile_index_to_inspect = 17;
+    // DPRINT_UNPACK({ DPRINT  << "Xmm, width_index=" << width_index << "Tile index:" << tile_index_to_inspect << " Tile content: " << TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // for (uint32_t i = 0; i < num_tiles_per_block; i++) {
+    //     DPRINT_UNPACK({ DPRINT  << "Xmm, width_index=" << width_index << "Tile content: " << TSLICE(cb_xmm, i, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
+    // if (width_index == 7 && block_w == 18) {
+    //     DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
+    // if (block_w == 16) {
+    //     DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
     #endif
 
     // (x - E[x])^2, cb_mm2 <-- cb_xmm
@@ -442,13 +460,13 @@ void MAIN {
         cb_wait_front(cb_out, num_tiles_per_block);
     }
 
-    if (width_index == 7 && block_w == 18) {
-        // DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    }
+    // if (width_index == 7 && block_w == 18) {
+    //     // DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
 
     if (block_w == 16) {
        // DPRINT << "BEGIN" << ENDL();
-        uint32_t pad_remainder = 2;
+        uint32_t pad_remainder = 2 * block_h_const;
         unpack_reconfig_data_format_srca(cb_padding_zero);
         pack_reconfig_data_format(cb_out);
         // DPRINT_UNPACK({ DPRINT  << "before: " <<  TSLICE(cb_out, 17, SliceRange::h0_w0_32()) << ENDL(); });
@@ -467,8 +485,16 @@ void MAIN {
         cb_push_back(cb_out, pad_remainder);
         cb_pop_front(cb_padding_zero, 1);
         //DPRINT << "END" << ENDL();
-        cb_wait_front(cb_out, 18);
+        cb_wait_front(cb_out, block_w * block_h_const);
         // DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
     }
+
+    // constexpr uint32_t tile_index_to_inspect = 36;
+    // if (width_index == 7 && block_w == 18) {
+    //     DPRINT_UNPACK({ DPRINT  << "   Padding implementation, tile_index: " << tile_index_to_inspect << " -> " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
+    // if (width_index == 7 && block_w == 16) {
+    //     DPRINT_UNPACK({ DPRINT  << "No padding implementation, tile_index: " << tile_index_to_inspect << " -> " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
 }
 }
