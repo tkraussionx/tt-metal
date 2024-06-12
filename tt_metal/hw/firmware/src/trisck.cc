@@ -22,6 +22,9 @@ uint32_t math_sync_tile_dst_index = 0;
 uint32_t gl_alu_format_spec_reg = 0;
 uint32_t op_info_offset = 0;
 
+uint32_t tiles_proc_delay = 0;
+uint32_t apply_cnt = 0;
+
 namespace ckernel
 {
 volatile tt_reg_ptr uint * regfile = reinterpret_cast<volatile uint *>(REGFILE_BASE);
