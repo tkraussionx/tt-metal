@@ -6,6 +6,7 @@ import torch
 import math
 from torch import nn
 import tt_lib
+import ttnn
 
 from typing import List
 from models.utility_functions import torch2tt_tensor
@@ -14,6 +15,8 @@ from models.utility_functions import torch2tt_tensor
 class TtFusedFalconLayernorm:
     def __init__(self, device, gamma1, beta1, gamma2, beta2, model_config, config, tt_cache_path):
         super().__init__()
+
+        gamma_beta_rm = False
 
         self.model_config = model_config
 
@@ -25,130 +28,269 @@ class TtFusedFalconLayernorm:
         ln_mlp_weights_str = f"{layer_name}.ln_mlp.weight"
         ln_mlp_bias_str = f"{layer_name}.ln_mlp.bias"
 
-        ln_attn_weights_path = (
-            tt_cache_path / f"{ln_attn_weights_str}_rm_fusedln_{self.model_config['LN_ATTN_WEIGHTS_DTYPE'].name}.bin"
-        )
-        if (ln_attn_weights_path).exists():
-            ln_attn_gamma_host = tt_lib.tensor.load_tensor(str(ln_attn_weights_path))
-            self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
-        else:
-            ln_attn_gamma_host = tt_lib.tensor.Tensor(
-                gamma1.reshape([1, 1, 1, -1]),
-                self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
+        if gamma_beta_rm:
+            ln_attn_weights_path = (
+                tt_cache_path
+                / f"{ln_attn_weights_str}_rm_fusedln_{self.model_config['LN_ATTN_WEIGHTS_DTYPE'].name}.bin"
             )
-            self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
-            tt_lib.tensor.dump_tensor(
-                str(ln_attn_weights_path),
-                ln_attn_gamma_host,
-            )
+            if (ln_attn_weights_path).exists():
+                ln_attn_gamma_host = tt_lib.tensor.load_tensor(str(ln_attn_weights_path))
+                self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
+            else:
+                ln_attn_gamma_host = tt_lib.tensor.Tensor(
+                    gamma1.reshape([1, 1, 1, -1]),
+                    self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
+                )
+                self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
+                tt_lib.tensor.dump_tensor(
+                    str(ln_attn_weights_path),
+                    ln_attn_gamma_host,
+                )
 
-        ln_attn_bias_path = (
-            tt_cache_path / f"{ln_attn_bias_str}_rm_fusedln_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}.bin"
-        )
-        if (ln_attn_bias_path).exists():
-            ln_attn_beta_host = tt_lib.tensor.load_tensor(str(ln_attn_bias_path))
-            self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
-        else:
-            ln_attn_beta_host = tt_lib.tensor.Tensor(
-                beta1.reshape([1, 1, 1, -1]),
-                self.model_config["LN_ATTN_BIAS_DTYPE"],
+            ln_attn_bias_path = (
+                tt_cache_path / f"{ln_attn_bias_str}_rm_fusedln_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}.bin"
             )
-            self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
-            tt_lib.tensor.dump_tensor(
-                str(ln_attn_bias_path),
-                ln_attn_beta_host,
-            )
+            if (ln_attn_bias_path).exists():
+                ln_attn_beta_host = tt_lib.tensor.load_tensor(str(ln_attn_bias_path))
+                self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
+            else:
+                ln_attn_beta_host = tt_lib.tensor.Tensor(
+                    beta1.reshape([1, 1, 1, -1]),
+                    self.model_config["LN_ATTN_BIAS_DTYPE"],
+                )
+                self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
+                tt_lib.tensor.dump_tensor(
+                    str(ln_attn_bias_path),
+                    ln_attn_beta_host,
+                )
 
-        ln_mlp_weights_path = (
-            tt_cache_path / f"{ln_mlp_weights_str}_rm_fusedln_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}.bin"
-        )
-        if (ln_mlp_weights_path).exists():
-            ln_mlp_gamma_host = tt_lib.tensor.load_tensor(str(ln_mlp_weights_path))
-            self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
-        else:
-            ln_mlp_gamma_host = tt_lib.tensor.Tensor(
-                gamma2.reshape([1, 1, 1, -1]),
-                self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+            ln_mlp_weights_path = (
+                tt_cache_path / f"{ln_mlp_weights_str}_rm_fusedln_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}.bin"
             )
-            self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
-            tt_lib.tensor.dump_tensor(
-                str(ln_mlp_weights_path),
-                ln_mlp_gamma_host,
-            )
+            if (ln_mlp_weights_path).exists():
+                ln_mlp_gamma_host = tt_lib.tensor.load_tensor(str(ln_mlp_weights_path))
+                self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
+            else:
+                ln_mlp_gamma_host = tt_lib.tensor.Tensor(
+                    gamma2.reshape([1, 1, 1, -1]),
+                    self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+                )
+                self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
+                tt_lib.tensor.dump_tensor(
+                    str(ln_mlp_weights_path),
+                    ln_mlp_gamma_host,
+                )
 
-        ln_mlp_bias_path = (
-            tt_cache_path / f"{ln_mlp_bias_str}_rm_fusedln_{self.model_config['LN_MLP_BIAS_DTYPE'].name}.bin"
-        )
-        if (ln_mlp_bias_path).exists():
-            ln_mlp_beta_host = tt_lib.tensor.load_tensor(str(ln_mlp_bias_path))
-            self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
+            ln_mlp_bias_path = (
+                tt_cache_path / f"{ln_mlp_bias_str}_rm_fusedln_{self.model_config['LN_MLP_BIAS_DTYPE'].name}.bin"
+            )
+            if (ln_mlp_bias_path).exists():
+                ln_mlp_beta_host = tt_lib.tensor.load_tensor(str(ln_mlp_bias_path))
+                self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
+            else:
+                ln_mlp_beta_host = tt_lib.tensor.Tensor(
+                    beta2.reshape([1, 1, 1, -1]),
+                    self.model_config["LN_MLP_BIAS_DTYPE"],
+                )
+                self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
+                tt_lib.tensor.dump_tensor(
+                    str(ln_mlp_bias_path),
+                    ln_mlp_beta_host,
+                )
         else:
-            ln_mlp_beta_host = tt_lib.tensor.Tensor(
-                beta2.reshape([1, 1, 1, -1]),
-                self.model_config["LN_MLP_BIAS_DTYPE"],
+            ln_attn_weights_path = (
+                tt_cache_path
+                / f"{ln_attn_weights_str}_tilized_fusedln_{self.model_config['LN_ATTN_WEIGHTS_DTYPE'].name}.bin"
             )
-            self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
-            tt_lib.tensor.dump_tensor(
-                str(ln_mlp_bias_path),
-                ln_mlp_beta_host,
+            if (ln_attn_weights_path).exists():
+                ln_attn_gamma_host = ttnn.experimental.tensor.load_tensor(str(ln_attn_weights_path))
+                self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
+            else:
+                ln_attn_gamma_torch = gamma1.reshape(1, 1, 1, -1)
+                ln_attn_gamma_torch_padded = torch.cat(
+                    [ln_attn_gamma_torch, torch.zeros(1, 1, 31, ln_attn_gamma_torch.shape[-1])], dim=2
+                )
+                ln_attn_gamma_host = torch2tt_tensor(
+                    ln_attn_gamma_torch_padded,
+                    None,
+                    tt_layout=ttnn.experimental.tensor.Layout.TILE,
+                    tt_memory_config=self.model_config["LN_ATTN_WEIGHTS_MEMCFG"],
+                    tt_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
+                )
+                self.ln_attn_gamma = ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"])
+                ttnn.experimental.tensor.dump_tensor(
+                    str(ln_attn_weights_path),
+                    ln_attn_gamma_host,
+                )
+
+            ln_attn_bias_path = (
+                tt_cache_path / f"{ln_attn_bias_str}_tilized_fusedln_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}.bin"
             )
+            if (ln_attn_bias_path).exists():
+                ln_attn_beta_host = ttnn.experimental.tensor.load_tensor(str(ln_attn_bias_path))
+                self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
+            else:
+                ln_attn_beta_torch = beta1.reshape(1, 1, 1, -1)
+                ln_attn_beta_torch_padded = torch.cat(
+                    [ln_attn_beta_torch, torch.zeros(1, 1, 31, ln_attn_beta_torch.shape[-1])], dim=2
+                )
+                ln_attn_beta_host = torch2tt_tensor(
+                    ln_attn_beta_torch_padded,
+                    None,
+                    tt_layout=ttnn.experimental.tensor.Layout.TILE,
+                    tt_memory_config=self.model_config["LN_ATTN_BIAS_MEMCFG"],
+                    tt_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
+                )
+                self.ln_attn_beta = ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"])
+                ttnn.experimental.tensor.dump_tensor(
+                    str(ln_attn_bias_path),
+                    ln_attn_beta_host,
+                )
+
+            ln_mlp_weights_path = (
+                tt_cache_path
+                / f"{ln_mlp_weights_str}_tilized_fusedln_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}.bin"
+            )
+            if (ln_mlp_weights_path).exists():
+                ln_mlp_gamma_host = ttnn.experimental.tensor.load_tensor(str(ln_mlp_weights_path))
+                self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
+            else:
+                ln_mlp_gamma_torch = gamma2.reshape(1, 1, 1, -1)
+                ln_mlp_gamma_torch_padded = torch.cat(
+                    [ln_mlp_gamma_torch, torch.zeros(1, 1, 31, ln_mlp_gamma_torch.shape[-1])], dim=2
+                )
+                ln_mlp_gamma_host = torch2tt_tensor(
+                    ln_mlp_gamma_torch_padded,
+                    None,
+                    tt_layout=ttnn.experimental.tensor.Layout.TILE,
+                    tt_memory_config=self.model_config["LN_MLP_WEIGHTS_MEMCFG"],
+                    tt_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+                )
+                self.ln_mlp_gamma = ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"])
+                ttnn.experimental.tensor.dump_tensor(
+                    str(ln_mlp_weights_path),
+                    ln_mlp_gamma_host,
+                )
+
+            ln_mlp_bias_path = (
+                tt_cache_path / f"{ln_mlp_bias_str}_tilized_fusedln_{self.model_config['LN_MLP_BIAS_DTYPE'].name}.bin"
+            )
+            if (ln_mlp_bias_path).exists():
+                ln_mlp_beta_host = ttnn.experimental.tensor.load_tensor(str(ln_mlp_bias_path))
+                self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
+            else:
+                ln_mlp_beta_torch = beta2.reshape(1, 1, 1, -1)
+                ln_mlp_beta_torch_padded = torch.cat(
+                    [ln_mlp_beta_torch, torch.zeros(1, 1, 31, ln_mlp_beta_torch.shape[-1])], dim=2
+                )
+                ln_mlp_beta_host = torch2tt_tensor(
+                    ln_mlp_beta_torch_padded,
+                    None,
+                    tt_layout=ttnn.experimental.tensor.Layout.TILE,
+                    tt_memory_config=self.model_config["LN_MLP_BIAS_MEMCFG"],
+                    tt_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
+                )
+                self.ln_mlp_beta = ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"])
+                ttnn.experimental.tensor.dump_tensor(
+                    str(ln_mlp_bias_path),
+                    ln_mlp_beta_host,
+                )
 
         self.layernorm_eps = config.layer_norm_epsilon
 
-        shard_spec_cores_grid = tt_lib.tensor.CoreRangeSet(
+        shard_spec_cores_grid = ttnn.experimental.tensor.CoreRangeSet(
             {
-                tt_lib.tensor.CoreRange(
-                    tt_lib.tensor.CoreCoord(0, 0),
-                    tt_lib.tensor.CoreCoord(7, 7),
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 0),
+                    ttnn.experimental.tensor.CoreCoord(7, 7),
                 ),
             }
         )
-        self.memconfig = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-            tt_lib.tensor.BufferType.L1,
-            tt_lib.tensor.ShardSpec(
+        self.sharded_memconfig = ttnn.experimental.tensor.MemoryConfig(
+            ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+            ttnn.experimental.tensor.BufferType.L1,
+            ttnn.experimental.tensor.ShardSpec(
                 shard_spec_cores_grid,
                 [
-                    32,
+                    self.model_config["SEQ_LEN"] // 8,
                     1024,
                 ],
-                tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 False,
             ),
         )
 
-        self.prg_config = tt_lib.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+        self.prg_config = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=[8, 8],
             subblock_w=8,
-            block_h=1,
+            block_h=self.model_config["SEQ_LEN"] // 32 // 8,
             block_w=32,
             inplace=False,
         )
 
-        self.interleaved_memconfig = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
-            tt_lib.tensor.BufferType.L1,
+        self.interleaved_memconfig = ttnn.experimental.tensor.MemoryConfig(
+            ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+            ttnn.experimental.tensor.BufferType.L1,
         )
 
-    def __call__(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
-        # block sharded
-        out2 = tt_lib.operations.primary.layernorm(
-            x, eps=self.layernorm_eps, output_mem_config=self.memconfig, program_config=self.prg_config
-        )
-        out2 = tt_lib.tensor.sharded_to_interleaved(out2, output_mem_config=self.interleaved_memconfig)
+    def __call__(self, x: ttnn.experimental.tensor.Tensor) -> ttnn.experimental.tensor.Tensor:
+        # # OG layernorm
+        # out1 = ttnn.experimental.operations.primary.layernorm(
+        #     x, eps=self.layernorm_eps, gamma=self.ln_attn_gamma, beta=self.ln_attn_beta, output_mem_config=self.sharded_memconfig, program_config=self.prg_config
+        # )
+        # out2 = ttnn.experimental.operations.primary.layernorm(
+        #     x, eps=self.layernorm_eps, gamma=self.ln_mlp_gamma, beta=self.ln_mlp_beta, output_mem_config=self.sharded_memconfig, program_config=self.prg_config
+        # )
 
-        out1 = tt_lib.tensor.bcast(
-            out2, self.ln_attn_gamma, math_op=tt_lib.tensor.BcastOpMath.MUL, dim=tt_lib.tensor.BcastOpDim.H
+        # block sharded layernorm, rest in interleaved
+        out2 = ttnn.experimental.operations.primary.layernorm(
+            x, eps=self.layernorm_eps, output_mem_config=self.sharded_memconfig, program_config=self.prg_config
         )
-        out1 = tt_lib.tensor.bcast(
-            out1, self.ln_attn_beta, math_op=tt_lib.tensor.BcastOpMath.ADD, dim=tt_lib.tensor.BcastOpDim.H
+        out2 = ttnn.experimental.tensor.sharded_to_interleaved(out2, output_mem_config=self.interleaved_memconfig)
+
+        out1 = ttnn.experimental.tensor.bcast(
+            out2,
+            self.ln_attn_gamma,
+            math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+            dim=ttnn.experimental.tensor.BcastOpDim.H,
+        )
+        out1 = ttnn.experimental.tensor.bcast(
+            out1,
+            self.ln_attn_beta,
+            math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+            dim=ttnn.experimental.tensor.BcastOpDim.H,
         )
 
-        out2 = tt_lib.tensor.bcast(
-            out2, self.ln_mlp_gamma, math_op=tt_lib.tensor.BcastOpMath.MUL, dim=tt_lib.tensor.BcastOpDim.H
+        out2 = ttnn.experimental.tensor.bcast(
+            out2,
+            self.ln_mlp_gamma,
+            math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+            dim=ttnn.experimental.tensor.BcastOpDim.H,
         )
-        out2 = tt_lib.tensor.bcast(
-            out2, self.ln_mlp_beta, math_op=tt_lib.tensor.BcastOpMath.ADD, dim=tt_lib.tensor.BcastOpDim.H
+        out2 = ttnn.experimental.tensor.bcast(
+            out2,
+            self.ln_mlp_beta,
+            math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+            dim=ttnn.experimental.tensor.BcastOpDim.H,
         )
+
+        # # all block sharded
+        # out2 = ttnn.experimental.operations.primary.layernorm(
+        #     x, eps=self.layernorm_eps, output_mem_config=self.sharded_memconfig, program_config=self.prg_config
+        # )
+
+        # out1 = ttnn.experimental.tensor.bcast(
+        #     out2, self.ln_attn_gamma, math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H, output_mem_config=self.sharded_memconfig
+        # )
+        # out1 = ttnn.experimental.tensor.bcast(
+        #     out1, self.ln_attn_beta, math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H, output_mem_config=self.sharded_memconfig
+        # )
+
+        # out2 = ttnn.experimental.tensor.bcast(
+        #     out2, self.ln_mlp_gamma, math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H, output_mem_config=self.sharded_memconfig
+        # )
+        # out2 = ttnn.experimental.tensor.bcast(
+        #     out2, self.ln_mlp_beta, math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H, output_mem_config=self.sharded_memconfig
+        # )
 
         return out1, out2

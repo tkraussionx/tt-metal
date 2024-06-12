@@ -388,6 +388,7 @@ def partial_layernorm(
             xs_output_cat[i] = ttnn.experimental.tensor.typecast(xs_output_cat[i], dtype)
     return xs_output_cat
 
+
 def determine_tensor_deallocation(layernorm_slice_size, seq_len):
     """
     Tensors will be reused for seq_lens > 512 and deallocated for seq_lens <= 512
@@ -424,6 +425,7 @@ def generate_layernorm_persistent_tensors(seq_len, slice_size, ln_output_tensors
         else:
             ln_output_tensors_dict[name] = {seq_len: output_tensor}
 
+
 def fused_partial_layernorm(
     xs,
     ln_gamma_1,
@@ -455,8 +457,12 @@ def fused_partial_layernorm(
 
     num_devices = len(devices)
 
-    dram_memcfg = ttnn.experimental.tensor.MemoryConfig(ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.experimental.tensor.BufferType.DRAM)
-    interleaved_l1_memcfg = ttnn.experimental.tensor.MemoryConfig(ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.experimental.tensor.BufferType.L1)
+    dram_memcfg = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.experimental.tensor.BufferType.DRAM
+    )
+    interleaved_l1_memcfg = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.experimental.tensor.BufferType.L1
+    )
 
     if seq_len > slice_size:
         assert seq_len % slice_size == 0, "Sequence length must be divisible by layernorm slice size {slice_size}"
@@ -489,19 +495,21 @@ def fused_partial_layernorm(
             xs_output_slice_1 = []
             for i in range(num_devices):
                 xs_output_slice_1.append(
-                    ttnn.experimental.tensor.sharded_to_interleaved(xs_slice[i], output_mem_config=interleaved_l1_memcfg)
+                    ttnn.experimental.tensor.bcast(
+                        xs_slice[i],
+                        ln_gamma_1[i],
+                        math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+                        dim=ttnn.experimental.tensor.BcastOpDim.H,
+                        output_mem_config=memconfig,
+                    )
                 )
             for i in range(num_devices):
                 xs_output_slice_1[i] = ttnn.experimental.tensor.bcast(
-                    xs_output_slice_1[i], ln_gamma_1[i], math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H
-                )
-            for i in range(num_devices):
-                xs_output_slice_1[i] = ttnn.experimental.tensor.bcast(
-                    xs_output_slice_1[i], ln_beta_1[i], math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H
-                )
-            for i in range(num_devices):
-                xs_output_slice_1[i] = ttnn.experimental.tensor.interleaved_to_sharded(
-                    xs_output_slice_1[i], sharded_mem_config=memconfig
+                    xs_output_slice_1[i],
+                    ln_beta_1[i],
+                    math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+                    dim=ttnn.experimental.tensor.BcastOpDim.H,
+                    output_mem_config=memconfig,
                 )
 
             for i in range(num_devices):
@@ -516,17 +524,21 @@ def fused_partial_layernorm(
 
             # Apply second layernorm gamma+beta inplace
             for i in range(num_devices):
-                xs_slice[i] = ttnn.experimental.tensor.sharded_to_interleaved(xs_slice[i], output_mem_config=interleaved_l1_memcfg)
-            for i in range(num_devices):
                 xs_slice[i] = ttnn.experimental.tensor.bcast(
-                    xs_slice[i], ln_gamma_2[i], math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H
+                    xs_slice[i],
+                    ln_gamma_2[i],
+                    math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+                    dim=ttnn.experimental.tensor.BcastOpDim.H,
+                    output_mem_config=memconfig,
                 )
             for i in range(num_devices):
                 xs_slice[i] = ttnn.experimental.tensor.bcast(
-                    xs_slice[i], ln_beta_2[i], math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H
+                    xs_slice[i],
+                    ln_beta_2[i],
+                    math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+                    dim=ttnn.experimental.tensor.BcastOpDim.H,
+                    output_mem_config=memconfig,
                 )
-            for i in range(num_devices):
-                xs_slice[i] = ttnn.experimental.tensor.interleaved_to_sharded(xs_slice[i], sharded_mem_config=memconfig)
 
             for i in range(num_devices):
                 ttnn.experimental.tensor.sharded_to_interleaved_partial(
@@ -537,7 +549,7 @@ def fused_partial_layernorm(
                     dram_memcfg,
                 )
                 xs_slice[i].deallocate(True)
-            
+
             output1 = out_tensor_1
             output2 = out_tensor_2
     else:
@@ -552,19 +564,27 @@ def fused_partial_layernorm(
                 program_config=pgmconfig,
             )
         for i in range(num_devices):
-            xs_output2[i] = ttnn.experimental.tensor.sharded_to_interleaved(xs_output2[i], output_mem_config=interleaved_l1_memcfg)
+            xs_output2[i] = ttnn.experimental.tensor.sharded_to_interleaved(
+                xs_output2[i], output_mem_config=interleaved_l1_memcfg
+            )
 
         # Apply first layernorm gamma+beta
         xs_output1 = []
         for i in range(num_devices):
             xs_output1.append(
                 ttnn.experimental.tensor.bcast(
-                    xs_output2[i], ln_gamma_1[i], math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H
+                    xs_output2[i],
+                    ln_gamma_1[i],
+                    math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+                    dim=ttnn.experimental.tensor.BcastOpDim.H,
                 )
             )
         for i in range(num_devices):
             xs_output1[i] = ttnn.experimental.tensor.bcast(
-                xs_output1[i], ln_beta_1[i], math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H
+                xs_output1[i],
+                ln_beta_1[i],
+                math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+                dim=ttnn.experimental.tensor.BcastOpDim.H,
             )
         for i in range(num_devices):
             xs_output1[i] = ttnn.experimental.tensor.clone(xs_output1[i], output_mem_config=dram_memcfg)
@@ -572,11 +592,17 @@ def fused_partial_layernorm(
         # Apply second layernorm gamma+beta
         for i in range(num_devices):
             xs_output2[i] = ttnn.experimental.tensor.bcast(
-                xs_output2[i], ln_gamma_2[i], math_op=ttnn.experimental.tensor.BcastOpMath.MUL, dim=ttnn.experimental.tensor.BcastOpDim.H
+                xs_output2[i],
+                ln_gamma_2[i],
+                math_op=ttnn.experimental.tensor.BcastOpMath.MUL,
+                dim=ttnn.experimental.tensor.BcastOpDim.H,
             )
         for i in range(num_devices):
             xs_output2[i] = ttnn.experimental.tensor.bcast(
-                xs_output2[i], ln_beta_2[i], math_op=ttnn.experimental.tensor.BcastOpMath.ADD, dim=ttnn.experimental.tensor.BcastOpDim.H
+                xs_output2[i],
+                ln_beta_2[i],
+                math_op=ttnn.experimental.tensor.BcastOpMath.ADD,
+                dim=ttnn.experimental.tensor.BcastOpDim.H,
             )
         for i in range(num_devices):
             xs_output2[i] = ttnn.experimental.tensor.clone(xs_output2[i], output_mem_config=dram_memcfg)

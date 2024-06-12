@@ -75,7 +75,7 @@ def run_test_FalconLayernorm_inference(pcc, devices, model_location_generator, g
     input_shape = [1, 1, seqlen, config.hidden_size]
 
     input_torch = (torch.rand(input_shape) * 2) - 1
-    input = torch2tt_tensor(input_torch, None, tt_dtype=ttl.tensor.DataType.BFLOAT8_B)
+    input = torch2tt_tensor(input_torch, None, tt_dtype=ttl.tensor.DataType.BFLOAT16)
     input = input.to(devices[0], model_config["DEFAULT_MEMCFG"])
 
     # block sharded hardcoded for S=128 and 8x4 grid of cores
@@ -93,7 +93,7 @@ def run_test_FalconLayernorm_inference(pcc, devices, model_location_generator, g
         ttl.tensor.ShardSpec(
             shard_spec_cores_grid,
             [
-                32,
+                seqlen // 8,
                 1024,
             ],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
@@ -107,10 +107,10 @@ def run_test_FalconLayernorm_inference(pcc, devices, model_location_generator, g
     torch_out1, torch_out2 = pytorch_FalconLayernorm_model(input_torch)
 
     # TT hardware execution -------------------------------------------------------------
-    tt_Falcon_layernorm_model = TtFusedLayernorm(
+
+    tt_Falcon_layernorm_model = TtFusedFalconLayernorm(
         devices[0], gamma1, beta1, gamma2, beta2, model_config, config, tt_cache_path
     )
-
     tt_out1, tt_out2 = tt_Falcon_layernorm_model(input)
 
     tt_out1 = tt2torch_tensor(tt_out1)
