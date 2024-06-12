@@ -398,24 +398,39 @@ class TtMixtralAttention(LightweightModule):
             output_mem_config=ttnn.L1_MEMORY_CONFIG,
         )
 
-        attn_output_11SH = ttnn.experimental.tensor.typecast(attn_output_11SH, dtype=ttnn.bfloat8_b)
+        # attn_output_11SH = ttnn.experimental.tensor.typecast(attn_output_11SH, dtype=ttnn.bfloat8_b)
+        pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            in0_block_w=2,  # how much inner dim you take each time
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+            per_core_N=16,  # N / TILE_WIDTH / Grid_Size
+            transpose_mcast=False,
+            fused_activation=None,
+            fuse_batch=False,
+        )
+        attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, 4, 2048, -1))
         output_11SH = ttnn.linear(
             attn_output_11SH,
             self.wo,
-            core_grid=ttnn.CoreGrid(y=8, x=8),
-            compute_kernel_config=self.model_config["PREFILL_MLP_COMPUTE_CONFIG"],
-            dtype=ttnn.bfloat8_b,
+            # core_grid=ttnn.CoreGrid(y=8, x=8),
+            program_config=pc,
+            compute_kernel_config=self.compute_kernel,  # self.model_config["PREFILL_MLP_COMPUTE_CONFIG"],
+            dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
+        output_11SH = ttnn.reshape(output_11SH, (1, 1, 8192, -1))
         attn_output_11SH.deallocate(True)
 
         output_11BH_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1)
         output_11SH.deallocate(True)
-        output_11BH_gathered = ttnn.experimental.tensor.typecast(output_11BH_gathered, dtype=ttnn.bfloat16)
-        output_11BH_gathered = ttnn.experimental.operations.primary.moreh_sum(
+        # output_11BH_gathered = ttnn.experimental.tensor.typecast(output_11BH_gathered, dtype=ttnn.bfloat16)
+        output_11BH_reduced = ttnn.experimental.operations.primary.moreh_sum(
             output_11BH_gathered, dims=[1], output=None, compute_kernel_config=None
         )
-        return output_11BH_gathered
+        output_11BH_gathered.deallocate(True)
+        return output_11BH_reduced
 
     def forward(
         self, xs, start_pos, current_pos, attn_masks, rot_mats, transformation_mats=None, user_id=0, mode="decode"

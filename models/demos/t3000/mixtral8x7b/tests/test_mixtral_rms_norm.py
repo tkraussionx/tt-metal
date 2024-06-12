@@ -17,7 +17,7 @@ if os.getenv("CI") == "true":
 import ttnn
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
-from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded
+from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
 from models.demos.t3000.mixtral8x7b.reference.model import RMSNorm
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 from models.utility_functions import (
@@ -26,7 +26,7 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_rms_norm_inference(t3k_device_mesh, use_program_cache, reset_seeds):
+def test_mistral_rms_norm_inference(t3k_device_mesh, use_program_cache):
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
@@ -37,7 +37,7 @@ def test_mistral_rms_norm_inference(t3k_device_mesh, use_program_cache, reset_se
     reference_model = RMSNorm(dim=model_args.dim)
     reference_model.load_state_dict(partial_state_dict)
 
-    tt_model = TtRMSNormSharded(
+    tt_model = TtRMSNorm(
         device_mesh=t3k_device_mesh,
         state_dict=state_dict,
         args=model_args,
@@ -45,7 +45,7 @@ def test_mistral_rms_norm_inference(t3k_device_mesh, use_program_cache, reset_se
         layer_num=0,
         weight_key="attention_norm",
     )
-    input = torch.rand(1, 1, 32, 4096)
+    input = torch.rand(1, 1, 8192, 4096)
     reference_output = reference_model(input)[0]
 
     tt_input = ttnn.from_torch(

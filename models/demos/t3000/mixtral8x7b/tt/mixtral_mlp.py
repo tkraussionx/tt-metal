@@ -62,10 +62,10 @@ class TtMixtralMLP(LightweightModule):
             # print(pc)
             pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
                 compute_with_storage_grid_size=(8, 8),
-                in0_block_w=2,  # how much inner dim you take each time
+                in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=8,  # 32, #16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=56,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
@@ -76,7 +76,7 @@ class TtMixtralMLP(LightweightModule):
                 self.w1,
                 compute_kernel_config=self.prefill_mlp_config,
                 # core_grid=ttnn.CoreGrid(y=8, x=8),
-                dtype=ttnn.bfloat8_b,
+                dtype=ttnn.bfloat16,
                 # activation="silu",
                 program_config=pc,
             )
@@ -85,10 +85,10 @@ class TtMixtralMLP(LightweightModule):
 
             pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
                 compute_with_storage_grid_size=(8, 8),
-                in0_block_w=2,  # how much inner dim you take each time
+                in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=56,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,
@@ -101,7 +101,7 @@ class TtMixtralMLP(LightweightModule):
                 compute_kernel_config=self.prefill_mlp_config,
                 # core_grid=ttnn.CoreGrid(y=8, x=8),
                 program_config=pc,
-                dtype=ttnn.bfloat8_b,
+                dtype=ttnn.bfloat16,
             )
 
             print("w3_out shape: ", w3_out.shape)
@@ -126,6 +126,8 @@ class TtMixtralMLP(LightweightModule):
                 program_config=pc,
                 dtype=ttnn.bfloat16,
             )
+
+            w2_in.deallocate(True)
             w2_out = ttnn.reshape(w2_out, (1, 1, 8192, 4096))
             return w2_out
 

@@ -122,6 +122,12 @@ def test_mixtral_decoder_inference(t3k_device_mesh, use_program_cache, reset_see
             logger.warning("Mistral Decoder Block Failed!")
             all_tests_pass = False
 
+        for mod in range(6):
+            passing, pcc_message = comp_pcc(
+                reference_model.comps[mod].view(batch, seq_len, -1), tt_model.comps[mod].view(batch, seq_len, -1), pcc
+            )
+            print("mod: ", mod, pcc_message)
+
     if all_tests_pass:
         logger.info(f"All {generation_length} Mistral decode iterations Passed!")
     else:

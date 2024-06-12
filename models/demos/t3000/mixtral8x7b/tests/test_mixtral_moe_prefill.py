@@ -85,7 +85,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, 
         logger.info(f"[Decoder] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
-        pt_decode_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
+        pt_decode_input = torch.load("moe_input.pt").float()  # (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_decode_input = ttnn.from_torch(
             pt_decode_input.clone().unsqueeze(1).view(1, 1, seq_len, 4096),
             device=t3k_device_mesh,
@@ -104,6 +104,7 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, 
         )
 
         # Reference model
+        pt_decode_input = torch.load("pt_moe_input.pt")
         ref_output = reference_model(pt_decode_input)
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
