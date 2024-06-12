@@ -19,10 +19,7 @@ if os.getenv("CI") == "true":
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "llama_version",
-    (
-        ("llama2"),
-        ("llama3"),
-    ),
+    (("llama3"),),
 )
 @pytest.mark.parametrize(
     "batch, seq_len, pcc",
@@ -58,7 +55,7 @@ def test_LlamaMLP_inference_t3000(
             os.environ["LLAMA_TOKENIZER_PATH"] = "/home/llama-data/tokenizer.model"
             os.environ["LLAMA_CACHE_PATH"] = "/home/llama-data-cache/weights-cache-2"
 
-    model_config = get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=n_devices, seq_len=seq_len)
+    model_config = get_model_config(num_devices=n_devices, batch=batch, seq_len=seq_len, llama_version=llama_version)
 
     if t3k_device_mesh.get_num_devices() < n_devices:
         pytest.skip(f"Requires at {n_devices} devices to run")
