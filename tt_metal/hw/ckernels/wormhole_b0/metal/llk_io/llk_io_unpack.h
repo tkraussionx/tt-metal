@@ -12,11 +12,14 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+// MT: Temp extern declaration
+extern uint32_t tiles_proc_delay;
+extern uint32_t apply_cnt;
 
 using namespace ckernel;
 
 // "llk_setup_operands" is the old function name that HLKC emits
-inline void llk_setup_operands() {
+inline void llk_setup_operands(bool apply_delay=false) {
     volatile tt_l1_ptr std::uint32_t* circular_buffer_config_addr = (volatile uint32_t*)(CIRCULAR_BUFFER_CONFIG_BASE);
 
     for (uint32_t cb_id = 0; cb_id < NUM_CIRCULAR_BUFFERS; cb_id++) {
@@ -35,6 +38,10 @@ inline void llk_setup_operands() {
 
         circular_buffer_config_addr += UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; // move by 3 uint32's
     }
+
+    if (apply_delay) {
+        tiles_proc_delay = 6144;  // Delay odd rows of cores
+    }
 }
 
 // Wait for N tiles available in the incoming stream
@@ -52,6 +59,14 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
         tiles_received = (std::uint16_t) reg_read((std::uint32_t)tiles_received_ptr);
         num_tiles_recv = tiles_received - cb_interface[input].tiles_acked;
     } while (num_tiles_recv < num_tiles_u);
+
+    // uncomment to add delay on each block and avoid the hang
+    // if (operand == tt::CB::c_in1) {
+    if (operand == tt::CB::c_in1 && (apply_cnt == 0)) {
+        // Apply delay only if second operand has arrived
+        apply_cnt++;
+        wait(tiles_proc_delay);
+    }
 }
 
 // Pop N tiles from the incoming stream
