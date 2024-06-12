@@ -256,7 +256,7 @@ def test_time_sharded_attnention(
     data_format,
     function_level_defaults,
 ):
-    pytest.skip()  # ND hang on CI
+    # pytest.skip()  # ND hang on CI
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -326,94 +326,94 @@ def test_time_sharded_attnention(
     mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
     heads_per_slice = num_heads // num_slices
-    for i in range(num_slices):
-        slice = ttl.tensor.interleaved_to_sharded_partial(
-            reference_query_layer,
-            grid_size,
-            mm_activations_height_shard_spec,
-            num_slices,
-            i,
-            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-        )
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=grid_size,
-            in0_block_w=2,
-            per_core_M=tiles_per_shard,
-            per_core_N=seq_len // 32,
-            out_subblock_h=1,
-            out_subblock_w=1,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=False,
-        )
+    for iter in range(3000):
+        for i in range(num_slices):
+            slice = ttl.tensor.interleaved_to_sharded_partial(
+                reference_query_layer,
+                grid_size,
+                mm_activations_height_shard_spec,
+                num_slices,
+                i,
+                ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+            )
+            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=grid_size,
+                in0_block_w=2,
+                per_core_M=tiles_per_shard,
+                per_core_N=seq_len // 32,
+                out_subblock_h=1,
+                out_subblock_w=8,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=False,
+            )
 
-        k_slice = ttl.tensor.unpad(
-            reference_key_layer_transposed,
-            (0, (i * heads_per_slice), 0, 0),
-            (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
-            output_mem_config=l1_interleaved_memory_config,
-        )
-        mm_slice = ttl.operations.primary.matmul(
-            slice,
-            k_slice,
-            program_config=program_config,
-            output_mem_config=height_sharded_memory_config,
-            output_dtype=data_format,
-            compute_kernel_config=compute_kernel_config,
-        )
-        k_slice.deallocate()
-        slice.deallocate()
+            k_slice = ttl.tensor.unpad(
+                reference_key_layer_transposed,
+                (0, (i * heads_per_slice), 0, 0),
+                (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
+                output_mem_config=l1_interleaved_memory_config,
+            )
+            mm_slice = ttl.operations.primary.matmul(
+                slice,
+                k_slice,
+                program_config=program_config,
+                output_mem_config=height_sharded_memory_config,
+                output_dtype=data_format,
+                compute_kernel_config=compute_kernel_config,
+            )
+            k_slice.deallocate()
+            slice.deallocate()
 
-        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-            compute_with_storage_grid_size=grid_size,
-            subblock_w=1,
-            block_h=mm_output_height_shard_spec[0] // 32,
-            block_w=mm_output_height_shard_spec[1] // 32,
-        )
+            softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=grid_size,
+                subblock_w=1,
+                block_h=mm_output_height_shard_spec[0] // 32,
+                block_w=mm_output_height_shard_spec[1] // 32,
+            )
 
-        mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
+            mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
 
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=grid_size,
-            in0_block_w=seq_len // 32,
-            per_core_M=tiles_per_shard,
-            per_core_N=2,
-            out_subblock_h=1,
-            out_subblock_w=1,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=False,
-        )
-        v_slice = ttl.tensor.unpad(
-            reference_value_layer,
-            (0, (i * heads_per_slice), 0, 0),
-            (0, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, 63),
-            output_mem_config=l1_interleaved_memory_config,
-        )
-        mm_slice = ttl.operations.primary.matmul(
-            mm_slice,
-            v_slice,
-            program_config=program_config,
-            output_mem_config=height_sharded_memory_config,
-            output_dtype=data_format,
-            compute_kernel_config=compute_kernel_config,
-        )
-        v_slice.deallocate()
+            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=grid_size,
+                in0_block_w=seq_len // 32,
+                per_core_M=tiles_per_shard,
+                per_core_N=2,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=False,
+            )
+            v_slice = ttl.tensor.unpad(
+                reference_value_layer,
+                (0, (i * heads_per_slice), 0, 0),
+                (0, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, 63),
+                output_mem_config=l1_interleaved_memory_config,
+            )
+            mm_slice = ttl.operations.primary.matmul(
+                mm_slice,
+                v_slice,
+                program_config=program_config,
+                output_mem_config=height_sharded_memory_config,
+                output_dtype=data_format,
+                compute_kernel_config=compute_kernel_config,
+            )
+            v_slice.deallocate()
 
-        ttl.tensor.sharded_to_interleaved_partial(
-            mm_slice,
-            mm_out,
-            num_slices,
-            i,
-            dram_interleaved_memory_config,
-        )
+            ttl.tensor.sharded_to_interleaved_partial(
+                mm_slice,
+                mm_out,
+                num_slices,
+                i,
+                dram_interleaved_memory_config,
+            )
 
-        mm_slice.deallocate()
+            mm_slice.deallocate()
 
-        return
-
-    mm_out_torch = tt2torch_tensor(mm_out)
+        mm_out_torch = tt2torch_tensor(mm_out)
+        print(iter)
 
     attn_weights = ttl.tensor.bmm(
         reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
