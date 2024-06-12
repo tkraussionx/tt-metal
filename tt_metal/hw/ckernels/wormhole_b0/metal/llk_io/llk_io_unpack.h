@@ -12,6 +12,9 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+// MT: Temp extern declaration
+extern uint32_t tiles_proc_delay;
+extern uint32_t apply_cnt;
 
 using namespace ckernel;
 

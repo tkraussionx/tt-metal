@@ -626,6 +626,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     const auto& cores = corerange_to_cores(all_cores, std::nullopt, row_major);
     for (uint32_t i = 0; i < num_cores; ++i) {
         const auto& core = cores[i];
+
+        // delay every other row of cores
+        std::vector<uint32_t> mm_compute_args;
+        mm_compute_args.push_back(core.y % 2);
+
+        tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_compute_args);
+
         uint32_t output_idx_x = i % num_blocks_x;
         uint32_t output_idx_y = i / num_blocks_x;
 
@@ -1333,6 +1340,11 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
     const auto& cores = corerange_to_cores(all_cores, std::nullopt, row_major);
     for (uint32_t i = 0; i < num_cores; ++i) {
         const auto& core = cores[i];
+
+        // delay every other row of cores
+        std::vector<uint32_t> mm_compute_args;
+        mm_compute_args.push_back(core.y % 2);
+
         uint32_t output_idx_x = i / num_blocks_y;
         uint32_t output_idx_y = i % num_blocks_y;
 
