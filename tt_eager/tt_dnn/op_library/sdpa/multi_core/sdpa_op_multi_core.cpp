@@ -477,7 +477,8 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         q_parallel_factor,
         B,
         NQH,
-        q_num_chunks
+        q_num_chunks,
+        is_causal
         ]
     (
         const void* operation,
@@ -499,6 +500,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         uint32_t v_addr = v_buffer->address();
         uint32_t mask_addr = mask_buffer->address();
         uint32_t out_addr = out0_buffer->address();
+
+        auto& reader_args_by_core = GetRuntimeArgs(program, reader_kernels_id);
+        auto& writer_args_by_core = GetRuntimeArgs(program, writer_kernels_id);
+        // auto& compute_args_by_core = GetRuntimeArgs(program, compute_kernels_id);
 
         // Set reader rt args
         for (uint32_t i = 0; i < num_cores; ++i) {
@@ -529,12 +534,27 @@ operation::ProgramWithCallbacks sdpa_multi_core(
             log_debug("local_q_start: {}", local_q_start);
             log_debug("local_q_end: {}", local_q_end);
 
+            auto& reader_args = reader_args_by_core[core.x][core.y];
+            auto& writer_args = writer_args_by_core[core.x][core.y];
+            // auto& compute_args = compute_args_by_core[core.x][core.y];
 
-            SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            reader_args[0] = q_addr;
+            reader_args[1] = k_addr;
+            reader_args[2] = v_addr;
+            reader_args[3] = mask_addr;
+
+            writer_args[0] = out_addr;
+
+            // SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            // SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            // SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
         }
 
+
+        if (!is_causal) {
+            UpdateDynamicCircularBufferAddress(program, tt::CB::c_in0, *q_buffer);
+            UpdateDynamicCircularBufferAddress(program, tt::CB::c_out0, *out0_buffer);
+        }
 
     };
 
