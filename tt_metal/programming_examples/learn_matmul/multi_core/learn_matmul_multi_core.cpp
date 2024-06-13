@@ -246,7 +246,9 @@ void matmul(Device* device, int argc, char** argv)
                     start_Mt,
                     start_Nt,
                     this_core_Mt,
-                    this_core_Nt
+                    this_core_Nt,
+                    max_per_core_Mt,
+                    max_per_core_Nt
                 }
             );
 
@@ -263,7 +265,9 @@ void matmul(Device* device, int argc, char** argv)
         tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {
             Mt,
             Kt,
-            Nt
+            Nt,
+            max_per_core_Mt,
+            max_per_core_Nt
             }
         }
     );
