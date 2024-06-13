@@ -8,6 +8,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/pack_untilize.h"
+#include "debug/dprint.h"
 
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
@@ -17,6 +18,25 @@
 
 
 namespace NAMESPACE {
+
+uint32_t mm_partials_cb_addr = 115520;
+
+#define USE_UNPACK_HACK 0
+
+void printBits(uint32_t n) {
+    for (int i = 31; i >= 0; --i) {
+        UNPACK(DPRINT << ((n >> i) & 1));
+        if (i % 4 == 0) UNPACK(DPRINT <<  ' ');
+    }
+    UNPACK(DPRINT << ENDL());
+}
+
+FORCE_INLINE void print_bits(uint32_t addr) {
+    volatile tt_l1_ptr float* test_ptrf = reinterpret_cast<volatile tt_l1_ptr float*>(addr);
+    volatile tt_l1_ptr uint32_t* test_ptru = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
+    UNPACK(DPRINT << "ignore this line! " << test_ptrf[0] << ENDL());
+    printBits(test_ptru[0]);
+}
 
 FORCE_INLINE void reload_from_cb_to_dst(uint32_t in0_cb_id, uint32_t in1_cb_id, uint32_t mm_partials_cb_id, uint32_t out_subblock_num_tiles, uint32_t out_subblock_w, uint32_t out_subblock_h, uint32_t in0_block_w) {
     // Reconfigure input
@@ -150,6 +170,30 @@ void MAIN {
 
                     tile_regs_acquire();
                     if (enable_reload) {
+                        // unpack
+                        UNPACK(DPRINT << "[DEBUG] 1. enable_reload. reload_from_cb_to_dst" << ENDL());
+                        #if USE_UNPACK_HACK
+                        unpack_hack(mm_partials_cb_id, mm_partials_cb_id);
+                        #endif
+                        reload_from_cb_to_dst(in0_cb_id, in1_cb_id, mm_partials_cb_id, out_subblock_num_tiles, out_subblock_w, out_subblock_h, in0_block_w);
+                        tile_regs_commit();
+
+                        // pack tiles to check bits
+                        tile_regs_wait();
+                        UNPACK(DPRINT << "[DEBUG] 2. matmul_pack_tile to check bits" << ENDL());
+                        cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
+                        uint32_t start_dst_index = 0;
+                        matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
+                        print_bits(mm_partials_cb_addr);
+                        cb_push_back(mm_partials_cb_id, out_subblock_num_tiles);
+                        tile_regs_release();
+
+                        // unpack again
+                        UNPACK(DPRINT << "[DEBUG] 3. unpack again. reload_from_cb_to_dst" << ENDL());
+                        tile_regs_acquire();
+                        #if USE_UNPACK_HACK
+                        unpack_hack(mm_partials_cb_id, mm_partials_cb_id);
+                        #endif
                         reload_from_cb_to_dst(in0_cb_id, in1_cb_id, mm_partials_cb_id, out_subblock_num_tiles, out_subblock_w, out_subblock_h, in0_block_w);
                     }
 
@@ -163,6 +207,9 @@ void MAIN {
                         // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                         // accumulation is done by iterating matmul_block across inner dim
                         // in0_block_w is passed as innder dim (kt) to matmul_block, interally used to stride in0
+                        #if USE_UNPACK_HACK
+                        unpack_hack(in0_cb_id, in1_cb_id);
+                        #endif
                         matmul_block(in0_cb_id, in1_cb_id, in0_index, in1_index, dst_index, false, out_subblock_w, out_subblock_h, in0_block_w);
                         in0_index ++;  // stride right by 1
                         in1_index += in1_per_core_w; // to stride down by 1 need to stride by in_per_core_w (should be called in1_block_w)
@@ -225,6 +272,10 @@ void MAIN {
 
                         uint32_t start_dst_index = 0;
                         matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
+
+
+                        UNPACK(DPRINT << "[DEBUG] 0. matmul_pack_tile after matmul_block" << ENDL());
+                        print_bits(mm_partials_cb_addr);
 
                         tile_regs_release();
                         cb_push_back(mm_partials_cb_id, out_subblock_num_tiles);

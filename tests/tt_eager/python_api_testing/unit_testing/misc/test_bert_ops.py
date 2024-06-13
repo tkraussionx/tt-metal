@@ -780,3 +780,138 @@ def test_bert_linear_batch4_fp32_input_output(
     passing, output = comp_pcc(pt_out, tt_out)
     logger.info(output)
     assert passing
+
+
+@pytest.mark.skipif(is_grayskull(), reason="not tested for GS")
+@pytest.mark.parametrize(
+    "M, K, N, activation",
+    [
+        # not sharded due to L1 size
+        # small tensor test
+        (128, 256, 256, None),
+    ],
+)
+@pytest.mark.parametrize(
+    "input_data_type",
+    [ttl.tensor.DataType.BFLOAT16],
+)
+def test_fp32_unpack(
+    device,
+    M,
+    K,
+    N,
+    activation,
+    input_data_type,
+    function_level_defaults,
+):
+    in0_shape = [1, 1, M, K]
+    in1_shape = [1, 1, K, N]
+    bias_shape = [1, 1, N]
+    grid_size = (8, 4)
+
+    fp32_acc_mode = True
+    has_bias = False
+    fidelity = ttl.tensor.MathFidelity.HiFi4
+    packer_l1_acc = False
+
+    in0_block_h = M // grid_size[1] // 32
+    in0_block_w = K // grid_size[0] // 32
+    out_block_h = M // grid_size[1] // 32
+    out_block_w = N // grid_size[0] // 32
+
+    # full block too large to fit in L1
+    if in0_block_h * in0_block_w >= 48 or in0_block_w * out_block_w >= 48:
+        in0_block_w = in0_block_w // 2
+
+    if out_block_w < 4:
+        out_subblock_w = out_block_w
+        out_subblock_h = out_block_h // out_subblock_w
+    else:
+        out_subblock_w = 4
+        out_subblock_h = 1
+
+    logger.debug("in0 block w h " + str(in0_block_w * 32) + " " + str(in0_block_h * 32))
+    logger.debug("in1 block w h " + str(out_block_w * 32) + " " + str(in0_block_w * 32))
+    logger.debug("out block w h " + str(out_block_w * 32) + " " + str(out_block_h * 32))
+    logger.debug("out subblock w h " + str(out_subblock_w * 32) + " " + str(out_subblock_h * 32))
+
+    interleaved_mem_config_L1 = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+    interleaved_mem_config_DRAM = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    sharded_mem_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+
+    in0 = torch.rand(in0_shape).float() * 1000.0
+    in1 = torch.rand(in1_shape).float() * 1000.0
+    bias = torch.rand(bias_shape).float() * 1000.0
+
+    in0_t = torch2tt_tensor(
+        in0,
+        device,
+        tt_memory_config=interleaved_mem_config_DRAM,
+        tt_dtype=input_data_type,
+    )
+    in1_t = torch2tt_tensor(in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=input_data_type)
+
+    output_mem_config = interleaved_mem_config_DRAM
+    bias_t = pad_by_zero(
+        bias, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
+    )[0]
+
+    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
+        fused_activation=activation,
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=fidelity,
+        math_approx_mode=True,
+        fp32_dest_acc_en=fp32_acc_mode,
+        packer_l1_acc=packer_l1_acc,
+    )
+
+    if has_bias:
+        output_t = ttl.operations.primary.matmul(
+            in0_t,
+            in1_t,
+            bias=bias_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
+    else:
+        output_t = ttl.operations.primary.matmul(
+            in0_t,
+            in1_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
+
+    pt_out = in0 @ in1
+    if has_bias:
+        pt_out = pt_out + bias
+    if activation != None:
+        pt_out = torch.nn.functional.gelu(pt_out)
+    tt_out = tt2torch_tensor(output_t)
+
+    passing, output = comp_pcc(pt_out, tt_out)
+    logger.info(output)
+    diff = torch.abs(pt_out - tt_out)
+    logger.debug(f"std={torch.std(diff)}")
+    logger.debug(f"mean={diff.mean()}")
+    logger.debug(f"topk(5) {torch.topk(diff.reshape(-1), 5)}")
+    assert passing

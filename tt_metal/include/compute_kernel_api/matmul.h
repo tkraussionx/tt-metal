@@ -207,6 +207,9 @@ ALWI void mm_block_init_short_with_dt(uint32_t in0_cb_id = 0, uint32_t in1_cb_id
     mm_block_init_short(in0_cb_id, in1_cb_id, transpose, ct_dim, rt_dim, kt_dim);
 }
 
+ALWI void unpack_hack(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1) {
+    UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated<DST_ACCUM_MODE>(in0_cb_id, in1_cb_id) ));
+}
 
 
 } // namespace ckernel
