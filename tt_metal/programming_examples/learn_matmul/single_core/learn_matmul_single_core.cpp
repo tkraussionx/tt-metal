@@ -12,7 +12,7 @@
 // #include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 // #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
-
+const int TILE_SIZE = 32;
 namespace fs = std::filesystem;
 void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
                         uint32_t M, uint32_t N, uint32_t K) {
@@ -45,7 +45,11 @@ void matmul(Device* device, int argc, char** argv);
 
 int main(int argc, char ** argv)
 {
-    const int device_id = 0;
+    int device_id = 0;
+    if(argc>=5)
+    {
+        device_id = atoi(argv[4]);
+    }
     Device *device = CreateDevice(device_id);
     try{
         matmul(device, argc, argv);
@@ -69,77 +73,22 @@ void matmul(Device* device, int argc, char** argv)
     int K = atoi(argv[3]);
     printf("Matmul dimensions: M=%d, N=%d, K=%d\n", M, N, K);
 
+    int Mt = M / TILE_SIZE;
+    int Kt = K / TILE_SIZE;
+    int Nt = N / TILE_SIZE;
 
     auto input_a = create_random_vector_of_bfloat16_native(M*K*sizeof(bfloat16), 2.0f, 0, -1);
     auto input_b = create_random_vector_of_bfloat16_native(K*N*sizeof(bfloat16), 2.0f, 2, -1);
     std::vector<bfloat16> output(M*N, 0);
     std::vector<bfloat16> ref_output(M*N, 0);
 
-    // std::vector<bfloat16> input_a(M*K, bfloat16((float)1));
-    // std::vector<bfloat16> input_b(K*N, bfloat16((float)1));
-    // float index = 0;
-    // for(auto&val : input_a)
-    // {
-    //     val = (index++);
-    // }
-    // index = 0;
-    // for(auto&val : input_b)
-    // {
-    //     val = (index++);
-    // }
-
-    // std::cout<<std::fixed << std::setprecision(2)<<"\nInput A "<<std::endl;
-    // for(int i = 0; i< M;i++)
-    // {
-    //     for(int j = 0; j< K; j++)
-    //     {
-    //         // input_a[i*K+j] = bfloat16((float)(i%3)-1);
-    //         std::cout<<input_a[i*K+j].to_float()<<" ";
-    //     }
-    //     std::cout<<std::endl;
-    // }
-
-
-    // std::cout<<"\nInput B "<<std::endl;
-    // for(int i = 0; i< K;i++)
-    // {
-    //     for(int j = 0; j< N; j++)
-    //     {
-    //         // input_b[i*N+j] = bfloat16((float)(j%5)-2);
-    //         std::cout<<input_b[i*N+j].to_float()<<" ";
-    //     }
-    //     std::cout<<std::endl;
-    // }
-
     printf("Computing Reference Output\n");
     golden_matmul(input_a, input_b, ref_output, M, N, K);
-
-    // std::cout<<"\nRef Output "<<std::endl;
-    // for(int i = 0; i< M;i++)
-    // {
-    //     for(int j = 0; j< N; j++)
-    //     {
-    //         std::cout<<ref_output[i*N+j].to_float()<<" ";
-    //     }
-    //     std::cout<<std::endl;
-    // }
 
     printf("Tilizing Input \n");
     tilize(input_a,M,K);
     tilize(input_b,K,N);
     printf("Done Tilizing Input\n");
-
-    // std::cout<<"\nOutput "<<std::endl;
-    // for(int i = 0; i< M;i++)
-    // {
-    //     for(int j = 0; j< K; j++)
-    //     {
-    //         std::cout<<output[i*K+j].to_float()<<" ";
-    //     }
-    //     std::cout<<std::endl;
-    // }
-
-
 
     const int device_id = 0;
     CommandQueue& command_q = device->command_queue();
@@ -172,7 +121,7 @@ void matmul(Device* device, int argc, char** argv)
     std::shared_ptr<tt::tt_metal::Buffer> output_buffer = CreateBuffer(out_buffer_config);
 
     const int buffer_size_in_tiles = 2;
-    std::cout<<"Buffer created @ "<<inputA_buffer->address()<<std::endl;
+
     auto inputA_CB = CreateCircularBuffer(program,compute_core,CircularBufferConfig(
         buffer_size_in_tiles*tile_size,
         {{tt::CB::c_in0,tt::DataFormat::Float16_b}}
@@ -233,6 +182,8 @@ void matmul(Device* device, int argc, char** argv)
 
 
     untilize(output,M,N);
+
+
     std::cout<<"\nOutput "<<std::endl;
     double diff_sum = 0;
     int count = 0;

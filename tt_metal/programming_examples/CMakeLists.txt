@@ -12,12 +12,13 @@ set(PROGRAMMING_EXAMPLES_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multicore_reuse/matmul_multicore_reuse
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_single_core/matmul_single_core
-    ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/learn_matmul
+    ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/multi_core/learn_matmul_multi_core
+    ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/single_core/learn_matmul_single_core
+
 
 )
 
 include(${PROJECT_SOURCE_DIR}/cmake/helper_functions.cmake)
-
 CREATE_PGM_EXAMPLES_EXE("${PROGRAMMING_EXAMPLES_SRCS}" "")  # no subdir, output binaries straight to build/programming_examples
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/profiler)
