@@ -76,17 +76,6 @@ void matmul(Device* device, int argc, char** argv)
     int K = atoi(argv[3]);
     printf("Matmul dimensions: M=%d, N=%d, K=%d\n", M, N, K);
 
-    int Mt = M / TILE_SIZE;
-    int Kt = K / TILE_SIZE;
-    int Nt = N / TILE_SIZE;
-
-    const auto compute_core_grid = device->compute_with_storage_grid_size();
-    printf("Compute Core Grid Size: %d x %d\n", (int)compute_core_grid.x,(int) compute_core_grid.y);
-    //Max size
-    int core_grid_width = std::min<int>(compute_core_grid.x, Nt);
-    int core_grid_height = std::min<int>(compute_core_grid.y, Mt);
-
-    printf("Active Grid Size: %d x %d\n", core_grid_width, core_grid_height);
 
 
     auto input_a = create_random_vector_of_bfloat16_native(M*K*sizeof(bfloat16), 2.0f, time(NULL)+100, -1);
@@ -101,6 +90,29 @@ void matmul(Device* device, int argc, char** argv)
     tilize(input_a,M,K);
     tilize(input_b,K,N);
     printf("Done Tilizing Input\n");
+
+
+    int Mt = M / TILE_SIZE;
+    int Kt = K / TILE_SIZE;
+    int Nt = N / TILE_SIZE;
+
+    const auto compute_core_grid = device->compute_with_storage_grid_size();
+    printf("Compute Core Grid Size: %d x %d\n", (int)compute_core_grid.x,(int) compute_core_grid.y);
+    //Max size
+    int core_grid_width = std::min<int>(compute_core_grid.x, Nt);
+    int core_grid_height = std::min<int>(compute_core_grid.y, Mt);
+
+
+    int per_core_Mt = Mt / compute_core_grid.y;
+    int rem_Mt = Mt % compute_core_grid.y;
+    int max_per_core_Mt = per_core_Mt + (rem_Mt>0);
+
+    int per_core_Nt = Nt / compute_core_grid.x;
+    int rem_Nt = Nt % compute_core_grid.x;
+    int max_per_core_Nt = per_core_Nt + (rem_Nt>0);
+
+    printf("Active Grid Size: %d x %d, Per Core : %d x %d, Rem : %d x %d\n",  core_grid_height, core_grid_width, per_core_Mt, per_core_Nt, rem_Mt, rem_Nt);
+
 
     const int device_id = 0;
     CommandQueue& command_q = device->command_queue();
@@ -131,19 +143,21 @@ void matmul(Device* device, int argc, char** argv)
                 .buffer_type = tt::tt_metal::BufferType::DRAM
     };
 
-    const int per_core_in_size = Kt * TILE_SIZE * TILE_SIZE * sizeof(bfloat16);
+    const int per_core_inA_size = max_per_core_Mt * Kt * TILE_SIZE * TILE_SIZE * sizeof(bfloat16);
+    const int per_core_inB_size = max_per_core_Nt * Kt * TILE_SIZE * TILE_SIZE * sizeof(bfloat16);
 
+    printf("Max Per Core InA Size %d, InB Size %d\n", max_per_core_Mt, max_per_core_Nt);
     tt::tt_metal::InterleavedBufferConfig inA_slice_buf_config{
                 .device= device,
-                .size = per_core_in_size,
-                .page_size = per_core_in_size,
+                .size = per_core_inA_size,
+                .page_size = per_core_inA_size,
                 .buffer_type = tt::tt_metal::BufferType::L1
     };
 
     tt::tt_metal::InterleavedBufferConfig inB_slice_buf_config{
                 .device= device,
-                .size = per_core_in_size,
-                .page_size = per_core_in_size,
+                .size = per_core_inB_size,
+                .page_size = per_core_inB_size,
                 .buffer_type = tt::tt_metal::BufferType::L1
     };
 
@@ -185,28 +199,6 @@ void matmul(Device* device, int argc, char** argv)
         tt::tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::NOC_0, .compile_args = {}}
     );
 
-    for(int core_y = 0; core_y < core_grid_height; core_y++)
-    {
-        for(int core_x = 0; core_x < core_grid_width; core_x++)
-        {
-            CoreCoord core(core_x, core_y);
-            tt::tt_metal::SetRuntimeArgs(program_fetch, fetch_kernel_id, core,
-            {
-                inputA_buffer->address(),
-                inputB_buffer->address(),
-                Mt,
-                Kt,
-                Nt,
-                inA_slice_buffer->address(),
-                inB_slice_buffer->address(),
-                core_x,
-                core_y
-            });
-        }
-    }
-
-
-
     auto reader_kernel_path = root_dir/"matmul_mc_dataflow.cpp";
     auto reader_id = tt::tt_metal::CreateKernel(
         program_compute,
@@ -215,23 +207,52 @@ void matmul(Device* device, int argc, char** argv)
         tt::tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default, .compile_args = {}}
     );
 
+    int start_Mt = 0;
     for(int core_y = 0; core_y < core_grid_height; core_y++)
     {
+        int start_Nt = 0;
+        int this_core_Mt = per_core_Mt+(core_y<rem_Mt);
         for(int core_x = 0; core_x < core_grid_width; core_x++)
         {
             CoreCoord core(core_x, core_y);
-            tt::tt_metal::SetRuntimeArgs(program_compute, reader_id, core,
-            {
-                inA_slice_buffer->address(),
-                inB_slice_buffer->address(),
-                Mt,
-                Kt,
-                Nt,
-                output_buffer->address(),
-                core_x,
-                core_y
-            });
+            int this_core_Nt = per_core_Nt+(core_x<rem_Nt);
+
+            tt::tt_metal::SetRuntimeArgs(
+                program_fetch, fetch_kernel_id, core,
+                {
+                    inputA_buffer->address(),
+                    inputB_buffer->address(),
+                    Mt,
+                    Kt,
+                    Nt,
+                    inA_slice_buffer->address(),
+                    inB_slice_buffer->address(),
+                    start_Mt,
+                    start_Nt,
+                    this_core_Mt,
+                    this_core_Nt
+                }
+            );
+
+            tt::tt_metal::SetRuntimeArgs(
+                program_compute, reader_id, core,
+                {
+                    inA_slice_buffer->address(),
+                    inB_slice_buffer->address(),
+                    Mt,
+                    Kt,
+                    Nt,
+                    output_buffer->address(),
+                    start_Mt,
+                    start_Nt,
+                    this_core_Mt,
+                    this_core_Nt
+                }
+            );
+
+            start_Nt += this_core_Nt;
         }
+        start_Mt += this_core_Mt;
     }
 
     auto compute_kernel_path = root_dir/"compute_kernel.cpp";
