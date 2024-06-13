@@ -8,7 +8,6 @@
 #include "hostdevcommon/common_values.hpp"
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
-#include "debug/dprint.h"
 
 void kernel_main() {
     constexpr bool is_all_to_all_worker              = get_compile_time_arg_val(0) == 1;
@@ -22,18 +21,12 @@ void kernel_main() {
     const uint32_t beta_addr                      = get_arg_val<uint32_t>(4);
     const uint32_t gamma_tile_start_id            = get_arg_val<uint32_t>(5);
     const uint32_t beta_tile_start_id             = get_arg_val<uint32_t>(6);
-    // uint32_t arg_val_block_w                      = get_arg_val<uint32_t>(7);
-
-    // DPRINT << "arg_val_block_w == " << arg_val_block_w << ENDL();
-    // block_w = arg_val_block_w;
 
     constexpr uint32_t cb_gamma = tt::CB::c_in5;
     constexpr uint32_t cb_beta = tt::CB::c_in6;
     constexpr uint32_t cb_padding_zero = tt::CB::c_intermed2;
-    //if (block_w == 16) {
-        generate_reduce_scaler(cb_padding_zero, 0);
-        // DPRINT  << "Stuff generated in cb_padding zero: " <<  TSLICE(cb_padding_zero, 0, SliceRange::h0_w0_32()) << ENDL();
-    //}
+    generate_reduce_scaler(cb_padding_zero, 0);
+
     {
         constexpr uint32_t cb_in_2 = tt::CB::c_in2;
         const uint32_t scalar_w = get_arg_val<uint32_t>(1);
