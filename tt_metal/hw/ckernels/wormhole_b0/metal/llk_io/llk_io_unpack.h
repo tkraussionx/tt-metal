@@ -62,11 +62,11 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
 
     // uncomment to add delay on each block and avoid the hang
     // if (operand == tt::CB::c_in1) {
-    if (operand == tt::CB::c_in1 && (apply_cnt == 0)) {
-        // Apply delay only if second operand has arrived
-        apply_cnt++;
-        wait(tiles_proc_delay);
-    }
+    //if (operand == tt::CB::c_in1 && (apply_cnt == 0)) {
+    //    // Apply delay only if second operand has arrived
+    //    apply_cnt++;
+    //    wait(tiles_proc_delay);
+    //}
 }
 
 // Pop N tiles from the incoming stream
