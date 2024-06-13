@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
-
+#include "debug/dprint.h"
 void kernel_main() {
     // in0 tensor args
     const uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
@@ -88,6 +88,8 @@ void kernel_main() {
     #endif
     #endif
 
+
+    DPRINT << "READER mm_partials_cb_id addr " << get_write_ptr(24) << ENDL();
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in0_tensor_current_block_start_tile_id = in0_tensor_start_tile_id;
         for (uint32_t block = 0; block < num_blocks; ++block) {
