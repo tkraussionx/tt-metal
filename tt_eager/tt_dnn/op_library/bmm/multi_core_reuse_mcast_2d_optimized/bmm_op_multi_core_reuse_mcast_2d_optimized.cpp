@@ -51,6 +51,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
     tt_metal::Program program{};
 
+    std::vector<uint32_t> y_cores = get_y_coords_wormhole(device);
+
     uint32_t num_blocks = K / in0_block_w;
 
     // Only enable packer l1 accumulation when there are num_blocks > 2, otherwise
@@ -452,6 +454,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
+    mm_kernel_defines["MATMUL_2D_OPTIMIZED"] = "1";
+
     if (in0_height_sharded) {
         mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
     }
@@ -780,6 +784,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     const auto& in1_receiver_other_cores =
         grid_to_cores(in0_receiver_in1_receiver_right_half.start, in0_receiver_in1_receiver_right_half.end, true);
     for (const auto& core : cores) {
+        // dellay every other row of cores
+        std::vector<uint32_t> mm_compute_args;
+        if (core.y % 2 == 1) {
+            mm_compute_args.push_back(1);
+        } else {
+            mm_compute_args.push_back(0);
+        }
+
+        tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_compute_args);
+
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
         CoreCoord right_core = {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)core.y};
