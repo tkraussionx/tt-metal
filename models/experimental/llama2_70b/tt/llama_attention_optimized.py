@@ -456,70 +456,105 @@ class TtLlamaAttention_optimized:
         key_layer.deallocate(True)
         # key and value layers will have kv_seq_len padded to nearest 32
 
-        keys = self.layer_past[0]
-        key_layer = tt_lib.tensor.nlp_kv_cache_load_slice(keys, 0, padded_layer_past_len)
+        # keys = self.layer_past[0]
+        # key_layer = tt_lib.tensor.nlp_kv_cache_load_slice(keys, 0, padded_layer_past_len)
 
-        # PRE-SOFTMAX MM
+        # # PRE-SOFTMAX MM
 
-        key_layer_transposed = tt_lib.tensor.transpose(
-            key_layer,
-            -2,
-            -1,
-            output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
-        )
+        # key_layer_transposed = tt_lib.tensor.transpose(
+        #     key_layer,
+        #     -2,
+        #     -1,
+        #     output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
+        # )
 
-        key_layer.deallocate(True)
+        # key_layer.deallocate(True)
 
-        attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
-        attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
-        attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
+        # attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+        # attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
+        # attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
 
-        attn_weights = tt_lib.operations.primary.matmul(
-            query_layer,
-            key_layer_transposed,
-            program_config=attn_prog_config,
-            output_mem_config=attn_output_memcfg,
-            output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
-        )
+        # attn_weights = tt_lib.operations.primary.matmul(
+        #     query_layer,
+        #     key_layer_transposed,
+        #     program_config=attn_prog_config,
+        #     output_mem_config=attn_output_memcfg,
+        #     output_dtype=self.model_config["ATTN_BATCHED_MM_OUTPUT_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
 
-        query_layer.deallocate(True)
-        key_layer_transposed.deallocate(True)
+        # query_layer.deallocate(True)
+        # key_layer_transposed.deallocate(True)
 
-        # SOFTMAX
-        softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
-        softmax_progcfg.block_w = padded_layer_past_len // 32
+        # # SOFTMAX
+        # softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
+        # softmax_progcfg.block_w = padded_layer_past_len // 32
 
-        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-            attn_weights,
-            self.scale,
-            attn_masks,
-            program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
-            is_causal_mask=True,
-        )
+        # attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+        #     attn_weights,
+        #     self.scale,
+        #     attn_masks,
+        #     program_config=self.model_config["BATCHED_SOFTMAX_PROGCFG"],
+        #     is_causal_mask=True,
+        # )
 
-        # V CACHE UPDATE
+        # # V CACHE UPDATE
+        def get_chunk_size(s):
+            # Not sure if optimal
+            if s <= 32:
+                return 32
+            if s <= 64:
+                return 64
+            if s <= 128:
+                return 128
+            if s <= 256:
+                return 256
+            if s <= 2048:
+                return 512
+            return 1024
+
+        sdpa_chunk_size = get_chunk_size(start_pos + 1)
+        padded_layer_past_len = int(math.ceil((start_pos + 1) / sdpa_chunk_size) * sdpa_chunk_size)
 
         values = self.layer_past[1]
         tt_lib.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
         value_layer.deallocate(True)
 
-        values = self.layer_past[1]
-        value_layer = tt_lib.tensor.nlp_kv_cache_load_slice(values, 0, padded_layer_past_len)
+        # values = self.layer_past[1]
+        # value_layer = tt_lib.tensor.nlp_kv_cache_load_slice(values, 0, padded_layer_past_len)
 
         # POST-SOFTMAX MM
-        scores_prog_config = self.model_config["SCORES_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+        # scores_prog_config = self.model_config["SCORES_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
 
-        attn_output = tt_lib.operations.primary.matmul(
-            attn_weights,
-            value_layer,
-            program_config=scores_prog_config,
-            output_mem_config=self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["BFLOAT16_DTYPE"],
-            compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # attn_output = tt_lib.operations.primary.matmul(
+        #     attn_weights,
+        #     value_layer,
+        #     program_config=scores_prog_config,
+        #     output_mem_config=self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"],
+        #     output_dtype=self.model_config["BFLOAT16_DTYPE"],
+        #     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+        # )
+        # attn_weights.deallocate(True)
+        # value_layer.deallocate(True)
+        sdpa_prog_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[8, 7],
+            q_chunk_size=self.padded_local_heads,
+            k_chunk_size=sdpa_chunk_size,
         )
-        attn_weights.deallocate(True)
-        value_layer.deallocate(True)
+        # breakpoint()
+        attn_output = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+            query_layer,
+            keys,
+            values,
+            attn_masks,
+            is_causal=False,
+            valid_seq_len=padded_layer_past_len,
+            program_config=sdpa_prog_config,
+            scale=self.scale,
+            compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP32ACC_CONFIG"],
+            output_mem_config=query_layer.memory_config(),
+        )
+        query_layer.deallocate(True)
 
         return attn_output
 

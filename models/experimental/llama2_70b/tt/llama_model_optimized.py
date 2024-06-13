@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-
+import math
 from loguru import logger
 from typing import List
 from tqdm import tqdm
@@ -24,6 +24,21 @@ from models.experimental.llama2_70b.tt.llama_common import (
     gather_cos_sin,
     get_rot_transformation_mat,
 )
+
+
+def get_chunk_size(s):
+    # Not sure if optimal
+    if s <= 32:
+        return 32
+    if s <= 64:
+        return 64
+    if s <= 128:
+        return 128
+    if s <= 256:
+        return 256
+    if s <= 2048:
+        return 512
+    return 1024
 
 
 class TtLlamaModel_optimized:
@@ -273,9 +288,11 @@ class TtLlamaModel_optimized:
                 rot_mats, sharded_mem_config=self.model_config["ROT_MAT_MM_IN1_MEMCFG"]
             )
 
-            padded_layer_past_len = nearest_32(start_pos + 1)
+            sdpa_chunk_size = get_chunk_size(start_pos + 1)
+            # padded_layer_past_len = nearest_32(start_pos + 1)
 
-            padded_layer_past_len = nearest_32(start_pos + 1)
+            # padded_layer_past_len = nearest_32(start_pos + 1)
+            padded_layer_past_len = int(math.ceil((start_pos + 1) / sdpa_chunk_size) * sdpa_chunk_size)
             attn_mask_shape = (seq_len, 1, self.padded_local_heads, padded_layer_past_len)
             attn_mask = torch.zeros(*attn_mask_shape)
             attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
@@ -295,16 +312,16 @@ class TtLlamaModel_optimized:
             attn_masks = tt_lib.tensor.repeat(
                 attn_masks, repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
             )
-            # Put attn_mask on the device with the sharded config
-            attention_mask_memconfig = self.model_config["ATTN_MASK_MEMCFG"]
-            if attention_mask_memconfig.is_sharded():
-                attn_mask_shard_shape = attention_mask_memconfig.shard_spec.shape
-                attn_mask_shard_shape[-1] = padded_layer_past_len
-                attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
+            # # Put attn_mask on the device with the sharded config
+            # attention_mask_memconfig = self.model_config["ATTN_MASK_MEMCFG"]
+            # if attention_mask_memconfig.is_sharded():
+            #     attn_mask_shard_shape = attention_mask_memconfig.shard_spec.shape
+            #     attn_mask_shard_shape[-1] = padded_layer_past_len
+            #     attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
-                attn_masks = tt_lib.tensor.interleaved_to_sharded(
-                    attn_masks, sharded_mem_config=attention_mask_memconfig
-                )
+            #     attn_masks = tt_lib.tensor.interleaved_to_sharded(
+            #         attn_masks, sharded_mem_config=attention_mask_memconfig
+            #     )
 
         return (
             xs,

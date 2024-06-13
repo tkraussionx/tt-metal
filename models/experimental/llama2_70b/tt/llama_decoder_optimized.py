@@ -197,7 +197,7 @@ class TtLlamaDecoder_optimized:
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 device=self.device_mesh,
-                memory_config=self.model_config["DRAM_MEMCFG"],
+                # memory_config=self.model_config["DRAM_MEMCFG"],
             )
             attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
 

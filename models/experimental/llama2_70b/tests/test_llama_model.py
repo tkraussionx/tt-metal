@@ -115,10 +115,10 @@ def run_test_LlamaModel_inference(
         generation_length = 1
     else:
         generation_start_pos = UNIT_TEST_START_POS
-        generation_length = UNIT_TEST_GENERATION_LENGTH
+        generation_length = 8000  # UNIT_TEST_GENERATION_LENGTH
     all_tests_pass = True
     all_pccs, all_top1, all_top5 = [], [], []
-    for i in range(generation_length):
+    for i in range(0, generation_length, 100):
         # Prepare input
         pt_inp_ids = torch.randint(0, configuration.vocab_size, (batch, seq_len))
         tt_inp_ids = pt_inp_ids.clone()
