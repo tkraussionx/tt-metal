@@ -82,15 +82,20 @@ void MAIN {
     uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
     uint32_t num_valid_tiles_per_block_h = block_w;
     uint32_t num_valid_subblocks_w = num_subblocks_w;
+    uint32_t padding_diff = 0;
 
     if (block_w == 16) {
         subblock_w = 1;
-        num_subblocks_w = 16;
+        num_subblocks_w = 18;
+        block_w = 18;
+        num_valid_subblocks_w = 16;
+        padding_diff = num_subblocks_w - num_valid_subblocks_w;
         // num_tiles_per_block = block_w * block_h_const;
         //num_valid_tiles_per_block_h = block_w;
 
+        cb_wait_front(cb_padding_zero, 1);
 
-        DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
+        // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
     } else if (width_index == 7) {
         DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
     }
@@ -208,16 +213,16 @@ void MAIN {
     }
     index_h_offset = 0;
     unpack_reconfig_data_format_srca(cb_ex_external, cb_in);
-    sub_bcast_cols_init_short();
     cb_reserve_back(cb_xmm, num_tiles_per_block);
     for (uint32_t i = 0; i < block_h; i++) {
+        sub_bcast_cols_init_short();
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
         constexpr uint32_t tile_index_to_inspect = 0;
         // DPRINT_UNPACK({ DPRINT  << "cb_ex_global, width_index=" << width_index << "Tile index:" << tile_index_to_inspect << " Tile content: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
         // DPRINT_UNPACK({ DPRINT  << "checking, width_index=" << width_index << "num_subblocks_w:" << num_subblocks_w << " sublock_w: " << subblock_w << ENDL(); });
 
-        for (uint32_t j = 0; j < num_subblocks_w; j++) {
+        for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
                 index = w + index_subblock_w_offset;
@@ -231,6 +236,16 @@ void MAIN {
             tile_regs_release();
             index_subblock_w_offset += subblock_w;
         }
+        copy_tile_init();
+        tile_regs_acquire();
+        copy_tile(cb_padding_zero, 0, 0);
+        tile_regs_commit();
+        tile_regs_wait();
+        for (uint32_t j = 0; j < padding_diff; j++) {
+            pack_tile(0 , cb_xmm);
+        }
+        tile_regs_release();
+
         cb_pop_front(cb_ex_global, 1);
         cb_pop_front(cb_in, block_w);
     }
@@ -239,8 +254,8 @@ void MAIN {
     unpack_reconfig_data_format_srca(cb_in, cb_xmm);
     #endif
     cb_wait_front(cb_xmm, num_tiles_per_block);
-    // constexpr uint32_t tile_index_to_inspect = 17;
-    // DPRINT_UNPACK({ DPRINT  << "Xmm, width_index=" << width_index << "Tile index:" << tile_index_to_inspect << " Tile content: " << TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    //constexpr uint32_t tile_index_to_inspect = 17;
+    //DPRINT_UNPACK({ DPRINT  << "WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
     // for (uint32_t i = 0; i < num_tiles_per_block; i++) {
     //     DPRINT_UNPACK({ DPRINT  << "Xmm, width_index=" << width_index << "Tile content: " << TSLICE(cb_xmm, i, SliceRange::h0_w0_32()) << ENDL(); });
     // }
@@ -253,12 +268,12 @@ void MAIN {
     #endif
 
     // (x - E[x])^2, cb_mm2 <-- cb_xmm
-    mul_tiles_init();
     index_h_offset = 0;
     cb_reserve_back(cb_xmm2, num_tiles_per_block);
     for (uint32_t i = 0; i < block_h; i++) {
+        mul_tiles_init();
         index_subblock_w_offset = 0;
-        for (uint32_t j = 0; j < num_subblocks_w; j++) {
+        for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
                 index = w + index_subblock_w_offset + index_h_offset;
@@ -272,6 +287,15 @@ void MAIN {
             tile_regs_release();
             index_subblock_w_offset += subblock_w;
         }
+        copy_tile_init();
+        tile_regs_acquire();
+        copy_tile(cb_padding_zero, 0, 0);
+        tile_regs_commit();
+        tile_regs_wait();
+        for (uint32_t j = 0; j < padding_diff; j++) {
+            pack_tile(0 , cb_xmm2);
+        }
+        tile_regs_release();
         index_h_offset += block_w;
     }
     cb_push_back(cb_xmm2, num_tiles_per_block);
@@ -285,6 +309,8 @@ void MAIN {
     #endif
 
     cb_wait_front(cb_xmm2, num_tiles_per_block);
+    // constexpr uint32_t tile_index_to_inspect = 15;
+    // DPRINT_UNPACK({ DPRINT  << "XMM2_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_xmm2, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
 
     // Var(x)
     cb_reserve_back(cb_ex_partial2, block_h);
@@ -304,6 +330,10 @@ void MAIN {
     reduce_revert_delta();
     cb_pop_front(cb_xmm2, num_tiles_per_block);
     cb_push_back(cb_ex_partial2, block_h);
+
+    // constexpr uint32_t tile_index_to_inspect = 0;
+    // DPRINT_UNPACK({ DPRINT  << "cb_ex_partial2_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_partial2, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+
 
     // global reduce, cb_ex <-- cb_ex_external, cb_ex_partial
     if constexpr(is_allgather_worker) {
@@ -367,13 +397,15 @@ void MAIN {
         unpack_reconfig_data_format(cb_xmm, cb_ex_global);
     }
     #endif
-    mul_bcast_cols_init_short();
     index_h_offset = 0;
     cb_reserve_back(cb_im, num_tiles_per_block);
     for (uint32_t i = 0; i < block_h; i++) {
+        mul_bcast_cols_init_short();
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
-        for (uint32_t j = 0; j < num_subblocks_w; j++) {
+        constexpr uint32_t tile_index_to_inspect = 0;
+        DPRINT_UNPACK({ DPRINT  << "cb_ex_global_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
                 index = w + index_subblock_w_offset + index_h_offset;
@@ -389,6 +421,15 @@ void MAIN {
 
             index_subblock_w_offset += subblock_w;
         }
+        copy_tile_init();
+        tile_regs_acquire();
+        copy_tile(cb_padding_zero, 0, 0);
+        tile_regs_commit();
+        tile_regs_wait();
+        for (uint32_t j = 0; j < padding_diff; j++) {
+            pack_tile(0 , cb_im);
+        }
+        tile_regs_release();
         index_h_offset += block_w;
         cb_pop_front(cb_ex_global, 1);
     }
@@ -402,13 +443,13 @@ void MAIN {
         if constexpr(do_beta == 0) {
             pack_reconfig_data_format(cb_out);
         }
-        mul_bcast_rows_init_short();
         cb_wait_front(cb_gamma, block_w);
         index_h_offset = 0;
         cb_reserve_back(cb_outgamma, num_tiles_per_block);
         for (uint32_t i = 0; i < block_h; i++) {
             index_subblock_w_offset = 0;
-            for (uint32_t j = 0; j < num_subblocks_w; j++) {
+            for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
+                mul_bcast_rows_init_short();
                 tile_regs_acquire();
                 for (uint32_t w = 0; w < subblock_w; w++) {
                     index = w + index_subblock_w_offset;
@@ -422,6 +463,15 @@ void MAIN {
                 tile_regs_release();
                 index_subblock_w_offset += subblock_w;
             }
+            copy_tile_init();
+            tile_regs_acquire();
+            copy_tile(cb_padding_zero, 0, 0);
+            tile_regs_commit();
+            tile_regs_wait();
+            for (uint32_t j = 0; j < padding_diff; j++) {
+                pack_tile(0 , cb_outgamma);
+            }
+            tile_regs_release();
             index_h_offset += block_w;
         }
         cb_push_back(cb_outgamma, num_tiles_per_block);
@@ -432,13 +482,13 @@ void MAIN {
     if constexpr(do_beta) {
         unpack_reconfig_data_format(cb_fusion, cb_beta);
         pack_reconfig_data_format(cb_out);
-        add_bcast_rows_init_short();
         cb_wait_front(cb_beta, block_w);
         index_h_offset = 0;
         cb_reserve_back(cb_out, num_tiles_per_block);
         for (uint32_t i = 0; i < block_h; i++) {
+            add_bcast_rows_init_short();
             index_subblock_w_offset = 0;
-            for (uint32_t j = 0; j < num_subblocks_w; j++) {
+            for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
                 tile_regs_acquire();
                 for (uint32_t w = 0; w < subblock_w; w++) {
                     index = w + index_subblock_w_offset;
@@ -451,8 +501,17 @@ void MAIN {
                 }
                 tile_regs_release();
                 index_subblock_w_offset += subblock_w;
-
             }
+            copy_tile_init();
+            tile_regs_acquire();
+            copy_tile(cb_padding_zero, 0, 0);
+            tile_regs_commit();
+            tile_regs_wait();
+            for (uint32_t j = 0; j < padding_diff; j++) {
+                pack_tile(0 , cb_out);
+            }
+            tile_regs_release();
+
             index_h_offset += block_w;
         }
         cb_push_back(cb_out, num_tiles_per_block);
@@ -464,30 +523,30 @@ void MAIN {
     //     // DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
     // }
 
-    if (block_w == 16) {
-       // DPRINT << "BEGIN" << ENDL();
-        uint32_t pad_remainder = 2 * block_h_const;
-        unpack_reconfig_data_format_srca(cb_padding_zero);
-        pack_reconfig_data_format(cb_out);
-        // DPRINT_UNPACK({ DPRINT  << "before: " <<  TSLICE(cb_out, 17, SliceRange::h0_w0_32()) << ENDL(); });
-        copy_tile_init();
-        cb_wait_front(cb_padding_zero, 1);
-        cb_reserve_back(cb_out, pad_remainder);
-        //cb_reserve_back(cb_out, 18);
-        tile_regs_acquire();
-        copy_tile(cb_padding_zero, 0, 0);
-        tile_regs_commit();
-        tile_regs_wait();
-        for (uint32_t i = 0; i < pad_remainder; i++) {
-            pack_tile(0, cb_out);
-        }
-        tile_regs_release();
-        cb_push_back(cb_out, pad_remainder);
-        cb_pop_front(cb_padding_zero, 1);
-        //DPRINT << "END" << ENDL();
-        cb_wait_front(cb_out, block_w * block_h_const);
-        // DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    }
+    // if (block_w == 16) {
+    //    // DPRINT << "BEGIN" << ENDL();
+    //     uint32_t pad_remainder = 2 * block_h_const;
+    //     unpack_reconfig_data_format_srca(cb_padding_zero);
+    //     pack_reconfig_data_format(cb_out);
+    //     // DPRINT_UNPACK({ DPRINT  << "before: " <<  TSLICE(cb_out, 17, SliceRange::h0_w0_32()) << ENDL(); });
+    //     copy_tile_init();
+    //     cb_wait_front(cb_padding_zero, 1);
+    //     cb_reserve_back(cb_out, pad_remainder);
+    //     //cb_reserve_back(cb_out, 18);
+    //     tile_regs_acquire();
+    //     copy_tile(cb_padding_zero, 0, 0);
+    //     tile_regs_commit();
+    //     tile_regs_wait();
+    //     for (uint32_t i = 0; i < pad_remainder; i++) {
+    //         pack_tile(0, cb_out);
+    //     }
+    //     tile_regs_release();
+    //     cb_push_back(cb_out, pad_remainder);
+    //     cb_pop_front(cb_padding_zero, 1);
+    //     //DPRINT << "END" << ENDL();
+    //     cb_wait_front(cb_out, block_w * block_h_const);
+    //     // DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_out, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+    // }
 
     // constexpr uint32_t tile_index_to_inspect = 36;
     // if (width_index == 7 && block_w == 18) {
