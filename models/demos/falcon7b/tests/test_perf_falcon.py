@@ -538,7 +538,7 @@ class TestParametrized:
             "decode_batch32_2047_bf16_l1_sharded",
         ],
     )
-    @pytest.mark.parametrize("async_mode", [False])
+    @pytest.mark.parametrize("async_mode", (False, True))
     @skip_for_grayskull()
     def test_perf_wh_bare_metal(
         self,
@@ -557,7 +557,7 @@ class TestParametrized:
         model_location_generator,
         get_tt_cache_path,
         device,
-        # use_program_cache,
+        use_program_cache,
         async_mode,
     ):
         print("Turned off program cache")

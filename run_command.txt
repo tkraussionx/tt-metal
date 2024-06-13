@@ -54,3 +54,7 @@ python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/
 decode 128:
 pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and decode_batch32_128_bf16_l1_sharded"
 python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and decode_batch32_128_bf16_l1_sharded\""
+
+
+TT_METAL_DPRINT_CORES=all TT_METAL_SLOW_DISPATCH_MODE=1 pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_sharded_ln and seq_len_32"
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"test_sharded_ln and seq_len_32\""

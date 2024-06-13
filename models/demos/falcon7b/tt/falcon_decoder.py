@@ -153,11 +153,11 @@ class TtFalconDecoderLayer(nn.Module):
 
         if self.flag == True:
             # First run
-            print("Running first run - no padding")
-            print("Beta shape: ", self.layernorm_beta[0].get_legacy_shape())
-            print("Beta layout: ", self.layernorm_beta[0].get_layout())
-            print("Gamma shape: ", self.layernorm_gamma[0].get_legacy_shape())
-            print("Gamma layout: ", self.layernorm_gamma[0].get_layout())
+            # print("Running first run - no padding")
+            # print("Beta shape: ", self.layernorm_beta[0].get_legacy_shape())
+            # print("Beta layout: ", self.layernorm_beta[0].get_layout())
+            # print("Gamma shape: ", self.layernorm_gamma[0].get_legacy_shape())
+            # print("Gamma layout: ", self.layernorm_gamma[0].get_layout())
             # self.flag = True
             for i in range(self.num_devices):
                 layernorm_output.append(

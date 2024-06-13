@@ -777,9 +777,13 @@ def test_sharded_ln(device, num_cores, seq_len):
     gamma_beta_shape = [1, 1, 32, hidden_dim]
 
     ln_epsilon = 1e-5
-    torch_input = torch.randn(input_shape).bfloat16().float()
-    torch_gamma = torch.randn(gamma_beta_shape).bfloat16().float()
-    torch_betta = torch.randn(gamma_beta_shape).bfloat16().float()
+    torch_input = torch.rand(input_shape).bfloat16().float()
+    torch_gamma = torch.rand(gamma_beta_shape).bfloat16().float()
+    torch_betta = torch.rand(gamma_beta_shape).bfloat16().float()
+
+    # torch_input = torch.randn(input_shape).bfloat16().float()
+    # torch_gamma = torch.randn(gamma_beta_shape).bfloat16().float()
+    # torch_betta = torch.randn(gamma_beta_shape).bfloat16().float()
 
     dram_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
         memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
@@ -874,10 +878,10 @@ def test_sharded_ln(device, num_cores, seq_len):
         tt_out_unpadded_sharded = ttnn.experimental.operations.primary.layernorm(
             tt_input_sharded_unpadded,
             ln_epsilon,
-            # gamma=tt_gamma,
-            # beta=tt_betta,
-            gamma=None,
-            beta=None,
+            gamma=tt_gamma,
+            beta=tt_betta,
+            # gamma=None,
+            # beta=None,
             output_mem_config=block_sharded_mem_config,
             program_config=layernorm_block_sharded_prg_config_inplace,
         )
@@ -897,13 +901,14 @@ def test_sharded_ln(device, num_cores, seq_len):
         tt_input_sharded_padded = ttnn.experimental.tensor.interleaved_to_sharded(
             tt_input_padded, sharded_mem_config=block_sharded_mem_config
         )
+        print("Start op 2")
         tt_out_padded_sharded = ttnn.experimental.operations.primary.layernorm(
             tt_input_sharded_padded,
             ln_epsilon,
-            # gamma=tt_gamma_padded,
-            # beta=tt_betta_padded,
-            gamma=None,
-            beta=None,
+            gamma=tt_gamma_padded,
+            beta=tt_betta_padded,
+            # gamma=None,
+            # beta=None,
             output_mem_config=block_sharded_mem_config,
             program_config=layernorm_block_sharded_prg_config_inplace,
         )
@@ -916,7 +921,7 @@ def test_sharded_ln(device, num_cores, seq_len):
 
     passing, out = comp_pcc(torch_out_unpadded, torch_out_padded)
     print("PCC comp is: ", out)
-    # assert passing
+    assert passing
 
 
 @pytest.mark.parametrize(

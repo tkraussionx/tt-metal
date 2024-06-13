@@ -84,6 +84,9 @@ void MAIN {
     uint32_t num_valid_subblocks_w = num_subblocks_w;
     uint32_t padding_diff = 0;
 
+    cb_wait_front(cb_padding_zero, 1);
+
+
     if (block_w == 16) {
         subblock_w = 1;
         num_subblocks_w = 18;
@@ -97,7 +100,7 @@ void MAIN {
 
         // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
     } else if (width_index == 7) {
-        DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
+        // DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
     }
 
     // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
@@ -165,7 +168,7 @@ void MAIN {
     cb_reserve_back(cb_ex_partial, block_h);
     for (uint32_t i = 0; i < block_h; i++) {
         tile_regs_acquire();
-        for (uint32_t w = 0; w < block_w; w++) {
+        for (uint32_t w = 0; w < num_valid_subblocks_w * subblock_w; w++) { // This needs fixing probably
             reduce_tile(cb_in, cb_scaler, w+index_h_offset, scaler0, dst0);
         }
         tile_regs_commit();
@@ -236,9 +239,9 @@ void MAIN {
             tile_regs_release();
             index_subblock_w_offset += subblock_w;
         }
-        copy_tile_init();
         tile_regs_acquire();
-        copy_tile(cb_padding_zero, 0, 0);
+        unpack_reconfig_data_format_srca(cb_in, cb_padding_zero);
+        sub_tiles_bcast_cols(cb_padding_zero, cb_ex_global, 0, 0, 0);
         tile_regs_commit();
         tile_regs_wait();
         for (uint32_t j = 0; j < padding_diff; j++) {
@@ -249,6 +252,7 @@ void MAIN {
         cb_pop_front(cb_ex_global, 1);
         cb_pop_front(cb_in, block_w);
     }
+
     cb_push_back(cb_xmm, num_tiles_per_block);
     #ifndef FUSE_PRE_ADD
     unpack_reconfig_data_format_srca(cb_in, cb_xmm);
@@ -273,7 +277,7 @@ void MAIN {
     for (uint32_t i = 0; i < block_h; i++) {
         mul_tiles_init();
         index_subblock_w_offset = 0;
-        for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
+        for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
                 index = w + index_subblock_w_offset + index_h_offset;
@@ -287,15 +291,15 @@ void MAIN {
             tile_regs_release();
             index_subblock_w_offset += subblock_w;
         }
-        copy_tile_init();
-        tile_regs_acquire();
-        copy_tile(cb_padding_zero, 0, 0);
-        tile_regs_commit();
-        tile_regs_wait();
-        for (uint32_t j = 0; j < padding_diff; j++) {
-            pack_tile(0 , cb_xmm2);
-        }
-        tile_regs_release();
+        // copy_tile_init();
+        // tile_regs_acquire();
+        // copy_tile(cb_padding_zero, 0, 0);
+        // tile_regs_commit();
+        // tile_regs_wait();
+        // for (uint32_t j = 0; j < padding_diff; j++) {
+        //     pack_tile(0 , cb_xmm2);
+        // }
+        // tile_regs_release();
         index_h_offset += block_w;
     }
     cb_push_back(cb_xmm2, num_tiles_per_block);
@@ -403,9 +407,9 @@ void MAIN {
         mul_bcast_cols_init_short();
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
-        constexpr uint32_t tile_index_to_inspect = 0;
-        DPRINT_UNPACK({ DPRINT  << "cb_ex_global_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-        for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
+        // constexpr uint32_t tile_index_to_inspect = 0;
+        // DPRINT_UNPACK({ DPRINT  << "cb_ex_global_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+        for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
                 index = w + index_subblock_w_offset + index_h_offset;
@@ -421,15 +425,15 @@ void MAIN {
 
             index_subblock_w_offset += subblock_w;
         }
-        copy_tile_init();
-        tile_regs_acquire();
-        copy_tile(cb_padding_zero, 0, 0);
-        tile_regs_commit();
-        tile_regs_wait();
-        for (uint32_t j = 0; j < padding_diff; j++) {
-            pack_tile(0 , cb_im);
-        }
-        tile_regs_release();
+        // copy_tile_init();
+        // tile_regs_acquire();
+        // copy_tile(cb_padding_zero, 0, 0);
+        // tile_regs_commit();
+        // tile_regs_wait();
+        // for (uint32_t j = 0; j < padding_diff; j++) {
+        //     pack_tile(0 , cb_im);
+        // }
+        // tile_regs_release();
         index_h_offset += block_w;
         cb_pop_front(cb_ex_global, 1);
     }
@@ -448,7 +452,7 @@ void MAIN {
         cb_reserve_back(cb_outgamma, num_tiles_per_block);
         for (uint32_t i = 0; i < block_h; i++) {
             index_subblock_w_offset = 0;
-            for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
+            for (uint32_t j = 0; j < num_subblocks_w; j++) {
                 mul_bcast_rows_init_short();
                 tile_regs_acquire();
                 for (uint32_t w = 0; w < subblock_w; w++) {
@@ -463,15 +467,15 @@ void MAIN {
                 tile_regs_release();
                 index_subblock_w_offset += subblock_w;
             }
-            copy_tile_init();
-            tile_regs_acquire();
-            copy_tile(cb_padding_zero, 0, 0);
-            tile_regs_commit();
-            tile_regs_wait();
-            for (uint32_t j = 0; j < padding_diff; j++) {
-                pack_tile(0 , cb_outgamma);
-            }
-            tile_regs_release();
+            // copy_tile_init();
+            // tile_regs_acquire();
+            // copy_tile(cb_padding_zero, 0, 0);
+            // tile_regs_commit();
+            // tile_regs_wait();
+            // for (uint32_t j = 0; j < padding_diff; j++) {
+            //     pack_tile(0 , cb_outgamma);
+            // }
+            // tile_regs_release();
             index_h_offset += block_w;
         }
         cb_push_back(cb_outgamma, num_tiles_per_block);
@@ -488,7 +492,7 @@ void MAIN {
         for (uint32_t i = 0; i < block_h; i++) {
             add_bcast_rows_init_short();
             index_subblock_w_offset = 0;
-            for (uint32_t j = 0; j < num_valid_subblocks_w; j++) {
+            for (uint32_t j = 0; j < num_subblocks_w; j++) {
                 tile_regs_acquire();
                 for (uint32_t w = 0; w < subblock_w; w++) {
                     index = w + index_subblock_w_offset;
@@ -502,15 +506,15 @@ void MAIN {
                 tile_regs_release();
                 index_subblock_w_offset += subblock_w;
             }
-            copy_tile_init();
-            tile_regs_acquire();
-            copy_tile(cb_padding_zero, 0, 0);
-            tile_regs_commit();
-            tile_regs_wait();
-            for (uint32_t j = 0; j < padding_diff; j++) {
-                pack_tile(0 , cb_out);
-            }
-            tile_regs_release();
+            // copy_tile_init();
+            // tile_regs_acquire();
+            // copy_tile(cb_padding_zero, 0, 0);
+            // tile_regs_commit();
+            // tile_regs_wait();
+            // for (uint32_t j = 0; j < padding_diff; j++) {
+            //     pack_tile(0 , cb_out);
+            // }
+            // tile_regs_release();
 
             index_h_offset += block_w;
         }
