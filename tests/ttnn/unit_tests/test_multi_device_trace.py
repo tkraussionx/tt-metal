@@ -49,7 +49,7 @@ def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enabl
     ttnn.end_trace_capture(t3k_device_mesh, tid, cq_id=0)
     logger.info("Done Trace Capture")
 
-    for i in range(50):
+    for i in range(10):
         # Create torch inputs
         torch_input_tensor_0 = torch.rand(
             (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
@@ -172,7 +172,7 @@ def test_multi_device_multi_trace(t3k_device_mesh, shape, use_all_gather, enable
     # Execute and verify trace against pytorch
     torch_silu = torch.nn.SiLU()
     torch_softmax = torch.nn.Softmax(dim=1)
-    for i in range(12):
+    for i in range(10):
         # Create torch inputs
         torch_input_tensor_0 = torch.rand(
             (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16

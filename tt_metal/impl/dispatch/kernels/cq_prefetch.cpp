@@ -216,6 +216,9 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
         read_from_pcie<preamble_size>
             (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
         if (stall_state == STALL_NEXT) {
+            // No pending reads. exec_buf is the first command being fetched and should be offset
+            // by preamble size. After ensuring that the exec_buf command has been read (barrier),
+            // exit.
             barrier_and_stall(pending_read_size, fence, cmd_ptr); // STALL_NEXT -> STALLED
             return;
         }
@@ -242,6 +245,9 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
                 stall_state = static_cast<StallState>(stall_flag << 1); // NOT_STALLED -> STALL_NEXT if stall_flag is set
 
                 if (stall_state == STALL_NEXT) {
+                    // If the prefetcher state reached here, it is issuing a read to the same "slot", since for exec_buf commands
+                    // we will insert a read barrier. Hence, the exec_buf command will be concatenated to a previous command, and
+                    // should not be offset by pramble size.
                     read_from_pcie<0>
                         (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
                     barrier_and_stall(pending_read_size, fence, cmd_ptr); // STALL_NEXT -> STALLED
@@ -961,7 +967,6 @@ inline uint32_t relay_cb_get_cmds(uint32_t& fence, uint32_t& data_ptr) {
 
     DPRINT << "get_commands: " << data_ptr << " " << fence << " " << cmddat_q_base << " " << cmddat_q_end << ENDL();
     if (data_ptr == fence) {
-        DPRINT << "get_cb_page" <<ENDL();
         get_cb_page<
             cmddat_q_base,
             cmddat_q_blocks,
@@ -972,7 +977,6 @@ inline uint32_t relay_cb_get_cmds(uint32_t& fence, uint32_t& data_ptr) {
                                    block_noc_writes_to_clear,
                                    block_next_start_addr,
                                    rd_block_idx);
-        DPRINT << "done get_cb_page" << ENDL();
     }
 
     volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *cmd_ptr =
@@ -987,7 +991,6 @@ inline uint32_t relay_cb_get_cmds(uint32_t& fence, uint32_t& data_ptr) {
     // TODO
     // Ugly: get_cb_page was written to process 1 page at a time, we need multiple
     // If it wraps, it resets the data_ptr to the top of the buffer, hand it a dummy for now
-    DPRINT << "Length: " << length << ENDL();
     uint32_t dummy_data_ptr = data_ptr;
     while (npages < pages_pending) {
         npages += get_cb_page<
@@ -1019,7 +1022,7 @@ void kernel_main_h() {
 
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
         uint32_t cmd_id = cmd->base.cmd_id;
-
+        // Infer that an exec_buf command is to be executed based on the stall state.
         bool is_exec_buf = (stall_state == STALLED);
         cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
 
