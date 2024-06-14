@@ -189,30 +189,8 @@ void DevicePool::add_devices_to_pool(
                     // Don't support multi cqs on R chip yet
                     continue;
                 }
-                all_device_ids.push_back(mmio_controlled_device_id);
-            }
-        }
-        for (const auto &device_id : all_device_ids) {
-            // For Galaxy init, we only need to loop over mmio devices
-            const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
-            if (is_galaxy and mmio_device_id != device_id) {
-                continue;
-            }
-            if (not this->is_device_active(mmio_device_id)) {
-                log_debug(tt::LogMetal, "MMIO Device {} Tunnel Count: {}", mmio_device_id, tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id));
-                log_debug(tt::LogMetal, "MMIO Device {} Tunnel Depth: {}", mmio_device_id, tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_device_id));
-                log_debug(tt::LogMetal, "MMIO Device {} Tunnel Stop: {}", mmio_device_id, tt::Cluster::instance().get_device_tunnel_depth(mmio_device_id));
-                int core_assigned_to_device = device_to_core_map.at(mmio_device_id);
-                this->activate_device(mmio_device_id);
-
-                auto tunnels_from_mmio = tt::Cluster::instance().get_tunnels_from_mmio_device(mmio_device_id);
-                for (uint32_t t = 0; t < tunnels_from_mmio.size(); t++) {
-                    //Need to create devices from farthest to the closest.
-                    for (uint32_t ts = tunnels_from_mmio[t].size() - 1; ts > 0 ; ts--) {
-                        uint32_t mmio_controlled_device_id = tunnels_from_mmio[t][ts];
-                        log_debug(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
-                        this->activate_device(mmio_controlled_device_id);
-                    }
+                if (not this->is_device_active(mmio_controlled_device_id)) {
+                    this->activate_device(mmio_controlled_device_id);
                 }
             }
         }
@@ -221,9 +199,41 @@ void DevicePool::add_devices_to_pool(
 }
 
 void DevicePool::init_firmware_on_active_devices() const {
+    bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
     for (const auto& dev : this->get_all_active_devices()) {
+        // For Galaxy init, we only need to loop over mmio devices
+        const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(dev->id());
+        if (is_galaxy and mmio_device_id != dev->id()) {
+            continue;
+        }
+        log_debug(
+            tt::LogMetal,
+            "MMIO Device {} Tunnel Count: {}",
+            mmio_device_id,
+            tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id));
+        log_debug(
+            tt::LogMetal,
+            "MMIO Device {} Tunnel Depth: {}",
+            mmio_device_id,
+            tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_device_id));
+        log_debug(
+            tt::LogMetal,
+            "MMIO Device {} Tunnel Stop: {}",
+            mmio_device_id,
+            tt::Cluster::instance().get_device_tunnel_depth(mmio_device_id));
+
+        auto tunnels_from_mmio = tt::Cluster::instance().get_tunnels_from_mmio_device(mmio_device_id);
         this->initialize_device(dev);
         detail::InitDeviceProfiler(dev);
+        for (uint32_t t = 0; t < tunnels_from_mmio.size(); t++) {
+            // Need to create devices from farthest to the closest.
+            for (uint32_t ts = tunnels_from_mmio[t].size() - 1; ts > 0; ts--) {
+                uint32_t mmio_controlled_device_id = tunnels_from_mmio[t][ts];
+                log_debug(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
+                this->initialize_device(this->devices[mmio_controlled_device_id].get());
+                detail::InitDeviceProfiler(this->devices[mmio_controlled_device_id].get());
+            }
+        }
     }
 }
 
