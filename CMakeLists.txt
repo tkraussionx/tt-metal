@@ -110,7 +110,20 @@ CHECK_COMPILER_WARNINGS()      # <- add any extra compile warning flags for buil
 
 add_library(compiler_flags INTERFACE)
 target_link_libraries(compiler_flags INTERFACE compiler_warnings)
-target_compile_options(compiler_flags INTERFACE -mavx2 -fPIC -DFMT_HEADER_ONLY -fvisibility-inlines-hidden -fno-lto -stdlib=libc++)
+
+set(COMMON_COMPILER_FLAGS
+    -fPIC
+    -DFMT_HEADER_ONLY
+    -fvisibility-inlines-hidden
+    -fno-lto
+    -stdlib=libc++
+)
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+    target_compile_options(compiler_flags INTERFACE ${COMMON_COMPILER_FLAGS} -mavx2)
+else()
+    target_compile_options(compiler_flags INTERFACE ${COMMON_COMPILER_FLAGS})
+endif()
 
 if(TT_METAL_VERSIM_DISABLED)
     target_compile_options(compiler_flags INTERFACE -DTT_METAL_VERSIM_DISABLED)

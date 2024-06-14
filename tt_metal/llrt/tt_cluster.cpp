@@ -4,8 +4,6 @@
 
 #include "tt_cluster.hpp"
 
-#include <immintrin.h>
-
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
