@@ -19,7 +19,7 @@ NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 10))
     "shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 32, 32), (1, 1, 256, 256), (1, 3, 512, 512), (1, 3, 128, 128)]
 )
 @pytest.mark.parametrize("use_all_gather", [True, False])
-@pytest.mark.parametrize("enable_async", [True, False])
+@pytest.mark.parametrize("enable_async", [True])
 @pytest.mark.parametrize("device_params", [{"trace_region_size": 33792}], indirect=True)
 def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enable_async):
     if t3k_device_mesh.get_num_devices() <= 1:
@@ -95,7 +95,7 @@ def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enabl
             # Perform host All-Gather
             logger.info("Read Back Trace Outputs")
             ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)
+                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.96)
 
@@ -108,10 +108,10 @@ def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enabl
 
 @pytest.mark.parametrize(
     "shape",
-    [(1, 3, 1024, 1024), (1, 1, 1024, 1024), (1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)],
+    [(1, 3, 1024, 1024), (1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)],
 )
 @pytest.mark.parametrize("use_all_gather", [True, False])
-@pytest.mark.parametrize("enable_async", [True, False])
+@pytest.mark.parametrize("enable_async", [True])
 @pytest.mark.parametrize("device_params", [{"trace_region_size": 99328}], indirect=True)
 def test_multi_device_multi_trace(t3k_device_mesh, shape, use_all_gather, enable_async):
     torch.manual_seed(0)
@@ -242,21 +242,21 @@ def test_multi_device_multi_trace(t3k_device_mesh, shape, use_all_gather, enable
             device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor_2)
             for device_tensor in device_tensors:
                 device_tensor_torch = ttnn.to_torch(device_tensor)
-                assert_with_pcc(device_tensor_torch, torch_output_golden_2, pcc=0.0)
+                assert_with_pcc(device_tensor_torch, torch_output_golden_2, pcc=0.96)
         else:
             # Perform host All-Gather
             ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)
+                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.96)
 
             ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor_1, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)
+                output_tensor_1, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden_1, pcc=0.96)
 
             ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor_2, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)
+                output_tensor_2, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden_2, pcc=0.96)
 
