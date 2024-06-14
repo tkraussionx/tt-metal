@@ -14,9 +14,11 @@ set(PROGRAMMING_EXAMPLES_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_single_core/matmul_single_core
     ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/multi_core/learn_matmul_multi_core
     ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/single_core/learn_matmul_single_core
+    ${CMAKE_CURRENT_SOURCE_DIR}/learn_matmul/multi_core_mcast/learn_matmul_mcast
 
 
 )
+
 
 include(${PROJECT_SOURCE_DIR}/cmake/helper_functions.cmake)
 CREATE_PGM_EXAMPLES_EXE("${PROGRAMMING_EXAMPLES_SRCS}" "")  # no subdir, output binaries straight to build/programming_examples
