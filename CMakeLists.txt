@@ -7,19 +7,19 @@ cmake_policy(VERSION 3.16)
 
 # Use Clang-17 by default until we upgrade to Ubuntu version that supports higher GCC
 # No longer support GCC-9 as it does not support C++20
-find_program(CLANGPP_17 clang++-17)
-find_program(CLANG_17 clang-17)
+find_program(CLANGPP_18 clang++-18)
+find_program(CLANG_18 clang-18)
 
-if (NOT CLANGPP_17)
-    message(FATAL_ERROR "clang++-17 not found")
+if (NOT CLANGPP_18)
+    message(FATAL_ERROR "clang++-18 not found")
 endif()
 
-if (NOT CLANG_17)
-    message(FATAL_ERROR "clang-17 not found")
+if (NOT CLANG_18)
+    message(FATAL_ERROR "clang-18 not found")
 endif()
 
-set(CMAKE_CXX_COMPILER "${CLANGPP_17}")
-set(CMAKE_C_COMPILER "${CLANG_17}")
+set(CMAKE_CXX_COMPILER "${CLANGPP_18}")
+set(CMAKE_C_COMPILER "${CLANG_18}")
 
 if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
     message(FATAL_ERROR "CMake generation is not allowed within source directory!! Please set a build folder with '-B'!!")

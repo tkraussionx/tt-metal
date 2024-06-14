@@ -28,6 +28,7 @@ macro(CHECK_COMPILER_WARNINGS)
             -Wsometimes-uninitialized -Wno-c++11-narrowing -Wno-c++23-extensions -Wno-error=local-type-template-args
             -Wno-delete-non-abstract-non-virtual-dtor -Wno-c99-designator -Wno-shift-op-parentheses -Wno-non-c-typedef-for-linkage
             -Wno-deprecated-this-capture -Wno-deprecated-volatile -Wno-deprecated-builtins -Wno-deprecated-declarations # -> extra C++20 build flags
+            -Wno-vla-cxx-extension
         )
         # -Wsometimes-uninitialized will override the -Wuninitialized added before
     else() # using GCC-11 or higher
