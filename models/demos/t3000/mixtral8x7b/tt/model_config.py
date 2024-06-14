@@ -136,14 +136,14 @@ class TtModelArgs:
             use_height_and_width_as_shard_shape=True,
         )
 
-        self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"] = cached_lambda(
-            lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
-                shape=(32, padded_layer_past_len),
-                core_grid=ttnn.CoreGrid(y=4, x=8),
-                strategy=ttnn.ShardStrategy.HEIGHT,
-                orientation=ttnn.ShardOrientation.ROW_MAJOR,
-                use_height_and_width_as_shard_shape=True,
-            )
+        self.model_config[
+            "ATTN_BATCHED_MM_OUTPUT_MEMCFG"
+        ] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
+            shape=(32, padded_layer_past_len),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
+            strategy=ttnn.ShardStrategy.HEIGHT,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            use_height_and_width_as_shard_shape=True,
         )
 
         self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
@@ -319,6 +319,15 @@ class TtModelArgs:
             block_h=shard_height // 32,
             block_w=shard_width_hidden_dim_across_32_cores // 32,
             inplace=False,
+        )
+        self.model_config["ATTN_MASK_MEMCFG"] = cached_lambda(
+            lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
+                shape=(32, padded_layer_past_len),
+                core_grid=ttnn.CoreGrid(y=4, x=8),
+                strategy=ttnn.ShardStrategy.HEIGHT,
+                orientation=ttnn.ShardOrientation.ROW_MAJOR,
+                use_height_and_width_as_shard_shape=True,
+            )
         )
 
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device

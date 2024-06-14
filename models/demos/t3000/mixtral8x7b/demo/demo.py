@@ -82,20 +82,20 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
     # Encoded input tokens need to be uint32 for embedding. Otherwise the dtype conversion to bfloat16 will change the tokenizer ID
     input_tokens_tt = [
         ttnn.from_torch(
-            input_tokens[:, i].unsqueeze(0),
+            input_tokens[:, i].unsqueeze(1).unsqueeze(0).unsqueeze(0),
             device=device_mesh,
-            dtype=ttnn.uint32,
-            layout=ttnn.ROW_MAJOR_LAYOUT,
+            dtype=ttnn.uint16,
+            layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
         for i in range(max_prompt_len)
     ]
     input_mask_tt = [
         ttnn.from_torch(
-            input_mask[:, i].unsqueeze(0),
+            input_mask[:, i].unsqueeze(1).unsqueeze(0).unsqueeze(0),
             device=device_mesh,
-            dtype=ttnn.bfloat16,
-            layout=ttnn.ROW_MAJOR_LAYOUT,
+            dtype=ttnn.uint16,
+            layout=ttnn.TILE_LAYOUT,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
         for i in range(max_prompt_len)
@@ -149,16 +149,6 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
     if instruct_mode:
         tokenizer._model.pad_id = tokenizer._model.eos_id
 
-    # Load TTNN mixtral model
-    logger.info("Loading weights to device...")
-    tt_model = TtTransformer(
-        device_mesh=device_mesh,
-        state_dict=state_dict,
-        args=model_args,
-        layers=list(range(model_args.n_layers)),
-        dtype=dtype,
-    )
-
     if not embed_on_host:
         tt_embds = TtMixtralEmbedding(
             device_mesh=device_mesh,
@@ -174,19 +164,19 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         pt_decode_input = embd(input_tokens_pt[:, 0]).view(batch_size, seqlen, -1)
     else:  # Embedding on device
         # Each device does its own embedding
-        decode_input_11BH = tt_embds(input_tokens_tt[0])
+        emd_input_B1 = ttnn.reshape(input_tokens_tt[0], ttnn.Shape([batch_size, 32]))
+        emd_input_B1 = ttnn.to_layout(emd_input_B1, layout=ttnn.ROW_MAJOR_LAYOUT)
+        emd_input_B1 = ttnn.experimental.tensor.typecast(emd_input_B1, dtype=ttnn.uint32)
+        decode_input_11BH = tt_embds(emd_input_B1)[:, :1, :]
         # Reshape and change row major to tile layout
         decode_input_11BH = ttnn.reshape(decode_input_11BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
-
-        decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT)
-        # decode_input_11BH = [ttnn.experimental.tensor.tilize(decode_input_11BH[i]) for i in range(len(devices))]
-        # decode_input_11BH = [ttnn.experimental.tensor.tilize_with_val_padding(decode_input_11BH[i], ) for i in range(len(devices))]")
+        decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16)
 
     # Prepare inputs for decode mode (rotary embeddings, attention mask, padding)
     rot_mats = prepare_rotation_mat_ttnn(
         model_args.head_dim,
         model_args.max_seq_len,
-        tt_model.device_mesh,
+        device_mesh,
     )
 
     generation_start_pos = 0
@@ -194,6 +184,15 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
 
     cache_attention(device_mesh, state_dict, model_args, rot_mats, generation_start_pos, max_generated_tokens, dtype)
 
+    # Load TTNN mixtral model
+    logger.info("Loading weights to device...")
+    tt_model = TtTransformer(
+        device_mesh=device_mesh,
+        state_dict=state_dict,
+        args=model_args,
+        layers=list(range(model_args.n_layers)),
+        dtype=dtype,
+    )
     logger.info("Starting inference...")
 
     # Keep track of generated outputs to print out every iteration
@@ -224,6 +223,7 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                 start_pos,
                 model_args.sliding_window,
                 tt_model.device_mesh,
+                tt_model.args,
             )
 
         # Run ttnn mixtral model
@@ -250,23 +250,25 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
             # Next PT input embedding
             pt_decode_input = embd(tt_token_batch).view(batch_size, seqlen, -1)
         else:  # Embedding/argmax on device
-            # TODO Update argmax to ttnn when OP becomes available
-            tt_out_B11B = ttnn.experimental.tensor.argmax(tt_out_11BH, dim=-1)
-            tt_out_1B = ttnn.reshape(tt_out_B11B[:1, :, :, :], ttnn.Shape([1, batch_size]))  # [1, 32] Bfloat16
-            # Update the users that are still in prefill and the ones generating new tokens
+            tt_values_11BK, tt_indices_11BK = ttnn.experimental.operations.primary.topk(tt_out_11BH, 32)
+            tt_out_11B1 = tt_indices_11BK[:, :, :, :1]
             if iteration < max_prompt_len:
-                decode_input_1B = ttnn.where(input_mask[iteration], input_tokens_tt[iteration], tt_out_1B)
+                decode_input_11B1 = ttnn.where(input_mask[iteration], input_tokens_tt[iteration], tt_out_11B1)
             else:
-                decode_input_1B = tt_out_1B
+                decode_input_11B1 = tt_out_11B1
 
             # Next TT input embeddings
-            decode_input_1BH = tt_embds(decode_input_1B)
+            emd_input_B1 = ttnn.reshape(decode_input_11B1, ttnn.Shape([batch_size, 32]))
+            emd_input_B1 = ttnn.to_layout(emd_input_B1, layout=ttnn.ROW_MAJOR_LAYOUT)
+            emd_input_B1 = ttnn.experimental.tensor.typecast(emd_input_B1, dtype=ttnn.uint32)
+            decode_input_1BH = tt_embds(emd_input_B1)[:, :1, :]
             decode_input_11BH = ttnn.reshape(decode_input_1BH, ttnn.Shape([1, 1, batch_size, model_args.dim]))
-            decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT)
+            decode_input_11BH = ttnn.to_layout(decode_input_11BH, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
 
             # Convert ttnn tensor to torch tensor and print decoded output (from a single device)
-            # tt_output_torch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
-            tt_token_batch = ttnn.to_torch(decode_input_1B).transpose(0, 1)
+            tt_token_batch = ttnn.to_torch(decode_input_11B1, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0))[
+                0
+            ].view(batch_size)
 
         # Get the generated tokens for each user for printing in the log
         for user in range(batch_size):
