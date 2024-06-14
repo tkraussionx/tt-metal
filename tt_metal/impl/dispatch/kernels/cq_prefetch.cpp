@@ -219,7 +219,9 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // No pending reads. exec_buf is the first command being fetched and should be offset
             // by preamble size. After ensuring that the exec_buf command has been read (barrier),
             // exit.
-            barrier_and_stall(pending_read_size, fence, cmd_ptr); // STALL_NEXT -> STALLED
+            if (pending_read_size != 0) {
+                barrier_and_stall(pending_read_size, fence, cmd_ptr); // STALL_NEXT -> STALLED
+            }
             return;
         }
     }
@@ -250,6 +252,9 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
                     // should not be offset by pramble size.
                     read_from_pcie<0>
                         (prefetch_q_rd_ptr, pending_read_size, fence, pcie_read_ptr, cmd_ptr, fetch_size);
+                    if (pending_read_size == 0) {
+                        return;
+                    }
                     barrier_and_stall(pending_read_size, fence, cmd_ptr); // STALL_NEXT -> STALLED
                 } else {
                     read_from_pcie<preamble_size>
