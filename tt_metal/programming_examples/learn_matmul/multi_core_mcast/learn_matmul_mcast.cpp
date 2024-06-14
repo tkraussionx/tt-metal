@@ -227,7 +227,7 @@ void matmul(Device* device, int argc, char** argv)
         {
             CoreCoord core(core_x, core_y);
             auto physical_core = device->worker_core_from_logical_core(core);
-            std::cout<<"Logical Core "<<core.x<<" "<<core.y<<" Physical Core "<<physical_core.x<<" "<<physical_core.y<<std::endl;
+            // std::cout<<"Logical Core "<<core.x<<" "<<core.y<<" Physical Core "<<physical_core.x<<" "<<physical_core.y<<std::endl;
             int this_core_Nt = per_core_Nt+(core_x<rem_Nt);
 
             tt::tt_metal::SetRuntimeArgs(

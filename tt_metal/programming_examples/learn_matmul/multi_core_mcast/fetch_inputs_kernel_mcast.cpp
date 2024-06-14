@@ -80,9 +80,11 @@ void kernel_main() {
                 physical_corex_map[core_grid_x-1],
                 physical_corey_map[core_y],
                 (uint32_t)in0_mcast_receiver_semaphore);
-            noc_semaphore_set((volatile tt_l1_ptr uint32_t*)in0_mcast_receiver_semaphore, VALID);
 
-            noc_async_write_multicast((uint32_t)in0_mcast_receiver_semaphore, in0_mcast_receiver_semaphore_noc_addr, 4, core_grid_x-1);
+            noc_semaphore_set((volatile tt_l1_ptr uint32_t*)in0_mcast_receiver_semaphore, VALID);
+            // noc_async_write_multicast((uint32_t)in0_mcast_receiver_semaphore, in0_mcast_receiver_semaphore_noc_addr, 4, core_grid_x-1);
+            noc_semaphore_set_multicast((uint32_t)in0_mcast_receiver_semaphore, in0_mcast_receiver_semaphore_noc_addr, core_grid_x-1);
+
             // DPRINT_DATA0(DPRINT << "NOC 0  MCast Grid Start: " <<physical_corex_map[1]<<" "<<physical_corey_map[core_y]<<" End: "<<physical_corex_map[core_grid_x-1]<<" "<<physical_corey_map[core_y]<<ENDL());
             // DPRINT_DATA0(DPRINT<<"Num Rx "<<core_grid_x-1<<ENDL());
         }
@@ -132,7 +134,7 @@ void kernel_main() {
                 (uint32_t)in1_mcast_receiver_semaphore);
             noc_semaphore_set((volatile tt_l1_ptr uint32_t*)in1_mcast_receiver_semaphore, VALID);
 
-            noc_async_write_multicast((uint32_t)in1_mcast_receiver_semaphore, in1_mcast_receiver_semaphore_noc_addr, 4, core_grid_y-1);
+            noc_semaphore_set_multicast((uint32_t)in1_mcast_receiver_semaphore, in1_mcast_receiver_semaphore_noc_addr, core_grid_y-1);
 
             // DPRINT_DATA0(DPRINT << "NOC 0  NCast Grid Start: " <<physical_corex_map[core_x]<<physical_corey_map[1]<<" End:"<<physical_corex_map[core_x]<<physical_corey_map[core_grid_y-1]<<ENDL());
             // DPRINT_DATA0(DPRINT<<"Num Rx "<<core_grid_x-1<<ENDL());
@@ -141,10 +143,12 @@ void kernel_main() {
     }
     else
     {
+        noc_semaphore_set((volatile tt_l1_ptr uint32_t*)in1_mcast_receiver_semaphore, INVALID);
         const uint32_t in1_mcast_sender_noc_x = physical_corex_map[core_x];
         const uint32_t in1_mcast_sender_noc_y = physical_corey_map[0];
         uint64_t in1_mcast_sender_semaphore_noc_addr = get_noc_addr(in1_mcast_sender_noc_x, in1_mcast_sender_noc_y,(uint32_t) in1_mcast_sender_semaphore);
         noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1); //NOC Inc 1
+        noc_semaphore_wait((volatile tt_l1_ptr uint32_t*)in1_mcast_receiver_semaphore, VALID);
 
     }
 
