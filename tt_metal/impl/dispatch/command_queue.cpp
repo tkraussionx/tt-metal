@@ -283,7 +283,6 @@ void EnqueueWriteBufferCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
-    // std::cout << "Setting size: " << cmd_sequence_sizeB << std::endl;
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
@@ -1123,7 +1122,6 @@ void EnqueueRecordEventCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
-    // std::cout << "Write: " << cmd_sequence_sizeB << "to fetch q" << endl;
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
