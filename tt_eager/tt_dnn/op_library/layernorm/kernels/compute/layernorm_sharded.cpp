@@ -322,7 +322,7 @@ void MAIN {
     index_h_offset = 0;
     for (uint32_t i = 0; i < block_h; i++) {
         tile_regs_acquire();
-        for (uint32_t w = 0; w < block_w; w++) {
+        for (uint32_t w = 0; w < num_valid_subblocks_w * subblock_w; w++) {
             reduce_tile(cb_xmm2, cb_scaler, w+index_h_offset, scaler0, dst0);
         }
         tile_regs_commit();
