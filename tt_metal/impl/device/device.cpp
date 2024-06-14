@@ -74,6 +74,12 @@ Device::Device(
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->build_key_ = tt::Cluster::instance().get_harvesting_mask(device_id);
+    if (!this->is_mmio_capable()) {
+        //Remote device Vs MMIO Device need to be unique even if they have same harvesting mask because
+        //dispatch cores are allocated differently on two types of devices.
+        //harvest mask is 12-bit mask so adding 100000 should not alias with any possible harvest mask value.
+        this->build_key_ += 100000;
+    }
     tunnel_device_dispatch_workers_ = {};
     this->initialize(l1_small_size, l1_bank_remap, minimal);
 }
