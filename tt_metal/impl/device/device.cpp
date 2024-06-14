@@ -591,7 +591,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[14] = 0; // preamble size
                     compile_args[15] = true,    // split_prefetcher
                     compile_args[16] = NOC_XY_ENCODING(prefetch_physical_core.x, prefetch_physical_core.y),
-                    compile_args[17] = 1; // prefetch_downstream_cb_sem,
+                    compile_args[17] = prefetch_h_settings.producer_semaphore_id, // sem_id on prefetch_h that dispatch_d is meant to increment, to resume sending of cmds post exec_buf stall
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages(), // XXXX should this be mux pages?
                     compile_args[19] = false; // is_dram_variant
                     compile_args[20] = true; // is_host_variant
@@ -745,7 +745,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 compile_args[15] = prefetch_d_settings.cb_pages; // prefetch_d only
                 compile_args[16] = prefetch_d_settings.consumer_semaphore_id; // prefetch_d only
                 compile_args[17] = demux_d_settings.producer_semaphore_id; //prefetch_downstream_cb_sem, // prefetch_d only
-                compile_args[18] = prefetch_d_settings.cb_log_page_size;;
+                compile_args[18] = prefetch_d_settings.cb_log_page_size;
                 compile_args[19] = dispatch_constants::PREFETCH_D_BUFFER_BLOCKS; // prefetch_d only
                 compile_args[20] = true;  // is_dram_variant
                 compile_args[21] = false; // is_host_variant
