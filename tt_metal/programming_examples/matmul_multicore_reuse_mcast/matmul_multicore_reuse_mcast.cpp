@@ -329,11 +329,15 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
             CoreCoord bottom_core  = {(std::size_t) core.x, (std::size_t) start_core_y + num_cores_r - 1};
 
             auto left_core_physical = device->worker_core_from_logical_core(left_core);
+            std::cout<<"Logical Core "<<left_core.x<<" "<<left_core.y<<" Physical Core "<<left_core_physical.x<<" "<<left_core_physical.y<<std::endl;
+
             auto left_core_plus_one_physical = device->worker_core_from_logical_core(left_core_plus_one);
             auto right_core_physical = device->worker_core_from_logical_core(right_core);
+            std::cout<<"Logical Core "<<right_core.x<<" "<<right_core.y<<" Physical Core "<<right_core_physical.x<<" "<<right_core_physical.y<<std::endl;
             auto top_core_physical = device->worker_core_from_logical_core(top_core);
             auto top_core_plus_one_physical = device->worker_core_from_logical_core(top_core_plus_one);
             auto bottom_core_physical = device->worker_core_from_logical_core(bottom_core);
+            std::cout<<"Logical Core "<<bottom_core.x<<" "<<bottom_core.y<<" Physical Core "<<bottom_core_physical.x<<" "<<bottom_core_physical.y<<std::endl;
 
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)  src0_dram_buffer->address(), // in0_buffer_addr
@@ -459,9 +463,9 @@ int main(int argc, char **argv) {
         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
 
         /* Create source data */
-        constexpr uint32_t M = 3200;  // user-defined
-        constexpr uint32_t N = 3200;  // user-defined
-        constexpr uint32_t K = 3200;  // user-defined
+        constexpr uint32_t M = 320;  // user-defined
+        constexpr uint32_t N = 320;  // user-defined
+        constexpr uint32_t K = 320;  // user-defined
         constexpr uint32_t B = 1;  // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;

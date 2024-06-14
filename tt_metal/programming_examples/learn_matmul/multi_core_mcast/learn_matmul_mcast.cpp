@@ -195,9 +195,14 @@ void matmul(Device* device, int argc, char** argv)
         ).set_page_size(tt::CB::c_out0, tile_size)
     );
 
+    auto in0_mcast_sender_semaphore = tt::tt_metal::CreateSemaphore(program_fetch, compute_core_range, INVALID);
+    auto in0_mcast_receiver_semaphore = tt::tt_metal::CreateSemaphore(program_fetch, compute_core_range, INVALID);
+    auto in1_mcast_sender_semaphore = tt::tt_metal::CreateSemaphore(program_fetch, compute_core_range, INVALID);
+    auto in1_mcast_receiver_semaphore = tt::tt_metal::CreateSemaphore(program_fetch, compute_core_range, INVALID);
+
     auto root_dir = fs::path(__FILE__).parent_path();
 
-    auto fetch_kernel_path = root_dir/"fetch_inputs_kernel.cpp";
+    auto fetch_kernel_path = root_dir/"fetch_inputs_kernel_mcast.cpp";
     auto fetch_kernel_id = tt::tt_metal::CreateKernel(
         program_fetch,
         fetch_kernel_path.string(),
@@ -221,6 +226,8 @@ void matmul(Device* device, int argc, char** argv)
         for(int core_x = 0; core_x < core_grid_width; core_x++)
         {
             CoreCoord core(core_x, core_y);
+            auto physical_core = device->worker_core_from_logical_core(core);
+            std::cout<<"Logical Core "<<core.x<<" "<<core.y<<" Physical Core "<<physical_core.x<<" "<<physical_core.y<<std::endl;
             int this_core_Nt = per_core_Nt+(core_x<rem_Nt);
 
             tt::tt_metal::SetRuntimeArgs(
@@ -236,7 +243,15 @@ void matmul(Device* device, int argc, char** argv)
                     start_Mt,
                     start_Nt,
                     this_core_Mt,
-                    this_core_Nt
+                    this_core_Nt,
+                    core_x,
+                    core_y,
+                    core_grid_width,
+                    core_grid_height,
+                    in0_mcast_sender_semaphore,
+                    in0_mcast_receiver_semaphore,
+                    in1_mcast_sender_semaphore,
+                    in1_mcast_receiver_semaphore
                 }
             );
 
