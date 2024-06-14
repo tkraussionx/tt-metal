@@ -24,8 +24,6 @@ void kernel_main() {
 
     constexpr uint32_t cb_gamma = tt::CB::c_in5;
     constexpr uint32_t cb_beta = tt::CB::c_in6;
-    constexpr uint32_t cb_padding_zero = tt::CB::c_intermed2;
-    generate_reduce_scaler(cb_padding_zero, 0);
 
     {
         constexpr uint32_t cb_in_2 = tt::CB::c_in2;

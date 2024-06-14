@@ -942,11 +942,6 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     tt_metal::CircularBufferConfig xmm_cb_config = tt_metal::CircularBufferConfig(xmm_CB_size, {{xmm_cb_index, cb_data_format}})
         .set_page_size(xmm_cb_index, single_tile_size);
     auto cb_xmm = tt_metal::CreateCircularBuffer(program, all_cores, xmm_cb_config);
-    uint32_t cb_padding_zero_index;
-    cb_padding_zero_index = CB::c_intermed2;
-    tt_metal::CircularBufferConfig cb_padding_zero_config = tt_metal::CircularBufferConfig(single_tile_size, {{cb_padding_zero_index, cb_data_format}})
-        .set_page_size(cb_padding_zero_index, single_tile_size);
-    auto cb_padding_zero = tt_metal::CreateCircularBuffer(program, all_cores, cb_padding_zero_config);
     // ex_partial
     if(!rms_norm) {
         uint32_t ex_cb_partial_index = CB::dataflow0;
