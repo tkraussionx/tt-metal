@@ -84,7 +84,8 @@ def test_reproduce_matmul_2d_hang(
         per_core_M=per_core_M,
         per_core_N=per_core_N,
         transpose_mcast=False,
-        fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
+        # fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
+        fused_activation=None,
     )
 
     compute_config = ttl.tensor.WormholeComputeKernelConfig(
