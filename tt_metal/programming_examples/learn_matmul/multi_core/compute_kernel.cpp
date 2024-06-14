@@ -15,11 +15,14 @@ void MAIN {
         uint32_t max_per_core_Mt = get_compile_time_arg_val(3);
         uint32_t max_per_core_Nt = get_compile_time_arg_val(4);
 
+        const uint32_t this_core_Mt = get_arg_val<uint32_t>(0);
+        const uint32_t this_core_Nt = get_arg_val<uint32_t>(1);
+
         mm_init();
 
         // int x = src1_addr + 2;
-        for(uint32_t m = 0; m<max_per_core_Mt; m++)
-        for(uint32_t n = 0; n<max_per_core_Nt; n++)
+        for(uint32_t m = 0; m<this_core_Mt; m++)
+        for(uint32_t n = 0; n<this_core_Nt; n++)
         {
                 acquire_dst(tt::DstMode::Full);
                 for(uint32_t k = 0; k<Kt; k++)

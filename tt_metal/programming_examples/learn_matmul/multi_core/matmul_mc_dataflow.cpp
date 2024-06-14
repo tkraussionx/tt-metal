@@ -40,9 +40,9 @@ void kernel_main() {
         .data_format = src0_data_format
     };
 
-    for(uint32_t current_Mt = 0; current_Mt<max_per_core_Mt;current_Mt++)
+    for(uint32_t current_Mt = 0; current_Mt<this_core_Mt;current_Mt++)
     {
-        for(uint32_t current_Nt = 0; current_Nt<max_per_core_Nt;current_Nt++)
+        for(uint32_t current_Nt = 0; current_Nt<this_core_Nt;current_Nt++)
         {
             uint32_t k = 0;
             int current_in0_addr = src0_addr +current_Mt*Kt*tile_size_bytes;
@@ -68,11 +68,8 @@ void kernel_main() {
 
             }
             cb_wait_front(cb_id_out0,1);
-            if(current_Mt<this_core_Mt && current_Nt<this_core_Nt)
-            {
-                noc_async_write_tile((current_Mt+start_Mt)*Nt + current_Nt + start_Nt, d1, get_read_ptr(cb_id_out0));
-                noc_async_write_barrier();
-            }
+            noc_async_write_tile((current_Mt+start_Mt)*Nt + current_Nt + start_Nt, d1, get_read_ptr(cb_id_out0));
+            noc_async_write_barrier();
             cb_pop_front(cb_id_out0, 1);
         }
     }

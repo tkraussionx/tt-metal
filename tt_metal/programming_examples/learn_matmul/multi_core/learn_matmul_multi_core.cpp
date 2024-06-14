@@ -14,6 +14,7 @@
 // #include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 // #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
+#include "/usr/lib/llvm-14/lib/clang/14.0.0/include/omp.h"
 
 namespace fs = std::filesystem;
 void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
@@ -26,6 +27,7 @@ void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& o
     float float_tmp;
     vector<bfloat16> c_bf(M * N, 0);
 
+    #pragma omp parallel for private(idx_c, idx_a, idx_b, c_f, float_tmp)
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
             idx_c = j+ (i * N);
@@ -207,6 +209,21 @@ void matmul(Device* device, int argc, char** argv)
         tt::tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default, .compile_args = {}}
     );
 
+    auto compute_kernel_path = root_dir/"compute_kernel.cpp";
+    auto compute_id = tt::tt_metal::CreateKernel(
+        program_compute,
+        compute_kernel_path.string(),
+        compute_core_range,
+        tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {
+            Mt,
+            Kt,
+            Nt,
+            max_per_core_Mt,
+            max_per_core_Nt
+            }
+        }
+    );
+
     int start_Mt = 0;
     for(int core_y = 0; core_y < core_grid_height; core_y++)
     {
@@ -252,25 +269,20 @@ void matmul(Device* device, int argc, char** argv)
                 }
             );
 
+                tt::tt_metal::SetRuntimeArgs(
+                program_compute, compute_id, core,
+                {
+                    this_core_Mt,
+                    this_core_Nt,
+                }
+            );
+
             start_Nt += this_core_Nt;
         }
         start_Mt += this_core_Mt;
     }
 
-    auto compute_kernel_path = root_dir/"compute_kernel.cpp";
-    auto compute_id = tt::tt_metal::CreateKernel(
-        program_compute,
-        compute_kernel_path.string(),
-        compute_core_range,
-        tt::tt_metal::ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {
-            Mt,
-            Kt,
-            Nt,
-            max_per_core_Mt,
-            max_per_core_Nt
-            }
-        }
-    );
+
 
     // tt::tt_metal::SetRuntimeArgs(program, reader_id, compute_core,
     // {
