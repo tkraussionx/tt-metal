@@ -109,10 +109,10 @@ class TtMixtralMLP(LightweightModule):
 
             pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
                 compute_with_storage_grid_size=(8, 8),
-                in0_block_w=2,  # how much inner dim you take each time
+                in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=16,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,

@@ -195,6 +195,7 @@ class TransformerBlock(nn.Module):
         self.comps.append(h)
         h1 = self.ffn_norm(h)
         self.comps.append(h1)
+        torch.save(h1, "torch_moe_input.pt")
         r = self.feed_forward.forward(h1)
         self.comps.append(r)
         out = h + r

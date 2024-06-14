@@ -410,7 +410,7 @@ class TtMixtralAttention(LightweightModule):
             fused_activation=None,
             fuse_batch=False,
         )
-        attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, 4, 2048, -1))
+        attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, 4, int(xs_11SH.shape[2] / 4), -1))
         output_11SH = ttnn.linear(
             attn_output_11SH,
             self.wo,
@@ -420,7 +420,7 @@ class TtMixtralAttention(LightweightModule):
             dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-        output_11SH = ttnn.reshape(output_11SH, (1, 1, 8192, -1))
+        output_11SH = ttnn.reshape(output_11SH, (1, 1, xs_11SH.shape[2], -1))
         attn_output_11SH.deallocate(True)
 
         output_11BH_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1)

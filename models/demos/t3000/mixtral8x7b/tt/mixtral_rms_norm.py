@@ -29,25 +29,42 @@ class TtRMSNorm(LightweightModule):
         else:
             weight_name = f"layers.{layer_num}.{weight_key}.weight"
 
-        torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
+        torch_weight = self.state_dict[weight_name].unsqueeze(0)  # .expand(32, -1)
+        print(torch_weight.shape)
 
         if args.dummy_weights:
             cache_name = None
         else:
-            cache_name = args.weight_cache_path(dtype) / (weight_name + "multidevice")
+            cache_name = args.weight_cache_path(dtype) / (weight_name + "multidevice_squeezed_1_4096")
 
         self.weight = ttnn.as_tensor(
-            torch_weight,
+            torch_weight.unsqueeze(0).unsqueeze(0),
             device=self.device_mesh,
             dtype=dtype,
             layout=self.model_config["NORM_W_LAYOUT_TILE"],
             memory_config=self.model_config["NORM_WEIGHTS_MEMCFG"],
-            cache_file_name=cache_name,
+            # cache_file_name=cache_name,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
         )
 
+        # self.weight_ones = ttnn.as_tensor(
+        #     torch.ones_like(torch_weight).unsqueeze(0).unsqueeze(0),
+        #     device=self.device_mesh,
+        #     dtype=dtype,
+        #     layout=self.model_config["NORM_W_LAYOUT_TILE"],
+        #     memory_config=self.model_config["NORM_WEIGHTS_MEMCFG"],
+        #     mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        # )
+        self.weight = ttnn.sum(self.weight, dim=2)
+        # self.weight_ones = ttnn.sum(self.weight_ones, dim=2)
+
+        # print(self.weight.shape, self.weight_ones.shape)
+
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        x = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
+        # x = ttnn.rms_norm(x, weight=self.weight_ones, epsilon=self.eps)* self.weight
+        x = x * ttnn.rsqrt(ttnn.mean(ttnn.pow(x, 2), dim=-1) + self.eps) * self.weight
+
+        print(x.shape)
         return x
 
 
