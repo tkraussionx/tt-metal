@@ -218,11 +218,13 @@ def test_multi_device_multi_trace(t3k_device_mesh, shape, use_all_gather, enable
                 assert_with_pcc(device_tensor_torch, torch_output_golden_1, pcc=0.99)
         else:
             # Perform host All-Gather
+            logger.info("Read Back Trace 0 Outputs")
             ttnn_torch_output_tensor = ttnn.to_torch(
                 output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
             assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.99)
 
+            logger.info("Read Back Trace 1 Outputs")
             ttnn_torch_output_tensor = ttnn.to_torch(
                 output_tensor_1, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
             )
