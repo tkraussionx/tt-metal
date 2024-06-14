@@ -352,6 +352,11 @@ const Layout& Tensor::get_layout() const {
     return this->tensor_attributes->layout;
 }
 
+const ttnn::Layout2& Tensor::get_layout2() const {
+    this->wait_for_tensor_metadata_populated();
+    return this->tensor_attributes->layout2;
+}
+
 const Storage& Tensor::get_storage() const {
     this->wait_for_tensor_data_populated();
     return this->tensor_attributes->storage;

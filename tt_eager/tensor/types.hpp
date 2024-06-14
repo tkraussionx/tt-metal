@@ -661,6 +661,8 @@ struct RankedShape {
 
     const auto operator[](std::int64_t index) const { return this->value.without_padding()[index]; }
 
+    tt::tt_metal::Shape get_metal_shape() const { return value; }
+
     static constexpr auto attribute_names = std::make_tuple("rank", "value");
     const auto attribute_values() const { return std::make_tuple(std::cref(this->rank), std::cref(this->value)); }
 };
@@ -803,6 +805,11 @@ struct Shape {
                 return Shape(RankedShape<NewRank>(new_shape, new_padded_shape));
             },
             this->ranked_shape);
+    }
+
+    tt::tt_metal::Shape get_metal_shape() const {
+        return std::visit(
+            [](const auto &shape) -> decltype(auto) { return shape.get_metal_shape(); }, this->ranked_shape);
     }
 
     static constexpr auto attribute_names = std::make_tuple("ranked_shape");

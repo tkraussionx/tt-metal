@@ -91,9 +91,12 @@ def run_conv(
 
     reader_patterns_cache = {}
 
+    # [kH, kW, inC, outC]
+    torch_weight_tensor = torch.permute(torch_weight_tensor, (2, 3, 1, 0))
     tt_weight_tensor = ttnn.from_torch(
         torch_weight_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
     )
+    print("asdf python weight shape", tt_weight_tensor.shape)
     tt_bias_tensor = None
     if has_bias:
         tt_bias_tensor = ttnn.from_torch(
@@ -101,6 +104,7 @@ def run_conv(
         )
 
     tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+    print("asdf", tt_input_tensor.shape)
     # breakpoint()
     conv_config = ttnn.Conv2dConfig(
         dtype=activations_dtype,

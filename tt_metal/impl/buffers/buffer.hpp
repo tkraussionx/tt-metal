@@ -24,6 +24,7 @@ namespace tt_metal {
 
 class Device;
 
+// TODO: Rename to MemorySpace
 enum class BufferType {
     DRAM,
     L1,
@@ -31,6 +32,7 @@ enum class BufferType {
     L1_SMALL,
 };
 
+// TODO: Rename to LayoutAddressingMode
 enum class TensorMemoryLayout {
     INTERLEAVED,
     SINGLE_BANK,
@@ -48,7 +50,7 @@ struct ShardSpec {
     CoreRangeSet grid;
     std::array<uint32_t, 2> shape;
     ShardOrientation orientation = ShardOrientation::ROW_MAJOR;
-    bool halo = false;
+    bool halo = false;  // TODO: Remove this
 
     ShardSpec(
         const CoreRangeSet &core_sets_,

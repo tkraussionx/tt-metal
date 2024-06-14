@@ -15,6 +15,7 @@
 #include "common/bfloat8.hpp"
 #include "common/test_tiles.hpp"
 #include "common/tt_backend_api_types.hpp"
+#include "tt_eager/tensor/layout.hpp"
 #include "tt_eager/tensor/types.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
 #include "tt_metal/impl/device/device.hpp"
@@ -31,6 +32,7 @@ struct Tensor {
         ttnn::Shape shape;
         DataType dtype;
         Layout layout;
+        ttnn::Layout2 layout2;
         std::mutex populated_mutex;
         uint32_t num_shards_to_be_populated = 0;
         uint32_t main_thread_ref_count = 0;
@@ -42,7 +44,7 @@ struct Tensor {
         bool dynamic_storage = false;  // Storage type can change, depending on op behaviour
         bool track_ref_count = false;
         TensorAttributes(const Storage storage, const ttnn::Shape shape, DataType dtype, Layout layout) :
-            storage(storage), shape(shape), dtype(dtype), layout(layout) {}
+            storage(storage), shape(shape), dtype(dtype), layout(layout), layout2() {}
         TensorAttributes() : shape({0xff, 0xff, 0xff, 0xff}), dtype(DataType::INVALID), layout(Layout::INVALID) {}
         ~TensorAttributes() = default;
 
@@ -288,6 +290,7 @@ struct Tensor {
     const ttnn::Shape &get_shape() const;
     const DataType &get_dtype() const;
     const Layout &get_layout() const;
+    const ttnn::Layout2 &get_layout2() const;
 
     // ======================================================================================
     // Non-Blocking Getters. Query attributes directly, without waiting for worker completion
