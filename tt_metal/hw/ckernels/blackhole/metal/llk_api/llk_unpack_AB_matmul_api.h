@@ -49,15 +49,16 @@ inline void llk_unpack_AB_matmul_hw_configure_disaggregated(
     llk_unpack_AB_matmul_hw_configure<is_fp32_dest_acc_en, stoch_rnd_mode>(&unpack_AB_matmul_params);
 }
 
-inline void llk_unpack_AB_matmul_mop_config(
-    const bool transpose,
-    const std::uint32_t ct_dim,
-    const std::uint32_t rt_dim,
-    const std::uint32_t kt_dim,
-    const bool partial_face) {
+inline void llk_unpack_AB_matmul_mop_config(const bool transpose, const std::uint32_t ct_dim, const std::uint32_t rt_dim, const std::uint32_t kt_dim, const bool partial_face) {
     // in0 - loaded to SrcB
     // in1 - loaded to SrcA
-    _llk_unpack_AB_matmul_mop_config_(transpose, ct_dim, rt_dim, kt_dim, partial_face);
+    _llk_unpack_AB_matmul_mop_config_(
+        transpose,
+        ct_dim,
+        rt_dim,
+        kt_dim,
+        partial_face
+    );
 }
 
 __attribute__((always_inline)) inline void llk_unpack_AB_matmul_init(
@@ -93,7 +94,8 @@ __attribute__((always_inline)) inline void llk_unpack_AB_matmul_init(
         unpB_face_r_dim,
         unpA_num_faces,
         unpB_num_faces,
-        partial_face_a);
+        partial_face_a
+    );
 }
 
 inline void llk_unpack_AB_matmul(
@@ -124,7 +126,6 @@ inline void llk_unpack_AB_matmul(
     std::uint32_t tile_size_a = cb_interface[operandA_id].fifo_page_size;
     std::uint32_t tile_size_b = cb_interface[operandB_id].fifo_page_size;
 
-    DEBUG_STATUS("UPMW");
     _llk_unpack_AB_matmul_(
         base_address_a,
         base_address_b,
@@ -137,6 +138,6 @@ inline void llk_unpack_AB_matmul(
         partial_face_a,
         ct_dim,
         rt_dim,
-        kt_dim);
-    DEBUG_STATUS("UPMD");
+        kt_dim
+    );
 }

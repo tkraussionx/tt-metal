@@ -7,8 +7,8 @@
 #include "llk_unpack_untilize.h"
 
 /*************************************************************************
- * LLK UNPACK UNTILIZE
- *************************************************************************/
+* LLK UNPACK UNTILIZE
+*************************************************************************/
 template <bool is_fp32_dest_acc_en = false>
 inline void llk_unpack_untilize_hw_configure(const llk_unpack_A_params_t *unpack_untilize_params) {
     constexpr bool is_row_pool = false;
@@ -24,7 +24,8 @@ inline void llk_unpack_untilize_hw_configure(const llk_unpack_A_params_t *unpack
         unpack_dst_format[unpA_operand_id],
         unpA_face_r_dim,
         within_face_16x16_transpose,
-        unpA_num_faces);
+        unpA_num_faces
+    );
 }
 
 template <bool is_fp32_dest_acc_en = false>

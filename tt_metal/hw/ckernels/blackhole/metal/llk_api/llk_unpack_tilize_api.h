@@ -8,8 +8,8 @@
 #include "llk_unpack_tilize.h"
 
 /*************************************************************************
- * LLK UNPACK TILIZE
- *************************************************************************/
+* LLK UNPACK TILIZE
+*************************************************************************/
 
 template <bool is_fp32_dest_acc_en = false>
 inline void llk_unpack_tilize_hw_configure(const llk_unpack_A_params_t *unpack_tilize_params) {
@@ -25,12 +25,16 @@ inline void llk_unpack_tilize_hw_configure(const llk_unpack_A_params_t *unpack_t
         unpack_dst_format[unpA_operand_id],
         unpA_face_r_dim,
         within_face_16x16_transpose,
-        unpA_num_faces);
+        unpA_num_faces
+    );
 }
+
 
 template <bool is_fp32_dest_acc_en = false>
 inline void llk_unpack_tilize_hw_configure_disaggregated(const std::uint32_t unpA_operand) {
-    const llk_unpack_A_params_t unpack_tilize_params = {.unpA_operand = unpA_operand};
+    const llk_unpack_A_params_t unpack_tilize_params = {
+        .unpA_operand = unpA_operand
+    };
     llk_unpack_tilize_hw_configure<is_fp32_dest_acc_en>(&unpack_tilize_params);
 }
 
@@ -48,7 +52,12 @@ inline void llk_unpack_tilize_init(const std::uint32_t operand, const std::uint3
     const bool narrow_tile = get_operand_narrow_tile(operand_id);
 
     _llk_unpack_tilize_init_(
-        unpack_src_format[operand_id], unpack_dst_format[operand_id], ct_dim, face_r_dim, narrow_tile);
+        unpack_src_format[operand_id],
+        unpack_dst_format[operand_id],
+        ct_dim,
+        face_r_dim,
+        narrow_tile
+    );
 }
 
 inline void llk_unpack_tilize_uninit(const std::uint32_t operand, const std::uint32_t face_r_dim = FACE_R_DIM) {
@@ -87,7 +96,14 @@ inline void llk_unpack_tilize(std::uint32_t operand, std::uint32_t tile_index, s
 
     DEBUG_STATUS("UPTW");
     _llk_unpack_tilize_(
-        base_address, tile_index, unpack_src_format[operand_id], block_ct_dim, face_r_dim, num_faces, narrow_tile);
+        base_address,
+        tile_index,
+        unpack_src_format[operand_id],
+        block_ct_dim,
+        face_r_dim,
+        num_faces,
+        narrow_tile
+    );
     DEBUG_STATUS("UPTD");
 }
 

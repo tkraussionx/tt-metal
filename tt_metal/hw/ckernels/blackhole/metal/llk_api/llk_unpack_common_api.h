@@ -47,22 +47,16 @@ inline void llk_unpack_debug_dump(std::uint8_t *data, std::uint32_t byte_size) {
 
 inline void llk_unpack_debug_dump_seek(std::uint8_t offset) { _llk_unpack_debug_dump_seek_(offset); }
 
-template <bool is_tile_dim_reconfig_en = false>
 inline void llk_unpack_reconfig_data_format_srca(const std::uint32_t srca_new_operand) {
     const std::uint32_t srca_operand_id = get_operand_id(srca_new_operand);
-    const std::uint32_t num_faces = get_operand_num_faces(srca_operand_id);
-    const std::uint32_t face_r_dim = get_operand_face_r_dim(srca_operand_id);
     _llk_unpack_reconfig_data_format_srca_impl_(
         unpack_src_format[srca_operand_id],
         unpack_dst_format[srca_operand_id],
         cb_interface[srca_operand_id].fifo_page_size);
 }
 
-template <bool is_tile_dim_reconfig_en = false>
 inline void llk_unpack_reconfig_data_format_srcb(const std::uint32_t srcb_new_operand) {
     std::uint32_t srcb_operand_id = get_operand_id(srcb_new_operand);
-    const std::uint32_t num_faces = get_operand_num_faces(srcb_operand_id);
-    const std::uint32_t face_r_dim = get_operand_face_r_dim(srcb_operand_id);
     _llk_unpack_reconfig_data_format_srcb_impl_(
         unpack_src_format[srcb_operand_id],
         unpack_dst_format[srcb_operand_id],
@@ -76,12 +70,11 @@ inline void llk_unpack_reconfig_data_format_srca(
     std::uint32_t new_srca_operand_id = get_operand_id(srca_new_operand);
 
     if ((unpack_src_format[old_srca_operand_id] != unpack_src_format[new_srca_operand_id])) {
-        llk_unpack_reconfig_data_format_srca<is_tile_dim_reconfig_en>(srca_new_operand);
+        llk_unpack_reconfig_data_format_srca(srca_new_operand);
     } else if constexpr (is_tile_dim_reconfig_en) {
-        llk_unpack_reconfig_data_format_srca<is_tile_dim_reconfig_en>(srca_new_operand);
+        llk_unpack_reconfig_data_format_srca(srca_new_operand);
     }
 }
-
 template <bool is_tile_dim_reconfig_en = false>
 inline void llk_unpack_reconfig_data_format_srcb(
     const std::uint32_t srcb_old_operand, const std::uint32_t srcb_new_operand) {
@@ -89,17 +82,17 @@ inline void llk_unpack_reconfig_data_format_srcb(
     std::uint32_t new_srcb_operand_id = get_operand_id(srcb_new_operand);
 
     if ((unpack_src_format[old_srcb_operand_id] != unpack_src_format[new_srcb_operand_id])) {
-        llk_unpack_reconfig_data_format_srcb<is_tile_dim_reconfig_en>(srcb_new_operand);
+        llk_unpack_reconfig_data_format_srcb(srcb_new_operand);
     } else if constexpr (is_tile_dim_reconfig_en) {
-        llk_unpack_reconfig_data_format_srcb<is_tile_dim_reconfig_en>(srcb_new_operand);
+        llk_unpack_reconfig_data_format_srcb(srcb_new_operand);
     }
 }
 
 template <bool is_tile_dim_reconfig_en = false>
 inline void llk_unpack_reconfig_data_format(
     const std::uint32_t srca_new_operand, const std::uint32_t srcb_new_operand) {
-    llk_unpack_reconfig_data_format_srca<is_tile_dim_reconfig_en>(srca_new_operand);
-    llk_unpack_reconfig_data_format_srcb<is_tile_dim_reconfig_en>(srcb_new_operand);
+    llk_unpack_reconfig_data_format_srca(srca_new_operand);
+    llk_unpack_reconfig_data_format_srcb(srcb_new_operand);
 }
 
 template <bool is_tile_dim_reconfig_en = false>

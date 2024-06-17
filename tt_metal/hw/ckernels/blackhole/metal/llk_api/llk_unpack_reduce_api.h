@@ -7,8 +7,8 @@
 #include "llk_unpack_reduce.h"
 
 /*************************************************************************
- * LLK UNPACK REDUCE
- *************************************************************************/
+* LLK UNPACK REDUCE
+*************************************************************************/
 
 template <
     PoolType type,
@@ -40,7 +40,8 @@ inline void llk_unpack_reduce_hw_configure(
         unpA_face_r_dim,
         within_face_16x16_transpose,
         unpA_num_faces,
-        unpA_num_faces);
+        unpA_num_faces
+    );
 
     if constexpr (type != PoolType::MAX) {
         union {
@@ -89,7 +90,9 @@ inline void llk_unpack_reduce_init(const std::uint32_t within_face_16x16_transpo
     TTI_NOP;
     TTI_NOP;
 
-    _llk_unpack_reduce_init_<type, dim>(within_face_16x16_transpose);
+    _llk_unpack_reduce_init_<type, dim>(
+        within_face_16x16_transpose
+    );
 }
 
 template <PoolType type, ReduceDim dim>
@@ -100,6 +103,8 @@ inline void llk_unpack_reduce(const std::uint32_t operand, const std::uint32_t t
     std::uint32_t address = base_address + offset_address;
 
     DEBUG_STATUS("UPRW");
-    _llk_unpack_reduce_<type, dim>(address);
+    _llk_unpack_reduce_<type, dim>(
+        address
+    );
     DEBUG_STATUS("UPRD");
 }

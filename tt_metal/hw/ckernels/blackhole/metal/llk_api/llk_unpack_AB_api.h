@@ -30,7 +30,8 @@ inline void llk_unpack_AB_hw_configure(
         unpack_dst_format[unpB_operand_id],
         face_r_dim,
         within_face_16x16_transpose,
-        num_faces);
+        num_faces
+    );
 }
 
 template <bool is_fp32_dest_acc_en = false, StochRndType stoch_rnd_mode = StochRndType::None>
@@ -42,11 +43,15 @@ inline void llk_unpack_AB_hw_configure_disaggregated(
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB_mop_config(const bool transpose_of_faces = false, const std::uint32_t operand_id = 0) {
+inline void llk_unpack_AB_mop_config(const bool transpose_of_faces=false, const std::uint32_t operand_id=0) {
     const std::uint32_t num_faces = get_operand_num_faces(operand_id);
-    const bool narrow_tile = get_operand_narrow_tile(operand_id);  // if narrow tile read face 0 twice for row broadcast
-                                                                   // or read face 0 and 1 for col broadcast
-    _llk_unpack_AB_mop_config_<BType>(transpose_of_faces, num_faces, narrow_tile);
+    const bool narrow_tile = get_operand_narrow_tile(operand_id); // if narrow tile read face 0 twice for row broadcast
+                                                          // or read face 0 and 1 for col broadcast
+    _llk_unpack_AB_mop_config_<BType>(
+        transpose_of_faces,
+        num_faces,
+        narrow_tile
+    );
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
@@ -61,7 +66,13 @@ inline void llk_unpack_AB_init(
     const bool narrow_tile =
         get_operand_narrow_tile(operandA_id);  // if narrow tile read face 0 twice for row broadcast
 
-    _llk_unpack_AB_init_<BType>(face_r_dim, num_faces, narrow_tile, transpose, acc_to_dest);
+    _llk_unpack_AB_init_<BType>(
+        face_r_dim,
+        num_faces,
+        narrow_tile,
+        transpose,
+        acc_to_dest
+    );
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
@@ -71,7 +82,7 @@ inline void llk_unpack_AB(
     const std::uint32_t tile_index_a,
     const std::uint32_t tile_index_b,
     const bool transpose_of_faces = 0 /*not used*/) {
-    std::uint32_t operandA_id = get_operand_id(operandA);
+   std::uint32_t operandA_id = get_operand_id(operandA);
     std::uint32_t operandB_id = get_operand_id(operandB);
     std::uint32_t base_address_a = cb_interface[operandA_id].fifo_rd_ptr - 1;
     std::uint32_t offset_address_a = cb_interface[operandA_id].fifo_page_size * tile_index_a;

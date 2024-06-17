@@ -7,8 +7,8 @@
 #include "llk_unpack_common_api.h"
 
 /*************************************************************************
- * LLK UNPACK A
- *************************************************************************/
+* LLK UNPACK A
+*************************************************************************/
 
 template <bool is_fp32_dest_acc_en = false, StochRndType stoch_rnd_mode = StochRndType::None>
 inline void llk_unpack_A_hw_configure(
@@ -28,7 +28,9 @@ inline void llk_unpack_A_hw_configure(
 template <bool is_fp32_dest_acc_en = false, StochRndType stoch_rnd_mode = StochRndType::None>
 inline void llk_unpack_A_hw_configure_disaggregated(
     const std::uint32_t unpA_operand, const int within_face_16x16_transpose = 0) {
-    const llk_unpack_A_params_t unpack_A_params = {.unpA_operand = unpA_operand};
+    const llk_unpack_A_params_t unpack_A_params = {
+        .unpA_operand = unpA_operand
+    };
     llk_unpack_A_hw_configure<is_fp32_dest_acc_en, stoch_rnd_mode>(&unpack_A_params, within_face_16x16_transpose);
 }
 
@@ -45,7 +47,11 @@ inline void llk_unpack_A_mop_config(
     const std::uint32_t num_faces = get_operand_num_faces(operand_id);
 
     _llk_unpack_A_mop_config_<BType, acc_to_dest, binary_reuse_dest, unpack_to_dest>(
-        transpose_of_faces > 0, num_faces, unpack_src_format, unpack_dst_format);
+        transpose_of_faces>0,
+        num_faces,
+        unpack_src_format,
+        unpack_dst_format
+    );
 }
 
 template <
@@ -54,8 +60,8 @@ template <
     EltwiseBinaryReuseDestType binary_reuse_dest = EltwiseBinaryReuseDestType::NONE,
     bool unpack_to_dest = false>
 inline void llk_unpack_A_init(
-    const std::uint32_t transpose_of_faces = 0,
-    const std::uint32_t within_face_16x16_transpose = 0,
+    const std::uint32_t transpose_of_faces=0,
+    const std::uint32_t within_face_16x16_transpose=0,
     const std::uint32_t operand = 0) {
     cfg_reg_rmw_tensix<THCON_SEC0_REG2_Haloize_mode_RMW>(within_face_16x16_transpose);
 
@@ -92,7 +98,11 @@ inline void llk_unpack_A(
 
     DEBUG_STATUS("UPAW");
     _llk_unpack_A_<BType, acc_to_dest, binary_reuse_dest, unpack_to_dest>(
-        address, transpose_of_faces > 0, unpack_src_format[operand_id], unpack_dst_format[operand_id]);
+        address,
+        transpose_of_faces>0,
+        unpack_src_format[operand_id],
+        unpack_dst_format[operand_id]
+    );
     DEBUG_STATUS("UPAD");
 }
 
