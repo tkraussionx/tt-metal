@@ -105,7 +105,7 @@ class TtMixtralMLP(LightweightModule):
             )
 
             print("w3_out shape: ", w3_out.shape)
-            w2_in = ttnn.experimental.tensor.mul(w1_out, w3_out)
+            w2_in = ttnn.mul(w1_out, w3_out)
 
             pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
                 compute_with_storage_grid_size=(8, 8),
