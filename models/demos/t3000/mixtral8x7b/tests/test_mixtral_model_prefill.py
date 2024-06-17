@@ -58,7 +58,7 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
     batch = 1
     if seq_len > 2048:
         model_args.max_seq_len = seq_len
-        model_args.max_batch_size = 32
+        model_args.max_batch_size = 1
     state_dict = model_args.load_state_dict()
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
@@ -69,9 +69,9 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
     # prompt = prompt * 5
     print("Prompt length: ", len(tokenizer.encode(prompt)))
     encoded_prompts = tokenizer.encode(prompt)[:seq_len]
-    # reference_model = Transformer(args=model_args)
-    # reference_model.load_state_dict(state_dict)
-    # reference_model.eval()
+    reference_model = Transformer(args=model_args)
+    reference_model.load_state_dict(state_dict)
+    reference_model.eval()
 
     # Embedding on host
     embd = Emb()
@@ -102,6 +102,8 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
     encoded_prompts_tensor = torch.tensor(encoded_prompts)  # [:,0]
     # pt_decode_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1  #
     pt_decode_input = embd(encoded_prompts_tensor).view(batch, seq_len, -1)
+    # pt_decode_input = torch.load("ref_output_prefil_24L_8192.pt")
+
     tt_decode_input = pt_decode_input
 
     start_pos = 0
@@ -132,26 +134,26 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
         # logger.info(f"seqlen: {seq_len}, iter: {iter}, TTNN Inference time: {time.time() - start_time:.2f} sec")
 
     # Measure PCC
-    ref_output = torch.load("ref_output_prefil_32L_8192.pt")
-    # pt_decode_input = torch.load("ref_output_prefil_16L_8192.pt")
-    # positions = torch.LongTensor(range(seq_len))
-    # attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
-    # attn_mask_torch = torch.triu(attn_mask, diagonal=1)
-    # ref_output = reference_model(pt_decode_input, positions, attn_mask_torch, mode="prefill").detach().float()
-    # torch.save(ref_output.view(batch, seq_len, -1), "ref_output_prefil_32L_8192.pt")
+    # ref_output = torch.load("ref_output_prefil_32L_8192.pt")
+    pt_decode_input = torch.load("ref_output_prefil_24L_8192.pt")
+    positions = torch.LongTensor(range(seq_len))
+    attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
+    attn_mask_torch = torch.triu(attn_mask, diagonal=1)
+    ref_output = reference_model(pt_decode_input, positions, attn_mask_torch, mode="prefill").detach().float()
+    # torch.save(ref_output.view(batch, seq_len, -1), "ref_output_prefil_26L_8192.pt")
     # print("done")
 
     passing, pcc_message = comp_pcc(ref_output.view(batch, seq_len, -1), tt_output_torch.view(batch, seq_len, -1), pcc)
     logger.info(comp_allclose(ref_output, tt_output_torch))
     logger.info(pcc_message)
-    # for layer in range(n_layers):
-    #     ref = reference_model.layers[layer]
-    #     tt = tt_model.layers[layer]
-    #     for mod in range(len(ref.comps)):
-    #         passing, pcc_message = comp_pcc(
-    #             ref.comps[mod].view(batch, seq_len, -1), tt.comps[mod].view(batch, seq_len, -1), pcc
-    #         )
-    #         print("layer: ", layer, "mod: ", mod, pcc_message)
+    for layer in range(24, n_layers):
+        ref = reference_model.layers[layer]
+        tt = tt_model.layers[layer]
+        for mod in range(len(ref.comps)):
+            passing, pcc_message = comp_pcc(
+                ref.comps[mod].view(batch, seq_len, -1), tt.comps[mod].view(batch, seq_len, -1), pcc
+            )
+            print("layer: ", layer, "mod: ", mod, pcc_message)
     if passing:
         logger.info(f"Mistral decode Passed!")
     else:
