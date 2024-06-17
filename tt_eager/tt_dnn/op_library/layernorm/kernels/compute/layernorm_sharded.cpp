@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <cstdint>
-
 #define REDUCE_OP PoolType::SUM
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
@@ -15,7 +13,6 @@
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/layernorm.h"
 #include "compute_kernel_api/tile_move_copy.h"
-#include "debug/dprint.h"
 
 // SPLIT REDUCE across Cores
 namespace NAMESPACE {
@@ -36,20 +33,7 @@ void MAIN {
     constexpr bool FLOAT32_DTYPE                    = get_compile_time_arg_val(10) == 1;
 
     const uint32_t num_reduce_tiles_per_block_h = get_arg_val<uint32_t>(0);
-
-    // if (num_reduce_tiles_per_block_h == 16) {
-    //     DPRINT_UNPACK({DPRINT << "Num_Reduce_Tiles: " << num_reduce_tiles_per_block_h << ENDL();});
-    // }
-    // const uint32_t block_w_arg_val = get_arg_val<uint32_t>(0);
-    // block_w = block_w_arg_val;
-
-    // DPRINT_UNPACK({DPRINT << "Hello from layernorm compute_kernel!" << ENDL(); });
-
-    // DPRINT << "LN compute kernel, block_w runtime_arg = " << block_w_arg_val << " block_w compile_time_arg: " << block_w <<  ENDL();
-
     const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(1) : 0;
-
-    // const uint32_t width_index = get_arg_val<uint32_t>(1);
 
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t scaler0 = 0;
@@ -84,29 +68,6 @@ void MAIN {
     // set block_h to volatile to disable automatically unroll of the loops, avoid code overflow
     const uint32_t block_h = (block_w == 1) ? block_h_volatile : block_h_const;
     uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
-    // uint32_t num_valid_tiles_per_block_h = block_w;
-    // uint32_t num_valid_subblocks_w = num_subblocks_w;
-    // uint32_t padding_diff = 0;
-
-    // if (block_w == 16) {
-    //     subblock_w = 1;
-    //     num_subblocks_w = 18;
-    //     block_w = 18;
-    //     num_valid_subblocks_w = 16;
-    //     padding_diff = num_subblocks_w - num_valid_subblocks_w;
-    //     // num_tiles_per_block = block_w * block_h_const;
-    //     //num_valid_tiles_per_block_h = block_w;
-
-
-    //     // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
-    // } else if (width_index == 7) {
-    //     // DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
-    // }
-
-    // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
-
-
-    // DPRINT << "In LN compute kernel, block_h: " << block_h  << ", block_w: " << block_w << ", num_subblocks_w: " << num_subblocks_w << ", subblock_w: " << subblock_w_volatile << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
 
     int index_subblock_w_offset = 0;
     int index_h_offset = 0;
@@ -168,7 +129,7 @@ void MAIN {
     cb_reserve_back(cb_ex_partial, block_h);
     for (uint32_t i = 0; i < block_h; i++) {
         tile_regs_acquire();
-        for (uint32_t w = 0; w < num_reduce_tiles_per_block_h; w++) { // This needs fixing probably
+        for (uint32_t w = 0; w < num_reduce_tiles_per_block_h; w++) {
             reduce_tile(cb_in, cb_scaler, w+index_h_offset, scaler0, dst0);
         }
         tile_regs_commit();
@@ -180,9 +141,6 @@ void MAIN {
     reduce_revert_delta();
     cb_push_back(cb_ex_partial, block_h);
     cb_wait_front(cb_ex_partial, block_h);
-
-    // constexpr uint32_t tile_index_to_inspect = 0;
-    // DPRINT_UNPACK({ DPRINT  << "WidthIndex: " << width_index << " BlockW: " << block_w << "TileRow: " <<  TSLICE(cb_ex_partial, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
 
     unpack_reconfig_data_format_srca(cb_in, cb_ex_external);
 
@@ -196,7 +154,6 @@ void MAIN {
             tile_regs_acquire();
             for (uint32_t w = 0; w < num_blocks; w++) {
                 cb_wait_front(cb_ex_external, 1);
-                //DPRINT_UNPACK({ DPRINT << TSLICE(cb_ex_external, 0, SliceRange::h0_w0_32()) << ENDL(); });
                 reduce_tile(cb_ex_external, cb_scaler_global, 0, scaler0, dst0);
                 cb_pop_front(cb_ex_external, 1);
             }
@@ -221,9 +178,6 @@ void MAIN {
         sub_bcast_cols_init_short();
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
-        constexpr uint32_t tile_index_to_inspect = 0;
-        // DPRINT_UNPACK({ DPRINT  << "cb_ex_global, width_index=" << width_index << "Tile index:" << tile_index_to_inspect << " Tile content: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-        // DPRINT_UNPACK({ DPRINT  << "checking, width_index=" << width_index << "num_subblocks_w:" << num_subblocks_w << " sublock_w: " << subblock_w << ENDL(); });
 
         for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
@@ -248,17 +202,6 @@ void MAIN {
     unpack_reconfig_data_format_srca(cb_in, cb_xmm);
     #endif
     cb_wait_front(cb_xmm, num_tiles_per_block);
-    //constexpr uint32_t tile_index_to_inspect = 17;
-    //DPRINT_UNPACK({ DPRINT  << "WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    // for (uint32_t i = 0; i < num_tiles_per_block; i++) {
-    //     DPRINT_UNPACK({ DPRINT  << "Xmm, width_index=" << width_index << "Tile content: " << TSLICE(cb_xmm, i, SliceRange::h0_w0_32()) << ENDL(); });
-    // }
-    // if (width_index == 7 && block_w == 18) {
-    //     DPRINT_UNPACK({ DPRINT  << "Regular implementation: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    // }
-    // if (block_w == 16) {
-    //     DPRINT_UNPACK({ DPRINT  << "Padded version: " <<  TSLICE(cb_xmm, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-    // }
     #endif
 
     // (x - E[x])^2, cb_mm2 <-- cb_xmm
@@ -294,8 +237,6 @@ void MAIN {
     #endif
 
     cb_wait_front(cb_xmm2, num_tiles_per_block);
-    // constexpr uint32_t tile_index_to_inspect = 15;
-    // DPRINT_UNPACK({ DPRINT  << "XMM2_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_xmm2, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
 
     // Var(x)
     cb_reserve_back(cb_ex_partial2, block_h);
@@ -315,10 +256,6 @@ void MAIN {
     reduce_revert_delta();
     cb_pop_front(cb_xmm2, num_tiles_per_block);
     cb_push_back(cb_ex_partial2, block_h);
-
-    // constexpr uint32_t tile_index_to_inspect = 0;
-    // DPRINT_UNPACK({ DPRINT  << "cb_ex_partial2_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_partial2, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
-
 
     // global reduce, cb_ex <-- cb_ex_external, cb_ex_partial
     if constexpr(is_allgather_worker) {
@@ -388,8 +325,7 @@ void MAIN {
         mul_bcast_cols_init_short();
         index_subblock_w_offset = 0;
         cb_wait_front(cb_ex_global, 1);
-        // constexpr uint32_t tile_index_to_inspect = 0;
-        // DPRINT_UNPACK({ DPRINT  << "cb_ex_global_WI=" << width_index << "TI:" << tile_index_to_inspect << " TC: " << TSLICE(cb_ex_global, tile_index_to_inspect, SliceRange::h0_w0_32()) << ENDL(); });
+
         for (uint32_t j = 0; j < num_subblocks_w; j++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < subblock_w; w++) {
