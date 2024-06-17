@@ -1,0 +1,212 @@
+128 - no padding applied
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:286 - Output: Max ATOL Delta: 4.287014961242676, Max RTOL Delta: 514.1734619140625, PCC: 0.9908931443113425
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:299 - Top-1 Accuracy: 0.90625
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:300 - Top-5 Accuracy: 1.0
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 0: Max ATOL Delta: 0.38667774200439453, Max RTOL Delta: inf, PCC: 0.9998397376255937
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 0: Max ATOL Delta: 0.0383073091506958, Max RTOL Delta: 425.92266845703125, PCC: 0.9997911553041854
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 1: Max ATOL Delta: 0.3626089096069336, Max RTOL Delta: inf, PCC: 0.9996574954268607
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 1: Max ATOL Delta: 0.04756787419319153, Max RTOL Delta: 519.2537841796875, PCC: 0.9993162430422581
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 2: Max ATOL Delta: 0.4508390426635742, Max RTOL Delta: inf, PCC: 0.9995948165689181
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 2: Max ATOL Delta: 0.07603108882904053, Max RTOL Delta: 239.37294006347656, PCC: 0.9985412420300993
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 3: Max ATOL Delta: 0.40430164337158203, Max RTOL Delta: inf, PCC: 0.9994441550167137
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 3: Max ATOL Delta: 0.11341129243373871, Max RTOL Delta: 210.4761199951172, PCC: 0.9967614569692185
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 4: Max ATOL Delta: 0.4003438949584961, Max RTOL Delta: inf, PCC: 0.9992474038399212
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 4: Max ATOL Delta: 0.21289247274398804, Max RTOL Delta: 702.973876953125, PCC: 0.9964866997687593
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 5: Max ATOL Delta: 0.7408387660980225, Max RTOL Delta: inf, PCC: 0.9989514113375723
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 5: Max ATOL Delta: 0.1548190861940384, Max RTOL Delta: 705.3955078125, PCC: 0.9985430374798373
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 6: Max ATOL Delta: 0.3670632839202881, Max RTOL Delta: inf, PCC: 0.99904776242201
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 6: Max ATOL Delta: 0.18382209539413452, Max RTOL Delta: 616.6598510742188, PCC: 0.9937041421431898
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 7: Max ATOL Delta: 0.7025842666625977, Max RTOL Delta: inf, PCC: 0.9990013579234214
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 7: Max ATOL Delta: 0.15984386205673218, Max RTOL Delta: 711.2363891601562, PCC: 0.997074420732556
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 8: Max ATOL Delta: 0.4759509563446045, Max RTOL Delta: inf, PCC: 0.9990723003143706
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 8: Max ATOL Delta: 0.18588364124298096, Max RTOL Delta: 400.64544677734375, PCC: 0.9929060257821386
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 9: Max ATOL Delta: 0.4820518493652344, Max RTOL Delta: inf, PCC: 0.998927290871519
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 9: Max ATOL Delta: 0.2652484178543091, Max RTOL Delta: 707.4979858398438, PCC: 0.9949074060401474
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 10: Max ATOL Delta: 0.7253518104553223, Max RTOL Delta: inf, PCC: 0.9979706670716691
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 10: Max ATOL Delta: 0.16646504402160645, Max RTOL Delta: 4517.46533203125, PCC: 0.995245877868964
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 11: Max ATOL Delta: 0.7172336578369141, Max RTOL Delta: inf, PCC: 0.9986768256702305
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 11: Max ATOL Delta: 0.17803482711315155, Max RTOL Delta: 296.24029541015625, PCC: 0.994192735538293
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 12: Max ATOL Delta: 0.7223764657974243, Max RTOL Delta: inf, PCC: 0.9982294772705995
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 12: Max ATOL Delta: 0.19046837091445923, Max RTOL Delta: 339.289306640625, PCC: 0.9930358206491121
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 13: Max ATOL Delta: 0.6889016628265381, Max RTOL Delta: inf, PCC: 0.9984894833564937
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 13: Max ATOL Delta: 0.26305776834487915, Max RTOL Delta: 1743.44775390625, PCC: 0.9917571481657969
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 14: Max ATOL Delta: 0.8107231855392456, Max RTOL Delta: inf, PCC: 0.9982595122244352
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 14: Max ATOL Delta: 0.40098440647125244, Max RTOL Delta: 577.5213012695312, PCC: 0.9931052641678435
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 15: Max ATOL Delta: 0.6803216934204102, Max RTOL Delta: inf, PCC: 0.998287285330246
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 15: Max ATOL Delta: 0.16813257336616516, Max RTOL Delta: 4255.1484375, PCC: 0.9927599172773169
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 16: Max ATOL Delta: 0.8555974960327148, Max RTOL Delta: inf, PCC: 0.9985371601460598
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 16: Max ATOL Delta: 0.2611527442932129, Max RTOL Delta: 474.6476135253906, PCC: 0.9963818719703124
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 17: Max ATOL Delta: 0.7596826553344727, Max RTOL Delta: inf, PCC: 0.9988197595339365
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 17: Max ATOL Delta: 0.21094433963298798, Max RTOL Delta: 329.6432800292969, PCC: 0.9947351710986487
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 18: Max ATOL Delta: 0.6089795827865601, Max RTOL Delta: inf, PCC: 0.9988701415155513
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 18: Max ATOL Delta: 0.2807328701019287, Max RTOL Delta: 180.2372283935547, PCC: 0.9961027853252495
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 19: Max ATOL Delta: 0.9400088787078857, Max RTOL Delta: inf, PCC: 0.9989550303659078
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 19: Max ATOL Delta: 0.5047961473464966, Max RTOL Delta: 345.41082763671875, PCC: 0.9980686483056023
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 20: Max ATOL Delta: 0.9126791954040527, Max RTOL Delta: inf, PCC: 0.998540800803512
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 20: Max ATOL Delta: 0.17967155575752258, Max RTOL Delta: 366.39404296875, PCC: 0.9944837786004673
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 21: Max ATOL Delta: 0.8124661445617676, Max RTOL Delta: inf, PCC: 0.9988415329461361
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 21: Max ATOL Delta: 0.18906116485595703, Max RTOL Delta: 169.77154541015625, PCC: 0.9945905115150547
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 22: Max ATOL Delta: 0.7714576721191406, Max RTOL Delta: inf, PCC: 0.9986680377466435
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 22: Max ATOL Delta: 0.19795826077461243, Max RTOL Delta: 249.29608154296875, PCC: 0.9954567067897442
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 23: Max ATOL Delta: 0.647942066192627, Max RTOL Delta: inf, PCC: 0.9986970397294107
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 23: Max ATOL Delta: 0.2511959969997406, Max RTOL Delta: 1278.9656982421875, PCC: 0.9950211319998746
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 24: Max ATOL Delta: 0.7697219848632812, Max RTOL Delta: inf, PCC: 0.9987572708871654
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 24: Max ATOL Delta: 0.2461060881614685, Max RTOL Delta: 838.6724243164062, PCC: 0.9957937176196365
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 25: Max ATOL Delta: 0.6308774948120117, Max RTOL Delta: inf, PCC: 0.9985333151952165
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 25: Max ATOL Delta: 0.4343043565750122, Max RTOL Delta: 164.6214599609375, PCC: 0.9961588264976876
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 26: Max ATOL Delta: 0.9234901666641235, Max RTOL Delta: inf, PCC: 0.9986306313662565
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 26: Max ATOL Delta: 0.3699316680431366, Max RTOL Delta: 951.4891967773438, PCC: 0.9964106745734684
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 27: Max ATOL Delta: 0.5834269523620605, Max RTOL Delta: inf, PCC: 0.998747262698674
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 27: Max ATOL Delta: 0.961916446685791, Max RTOL Delta: 4356.6533203125, PCC: 0.9974423012313063
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 28: Max ATOL Delta: 0.6924875378608704, Max RTOL Delta: inf, PCC: 0.9985517603675286
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 28: Max ATOL Delta: 0.4534175395965576, Max RTOL Delta: inf, PCC: 0.9969696493947013
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 29: Max ATOL Delta: 0.6153116226196289, Max RTOL Delta: inf, PCC: 0.9988612695763666
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 29: Max ATOL Delta: 0.4101439118385315, Max RTOL Delta: 1843.7952880859375, PCC: 0.9947110588175012
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 30: Max ATOL Delta: 0.6023621559143066, Max RTOL Delta: inf, PCC: 0.9987808180569322
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 30: Max ATOL Delta: 0.444324254989624, Max RTOL Delta: 453.470947265625, PCC: 0.9957441705266242
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 31: Max ATOL Delta: 0.5648040771484375, Max RTOL Delta: inf, PCC: 0.9984572386808911
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 31: Max ATOL Delta: 0.2670137882232666, Max RTOL Delta: 3899.58837890625, PCC: 0.9962957274554866
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:326 - Device PCC K: 0.9979706670716691
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:327 - Device PCC V: 0.9917571481657969
+
+1024 - no padding applied
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:286 - Output: Max ATOL Delta: 2.598875045776367, Max RTOL Delta: 5918.4072265625, PCC: 0.9962053062938737
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:299 - Top-1 Accuracy: 0.8779296875
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:300 - Top-5 Accuracy: 1.0
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 0: Max ATOL Delta: 0.38667774200439453, Max RTOL Delta: inf, PCC: 0.9998786541577387
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 0: Max ATOL Delta: 0.04373055696487427, Max RTOL Delta: 814.993896484375, PCC: 0.9997976066417833
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 1: Max ATOL Delta: 0.47025394439697266, Max RTOL Delta: inf, PCC: 0.9996340938277506
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 1: Max ATOL Delta: 0.06601548194885254, Max RTOL Delta: 752.3526000976562, PCC: 0.9993756094982331
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 2: Max ATOL Delta: 0.5133390426635742, Max RTOL Delta: inf, PCC: 0.9995890939561034
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 2: Max ATOL Delta: 0.07603108882904053, Max RTOL Delta: 11286.00390625, PCC: 0.9985377641087615
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 3: Max ATOL Delta: 0.49042510986328125, Max RTOL Delta: inf, PCC: 0.9994292448087135
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 3: Max ATOL Delta: 0.1280597299337387, Max RTOL Delta: 21202.119140625, PCC: 0.9971003845828175
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 4: Max ATOL Delta: 0.5250179767608643, Max RTOL Delta: inf, PCC: 0.9991353576613379
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 4: Max ATOL Delta: 0.20507997274398804, Max RTOL Delta: 2874.557373046875, PCC: 0.9959368732714722
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 5: Max ATOL Delta: 1.1927547454833984, Max RTOL Delta: inf, PCC: 0.998978558141613
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 5: Max ATOL Delta: 0.15401220321655273, Max RTOL Delta: 4076.3271484375, PCC: 0.9986563447820346
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 6: Max ATOL Delta: 0.5286266803741455, Max RTOL Delta: inf, PCC: 0.9990138996590037
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 6: Max ATOL Delta: 0.20058302581310272, Max RTOL Delta: 3361.240234375, PCC: 0.9934747774905108
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 7: Max ATOL Delta: 0.7688789367675781, Max RTOL Delta: inf, PCC: 0.9989980554749088
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 7: Max ATOL Delta: 0.1749396026134491, Max RTOL Delta: 1041.906494140625, PCC: 0.9973036969463183
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 8: Max ATOL Delta: 0.4986436367034912, Max RTOL Delta: inf, PCC: 0.9991645230061543
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 8: Max ATOL Delta: 0.19955551624298096, Max RTOL Delta: 2950.818359375, PCC: 0.9939998256317399
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 9: Max ATOL Delta: 0.601898193359375, Max RTOL Delta: inf, PCC: 0.9989004917679905
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 9: Max ATOL Delta: 0.3288164734840393, Max RTOL Delta: 4510.0224609375, PCC: 0.9950303836629306
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 10: Max ATOL Delta: 1.0066018104553223, Max RTOL Delta: inf, PCC: 0.9983433649260617
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 10: Max ATOL Delta: 0.21756452322006226, Max RTOL Delta: 11922.80078125, PCC: 0.9952461058611453
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 11: Max ATOL Delta: 0.6859836578369141, Max RTOL Delta: inf, PCC: 0.9988651211340602
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 11: Max ATOL Delta: 0.22226133942604065, Max RTOL Delta: 7057.86328125, PCC: 0.9935778973992109
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 12: Max ATOL Delta: 0.8557471632957458, Max RTOL Delta: inf, PCC: 0.9985784794416052
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 12: Max ATOL Delta: 0.2062855064868927, Max RTOL Delta: 69071.65625, PCC: 0.9934199987936345
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 13: Max ATOL Delta: 0.7123391628265381, Max RTOL Delta: inf, PCC: 0.9988151704467473
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 13: Max ATOL Delta: 0.2887020707130432, Max RTOL Delta: 1954.2886962890625, PCC: 0.9947925435972065
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 14: Max ATOL Delta: 0.7996022701263428, Max RTOL Delta: inf, PCC: 0.9984917560684561
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 14: Max ATOL Delta: 0.42505913972854614, Max RTOL Delta: 2739.943359375, PCC: 0.9930980663396476
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 15: Max ATOL Delta: 0.7428216934204102, Max RTOL Delta: inf, PCC: 0.9986309887382764
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 15: Max ATOL Delta: 0.2571847438812256, Max RTOL Delta: 4759.56884765625, PCC: 0.9935085595615867
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 16: Max ATOL Delta: 1.0118474960327148, Max RTOL Delta: inf, PCC: 0.9987848871891866
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 16: Max ATOL Delta: 0.2880823016166687, Max RTOL Delta: 1769.5655517578125, PCC: 0.9967010249984982
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 17: Max ATOL Delta: 0.8567185401916504, Max RTOL Delta: inf, PCC: 0.9990298008129735
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 17: Max ATOL Delta: 0.24157050251960754, Max RTOL Delta: 5929.06494140625, PCC: 0.995056190068966
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 18: Max ATOL Delta: 0.7896842956542969, Max RTOL Delta: inf, PCC: 0.9990163288050511
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 18: Max ATOL Delta: 0.400898277759552, Max RTOL Delta: 912.8031616210938, PCC: 0.9967287216886652
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 19: Max ATOL Delta: 1.0185918807983398, Max RTOL Delta: inf, PCC: 0.9988583677222891
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 19: Max ATOL Delta: 0.5052947998046875, Max RTOL Delta: 1900.7918701171875, PCC: 0.9986967206525955
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 20: Max ATOL Delta: 1.2251791954040527, Max RTOL Delta: inf, PCC: 0.9987993727631037
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 20: Max ATOL Delta: 0.22129273414611816, Max RTOL Delta: 7592.94580078125, PCC: 0.9951091807214735
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 21: Max ATOL Delta: 1.0624661445617676, Max RTOL Delta: inf, PCC: 0.9990073692219642
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 21: Max ATOL Delta: 0.2643207013607025, Max RTOL Delta: 10299.654296875, PCC: 0.9962141985119201
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 22: Max ATOL Delta: 1.0527076721191406, Max RTOL Delta: inf, PCC: 0.9988860311550509
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 22: Max ATOL Delta: 0.29699188470840454, Max RTOL Delta: 7871.23681640625, PCC: 0.9959462670631288
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 23: Max ATOL Delta: 0.75901198387146, Max RTOL Delta: inf, PCC: 0.9990858826122102
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 23: Max ATOL Delta: 0.28714150190353394, Max RTOL Delta: 2899.061767578125, PCC: 0.9966656403309978
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 24: Max ATOL Delta: 1.0594040155410767, Max RTOL Delta: inf, PCC: 0.9990548067448352
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 24: Max ATOL Delta: 0.3116804361343384, Max RTOL Delta: 7506.21533203125, PCC: 0.9957085030156563
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 25: Max ATOL Delta: 0.999342679977417, Max RTOL Delta: inf, PCC: 0.9989354759950642
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 25: Max ATOL Delta: 0.717525839805603, Max RTOL Delta: 1209.387451171875, PCC: 0.9973505873420088
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 26: Max ATOL Delta: 0.9938406348228455, Max RTOL Delta: inf, PCC: 0.9989696772974734
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 26: Max ATOL Delta: 0.5996824502944946, Max RTOL Delta: 9015.97265625, PCC: 0.9976767079858406
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 27: Max ATOL Delta: 0.764328122138977, Max RTOL Delta: inf, PCC: 0.9988316374605318
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 27: Max ATOL Delta: 0.8956050872802734, Max RTOL Delta: 4011.55712890625, PCC: 0.998253581136312
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 28: Max ATOL Delta: 1.0635631084442139, Max RTOL Delta: inf, PCC: 0.9988295968641104
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 28: Max ATOL Delta: 0.568627119064331, Max RTOL Delta: 1790.792236328125, PCC: 0.9979462577926647
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 29: Max ATOL Delta: 0.8684601783752441, Max RTOL Delta: inf, PCC: 0.9991080419935368
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 29: Max ATOL Delta: 0.6042993068695068, Max RTOL Delta: 16967.640625, PCC: 0.9970791536072332
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 30: Max ATOL Delta: 0.9759171605110168, Max RTOL Delta: inf, PCC: 0.9990348049036679
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 30: Max ATOL Delta: 0.5387628078460693, Max RTOL Delta: 849.5303955078125, PCC: 0.9970832483286819
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 31: Max ATOL Delta: 1.351049780845642, Max RTOL Delta: inf, PCC: 0.998908156653687
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 31: Max ATOL Delta: 0.5045725703239441, Max RTOL Delta: 9666.337890625, PCC: 0.9976042989863748
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:326 - Device PCC K: 0.9983433649260617
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:327 - Device PCC V: 0.9930980663396476
+
+2048 - no padding applied
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:286 - Output: Max ATOL Delta: 2.802581787109375, Max RTOL Delta: 635.6627197265625, PCC: 0.9960119536786032
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:299 - Top-1 Accuracy: 0.87060546875
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:300 - Top-5 Accuracy: 1.0
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 0: Max ATOL Delta: 0.38667774200439453, Max RTOL Delta: inf, PCC: 0.9998929791207545
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 0: Max ATOL Delta: 0.05143171548843384, Max RTOL Delta: 1390.6484375, PCC: 0.9998186312480729
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 1: Max ATOL Delta: 0.5444459915161133, Max RTOL Delta: inf, PCC: 0.999616263024538
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 1: Max ATOL Delta: 0.07472842931747437, Max RTOL Delta: 1546.0206298828125, PCC: 0.9993773523495613
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 2: Max ATOL Delta: 0.5287513732910156, Max RTOL Delta: inf, PCC: 0.9995721727066675
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 2: Max ATOL Delta: 0.08380019664764404, Max RTOL Delta: 92197.1640625, PCC: 0.9985633768796509
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 3: Max ATOL Delta: 0.619384765625, Max RTOL Delta: inf, PCC: 0.9994031048323523
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 3: Max ATOL Delta: 0.1280597299337387, Max RTOL Delta: 1523.9205322265625, PCC: 0.9972348240570168
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 4: Max ATOL Delta: 0.5563020706176758, Max RTOL Delta: inf, PCC: 0.9990984556244347
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 4: Max ATOL Delta: 0.20507997274398804, Max RTOL Delta: 4837.88623046875, PCC: 0.9958781879464503
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 5: Max ATOL Delta: 0.9427547454833984, Max RTOL Delta: inf, PCC: 0.9989848367917491
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 5: Max ATOL Delta: 0.16072869300842285, Max RTOL Delta: 1620.6519775390625, PCC: 0.9986431808728778
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 6: Max ATOL Delta: 0.6479384303092957, Max RTOL Delta: inf, PCC: 0.9989525811165003
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 6: Max ATOL Delta: 0.242010235786438, Max RTOL Delta: 9896.75, PCC: 0.9933363098688494
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 7: Max ATOL Delta: 0.8333320617675781, Max RTOL Delta: inf, PCC: 0.9989263151061777
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 7: Max ATOL Delta: 0.17734016478061676, Max RTOL Delta: 21445.224609375, PCC: 0.9973720539265524
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 8: Max ATOL Delta: 0.6314561367034912, Max RTOL Delta: inf, PCC: 0.9991640078774544
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 8: Max ATOL Delta: 0.19955551624298096, Max RTOL Delta: 2546.9052734375, PCC: 0.9942830877934765
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 9: Max ATOL Delta: 0.6526947021484375, Max RTOL Delta: inf, PCC: 0.99882219182404
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 9: Max ATOL Delta: 0.3288164734840393, Max RTOL Delta: 8487.9208984375, PCC: 0.9949034489419106
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 10: Max ATOL Delta: 1.0066018104553223, Max RTOL Delta: inf, PCC: 0.9984143814624832
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 10: Max ATOL Delta: 0.20584577322006226, Max RTOL Delta: 38397.40625, PCC: 0.9955026876635392
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 11: Max ATOL Delta: 0.9649996757507324, Max RTOL Delta: inf, PCC: 0.9988838923320843
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 11: Max ATOL Delta: 0.2417256236076355, Max RTOL Delta: 108536.9140625, PCC: 0.9934100718521229
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 12: Max ATOL Delta: 0.8791846632957458, Max RTOL Delta: inf, PCC: 0.9986244301555746
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 12: Max ATOL Delta: 0.2053089439868927, Max RTOL Delta: 7938.447265625, PCC: 0.9935770581892944
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 13: Max ATOL Delta: 1.077484130859375, Max RTOL Delta: inf, PCC: 0.9988390408376332
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 13: Max ATOL Delta: 0.2965145707130432, Max RTOL Delta: 151644.0, PCC: 0.9954467287377555
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 14: Max ATOL Delta: 1.1313345432281494, Max RTOL Delta: inf, PCC: 0.9985031638357271
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 14: Max ATOL Delta: 0.42020803689956665, Max RTOL Delta: 1960.62939453125, PCC: 0.9934369931226024
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 15: Max ATOL Delta: 0.9956797957420349, Max RTOL Delta: inf, PCC: 0.9985978232259587
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 15: Max ATOL Delta: 0.4700847864151001, Max RTOL Delta: 35912.83984375, PCC: 0.9935758488311296
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 16: Max ATOL Delta: 1.0118474960327148, Max RTOL Delta: inf, PCC: 0.9988057617654315
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 16: Max ATOL Delta: 0.28395533561706543, Max RTOL Delta: 65573.65625, PCC: 0.9965646387936669
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 17: Max ATOL Delta: 0.8645310401916504, Max RTOL Delta: inf, PCC: 0.9990939037731278
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 17: Max ATOL Delta: 0.26435279846191406, Max RTOL Delta: 14184.9833984375, PCC: 0.9950437719710687
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 18: Max ATOL Delta: 0.7938535213470459, Max RTOL Delta: inf, PCC: 0.9990001582019411
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 18: Max ATOL Delta: 0.377460777759552, Max RTOL Delta: 2818.138427734375, PCC: 0.9971050476395759
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 19: Max ATOL Delta: 1.0185918807983398, Max RTOL Delta: inf, PCC: 0.9989123649018028
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 19: Max ATOL Delta: 0.4774523973464966, Max RTOL Delta: 10172.6220703125, PCC: 0.9987943843614187
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 20: Max ATOL Delta: 1.2251791954040527, Max RTOL Delta: inf, PCC: 0.9988868414328838
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 20: Max ATOL Delta: 0.24874627590179443, Max RTOL Delta: 33821.359375, PCC: 0.9952112326039054
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 21: Max ATOL Delta: 1.0624661445617676, Max RTOL Delta: inf, PCC: 0.9990419027853941
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 21: Max ATOL Delta: 0.2955707013607025, Max RTOL Delta: 3299.939697265625, PCC: 0.9963558580778191
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 22: Max ATOL Delta: 1.0527076721191406, Max RTOL Delta: inf, PCC: 0.9989468475560062
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 22: Max ATOL Delta: 0.30278921127319336, Max RTOL Delta: 23743.84375, PCC: 0.9962509338647616
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 23: Max ATOL Delta: 0.7906321883201599, Max RTOL Delta: inf, PCC: 0.9991582932173372
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 23: Max ATOL Delta: 0.2956944704055786, Max RTOL Delta: 78217.0859375, PCC: 0.996849024229613
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 24: Max ATOL Delta: 0.9969040155410767, Max RTOL Delta: inf, PCC: 0.9991186174936725
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 24: Max ATOL Delta: 0.2804304361343384, Max RTOL Delta: 188435.078125, PCC: 0.9957798493534541
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 25: Max ATOL Delta: 0.905592679977417, Max RTOL Delta: inf, PCC: 0.9989755741315081
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 25: Max ATOL Delta: 0.6504406929016113, Max RTOL Delta: 22449.2890625, PCC: 0.9975257824637584
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 26: Max ATOL Delta: 0.897885799407959, Max RTOL Delta: inf, PCC: 0.9990439163904258
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 26: Max ATOL Delta: 0.5762449502944946, Max RTOL Delta: 33579.69140625, PCC: 0.9975771465778416
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 27: Max ATOL Delta: 0.6146769523620605, Max RTOL Delta: inf, PCC: 0.998941429927097
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 27: Max ATOL Delta: 1.0052480697631836, Max RTOL Delta: 2817.01904296875, PCC: 0.9984528927578039
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 28: Max ATOL Delta: 1.0323131084442139, Max RTOL Delta: inf, PCC: 0.9989418575300529
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 28: Max ATOL Delta: 0.5081050395965576, Max RTOL Delta: 137626.15625, PCC: 0.9980309097300397
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 29: Max ATOL Delta: 0.8684601783752441, Max RTOL Delta: inf, PCC: 0.9991832808352747
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 29: Max ATOL Delta: 0.5849063992500305, Max RTOL Delta: 20767.16796875, PCC: 0.9972410338002184
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 30: Max ATOL Delta: 0.9915421605110168, Max RTOL Delta: inf, PCC: 0.9991012619090618
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 30: Max ATOL Delta: 0.5478234887123108, Max RTOL Delta: 4284.8701171875, PCC: 0.9971855731203563
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:318 - K Cache Layer 31: Max ATOL Delta: 1.335424780845642, Max RTOL Delta: inf, PCC: 0.999012865744156
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:323 - V Cache Layer 31: Max ATOL Delta: 0.5201975703239441, Max RTOL Delta: 7350.43359375, PCC: 0.9976599109741752
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:326 - Device PCC K: 0.9984143814624832
+| models.demos.falcon7b.tests.test_perf_falcon:run_test_FalconCausalLM_end_to_end:327 - Device PCC V: 0.9933363098688494
