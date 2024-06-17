@@ -72,9 +72,9 @@
 #include "compute_kernel_api/eltwise_unary/right_shift.h"
 #endif
 
-#if SFPU_OP_FLOOR_INCLUDE
+// #if SFPU_OP_FLOOR_INCLUDE
 #include "compute_kernel_api/eltwise_unary/floor.h"
-#endif
+// #endif
 
 #if SFPU_OP_LEFT_SHIFT_INCLUDE
 #include "compute_kernel_api/eltwise_unary/left_shift.h"

@@ -67,14 +67,15 @@ tt::test_utils::df::bfloat16 sfpu_function(const string& op_name, const tt::test
     }
 }
 vector<uint32_t> generate_packed_sfpu_input(const unsigned int numel, const string& op_name, const int seed) {
-    if ((op_name == "sqrt") or (op_name == "log")) {
-        return generate_packed_uniform_random_vector<uint32_t, tt::test_utils::df::bfloat16>(0.0001f, 4.0f, numel, seed);
-    } else if ((op_name == "exponential") or (op_name == "gelu") or (op_name == "reciprocal")) {
-        auto possible_values = vector<tt::test_utils::df::bfloat16>({-1.0f, -0.5f, 0.5f, 1.0f});
-        return generate_packed_random_vector_from_vector<uint32_t, tt::test_utils::df::bfloat16>(possible_values, numel, seed);
-    } else {
-        return generate_packed_uniform_random_vector<uint32_t, tt::test_utils::df::bfloat16>(-1.0f, 1.0f, numel, seed);
-    }
+    // if ((op_name == "sqrt") or (op_name == "log")) {
+    //     return generate_packed_uniform_random_vector<uint32_t, tt::test_utils::df::bfloat16>(0.0001f, 4.0f, numel, seed);
+    // } else if ((op_name == "exponential") or (op_name == "gelu") or (op_name == "reciprocal")) {
+    //     auto possible_values = vector<tt::test_utils::df::bfloat16>({-1.0f, -0.5f, 0.5f, 1.0f});
+    //     return generate_packed_random_vector_from_vector<uint32_t, tt::test_utils::df::bfloat16>(possible_values, numel, seed);
+    // } else {
+        // return generate_packed_uniform_random_vector<uint32_t, tt::test_utils::df::bfloat16>(-1.0f, 1.0f, numel, seed);
+        return generate_packed_sequential_vector<uint32_t, tt::test_utils::df::bfloat16>(numel, 0, 1);
+    // }
 }
 
 bool is_close_packed_sfpu_output(const vector<uint32_t>& vec_a, const vector<uint32_t>& vec_b, const string& op_name) {

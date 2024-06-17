@@ -42,6 +42,18 @@ std::vector<ValueType> generate_constant_vector(
 }
 
 template <typename ValueType>
+std::vector<ValueType> generate_sequential_vector(
+    const size_t& numel, const float& start_idx, const float& step) {
+    std::vector<ValueType> results(numel);
+    float val = start_idx;
+    for (unsigned int index = 0; index < numel; index+=1) {
+        results.at(index) = ValueType(val);
+        val+=step;
+    }
+    return results;
+}
+
+template <typename ValueType>
 std::vector<ValueType> generate_uniform_random_vector(
     ValueType min, ValueType max, const size_t numel, const float seed = 0) {
     std::mt19937 gen(seed);
@@ -114,6 +126,12 @@ template <typename PackType, typename ValueType>
 std::vector<PackType> generate_packed_constant_vector(
     const ValueType& constant, const size_t& numel) {
     return pack_vector<PackType, ValueType>(generate_constant_vector(constant, numel));
+}
+
+template <typename PackType, typename ValueType>
+std::vector<PackType> generate_packed_sequential_vector(
+    const size_t& numel, const float& start_idx, const float& step) {
+    return pack_vector<PackType, ValueType>(generate_sequential_vector<ValueType>(numel, start_idx, step));
 }
 
 }  // namespace test_utils
