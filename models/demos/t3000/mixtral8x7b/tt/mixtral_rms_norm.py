@@ -61,8 +61,8 @@ class TtRMSNorm(LightweightModule):
         # print(self.weight.shape, self.weight_ones.shape)
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        # x = ttnn.rms_norm(x, weight=self.weight_ones, epsilon=self.eps)* self.weight
-        x = x * ttnn.rsqrt(ttnn.mean(ttnn.pow(x, 2), dim=-1) + self.eps) * self.weight
+        x = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
+        # x = x * ttnn.rsqrt(ttnn.mean(ttnn.pow(x, 2), dim=-1) + self.eps) * self.weight
 
         print(x.shape)
         return x

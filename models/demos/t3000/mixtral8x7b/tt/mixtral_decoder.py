@@ -83,9 +83,9 @@ class TtTransformerBlock(LightweightModule):
         H: hidden dim (4096)
         """
         attn_norm_1SBH = self.attention_norm(xs_1SBH)
-        self.comps.append(
-            ttnn.to_torch(attn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
-        )
+        # self.comps.append(
+        #     ttnn.to_torch(attn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
+        # )
 
         attn_1SBH = self.attention(
             attn_norm_1SBH,
@@ -98,24 +98,24 @@ class TtTransformerBlock(LightweightModule):
             mode,
         )
         # attn_norm_1SBH.deallocate(True)
-        self.comps.append(ttnn.to_torch(attn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+        # self.comps.append(ttnn.to_torch(attn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
         hs_1SBH = ttnn.experimental.tensor.add(xs_1SBH, attn_1SBH, output_mem_config=ttnn.DRAM_MEMORY_CONFIG)
-        self.comps.append(ttnn.to_torch(hs_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+        # self.comps.append(ttnn.to_torch(hs_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
         ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
         # hs_1SBH.deallocate(True)
 
-        moe_input = ttnn.to_torch(ffn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
-        self.comps.append(moe_input)
-        torch.save(moe_input, "moe_input.pt")
+        # moe_input = ttnn.to_torch(ffn_norm_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0]
+        # self.comps.append(moe_input)
+        # torch.save(moe_input, "moe_input.pt")
 
         ffn_1SBH = self.feed_forward(ffn_norm_1SBH, mode=mode)
         # ffn_norm_1SBH.deallocate(True)
-        self.comps.append(ttnn.to_torch(ffn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+        # self.comps.append(ttnn.to_torch(ffn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
         out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
-        self.comps.append(ttnn.to_torch(out_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
-
+        # self.comps.append(ttnn.to_torch(out_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
+        print("layer num =", self.layer_num)
         return out_1SBH
