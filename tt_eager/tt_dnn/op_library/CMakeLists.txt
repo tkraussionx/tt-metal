@@ -21,8 +21,6 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_overlap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_sharded.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sliding_window_op_infra/halo_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_binary/eltwise_binary_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_binary/multi_core/eltwise_binary_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/eltwise_unary_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_sharded.cpp
@@ -48,6 +46,8 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce/single_core_hw/reduce_op_single_core_hw.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce/multi_core_h/reduce_op_multi_core_h.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/reduce/multi_core_w/reduce_op_multi_core_w.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/fast_reduce_nc/fast_reduce_nc_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/fast_reduce_nc/reduce_nc_impl/reduce_nc_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/bcast_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_h/bcast_op_multi_core_h.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_h/bcast_op_sharded_h.cpp
@@ -210,13 +210,11 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/scan/scan_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/topk/topk_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/topk/single_core/single_core_topk.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/risc_v/risc_v_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/risc_v/argmax_op.cpp
 )
 
 add_library(tt_dnn OBJECT ${TT_DNN_SRCS})
 
-target_link_libraries(tt_dnn PUBLIC metal_header_directories compiler_flags)
+target_link_libraries(tt_dnn PUBLIC metal_header_directories compiler_flags umd_device)
 target_include_directories(tt_dnn PUBLIC
     ${UMD_HOME}
     ${PROJECT_SOURCE_DIR}
@@ -226,12 +224,12 @@ target_include_directories(tt_dnn PUBLIC
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt
 )
 
-target_precompile_headers(tt_dnn PUBLIC
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
-)
+# target_precompile_headers(tt_dnn PUBLIC
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
+# )

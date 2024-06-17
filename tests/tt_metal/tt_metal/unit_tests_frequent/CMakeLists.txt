@@ -5,7 +5,7 @@ set(UNIT_TESTS_FREQUENT_SRCS
 
 add_executable(unit_tests_frequent ${UNIT_TESTS_FREQUENT_SRCS})
 
-target_link_libraries(unit_tests_frequent PUBLIC test_metal_common_libs)
+target_link_libraries(unit_tests_frequent PUBLIC test_metal_common_libs gtest gtest_main)
 target_include_directories(unit_tests_frequent PRIVATE
     ${UMD_HOME}
     ${PROJECT_SOURCE_DIR}

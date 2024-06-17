@@ -18,6 +18,9 @@ import ttnn._ttnn
 
 CPP_CONFIG: ttnn._ttnn.core.Config = ttnn._ttnn.CONFIG
 
+UnaryWithParam = _tt_lib.tensor.FusibleActivationWithParam
+UnaryOpType = _tt_lib.tensor.FusibleActivation
+
 
 @dataclasses.dataclass
 class Config:
@@ -304,6 +307,7 @@ from ttnn.operations.reduction import (
     min,
     sum,
     mean,
+    argmax,
 )
 
 from ttnn.operations.losses import (
@@ -438,6 +442,8 @@ from ttnn.operations.binary import (
     eq,
     ne,
     isclose,
+    bias_gelu,
+    divide,
 )
 
 from ttnn.operations.ternary import (
@@ -470,7 +476,7 @@ from ttnn.operations.ccl import all_gather
 
 from ttnn.operations import transformer
 from ttnn.operations import kv_cache
-from ttnn.operations.conv2d import Conv2d, conv2d, Conv2dConfig
+from ttnn.operations.conv2d import Conv2d, conv2d, Conv2dConfig, get_conv_output_dim
 from ttnn.operations.pool import (
     MaxPool2d,
     global_avg_pool2d,

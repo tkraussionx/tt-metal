@@ -182,7 +182,7 @@ def run_trace_model(device, tt_image, tt_resnet50):
     # Compile
     tt_resnet50(tt_image_res)
     # Trace
-    tid = tt_lib.device.BeginTraceCapture(device, 0, 1500000)
+    tid = tt_lib.device.BeginTraceCapture(device, 0)
     tt_output_res = tt_resnet50(tt_image_res)
     tt_lib.device.EndTraceCapture(device, 0, tid)
 
@@ -238,7 +238,7 @@ def run_trace_2cq_model(device, tt_image, tt_resnet50):
 
     # Compile
     tt_lib.device.WaitForEvent(device, 1, op_event)
-    tt_lib.tensor.write_tensor(tt_image, tt_image_res)
+    tt_lib.tensor.write_tensor(tt_image, tt_image_res, 1)
     tt_lib.device.RecordEvent(device, 1, write_event)
 
     tt_lib.device.WaitForEvent(device, 0, write_event)
@@ -250,14 +250,14 @@ def run_trace_2cq_model(device, tt_image, tt_resnet50):
     tt_lib.device.Synchronize(device)
     # Trace
     tt_lib.device.WaitForEvent(device, 1, op_event)
-    tt_lib.tensor.write_tensor(tt_image, tt_image_res)
+    tt_lib.tensor.write_tensor(tt_image, tt_image_res, 1)
     tt_lib.device.RecordEvent(device, 1, write_event)
 
     tt_lib.device.WaitForEvent(device, 0, write_event)
     reshard_out = tt_lib.tensor.reshard(tt_image_res, reshard_mem_config)
     tt_lib.device.RecordEvent(device, 0, op_event)
 
-    tid = tt_lib.device.BeginTraceCapture(device, 0, 1500000)
+    tid = tt_lib.device.BeginTraceCapture(device, 0)
     tt_output_res = tt_resnet50(reshard_out, final_out_mem_config=interleaved_dram_mem_config)
     reshard_out = tt_lib.tensor.allocate_tensor_on_device(
         reshard_out.shape, reshard_out.dtype, reshard_out.layout, device, reshard_mem_config
@@ -267,11 +267,10 @@ def run_trace_2cq_model(device, tt_image, tt_resnet50):
     tt_lib.device.Synchronize(device)
 
     # Test overlapping write
-    tt_lib.device.RecordEvent(device, 0, op_event)
     outputs = []
     for iter in range(0, 2):
         tt_lib.device.WaitForEvent(device, 1, op_event)
-        tt_lib.tensor.write_tensor(tt_image, tt_image_res)
+        tt_lib.tensor.write_tensor(tt_image, tt_image_res, 1)
         tt_lib.device.RecordEvent(device, 1, write_event)
 
         tt_lib.device.WaitForEvent(device, 0, write_event)

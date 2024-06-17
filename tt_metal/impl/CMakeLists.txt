@@ -1,6 +1,7 @@
 
 set(IMPL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/device/device.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/device/device_pool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/device/multi_device.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/buffers/buffer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/buffers/circular_buffer.cpp
@@ -16,6 +17,7 @@ set(IMPL_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/debug/dprint_server.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/debug/watcher_server.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/trace/trace.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/trace/trace_buffer.cpp
 )
 
 add_library(impl OBJECT ${IMPL_SRC})

@@ -74,7 +74,7 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
 void EnqueueReadInterleavedBufferCommand::add_prefetch_relay(HugepageDeviceCommand& command) {
     uint32_t padded_page_size = align(this->buffer.page_size(), ADDRESS_ALIGNMENT);
     command.add_prefetch_relay_paged(
-        this->buffer.buffer_type() == BufferType::DRAM,
+        this->buffer.is_dram(),
         this->src_page_index,
         this->buffer.address(),
         padded_page_size,
@@ -151,7 +151,7 @@ EnqueueWriteBufferCommand::EnqueueWriteBufferCommand(
 }
 
 void EnqueueWriteInterleavedBufferCommand::add_dispatch_write(HugepageDeviceCommand& command_sequence) {
-    uint8_t is_dram = uint8_t(this->buffer.buffer_type() == BufferType::DRAM);
+    uint8_t is_dram = uint8_t(this->buffer.is_dram());
     TT_ASSERT(
         this->dst_page_index <= 0xFFFF,
         "Page offset needs to fit within range of uint16_t, bank_base_address was computed incorrectly!");
@@ -283,7 +283,6 @@ void EnqueueWriteBufferCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
@@ -965,6 +964,7 @@ void EnqueueProgramCommand::process() {
         this->assemble_device_commands();
     } else {
         static constexpr uint32_t count_offset = (sizeof(CQPrefetchCmd) + offsetof(CQDispatchCmd, wait.count));
+        TT_ASSERT(this->cached_program_command_sequences.find(program.id) != this->cached_program_command_sequences.end(), "Program cache hit, but no stored command sequence");
         this->cached_program_command_sequences[program.id].preamble_command_sequence.update_cmd_sequence(
             count_offset, &this->expected_num_workers_completed, sizeof(uint32_t));
         this->assemble_device_commands();
@@ -1122,7 +1122,6 @@ void EnqueueRecordEventCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
 }
 
@@ -1243,7 +1242,10 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id, NOC noc_index) :
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());
     this->size_B = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel) / device->num_hw_cqs();
-
+    if (tt::Cluster::instance().is_galaxy_cluster()) {
+        //Galaxy puts 4 devices per host channel until umd can provide one channel per device.
+        this->size_B = this->size_B / 4;
+    }
     tt_cxy_pair completion_q_writer_location =
         dispatch_core_manager::get(device->num_hw_cqs()).completion_queue_writer_core(device->id(), channel, this->id);
 
@@ -1347,7 +1349,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
                 num_total_pages -= num_pages_to_read;
             }
             uint32_t bank_base_address = buffer.address();
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.is_dram()) {
                 bank_base_address += buffer.device()->bank_offset(
                     BufferType::DRAM, buffer.device()->dram_channel_from_logical_core(cores[core_id]));
             }
@@ -1513,7 +1515,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             }
             uint32_t curr_page_idx_in_shard = 0;
             uint32_t bank_base_address = buffer.address();
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.is_dram()) {
                 bank_base_address += buffer.device()->bank_offset(
                     BufferType::DRAM, buffer.device()->dram_channel_from_logical_core(cores[core_id]));
             }
@@ -1775,7 +1777,8 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     if (blocking) {
         this->finish();
-    } else {
+    }
+    else {
         std::shared_ptr<Event> event = std::make_shared<Event>();
         this->enqueue_record_event(event);
     }

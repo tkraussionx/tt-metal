@@ -7,13 +7,19 @@ cmake_policy(VERSION 3.16)
 
 # Use Clang-17 by default until we upgrade to Ubuntu version that supports higher GCC
 # No longer support GCC-9 as it does not support C++20
-find_program(CLANG_17 clang++-17)
-if(CLANG_17)
-    message(STATUS "Found Clang-17 here: ${CLANG_17}")
-    set(CMAKE_CXX_COMPILER "${CLANG_17}")
-else()
-    message(WARNING "Clang++-17 not found!!!")
+find_program(CLANGPP_17 clang++-17)
+find_program(CLANG_17 clang-17)
+
+if (NOT CLANGPP_17)
+    message(FATAL_ERROR "clang++-17 not found")
 endif()
+
+if (NOT CLANG_17)
+    message(FATAL_ERROR "clang-17 not found")
+endif()
+
+set(CMAKE_CXX_COMPILER "${CLANGPP_17}")
+set(CMAKE_C_COMPILER "${CLANG_17}")
 
 if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
     message(FATAL_ERROR "CMake generation is not allowed within source directory!! Please set a build folder with '-B'!!")
@@ -32,8 +38,8 @@ CHECK_COMPILERS()
 ############################################################################################################################
 # Find all required libraries to build
 ############################################################################################################################
-include(${PROJECT_SOURCE_DIR}/cmake/CPM_boost.cmake)
-find_package(GTest REQUIRED)
+include(${PROJECT_SOURCE_DIR}/cmake/dependencies.cmake)
+
 find_package (Python3 COMPONENTS Interpreter Development)
 find_library(NUMA_LIBRARY NAMES numa)
 if (NOT NUMA_LIBRARY)
@@ -90,7 +96,7 @@ set(CMAKE_INSTALL_DATAROOTDIR "${PROJECT_BINARY_DIR}/tmp/share")
 ############################################################################################################################
 add_library(metal_common_libs INTERFACE)
 target_link_libraries(metal_common_libs INTERFACE
-    dl z pthread atomic stdc++ hwloc numa # system libraries, hwloc has no cmake support, find_package won't find it
+    dl z pthread atomic c++ c++abi hwloc numa # system libraries, hwloc has no cmake support, find_package won't find it
 )
 
 # Note on flags:
@@ -104,7 +110,7 @@ CHECK_COMPILER_WARNINGS()      # <- add any extra compile warning flags for buil
 
 add_library(compiler_flags INTERFACE)
 target_link_libraries(compiler_flags INTERFACE compiler_warnings)
-target_compile_options(compiler_flags INTERFACE -mavx2 -fPIC -DFMT_HEADER_ONLY -fvisibility-inlines-hidden -fno-lto)
+target_compile_options(compiler_flags INTERFACE -mavx2 -fPIC -DFMT_HEADER_ONLY -fvisibility-inlines-hidden -fno-lto -stdlib=libc++)
 
 if(TT_METAL_VERSIM_DISABLED)
     target_compile_options(compiler_flags INTERFACE -DTT_METAL_VERSIM_DISABLED)
@@ -142,12 +148,12 @@ else()
 endif()
 
 # Can't use the `REUSE_FROM` option bc tt_lib and ttnn have different build flags :(
-add_library(pch_pybinds INTERFACE)
-target_precompile_headers(pch_pybinds INTERFACE
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/operators.h
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/pybind11.h
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/stl.h
-)
+# add_library(pch_pybinds INTERFACE)
+# target_precompile_headers(pch_pybinds INTERFACE
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/operators.h
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/pybind11.h
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/pybind11/include/pybind11/stl.h
+# )
 
 ############################################################################################################################
 # Build subdirectories
