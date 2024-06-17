@@ -547,6 +547,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
 
     uint32_t num_cores_x = grid_size.x;
     uint32_t num_cores_y = grid_size.y;
+    //log_info(LogTest, "Num Cores x is {}, Num cores y is {}", num_cores_x, num_cores_y);
     uint32_t num_cores = num_cores_x * num_cores_y;
     uint32_t num_cores_all_to_all = div_up(block_ht, num_rows_per_all_to_all_worker);
     uint32_t num_none_all_to_all_workers = num_blocks - num_cores_all_to_all;
@@ -1016,6 +1017,9 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
         in0_mcast_noc_y.push_back(device->worker_core_from_logical_core({0, core_idx_y}).y);
     }
 
+    uint32_t last_core_width_index = 0;
+    last_core_width_index = row_wise ? (num_cores_x - 1) : (num_cores_y - 1);
+
     for (uint32_t i = 0; i < cores.size(); ++i) {
         const auto& core = cores[i];
         uint32_t height_index = 0, width_index = 0;
@@ -1035,14 +1039,15 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
         uint32_t in1_tile_start_id = (height_index * block_ht * Kt) + (width_index * block_wt);
         uint32_t gamma_tile_start_id = width_index * block_wt;
         uint32_t beta_tile_start_id = width_index * block_wt;
-
         std::vector<uint32_t> compute_args;
-        uint32_t arg_val_block_w = block_wt;
-        if (a.get_legacy_shape()[-1] == 4544 && width_index == 7) {
-            arg_val_block_w = 16;
+
+        uint32_t num_reduce_tiles_per_block_h = block_wt;
+        // account for padding
+        if (width_index == last_core_width_index) {
+            num_reduce_tiles_per_block_h = Kt - last_core_width_index * block_wt;
         }
-        compute_args.push_back(arg_val_block_w);
-        compute_args.push_back(width_index);
+
+        compute_args.push_back(num_reduce_tiles_per_block_h);
 
         if (width_index < num_cores_all_to_all) {
             uint32_t num_rows = width_index == num_cores_all_to_all - 1 ? num_rows_per_all_to_all_worker_last : num_rows_per_all_to_all_worker;

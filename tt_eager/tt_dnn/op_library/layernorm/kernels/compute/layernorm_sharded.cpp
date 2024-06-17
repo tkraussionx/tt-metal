@@ -35,16 +35,21 @@ void MAIN {
     uint32_t num_tiles_per_block            = get_compile_time_arg_val(9);
     constexpr bool FLOAT32_DTYPE                    = get_compile_time_arg_val(10) == 1;
 
-    const uint32_t block_w_arg_val = get_arg_val<uint32_t>(0);
-    block_w = block_w_arg_val;
+    const uint32_t num_reduce_tiles_per_block_h = get_arg_val<uint32_t>(0);
+
+    // if (num_reduce_tiles_per_block_h == 16) {
+    //     DPRINT_UNPACK({DPRINT << "Num_Reduce_Tiles: " << num_reduce_tiles_per_block_h << ENDL();});
+    // }
+    // const uint32_t block_w_arg_val = get_arg_val<uint32_t>(0);
+    // block_w = block_w_arg_val;
 
     // DPRINT_UNPACK({DPRINT << "Hello from layernorm compute_kernel!" << ENDL(); });
 
     // DPRINT << "LN compute kernel, block_w runtime_arg = " << block_w_arg_val << " block_w compile_time_arg: " << block_w <<  ENDL();
 
-    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(2) : 0;
+    const uint32_t num_tiles_per_allgather_worker = is_allgather_worker ? get_arg_val<uint32_t>(1) : 0;
 
-    const uint32_t width_index = get_arg_val<uint32_t>(1);
+    // const uint32_t width_index = get_arg_val<uint32_t>(1);
 
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t scaler0 = 0;
@@ -79,24 +84,24 @@ void MAIN {
     // set block_h to volatile to disable automatically unroll of the loops, avoid code overflow
     const uint32_t block_h = (block_w == 1) ? block_h_volatile : block_h_const;
     uint32_t subblock_w = (block_w <= 2) ? subblock_w_volatile : subblock_w_const;
-    uint32_t num_valid_tiles_per_block_h = block_w;
-    uint32_t num_valid_subblocks_w = num_subblocks_w;
-    uint32_t padding_diff = 0;
+    // uint32_t num_valid_tiles_per_block_h = block_w;
+    // uint32_t num_valid_subblocks_w = num_subblocks_w;
+    // uint32_t padding_diff = 0;
 
-    if (block_w == 16) {
-        subblock_w = 1;
-        num_subblocks_w = 18;
-        block_w = 18;
-        num_valid_subblocks_w = 16;
-        padding_diff = num_subblocks_w - num_valid_subblocks_w;
-        // num_tiles_per_block = block_w * block_h_const;
-        //num_valid_tiles_per_block_h = block_w;
+    // if (block_w == 16) {
+    //     subblock_w = 1;
+    //     num_subblocks_w = 18;
+    //     block_w = 18;
+    //     num_valid_subblocks_w = 16;
+    //     padding_diff = num_subblocks_w - num_valid_subblocks_w;
+    //     // num_tiles_per_block = block_w * block_h_const;
+    //     //num_valid_tiles_per_block_h = block_w;
 
 
-        // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
-    } else if (width_index == 7) {
-        // DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
-    }
+    //     // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
+    // } else if (width_index == 7) {
+    //     // DPRINT << "width=7 subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << ENDL();
+    // }
 
     // DPRINT << "subblock_w: " << subblock_w << " num_subblocks_w: " << num_subblocks_w << " num_tiles_per_block: " << num_tiles_per_block << "num_blocks:" << num_blocks << "do_gamma: " << do_gamma << "do_betta: " << do_beta << ENDL();
 
@@ -163,7 +168,7 @@ void MAIN {
     cb_reserve_back(cb_ex_partial, block_h);
     for (uint32_t i = 0; i < block_h; i++) {
         tile_regs_acquire();
-        for (uint32_t w = 0; w < num_valid_subblocks_w * subblock_w; w++) { // This needs fixing probably
+        for (uint32_t w = 0; w < num_reduce_tiles_per_block_h; w++) { // This needs fixing probably
             reduce_tile(cb_in, cb_scaler, w+index_h_offset, scaler0, dst0);
         }
         tile_regs_commit();
@@ -298,7 +303,7 @@ void MAIN {
     index_h_offset = 0;
     for (uint32_t i = 0; i < block_h; i++) {
         tile_regs_acquire();
-        for (uint32_t w = 0; w < num_valid_subblocks_w * subblock_w; w++) {
+        for (uint32_t w = 0; w < num_reduce_tiles_per_block_h; w++) {
             reduce_tile(cb_xmm2, cb_scaler, w+index_h_offset, scaler0, dst0);
         }
         tile_regs_commit();

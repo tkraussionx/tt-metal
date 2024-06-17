@@ -764,8 +764,9 @@ def test_falcon7b_attention_softmax_sequence(
     [32, 64, 128, 256, 512, 1024, 2048],
     ids=["seq_len_32", "seq_len_64", "seq_len_128", "seq_len_256", "seq_len_512", "seq_len_1024", "seq_len_2048"],
 )
+@pytest.mark.parametrize("is_randn", [True, False], ids=["true_randn", "false_randn"])
 @pytest.mark.parametrize("num_cores", [64])
-def test_sharded_ln(device, num_cores, seq_len):
+def test_sharded_ln(device, num_cores, seq_len, is_randn):
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
@@ -777,13 +778,15 @@ def test_sharded_ln(device, num_cores, seq_len):
     gamma_beta_shape = [1, 1, 32, hidden_dim]
 
     ln_epsilon = 1e-5
-    torch_input = torch.rand(input_shape).bfloat16().float()
-    torch_gamma = torch.rand(gamma_beta_shape).bfloat16().float()
-    torch_betta = torch.rand(gamma_beta_shape).bfloat16().float()
 
-    # torch_input = torch.randn(input_shape).bfloat16().float()
-    # torch_gamma = torch.randn(gamma_beta_shape).bfloat16().float()
-    # torch_betta = torch.randn(gamma_beta_shape).bfloat16().float()
+    if is_randn == True:
+        torch_input = torch.randn(input_shape).bfloat16().float()
+        torch_gamma = torch.randn(gamma_beta_shape).bfloat16().float()
+        torch_betta = torch.randn(gamma_beta_shape).bfloat16().float()
+    else:
+        torch_input = torch.rand(input_shape).bfloat16().float()
+        torch_gamma = torch.rand(gamma_beta_shape).bfloat16().float()
+        torch_betta = torch.rand(gamma_beta_shape).bfloat16().float()
 
     dram_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
         memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
