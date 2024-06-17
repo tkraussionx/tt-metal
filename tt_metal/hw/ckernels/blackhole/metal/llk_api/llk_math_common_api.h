@@ -48,9 +48,13 @@ inline void llk_math_release_tile(std::uint32_t operand) {
     _llk_math_release_tile_<mail2math, mail2pack>();
 }
 
-inline void llk_math_debug_dump(std::uint8_t *data, std::uint32_t byte_size) { _llk_math_debug_dump_(data, byte_size); }
 
-inline void llk_math_debug_dump_seek(std::uint8_t offset) { _llk_math_debug_dump_seek_(offset); }
+inline void llk_math_debug_dump(std::uint8_t *data, std::uint32_t byte_size) {
+    _llk_math_debug_dump_(data, byte_size);
+}
+inline void llk_math_debug_dump_seek(std::uint8_t offset) {
+    _llk_math_debug_dump_seek_(offset);
+}
 
 inline void llk_math_reconfig_data_format_srca(const std::uint32_t srca_new_operand) {
     std::uint32_t new_srca_operand_id = get_operand_id(srca_new_operand);
@@ -66,7 +70,10 @@ inline void llk_math_reconfig_data_format(const std::uint32_t srca_new_operand, 
     std::uint32_t new_srca_operand_id = get_operand_id(srca_new_operand);
     std::uint32_t new_srcb_operand_id = get_operand_id(srcb_new_operand);
 
-    _llk_math_reconfig_data_format_(unpack_dst_format[new_srca_operand_id], unpack_dst_format[new_srcb_operand_id]);
+    _llk_math_reconfig_data_format_(
+        unpack_dst_format[new_srca_operand_id],
+        unpack_dst_format[new_srcb_operand_id]
+    );
 }
 
 inline void llk_math_reconfig_data_format(
