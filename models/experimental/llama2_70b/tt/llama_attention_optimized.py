@@ -217,6 +217,11 @@ class TtLlamaAttention_optimized:
         )
         xs.deallocate(True)
 
+        # Reshape such that true unpadded batch is tracked in shape
+        fqkv_shape = fused_query_key_value.shape
+        fused_query_key_value = ttnn.reshape(
+            fused_query_key_value, ttnn.Shape((1, 1, self.max_batch_size, fqkv_shape[3]), (1, 1, 32, fqkv_shape[3]))
+        )
         # Split QKV
         (
             query_layer,  # [seqlen, n_local_heads, bsz, head_dim]

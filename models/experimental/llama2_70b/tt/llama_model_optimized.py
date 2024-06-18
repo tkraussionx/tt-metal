@@ -161,13 +161,8 @@ class TtLlamaModel_optimized:
 
         if self.model_config["LLM_MODE"] == "decode":
             inp_ids = inp_ids.reshape(seq_len, 1, 1, batch)
-            # TODO: Pad
-            # pad_w = 32 - batch
-            # if pad_w > 0:
-            #     inp_ids = torch.cat(
-            #         [inp_ids, torch.zeros(seq_len, 1, 1, pad_w, device=inp_ids.device, dtype=inp_ids.dtype)], dim=-1
-            # breakpoint()
-            # x = ttnn.Tensor(inp_ids, data_type=ttnn.uint32)
+            # Pad small batches to 32
+            inp_ids = torch.nn.functional.pad(inp_ids, (0, 32 - batch))
 
         else:
             inp_ids = inp_ids.reshape(batch, 1, 1, seq_len)
@@ -180,9 +175,6 @@ class TtLlamaModel_optimized:
             memory_config=self.model_config["DRAM_MEMCFG"],
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )
-        breakpoint()
-        x = ttnn.reshape(x, ttnn.Shape((1, 1, 1, batch), (1, 1, 1, 32)))
-        # x = ttnn.to_device(x, self.device_mesh)
 
         xs = self.tt_embd(x)
 
@@ -245,7 +237,7 @@ class TtLlamaModel_optimized:
 
         elif self.model_config["LLM_MODE"] == "decode":
             assert seq_len == 1, "Decode mode only supports seq_len=1"
-            assert xs.shape == (seq_len, 1, batch, self.hidden_size // self.num_devices)
+            assert xs.shape == (seq_len, 1, 32, self.hidden_size // self.num_devices)
 
             xs = tt_lib.tensor.interleaved_to_sharded(
                 xs, sharded_mem_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"]

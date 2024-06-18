@@ -121,7 +121,7 @@ def get_model_config(
     n_kv_heads = model_config_entries["num_kv_heads"]
 
     if llm_mode == "decode":
-        shard_height = batch
+        shard_height = 32  # batch
     else:
         shard_height = seq_len
 
