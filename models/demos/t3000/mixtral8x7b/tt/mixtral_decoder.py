@@ -44,9 +44,9 @@ class TtTransformerBlock(LightweightModule):
                 args=args,
                 layer_num=layer_num,
                 dtypes={
-                    "w1": ttnn.bfloat4_b,
+                    "w1": ttnn.bfloat8_b,
                     "w2": ttnn.bfloat8_b,
-                    "w3": ttnn.bfloat4_b,
+                    "w3": ttnn.bfloat8_b,
                 },
             ),
             args=args,
@@ -100,7 +100,7 @@ class TtTransformerBlock(LightweightModule):
         # attn_norm_1SBH.deallocate(True)
         # self.comps.append(ttnn.to_torch(attn_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
-        hs_1SBH = ttnn.experimental.tensor.add(xs_1SBH, attn_1SBH, output_mem_config=ttnn.DRAM_MEMORY_CONFIG)
+        hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         # self.comps.append(ttnn.to_torch(hs_1SBH, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
         ffn_norm_1SBH = self.ffn_norm(hs_1SBH)

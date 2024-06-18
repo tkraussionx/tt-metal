@@ -50,7 +50,7 @@ class TtMoeLayer(LightweightModule):
         top8_mask[:, :, :, 1:9] = 0.0
         self.top8_mask_11B_64 = ttnn.from_torch(
             top8_mask,
-            dtype=ttnn.bfloat8_b,
+            dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
@@ -61,7 +61,7 @@ class TtMoeLayer(LightweightModule):
         top2_mask[:, :, :, :2] = 0.0
         self.top2_mask_11BB = ttnn.from_torch(
             top2_mask,
-            dtype=ttnn.bfloat8_b,
+            dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
             device=device_mesh,
             mesh_mapper=ReplicateTensorToMesh(device_mesh),
@@ -87,12 +87,18 @@ class TtMoeLayer(LightweightModule):
             input_i_1SBH,
             self.gates_H8,
             # program_config=self.model_config["GATE_MM_OUTPUT_PROGCFG_PREFILL"](seqlen),
-            memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
-            compute_kernel_config=self.compute_kernel,
-            # use_1d_systolic_array=True,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,  # self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+            compute_kernel_config=ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi4,
+                fp32_dest_acc_en=True,
+                packer_l1_acc=True,
+            ),
+            use_1d_systolic_array=True,
             core_grid=ttnn.CoreGrid(y=8, x=8),
             dtype=ttnn.bfloat16,
         )
+
+        # print("gates", ttnn.to_torch(gate_logits_1SB8, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=0))[0])
 
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
@@ -103,6 +109,7 @@ class TtMoeLayer(LightweightModule):
         tmp = ttnn.experimental.tensor.typecast(tmp, dtype=ttnn.bfloat16)
         mask_B2 = ttnn.eqz(tmp)
         weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=3)
+        # print("indices", ttnn.to_torch(ttl_topk_indices, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=0))[0])
         ttl_topk_values.deallocate(True)
         ttl_topk_indices.deallocate(True)
 

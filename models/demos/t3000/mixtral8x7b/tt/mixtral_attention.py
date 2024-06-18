@@ -439,7 +439,7 @@ class TtMixtralAttention(LightweightModule):
         output_11SH.deallocate(True)
         # output_11BH_gathered = ttnn.experimental.tensor.typecast(output_11BH_gathered, dtype=ttnn.bfloat16)
         output_11BH_reduced = ttnn.experimental.operations.primary.moreh_sum(
-            output_11BH_gathered, dims=[1], output=None, compute_kernel_config=None
+            output_11BH_gathered, dim=1  # , output=None, compute_kernel_config=None
         )
         output_11BH_gathered.deallocate(True)
         return output_11BH_reduced

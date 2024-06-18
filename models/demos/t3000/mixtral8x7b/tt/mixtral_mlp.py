@@ -56,7 +56,7 @@ class TtMixtralMLP(LightweightModule):
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
         if mode == "prefill":
-            x = ttnn.reshape(x, (1, 4, 2048, 4096))
+            x = ttnn.reshape(x, (1, 8, 2048 // 2, 4096))
             # from models.demos.t3000.mixtral8x7b.tt.create_program_config import create_matmul_program_config
             # pc = create_matmul_program_config(input_tensor_a=x, input_tensor_b=self.w1, core_grid=ttnn.CoreGrid(y=8, x=8), activation="silu", use_1d_systolic_array=False, compute_kernel_config=self.prefill_mlp_config)
             # print(pc)
@@ -65,7 +65,7 @@ class TtMixtralMLP(LightweightModule):
                 in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=8,  # 32, #16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=4,  # 32, #16,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=56,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=ttnn.experimental.tensor.FusibleActivation.SILU,
@@ -88,7 +88,7 @@ class TtMixtralMLP(LightweightModule):
                 in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=4,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=56,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,
@@ -112,7 +112,7 @@ class TtMixtralMLP(LightweightModule):
                 in0_block_w=4,  # how much inner dim you take each time
                 out_subblock_h=1,  # Must be divisible by per_core_M
                 out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-                per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+                per_core_M=4,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
                 per_core_N=16,  # N / TILE_WIDTH / Grid_Size
                 transpose_mcast=False,
                 fused_activation=None,
