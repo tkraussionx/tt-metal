@@ -8,7 +8,7 @@ from tqdm import tqdm
 import torch
 import ttnn.experimental as tt_lib
 import ttnn
-from ttnn import ShardTensorToMesh, ReplicateTensorToMesh
+from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor
 
 
 from models.utility_functions import nearest_32, profiler
@@ -32,7 +32,6 @@ class TtLlamaModel_optimized:
         n_layers,
         model_config,
         configuration,
-        batch,
         cache_path=None,
         read_cache=False,
     ):
@@ -75,7 +74,6 @@ class TtLlamaModel_optimized:
                 layer_num,
                 model_config,
                 configuration,
-                batch,
                 transformation_mats,
                 cache_path=cache_path,
                 read_cache=read_cache,
@@ -163,6 +161,14 @@ class TtLlamaModel_optimized:
 
         if self.model_config["LLM_MODE"] == "decode":
             inp_ids = inp_ids.reshape(seq_len, 1, 1, batch)
+            # TODO: Pad
+            # pad_w = 32 - batch
+            # if pad_w > 0:
+            #     inp_ids = torch.cat(
+            #         [inp_ids, torch.zeros(seq_len, 1, 1, pad_w, device=inp_ids.device, dtype=inp_ids.dtype)], dim=-1
+            # breakpoint()
+            # x = ttnn.Tensor(inp_ids, data_type=ttnn.uint32)
+
         else:
             inp_ids = inp_ids.reshape(batch, 1, 1, seq_len)
 
@@ -174,7 +180,9 @@ class TtLlamaModel_optimized:
             memory_config=self.model_config["DRAM_MEMCFG"],
             mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
         )
-        x = ttnn.to_device(x, self.device_mesh)
+        breakpoint()
+        x = ttnn.reshape(x, ttnn.Shape((1, 1, 1, batch), (1, 1, 1, 32)))
+        # x = ttnn.to_device(x, self.device_mesh)
 
         xs = self.tt_embd(x)
 
@@ -261,16 +269,29 @@ class TtLlamaModel_optimized:
                 rot_mats, sharded_mem_config=self.model_config["ROT_MAT_MM_IN1_MEMCFG"]
             )
 
-            padded_layer_past_len = nearest_32(start_pos + 1)
+            def get_chunk_size(s):
+                # Not sure if optimal
+                if s <= 32:
+                    return 32
+                if s <= 64:
+                    return 64
+                if s <= 128:
+                    return 128
+                if s <= 256:
+                    return 256
+                if s <= 2048:
+                    return 512
+                return 1024
 
-            padded_layer_past_len = nearest_32(start_pos + 1)
+            k_chunk_size = get_chunk_size(start_pos + 1)
+            padded_layer_past_len = ((start_pos + 1 + k_chunk_size - 1) // k_chunk_size) * k_chunk_size
             attn_mask_shape = (seq_len, 1, self.padded_local_heads, padded_layer_past_len)
             attn_mask = torch.zeros(*attn_mask_shape)
             attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
 
             attn_masks = ttnn.as_tensor(
                 attn_mask,
-                dtype=ttnn.bfloat16,
+                dtype=ttnn.bfloat8_b,
                 layout=ttnn.TILE_LAYOUT,
                 cache_file_name=cache_name(f"attn_masks_decode_{start_pos}"),
                 memory_config=self.model_config["DRAM_MEMCFG"],
@@ -283,16 +304,16 @@ class TtLlamaModel_optimized:
             attn_masks = tt_lib.tensor.repeat(
                 attn_masks, repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
             )
-            # Put attn_mask on the device with the sharded config
-            attention_mask_memconfig = self.model_config["ATTN_MASK_MEMCFG"]
-            if attention_mask_memconfig.is_sharded():
-                attn_mask_shard_shape = attention_mask_memconfig.shard_spec.shape
-                attn_mask_shard_shape[-1] = padded_layer_past_len
-                attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
+            # # Put attn_mask on the device with the sharded config
+            # attention_mask_memconfig = self.model_config["ATTN_MASK_MEMCFG"]
+            # if attention_mask_memconfig.is_sharded():
+            #     attn_mask_shard_shape = attention_mask_memconfig.shard_spec.shape
+            #     attn_mask_shard_shape[-1] = padded_layer_past_len
+            #     attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
-                attn_masks = tt_lib.tensor.interleaved_to_sharded(
-                    attn_masks, sharded_mem_config=attention_mask_memconfig
-                )
+            #     attn_masks = tt_lib.tensor.interleaved_to_sharded(
+            #         attn_masks, sharded_mem_config=attention_mask_memconfig
+            #     )
 
         return (
             xs,

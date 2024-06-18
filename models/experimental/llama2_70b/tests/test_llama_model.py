@@ -108,7 +108,6 @@ def run_test_LlamaModel_inference(
         n_layers,
         model_config,
         configuration,
-        batch,
         cache_path=cache_path,
     )
 
@@ -117,7 +116,7 @@ def run_test_LlamaModel_inference(
         generation_length = 1
     else:
         generation_start_pos = UNIT_TEST_START_POS
-        generation_length = UNIT_TEST_GENERATION_LENGTH
+        generation_length = 2000  # UNIT_TEST_GENERATION_LENGTH
 
     # Pre-process inputs in prompt mode
     if prompt:
@@ -163,11 +162,10 @@ def run_test_LlamaModel_inference(
 
         tt_out = ttnn.from_device(tt_out)
         tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=3))
-        tt_out = tt_out[..., : configuration.vocab_size]
+        tt_out = tt_out[..., :batch, : configuration.vocab_size]
         tt_out = tt_out.permute(2, 1, 0, 3).squeeze()  # [batch, hidden_dim]
         tt_out = tt_out.float()
         pytorch_out = pytorch_out.squeeze()  # [batch, hidden_dim]
-
         # check outputs ----------------------------------------------------------------------
         does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
         logger.info(f"Output: {output_pcc}")
@@ -263,8 +261,8 @@ def run_test_LlamaModel_inference(
 )
 @pytest.mark.parametrize(
     "batch, seq_len",
-    ((32, 1), (1, 128), (1, 2048), (1, 8192)),
-    ids=("decode", "prefill_128", "prefill_2k", "prefill_8k"),
+    ((32, 1), (1, 128), (1, 2048), (1, 8192), (16, 1)),
+    ids=("decode", "prefill_128", "prefill_2k", "prefill_8k", "decode_b16"),
 )
 @pytest.mark.parametrize(
     "max_batch_size, max_context_len",
