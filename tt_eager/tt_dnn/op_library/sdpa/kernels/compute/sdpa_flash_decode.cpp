@@ -96,6 +96,7 @@ void reduce_c() {
     }
 
    reduce_revert_delta<reduce_dim>(out_cb);
+   UNPACK(tensix_sync());
 }
 
 void __attribute((noinline)) recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
@@ -151,7 +152,7 @@ void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t
     }
 }
 
-void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols, bool populate_in1 = true) {
+void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
     // Precondition: in0_cb has rows*cols produced
     // Precondition: in1_cb has rows produced
     // Postcondition: in0_cb has rows*cols produced
@@ -172,9 +173,7 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
             release_dst(tt::DstMode::Half);
         }
     }
-    if (populate_in1) {
-        cb_pop_front(in1_cb, rows);
-    }
+    cb_pop_front(in1_cb, rows);
 }
 
 void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
@@ -321,6 +320,7 @@ void copy_block(uint32_t in_cb, uint32_t out_cb, uint32_t num_tiles) {
     cb_wait_front(in_cb, num_tiles);
     cb_reserve_back(out_cb, num_tiles);
 
+    #pragma GCC unroll 0
     for (uint32_t i = 0; i < num_tiles; i++) {
         acquire_dst(tt::DstMode::Half);
         copy_tile(in_cb, i, 0/*dst*/);
@@ -572,7 +572,7 @@ void MAIN {
 
                 copy_block(cb_q_in, cb_out_accumulate_im_2, q_chunk_tiles);
                 // copy_block(cb_m_in, cb_prev_max_2, Sq_chunk_t);
-                // copy_block(cb_l_in, cb_prev_sum_2, Sq_chunk_t);
+                copy_block(cb_l_in, cb_prev_sum_2, Sq_chunk_t);
 
                 // // DEBUG ONLY: remove these
                 // cb_pop_front(cb_out_accumulate_im_2, q_chunk_tiles);
@@ -602,16 +602,16 @@ void MAIN {
                 // unpack_reconfig_data_format(cb_prev_max_2, cb_cur_max); // DEBUG
                 // pack_reconfig_data_format(cb_exp_max_diff_2);
                 sub_exp_block(cb_m_in, cb_cur_max, cb_exp_max_diff_2, Sq_chunk_t);
-                mul_block_inplace(cb_l_in, cb_exp_max_diff_2, Sq_chunk_t);
+                mul_block_inplace(cb_prev_sum_2, cb_exp_max_diff_2, Sq_chunk_t);
                 /// l2 = torch.exp(m_1 - m) * l_1
-                unpack_reconfig_data_format(cb_prev_max, cb_cur_max); // DEBUG
-                pack_reconfig_data_format(cb_exp_max_diff);
+                // unpack_reconfig_data_format(cb_prev_max, cb_cur_max); // DEBUG
+                // pack_reconfig_data_format(cb_exp_max_diff);
                 sub_exp_block(cb_prev_max, cb_cur_max, cb_exp_max_diff, Sq_chunk_t);
                 mul_block_inplace(cb_prev_sum, cb_exp_max_diff, Sq_chunk_t);
                 /// l = l1 + l2
-                unpack_reconfig_data_format(cb_cur_sum, cb_prev_sum); // DEBUG
-                pack_reconfig_data_format(cb_cur_sum);
-                add_block(cb_l_in, cb_prev_sum, cb_cur_sum, Sq_chunk_t);
+                // unpack_reconfig_data_format(cb_cur_sum, cb_prev_sum); // DEBUG
+                // pack_reconfig_data_format(cb_cur_sum);
+                add_block(cb_prev_sum_2, cb_prev_sum, cb_cur_sum, Sq_chunk_t);
 
                 // DPRINT << "[C] R ckpt 3" << ENDL();
 

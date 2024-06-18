@@ -140,7 +140,7 @@ def scaled_dot_product_attention_simulated(
     return output_tensor
 
 
-def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
+def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size):
     padded_num_heads = nearest_pow_2(nearest_n(nh, n=32))
     torch.manual_seed(1234)
 
@@ -201,7 +201,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
         k_chunk_size = get_chunk_size(start_idx)
         # k_chunk_size = 32
         program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
-            compute_with_storage_grid_size=(8, 4),  # device.compute_with_storage_grid_size(),
+            compute_with_storage_grid_size=grid_size,  # device.compute_with_storage_grid_size(),
             q_chunk_size=padded_num_heads,
             k_chunk_size=k_chunk_size,
         )
@@ -327,13 +327,15 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
     ],
 )
 @pytest.mark.parametrize(
-    "b, nh, nkv, s, d",
+    "b, nh, nkv, s, d, grid_size",
     (
         # [1, 1, 1, 8192, 128],  # Llama2-70B
         # [1, 8, 1, 32768, 128],  # Llama2-70B
-        [8, 8, 1, 32768, 128],  # Llama2-70B
+        # [8, 8, 1, 32768, 128, (8,4)],  # Llama2-70B
         # [12, 8, 1, 32768, 128],  # Llama2-70B
-        # [16, 8, 1, 32768, 128],  # Llama2-70B
+        # [16, 8, 1, 32768, 128, (8,6)],  # Llama2-70B
+        [16, 8, 1, 32768, 128, (8, 4)],  # Llama2-70B
+        # [16, 8, 1, 32768, 128, (8,8)],  # Llama2-70B
         # [1, 8, 1, 2048, 128],  # Llama2-70B
         # [32, 16, 1, 2048, 64],  # Falcon-40B
         # [32, 71, 1, 2048, 64],  # Falcon-7B
@@ -341,6 +343,6 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
         # [1, 8, 1, 8192, 128],  # Llama2-70B large sequence
     ),
 )
-def test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
+def test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size):
     tt_lib.device.DisablePersistentKernelCache()
-    run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype)
+    run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size)
