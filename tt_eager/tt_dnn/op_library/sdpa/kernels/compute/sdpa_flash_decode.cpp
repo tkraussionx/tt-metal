@@ -16,8 +16,6 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
 
-#include "debug/dprint.h"
-
 namespace NAMESPACE {
 void max_block_inplace(uint32_t in0, uint32_t in1, uint32_t num_tiles) {
     // inputs come in full, outputs go out full
@@ -100,7 +98,7 @@ void reduce_c() {
    reduce_revert_delta<reduce_dim>(out_cb);
 }
 
-void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
+void __attribute((noinline)) recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     // Precondition: in_cb has num_tiles produced
     // Postcondition: in_cb has num_tiles produced
     copy_tile_to_dst_init_short(in_cb);
@@ -153,7 +151,7 @@ void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t
     }
 }
 
-void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
+void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols, bool populate_in1 = true) {
     // Precondition: in0_cb has rows*cols produced
     // Precondition: in1_cb has rows produced
     // Postcondition: in0_cb has rows*cols produced
@@ -174,7 +172,9 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
             release_dst(tt::DstMode::Half);
         }
     }
-    cb_pop_front(in1_cb, rows);
+    if (populate_in1) {
+        cb_pop_front(in1_cb, rows);
+    }
 }
 
 void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
@@ -571,8 +571,8 @@ void MAIN {
                 cb_wait_front(cb_l_in, Sq_chunk_t);  //l_2
 
                 copy_block(cb_q_in, cb_out_accumulate_im_2, q_chunk_tiles);
-                copy_block(cb_m_in, cb_prev_max_2, Sq_chunk_t);
-                copy_block(cb_l_in, cb_prev_sum_2, Sq_chunk_t);
+                // copy_block(cb_m_in, cb_prev_max_2, Sq_chunk_t);
+                // copy_block(cb_l_in, cb_prev_sum_2, Sq_chunk_t);
 
                 // // DEBUG ONLY: remove these
                 // cb_pop_front(cb_out_accumulate_im_2, q_chunk_tiles);
@@ -583,7 +583,7 @@ void MAIN {
 
                 // m = torch.max(m_1, m_2)
                 // unpack_reconfig_data_format(cb_prev_max_2, cb_prev_max);
-                max_block(cb_prev_max_2, cb_prev_max, cb_cur_max, Sq_chunk_t); // pushed, pushed, popped
+                max_block(cb_m_in, cb_prev_max, cb_cur_max, Sq_chunk_t); // pushed, pushed, popped
 
                 // copy_block(cb_prev_max, cb_cur_max, Sq_chunk_t);
                 // DPRINT << "[C] R ckpt 1.1" << ENDL();
@@ -601,8 +601,8 @@ void MAIN {
                 /// l1 = torch.exp(m_2 - m) * l_2
                 // unpack_reconfig_data_format(cb_prev_max_2, cb_cur_max); // DEBUG
                 // pack_reconfig_data_format(cb_exp_max_diff_2);
-                sub_exp_block(cb_prev_max_2, cb_cur_max, cb_exp_max_diff_2, Sq_chunk_t);
-                mul_block_inplace(cb_prev_sum_2, cb_exp_max_diff_2, Sq_chunk_t);
+                sub_exp_block(cb_m_in, cb_cur_max, cb_exp_max_diff_2, Sq_chunk_t);
+                mul_block_inplace(cb_l_in, cb_exp_max_diff_2, Sq_chunk_t);
                 /// l2 = torch.exp(m_1 - m) * l_1
                 unpack_reconfig_data_format(cb_prev_max, cb_cur_max); // DEBUG
                 pack_reconfig_data_format(cb_exp_max_diff);
@@ -611,7 +611,7 @@ void MAIN {
                 /// l = l1 + l2
                 unpack_reconfig_data_format(cb_cur_sum, cb_prev_sum); // DEBUG
                 pack_reconfig_data_format(cb_cur_sum);
-                add_block(cb_prev_sum_2, cb_prev_sum, cb_cur_sum, Sq_chunk_t);
+                add_block(cb_l_in, cb_prev_sum, cb_cur_sum, Sq_chunk_t);
 
                 // DPRINT << "[C] R ckpt 3" << ENDL();
 
@@ -634,7 +634,7 @@ void MAIN {
                 // unpack_reconfig_data_format(cb_cur_max, cb_cur_max); // DEBUG
                 // pack_reconfig_data_format(cb_prev_max);
                 cb_pop_front(cb_prev_max, Sq_chunk_t);
-                cb_pop_front(cb_prev_max_2, Sq_chunk_t);
+                cb_pop_front(cb_m_in, Sq_chunk_t);
                 // DPRINT << "[C] R ckpt 5" << ENDL();
                 // cb_pop_front(cb_prev_sum, Sq_chunk_t);
                 copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
