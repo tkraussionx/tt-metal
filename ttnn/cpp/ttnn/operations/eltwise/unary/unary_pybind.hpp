@@ -8,7 +8,7 @@
 #include <pybind11/stl.h>
 
 #include "ttnn/cpp/pybind11/decorators.hpp"
-#include "ttnn/operations/unary.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/types.hpp"
 
 namespace py = pybind11;
@@ -34,6 +34,8 @@ void bind_unary_operation(py::module& module, const unary_operation_t& operation
 
             Keyword Args:
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -50,10 +52,16 @@ void bind_unary_operation(py::module& module, const unary_operation_t& operation
         ttnn::pybind_overload_t{
             [](const unary_operation_t& self,
                const Tensor& input_tensor,
-               const std::optional<MemoryConfig>& memory_config) { return self(input_tensor, memory_config); },
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                    return self(queue_id, input_tensor, memory_config, output_tensor);
+                },
             py::arg("input_tensor"),
             py::kw_only(),
-            py::arg("memory_config") = std::nullopt});
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 template <typename unary_operation_t>
@@ -202,6 +210,8 @@ void bind_unary_operation_with_fast_and_approximate_mode(py::module& module, con
             Keyword Args:
                 * :attr:`fast_and_approximate_mode` (bool): "Use fast and approximate mode".
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -215,12 +225,21 @@ void bind_unary_operation_with_fast_and_approximate_mode(py::module& module, con
         module,
         operation,
         doc,
-        ttnn::pybind_arguments_t{
+        ttnn::pybind_overload_t{
+            [](const unary_operation_t& self,
+               const Tensor& input_tensor,
+               const bool parameter,
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                return self(queue_id, input_tensor, parameter, memory_config, output_tensor);
+            },
             py::arg("input_tensor"),
             py::kw_only(),
             py::arg("fast_and_approximate_mode") = false,
             py::arg("memory_config") = std::nullopt,
-            py::arg("output_tensor") = std::nullopt});
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 template <typename unary_operation_t>
@@ -243,6 +262,8 @@ void bind_unary_operation_with_float_parameter(
             Keyword Args:
                 * :attr:`{2}` (bool): {3}.
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -258,12 +279,21 @@ void bind_unary_operation_with_float_parameter(
         module,
         operation,
         doc,
-        ttnn::pybind_arguments_t{
+        ttnn::pybind_overload_t{
+            [](const unary_operation_t& self,
+               const Tensor& input_tensor,
+               const float parameter,
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                return self(queue_id, input_tensor, parameter, memory_config, output_tensor);
+            },
             py::arg("input_tensor"),
             py::arg(parameter_name.c_str()),
             py::kw_only(),
             py::arg("memory_config") = std::nullopt,
-            py::arg("output_tensor") = std::nullopt});
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 void bind_softplus(py::module& module) {

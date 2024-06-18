@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include "device/unary_op.hpp"
 #include "tt_eager/tt_dnn/op_library/composite/composite_ops.hpp"
 #include "tt_eager/tt_dnn/op_library/downsample/downsample_op.hpp"
-#include "tt_eager/tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 #include "tt_eager/tt_dnn/op_library/run_operation.hpp"
 #include "ttnn/decorators.hpp"
 #include "ttnn/operations/core.hpp"
@@ -17,8 +17,6 @@ namespace ttnn {
 namespace operations {
 
 namespace unary {
-
-using UnaryOpType = tt::tt_metal::UnaryOpType;
 
 namespace detail {
 
@@ -40,8 +38,9 @@ inline auto input_tensors_to_validate(const Tensor& input_tensor, Args&&... args
 }
 
 inline Tensor execute_on_worker_thread(
+    uint8_t queue_id,
     const Tensor& input_tensor,
-    const std::vector<tt::tt_metal::UnaryWithParam>& op_chain,
+    const std::vector<UnaryWithParam>& op_chain,
     const std::optional<MemoryConfig>& memory_config = std::nullopt,
     const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     DataType output_dtype = (op_chain[0].op_type == UnaryOpType::TYPECAST) ? static_cast<DataType>(op_chain[0].params[1]) : input_tensor.get_dtype();
@@ -52,7 +51,7 @@ inline Tensor execute_on_worker_thread(
                                                                           // DST directly, fp32 is converted to fp16b
     return operation::run(
                EltwiseUnary{op_chain, memory_config.value_or(input_tensor.memory_config()), fp32_dest_acc_en, output_dtype},
-               {input_tensor}, {}, {optional_output_tensor})
+               {input_tensor}, {}, {optional_output_tensor}, queue_id)
         .at(0);
 }
 
@@ -67,9 +66,14 @@ struct ExecuteUnary {
         return detail::input_tensors_to_validate(input_tensor, std::forward<Args>(args)...);
     }
     static Tensor execute_on_worker_thread(
+        uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt,
+        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
+        return detail::execute_on_worker_thread(queue_id, input_tensor, {UnaryWithParam{unary_op_types}...}, memory_config, optional_output_tensor);
+    }
+    static Tensor execute_on_worker_thread(
         const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt,
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
-        return detail::execute_on_worker_thread(input_tensor, {UnaryWithParam{unary_op_types}...}, memory_config, optional_output_tensor);
+        return detail::execute_on_worker_thread(DefaultQueueId, input_tensor, {UnaryWithParam{unary_op_types}...}, memory_config, optional_output_tensor);
     }
 };
 
@@ -83,12 +87,21 @@ struct ExecuteUnaryWithFastAndApproximateMode {
     }
 
     static Tensor execute_on_worker_thread(
+        uint8_t queue_id,
         const Tensor& input_tensor,
         const bool parameter = false,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
         return detail::execute_on_worker_thread(
-            input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
+            queue_id, input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
+    }
+    static Tensor execute_on_worker_thread(
+        const Tensor& input_tensor,
+        const bool parameter = false,
+        const std::optional<MemoryConfig>& memory_config = std::nullopt,
+        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
+        return detail::execute_on_worker_thread(
+            DefaultQueueId, input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
     }
 };
 
@@ -102,12 +115,22 @@ struct ExecuteUnaryWithFloatParameter {
     }
 
     static Tensor execute_on_worker_thread(
+        uint8_t queue_id,
         const Tensor& input_tensor,
         const float parameter,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
         return detail::execute_on_worker_thread(
-            input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
+            queue_id, input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
+    }
+
+    static Tensor execute_on_worker_thread(
+        const Tensor& input_tensor,
+        const float parameter,
+        const std::optional<MemoryConfig>& memory_config = std::nullopt,
+        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
+        return detail::execute_on_worker_thread(
+            DefaultQueueId, input_tensor, {UnaryWithParam{unary_op_type, static_cast<float>(parameter)}}, memory_config, optional_output_tensor);
     }
 };
 
@@ -127,34 +150,34 @@ struct Softplus {
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
         TT_ASSERT(input.device()->arch() != tt::ARCH::GRAYSKULL, "Softplus is not currently supported on Grayskull");
         return detail::execute_on_worker_thread(
-            input, {UnaryWithParam{ttnn::operations::unary::UnaryOpType::SOFTPLUS, {beta, threshold}}}, memory_config, optional_output_tensor);
+            DefaultQueueId, input, {UnaryWithParam{UnaryOpType::SOFTPLUS, {beta, threshold}}}, memory_config, optional_output_tensor);
     }
 };
 
 // TODO: update these composite unary ops pending decision on TensorAsync implementation.
 
-Tensor acosh(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor acosh(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::acosh(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
 
-Tensor asinh(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor asinh(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::asinh(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
 
-Tensor atanh(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor atanh(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::atanh(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
 
-Tensor cbrt(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor cbrt(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::cbrt(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor cosh(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor cosh(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::cosh(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor deg2rad(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor deg2rad(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::deg2rad(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor digamma(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor digamma(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::digamma(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
 Tensor hardswish(
@@ -180,34 +203,34 @@ Tensor hardtanh(
     const std::optional<MemoryConfig>& memory_config = std::nullopt) {
     return tt::tt_metal::hardtanh(input_tensor, low, high, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor lgamma(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor lgamma(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::lgamma(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor log1p(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor log1p(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::log1p(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor mish(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor mish(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::mish(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor multigammaln(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor multigammaln(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::multigammaln(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor rad2deg(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor rad2deg(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::rad2deg(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor sigmoid_accurate(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor sigmoid_accurate(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::sigmoid_accurate(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor sinh(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor sinh(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::sinh(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor softsign(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor softsign(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::softsign(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor swish(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor swish(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::swish(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
-Tensor tanhshrink(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+Tensor tanhshrink(uint8_t queue_id, const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return tt::tt_metal::tanhshrink(input_tensor, memory_config.value_or(input_tensor.memory_config()));
 }
 Tensor tril(
