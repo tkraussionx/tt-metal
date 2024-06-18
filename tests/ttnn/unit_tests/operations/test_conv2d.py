@@ -166,9 +166,11 @@ def run_conv(
             torch_input_tensor,
             [batch_size, input_height, input_width, input_channels],
             use_shallow_conv_variant,
-            mem_config=conv.conv.input_sharded_memory_config
-            if config_override is not None and "act_reshard_num_cores_nhw" in config_override
-            else None,
+            mem_config=(
+                conv.conv.input_sharded_memory_config
+                if config_override is not None and "act_reshard_num_cores_nhw" in config_override
+                else None
+            ),
         )
     else:
         tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
@@ -1266,4 +1268,74 @@ def test_conv_core_nondivis(
         pad_w,
         use_1d_systolic_array,
         config_override,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, weights_dtype, use_1d_systolic_array, conv_blocking_and_parallelization_config_override, use_shallow_conv_variant",
+    ((1, 1, 512, 30, 18, 3, 3, 1, 1, 1, 1, ttnn.bfloat8_b, True, {"act_block_h": 32}, False),),
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_dispnetres_conv(
+    use_program_cache,
+    device,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    conv_blocking_and_parallelization_config_override,
+    use_shallow_conv_variant,
+):
+    if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
+        pytest.skip("Batch > 8 must be run fully bfp8")
+
+    if (
+        activations_dtype == ttnn.bfloat16
+        and batch_size == 20
+        and (
+            output_channels == 64
+            or (
+                stride_h == 2
+                and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+            )
+        )
+    ):
+        pytest.skip("Skipping test because it won't fit in L1!")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override=conv_blocking_and_parallelization_config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        padded_input_channels=16 if input_channels == 16 else None,
     )
