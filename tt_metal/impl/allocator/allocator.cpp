@@ -197,7 +197,7 @@ void init_one_bank_per_l1(Allocator &allocator, const AllocatorConfig &alloc_con
     uint64_t offset_bytes = static_cast<uint64_t>(L1_UNRESERVED_BASE);
     uint32_t l1_bank_size = alloc_config.worker_l1_size - L1_UNRESERVED_BASE;
     std::vector<int64_t> bank_offsets (num_l1_banks, 0);
-    allocator.l1_manager = BankManager(BufferType::L1, bank_offsets, l1_bank_size, L1_ALIGNMENT, offset_bytes);
+    allocator.l1_manager = BankManager(BufferType::L1, bank_offsets, l1_bank_size, DRAM_ALIGNMENT, offset_bytes);
 
     uint32_t bank_id = 0;
     for (uint32_t y = 0; y < alloc_config.worker_grid_size.y; y++) {
