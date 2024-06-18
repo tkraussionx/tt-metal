@@ -56,7 +56,7 @@ class TtMixtralMLP(LightweightModule):
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
         if mode == "prefill":
-            x = ttnn.reshape(x, (1, 8, 2048 // 2, 4096))
+            x = ttnn.reshape(x, (1, 8 * 2, 2048 // 2, 4096))
             # from models.demos.t3000.mixtral8x7b.tt.create_program_config import create_matmul_program_config
             # pc = create_matmul_program_config(input_tensor_a=x, input_tensor_b=self.w1, core_grid=ttnn.CoreGrid(y=8, x=8), activation="silu", use_1d_systolic_array=False, compute_kernel_config=self.prefill_mlp_config)
             # print(pc)
@@ -128,7 +128,7 @@ class TtMixtralMLP(LightweightModule):
             )
 
             w2_in.deallocate(True)
-            w2_out = ttnn.reshape(w2_out, (1, 1, 8192, 4096))
+            w2_out = ttnn.reshape(w2_out, (1, 1, 8192 * 2, 4096))
             return w2_out
 
         else:

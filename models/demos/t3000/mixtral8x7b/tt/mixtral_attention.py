@@ -330,16 +330,31 @@ class TtMixtralAttention(LightweightModule):
         ###
         # QKV matmuls
         ###
-
+        xs_11SH = ttnn.reshape(xs_11SH, (1, 8, int(xs_11SH.shape[2] / 8), -1))
+        print("xs_11SH.shape", xs_11SH.shape)
+        pc = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            in0_block_w=4,  # how much inner dim you take each time
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+            per_core_N=3,  # N / TILE_WIDTH / Grid_Size
+            transpose_mcast=False,
+            fused_activation=None,
+            fuse_batch=False,
+        )
         xqkv_fused = ttnn.linear(
             xs_11SH,
             self.wqkv,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            core_grid=ttnn.CoreGrid(y=8, x=8),
+            # core_grid=ttnn.CoreGrid(y=8, x=8),
+            program_config=pc,
             compute_kernel_config=self.compute_kernel,
         )
+        xqkv_fused = ttnn.reshape(xqkv_fused, (1, 1, xs_11SH.shape[2] * 8, -1))
 
+        print("xqkv_fused.shape", xqkv_fused.shape)
         # split qkv into heads
         (
             q_heads_14SD_pre_rot,
@@ -353,6 +368,8 @@ class TtMixtralAttention(LightweightModule):
             output_mem_config=ttnn.DRAM_MEMORY_CONFIG,  # self.model_config["HEIGHT_SHARDED_MEMCFG"],
         )
 
+        print("q_heads_14SD_pre_rot.shape", q_heads_14SD_pre_rot.shape)
+
         xqkv_fused.deallocate(True)
 
         ###
@@ -362,11 +379,13 @@ class TtMixtralAttention(LightweightModule):
         q_heads_14SD = ttnn.experimental.tensor.rotary_embedding_llama(
             q_heads_14SD_pre_rot, rot_mats[0], rot_mats[1], transformation_mats
         )
+        print("q_heads_14SD.shape", q_heads_14SD.shape)
         q_heads_14SD_pre_rot.deallocate(True)
 
         k_heads_11SD = ttnn.experimental.tensor.rotary_embedding_llama(
             k_heads_11SD_pre_rot, rot_mats[0], rot_mats[1], transformation_mats
         )
+        print("k_heads_11SD.shape", k_heads_11SD.shape)
         k_heads_11SD_pre_rot.deallocate(True)
 
         # FILL KV CACHE
@@ -422,7 +441,9 @@ class TtMixtralAttention(LightweightModule):
             fused_activation=None,
             fuse_batch=False,
         )
-        attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, 4, int(xs_11SH.shape[2] / 4), -1))
+        print("attn_output_11SH.shape", attn_output_11SH.shape)
+        attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, 8, int(attn_output_11SH.shape[2] / 8), -1))
+        print("attn_output_11SH.shape", attn_output_11SH.shape)
         output_11SH = ttnn.linear(
             attn_output_11SH,
             self.wo,
@@ -432,7 +453,7 @@ class TtMixtralAttention(LightweightModule):
             dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-        output_11SH = ttnn.reshape(output_11SH, (1, 1, xs_11SH.shape[2], -1))
+        output_11SH = ttnn.reshape(output_11SH, (1, 1, -1, output_11SH.shape[-1]))
         attn_output_11SH.deallocate(True)
 
         output_11BH_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1)
