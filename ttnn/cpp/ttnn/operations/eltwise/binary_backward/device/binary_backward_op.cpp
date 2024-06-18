@@ -18,7 +18,7 @@ namespace ttnn::operations::binary_backward {
 
 namespace utils {
 
-
+// TODO: change unary ops to ttnn:: after unary op migration
 std::vector<ttnn::Tensor> _atan2_bw(
     const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
@@ -26,7 +26,7 @@ std::vector<ttnn::Tensor> _atan2_bw(
     UnaryWithParam op1{UnaryOpType::SQUARE};
     UnaryWithParam op2{UnaryOpType::RECIP};
     Tensor recip_mul =
-        ttnn::multiply(grad, unary_chain(hypot(input, other), {op1, op2}, output_mem_config), std::nullopt, output_mem_config);
+        ttnn::multiply(grad, tt::tt_metal::unary_chain(hypot(input, other), {op1, op2}, output_mem_config), std::nullopt, output_mem_config);
     Tensor grad_a = ttnn::multiply(other, recip_mul, std::nullopt, output_mem_config);
     Tensor cond = ttnn::logical_and(eqz(input, output_mem_config), eqz(other, output_mem_config));
     grad_a = where(cond, t_nan, grad_a, output_mem_config);
