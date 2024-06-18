@@ -10,6 +10,7 @@ set(TTNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/broadcast_height_multi_core_program_factory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/broadcast_width_multi_core_program_factory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/element_wise_multi_core_program_factory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/unary/device/unary_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/reduction/topk/device/topk_op.cpp
 )
 
@@ -28,9 +29,9 @@ target_include_directories(ttnn_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt
 )
-target_precompile_headers(ttnn_lib PRIVATE
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
-)
+# target_precompile_headers(ttnn_lib PRIVATE
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
+# )
 
 # TODO: should be using pybind11_add_module, but right now it introduces many build problems
 # pybinds will always be built as a shared library

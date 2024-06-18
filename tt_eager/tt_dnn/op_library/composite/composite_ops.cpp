@@ -23,6 +23,7 @@
 #include "tt_numpy/functions.hpp"
 
 #include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 
 namespace tt {
 

@@ -22,9 +22,9 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_overlap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_sharded.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sliding_window_op_infra/halo_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/eltwise_unary_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_sharded.cpp
+    # ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/eltwise_unary_op.cpp
+    # ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp
+    # ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_sharded.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pad/pad_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pad/pad_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/unpad/multi_core/unpad_op_multi_core.cpp
@@ -225,12 +225,12 @@ target_include_directories(tt_dnn PUBLIC
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt
 )
 
-target_precompile_headers(tt_dnn PUBLIC
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
-)
+# target_precompile_headers(tt_dnn PUBLIC
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
+#     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
+# )

@@ -8,7 +8,7 @@
 #include <pybind11/stl.h>
 
 #include "ttnn/cpp/pybind11/decorators.hpp"
-#include "ttnn/operations/unary.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/types.hpp"
 
 namespace py = pybind11;
@@ -34,6 +34,8 @@ void bind_unary_operation(py::module& module, const unary_operation_t& operation
 
             Keyword Args:
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -50,10 +52,16 @@ void bind_unary_operation(py::module& module, const unary_operation_t& operation
         ttnn::pybind_overload_t{
             [](const unary_operation_t& self,
                const Tensor& input_tensor,
-               const std::optional<MemoryConfig>& memory_config) { return self(input_tensor, memory_config); },
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                    return self(queue_id, input_tensor, memory_config, output_tensor);
+                },
             py::arg("input_tensor"),
             py::kw_only(),
-            py::arg("memory_config") = std::nullopt});
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 template <typename unary_operation_t>
@@ -202,6 +210,8 @@ void bind_unary_operation_with_fast_and_approximate_mode(py::module& module, con
             Keyword Args:
                 * :attr:`fast_and_approximate_mode` (bool): "Use fast and approximate mode".
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -215,12 +225,21 @@ void bind_unary_operation_with_fast_and_approximate_mode(py::module& module, con
         module,
         operation,
         doc,
-        ttnn::pybind_arguments_t{
+        ttnn::pybind_overload_t{
+            [](const unary_operation_t& self,
+               const Tensor& input_tensor,
+               const bool parameter,
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                return self(queue_id, input_tensor, parameter, memory_config, output_tensor);
+            },
             py::arg("input_tensor"),
             py::kw_only(),
             py::arg("fast_and_approximate_mode") = false,
             py::arg("memory_config") = std::nullopt,
-            py::arg("output_tensor") = std::nullopt});
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 template <typename unary_operation_t>
@@ -243,6 +262,8 @@ void bind_unary_operation_with_float_parameter(
             Keyword Args:
                 * :attr:`{2}` (bool): {3}.
                 * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+                * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+                * :attr:`queue_id` (Optional[uint8]): command queue id
 
             Example:
 
@@ -258,12 +279,21 @@ void bind_unary_operation_with_float_parameter(
         module,
         operation,
         doc,
-        ttnn::pybind_arguments_t{
+        ttnn::pybind_overload_t{
+            [](const unary_operation_t& self,
+               const Tensor& input_tensor,
+               const float parameter,
+               const std::optional<MemoryConfig>& memory_config,
+               const std::optional<ttnn::Tensor>& output_tensor,
+               const uint8_t& queue_id) {
+                return self(queue_id, input_tensor, parameter, memory_config, output_tensor);
+            },
             py::arg("input_tensor"),
             py::arg(parameter_name.c_str()),
             py::kw_only(),
             py::arg("memory_config") = std::nullopt,
-            py::arg("output_tensor") = std::nullopt});
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = 0});
 }
 
 void bind_softplus(py::module& module) {
@@ -300,6 +330,85 @@ void bind_softplus(py::module& module) {
             py::kw_only(),
             py::arg("beta") = 1.0f,
             py::arg("threshold") = 20.0f,
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt});
+}
+
+void bind_sigmoid_accurate(py::module& module) {
+    auto doc = fmt::format(
+        R"doc({0}(input_tensor: ttnn.Tensor, memory_config: Optional[ttnn.MemoryConfig] = None) -> ttnn.Tensor
+
+            Applies {0} to :attr:`input_tensor` element-wise.
+
+            .. math::
+                {0}(\\mathrm{{input\\_tensor}}_i)
+
+            Args:
+                * :attr:`input_tensor`
+
+            Keyword Args:
+                * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+
+            Example:
+
+                >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
+                >>> output = {1}(tensor, parameter=true)
+        )doc",
+        ttnn::sigmoid_accurate.name(),
+        ttnn::sigmoid_accurate.python_fully_qualified_name());
+
+    bind_registered_operation(
+        module,
+        ttnn::sigmoid_accurate,
+        doc,
+        ttnn::pybind_arguments_t{
+            py::arg("input_tensor"),
+            py::kw_only(),
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt});
+}
+
+void bind_unary_chain(py::module& module) {
+    auto doc = fmt::format(
+        R"doc({0}(input_tensor: ttnn.Tensor, ops_chain: std::vector<UnaryWithParam>, memory_config: Optional[ttnn.MemoryConfig] = None) -> ttnn.Tensor
+
+            Applies {0} to :attr:`input_tensor` element-wise.
+
+            .. math::
+                {0}(\\mathrm{{input\\_tensor}}_i)
+
+            Args:
+                * :attr:`input_tensor`
+
+            Keyword Args:
+                * :attr:`ops_chain` (vector): Vector of unary ops chain
+                * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+
+            Example:
+
+                >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
+                >>> output = {1}(tensor, ops_chain)
+        )doc",
+        ttnn::unary_chain.name(),
+        ttnn::unary_chain.python_fully_qualified_name());
+
+    bind_registered_operation(
+        module,
+        ttnn::unary_chain,
+        doc,
+        // ttnn::pybind_overload_t{
+        //     [](const unary_operation_t& self,
+        //        const Tensor& input_tensor,
+        //        const std::vector<UnaryWithParam>& ops_chain,
+        //        const std::optional<MemoryConfig>& memory_config,
+        //        const std::optional<ttnn::Tensor>& output_tensor,
+        //        const uint8_t& queue_id) {
+        //             return self(queue_id, input_tensor, memory_config, output_tensor);
+        //         },
+        ttnn::pybind_arguments_t{
+            py::arg("input_tensor"),
+            py::arg("ops_chain"),
+            py::kw_only(),
             py::arg("memory_config") = std::nullopt,
             py::arg("output_tensor") = std::nullopt});
 }
@@ -365,6 +474,8 @@ void py_module(py::module& module) {
 
     // Other unaries (composite operations)
     detail::bind_softplus(module);
+    detail::bind_sigmoid_accurate(module);
+    detail::bind_unary_chain(module);
 
     detail::bind_unary_operation(module, ttnn::acosh);
     detail::bind_unary_operation(module, ttnn::asinh);
@@ -381,7 +492,7 @@ void py_module(py::module& module) {
     detail::bind_unary_operation(module, ttnn::mish);
     detail::bind_unary_operation(module, ttnn::multigammaln);
     detail::bind_unary_operation(module, ttnn::rad2deg);
-    detail::bind_unary_operation(module, ttnn::sigmoid_accurate);
+    // detail::bind_unary_operation(module, ttnn::sigmoid_accurate);
     detail::bind_unary_operation(module, ttnn::sinh);
     detail::bind_unary_operation(module, ttnn::softsign);
     detail::bind_unary_operation(module, ttnn::swish);

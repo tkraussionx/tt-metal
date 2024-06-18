@@ -19,6 +19,7 @@
 #include "tt_dnn/op_library/copy/copy_op.hpp"
 
 #include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 
 namespace tt {
 
