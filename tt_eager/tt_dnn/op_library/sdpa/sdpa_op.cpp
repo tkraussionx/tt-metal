@@ -91,16 +91,16 @@ void ScaledDotProductAttention::validate(
 
     } else {
         // Input 0 must be sharded by height. All other inputs must be in DRAM.
-        const auto Q_memcfg = input_tensors.at(0).memory_config();
-        TT_FATAL(input_tensors.at(0).is_sharded() == true);
-        TT_FATAL(Q_memcfg.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
+        // const auto Q_memcfg = input_tensors.at(0).memory_config();
+        // TT_FATAL(input_tensors.at(0).is_sharded() == true);
+       // TT_FATAL(Q_memcfg.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
 
         for (std::size_t i = 1; i < input_tensors.size(); i++) {
             TT_FATAL(input_tensors.at(i).buffer()->buffer_type() == tt_metal::BufferType::DRAM);
         }
         // Output memconfig must be height sharded, same as input
-        TT_FATAL(this->output_mem_config.is_sharded());
-        TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
+        // TT_FATAL(this->output_mem_config.is_sharded());
+        // TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
 
         // Assert we are in decode mode if not causal
         // Q: [1, B, NH, D]
@@ -113,7 +113,7 @@ void ScaledDotProductAttention::validate(
         TT_FATAL(k_shape[1] == B);
         TT_FATAL(v_shape[1] == B);
         TT_FATAL(mask_shape[1] == B);
-        TT_FATAL(Q_memcfg.shard_spec.value().grid.num_cores() == B, "Q must be height sharded by batch ");
+        // TT_FATAL(Q_memcfg.shard_spec.value().grid.num_cores() == B, "Q must be height sharded by batch ");
 
         // NKV must be 1 if we are running in this decode mode
         TT_FATAL(q_shape[0] == 1);

@@ -40,47 +40,33 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 ) {
 
     /*
-    Q: B x NQH x S x DH
-    K: B x NKH x DH x S
-    V: B x NKH x S x DH
-    attn_mask: B x NQH x S x S
+    Q: 1 x B x PNH x DH
+    K: 1 x B x S x DH
+    V: 1 x B x S x DH
+    attn_mask: 1 x B x PNH x S
     */
 
     const auto q_shape = input_tensor_q.get_legacy_shape();
     const auto k_shape = input_tensor_k.get_legacy_shape();
     // Use k_shape for S and DH since Q might be different for decode
-    uint32_t B = q_shape[0], NQH = q_shape[1], S = k_shape[2], DH = k_shape[3];
+    uint32_t B = q_shape[1], PNH = q_shape[2], S = k_shape[2], DH = k_shape[3];
+    uint32_t PSt = valid_seq_len.value()/TILE_HEIGHT;
     uint32_t St = S/TILE_HEIGHT;
     uint32_t DHt = DH/TILE_WIDTH;
-
-    uint32_t Sq_chunk_t = q_chunk_size / TILE_HEIGHT;
+    uint32_t PNHt = PNH/TILE_HEIGHT;
     uint32_t Sk_chunk_t = k_chunk_size / TILE_HEIGHT;
-    uint32_t q_num_chunks = S / q_chunk_size;
-    uint32_t k_num_chunks = S / k_chunk_size;
-    if (!is_causal) {
-        q_num_chunks = q_shape[2] / q_chunk_size;
-        TT_FATAL(q_num_chunks == 1, "Non-causal mode only supports one chunk");
-        k_num_chunks = valid_seq_len.value() / k_chunk_size;
-    }
-
-    uint32_t NKH = k_shape[1];
+    uint32_t k_num_chunks = valid_seq_len.value() / k_chunk_size;
 
     // log_debug all of the above
     log_debug("B: {}", B);
-    log_debug("NQH: {}", NQH);
-
     log_debug("S: {}", S);
     log_debug("DH: {}", DH);
     log_debug("St: {}", St);
     log_debug("DHt: {}", DHt);
-    log_debug("Sq_chunk_t: {}", Sq_chunk_t);
+    log_debug("PNHt: {}", PNHt);
     log_debug("Sk_chunk_t: {}", Sk_chunk_t);
-    log_debug("q_chunk_size: {}", q_chunk_size);
     log_debug("k_chunk_size: {}", k_chunk_size);
-    log_debug("q_num_chunks: {}", q_num_chunks);
     log_debug("k_num_chunks: {}", k_num_chunks);
-    log_debug("NKH: {}", NKH);
-
 
     Program program = CreateProgram();
 
@@ -138,38 +124,45 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     TT_FATAL(num_cores <= device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y);
 
     // Parallelization scheme
-    // We will choose parallelization factors for batch, num_heads, and q_seq_len in that order
-    uint32_t batch_parallel_factor = std::min(B, num_cores);
-    uint32_t nh_parallel_factor = std::min(num_cores / batch_parallel_factor, NQH);
-    uint32_t q_parallel_factor = std::min(num_cores / (batch_parallel_factor * nh_parallel_factor), q_num_chunks);
+    // We will assign cores to batches
+    // Split to cores
+    uint32_t num_cores_per_batch = num_cores / B;
+    uint32_t num_active_cores = num_cores_per_batch * B;
 
-    TT_FATAL( batch_parallel_factor * nh_parallel_factor * q_parallel_factor <= num_cores );
+    // Sequence length assignment
+    assert(valid_seq_len.value() % k_chunk_size == 0);
+    uint32_t num_chunks = valid_seq_len.value() / k_chunk_size;
+    int chunks_per_core = num_chunks / num_cores_per_batch;
+
+    std::vector<std::vector<int>> chunk_assignment(num_cores_per_batch, std::vector<int>(2));
+    for (int i = 0; i < num_cores_per_batch; ++i) {
+        chunk_assignment[i][0] = i * chunks_per_core;
+        chunk_assignment[i][1] = (i + 1) * chunks_per_core;
+    }
+    chunk_assignment.back()[1] += (num_chunks % num_cores_per_batch);
+
+    // chunk_assignment = chunk_assignment[::-1]
+    // reduction core is the first core, and we always want the reduction core to deal with the residual chunks
+    // residual chunks exists when other chunks are 0, and has less chunks than the other cores when other chunks are not 0
+    std::reverse(chunk_assignment.begin(), chunk_assignment.end());
 
     log_debug("Parallelization scheme:");
-    log_debug("batch_parallel_factor: {}", batch_parallel_factor);
-    log_debug("nh_parallel_factor: {}", nh_parallel_factor);
-    log_debug("q_parallel_factor: {}", q_parallel_factor);
-
-
-    // Ceiling divide to allow for non-perfect divisions
-    const uint32_t batch_per_core = (B + batch_parallel_factor-1) / batch_parallel_factor;
-    const uint32_t nh_per_core = (NQH + nh_parallel_factor-1) / nh_parallel_factor;
-    const uint32_t q_per_core = (q_num_chunks + q_parallel_factor-1) / q_parallel_factor;
-
-    const uint32_t q_buffer_factor = (q_per_core > 1) ? 2 : 1;
-
-    log_debug("q_per_core: {}", q_per_core);
+    log_debug("num_cores_per_batch: {}", num_cores_per_batch);
+    log_debug("num_active_cores: {}", num_active_cores);
+    log_debug("num_chunks: {}", num_chunks);
+    log_debug("chunks_per_core: {}", chunks_per_core);
+    log_debug("chunk_assignment: {}", chunk_assignment);
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
-    uint32_t q_tiles  = Sq_chunk_t * DHt * q_buffer_factor;
+    uint32_t q_tiles  = PNHt * DHt;
     uint32_t k_tiles  = Sk_chunk_t * DHt * 2; // double buffer
     uint32_t v_tiles  = Sk_chunk_t * DHt * 2; // double buffer
-    uint32_t mask_tiles = Sq_chunk_t * Sk_chunk_t * 2; // double buffer
-    uint32_t qk_tiles = Sq_chunk_t * Sk_chunk_t;
-    uint32_t out_im_tiles = Sq_chunk_t * DHt;
-    uint32_t out0_t = Sq_chunk_t * DHt;
+    uint32_t mask_tiles = PNHt * Sk_chunk_t * 2; // double buffer
+    uint32_t qk_tiles = PNHt * Sk_chunk_t;
+    uint32_t out_im_tiles = PNHt * DHt;
+    uint32_t out0_t = PNHt * DHt;
     uint32_t scale_tiles = 1;
-    uint32_t statistics_tiles = Sq_chunk_t; // Single column of values in each iteration
+    uint32_t statistics_tiles = PNHt; // Single column of values in each iteration
 
     // log all values
     log_debug("q_tiles: {}", q_tiles);
@@ -181,27 +174,24 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("scale_tiles: {}", scale_tiles);
     log_debug("statistics_tiles: {}", statistics_tiles);
 
-
-
-
     // Host code is responsible for determining matmul configuration
     const uint32_t dst_size = fp32_dest_acc_en ? 4: 8;
     const uint32_t qk_in0_block_w = DHt;
     // max of Sk_chunk_t and dst_size
     const uint32_t qk_out_subblock_w = std::min(Sk_chunk_t, dst_size);
     // If qk_out_subblock_w is full row of output, scale subblock_h so volume = dst_size. Otherwise it's 1 to maintain row-major intermediate buffer.
-    const uint32_t qk_out_subblock_h = (qk_out_subblock_w == Sk_chunk_t) ? (std::min(Sq_chunk_t, dst_size / qk_out_subblock_w)) : 1;
+    const uint32_t qk_out_subblock_h = (qk_out_subblock_w == Sk_chunk_t) ? (std::min(PNHt, dst_size / qk_out_subblock_w)) : 1;
 
-    const uint32_t qk_in0_num_subblocks = Sq_chunk_t / qk_out_subblock_h;
+    const uint32_t qk_in0_num_subblocks = PNHt / qk_out_subblock_h;
     const uint32_t qk_in1_num_subblocks = Sk_chunk_t / qk_out_subblock_w;
     const uint32_t qk_num_blocks = DHt / qk_in0_block_w;
 
     // now for out0
     const uint32_t out_in0_block_w = Sk_chunk_t;
     const uint32_t out_out_subblock_w = std::min(DHt, dst_size);
-    const uint32_t out_out_subblock_h = (out_out_subblock_w == DHt) ? (std::min(Sq_chunk_t, dst_size / out_out_subblock_w)) : 1;
+    const uint32_t out_out_subblock_h = (out_out_subblock_w == DHt) ? (std::min(PNHt, dst_size / out_out_subblock_w)) : 1;
 
-    const uint32_t out_in0_num_subblocks = Sq_chunk_t / out_out_subblock_h;
+    const uint32_t out_in0_num_subblocks = PNHt / out_out_subblock_h;
     const uint32_t out_in1_num_subblocks = DHt / out_out_subblock_w;
     const uint32_t out_num_blocks = Sk_chunk_t / out_in0_block_w;
 
@@ -221,7 +211,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("out_num_blocks: {}", out_num_blocks);
 
     // Determine granularity for statistics computation
-    const uint32_t stats_granularity = std::min(Sq_chunk_t, dst_size);
+    const uint32_t stats_granularity = std::min(PNHt, dst_size);
     // Find log2 of stats_granularity using std
     const uint32_t log2_stats_granularity = std::log2(stats_granularity);
     // Assert that this is a power of 2
@@ -231,7 +221,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     const uint32_t log2_sub_exp_granularity = std::log2(sub_exp_granularity);
     TT_FATAL(sub_exp_granularity == (1 << log2_sub_exp_granularity));
 
-    const uint32_t mul_bcast_granularity = std::min(Sq_chunk_t * Sk_chunk_t, dst_size);
+    const uint32_t mul_bcast_granularity = std::min(PNHt * Sk_chunk_t, dst_size);
     const uint32_t log2_mul_bcast_granularity = std::log2(mul_bcast_granularity);
     TT_FATAL(mul_bcast_granularity == (1 << log2_mul_bcast_granularity));
 
@@ -247,82 +237,6 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("log2_mul_bcast_granularity: {}", log2_mul_bcast_granularity);
     log_debug("dht_granularity: {}", dht_granularity);
     log_debug("log2_dht_granularity: {}", log2_dht_granularity);
-
-
-
-    // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
-    bfloat16 bfloat_identity_scalar = bfloat16(1.0f);
-    uint32_t packed_identity_scalar = pack_two_bfloat16_into_uint32({bfloat_identity_scalar, bfloat_identity_scalar});
-
-    union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
-
-    std::vector<uint32_t> reader_compile_time_args = {
-        // interleaved accessor args
-        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
-        num_cores
-
-    };
-
-    std::vector<uint32_t> writer_compile_time_args = {
-        // interleaved accessor args
-        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
-        packed_identity_scalar,
-        scale_union.u,
-        num_cores
-
-    };
-
-    std::vector<uint32_t> compute_compile_time_args = {
-        // matmul args
-        B, NQH, NKH, St, DHt, Sq_chunk_t, q_num_chunks, Sk_chunk_t, k_num_chunks,
-        qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
-        out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks,
-        num_cores
-    };
-
-    std::map<string, string> defines;
-    defines["STATS_GRANULARITY"] = std::to_string(stats_granularity);
-    defines["LOG2_STATS_GRANULARITY"] = std::to_string(log2_stats_granularity);
-    defines["SUB_EXP_GRANULARITY"] = std::to_string(sub_exp_granularity);
-    defines["LOG2_SUB_EXP_GRANULARITY"] = std::to_string(log2_sub_exp_granularity);
-    defines["MUL_BCAST_GRANULARITY"] = std::to_string(mul_bcast_granularity);
-    defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
-    defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
-    defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
-    uint32_t balanced_q_parallel = (q_per_core*q_parallel_factor == q_num_chunks) && (q_per_core % 2 == 0);
-    if (balanced_q_parallel) {
-        defines["BALANCED_Q_PARALLEL"] = "1";
-    }
-
-    log_debug("BALANCED_Q_PARALLEL: {}", balanced_q_parallel);
-
-    auto reader_kernels_id = CreateKernel(
-        program,
-        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_interleaved.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_noncausal_interleaved.cpp",
-        core_grid,
-        tt_metal::ReaderDataMovementConfig(
-            reader_compile_time_args,
-            defines
-    ));
-
-    auto writer_kernels_id = CreateKernel(
-        program,
-        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_interleaved.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_noncausal_interleaved.cpp",
-        core_grid,
-        tt_metal::WriterDataMovementConfig(
-            writer_compile_time_args,
-            defines
-    ));
-
-    auto compute_kernels_id = CreateKernel(
-        program,
-        is_causal ? "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa.cpp" : "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa_noncausal.cpp",
-        core_grid,
-        tt_metal::ComputeConfig{
-            .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
-            .compile_args = compute_compile_time_args,
-            .defines = defines
-    });
 
     // Create circular buffers
 
@@ -344,6 +258,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t scalar_tile_size = tt_metal::detail::TileSize(scalar_df);
     uint32_t im_tile_size = tt_metal::detail::TileSize(im_df);
     uint32_t stats_tile_size = tt_metal::detail::TileSize(stats_df);
+    uint32_t intermed_output_tiles = (out0_t + 2*PNHt)*(num_cores_per_batch-1);
 
     log_debug("q_data_format: {}", q_df);
     log_debug("k_data_format: {}", k_df);
@@ -354,71 +269,240 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     log_debug("intermediate_data_format: {}", im_df);
     log_debug("statistics_data_format: {}", stats_df);
 
+    // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
+    bfloat16 bfloat_identity_scalar = bfloat16(1.0f);
+    uint32_t packed_identity_scalar = pack_two_bfloat16_into_uint32({bfloat_identity_scalar, bfloat_identity_scalar});
 
-    // Q input
-    auto c_in0_config = CircularBufferConfig(q_tiles * q_tile_size, {{CB::c_in0, q_df}}).set_page_size(CB::c_in0, q_tile_size);
-    if (!is_causal) {
-        c_in0_config.set_globally_allocated_address(*q_buffer);
+    union {float f; uint32_t u;} scale_union; scale_union.f = scale.value_or(1.0f);
+
+    std::vector<uint32_t> reader_compile_time_args_common = {
+        // interleaved accessor args
+        B, PNHt, PSt, St, DHt, Sk_chunk_t, k_num_chunks, num_cores
+    };
+
+    std::vector<uint32_t> writer_reducer_compile_time_args_common = {
+        // interleaved accessor args
+        B, PNHt, PSt, St, DHt,
+        packed_identity_scalar,
+        scale_union.u,
+        num_cores_per_batch,
+        num_active_cores
+    };
+
+    std::vector<uint32_t> writer_worker_compile_time_args_common = {
+        // interleaved accessor args
+        B, PNHt, PSt, St, DHt,
+        packed_identity_scalar,
+        scale_union.u,
+        num_cores_per_batch,
+        num_active_cores
+    };
+
+    std::vector<uint32_t> compute_compile_time_args_common = {
+        // matmul args
+        St, DHt, PNHt, Sk_chunk_t, k_num_chunks,
+        qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
+        out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks,
+        num_cores_per_batch
+    };
+
+    log_debug("breakpoint 1");
+
+    std::map<string, string> defines;
+    defines["STATS_GRANULARITY"] = std::to_string(stats_granularity);
+    defines["LOG2_STATS_GRANULARITY"] = std::to_string(log2_stats_granularity);
+    defines["SUB_EXP_GRANULARITY"] = std::to_string(sub_exp_granularity);
+    defines["LOG2_SUB_EXP_GRANULARITY"] = std::to_string(log2_sub_exp_granularity);
+    defines["MUL_BCAST_GRANULARITY"] = std::to_string(mul_bcast_granularity);
+    defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
+    defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
+    defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
+
+    log_debug("breakpoint 2");
+
+    uint32_t reduce_core_noc_x;
+    uint32_t reduce_core_noc_y;
+    uint32_t in0_mcast_reducer_semaphore;
+    std::vector<uintptr_t> all_reader_kernels_id;
+    std::vector<uintptr_t> all_writer_kernels_id;
+    std::vector<uintptr_t> all_compute_kernels_id;
+    log_debug("breakpoint 3");
+    for (int i = 0; i < num_active_cores; ++i) {
+        CoreCoord core = {i % grid_size.x, i / grid_size.x};
+        int worker_id = i % num_cores_per_batch - 1;
+        bool do_reduce = (worker_id == -1);
+        uint32_t cur_batch = i / num_cores_per_batch;
+        uint32_t k_chunk_start = chunk_assignment[worker_id+1][0];
+        uint32_t k_chunk_end = chunk_assignment[worker_id+1][1];
+        if (do_reduce) {
+            reduce_core_noc_x = core.x;
+            reduce_core_noc_y = core.y;
+            in0_mcast_reducer_semaphore = tt_metal::CreateSemaphore(program, core, 0);
+        }
+
+        log_debug("i = {} -------------------------------------", i);
+        log_debug("core: {}", core);
+        log_debug("worker_id: {}", worker_id);
+        log_debug("is reducer: {}", do_reduce);
+        log_debug("cur_batch: {}", cur_batch);
+        log_debug("k_chunk_start: {}", k_chunk_start);
+        log_debug("k_chunk_end: {}", k_chunk_end);
+        log_debug("reduce_core_noc_x: {}", reduce_core_noc_x);
+        log_debug("reduce_core_noc_y: {}", reduce_core_noc_y);
+
+        // Reader
+        std::vector<uint32_t> reader_compile_time_args = reader_compile_time_args_common;
+        reader_compile_time_args.insert(reader_compile_time_args.end(), {cur_batch, k_chunk_start, k_chunk_end});
+        auto reader_kernels_id = CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/reader_decode_interleaved.cpp",
+            core,
+            tt_metal::ReaderDataMovementConfig(
+                reader_compile_time_args,
+                defines
+        ));
+
+        // Writer
+        uintptr_t writer_kernels_id;
+        std::vector<uint32_t> writer_compile_time_args = do_reduce ? writer_reducer_compile_time_args_common : writer_worker_compile_time_args_common;
+        if (do_reduce) {
+            writer_compile_time_args.insert(writer_compile_time_args.end(), {in0_mcast_reducer_semaphore, cur_batch, k_num_chunks, k_chunk_start, k_chunk_end});
+            writer_kernels_id = CreateKernel(
+                program,
+                "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_decode_reducer_interleaved.cpp",
+                core,
+                tt_metal::WriterDataMovementConfig(
+                    writer_compile_time_args,
+                    defines
+            ));
+        } else {
+            // get physical core
+            CoreCoord reduce_core = {(std::size_t)reduce_core_noc_x, (std::size_t)reduce_core_noc_y};
+            auto reduce_core_physical = device->worker_core_from_logical_core(reduce_core);
+            writer_compile_time_args.insert(writer_compile_time_args.end(), {in0_mcast_reducer_semaphore, reduce_core_physical.x, reduce_core_physical.y, cur_batch, worker_id, k_chunk_start, k_chunk_end});
+            writer_kernels_id = CreateKernel(
+                program,
+                "tt_eager/tt_dnn/op_library/sdpa/kernels/dataflow/writer_decode_worker.cpp",
+                core,
+                tt_metal::WriterDataMovementConfig(
+                    writer_compile_time_args,
+                    defines
+            ));
+        }
+
+        // Compute
+        std::vector<uint32_t> compute_compile_time_args = compute_compile_time_args_common;
+        compute_compile_time_args.insert(compute_compile_time_args.end(), {do_reduce, k_chunk_start, k_chunk_end});
+        auto compute_kernels_id = CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/sdpa/kernels/compute/sdpa_flash_decode.cpp",
+            core,
+            tt_metal::ComputeConfig{
+                .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
+                .compile_args = compute_compile_time_args,
+                .defines = defines
+        });
+
+        all_reader_kernels_id.push_back(reader_kernels_id);
+        all_writer_kernels_id.push_back(writer_kernels_id);
+        all_compute_kernels_id.push_back(compute_kernels_id);
+
+        // CBs
+        // Q input
+        auto c_in0_config = CircularBufferConfig(q_tiles * q_tile_size, {{CB::c_in0, q_df}}).set_page_size(CB::c_in0, q_tile_size);
+        auto cb_in0_id = CreateCircularBuffer(program, core, c_in0_config);
+        // K input
+        auto c_in1_config = CircularBufferConfig(k_tiles * k_tile_size, {{CB::c_in1, k_df}}).set_page_size(CB::c_in1, k_tile_size);
+        auto cb_in1_id = CreateCircularBuffer(program, core, c_in1_config);
+        // V input
+        auto c_in2_config = CircularBufferConfig(v_tiles * v_tile_size, {{CB::c_in2, v_df}}).set_page_size(CB::c_in2, v_tile_size);
+        auto cb_in2_id = CreateCircularBuffer(program, core, c_in2_config);
+
+        // attn_mask input
+        auto c_in3_config = CircularBufferConfig(mask_tiles * mask_tile_size, {{CB::c_in3, mask_df}}).set_page_size(CB::c_in3, mask_tile_size);
+        auto cb_in3_id = CreateCircularBuffer(program, core, c_in3_config);
+
+        // scale input
+        auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, scalar_df}}).set_page_size(CB::c_in4, scalar_tile_size);
+        auto cb_in4_id = CreateCircularBuffer(program, core, c_in4_config);
+
+        // identity scale input
+        auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, scalar_df}}).set_page_size(CB::c_in5, scalar_tile_size);
+        auto cb_in5_id = CreateCircularBuffer(program, core, c_in5_config);
+
+        // cb_m_in
+        auto c_in6_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_in6, stats_df}}).set_page_size(CB::c_in6, stats_tile_size);
+        auto cb_in6_id = CreateCircularBuffer(program, core, c_in6_config);
+
+        // cb_l_in
+        auto c_in7_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_in7, stats_df}}).set_page_size(CB::c_in7, stats_tile_size);
+        auto c_in7_id = CreateCircularBuffer(program, core, c_in7_config);
+
+        // cb_qk_im
+        auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_df}}).set_page_size(CB::c_intermed0, im_tile_size);
+        auto cb_intermed0_id = CreateCircularBuffer(program, core, c_intermed0_config);
+
+        // cb_out_im
+        auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_df}}).set_page_size(CB::c_intermed1, im_tile_size);
+        auto cb_intermed1_id = CreateCircularBuffer(program, core, c_intermed1_config);
+
+        // cb_out_accumulate_im
+        auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_df}}).set_page_size(CB::c_intermed2, im_tile_size);
+        auto cb_intermed2_id = CreateCircularBuffer(program, core, c_intermed2_config);
+
+        // cb_cur_max
+        auto c_intermed3_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed3, stats_df}}).set_page_size(CB::c_intermed3, stats_tile_size);
+        auto cb_intermed3_id = CreateCircularBuffer(program, core, c_intermed3_config);
+
+        // cb_prev_max
+        auto c_intermed4_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed4, stats_df}}).set_page_size(CB::c_intermed4, stats_tile_size);
+        auto cb_intermed4_id = CreateCircularBuffer(program, core, c_intermed4_config);
+
+        // cb_cur_sum
+        auto c_intermed5_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed5, stats_df}}).set_page_size(CB::c_intermed5, stats_tile_size);
+        auto cb_intermed5_id = CreateCircularBuffer(program, core, c_intermed5_config);
+
+        // cb_prev_sum
+        auto c_intermed6_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed6, stats_df}}).set_page_size(CB::c_intermed6, stats_tile_size);
+        auto cb_intermed6_id = CreateCircularBuffer(program, core, c_intermed6_config);
+
+        // cb_exp_max_diff
+        auto c_intermed7_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed7, stats_df}}).set_page_size(CB::c_intermed7, stats_tile_size);
+        auto cb_intermed7_id = CreateCircularBuffer(program, core, c_intermed7_config);
+
+        // cb_prev_max_2
+        auto c_out4_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_out4, stats_df}}).set_page_size(CB::c_out4, stats_tile_size);
+        auto cb_out4_id = CreateCircularBuffer(program, core, c_out4_config);
+
+        // cb_prev_sum_2
+        auto c_out5_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_out5, stats_df}}).set_page_size(CB::c_out5, stats_tile_size);
+        auto c_out5_id = CreateCircularBuffer(program, core, c_out5_config);
+
+        // cb_exp_max_diff_2
+        auto c_out6_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_out6, stats_df}}).set_page_size(CB::c_out6, stats_tile_size);
+        auto c_out6_id = CreateCircularBuffer(program, core, c_out6_config);
+
+        // cb_out_accumulate_im_2
+        auto c_out7_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_out7, im_df}}).set_page_size(CB::c_out7, im_tile_size);
+        auto c_out7_id = CreateCircularBuffer(program, core, c_out7_config);
+
+        // Output
+        // cb_out_o
+        auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
+        auto cb_out0_id = CreateCircularBuffer( program, core, c_out0_config );
+
+        // cb_out_m
+        auto c_out1_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_out1, stats_df}}).set_page_size(CB::c_out1, stats_tile_size);
+        auto cb_out1_id = CreateCircularBuffer(program, core, c_out1_config);
+
+        // cb_out_l
+        auto c_out2_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_out2, stats_df}}).set_page_size(CB::c_out2, stats_tile_size);
+        auto c_out2_id = CreateCircularBuffer(program, core, c_out2_config);
+
+        // cb_intermed_out
+        auto c_out3_config = CircularBufferConfig(intermed_output_tiles * stats_tile_size, {{CB::c_out3, stats_df}}).set_page_size(CB::c_out3, stats_tile_size);
+        auto c_out3_id = CreateCircularBuffer(program, core, c_out3_config);
     }
-    auto cb_in0_id = CreateCircularBuffer(program, core_grid, c_in0_config);
-    // K input
-    auto c_in1_config = CircularBufferConfig(k_tiles * k_tile_size, {{CB::c_in1, k_df}}).set_page_size(CB::c_in1, k_tile_size);
-    auto cb_in1_id = CreateCircularBuffer(program, core_grid, c_in1_config);
-    // V input
-    auto c_in2_config = CircularBufferConfig(v_tiles * v_tile_size, {{CB::c_in2, v_df}}).set_page_size(CB::c_in2, v_tile_size);
-    auto cb_in2_id = CreateCircularBuffer(program, core_grid, c_in2_config);
-
-    // attn_mask input
-    auto c_in3_config = CircularBufferConfig(mask_tiles * mask_tile_size, {{CB::c_in3, mask_df}}).set_page_size(CB::c_in3, mask_tile_size);
-    auto cb_in3_id = CreateCircularBuffer(program, core_grid, c_in3_config);
-
-    // scale input
-    auto c_in4_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in4, scalar_df}}).set_page_size(CB::c_in4, scalar_tile_size);
-    auto cb_in4_id = CreateCircularBuffer(program, core_grid, c_in4_config);
-
-    // identity scale input
-    auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, scalar_df}}).set_page_size(CB::c_in5, scalar_tile_size);
-    auto cb_in5_id = CreateCircularBuffer(program, core_grid, c_in5_config);
-
-    // cb_qk_im
-    auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_df}}).set_page_size(CB::c_intermed0, im_tile_size);
-    auto cb_intermed0_id = CreateCircularBuffer(program, core_grid, c_intermed0_config);
-
-    // cb_out_im
-    auto c_intermed1_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed1, im_df}}).set_page_size(CB::c_intermed1, im_tile_size);
-    auto cb_intermed1_id = CreateCircularBuffer(program, core_grid, c_intermed1_config);
-
-    // cb_out_accumulate_im
-    auto c_intermed2_config = CircularBufferConfig(out_im_tiles * im_tile_size, {{CB::c_intermed2, im_df}}).set_page_size(CB::c_intermed2, im_tile_size);
-    auto cb_intermed2_id = CreateCircularBuffer(program, core_grid, c_intermed2_config);
-
-    // cb_cur_max
-    auto c_intermed3_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed3, stats_df}}).set_page_size(CB::c_intermed3, stats_tile_size);
-    auto cb_intermed3_id = CreateCircularBuffer(program, core_grid, c_intermed3_config);
-
-    // cb_prev_max
-    auto c_intermed4_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed4, stats_df}}).set_page_size(CB::c_intermed4, stats_tile_size);
-    auto cb_intermed4_id = CreateCircularBuffer(program, core_grid, c_intermed4_config);
-
-    // cb_cur_sum
-    auto c_intermed5_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed5, stats_df}}).set_page_size(CB::c_intermed5, stats_tile_size);
-    auto cb_intermed5_id = CreateCircularBuffer(program, core_grid, c_intermed5_config);
-
-    // cb_prev_sum
-    auto c_intermed6_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed6, stats_df}}).set_page_size(CB::c_intermed6, stats_tile_size);
-    auto cb_intermed6_id = CreateCircularBuffer(program, core_grid, c_intermed6_config);
-
-    // cb_exp_max_diff
-    auto c_intermed7_config = CircularBufferConfig(statistics_tiles * stats_tile_size, {{CB::c_intermed7, stats_df}}).set_page_size(CB::c_intermed7, stats_tile_size);
-    auto cb_intermed7_id = CreateCircularBuffer(program, core_grid, c_intermed7_config);
-
-    // Output
-    auto c_out0_config = CircularBufferConfig(out0_t * out_tile_size, {{CB::c_out0, out_df}}).set_page_size(CB::c_out0, out_tile_size);
-    if (!is_causal) {
-        c_out0_config.set_globally_allocated_address(*out0_buffer);
-    }
-    auto cb_out0_id = CreateCircularBuffer( program, core_grid, c_out0_config );
-
 
     uint32_t q_addr = q_buffer->address();
     uint32_t k_addr = k_buffer->address();
@@ -428,56 +512,28 @@ operation::ProgramWithCallbacks sdpa_multi_core(
 
 
     // Set reader rt args
-    for (uint32_t i = 0; i < num_cores; ++i) {
+    for (uint32_t i = 0; i < num_active_cores; ++i) {
         CoreCoord core = {i % grid_size.x, i / grid_size.x};
+        uint32_t worker_id = i % num_cores_per_batch - 1;
+        bool do_reduce = (worker_id == -1);
 
-        // log_debug("core: {} getting runtime args for idx {i}", core, i);
-        uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
-        uint32_t local_batch_end = local_batch_start + batch_per_core;
-        uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
-        uint32_t local_nh_end = local_nh_start + nh_per_core;
-        uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
-        uint32_t local_q_end = local_q_start + q_per_core;
+        uintptr_t reader_kernels_id = all_reader_kernels_id[i];
+        uintptr_t writer_kernels_id = all_writer_kernels_id[i];
+        uintptr_t compute_kernels_id = all_compute_kernels_id[i];
 
-        // clamp all to max values for non-even partitioning
-        local_batch_start = std::min(local_batch_start, B);
-        local_batch_end = std::min(local_batch_end, B);
-        local_nh_start = std::min(local_nh_start, NQH);
-        local_nh_end = std::min(local_nh_end, NQH);
-        local_q_start = std::min(local_q_start, q_num_chunks);
-        local_q_end = std::min(local_q_end, q_num_chunks);
-
-
-        // log the above
-        log_debug("core: {}", i);
-        log_debug("x={},y={}", core.x, core.y);
-        log_debug("local_batch_start: {}", local_batch_start);
-        log_debug("local_batch_end: {}", local_batch_end);
-        log_debug("local_nh_start: {}", local_nh_start);
-        log_debug("local_nh_end: {}", local_nh_end);
-        log_debug("local_q_start: {}", local_q_start);
-        log_debug("local_q_end: {}", local_q_end);
-
-
-        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-        SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-        SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+        SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr });
+        if (do_reduce) {
+            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr });
+        }
     }
 
     auto override_runtime_arguments_callback = [
-        num_cores,
+        num_active_cores,
         grid_size,
-        reader_kernels_id,
-        writer_kernels_id,
-        compute_kernels_id,
-        batch_per_core,
-        nh_per_core,
-        q_per_core,
-        nh_parallel_factor,
-        q_parallel_factor,
-        B,
-        NQH,
-        q_num_chunks
+        all_reader_kernels_id,
+        all_writer_kernels_id,
+        all_compute_kernels_id,
+        num_cores_per_batch
         ]
     (
         const void* operation,
@@ -501,38 +557,19 @@ operation::ProgramWithCallbacks sdpa_multi_core(
         uint32_t out_addr = out0_buffer->address();
 
         // Set reader rt args
-        for (uint32_t i = 0; i < num_cores; ++i) {
+        for (uint32_t i = 0; i < num_active_cores; ++i) {
             CoreCoord core = {i % grid_size.x, i / grid_size.x};
+            uint32_t worker_id = i % num_cores_per_batch - 1;
+            bool do_reduce = (worker_id == -1);
 
-            // log_debug("core: {} getting runtime args for idx {i}", core, i);
-            uint32_t local_batch_start = (i / (nh_parallel_factor * q_parallel_factor)) * batch_per_core;
-            uint32_t local_batch_end = local_batch_start + batch_per_core;
-            uint32_t local_nh_start = ((i / q_parallel_factor) % nh_parallel_factor) * nh_per_core;
-            uint32_t local_nh_end = local_nh_start + nh_per_core;
-            uint32_t local_q_start = (i % q_parallel_factor) * q_per_core;
-            uint32_t local_q_end = local_q_start + q_per_core;
+            uintptr_t reader_kernels_id = all_reader_kernels_id[i];
+            uintptr_t writer_kernels_id = all_writer_kernels_id[i];
+            uintptr_t compute_kernels_id = all_compute_kernels_id[i];
 
-            // clamp all to max values for non-even partitioning
-            local_batch_start = std::min(local_batch_start, B);
-            local_batch_end = std::min(local_batch_end, B);
-            local_nh_start = std::min(local_nh_start, NQH);
-            local_nh_end = std::min(local_nh_end, NQH);
-            local_q_start = std::min(local_q_start, q_num_chunks);
-            local_q_end = std::min(local_q_end, q_num_chunks);
-
-            // log the above
-            log_debug("core: {}", i);
-            log_debug("local_batch_start: {}", local_batch_start);
-            log_debug("local_batch_end: {}", local_batch_end);
-            log_debug("local_nh_start: {}", local_nh_start);
-            log_debug("local_nh_end: {}", local_nh_end);
-            log_debug("local_q_start: {}", local_q_start);
-            log_debug("local_q_end: {}", local_q_end);
-
-
-            SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
-            SetRuntimeArgs(program, compute_kernels_id, core, { i, local_batch_start, local_batch_end, local_nh_start, local_nh_end, local_q_start, local_q_end });
+            SetRuntimeArgs(program, reader_kernels_id, core, { q_addr, k_addr, v_addr, mask_addr });
+            if (do_reduce) {
+                SetRuntimeArgs(program, writer_kernels_id, core, { out_addr });
+            }
         }
 
 
