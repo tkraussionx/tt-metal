@@ -91,7 +91,7 @@ void kernel_main() {
     const uint32_t v_batch_offset = cur_batch * St * DHt;
     const uint32_t mask_batch_offset = cur_batch * PNHt * PSt;
 
-    DPRINT << "[Reader] Start" << ENDL();
+    // DPRINT << "[Reader] Start" << ENDL();
 
     // First, read Q entirely
     uint32_t q_tile_id = q_batch_offset;
@@ -110,7 +110,7 @@ void kernel_main() {
     noc_async_read_barrier();
     cb_push_back(cb_q_in, q_chunk_tiles);
 
-    DPRINT << "[Reader] read Q" << ENDL();
+    // DPRINT << "[Reader] read Q" << ENDL();
 
     // Then, read K, V, Mask k_chunk_tiles at a time
     const uint32_t k_chunk_offset = k_chunk_start * Sk_chunk_t * DHt;
@@ -120,7 +120,7 @@ void kernel_main() {
     uint32_t v_start_tile_id = v_batch_offset + v_chunk_offset;
     uint32_t mask_start_tile_id = mask_batch_offset + mask_chunk_offset;
 
-    DPRINT << "[Reader] push kvm " << k_chunk_start << " to " << k_chunk_end << ENDL();
+    // DPRINT << "[Reader] push kvm " << k_chunk_start << " to " << k_chunk_end << ENDL();
 
     for (uint32_t k_chunk = k_chunk_start; k_chunk < k_chunk_end; ++k_chunk) {
         // Read K chunk transposed
@@ -190,5 +190,5 @@ void kernel_main() {
         // DPRINT << "[Reader] Finished Reading V at " << k_chunk << ENDL();
     }
 
-    DPRINT << "[Reader] Done" << ENDL();
+    // DPRINT << "[Reader] Done" << ENDL();
 }

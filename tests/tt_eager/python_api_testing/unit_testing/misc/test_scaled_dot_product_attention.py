@@ -195,7 +195,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
     # start_idx = 32
 
     # while start_idx < s:
-    for start_idx in [128]:  # [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]:
+    for start_idx in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]:
         scale = d**-0.5
 
         k_chunk_size = get_chunk_size(start_idx)

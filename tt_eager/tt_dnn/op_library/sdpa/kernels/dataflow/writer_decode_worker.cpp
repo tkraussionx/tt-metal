@@ -32,10 +32,10 @@ void kernel_main() {
     constexpr uint32_t k_chunk_end = get_compile_time_arg_val(15);
 
     if (k_chunk_start == k_chunk_end) {
-        DPRINT << "[Writer Worker] No computes to be done for this worker" << ENDL();
+        // DPRINT << "[Writer Worker] No computes to be done for this worker" << ENDL();
         return; // early exit because no computes needs to be done for this worker
     }
-    DPRINT << "[Writer Worker] worker id, noc x and nox y: " << worker_id << ", " << reduce_core_noc_x << " " << reduce_core_noc_y << ENDL();
+    // DPRINT << "[Writer Worker] worker id, noc x and nox y: " << worker_id << ", " << reduce_core_noc_x << " " << reduce_core_noc_y << ENDL();
 
     const uint64_t in0_sender_semaphore_noc_addr = get_noc_addr(reduce_core_noc_x, reduce_core_noc_y, in0_sender_semaphore_addr);
 
@@ -52,7 +52,7 @@ void kernel_main() {
     generate_bcast_unary_scalar(cb_scale_in, scale_val);
     generate_reduce_scaler(cb_identity_scale_in, identity_scalar_packed);
 
-    DPRINT << "[Writer Worker] Pushed statistics to copmute" << ENDL();
+    // DPRINT << "[Writer Worker] Pushed statistics to copmute" << ENDL();
 
     uint32_t out_tile_id = 0;
 
@@ -61,7 +61,7 @@ void kernel_main() {
     cb_wait_front(cb_out_m, PNHt);
     cb_wait_front(cb_out_l, PNHt);
 
-    DPRINT << "[Writer Worker] Received output chunk from compute" << ENDL();
+    // DPRINT << "[Writer Worker] Received output chunk from compute" << ENDL();
 
     // Write output chunk to reducer
     constexpr uint32_t tile_bytes = get_tile_size(cb_out);
@@ -75,18 +75,18 @@ void kernel_main() {
     output_write_addr+=ml_write_size;
     noc_async_write(get_read_ptr(cb_out_l), output_write_addr, ml_write_size);
 
-    DPRINT << "[Writer Worker] Wrote output chunk to reducer" << ENDL();
+    // DPRINT << "[Writer Worker] Wrote output chunk to reducer" << ENDL();
 
     // increment semaphore
     noc_async_write_barrier();
     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
 
-    DPRINT << "[Writer Worker] Incremented semaphore" << ENDL();
+    // DPRINT << "[Writer Worker] Incremented semaphore" << ENDL();
 
     // pop front
     cb_pop_front(cb_out, out_chunk_tiles);
     cb_pop_front(cb_out_m, PNHt);
     cb_pop_front(cb_out_l, PNHt);
 
-    DPRINT << "[Writer Worker] Done" << ENDL();
+    // DPRINT << "[Writer Worker] Done" << ENDL();
 }

@@ -19,8 +19,7 @@
 #include "debug/dprint.h"
 
 namespace NAMESPACE {
-template<uint32_t in0, uint32_t in1, uint32_t num_tiles>
-void max_block_inplace() {
+void max_block_inplace(uint32_t in0, uint32_t in1, uint32_t num_tiles) {
     // inputs come in full, outputs go out full
     copy_tile_to_dst_init_short(in0);
     max_tile_init();
@@ -42,8 +41,7 @@ void max_block_inplace() {
     }
 }
 
-template<uint32_t in0, uint32_t in1, uint32_t out_cb, uint32_t num_tiles>
-void max_block() {
+void max_block(uint32_t in0, uint32_t in1, uint32_t out_cb, uint32_t num_tiles) {
     // inputs come in full, outputs go out full
     copy_tile_to_dst_init_short(in0);
     max_tile_init();
@@ -52,7 +50,7 @@ void max_block() {
     constexpr uint32_t dst_reg_1 = 1;
     cb_wait_front(in0, num_tiles);
     cb_wait_front(in1, num_tiles);
-    DPRINT << "[C] R ckpt 1.5" << ENDL();
+    // DPRINT << "[C] R ckpt 1.5" << ENDL();
     cb_reserve_back(out_cb, num_tiles);
     for (uint32_t i = 0; i < num_tiles; ++i) {
         acquire_dst(tt::DstMode::Half);
@@ -121,8 +119,7 @@ void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     }
 }
 
-template<uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols>
-void sub_exp_block_bcast_cols_inplace() {
+void sub_exp_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t rows, uint32_t cols) {
     // Precondition: in0_cb has rows*cols produced
     // Precondition: in1_cb has rows produced
     // Postcondition: in0_cb has rows*cols produced
@@ -135,7 +132,7 @@ void sub_exp_block_bcast_cols_inplace() {
 
 
     constexpr uint32_t dst_tiles = SUB_EXP_GRANULARITY;
-    constexpr uint32_t granularity = cols >> LOG2_SUB_EXP_GRANULARITY;
+    uint32_t granularity = cols >> LOG2_SUB_EXP_GRANULARITY;
     for (uint32_t i = 0; i < rows; ++i) {
         for(uint32_t u = 0; u < granularity; u++) {
             tile_regs_acquire();
@@ -180,15 +177,14 @@ void mul_block_bcast_cols_inplace(uint32_t in0_cb, uint32_t in1_cb, uint32_t row
     cb_pop_front(in1_cb, rows);
 }
 
-template<uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles>
-void mul_block_bcast_scalar_inplace() {
+void mul_block_bcast_scalar_inplace(uint32_t in0_cb, uint32_t in1_scalar_cb, uint32_t num_tiles) {
     // Precondition: in0_cb has num_tiles produced
     // Precondition: in1_scalar_cb has 1 produced
     // Postcondition: in0_cb has num_tiles produced
     // Postcondition: in1_scalar_cb has 1 produced
 
     constexpr uint32_t dst_tiles = MUL_BCAST_GRANULARITY;
-    constexpr uint32_t granularity = num_tiles >> LOG2_MUL_BCAST_GRANULARITY;
+    uint32_t granularity = num_tiles >> LOG2_MUL_BCAST_GRANULARITY;
     unpack_reconfig_data_format(in0_cb, in1_scalar_cb);
     mul_tiles_bcast_scalar_init_short();
     cb_wait_front(in0_cb, num_tiles);
@@ -273,44 +269,44 @@ void sub_exp_block(uint32_t in0_cb, uint32_t in1_cb, uint32_t out_cb, uint32_t n
     // Precondition: in0_cb and in1_cb have num_tiles produced
     // Postcondition: out_cb has num_tiles produced
     // Postcondition: in0_cb and in1_cb has num_tiles produced
-    DEBUG_STATUS("XCAE");
+    // DEBUG_STATUS("XCAE");
     sub_tiles_init();
-    DEBUG_STATUS("XCAF");
+    // DEBUG_STATUS("XCAF");
     exp_tile_init<true>();
-    DEBUG_STATUS("XCAG");
+    // DEBUG_STATUS("XCAG");
     // DPRINT_MATH(DPRINT << "[C] R ckpt 2.1.1.0 math" << ENDL());
     // DPRINT_PACK(DPRINT << "[C] R ckpt 2.1.1.0 pack" << ENDL());
     // DPRINT_UNPACK(DPRINT << "[C] R ckpt 2.1.1.0 unpack" << ENDL());
     cb_wait_front(in0_cb, num_tiles);
-    DEBUG_STATUS("XCAH");
+    // DEBUG_STATUS("XCAH");
     // DPRINT_MATH(DPRINT << "[C] R ckpt 2.1.1.1 math" << ENDL());
     // DPRINT_PACK(DPRINT << "[C] R ckpt 2.1.1.1 pack" << ENDL());
     // DPRINT_UNPACK(DPRINT << "[C] R ckpt 2.1.1.1 unpack" << ENDL());
     cb_wait_front(in1_cb, num_tiles);
-    DEBUG_STATUS("XCAI");
+    // DEBUG_STATUS("XCAI");
     cb_reserve_back(out_cb, num_tiles);
-    DEBUG_STATUS("XCAJ");
+    // DEBUG_STATUS("XCAJ");
 
     // DPRINT << "[C] R ckpt 2.1.1.2" << ENDL();
 
     for (uint32_t i = 0; i < num_tiles; i++) {
 
         acquire_dst(tt::DstMode::Half);
-        DEBUG_STATUS("XCAK");
+        // DEBUG_STATUS("XCAK");
 
         sub_tiles(in0_cb, in1_cb, i, i, 0);
-        DEBUG_STATUS("XCAL");
+        // DEBUG_STATUS("XCAL");
 
         exp_tile<true>(0);
-        DEBUG_STATUS("XCAM");
+        // DEBUG_STATUS("XCAM");
 
         pack_tile(0, out_cb);
-        DEBUG_STATUS("XCAN");
+        // DEBUG_STATUS("XCAN");
 
         cb_push_back(out_cb, 1);
-        DEBUG_STATUS("XCAO");
+        // DEBUG_STATUS("XCAO");
         release_dst(tt::DstMode::Half);
-        DEBUG_STATUS("XCAP");
+        // DEBUG_STATUS("XCAP");
     }
 }
 
@@ -460,7 +456,7 @@ void MAIN {
         // DPRINT << "[C] D QK 1"<< ENDL();
 
         /* QK *= SCALE */
-        mul_block_bcast_scalar_inplace<cb_qk_im, cb_scale_in, qk_chunk_tiles>();
+        mul_block_bcast_scalar_inplace(cb_qk_im, cb_scale_in, qk_chunk_tiles);
 
         // Finding the diagonal is harder now that q_chunk_size and k_chunk_size can differ
         // Q-range = [q_low, q_high)
@@ -480,13 +476,13 @@ void MAIN {
 
         if (k_chunk > k_chunk_start) {
             unpack_reconfig_data_format(cb_cur_max, cb_prev_max);
-            max_block_inplace<cb_cur_max, cb_prev_max, Sq_chunk_t>();
+            max_block_inplace(cb_cur_max, cb_prev_max, Sq_chunk_t);
         }
         /* QK -= cb_cur_max */
         /* QK = exp(QK)*/
         unpack_reconfig_data_format(cb_qk_im, cb_cur_max);
         pack_reconfig_data_format(cb_qk_im);
-        sub_exp_block_bcast_cols_inplace<cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t>();
+        sub_exp_block_bcast_cols_inplace(cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t);
 
         // DPRINT << "[C] D QK all"<< ENDL();
 
@@ -587,30 +583,26 @@ void MAIN {
 
                 // m = torch.max(m_1, m_2)
                 // unpack_reconfig_data_format(cb_prev_max_2, cb_prev_max);
-                // max_block<cb_prev_max_2, cb_prev_max, cb_cur_max, Sq_chunk_t>(); // pushed, pushed, popped
+                max_block(cb_prev_max_2, cb_prev_max, cb_cur_max, Sq_chunk_t); // pushed, pushed, popped
 
-                copy_block(cb_prev_max, cb_cur_max, Sq_chunk_t);
+                // copy_block(cb_prev_max, cb_cur_max, Sq_chunk_t);
                 // DPRINT << "[C] R ckpt 1.1" << ENDL();
-                cb_push_back(cb_prev_max, Sq_chunk_t);
-                DEBUG_STATUS("XCAA");
+                // cb_push_back(cb_prev_max, Sq_chunk_t);
+                // DEBUG_STATUS("XCAA");
                 // DPRINT << "[C] R ckpt 1.2" << ENDL();
                 // max_block_inplace<cb_cur_max, cb_prev_max_2, Sq_chunk_t>(); // TODO: NEED TO FIX THIS
 
                 // DPRINT_MATH(DPRINT << "[C] R ckpt 2 math" << ENDL());
                 // DPRINT_PACK(DPRINT << "[C] R ckpt 2 pack" << ENDL());
                 // DPRINT_UNPACK(DPRINT << "[C] R ckpt 2 unpack" << ENDL());
-                DEBUG_STATUS("XCAB");
+                // DEBUG_STATUS("XCAB");
 
                 // l = torch.exp(m_2 - m) * l_2 + torch.exp(m_1 - m) * l_1
                 /// l1 = torch.exp(m_2 - m) * l_2
                 // unpack_reconfig_data_format(cb_prev_max_2, cb_cur_max); // DEBUG
-                DEBUG_STATUS("XCAC");
                 // pack_reconfig_data_format(cb_exp_max_diff_2);
-                DEBUG_STATUS("XCAD");
                 sub_exp_block(cb_prev_max_2, cb_cur_max, cb_exp_max_diff_2, Sq_chunk_t);
-                // DPRINT << "[C] R ckpt 2.1.1" << ENDL();
                 mul_block_inplace(cb_prev_sum_2, cb_exp_max_diff_2, Sq_chunk_t);
-                // DPRINT << "[C] R ckpt 2.1.2" << ENDL();
                 /// l2 = torch.exp(m_1 - m) * l_1
                 unpack_reconfig_data_format(cb_prev_max, cb_cur_max); // DEBUG
                 pack_reconfig_data_format(cb_exp_max_diff);
@@ -621,7 +613,7 @@ void MAIN {
                 pack_reconfig_data_format(cb_cur_sum);
                 add_block(cb_prev_sum_2, cb_prev_sum, cb_cur_sum, Sq_chunk_t);
 
-                DPRINT << "[C] R ckpt 3" << ENDL();
+                // DPRINT << "[C] R ckpt 3" << ENDL();
 
                 // O = torch.matmul(torch.eye(padded_num_heads) * torch.exp(m_2 - m), O_2) + torch.matmul(torch.eye(padded_num_heads) * torch.exp(m_1 - m), O_1)
                 /// O_1 = torch.matmul(torch.eye(padded_num_heads) * torch.exp(m_2 - m), O_2)
@@ -636,19 +628,19 @@ void MAIN {
                 // unpack_reconfig_data_format(cb_out_accumulate_im, cb_out_accumulate_im_2);
                 add_block_inplace(cb_out_accumulate_im, cb_out_accumulate_im_2, q_chunk_tiles);
 
-                DPRINT << "[C] R ckpt 4" << ENDL();
+                // DPRINT << "[C] R ckpt 4" << ENDL();
 
                 // copy tiles
                 // unpack_reconfig_data_format(cb_cur_max, cb_cur_max); // DEBUG
                 // pack_reconfig_data_format(cb_prev_max);
                 cb_pop_front(cb_prev_max, Sq_chunk_t);
                 cb_pop_front(cb_prev_max_2, Sq_chunk_t);
-                DPRINT << "[C] R ckpt 5" << ENDL();
+                // DPRINT << "[C] R ckpt 5" << ENDL();
                 // cb_pop_front(cb_prev_sum, Sq_chunk_t);
                 copy_block(cb_cur_max, cb_prev_max, Sq_chunk_t);
-                DPRINT << "[C] R ckpt 6" << ENDL();
+                // DPRINT << "[C] R ckpt 6" << ENDL();
                 copy_block(cb_cur_sum, cb_prev_sum, Sq_chunk_t);
-                DPRINT << "[C] R ckpt 7" << ENDL();
+                // DPRINT << "[C] R ckpt 7" << ENDL();
 
 
             }
