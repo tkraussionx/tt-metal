@@ -15,6 +15,7 @@ set(PERF_MICROBENCH_TESTS_SRCS
     routing/test_tunnel_2cq
     routing/test_uni_tunnel
     routing/test_uni_tunnel_single_chip
+    routing/test_uni_tunnel_through_stream_single_chip
     routing/test_bi_tunnel
     noc/test_noc_unicast_vs_multicast_to_single_core_latency
     old/matmul/matmul_global_l1

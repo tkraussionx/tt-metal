@@ -5,6 +5,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
+#include "tests/tt_metal/tt_metal/test_kernels/dataflow/streams/stream_io_kernel_helpers.hpp"
 
 packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 packet_output_queue_state_t output_queue;
@@ -146,8 +147,20 @@ void kernel_main() {
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
     write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xaa000000 | mux_fan_in);
     uint32_t arg_idx = 0;
+    stream_remote_sender_kernel_args_t remote_sender_rt_args;
     if constexpr (use_stream_for_writer) {
-        arg_idx = output_queue.stream_state.init_from_runtime_args(arg_idx);
+        arg_idx = remote_sender_rt_args.init_from_rt_args(arg_idx);
+        uint32_t local_starting_phase = notify_remote_receiver_of_starting_phase(
+                                            remote_sender_rt_args.local_stream_id,
+                                            remote_sender_rt_args.local_stream_tile_header_buffer_addr,//local_stream_buffer_addr,
+                                            get_noc_addr(
+                                                remote_sender_rt_args.remote_dest_noc_x,
+                                                remote_sender_rt_args.remote_dest_noc_y,
+                                                remote_sender_rt_args.first_relay_remote_src_start_phase_addr)) -
+                                        1;
+        *reinterpret_cast<volatile uint32_t*>(remote_sender_rt_args.local_stream_tile_header_buffer_addr) = 0;
+
+        output_queue.stream_state.init_from_runtime_args(remote_sender_rt_args, local_starting_phase);
     }
 
     for (uint32_t i = 0; i < mux_fan_in; i++) {

@@ -11,6 +11,7 @@
 #include "noc_overlay_parameters.h"
 #include "ethernet/dataflow_api.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "tests/tt_metal/tt_metal/test_kernels/dataflow/streams/stream_io_kernel_helpers.hpp"
 
 
 constexpr uint32_t NUM_WR_CMD_BUFS = 4;
@@ -423,10 +424,10 @@ public:
 
 
 class packet_input_queue_state_t : public packet_queue_state_t {
+public:
+    fabric_receiver_stream_state_t stream_state;
 
 protected:
-
-    fabric_receiver_stream_state_t stream_state;
     bool curr_packet_valid;
     tt_l1_ptr dispatch_packet_header_t* curr_packet_header_ptr;
     uint16_t curr_packet_src;
@@ -458,7 +459,7 @@ protected:
                 // Streams expect sizes to be in num 16B words, which isn't bytes, so if we are
                 // reading a packet header that came from a stream it means we need to convert
                 // it back to size in bytes, from size in 16B words.
-                packet_size_bytes << 4;
+                packet_size_bytes = packet_size_bytes << 4;
             }
 
             this->end_of_cmd = curr_packet_header_ptr->get_is_end_of_cmd();
@@ -527,12 +528,12 @@ public:
         this->reset_ready_flag();
     }
 
-    final uint32_t get_queue_data_num_words_available_to_send() override {
-        if (this-> remote_update_network_type== DispatchRemoteNetworkType::STREAM) {
+    virtual uint32_t get_queue_data_num_words_available_to_send() const override {
+        if (this-> remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
             uint32_t n = fw_managed_rx_stream_num_bytes_available(this->stream_state.local_stream_id, this->stream_state);
             return n >> 4;
         } else {
-            return ::get_queue_data_num_words_available_to_send();
+            return packet_queue_state_t::get_queue_data_num_words_available_to_send();
         }
     }
 
@@ -704,9 +705,10 @@ public:
 
 
 class packet_output_queue_state_t : public packet_queue_state_t {
+public:
+    fabric_sender_stream_state_t stream_state;
 
 protected:
-    fabric_sender_stream_state_t stream_state;
     uint32_t max_noc_send_words;
     uint32_t max_eth_send_words;
 
@@ -852,13 +854,12 @@ public:
             internal_::eth_send_packet(0, src_addr/PACKET_WORD_SIZE_BYTES, dest_addr/PACKET_WORD_SIZE_BYTES, num_words);
         } else if (this->remote_update_network_type== DispatchRemoteNetworkType::STREAM) {
             // Sending into a stream, from a remote_source_stream on this core, managed by this RISC processor.
-            stream_noc_write(
+            stream_noc_write_from_mux(
                 src_addr,
                 dest_addr,
                 num_words*PACKET_WORD_SIZE_BYTES,
                 this->remote_x,
                 this->remote_y,
-                this->dest_noc_port_id,
                 this->stream_state);
         } else {
             uint64_t noc_dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, dest_addr);
@@ -938,7 +939,7 @@ public:
         uint32_t num_words_available_in_input =
             is_remote_receiver_from_stream
                 ? fw_managed_rx_stream_num_bytes_available(
-                      input_queue_ptr->stream_state.stream_id, input_queue_ptr->stream_state) >>
+                      input_queue_ptr->stream_state.local_stream_id, input_queue_ptr->stream_state) >>
                       4
                 : input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
         uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();

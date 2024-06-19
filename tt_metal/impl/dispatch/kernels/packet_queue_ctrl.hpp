@@ -44,7 +44,8 @@ enum DispatchRemoteNetworkType : uint32_t {
     NOC0 = 0,
     NOC1 = 1,
     ETH = 2,
-    NONE = 3
+    STREAM = 3,
+    NONE = 4
 };
 
 inline bool is_remote_network_type_noc(DispatchRemoteNetworkType type) {
@@ -69,7 +70,7 @@ struct dispatch_packet_header_t {
     uint32_t tag;
 
     inline uint32_t get_packet_size_bytes() const {
-        return (packet_size_and_end_cmd_flag.packet_size_bytes & 0x00'FF'FF'FF)
+        return (packet_size_and_end_cmd_flag.packet_size_bytes & 0x00'FF'FF'FF);
     }
 
     inline bool get_is_end_of_cmd() const {
