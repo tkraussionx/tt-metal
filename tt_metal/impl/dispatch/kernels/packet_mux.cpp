@@ -147,8 +147,8 @@ void kernel_main() {
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
     write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xaa000000 | mux_fan_in);
     uint32_t arg_idx = 0;
-    stream_remote_sender_kernel_args_t remote_sender_rt_args;
     if constexpr (use_stream_for_writer) {
+        stream_remote_sender_kernel_args_t remote_sender_rt_args;
         arg_idx = remote_sender_rt_args.init_from_rt_args(arg_idx);
         uint32_t local_starting_phase = notify_remote_receiver_of_starting_phase(
                                             remote_sender_rt_args.local_stream_id,

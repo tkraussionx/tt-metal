@@ -194,18 +194,19 @@ void kernel_main() {
 
     noc_init();
     uint32_t arg_idx = 0;
-    stream_remote_receiver_kernel_args_t remote_receiver_rt_args;
     if constexpr (use_stream_for_reader) {
+        stream_remote_receiver_kernel_args_t remote_receiver_rt_args;
         const uint32_t first_phase_remote_src_phase =
             wait_for_remote_source_starting_phase(reinterpret_cast<volatile uint32_t *>(remote_receiver_rt_args.remote_src_start_phase_addr));
         const uint32_t second_phase_remote_src_phase = first_phase_remote_src_phase + 1;
         const uint32_t local_first_phase = get_first_available_phase_out_of_reset(remote_receiver_rt_args.local_stream_id);
         const uint32_t local_second_phase = local_first_phase;
-        auto local_phase_iterator = phase_iterator_t(local_first_phase, local_second_phase);
-        auto remote_phase_iterator = phase_iterator_t(first_phase_remote_src_phase, second_phase_remote_src_phase);
 
         arg_idx = remote_receiver_rt_args.init_from_rt_args(arg_idx);
-        input_queue.stream_state.init_from_runtime_args(remote_receiver_rt_args, local_phase_iterator, remote_phase_iterator);
+        input_queue.stream_state.init_from_runtime_args(
+            remote_receiver_rt_args,
+            /*local_phase_iterator*/{local_first_phase, local_second_phase},
+            /*remote_phase_iterator*/{first_phase_remote_src_phase, second_phase_remote_src_phase});
     }
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
