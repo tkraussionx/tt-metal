@@ -29,17 +29,17 @@ namespace {
 
 void ConfigureKernelGroup(
     const Program &program, const KernelGroup *kernel_group, Device *device, const CoreCoord &logical_core) {
-    if (kernel_group->compute_id.has_value()) {
-        detail::GetKernel(program, kernel_group->compute_id.value())->configure(device, logical_core);
+    if (kernel_group->k_ids[tt::RISCV::COMPUTE].has_value()) {
+        detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::COMPUTE].value())->configure(device, logical_core);
     }
-    if (kernel_group->riscv1_id.has_value()) {
-        detail::GetKernel(program, kernel_group->riscv1_id.value())->configure(device, logical_core);
+    if (kernel_group->k_ids[tt::RISCV::NCRISC].has_value()) {
+        detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::NCRISC].value())->configure(device, logical_core);
     }
-    if (kernel_group->riscv0_id.has_value()) {
-        detail::GetKernel(program, kernel_group->riscv0_id.value())->configure(device, logical_core);
+    if (kernel_group->k_ids[tt::RISCV::BRISC].has_value()) {
+        detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::BRISC].value())->configure(device, logical_core);
     }
-    if (kernel_group->erisc_id.has_value()) {
-        detail::GetKernel(program, kernel_group->erisc_id.value())->configure(device, logical_core);
+    if (kernel_group->k_ids[tt::RISCV::ERISC].has_value()) {
+        detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::ERISC].value())->configure(device, logical_core);
     }
 }
 

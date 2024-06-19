@@ -136,11 +136,11 @@ int main(int argc, char **argv) {
             // Check that binary memory objects in the kernel match the ones obtained from the persistent cache
             const KernelGroup* kernel_group = program.kernels_on_core(core, CoreType::WORKER);
             TT_FATAL(
-                kernel_group != nullptr && kernel_group->compute_id.has_value() and
-                kernel_group->riscv0_id.has_value() and kernel_group->riscv1_id.has_value());
-            auto compute_kernel = tt_metal::detail::GetKernel(program, kernel_group->compute_id.value());
-            auto riscv0_kernel = tt_metal::detail::GetKernel(program, kernel_group->riscv0_id.value());
-            auto riscv1_kernel = tt_metal::detail::GetKernel(program, kernel_group->riscv1_id.value());
+                kernel_group != nullptr && kernel_group->k_ids[tt::RISCV::COMPUTE].has_value() and
+                kernel_group->k_ids[tt::RISCV::BRISC].has_value() and kernel_group->k_ids[tt::RISCV::NCRISC].has_value());
+            auto compute_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::COMPUTE].value());
+            auto riscv0_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::BRISC].value());
+            auto riscv1_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::NCRISC].value());
 
             // Run iteration to get golden
             uint32_t mask = device->build_key();
@@ -175,9 +175,9 @@ int main(int argc, char **argv) {
                         uint32_t mask = device->build_key();
                         tt_metal::detail::CompileProgram(device, program);
                         const KernelGroup* kernel_group = program.kernels_on_core(core, CoreType::WORKER);
-                        auto compute_kernel = tt_metal::detail::GetKernel(program, kernel_group->compute_id.value());
-                        auto riscv0_kernel = tt_metal::detail::GetKernel(program, kernel_group->riscv0_id.value());
-                        auto riscv1_kernel = tt_metal::detail::GetKernel(program, kernel_group->riscv1_id.value());
+                        auto compute_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::COMPUTE].value());
+                        auto riscv0_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::BRISC].value());
+                        auto riscv1_kernel = tt_metal::detail::GetKernel(program, kernel_group->k_ids[tt::RISCV::NCRISC].value());
                         TT_FATAL(compute_kernel->binaries(mask) == compute_binaries.at(mask));
                         TT_FATAL(riscv0_kernel->binaries(mask) == brisc_binaries.at(mask));
                         TT_FATAL(riscv1_kernel->binaries(mask) == ncrisc_binaries.at(mask));

@@ -121,7 +121,7 @@ KernelGroup::KernelGroup(
     const Program &program,
     std::optional<KernelHandle> brisc_id,
     std::optional<KernelHandle> ncrisc_id,
-    std::optional<KernelHandle> trisc_id,
+    std::optional<KernelHandle> compute_id,
     std::optional<KernelHandle> erisc_id,
     bool erisc_is_idle,
     int last_cb_index,
@@ -129,10 +129,10 @@ KernelGroup::KernelGroup(
     core_ranges({}) {
     this->core_ranges = this->core_ranges.merge(new_ranges);
 
-    this->riscv0_id = brisc_id;
-    this->riscv1_id = ncrisc_id;
-    this->compute_id = trisc_id;
-    this->erisc_id = erisc_id;
+    this->k_ids[tt::RISCV::BRISC] = brisc_id;
+    this->k_ids[tt::RISCV::NCRISC] = ncrisc_id;
+    this->k_ids[tt::RISCV::COMPUTE] = compute_id;
+    this->k_ids[tt::RISCV::ERISC] = erisc_id;
 
     // The code below sets the brisc_noc_id for use by the device firmware
     // Use 0 if neither brisc nor trisc specify a noc
@@ -174,9 +174,9 @@ KernelGroup::KernelGroup(
         this->launch_msg.ncrisc_kernel_size16 = 0;
     }
 
-    if (trisc_id) {
+    if (compute_id) {
         this->launch_msg.enable_triscs = true;
-        this->launch_msg.triscs_watcher_kernel_id = program.get_kernel(trisc_id.value())->get_watcher_kernel_id();
+        this->launch_msg.triscs_watcher_kernel_id = program.get_kernel(compute_id.value())->get_watcher_kernel_id();
     } else {
         this->launch_msg.triscs_watcher_kernel_id = 0;
         this->launch_msg.enable_triscs = false;
@@ -195,7 +195,7 @@ KernelGroup::KernelGroup(
 }
 
 CoreType KernelGroup::get_core_type() const {
-    if (this->erisc_id.has_value()) {
+    if (this->k_ids[tt::RISCV::ERISC].has_value()) {
         return CoreType::ETH;
     } else {
         return CoreType::WORKER;
@@ -217,7 +217,7 @@ KernelGroup *Program::kernels_on_core(const CoreCoord &core, const CoreType &cor
 
 struct KernelGroupInt {
     bool valid;
-    std::optional<KernelHandle> trisc_id = std::nullopt;
+    std::optional<KernelHandle> compute_id = std::nullopt;
     std::optional<KernelHandle> brisc_id = std::nullopt;
     std::optional<KernelHandle> ncrisc_id = std::nullopt;
     std::optional<KernelHandle> erisc_id = std::nullopt;
@@ -227,7 +227,7 @@ struct KernelGroupInt {
         switch (riscv_processor) {
             case RISCV::BRISC: this->brisc_id = static_cast<KernelHandle>(kernel_idx); break;
             case RISCV::NCRISC: this->ncrisc_id = static_cast<KernelHandle>(kernel_idx); break;
-            case RISCV::COMPUTE: this->trisc_id = static_cast<KernelHandle>(kernel_idx); break;
+            case RISCV::COMPUTE: this->compute_id = static_cast<KernelHandle>(kernel_idx); break;
             case RISCV::ERISC: this->erisc_id = static_cast<KernelHandle>(kernel_idx); break;
             default: TT_ASSERT(false, "Unsupported kernel processor!");
         }
@@ -235,12 +235,12 @@ struct KernelGroupInt {
 };
 
 bool KernelGroupInt::operator==(const KernelGroupInt &b) const {
-    return trisc_id == b.trisc_id && brisc_id == b.brisc_id && ncrisc_id == b.ncrisc_id && erisc_id == b.erisc_id;
+    return compute_id == b.compute_id && brisc_id == b.brisc_id && ncrisc_id == b.ncrisc_id && erisc_id == b.erisc_id;
 }
 
 struct KernelGroupIntHasher {
     std::size_t operator()(const KernelGroupInt &x) const {
-        return static_cast<size_t>(x.erisc_id.value_or(0)) | static_cast<size_t>(x.trisc_id.value_or(0)) |
+        return static_cast<size_t>(x.erisc_id.value_or(0)) | static_cast<size_t>(x.compute_id.value_or(0)) |
                static_cast<size_t>(x.brisc_id.value_or(0)) << 16 | static_cast<size_t>(x.ncrisc_id.value_or(0)) << 32;
     }
 };
@@ -325,7 +325,7 @@ void Program::update_kernel_groups(const CoreType &core_type) {
                 *this,
                 kg_to_cores.first.brisc_id,
                 kg_to_cores.first.ncrisc_id,
-                kg_to_cores.first.trisc_id,
+                kg_to_cores.first.compute_id,
                 kg_to_cores.first.erisc_id,
                 erisc_is_idle,
                 last_cb_index,
@@ -662,12 +662,12 @@ void Program::populate_dispatch_data(Device *device) {
         // which use multiple core ranges
         bool linked = dst_noc_multicast_info.size() == 1;
         vector<KernelHandle> kernel_ids;
-        if (kernel_group.riscv0_id)
-            kernel_ids.push_back(kernel_group.riscv0_id.value());
-        if (kernel_group.riscv1_id)
-            kernel_ids.push_back(kernel_group.riscv1_id.value());
-        if (kernel_group.compute_id)
-            kernel_ids.push_back(kernel_group.compute_id.value());
+        if (kernel_group.k_ids[tt::RISCV::BRISC])
+            kernel_ids.push_back(kernel_group.k_ids[tt::RISCV::BRISC].value());
+        if (kernel_group.k_ids[tt::RISCV::NCRISC])
+            kernel_ids.push_back(kernel_group.k_ids[tt::RISCV::NCRISC].value());
+        if (kernel_group.k_ids[tt::RISCV::COMPUTE])
+            kernel_ids.push_back(kernel_group.k_ids[tt::RISCV::COMPUTE].value());
         for (size_t i = 0; i < kernel_ids.size(); i++) {
             KernelHandle kernel_id = kernel_ids[i];
             vector<RISCV> sub_kernels;
@@ -729,8 +729,8 @@ void Program::populate_dispatch_data(Device *device) {
             extract_dst_noc_unicast_info(kernel_group.core_ranges.ranges(), kernel_group.get_core_type());
 
         vector<KernelHandle> kernel_ids;
-        if (kernel_group.erisc_id)
-            kernel_ids.push_back(kernel_group.erisc_id.value());
+        if (kernel_group.k_ids[tt::RISCV::ERISC])
+            kernel_ids.push_back(kernel_group.k_ids[tt::RISCV::ERISC].value());
         for (size_t i = 0; i < kernel_ids.size(); i++) {
             KernelHandle kernel_id = kernel_ids[i];
             vector<RISCV> sub_kernels;

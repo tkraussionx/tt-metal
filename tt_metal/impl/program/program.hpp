@@ -34,10 +34,7 @@ namespace detail{
 
 struct KernelGroup {
     CoreRangeSet core_ranges;
-    std::optional<KernelHandle> compute_id = std::nullopt;
-    std::optional<KernelHandle> riscv0_id = std::nullopt;
-    std::optional<KernelHandle> riscv1_id = std::nullopt;
-    std::optional<KernelHandle> erisc_id = std::nullopt;
+    std::optional<KernelHandle> k_ids[tt::RISCV::MAX];
     launch_msg_t launch_msg;
 
     KernelGroup();
@@ -45,7 +42,7 @@ struct KernelGroup {
         const Program &program,
         std::optional<KernelHandle> brisc_id,
         std::optional<KernelHandle> ncrisc_id,
-        std::optional<KernelHandle> trisc_id,
+        std::optional<KernelHandle> compute_id,
         std::optional<KernelHandle> erisc_id,
         bool erisc_is_idle,
         int last_cb_index,

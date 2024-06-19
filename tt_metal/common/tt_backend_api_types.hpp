@@ -146,6 +146,7 @@ enum RISCV : uint8_t {
     TRISC2 = 4,
     ERISC = 5,
     COMPUTE = 6,     // Encompasses TRISC0, TRISC1, and TRISC2
+    MAX = 7,
 };
 
 inline std::ostream& operator<<(std::ostream& os, const enum RISCV& riscv) {
