@@ -454,70 +454,88 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
     // TODO: If we need to break apart cmds if they exceed the max prefetch cmd size
     // would potentially be more optimal to sort the data by size and have a max rt arg size
     // to pad to per split. Currently we take the max of all rt args before splitting
-    for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
-        auto kernel = detail::GetKernel(program, kernel_id);
 
-        uint32_t processor_idx = kernel->processor();
+    // TODO: these should be part of the abstractions
+    // TODO: note that the below will iterate over proc_types that are not present in the core_type
+    static const std::vector<CoreType> core_types = {CoreType::WORKER, CoreType::ETH};
+    static const std::vector<tt::RISCV> proc_types = {tt::RISCV::BRISC, tt::RISCV::NCRISC, tt::RISCV::COMPUTE, tt::RISCV::ERISC};
+    for (CoreType core_type : core_types) {
+        for (KernelGroup& kernel_group : program.get_kernel_groups(core_type)) {
+            for (tt::RISCV proc_type : proc_types) {
+                if (not kernel_group.k_ids[proc_type].has_value()) continue;
+                uint32_t kernel_id = kernel_group.k_ids[proc_type].value();
 
-        if (!kernel->cores_with_runtime_args().empty()) {
-            unique_processors.insert(processor_idx);
-            unique_sub_cmds[processor_idx].reserve(kernel->cores_with_runtime_args().size());
-            unique_rt_data_and_sizes[processor_idx].reserve(kernel->cores_with_runtime_args().size());
-            unique_rt_args_data[processor_idx].reserve(kernel->cores_with_runtime_args().size());
-            for (const auto& core_coord : kernel->cores_with_runtime_args()) {
-                // can make a vector of unicast encodings here
-                CoreCoord physical_core =
-                    device->physical_core_from_logical_core(core_coord, kernel->get_kernel_core_type());
-                const auto& runtime_args_data = kernel->runtime_args(core_coord);
-                unique_rt_args_data[processor_idx].emplace_back(kernel->runtime_args_data(core_coord));
-                // 2, 17, could be differnet len here
+                auto kernel = detail::GetKernel(program, kernel_id);
 
-                unique_sub_cmds[processor_idx].emplace_back(CQDispatchWritePackedUnicastSubCmd{
-                    .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
-                unique_rt_data_and_sizes[processor_idx].emplace_back(
-                    runtime_args_data.data(), runtime_args_data.size() * sizeof(uint32_t));
-                unique_max_runtime_args_len[processor_idx] =
-                    std::max(unique_max_runtime_args_len[processor_idx], (uint32_t)runtime_args_data.size());
-            }
-        }
-        // Common Runtime Args (Multicast)
-        const auto& common_rt_args = kernel->common_runtime_args();
+                uint32_t processor_idx = kernel->processor();
 
-        if (common_rt_args.size() > 0) {
-            common_kernels.insert(kernel_id);
-            uint32_t common_args_addr =
-                unique_processor_to_l1_arg_base_addr[processor_idx] + kernel->get_common_runtime_args_index() * sizeof(uint32_t);
-            common_processor_to_l1_arg_base_addr[kernel_id] = common_args_addr;
-            common_rt_data_and_sizes[kernel_id].emplace_back(
-                common_rt_args.data(), common_rt_args.size() * sizeof(uint32_t));
-            common_rt_args_data[kernel_id].emplace_back(kernel->common_runtime_args_data());
-            common_max_runtime_args_len[kernel_id] = (uint32_t)common_rt_args.size();
-            if (kernel->get_kernel_core_type() == CoreType::ETH) {
-                common_sub_cmds[kernel_id].emplace<std::vector<CQDispatchWritePackedUnicastSubCmd>>(
-                    std::vector<CQDispatchWritePackedUnicastSubCmd>());
-                auto& unicast_sub_cmd =
-                    std::get<std::vector<CQDispatchWritePackedUnicastSubCmd>>(common_sub_cmds[kernel_id]);
-                unicast_sub_cmd.reserve(kernel->logical_cores().size());
-                for (auto& core_coord : kernel->logical_cores()) {
-                    // can make a vector of unicast encodings here
-                    CoreCoord physical_core = device->ethernet_core_from_logical_core(core_coord);
-                    unicast_sub_cmd.emplace_back(CQDispatchWritePackedUnicastSubCmd{
-                        .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
+                if (!kernel->cores_with_runtime_args().empty()) {
+                    unique_processors.insert(processor_idx);
+                    unique_sub_cmds[processor_idx].reserve(kernel->cores_with_runtime_args().size());
+                    unique_rt_data_and_sizes[processor_idx].reserve(kernel->cores_with_runtime_args().size());
+                    unique_rt_args_data[processor_idx].reserve(kernel->cores_with_runtime_args().size());
+
+                    for (const CoreRange& core_range : kernel_group.core_ranges.ranges()) {
+                        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                            for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                                CoreCoord core_coord = {x, y};
+                                // can make a vector of unicast encodings here
+                                CoreCoord physical_core =
+                                    device->physical_core_from_logical_core(core_coord, kernel->get_kernel_core_type());
+                                const auto& runtime_args_data = kernel->runtime_args(core_coord);
+                                unique_rt_args_data[processor_idx].emplace_back(kernel->runtime_args_data(core_coord));
+                                // 2, 17, could be differnet len here
+
+                                unique_sub_cmds[processor_idx].emplace_back(CQDispatchWritePackedUnicastSubCmd{
+                                        .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
+                                unique_rt_data_and_sizes[processor_idx].emplace_back(
+                                    runtime_args_data.data(), runtime_args_data.size() * sizeof(uint32_t));
+                                unique_max_runtime_args_len[processor_idx] =
+                                    std::max(unique_max_runtime_args_len[processor_idx], (uint32_t)runtime_args_data.size());
+                            }
+                        }
+                    }
                 }
-            } else {
-                vector<pair<transfer_info_cores, uint32_t>> dst_noc_multicast_info =
-                    extract_dst_noc_multicast_info<std::vector<CoreRange>>(
-                        device, kernel->logical_coreranges(), kernel->get_kernel_core_type());
-                common_sub_cmds[kernel_id].emplace<std::vector<CQDispatchWritePackedMulticastSubCmd>>(
-                    std::vector<CQDispatchWritePackedMulticastSubCmd>());
-                auto& multicast_sub_cmd =
-                    std::get<std::vector<CQDispatchWritePackedMulticastSubCmd>>(common_sub_cmds[kernel_id]);
-                multicast_sub_cmd.reserve(dst_noc_multicast_info.size());
-                for (const auto& mcast_dests : dst_noc_multicast_info) {
-                    multicast_sub_cmd.emplace_back(CQDispatchWritePackedMulticastSubCmd{
-                        .noc_xy_addr = this->device->get_noc_multicast_encoding(
-                            this->noc_index, std::get<CoreRange>(mcast_dests.first)),
-                        .num_mcast_dests = mcast_dests.second});
+                // Common Runtime Args (Multicast)
+                const auto& common_rt_args = kernel->common_runtime_args();
+
+                if (common_rt_args.size() > 0) {
+                    common_kernels.insert(kernel_id);
+                    uint32_t common_args_addr =
+                        unique_processor_to_l1_arg_base_addr[processor_idx] + kernel->get_common_runtime_args_index() * sizeof(uint32_t);
+                    common_processor_to_l1_arg_base_addr[kernel_id] = common_args_addr;
+                    common_rt_data_and_sizes[kernel_id].emplace_back(
+                        common_rt_args.data(), common_rt_args.size() * sizeof(uint32_t));
+                    common_rt_args_data[kernel_id].emplace_back(kernel->common_runtime_args_data());
+                    common_max_runtime_args_len[kernel_id] = (uint32_t)common_rt_args.size();
+                    if (kernel->get_kernel_core_type() == CoreType::ETH) {
+                        common_sub_cmds[kernel_id].emplace<std::vector<CQDispatchWritePackedUnicastSubCmd>>(
+                            std::vector<CQDispatchWritePackedUnicastSubCmd>());
+                        auto& unicast_sub_cmd =
+                            std::get<std::vector<CQDispatchWritePackedUnicastSubCmd>>(common_sub_cmds[kernel_id]);
+                        unicast_sub_cmd.reserve(kernel->logical_cores().size());
+                        for (auto& core_coord : kernel->logical_cores()) {
+                            // can make a vector of unicast encodings here
+                            CoreCoord physical_core = device->ethernet_core_from_logical_core(core_coord);
+                            unicast_sub_cmd.emplace_back(CQDispatchWritePackedUnicastSubCmd{
+                                    .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
+                        }
+                    } else {
+                        vector<pair<transfer_info_cores, uint32_t>> dst_noc_multicast_info =
+                            extract_dst_noc_multicast_info<std::vector<CoreRange>>(
+                                device, kernel->logical_coreranges(), kernel->get_kernel_core_type());
+                        common_sub_cmds[kernel_id].emplace<std::vector<CQDispatchWritePackedMulticastSubCmd>>(
+                            std::vector<CQDispatchWritePackedMulticastSubCmd>());
+                        auto& multicast_sub_cmd =
+                            std::get<std::vector<CQDispatchWritePackedMulticastSubCmd>>(common_sub_cmds[kernel_id]);
+                        multicast_sub_cmd.reserve(dst_noc_multicast_info.size());
+                        for (const auto& mcast_dests : dst_noc_multicast_info) {
+                            multicast_sub_cmd.emplace_back(CQDispatchWritePackedMulticastSubCmd{
+                               .noc_xy_addr = this->device->get_noc_multicast_encoding(
+                                   this->noc_index, std::get<CoreRange>(mcast_dests.first)),
+                               .num_mcast_dests = mcast_dests.second});
+                        }
+                    }
                 }
             }
         }
