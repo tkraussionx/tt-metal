@@ -12,6 +12,10 @@
 // #include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 // #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
+#ifdef USE_OPENMP
+#include "omp.h"
+#endif
+
 const int TILE_SIZE = 32;
 namespace fs = std::filesystem;
 void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
@@ -24,6 +28,7 @@ void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& o
     float float_tmp;
     vector<bfloat16> c_bf(M * N, 0);
 
+    #pragma omp parallel for private(idx_c, idx_a, idx_b, c_f, float_tmp)
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
             idx_c = j+ (i * N);

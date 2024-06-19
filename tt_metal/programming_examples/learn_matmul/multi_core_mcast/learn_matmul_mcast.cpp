@@ -14,7 +14,9 @@
 // #include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 // #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
-#include "/usr/lib/llvm-14/lib/clang/14.0.0/include/omp.h"
+#ifdef USE_OPENMP
+#include "omp.h"
+#endif
 namespace fs = std::filesystem;
 void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
                         uint32_t M, uint32_t N, uint32_t K) {
@@ -201,6 +203,8 @@ void matmul(Device* device, int argc, char** argv)
     auto in1_mcast_receiver_semaphore = tt::tt_metal::CreateSemaphore(program_fetch, compute_core_range, INVALID);
 
     auto root_dir = fs::path(__FILE__).parent_path();
+
+    std::cout<<"Root Dir "<<root_dir<<" File "<<__FILE__<<std::endl;;
 
     auto fetch_kernel_path = root_dir/"fetch_inputs_kernel_mcast.cpp";
     auto fetch_kernel_id = tt::tt_metal::CreateKernel(

@@ -29,12 +29,17 @@ function(CREATE_EAGER_TEST_EXE TESTLIST)
     set(EAGER_TEST_TARGETS "${EAGER_TEST_TARGETS}" PARENT_SCOPE)
 endfunction()
 
+find_package(OpenMP)
 function(CREATE_PGM_EXAMPLES_EXE TESTLIST SUBDIR)
     foreach (TEST ${TESTLIST})
         get_filename_component(TEST_TARGET ${TEST} NAME)
 
         add_executable(${TEST_TARGET} ${TEST})
-        target_link_libraries(${TEST_TARGET} PUBLIC tt_metal m pthread)
+        target_link_libraries(${TEST_TARGET} PUBLIC tt_metal m pthread )
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(${TEST_TARGET} PUBLIC OpenMP::OpenMP_CXX)
+            target_compile_definitions(${TEST_TARGET} PUBLIC USE_OPENMP)
+        endif()
         target_include_directories(${TEST_TARGET} PRIVATE
             ${UMD_HOME}
             ${PROJECT_SOURCE_DIR}

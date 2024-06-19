@@ -14,7 +14,9 @@
 // #include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 // #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
-#include "/usr/lib/llvm-14/lib/clang/14.0.0/include/omp.h"
+#ifdef USE_OPENMP
+#include "omp.h"
+#endif
 
 namespace fs = std::filesystem;
 void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
