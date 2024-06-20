@@ -2,6 +2,7 @@ import torch
 from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import set_model_args
 
 
 class Emb(torch.nn.Module):
@@ -21,6 +22,7 @@ def test_torch_prefill(device):
         prompt = f.read()
 
     model_args = TtModelArgs(device)
+    model_args = set_model_args(model_args, seq_len)
     state_dict = model_args.load_state_dict()
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
@@ -38,4 +40,4 @@ def test_torch_prefill(device):
     reference_model.eval()
     positions = torch.LongTensor(range(seq_len))
     ref_output = reference_model(pt_decode_input, positions, attn_mask_torch, mode="prefill").detach().float()
-    torch.save(ref_output, "ref_output_prefil_16L_16k.pt")
+    torch.save(ref_output, "ref_output_prefil_8L_16k.pt")

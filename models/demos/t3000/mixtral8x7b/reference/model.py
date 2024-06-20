@@ -72,7 +72,7 @@ class Attention(nn.Module):
         self.n_kv_heads: int = args.n_kv_heads
 
         self.repeats = self.n_heads // self.n_kv_heads
-        self.sliding_window = self.args.sliding_window
+        self.max_seq_len = self.args.max_seq_len
 
         self.scale = self.args.head_dim**-0.5
 
@@ -82,13 +82,13 @@ class Attention(nn.Module):
         self.wo = skip_init(nn.Linear, args.n_heads * args.head_dim, args.dim, bias=False)
         self.cache_k = torch.empty(
             args.max_batch_size,
-            args.sliding_window,
+            args.max_seq_len,
             self.n_kv_heads,
             self.args.head_dim,
         )
         self.cache_v = torch.empty(
             args.max_batch_size,
-            args.sliding_window,
+            args.max_seq_len,
             self.n_kv_heads,
             self.args.head_dim,
         )
@@ -226,7 +226,7 @@ class Transformer(nn.Module):
         h = input_ids
         freqs_cis = self.freqs_cis[positions]
 
-        for layer in self.layers:
+        for layer in self.layers[:8]:
             h = layer(h, freqs_cis, positions, mask)
         if mode == "prefill":
             return h.float()
