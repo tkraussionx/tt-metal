@@ -151,8 +151,9 @@ uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_r
     }
 
     uint64_t host_src_addr = get_noc_addr_helper(pcie_noc_xy, pcie_read_ptr);
-    DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
+    DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << " " << size << ENDL();
     noc_async_read(host_src_addr, fence + preamble_size, size);
+    DPRINT << "read done" << ENDL();
     pending_read_size = size + preamble_size;
     pcie_read_ptr += size;
 
@@ -192,7 +193,7 @@ uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_r
 //  -  cmd_ready,  prefetch_q_ready,  read_pending: issue and tag read
 template<uint32_t preamble_size>
 void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_ptr) {
-
+    DPRINT << "Calling fetch_q_get_cmds" << ENDL();
     static uint32_t pending_read_size = 0;
     static volatile tt_l1_ptr prefetch_q_entry_type* prefetch_q_rd_ptr = (volatile tt_l1_ptr prefetch_q_entry_type*)prefetch_q_base;
     constexpr uint32_t prefetch_q_msb_mask = 1u << (sizeof(prefetch_q_entry_type) * CHAR_BIT - 1);
@@ -212,6 +213,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
 
     uint32_t prefetch_q_rd_ptr_local = *prefetch_q_rd_ptr;
     uint32_t fetch_size = (prefetch_q_rd_ptr_local & ~prefetch_q_msb_mask) << prefetch_q_log_minsize;
+    DPRINT << "Fetch Size: " << fetch_size <<ENDL();
     bool stall_flag = (prefetch_q_rd_ptr_local & prefetch_q_msb_mask) != 0;
     stall_state = static_cast<StallState>(stall_flag << 1); // NOT_STALLED -> STALL_NEXT if stall_flag is set
 
@@ -963,7 +965,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     // XXXXX - painful syncing right now?  move this into get_cmds
     noc_async_writes_flushed();
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages);
-
+    DPRINT << "NOC ASYNC WRITE DONE" << ENDL();
     return fence;
 }
 
@@ -1024,7 +1026,8 @@ void kernel_main_h() {
 
     uint32_t cmd_ptr = cmddat_q_base;
     uint32_t fence = cmddat_q_base;
-
+    DPRINT << "ISSUE QUEUE START: " <<  pcie_base << ENDL();
+    DPRINT << "DISPATCH" << DOWNSTREAM_NOC_X << " " << DOWNSTREAM_NOC_Y << ENDL();
     bool done = false;
     while (!done) {
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);

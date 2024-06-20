@@ -1065,6 +1065,10 @@ void EnqueueRecordEventCommand::process() {
 
     uint8_t num_hw_cqs =
         this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
+    // uint32_t packed_event_payload_sizeB =
+    //     align(sizeof(CQDispatchCmd) + (device->is_mmio_capable() ? num_hw_cqs : 1) * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT) +
+    //     (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * (device->is_mmio_capable() ? num_hw_cqs : 1));
+
     uint32_t packed_event_payload_sizeB =
         align(sizeof(CQDispatchCmd) + num_hw_cqs * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT) +
         (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * num_hw_cqs);
@@ -1090,6 +1094,7 @@ void EnqueueRecordEventCommand::process() {
     std::vector<CQDispatchWritePackedUnicastSubCmd> unicast_sub_cmds(num_hw_cqs);
     std::vector<std::pair<const void*, uint32_t>> event_payloads(num_hw_cqs);
 
+    // uint8_t cq_base = device->is_mmio_capable() ? 0 : 1;
     for (uint8_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
         tt_cxy_pair dispatch_location;
         if (device->is_mmio_capable()) {
@@ -1108,7 +1113,7 @@ void EnqueueRecordEventCommand::process() {
 
     uint32_t address = this->command_queue_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
     command_sequence.add_dispatch_write_packed<CQDispatchWritePackedUnicastSubCmd>(
-        num_hw_cqs,
+        device->is_mmio_capable() ? num_hw_cqs : 1,
         address,
         dispatch_constants::EVENT_PADDED_SIZE,
         packed_event_payload_sizeB,
@@ -1653,10 +1658,12 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
 
     if (blocking) {
         this->finish();
-    } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
     }
+
+    // else {
+    //     std::shared_ptr<Event> event = std::make_shared<Event>();
+    //     this->enqueue_record_event(event);
+    // }
 }
 
 void HWCommandQueue::enqueue_program(Program& program, bool blocking) {

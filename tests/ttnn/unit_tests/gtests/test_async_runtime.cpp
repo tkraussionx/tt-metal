@@ -142,3 +142,43 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestAsyncRuntimeAllocatedBuffers) {
         }
     }
 }
+
+TEST(TTNN_MultiDev, Test2CQ2Device) {
+    auto devs = tt::tt_metal::detail::CreateDevices({0, 4}, 2);
+    Device* dev0 = devs.at(0);
+    Device* dev1 = devs.at(4);
+    MemoryConfig mem_cfg = MemoryConfig{
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
+        .buffer_type = BufferType::DRAM,
+        .shard_spec = std::nullopt};
+
+    ttnn::Shape shape = ttnn::Shape(Shape({1, 1, 32, 32}));
+    uint32_t buf_size_datums = 32 * 32;
+    uint32_t datum_size_bytes = 2;
+    auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
+    // auto readback_data_0 = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
+    auto readback_data_1 = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
+
+    for (int i = 0; i < buf_size_datums; i++) {
+        host_data[i] = bfloat16(static_cast<float>(5));
+    }
+
+    auto input_buffer_1 = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, dev1, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
+    auto input_storage_1 = tt::tt_metal::DeviceStorage{input_buffer_1};
+    Tensor input_tensor_1 = Tensor(input_storage_1, shape, DataType::BFLOAT16, Layout::TILE);
+    std::cout << "write to dev1" <<std::endl;
+    ttnn::write_buffer(0, input_tensor_1, {{}, {}, {}, {}, host_data});
+    std::cout << "Writes Done" << std::endl;
+    ttnn::read_buffer(0, input_tensor_1, {{}, {}, {}, {}, readback_data_1});
+
+    // for (int i = 0; i < 1; i++) {
+    //     std::cout << readback_data_0[i] << std::endl;;
+    // }
+
+    for (int i = 0; i < 1024; i++) {
+        std::cout << readback_data_1[i].to_float() << " ";
+    }
+    std::cout << std::endl;
+    CloseDevice(dev0);
+    CloseDevice(dev1);
+}
