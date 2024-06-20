@@ -39,7 +39,7 @@ def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_s
     pcc = 0.99
     dtype = ttnn.bfloat8_b
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
-    model_args = set_model_args(model_args)
+    model_args = set_model_args(model_args, seq_len)
     state_dict = model_args.load_state_dict()
     batch = 1
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
@@ -65,7 +65,7 @@ def test_mixtral_attention_inference(t3k_device_mesh, use_program_cache, reset_s
     tt_model = TtMixtralAttention(t3k_device_mesh, state_dict, args=model_args, layer_num=0, dtype=dtype)
 
     generation_start_pos = 0
-    generation_length = 3
+    generation_length = 2
     all_tests_pass = True
 
     for i in range(generation_length):

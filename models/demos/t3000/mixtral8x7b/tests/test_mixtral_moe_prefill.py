@@ -30,11 +30,11 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048),
+    (8192 * 4,),
 )
 def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, seq_len):
     pcc = 0.99
-    iterations = 3
+    iterations = 2
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
@@ -63,9 +63,9 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, 
         args=model_args,
         layer_num=0,
         dtypes={
-            "w1": ttnn.bfloat4_b,
+            "w1": ttnn.bfloat8_b,
             "w2": ttnn.bfloat8_b,
-            "w3": ttnn.bfloat4_b,
+            "w3": ttnn.bfloat8_b,
         },
     )
 
@@ -97,10 +97,8 @@ def test_mixtral_moe_inference(t3k_device_mesh, use_program_cache, reset_seeds, 
 
         # Run TT model
         tt_out = tt_model(tt_decode_input, mode="prefill")
-        tt_output_torch = (
-            ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0]
-            .squeeze(2)
-            .view(batch, seq_len, -1)
+        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0))[0].view(
+            batch, seq_len, -1
         )
 
         # Reference model

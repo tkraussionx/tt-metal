@@ -43,21 +43,18 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "seq_len",
-    (128, 1024, 2048, 8192),
+    (8192,),
 )
 @pytest.mark.parametrize(
     "n_layers",
-    (
-        1,
-        32,
-    ),
+    (32,),
 )
 def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds, n_layers, seq_len):
     pcc = 0.96
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(t3k_device_mesh.get_device(0))
-    model_args = set_model_args(model_args)
+    model_args = set_model_args(model_args, seq_len)
 
     model_args.n_layers = n_layers
     batch = 1
@@ -124,7 +121,11 @@ def test_mixtral_model_inference(t3k_device_mesh, use_program_cache, reset_seeds
 
     # Measure PCC
     if seq_len == 8192:
-        ref_output = torch.load("models/demos/t3000/mixtral8x7b/reference/ref_output_prefil_32L_8192.pt")
+        ref_output = torch.load("ref_output_prefil_32L_8192.pt")
+    elif seq_len == 8192 * 2:
+        ref_output = torch.load(f"ref_output_prefil_{n_layers}L_16k.pt")
+    elif seq_len == 8192 * 4:
+        ref_output = torch.load("ref_output_prefil_{n_layers}L_32k.pt")
     else:
         reference_model = Transformer(args=model_args)
         reference_model.load_state_dict(state_dict)

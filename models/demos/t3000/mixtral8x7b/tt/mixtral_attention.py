@@ -23,7 +23,6 @@ class TtMixtralAttention(LightweightModule):
         self.max_seq_len = args.max_seq_len
         self.max_batch_size = args.max_batch_size
         self.n_kv_heads = args.n_kv_heads
-        self.sliding_window = args.sliding_window
 
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
@@ -101,7 +100,7 @@ class TtMixtralAttention(LightweightModule):
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -109,7 +108,7 @@ class TtMixtralAttention(LightweightModule):
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -161,7 +160,7 @@ class TtMixtralAttention(LightweightModule):
         """
         x: (seq_len, 1, batch, hidden_dim)
         start_pos: the length of the KV cache. Same as current token's index.
-        current_pos: start_pos % self.sliding_window
+        current_pos: start_pos
         attn_masks: (seq_len, batch, n_heads, cache_len+seq_len)
         rot_mats: list of rotation matrices for each device
 
@@ -171,7 +170,7 @@ class TtMixtralAttention(LightweightModule):
         D : head_dim (128)
         P : padded_layer_past_len
         """
-        padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
+        padded_layer_past_len = nearest_32(start_pos + 1)
 
         x_11BH = xs
         wo = self.wo
@@ -332,21 +331,23 @@ class TtMixtralAttention(LightweightModule):
         # QKV matmuls
         ###
         xqkv_program_config = None
-        if seq_len > 8192:
-            xs_11SH = ttnn.reshape(xs_11SH, (1, 8, seq_len // 8), -1)
+        xqkv_mem_config = ttnn.L1_MEMORY_CONFIG
+        if seq_len >= 8192:
+            xs_11SH = ttnn.reshape(xs_11SH, (1, seq_len // 2048, 2048, -1))
             xqkv_program_config = self.model_config["WQKV_PREFILL_PROGCFG"]
+            xqkv_mem_config = ttnn.DRAM_MEMORY_CONFIG
         xqkv_fused = ttnn.linear(
             xs_11SH,
             self.wqkv,
             dtype=ttnn.bfloat16,
-            memory_config=ttnn.L1_MEMORY_CONFIG,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            core_grid=self.core_grid_attention,
+            memory_config=xqkv_mem_config,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+            core_grid=self.core_grid_attention if not xqkv_program_config else None,
             compute_kernel_config=self.compute_kernel,
             program_config=xqkv_program_config,
         )
 
-        if seq_len > 8192:
-            xqkv_fused = ttnn.reshape(xqkv_fused, (1, 1, seq_len * 8, -1))
+        if seq_len >= 8192:
+            xqkv_fused = ttnn.reshape(xqkv_fused, (1, 1, seq_len, -1))
         # split qkv into heads
         (
             q_heads_14SD_pre_rot,
@@ -420,12 +421,12 @@ class TtMixtralAttention(LightweightModule):
         wo_program_config = None
         if seq_len > 2048:
             attn_output_11SH = ttnn.reshape(attn_output_11SH, (1, seq_len // 2048, 2048, -1))
-            wo_program_config = self.model_config["WQKV_PREFILL_PROGCFG"]
+            wo_program_config = self.model_config["WO_PREFILL_PROGCFG"]
 
         output_11SH = ttnn.linear(
             attn_output_11SH,
             self.wo,
-            core_grid=ttnn.CoreGrid(y=8, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8) if not wo_program_config else None,
             compute_kernel_config=self.compute_kernel,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
