@@ -70,8 +70,8 @@ int main(int argc, char **argv) {
 
     constexpr uint32_t default_mux_x = 0;
     constexpr uint32_t default_mux_y = 1;
-    constexpr uint32_t default_demux_x = 0;
-    constexpr uint32_t default_demux_y = 2;
+    constexpr uint32_t default_demux_x = 3;
+    constexpr uint32_t default_demux_y = 1;
 
     constexpr uint32_t default_tunneler_x = 0;
     constexpr uint32_t default_tunneler_y = 0;
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_queue_start_addr = 0x90000;
     constexpr uint32_t default_demux_queue_size_bytes = 0x20000;
 
-    constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
+    constexpr uint32_t default_tunneler_queue_start_addr = default_tx_queue_start_addr;//0x19000;
     constexpr uint32_t default_tunneler_queue_size_bytes = 0x10000;
 
     constexpr uint32_t default_test_results_addr = 0x100000;
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t semaphore_size_bytes = 16; // Set to 16 to keep all buffers 16B aligned
     constexpr uint32_t default_overlay_blob_size = 1024;
 
-    uint32_t default_mux_sender_stream_tile_header_buffer_addr = default_mux_queue_start_addr + default_mux_queue_size_bytes;
+    uint32_t default_mux_sender_stream_tile_header_buffer_addr = default_mux_queue_start_addr + (default_mux_queue_size_bytes * (num_src_endpoints + 1));
     uint32_t default_tunneler_l_relay_stream_buffer_addr = default_tunneler_queue_start_addr;
     uint32_t default_tunneler_l_relay_stream_tile_header_buffer_addr = default_tunneler_l_relay_stream_buffer_addr + default_tunneler_queue_size_bytes;
     uint32_t default_tunneler_l_relay_stream_overlay_blob_addr = default_tunneler_l_relay_stream_tile_header_buffer_addr + default_tile_header_buffer_size;
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
     uint32_t default_remote_receiver_flushed_mux_semaphore_addr = default_mux_sender_stream_tile_header_buffer_addr + default_tile_header_buffer_size;
     uint32_t default_demux_receiver_stream_buffer_addr = default_demux_queue_start_addr;
     uint32_t default_demux_receiver_stream_buffer_size_bytes = default_demux_queue_size_bytes;
-    uint32_t default_demux_receiver_stream_tile_header_buffer_addr = default_demux_receiver_stream_buffer_addr + default_demux_receiver_stream_buffer_size_bytes;
+    uint32_t default_demux_receiver_stream_tile_header_buffer_addr = default_demux_receiver_stream_buffer_addr + (default_demux_receiver_stream_buffer_size_bytes * (num_dest_endpoints + 1));
 
     std::vector<std::string> input_args(argv, argv + argc);
     if (test_args::has_command_option(input_args, "-h") ||
@@ -246,13 +246,17 @@ int main(int argc, char **argv) {
 
         auto eth_core_iter = device_active_eth_cores.begin();
         //CoreCoord tunneler_logical_core = device->get_ethernet_sockets(5)[0];
-        CoreCoord tunneler_logical_core = *eth_core_iter;
-        CoreCoord tunneler_phys_core = device->ethernet_core_from_logical_core(tunneler_logical_core);
+        // CoreCoord tunneler_logical_core = *eth_core_iter;
+        // CoreCoord tunneler_phys_core = device->ethernet_core_from_logical_core(tunneler_logical_core);
+        CoreCoord tunneler_logical_core = CoreCoord(1,1);
+        CoreCoord tunneler_phys_core = device->worker_core_from_logical_core(tunneler_logical_core);
 
         //CoreCoord r_tunneler_logical_core = device->get_ethernet_sockets(5)[1];
         eth_core_iter++;
-        CoreCoord r_tunneler_logical_core = *eth_core_iter;
-        CoreCoord r_tunneler_phys_core = device->ethernet_core_from_logical_core(r_tunneler_logical_core);
+        // CoreCoord r_tunneler_logical_core = *eth_core_iter;
+        // CoreCoord r_tunneler_phys_core = device->ethernet_core_from_logical_core(r_tunneler_logical_core);
+        CoreCoord r_tunneler_logical_core = CoreCoord(2,1); // Putting on same row as tunneler l core to simplify stream dumping
+        CoreCoord r_tunneler_phys_core = device->worker_core_from_logical_core(r_tunneler_logical_core);
 
 
 
@@ -294,13 +298,34 @@ int main(int argc, char **argv) {
                 };
 
             log_info(LogTest, "run traffic_gen_tx at x={},y={}", core.x, core.y);
+            log_debug(LogTest, "Args:");
+            std::size_t ct_arg_idx = 0;
+            log_debug(LogTest, "\tsrc_endpoint_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tnum_dest_endpoints: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tqueue_start_addr_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tqueue_size_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_rx_queue_start_addr_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_rx_queue_size_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_rx_x: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_rx_y: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_rx_queue_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttx_network_type: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttest_results_addr: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttest_results_size: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tprng_seed: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttotal_data_kb: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tmax_packet_size_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tsrc_endpoint_start_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tdest_endpoint_start_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttimeout_cycles: {}", compile_args.at(ct_arg_idx++));
+
             auto kernel = tt_metal::CreateKernel(
                 program,
                 "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_tx.cpp",
                 {core},
                 tt_metal::DataMovementConfig{
-                    .processor = tt_metal::DataMovementProcessor::RISCV_0,
-                    .noc = tt_metal::NOC::RISCV_0_default,
+                    .processor = tt_metal::DataMovementProcessor::RISCV_1,
+                    .noc = tt_metal::NOC::RISCV_1_default,
                     .compile_args = compile_args,
                     .defines = {}
                 }
@@ -308,6 +333,9 @@ int main(int argc, char **argv) {
         }
 
         // Mux
+        static constexpr uint32_t input_packetize_log_page_size = 8;
+        static constexpr uint32_t packet_size_bytes = 4096;
+        static_assert((1 << input_packetize_log_page_size) * 16 == packet_size_bytes);
         std::vector<uint32_t> mux_compile_args =
             {
                 0, // 0: reserved
@@ -335,11 +363,19 @@ int main(int argc, char **argv) {
                 (uint32_t)tunneler_phys_core.x, // 10: remote_tx_x
                 (uint32_t)tunneler_phys_core.y, // 11: remote_tx_y
                 0, // 12: remote_tx_queue_id
-                (uint32_t)DispatchRemoteNetworkType::NOC0, // 13: tx_network_type
+                (uint32_t)DispatchRemoteNetworkType::STREAM, // 13: tx_network_type
                 test_results_addr, // 14: test_results_addr
                 test_results_size, // 15: test_results_size
                 timeout_mcycles * 1000 * 1000, // 16: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0, // 17-24: packetize/depacketize settings
+                0,// 17: output_depacketize
+                0, // 18: output_depacketize info
+                // input 0 packetization info
+                packet_switch_4B_pack(1, // packetize
+                                    input_packetize_log_page_size, // log_page_size
+                                    0, // downstream sem - set to 0 because stream manages credits + handshaking
+                                    0), // local sem - set to 0 because stream manages credits + handshaking
+                0, 0, 0, // 20 - 22 input1,2,3 packetization info (All 0s for this test)
+                0, 0, // 23, 24 input_packetize_src_endpoint, input_packetize_dest_endpoint
                 1 // 25: use_stream_for_writer
             };
 
@@ -349,7 +385,7 @@ int main(int argc, char **argv) {
             "tt_metal/impl/dispatch/kernels/packet_mux.cpp",
             {mux_core},
             tt_metal::DataMovementConfig{
-                .processor = tt_metal::DataMovementProcessor::RISCV_0,
+                .processor = tt_metal::DataMovementProcessor::RISCV_1,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = mux_compile_args,
                 .defines = {}
@@ -388,22 +424,22 @@ int main(int argc, char **argv) {
         {
             log_debug(tt::LogTest, "MUX kernel RT args:");
             std::size_t i = 0;
-            log_debug(tt::LogTest, "local_stream_id: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "local_stream_tile_header_buffer_addr: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "messages_per_phase: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_dest_noc_x: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_dest_noc_y: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_dest_noc_stream_id: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_dest_noc_id: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_buffer_base_addr: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_buffer_size_4B_words: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_tile_header_buffer_addr: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "relay_done_semaphore_addr: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_core_to_signal_x: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_core_to_signal_y: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_done_semaphore: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "wait_receiver_semaphore: {}", packet_mux_rt_args[i++]);
-            log_debug(tt::LogTest, "first_relay_remote_src_start_phase_addr: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tlocal_stream_id: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tlocal_stream_tile_header_buffer_addr: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tmessages_per_phase: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_dest_noc_x: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_dest_noc_y: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_dest_noc_stream_id: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_dest_noc_id: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_buffer_base_addr: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_buffer_size_4B_words: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_tile_header_buffer_addr: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\trelay_done_semaphore_addr: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_core_to_signal_x: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_core_to_signal_y: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_done_semaphore: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\twait_receiver_semaphore: {}", packet_mux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tfirst_relay_remote_src_start_phase_addr: {}", packet_mux_rt_args[i++]);
             TT_ASSERT(i == packet_mux_rt_args.size(), "Mismatch in number of runtime args");
         }
 
@@ -424,29 +460,29 @@ int main(int argc, char **argv) {
             mux_core.x, // sender_noc_x
             mux_core.y, // sender_noc_y
             remote_receiver_flushed_mux_semaphore_addr, // sender_wait_finish_semaphore
-            second_relay_remote_src_start_phase_addr //tunneler_r_relay_remote_src_start_phase_addr  // remote_src_start_phase_addr
+            receiver_remote_src_start_phase_addr, //second_relay_remote_src_start_phase_addr //tunneler_r_relay_remote_src_start_phase_addr  // remote_src_start_phase_addr
         };
 
         {
             log_debug(tt::LogTest, "DEMUX kernel RT args:");
             std::size_t i = 0;
-            log_debug(tt::LogTest, "local_stream_id: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "stream_buffer_addr: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "stream_buffer_size: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "stream_tile_header_buffer_addr: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "stream_tile_header_max_num_messages: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_src_noc_x: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_src_noc_y: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_src_noc_stream_id: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_src_data_noc_id: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "relay_done_semaphore_addr: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_core_to_signal_x: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_core_to_signal_y: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "other_relay_done_semaphore: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "sender_noc_x: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "sender_noc_y: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "sender_wait_finish_semaphore: {}", packet_demux_rt_args[i++]);
-            log_debug(tt::LogTest, "remote_src_start_phase_addr: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tlocal_stream_id: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tstream_buffer_addr: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tstream_buffer_size: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tstream_tile_header_buffer_addr: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tstream_tile_header_max_num_messages: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_src_noc_x: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_src_noc_y: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_src_noc_stream_id: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_src_data_noc_id: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\trelay_done_semaphore_addr: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_core_to_signal_x: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_core_to_signal_y: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tother_relay_done_semaphore: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tsender_noc_x: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tsender_noc_y: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tsender_wait_finish_semaphore: {}", packet_demux_rt_args[i++]);
+            log_debug(tt::LogTest, "\tremote_src_start_phase_addr: {}", packet_demux_rt_args[i++]);
         }
 
 
@@ -652,13 +688,34 @@ int main(int argc, char **argv) {
                 };
 
             log_info(LogTest, "run traffic_gen_rx at x={},y={}", core.x, core.y);
+
+            log_debug(LogTest, "Args:");
+            std::size_t ct_arg_idx = 0;
+            log_debug(LogTest, "\tdest_endpoint_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tnum_src_endpoints: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tnum_dest_endpoints: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tqueue_start_addr_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tqueue_size_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_tx_x: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_tx_y: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tremote_tx_queue_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\trx_rptr_update_network_type: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttest_results_addr: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttest_results_size: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tprng_seed: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\treserved: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tmax_packet_size_words: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tcheck: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tsrc_endpoint_start_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\tdest_endpoint_start_id: {}", compile_args.at(ct_arg_idx++));
+            log_debug(LogTest, "\ttimeout_cycles: {}", compile_args.at(ct_arg_idx++));
             auto kernel = tt_metal::CreateKernel(
                 program,
                 "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_rx.cpp",
                 {core},
                 tt_metal::DataMovementConfig{
-                    .processor = tt_metal::DataMovementProcessor::RISCV_0,
-                    .noc = tt_metal::NOC::RISCV_0_default,
+                    .processor = tt_metal::DataMovementProcessor::RISCV_1,
+                    .noc = tt_metal::NOC::RISCV_1_default,
                     .compile_args = compile_args,
                     .defines = {}
                 }
@@ -703,7 +760,7 @@ int main(int argc, char **argv) {
                 (uint32_t)r_tunneler_phys_core.x, // 16: remote_rx_x
                 (uint32_t)r_tunneler_phys_core.y, // 17: remote_rx_y
                 2, // 18: remote_rx_queue_id
-                (uint32_t)DispatchRemoteNetworkType::NOC0, // 19: tx_network_type
+                (uint32_t)DispatchRemoteNetworkType::STREAM, // 19: remote_rx_network_type
                 (uint32_t)(dest_endpoint_output_map >> 32), // 20: dest_endpoint_output_map_hi
                 (uint32_t)(dest_endpoint_output_map & 0xFFFFFFFF), // 21: dest_endpoint_output_map_lo
                 test_results_addr, // 22: test_results_addr
@@ -719,7 +776,7 @@ int main(int argc, char **argv) {
             "tt_metal/impl/dispatch/kernels/packet_demux.cpp",
             {demux_core},
             tt_metal::DataMovementConfig{
-                .processor = tt_metal::DataMovementProcessor::RISCV_0,
+                .processor = tt_metal::DataMovementProcessor::RISCV_1,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = demux_compile_args,
                 .defines = {}

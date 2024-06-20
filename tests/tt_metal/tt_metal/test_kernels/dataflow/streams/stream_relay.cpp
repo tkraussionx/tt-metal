@@ -49,6 +49,7 @@ void kernel_main() {
     *tx_rx_done_semaphore_addr = 0;  // should already be set to 0, but why not...
     // use stream_buffer_addr as temporary storage just for this initial setup
 
+    DPRINT << "Relay stream phase exchange running... Sending starting phase to core x=" << remote_dest_noc_x << ", y=" << remote_dest_noc_y << "\n";
     const uint32_t local_first_phase = notify_remote_receiver_of_starting_phase(
         stream_id,
         stream_buffer_addr + 16,  // local storage to hold the phase while async send in progress, 16B for noc alignment
@@ -64,6 +65,7 @@ void kernel_main() {
     const uint32_t second_phase_remote_src_phase =
         is_first_relay_stream_in_chain ? stream_tile_header_max_num_messages + first_phase_remote_src_phase
                                        : first_phase_remote_src_phase + 1;
+    DPRINT << "Relay stream starting phase exchange COMPLETED\n";
 
     // Setup the stream phases
     volatile uint32_t* stream_phases_start = reinterpret_cast<volatile uint32_t*>(relay_stream_overlay_blob_addr);

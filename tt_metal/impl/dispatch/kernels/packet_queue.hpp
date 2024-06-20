@@ -215,9 +215,9 @@ public:
         *this->local_rptr_cleared_update = num_words << REMOTE_DEST_BUF_WORDS_FREE_INC;
     }
 
-    virtual inline uint32_t get_queue_data_num_words_available_to_send() const {
-        return (this->get_queue_local_wptr() - this->get_queue_local_rptr_sent()) & this->queue_size_mask;
-    }
+    // /*virtual*/ inline uint32_t get_queue_data_num_words_available_to_send() const {
+    //     return (this->get_queue_local_wptr() - this->get_queue_local_rptr_sent()) & this->queue_size_mask;
+    // }
 
     inline uint32_t get_queue_data_num_words_occupied() const {
         return (this->get_queue_local_wptr() - this->get_queue_local_rptr_cleared()) & this->queue_size_mask;
@@ -279,7 +279,7 @@ public:
         else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
             eth_write_remote_reg(reg_addr, val);
         } else {
-            uint64_t dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, reg_addr);
+            uint64_t dest_addr = get_noc_addr(this->remote_x, this->remote_y, reg_addr);
             noc_inline_dw_write(dest_addr, val);
         }
     }
@@ -441,19 +441,29 @@ protected:
     uint32_t packetizer_page_words_cleared;
 
     /*
-     * When data is available to send from this queue, this function updates internal the internal `curr_packet_*`
+     * When data is available to send from this queue, this function updates the internal `curr_packet_*`
      * fields hold the information about the payload (e.g. size, src, dest, etc.)
      * This function doesn't do any sort of sending of the actual payload
      */
     inline void advance_next_packet() {
-        if(this->get_queue_data_num_words_available_to_send() > 0) {
+        bool rx_from_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+        bool packet_available = (rx_from_stream && messages_are_available(stream_state)) || (this->get_queue_data_num_words_available_to_send() > 0);
+        if(packet_available) {
+            if (rx_from_stream) {
+                advance_remote_receiver_stream_to_next_message(
+                    stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
+            } else {
+
+            }
             tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
                 reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(
+                    rx_from_stream ?
+                    stream_state.get_current_local_buffer_address() :
                     (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
                 );
             this->curr_packet_header_ptr = next_packet_header_ptr;
             uint32_t packet_size_bytes = curr_packet_header_ptr->get_packet_size_bytes();
-            if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+            if (rx_from_stream) {
                 // Indicates we are a remote receiver receving from a stream.
                 //
                 // Streams expect sizes to be in num 16B words, which isn't bytes, so if we are
@@ -528,12 +538,19 @@ public:
         this->reset_ready_flag();
     }
 
-    virtual uint32_t get_queue_data_num_words_available_to_send() const override {
-        if (this-> remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+    uint32_t get_queue_data_num_words_available_to_send() const {
+        if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
             uint32_t n = fw_managed_rx_stream_num_bytes_available(this->stream_state.local_stream_id, this->stream_state);
             return n >> 4;
         } else {
-            return packet_queue_state_t::get_queue_data_num_words_available_to_send();
+            uint32_t size = (this->get_queue_local_wptr() - this->get_queue_local_rptr_sent()) & this->queue_size_mask;
+            if (size == 2160 || size == 2352) {
+                DPRINT << "size: " << size << "\n";
+                DPRINT << "wrptr: " << this->get_queue_local_wptr() << "\n";
+                DPRINT << "rdptr: " << this->get_queue_local_rptr_sent() << "\n";
+                DPRINT << "this->queue_size_mask: " << this->queue_size_mask << "\n";
+            }
+            return size;
         }
     }
 
@@ -557,6 +574,7 @@ public:
         }
         // stream -> auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
         if (!this->curr_packet_valid && (this->get_queue_data_num_words_available_to_send() > 0)){
+            DPRINT << "RR: packet_valid: \n";
             // stream:
             //  auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
             //  ASSERT(msg_size_bytes > 0);
@@ -637,6 +655,7 @@ public:
 
     inline uint32_t input_queue_curr_packet_num_words_available_to_send() {
         if (this->cb_mode) {
+            ASSERT(this->remote_update_network_type != DispatchRemoteNetworkType::STREAM);
             this->cb_mode_local_sem_wptr_update();
         }
         uint32_t num_words = this->get_queue_data_num_words_available_to_send();
@@ -862,7 +881,7 @@ public:
                 this->remote_y,
                 this->stream_state);
         } else {
-            uint64_t noc_dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, dest_addr);
+            uint64_t noc_dest_addr = get_noc_addr(this->remote_x, this->remote_y, dest_addr);
             noc_async_write(src_addr, noc_dest_addr, num_words*PACKET_WORD_SIZE_BYTES);
         }
     }
@@ -942,9 +961,23 @@ public:
                       input_queue_ptr->stream_state.local_stream_id, input_queue_ptr->stream_state) >>
                       4
                 : input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
-        uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
-        num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
+
+        if (is_remote_sender_to_stream) {
+            return num_words_available_in_input;
+        }
+
+        // Streams can properly handle wraparound so we should disable this check for sender_to_stream_mode
+        // if (!is_remote_sender_to_stream) {
+            uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
+            // DPRINT << "num_words_available_in_nput 1: " << num_words_available_in_input << "\n";
+            num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
+            // DPRINT << "num_words_before_input_rptr_wrap: " << num_words_before_input_rptr_wrap << "\n";
+        // }
         uint32_t num_words_free_in_output = this->get_queue_data_num_words_free();
+        if (is_remote_sender_to_stream) {
+            DPRINT << "num_words_available_in_input 2: " << num_words_available_in_input << "\n";
+            DPRINT << "num_words_free_in_output: " << num_words_free_in_output << "\n";
+        }
         uint32_t num_words_to_forward = std::min(num_words_available_in_input, num_words_free_in_output);
 
         if (num_words_to_forward == 0) {
@@ -1004,9 +1037,9 @@ public:
         this->advance_queue_local_wptr(num_words_to_forward);
 
         if (!this->is_unpacketizer_output()) {
-            ASSERT(this->remote_update_network_type != DispatchRemoteNetworkType::STREAM);
             this->remote_wptr_update(num_words_to_forward);
         } else {
+            ASSERT(this->remote_update_network_type != DispatchRemoteNetworkType::STREAM);
             this->unpacketizer_page_words_sent += num_words_to_forward;
             // packet header size is in bytes and includes the header contribution to send size
             // for now need to size relay stream buffer to 64k since that's max packet size
@@ -1051,7 +1084,17 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
 
     bool all_src_dest_ready = false;
     bool src_ready[MAX_SWITCH_FAN_IN] = {false};
+    for (std::size_t i = 0; i < MAX_SWITCH_FAN_IN; i++) {
+        // For stream remote endpoints, the handshake is done by the stream hardware
+        // instead so we don't explicitly check for readiness here
+        src_ready[i] = input_queue_array[i].remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+    }
     bool dest_ready[MAX_SWITCH_FAN_OUT] = {false};
+    for (std::size_t i = 0; i < MAX_SWITCH_FAN_OUT; i++) {
+        // For stream remote endpoints, the handshake is done by the stream hardware
+        // instead so we don't explicitly check for readiness here
+        dest_ready[i] = output_queue_array[i].remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+    }
 
     uint32_t iters = 0;
 

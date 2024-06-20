@@ -194,20 +194,28 @@ void kernel_main() {
 
     noc_init();
     uint32_t arg_idx = 0;
+    // DPRINT << "RR: Starting\n";
     if constexpr (use_stream_for_reader) {
         stream_remote_receiver_kernel_args_t remote_receiver_rt_args;
+        arg_idx = remote_receiver_rt_args.init_from_rt_args(arg_idx);
+        // DPRINT << "RR: phase exchange... Waiting @ " << remote_receiver_rt_args.remote_src_start_phase_addr << "\n";
         const uint32_t first_phase_remote_src_phase =
             wait_for_remote_source_starting_phase(reinterpret_cast<volatile uint32_t *>(remote_receiver_rt_args.remote_src_start_phase_addr));
         const uint32_t second_phase_remote_src_phase = first_phase_remote_src_phase + 1;
         const uint32_t local_first_phase = get_first_available_phase_out_of_reset(remote_receiver_rt_args.local_stream_id);
         const uint32_t local_second_phase = local_first_phase;
+        // DPRINT << "RR: phase exchange COMPLETED \n";
 
-        arg_idx = remote_receiver_rt_args.init_from_rt_args(arg_idx);
         input_queue.stream_state.init_from_runtime_args(
             remote_receiver_rt_args,
             /*local_phase_iterator*/{local_first_phase, local_second_phase},
             /*remote_phase_iterator*/{first_phase_remote_src_phase, second_phase_remote_src_phase});
+
+        // This will initiate then handshake with the sender (relay) stream so that the relay can forward messages as soon as they are available
+        advance_remote_receiver_phase(input_queue.stream_state);
+        // DPRINT << "RR: DONE Handshaking...\n";
     }
+    // DPRINT << "RR: Done stream state setup\n";
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
@@ -231,6 +239,7 @@ void kernel_main() {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
     }
+    DPRINT << "RR: All src_dest ready\n";
 
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
 

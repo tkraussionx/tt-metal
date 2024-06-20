@@ -25,20 +25,6 @@ inline void stream_receiver_endpoint_tiles_clear_b0(uint32_t stream_id, uint32_t
 }
 //////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t get_receiver_stream_config_reg(uint32_t data_noc_id, uint32_t update_noc, bool drain_after_phase_send) {
-    uint32_t stream_cfg_reg = 0;
-    bool next_phase_src_dest_change = drain_after_phase_send ? 1 : 0;
-    stream_cfg_reg |= STREAM_CFG(INCOMING_DATA_NOC, data_noc_id) | STREAM_CFG(REMOTE_SRC_UPDATE_NOC, update_noc) |
-                      STREAM_CFG(RECEIVER_ENDPOINT, 1) | STREAM_CFG(REMOTE_SOURCE, 1) |
-                      STREAM_CFG(NEXT_PHASE_SRC_CHANGE, next_phase_src_dest_change) |
-                      STREAM_CFG(NEXT_PHASE_DEST_CHANGE, next_phase_src_dest_change) |
-                      STREAM_CFG(PHASE_AUTO_ADVANCE, 0) | STREAM_CFG(DATA_AUTO_SEND, 0) |
-                      STREAM_CFG(REG_UPDATE_VC_REG, 1);
-
-    return stream_cfg_reg;
-}
-
-
 
 FORCE_INLINE bool messages_are_available(uint32_t stream_id, stream_state_t &stream_state) {
     uint32_t wrptr = NOC_STREAM_READ_REG(stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
@@ -111,7 +97,7 @@ FORCE_INLINE void advance_phase(
     NOC_STREAM_WRITE_REG(
         stream_id,
         STREAM_MISC_CFG_REG_INDEX,
-        get_receiver_stream_config_reg(remote_endpoint_info.data_noc_id, remote_endpoint_info.update_noc_id, true));
+        get_receiver_stream_config_reg_val_for_looping_mode(remote_endpoint_info.data_noc_id, remote_endpoint_info.update_noc_id, true));
 
     NOC_STREAM_WRITE_REG(
         stream_id, STREAM_PHASE_AUTO_CFG_HEADER_REG_INDEX, AUTO_CFG_HEADER(0, state.messages_per_phase, 0));

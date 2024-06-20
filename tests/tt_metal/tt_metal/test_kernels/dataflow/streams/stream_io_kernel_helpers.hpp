@@ -6,12 +6,29 @@
 
 #include <cstdint>
 #include <limits>
+#include <tuple>
 
 #include "dataflow_api.h"
 #include "stream_interface.h"
 #include "tt_metal/hw/inc/wormhole/noc/noc_overlay_parameters.h"
 
+
+// THESE TWO FUNCTIONS WERE ONLY VALID FOR WORMHOLE_B0 AND MAY NOT WORK WITH BLACKHOLE!!!
+// STREAM_RECEIVER_ENDPOINT_MULTI_TILE_CLEAR_REG_INDEX is aliased to STREAM_REMOTE_DEST_MSG_INFO_WR_PTR_REG_INDEX for
+// whb0
+inline bool is_stream_receiver_endpoint_tile_clearing_finished(uint32_t stream_id) {
+    return (NOC_STREAM_READ_REG(stream_id, STREAM_REMOTE_DEST_MSG_INFO_WR_PTR_REG_INDEX) == 0);
+}
+inline void stream_receiver_endpoint_tiles_clear_b0(uint32_t stream_id, uint32_t num_tiles) {
+    uint32_t clr_val = num_tiles;
+    clr_val *= 2;
+    clr_val = (~clr_val) + 1;
+    NOC_STREAM_WRITE_REG(stream_id, STREAM_REMOTE_DEST_MSG_INFO_WR_PTR_REG_INDEX, clr_val);
+}
+//////////////////////////////////////////////////////////////////////////////////////////
+
 struct phase_iterator_t {
+    phase_iterator_t()=default;
     phase_iterator_t(uint32_t start_phase, uint32_t max_phase) :
         phase_id(start_phase), max_phase(max_phase), start_phase(start_phase) {}
     uint32_t phase_id;
@@ -185,121 +202,14 @@ struct fabric_sender_stream_state_t {
     // }
 };
 
+// struct noc_endpoint_info_t {
+//     uint32_t data_noc_id;
+//     uint32_t update_noc_id;
+//     uint32_t noc_x;
+//     uint32_t noc_y;
+// };
 
-struct stream_remote_receiver_kernel_args_t {
-    // FORCE_INLINE
-    int init_from_rt_args(uint32_t arg_idx) {
-        this->local_stream_id = get_arg_val<uint32_t>(arg_idx++);
-        this->local_stream_buffer_addr = get_arg_val<uint32_t>(arg_idx++);
-        this->local_stream_buffer_size = get_arg_val<uint32_t>(arg_idx++);
-        this->local_stream_tile_header_buffer_addr = get_arg_val<uint32_t>(arg_idx++);
-        this->num_message_per_phase = get_arg_val<uint32_t>(arg_idx++);
-        this->remote_src_noc_x = get_arg_val<uint32_t>(arg_idx++);
-        this->remote_src_noc_y = get_arg_val<uint32_t>(arg_idx++);
-        this->remote_src_noc_stream_id = get_arg_val<uint32_t>(arg_idx++);
-        this->remote_src_data_noc_id = get_arg_val<uint32_t>(arg_idx++);
-        this->relay_done_semaphore_addr = get_arg_val<uint32_t>(arg_idx++);
-        this->other_relay_core_to_signal_x = get_arg_val<uint32_t>(arg_idx++);
-        this->other_relay_core_to_signal_y = get_arg_val<uint32_t>(arg_idx++);
-        this->other_relay_done_semaphore = get_arg_val<uint32_t>(arg_idx++);
-        this->fw_sender_noc_x = get_arg_val<uint32_t>(arg_idx++);
-        this->fw_sender_noc_y = get_arg_val<uint32_t>(arg_idx++);
-        this->sender_wait_finish_semaphore = get_arg_val<uint32_t>(arg_idx++);
-        this->remote_src_start_phase_addr = get_arg_val<uint32_t>(arg_idx++);
 
-        return arg_idx;
-    }
-
-    // bool is_initialized() const {
-    //     return
-    //         this->local_stream_id != std::numeric_limits<uint32_t>::max() &&
-    //         this->local_stream_buffer_addr != std::numeric_limits<uint32_t>::max() &&
-    //         this->local_stream_buffer_size != std::numeric_limits<uint32_t>::max() &&
-    //         this->local_stream_tile_header_buffer_addr != std::numeric_limits<uint32_t>::max() &&
-    //         this->num_message_per_phase != std::numeric_limits<uint32_t>::max() &&
-    //         this->remote_src_noc_x != std::numeric_limits<uint32_t>::max() &&
-    //         this->remote_src_noc_y != std::numeric_limits<uint32_t>::max() &&
-    //         this->remote_src_noc_stream_id != std::numeric_limits<uint32_t>::max() &&
-    //         this->remote_src_data_noc_id != std::numeric_limits<uint32_t>::max() &&
-    //         this->relay_done_semaphore_addr != std::numeric_limits<uint32_t>::max() &&
-    //         this->other_relay_core_to_signal_x != std::numeric_limits<uint32_t>::max() &&
-    //         this->other_relay_core_to_signal_y != std::numeric_limits<uint32_t>::max() &&
-    //         this->other_relay_done_semaphore != std::numeric_limits<uint32_t>::max() &&
-    //         this->fw_sender_noc_x != std::numeric_limits<uint32_t>::max() &&
-    //         this->fw_sender_noc_y != std::numeric_limits<uint32_t>::max() &&
-    //         this->sender_wait_finish_semaphore != std::numeric_limits<uint32_t>::max() &&
-    //         this->remote_src_start_phase_addr != std::numeric_limits<uint32_t>::max();
-    // }
-
-    uint32_t local_stream_id;// = std::numeric_limits<uint32_t>::max();
-    uint32_t local_stream_buffer_addr;// = std::numeric_limits<uint32_t>::max();
-    uint32_t local_stream_buffer_size;// = std::numeric_limits<uint32_t>::max();
-    uint32_t local_stream_tile_header_buffer_addr;// = std::numeric_limits<uint32_t>::max();
-    uint32_t num_message_per_phase;// = std::numeric_limits<uint32_t>::max();
-    uint32_t remote_src_noc_x;// = std::numeric_limits<uint32_t>::max();
-    uint32_t remote_src_noc_y;// = std::numeric_limits<uint32_t>::max();
-    uint32_t remote_src_noc_stream_id;// = std::numeric_limits<uint32_t>::max();
-    uint32_t remote_src_data_noc_id;// = std::numeric_limits<uint32_t>::max();
-    uint32_t relay_done_semaphore_addr;// = std::numeric_limits<uint32_t>::max();
-    uint32_t other_relay_core_to_signal_x;// = std::numeric_limits<uint32_t>::max();
-    uint32_t other_relay_core_to_signal_y;// = std::numeric_limits<uint32_t>::max();
-    uint32_t other_relay_done_semaphore;// = std::numeric_limits<uint32_t>::max();
-    // The remote src of the first tunneler stream
-    uint32_t fw_sender_noc_x;// = std::numeric_limits<uint32_t>::max();
-    uint32_t fw_sender_noc_y;// = std::numeric_limits<uint32_t>::max();
-    uint32_t sender_wait_finish_semaphore;// = std::numeric_limits<uint32_t>::max();
-    uint32_t remote_src_start_phase_addr;// = std::numeric_limits<uint32_t>::max();
-};
-
-struct fabric_receiver_stream_state_t {
-    uint32_t local_data_buffer_base_address;
-    uint32_t local_msg_info_ptr_base_address;
-
-    uint32_t local_stream_id;
-    uint32_t remote_stream_id;
-
-    uint32_t local_start_phase_id;
-    uint32_t local_phase_id;
-    uint32_t messages_per_phase;
-    uint32_t msg_info_wrptr_addr;
-
-    uint32_t num_tiles_sent;
-    uint32_t tile_header_num_msgs;
-
-    uint32_t local_buffer_base_addr;
-    uint32_t local_buffer_size;
-    uint32_t local_msg_info_ptr;
-    uint32_t local_buffer_read_offset;
-
-    uint32_t remote_phase_id;
-
-    // FORCE_INLINE
-    uint32_t get_current_local_buffer_address() const {
-        return local_data_buffer_base_address + local_buffer_read_offset;
-    }
-
-    // FORCE_INLINE
-    void init_from_runtime_args(
-        stream_remote_receiver_kernel_args_t const& args,
-        phase_iterator_t const& local_phase_iterator,
-        phase_iterator_t const& remote_phase_iterator) {
-        this->local_data_buffer_base_address = args.local_stream_buffer_addr;
-        this->local_msg_info_ptr_base_address = args.local_stream_tile_header_buffer_addr;
-        this->local_stream_id = args.local_stream_id;
-        this->remote_stream_id = args.remote_src_noc_stream_id;
-        this->local_start_phase_id = local_phase_iterator.get();
-        this->local_phase_id = this->local_start_phase_id;
-        this->messages_per_phase = args.num_message_per_phase;
-        this->msg_info_wrptr_addr = this->local_msg_info_ptr_base_address;
-        this->num_tiles_sent = 0;
-        this->tile_header_num_msgs = this->messages_per_phase;
-        this->local_buffer_base_addr = args.local_stream_buffer_addr;
-        this->local_buffer_size = args.local_stream_buffer_size;
-        this->local_msg_info_ptr = this->local_msg_info_ptr_base_address;
-        this->local_buffer_read_offset = 0;
-        this->remote_phase_id = remote_phase_iterator.get();
-    }
-};
 
 
 
@@ -601,7 +511,7 @@ void stream_noc_write(
     stream_state.num_tiles_sent = num_tiles;
 }
 
-/*FORCE_INLINE*/ void stream_noc_write_from_mux(
+/*// FORCE_INLINE*/ void stream_noc_write_from_mux(
     uint32_t src_addr,
     uint32_t dest_addr,
     uint32_t size_bytes,
@@ -614,6 +524,10 @@ void stream_noc_write(
     // the message size in 16B words, in the packet header. However, for packet_(mux|demux),
     // the message size is stored in bytes, so we need to override it to be in 16B words
     uint32_t message_size_noc_words = *reinterpret_cast<volatile uint32_t *>(src_addr);
+    if (!(size_bytes == message_size_noc_words)) {
+        DPRINT << "src_addr: " << src_addr << "\n";
+        DPRINT << "size_bytes = " << size_bytes << " message_size_noc_words = " << message_size_noc_words << "\n";
+    }
     ASSERT(size_bytes == message_size_noc_words);
     message_size_noc_words = message_size_noc_words >> 4;
     *reinterpret_cast<volatile uint32_t *>(src_addr) = message_size_noc_words;
@@ -628,6 +542,7 @@ void stream_noc_write(
     NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_CURR_PHASE_REG_INDEX, stream_state.local_phase_id);
 
     if (first_message) {
+        DPRINT << "Stream Noc Write: reset_stream_message_info_buffer_rdptr \n";
         reset_stream_message_info_buffer_rdptr(stream_state, stream_state.local_stream_id);
     }
     // copy_from_cb_to_stream_buffer(stream_state, src_addr, message_size_noc_words);
@@ -692,10 +607,13 @@ void stream_noc_write(
     NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_PHASE_ADVANCE_REG_INDEX, 0x1);
 
     if (first_message) {
+        DPRINT << "Stream Noc Write: Handshaking...\n";
         // wait for handshake to complete
         while (!stream_phase_is_active(stream_state.local_stream_id)) {
             asm volatile("");
         }
+
+        DPRINT << "Stream Noc Write: ... Done\n";
     }
 
     if (send_last_message_and_drain) {
@@ -713,8 +631,11 @@ void stream_noc_write(
         stream_state.local_phase_id++;
     }
 
+    // DPRINT << "Stream Noc Write: Sending message\n";
     stream_relay_tiles(stream_state.local_stream_id, 1, message_size_noc_words);
+    // DPRINT << "Stream Noc Write: Waiting for flush\n";
     wait_for_stream_write_complete(stream_state.local_stream_id);
+    DPRINT << "Stream Noc Write: Message sent!\n";
 
     stream_state.num_tiles_sent = num_tiles;
 }
@@ -724,6 +645,265 @@ void stream_noc_write(
 /////////////////////////////////////////////////
 ///  REMOTE RECEIVER HELPERS
 /////////////////////////////////////////////////
+
+
+struct stream_remote_receiver_kernel_args_t {
+    // FORCE_INLINE
+    int init_from_rt_args(uint32_t arg_idx) {
+        this->local_stream_id = get_arg_val<uint32_t>(arg_idx++);
+        this->local_stream_buffer_addr = get_arg_val<uint32_t>(arg_idx++);
+        this->local_stream_buffer_size = get_arg_val<uint32_t>(arg_idx++);
+        this->local_stream_tile_header_buffer_addr = get_arg_val<uint32_t>(arg_idx++);
+        this->num_message_per_phase = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_src_noc_x = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_src_noc_y = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_src_noc_stream_id = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_src_data_noc_id = get_arg_val<uint32_t>(arg_idx++);
+        this->relay_done_semaphore_addr = get_arg_val<uint32_t>(arg_idx++);
+        this->other_relay_core_to_signal_x = get_arg_val<uint32_t>(arg_idx++);
+        this->other_relay_core_to_signal_y = get_arg_val<uint32_t>(arg_idx++);
+        this->other_relay_done_semaphore = get_arg_val<uint32_t>(arg_idx++);
+        this->fw_sender_noc_x = get_arg_val<uint32_t>(arg_idx++);
+        this->fw_sender_noc_y = get_arg_val<uint32_t>(arg_idx++);
+        this->sender_wait_finish_semaphore = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_src_start_phase_addr = get_arg_val<uint32_t>(arg_idx++);
+
+        this->remote_src_update_noc_id = 1 - this->remote_src_data_noc_id;
+
+        return arg_idx;
+    }
+
+    bool is_initialized() const {
+        return
+            this->local_stream_id != std::numeric_limits<uint32_t>::max() &&
+            this->local_stream_buffer_addr != std::numeric_limits<uint32_t>::max() &&
+            this->local_stream_buffer_size != std::numeric_limits<uint32_t>::max() &&
+            this->local_stream_tile_header_buffer_addr != std::numeric_limits<uint32_t>::max() &&
+            this->num_message_per_phase != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_noc_x != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_noc_y != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_noc_stream_id != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_data_noc_id != std::numeric_limits<uint32_t>::max() &&
+            this->relay_done_semaphore_addr != std::numeric_limits<uint32_t>::max() &&
+            this->other_relay_core_to_signal_x != std::numeric_limits<uint32_t>::max() &&
+            this->other_relay_core_to_signal_y != std::numeric_limits<uint32_t>::max() &&
+            this->other_relay_done_semaphore != std::numeric_limits<uint32_t>::max() &&
+            this->fw_sender_noc_x != std::numeric_limits<uint32_t>::max() &&
+            this->fw_sender_noc_y != std::numeric_limits<uint32_t>::max() &&
+            this->sender_wait_finish_semaphore != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_start_phase_addr != std::numeric_limits<uint32_t>::max() &&
+            this->remote_src_update_noc_id != std::numeric_limits<uint32_t>::max();
+    }
+
+    uint32_t local_stream_id = std::numeric_limits<uint32_t>::max();
+    uint32_t local_stream_buffer_addr = std::numeric_limits<uint32_t>::max();
+    uint32_t local_stream_buffer_size = std::numeric_limits<uint32_t>::max();
+    uint32_t local_stream_tile_header_buffer_addr = std::numeric_limits<uint32_t>::max();
+    uint32_t num_message_per_phase = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_noc_x = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_noc_y = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_noc_stream_id = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_data_noc_id = std::numeric_limits<uint32_t>::max();
+    uint32_t relay_done_semaphore_addr = std::numeric_limits<uint32_t>::max();
+    uint32_t other_relay_core_to_signal_x = std::numeric_limits<uint32_t>::max();
+    uint32_t other_relay_core_to_signal_y = std::numeric_limits<uint32_t>::max();
+    uint32_t other_relay_done_semaphore = std::numeric_limits<uint32_t>::max();
+    // The remote src of the first tunneler stream
+    uint32_t fw_sender_noc_x = std::numeric_limits<uint32_t>::max();
+    uint32_t fw_sender_noc_y = std::numeric_limits<uint32_t>::max();
+    uint32_t sender_wait_finish_semaphore = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_start_phase_addr = std::numeric_limits<uint32_t>::max();
+    uint32_t remote_src_update_noc_id = std::numeric_limits<uint32_t>::max();
+};
+struct fabric_receiver_stream_state_t {
+    fabric_receiver_stream_state_t() = default;
+    uint32_t local_data_buffer_base_address;
+    uint32_t local_msg_info_ptr_base_address;
+
+    uint32_t local_stream_id;
+    uint32_t remote_stream_id;
+
+    uint32_t local_start_phase_id;
+    uint32_t local_phase_id;
+    uint32_t messages_per_phase;
+    uint32_t msg_info_wrptr_addr;
+
+    uint32_t num_tiles_sent;
+    uint32_t tile_header_num_msgs;
+
+    uint32_t local_buffer_base_addr;
+    uint32_t local_buffer_size;
+    uint32_t local_msg_info_ptr;
+    uint32_t local_buffer_read_offset;
+
+    uint32_t remote_phase_id;
+
+    uint32_t remote_src_noc_x;
+    uint32_t remote_src_noc_y;
+    uint32_t remote_src_data_noc_id;
+    uint32_t remote_src_update_noc_id;
+
+
+    phase_iterator_t local_phase_iterator;
+    phase_iterator_t remote_phase_iterator;
+
+    // FORCE_INLINE
+    uint32_t get_current_local_buffer_address() const {
+        return local_data_buffer_base_address + local_buffer_read_offset;
+    }
+
+    // FORCE_INLINE
+    void init_from_runtime_args(
+        stream_remote_receiver_kernel_args_t const& args,
+        phase_iterator_t const& local_phase_iterator,
+        phase_iterator_t const& remote_phase_iterator) {
+        this->local_data_buffer_base_address = args.local_stream_buffer_addr;
+        this->local_msg_info_ptr_base_address = args.local_stream_tile_header_buffer_addr;
+        this->local_stream_id = args.local_stream_id;
+        this->remote_stream_id = args.remote_src_noc_stream_id;
+        this->local_start_phase_id = local_phase_iterator.get();
+        this->local_phase_id = this->local_start_phase_id;
+        this->messages_per_phase = args.num_message_per_phase;
+        this->msg_info_wrptr_addr = this->local_msg_info_ptr_base_address;
+        this->num_tiles_sent = 0;
+        this->tile_header_num_msgs = this->messages_per_phase;
+        this->local_buffer_base_addr = args.local_stream_buffer_addr;
+        this->local_buffer_size = args.local_stream_buffer_size;
+        this->local_msg_info_ptr = this->local_msg_info_ptr_base_address;
+        this->local_buffer_read_offset = 0;
+        this->remote_phase_id = remote_phase_iterator.get();
+
+        this->remote_src_noc_x = args.remote_src_noc_x;
+        this->remote_src_noc_y = args.remote_src_noc_y;
+        this->remote_src_data_noc_id = args.remote_src_data_noc_id;
+        this->remote_src_update_noc_id = args.remote_src_update_noc_id;
+
+        this->local_phase_iterator = local_phase_iterator;
+        this->remote_phase_iterator = remote_phase_iterator;
+    }
+};
+
+// Taken from `advance_stream_state_struct`
+FORCE_INLINE void advance_remote_receiver_stream_state_struct(
+    fabric_receiver_stream_state_t &stream_state, uint32_t msg_size_bytes) {
+    uint32_t next_offset = stream_state.local_buffer_read_offset + msg_size_bytes;
+    if (next_offset >= stream_state.local_buffer_size) {
+        next_offset -= stream_state.local_buffer_size;
+    }
+    stream_state.local_buffer_read_offset = next_offset;
+    stream_state.local_msg_info_ptr += (1 << 4);
+}
+
+uint32_t get_receiver_stream_config_reg_val_for_looping_mode(uint32_t data_noc_id, uint32_t update_noc, bool drain_after_phase_send) {
+    uint32_t stream_cfg_reg = 0;
+    bool next_phase_src_dest_change = drain_after_phase_send ? 1 : 0;
+    stream_cfg_reg |= STREAM_CFG(INCOMING_DATA_NOC, data_noc_id) | STREAM_CFG(REMOTE_SRC_UPDATE_NOC, update_noc) |
+                      STREAM_CFG(RECEIVER_ENDPOINT, 1) | STREAM_CFG(REMOTE_SOURCE, 1) |
+                      STREAM_CFG(NEXT_PHASE_SRC_CHANGE, next_phase_src_dest_change) |
+                      STREAM_CFG(NEXT_PHASE_DEST_CHANGE, next_phase_src_dest_change) |
+                      STREAM_CFG(PHASE_AUTO_ADVANCE, 0) | STREAM_CFG(DATA_AUTO_SEND, 0) |
+                      STREAM_CFG(REG_UPDATE_VC_REG, 1);
+
+    return stream_cfg_reg;
+}
+
+
+FORCE_INLINE void advance_remote_receiver_phase(
+    // noc_endpoint_info_t const &remote_endpoint_info,
+    fabric_receiver_stream_state_t &state//,
+    // uint32_t stream_id
+    ) {
+    // This is remote receiver, so it sends messages (updates) to remote source, NOT data, so it uses
+    // the update noc to communicate to remote src instead of the data noc. Therefore, we need to set remote
+    // src x/y based on the update noc.
+    uint32_t translated_remote_noc_x = state.remote_src_update_noc_id == 0
+                                           ? state.remote_src_noc_x
+                                           : noc_size_x - 1 - state.remote_src_noc_x;
+    uint32_t translated_remote_noc_y = state.remote_src_update_noc_id == 0
+                                           ? state.remote_src_noc_y
+                                           : noc_size_y - 1 - state.remote_src_noc_y;
+
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_CURR_PHASE_BASE_REG_INDEX, 0);
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_CURR_PHASE_REG_INDEX, ((uint32_t)state.local_phase_id));
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_BUF_START_REG_INDEX, ((uint32_t)state.local_buffer_base_addr) >> 4);
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_BUF_SIZE_REG_INDEX, state.local_buffer_size >> 4);
+    NOC_STREAM_WRITE_REG(
+        state.local_stream_id,
+        STREAM_REMOTE_SRC_REG_INDEX,
+        STREAM_REMOTE_SRC(translated_remote_noc_x, translated_remote_noc_y, state.local_stream_id));
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_REMOTE_SRC_PHASE_REG_INDEX, ((uint32_t)state.remote_phase_id));
+
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MEM_BUF_SPACE_AVAILABLE_ACK_THRESHOLD_REG_INDEX, 0);
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr) >> 4);
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr) >> 4);
+
+    NOC_STREAM_WRITE_REG(
+        state.local_stream_id,
+        STREAM_MISC_CFG_REG_INDEX,
+        get_receiver_stream_config_reg_val_for_looping_mode(state.remote_src_data_noc_id, state.remote_src_update_noc_id, true));
+
+    NOC_STREAM_WRITE_REG(
+        state.local_stream_id, STREAM_PHASE_AUTO_CFG_HEADER_REG_INDEX, AUTO_CFG_HEADER(0, state.messages_per_phase, 0));
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_PHASE_ADVANCE_REG_INDEX, 0x1);
+}
+
+
+// Taken from `flush_message_from_stream_buffer`
+FORCE_INLINE void flush_message_from_remote_receiver_stream_buffer(
+    fabric_receiver_stream_state_t &stream_state, uint32_t msg_size_bytes) {
+    stream_receiver_endpoint_tiles_clear_b0(stream_state.local_stream_id, 1);
+    while (!is_stream_receiver_endpoint_tile_clearing_finished(stream_state.local_stream_id)) {
+        asm volatile("");
+    }
+}
+
+// Taken from `advance_stream_to_next_message`
+FORCE_INLINE void advance_remote_receiver_stream_to_next_message(
+    // noc_endpoint_info_t const &remote_endpoint_info,
+    fabric_receiver_stream_state_t &state,
+    // uint32_t stream_id,
+    uint32_t msg_size_bytes) {
+    advance_remote_receiver_stream_state_struct(state, msg_size_bytes);
+    flush_message_from_remote_receiver_stream_buffer(state, msg_size_bytes);
+
+    if (state.num_tiles_sent == state.tile_header_num_msgs - 1) {
+        state.remote_phase_iterator.increment();
+        state.remote_phase_id = state.remote_phase_iterator.get();
+        state.local_phase_iterator.increment();
+        state.local_phase_id = state.local_phase_iterator.get();
+        state.num_tiles_sent = 0;
+        state.local_msg_info_ptr = state.local_msg_info_ptr_base_address;
+
+        advance_remote_receiver_phase(state);
+        state.local_buffer_read_offset = 0;
+    } else {
+        state.num_tiles_sent++;
+    }
+}
+
+FORCE_INLINE uint32_t get_next_available_stream_message_size_in_bytes(fabric_receiver_stream_state_t &stream_state) {
+    uint32_t msg_info_byte_ptr = stream_state.local_msg_info_ptr;
+    uint32_t msg_size_bytes = *reinterpret_cast<volatile uint32_t *>(msg_info_byte_ptr) << 4;
+    ASSERT(msg_size_bytes > 0);
+    return msg_size_bytes;
+}
+
+
+FORCE_INLINE bool messages_are_available(fabric_receiver_stream_state_t &stream_state) {
+    uint32_t wrptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
+    uint32_t rdptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX);
+    uint32_t internal_rdptr = stream_state.local_msg_info_ptr >> 4;
+    bool messages_available = internal_rdptr < wrptr;
+    return messages_available;
+}
+
+FORCE_INLINE std::tuple<uint32_t, uint32_t> get_next_message_info(fabric_receiver_stream_state_t &stream_state) {
+    uint32_t rdptr_offset = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_RD_PTR_REG_INDEX) << 4;
+    uint32_t addr = rdptr_offset + stream_state.local_data_buffer_base_address;
+    ASSERT((rdptr_offset & 0xF) == 0);
+    ASSERT((addr & 0xF) == 0);
+    return std::make_tuple(addr, get_next_available_stream_message_size_in_bytes(stream_state));
+}
 
 // FORCE_INLINE
 bool fw_managed_rx_stream_num_bytes_available_impl(uint32_t stream_id, uint32_t local_msg_info_ptr) {

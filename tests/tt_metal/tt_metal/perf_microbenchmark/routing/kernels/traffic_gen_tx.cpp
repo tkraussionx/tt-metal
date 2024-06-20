@@ -90,7 +90,7 @@ inline bool input_queue_handler() {
 
             tt_l1_ptr dispatch_packet_header_t* header_ptr =
                 reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(byte_wr_addr);
-            header_ptr->packet_size_and_end_cmd_flag.packet_size_bytes = input_queue_rnd_state.curr_packet_size_words * PACKET_WORD_SIZE_BYTES;
+            header_ptr->packet_size_bytes = input_queue_rnd_state.curr_packet_size_words * PACKET_WORD_SIZE_BYTES;
             header_ptr->packet_src = src_endpoint_id;
             header_ptr->packet_dest = input_queue_rnd_state.curr_packet_dest;
             header_ptr->packet_flags = input_queue_rnd_state.curr_packet_flags;
