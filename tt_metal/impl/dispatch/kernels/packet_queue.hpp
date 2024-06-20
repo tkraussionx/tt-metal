@@ -430,14 +430,23 @@ public:
 protected:
     bool curr_packet_valid;
     tt_l1_ptr dispatch_packet_header_t* curr_packet_header_ptr;
+    //
     uint16_t curr_packet_src;
+    //
     uint16_t curr_packet_dest;
+    //
     uint32_t curr_packet_size_words;
+    //
     uint32_t end_of_cmd;
+    // I think this is only for padding packets to packet boundary by skipping through the
+    // buffer by that many words
     uint32_t curr_packet_words_sent;
+    // for packet switching. Obtainable from payload header
     uint32_t curr_packet_tag;
+    // for packet switching. Obtainable from payload header
     uint16_t curr_packet_flags;
 
+    //
     uint32_t packetizer_page_words_cleared;
 
     /*
@@ -452,9 +461,10 @@ protected:
             if (rx_from_stream) {
                 advance_remote_receiver_stream_to_next_message(
                     stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
-            } else {
-
             }
+            // uses get_queue_rptr_sent_offset_words
+            // -> Under the hood uses local_rptr_sent_val, which is actually a pointer...
+            //    I expect this is the current offset...
             tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
                 reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(
                     rx_from_stream ?
@@ -491,6 +501,12 @@ protected:
             }
             this->curr_packet_words_sent = 0;
             this->curr_packet_valid = true;
+
+            // Now that we've extracted the header information, we can advance the packet?
+            // but this will clear the packet... what's the point of grabbing the header?
+            // then it must mean we're pointing to the next packet (which may not have arrived yet?)
+            // so what's going on here unless it's just to book keep so keep
+
        }
     }
 

@@ -211,7 +211,8 @@ void kernel_main() {
             /*local_phase_iterator*/{local_first_phase, local_second_phase},
             /*remote_phase_iterator*/{first_phase_remote_src_phase, second_phase_remote_src_phase});
 
-        // This will initiate then handshake with the sender (relay) stream so that the relay can forward messages as soon as they are available
+        // This will initiate then handshake with the sender (relay) stream so that the relay can forward
+        // messages as soon as they are available
         advance_remote_receiver_phase(input_queue.stream_state);
         // DPRINT << "RR: DONE Handshaking...\n";
     }
