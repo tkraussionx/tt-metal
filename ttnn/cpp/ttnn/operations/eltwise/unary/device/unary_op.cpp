@@ -4,9 +4,9 @@
 
 // #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 #include "unary_op.hpp"
-#include "eltwise_unary_op_multi_core.cpp"
-#include "eltwise_unary_op_sharded.cpp"
 
+#include "eltwise_unary_op_multi_core.hpp"
+#include "eltwise_unary_op_sharded.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
 #include "tt_dnn/op_library/composite/composite_ops.hpp"
@@ -134,7 +134,11 @@ std::pair<string, string> get_op_init_and_func_parameterized(
         case UnaryOpType::REMAINDER:
             op_init_and_name = {
                 "remainder_tile_init();",
-                fmt::format("remainder_tile({}, {}u, {}u);", idst, Converter::to_hex(param0), Converter::to_hex(1.0f/param0))};
+                fmt::format(
+                    "remainder_tile({}, {}u, {}u);",
+                    idst,
+                    Converter::to_hex(param0),
+                    Converter::to_hex(1.0f / param0))};
             break;
         case UnaryOpType::EXP:
             op_init_and_name = {
@@ -358,14 +362,16 @@ inline void validate_supported_arch(::tt::ARCH arch, UnaryOpType op_type) {
         case UnaryOpType::RIGHT_SHIFT:
             TT_FATAL(arch == ::tt::ARCH::WORMHOLE_B0, "Op is only supported on Wormhole");
             break;
-        default:
-            return;
+        default: return;
     }
 }
 
-void EltwiseUnary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const {
+void EltwiseUnary::validate_with_output_tensors(
+    const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    auto out_mem_config = (!output_tensors.empty() && output_tensors.at(0).has_value()) ? output_tensors.at(0).value().memory_config() : this->output_mem_config;
+    auto out_mem_config = (!output_tensors.empty() && output_tensors.at(0).has_value())
+                              ? output_tensors.at(0).value().memory_config()
+                              : this->output_mem_config;
 
     auto arch = input_tensor_a.device()->arch();
     for (const auto& unary_op : this->op_chain) {
@@ -383,10 +389,15 @@ void EltwiseUnary::validate_with_output_tensors(const std::vector<Tensor> &input
             input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED,
             "Interleaved memory layout supported");
     }
-    if(!output_tensors.empty() && output_tensors.at(0).has_value()){
+    if (!output_tensors.empty() && output_tensors.at(0).has_value()) {
         const auto output_shape_required = this->compute_output_shapes(input_tensors);
         const auto& out_tensor = output_tensors.at(0).value();
-        TT_FATAL(out_tensor.get_legacy_shape() == output_shape_required.at(0), fmt::format("The input tensors need a shape of {}, however the output tensor is only {}", output_shape_required,  out_tensor.get_legacy_shape()));
+        TT_FATAL(
+            out_tensor.get_legacy_shape() == output_shape_required.at(0),
+            fmt::format(
+                "The input tensors need a shape of {}, however the output tensor is only {}",
+                output_shape_required,
+                out_tensor.get_legacy_shape()));
     }
 
     if (!output_tensors.empty()) {
@@ -399,8 +410,9 @@ std::vector<tt::tt_metal::Shape> EltwiseUnary::compute_output_shapes(const std::
     return {input_tensor.get_legacy_shape()};
 }
 
-std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
-    if(!output_tensors.empty() && output_tensors.at(0).has_value()){
+std::vector<Tensor> EltwiseUnary::create_output_tensors(
+    const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
+    if (!output_tensors.empty() && output_tensors.at(0).has_value()) {
         return {output_tensors.at(0).value()};
     }
 
@@ -426,9 +438,12 @@ operation::ProgramWithCallbacks EltwiseUnary::create_program(
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
     switch (parallelization_strategy) {
         case UnaryOpParallelizationStrategy::SHARDED_MULTI_CORE:
-            return eltwise_unary_sharded(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
+            return eltwise_unary_sharded(
+                input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-        default: return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
+        default:
+            return eltwise_unary_multi_core(
+                input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
     }
 }
 
@@ -461,9 +476,8 @@ const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tenso
     return hash;
 }
 
-
 // }  // namespace tt_metal
 
 // }  // namespace tt
 
-} // namespace ttnn::operations::unary
+}  // namespace ttnn::operations::unary

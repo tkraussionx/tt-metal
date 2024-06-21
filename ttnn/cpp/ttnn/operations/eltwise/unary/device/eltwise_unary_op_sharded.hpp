@@ -1,27 +1,32 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
+#pragma once
 
 #include <algorithm>
 
 // #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
-#include "unary_op.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
-
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
+#include "tt_metal/host_api.hpp"
+#include "unary_op.hpp"
 
 namespace ttnn::operations::unary {
 
 // namespace tt {
 
 // namespace tt_metal {
-    // using namespace tt::constants;
-    // using namespace tt;
-    // using namespace tt::tt_metal;
+// using namespace tt::constants;
+// using namespace tt;
+// using namespace tt::tt_metal;
 
-operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tensor &output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en, bool preserve_fp32_precision){
+operation::ProgramWithCallbacks eltwise_unary_sharded(
+    const Tensor &input,
+    Tensor &output,
+    const std::vector<UnaryWithParam> op_chain,
+    bool fp32_dest_acc_en,
+    bool preserve_fp32_precision) {
     using namespace tt::constants;
     using namespace tt;
     using namespace tt::tt_metal;
@@ -34,7 +39,11 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
     uint32_t ncores = shard_spec.num_cores();
 
     auto out_shard_spec = output.shard_spec().value();
-    TT_FATAL(out_shard_spec.num_cores() == ncores, "Output tensor should have same number of cores {} as input tensor {}", out_shard_spec.num_cores(), ncores);
+    TT_FATAL(
+        out_shard_spec.num_cores() == ncores,
+        "Output tensor should have same number of cores {} as input tensor {}",
+        out_shard_spec.num_cores(),
+        ncores);
 
     tt::DataFormat act_df = tt_metal::datatype_to_dataformat_converter(input.get_dtype());
     tt::DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
@@ -47,37 +56,37 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
     uint32_t num_tile_per_core = 0;
 
     if (input.get_dtype() == DataType::BFLOAT8_B) {
-        uint32_t ntiles_along_width = ceil(shard_spec.shape[1] / (float) constants::TILE_WIDTH);
-        uint32_t ntiles_along_height = ceil(shard_spec.shape[0] / (float) constants::TILE_HEIGHT);
+        uint32_t ntiles_along_width = ceil(shard_spec.shape[1] / (float)constants::TILE_WIDTH);
+        uint32_t ntiles_along_height = ceil(shard_spec.shape[0] / (float)constants::TILE_HEIGHT);
         num_tile_per_core = ntiles_along_width * ntiles_along_height;
     } else {
-        TT_FATAL((shard_spec.shape[1] * datum_size(act_df)) % L1_ALIGNMENT == 0, "Shard width should be multiple of L1_ADRESS_ALIGNMENT");
+        TT_FATAL(
+            (shard_spec.shape[1] * datum_size(act_df)) % L1_ALIGNMENT == 0,
+            "Shard width should be multiple of L1_ADRESS_ALIGNMENT");
         size_t shard_height = shard_spec.shape[0];
-        size_t shard_width = round_up_to_mul16(shard_spec.shape[1]); // rounding up is done to aligned with  --> tt-metal/tt_metal/detail/util.hpp:31
+        size_t shard_width = round_up_to_mul16(
+            shard_spec.shape[1]);  // rounding up is done to aligned with  --> tt-metal/tt_metal/detail/util.hpp:31
         size_t shard_size_in_bytes = shard_height * shard_width * datum_size(act_df);
         TT_FATAL(shard_size_in_bytes % input_tile_size == 0, "Shard Size must be multiple of input_tile_size");
-        num_tile_per_core = (shard_size_in_bytes + input_tile_size - 1) / input_tile_size; //ceil value
+        num_tile_per_core = (shard_size_in_bytes + input_tile_size - 1) / input_tile_size;  // ceil value
     }
 
     uint32_t in_cb_id = CB::c_in0;
     uint32_t buffering_factor = 1;  // data is already fully buffered in the CBs since its sharded
-    uint32_t aligned_input_tile_nbytes = round_up_to_mul32(input_tile_size); //will have issue if the page is not multiple of 32
+    uint32_t aligned_input_tile_nbytes =
+        round_up_to_mul32(input_tile_size);  // will have issue if the page is not multiple of 32
     uint32_t in_cb_pagesize = aligned_input_tile_nbytes;
     uint32_t in_cb_npages = num_tile_per_core * buffering_factor;
-    CircularBufferConfig cb_src0_config = CircularBufferConfig(
-                                            in_cb_pagesize * in_cb_npages,
-                                            {{in_cb_id, act_df}})
-                                          .set_page_size(in_cb_id, in_cb_pagesize)
-                                          .set_globally_allocated_address(*input.buffer());
+    CircularBufferConfig cb_src0_config = CircularBufferConfig(in_cb_pagesize * in_cb_npages, {{in_cb_id, act_df}})
+                                              .set_page_size(in_cb_id, in_cb_pagesize)
+                                              .set_globally_allocated_address(*input.buffer());
     auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
 
     // output sharded CB
     uint32_t out_cb_id = CB::c_out0;
-    CircularBufferConfig out_cb_config = CircularBufferConfig(
-                                            in_cb_pagesize * in_cb_npages,
-                                            {{out_cb_id, out_df}})
-                                          .set_page_size(out_cb_id, in_cb_pagesize)
-                                          .set_globally_allocated_address(*output.buffer());
+    CircularBufferConfig out_cb_config = CircularBufferConfig(in_cb_pagesize * in_cb_npages, {{out_cb_id, out_df}})
+                                             .set_page_size(out_cb_id, in_cb_pagesize)
+                                             .set_globally_allocated_address(*output.buffer());
     auto out_cb = tt_metal::CreateCircularBuffer(program, all_cores, out_cb_config);
 
     log_debug(LogOp, "input_cb: {}, npages: {}, pagesize: {}", in_cb_id, in_cb_npages, in_cb_pagesize);
@@ -103,11 +112,12 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
         tt_metal::ReaderDataMovementConfig(reader_compile_time_args, kernel_defines));
 
     vector<uint32_t> compute_kernel_args_group_1 = {
-         1, // per_core_block_cnt
-         num_tile_per_core // per_core_block_size
+        1,                 // per_core_block_cnt
+        num_tile_per_core  // per_core_block_size
     };
 
-    bool math_approx_mode = std::all_of(op_chain.begin(), op_chain.end(), [](const auto& u) {return utils::get_op_approx_mode(u.op_type);});
+    bool math_approx_mode = std::all_of(
+        op_chain.begin(), op_chain.end(), [](const auto &u) { return utils::get_op_approx_mode(u.op_type); });
     std::map<string, string> unary_defines = utils::get_block_defines(op_chain);
     auto eltwise_unary_kernel_group_1_id = tt_metal::CreateKernel(
         program,
@@ -119,9 +129,7 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
             .preserve_fp32_precision = preserve_fp32_precision,
             .math_approx_mode = math_approx_mode,
             .compile_args = compute_kernel_args_group_1,
-            .defines = unary_defines
-        }
-    );
+            .defines = unary_defines});
 
     tt_metal::SetRuntimeArgs(
         program,
@@ -129,27 +137,24 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
         all_cores,
         {
             (uint32_t)(num_tile_per_core),
-        }
-    );
+        });
 
     auto override_runtime_args_callback = [unary_reader_kernel_id, cb_src0, out_cb](
-        const void* operation,
-        Program &program,
-        const std::vector<Tensor>& input_tensors,
-        const std::vector<std::optional<const Tensor>>&,
-        const std::vector<Tensor>& output_tensors
-    ) {
-
+                                              const void *operation,
+                                              Program &program,
+                                              const std::vector<Tensor> &input_tensors,
+                                              const std::vector<std::optional<const Tensor>> &,
+                                              const std::vector<Tensor> &output_tensors) {
         auto src_buffer = input_tensors.at(0).buffer();
         auto dst_buffer = output_tensors.at(0).buffer();
         UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
         UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
     };
 
-    return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_args_callback};
+    return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_args_callback};
 }
 // }  // namespace tt_metal
 
 // }  // namespace tt
 
-}
+}  // namespace ttnn::operations::unary
