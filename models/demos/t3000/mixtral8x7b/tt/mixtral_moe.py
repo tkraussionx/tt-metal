@@ -94,7 +94,7 @@ class TtMoeLayer(LightweightModule):
                 packer_l1_acc=True,
             ),
             use_1d_systolic_array=True,
-            core_grid=ttnn.CoreGrid(y=4, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
             dtype=ttnn.bfloat16,
         )
 

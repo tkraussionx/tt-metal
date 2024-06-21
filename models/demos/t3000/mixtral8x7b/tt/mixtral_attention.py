@@ -332,7 +332,7 @@ class TtMixtralAttention(LightweightModule):
         ###
         xqkv_program_config = None
         xqkv_mem_config = ttnn.L1_MEMORY_CONFIG
-        if seq_len >= 8192:
+        if seq_len > 8192:
             xs_11SH = ttnn.reshape(xs_11SH, (1, seq_len // 2048, 2048, -1))
             xqkv_program_config = self.model_config["WQKV_PREFILL_PROGCFG"]
             xqkv_mem_config = ttnn.DRAM_MEMORY_CONFIG
@@ -341,12 +341,12 @@ class TtMixtralAttention(LightweightModule):
             self.wqkv,
             dtype=ttnn.bfloat16,
             memory_config=xqkv_mem_config,  # self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            core_grid=self.core_grid_attention if not xqkv_program_config else None,
+            core_grid=ttnn.CoreGrid(y=8, x=8) if not xqkv_program_config else None,
             compute_kernel_config=self.compute_kernel,
             program_config=xqkv_program_config,
         )
 
-        if seq_len >= 8192:
+        if seq_len > 8192:
             xqkv_fused = ttnn.reshape(xqkv_fused, (1, 1, seq_len, -1))
         # split qkv into heads
         (
