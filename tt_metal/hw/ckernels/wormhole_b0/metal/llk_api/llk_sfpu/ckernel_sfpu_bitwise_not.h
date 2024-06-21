@@ -8,6 +8,7 @@
 #include "ckernel_defs.h"
 #include "sfpi.h"
 #include "noc_nonblocking_api.h"
+#include "limits.h"
 
 using namespace sfpi;
 
@@ -19,17 +20,11 @@ inline void calculate_bitwise_not(const uint value) {
 #pragma GCC unroll 0
     for (int d = 0; d < ITERATIONS; d++) {
         vInt input = dst_reg[0];
-        vInt res;
-
-        v_if(input < 0){
-            vFloat fval = int32_to_float(input);
-            fval = fval + 1;
-            fval = setsgn(fval, 2);
-            res = float_to_int16(fval);
-        }
-        v_else {
-            res = setsgn(input, -1);
-            res = res + 1;
+        vInt res = ~input;
+        v_if(res > INT_MIN && res < 0)
+        {
+            res = 0 - res;
+            res = setsgn(res, -1);
         }
         v_endif;
 

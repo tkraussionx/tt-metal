@@ -100,6 +100,7 @@ def get_atol_rtol_pcc(golden, calculated):
 
 
 def comp_equal(golden, calculated):
+    print(calculated)
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)
 

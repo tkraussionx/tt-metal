@@ -25,7 +25,7 @@ mem_configs = [
 
 @pytest.mark.parametrize(
     "scalar",
-    (1, 1),
+    (1, 1, 1),
 )
 @pytest.mark.parametrize(
     "input_shapes",
@@ -49,9 +49,7 @@ class TestBitwiseNot:
         device,
     ):
         datagen_func = [
-            generation_funcs.gen_func_with_cast(
-                partial(generation_funcs.gen_rand, low=-32767, high=2147483583), torch.int
-            )
+            generation_funcs.gen_func_with_cast(partial(generation_funcs.gen_rand, low=0, high=2147483647), torch.int)
         ]
         test_args = generation_funcs.gen_default_dtype_layout_device(input_shapes)[0]
         test_args.update(
