@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 
 #include "common/utils.hpp"
@@ -15,11 +16,13 @@
 
 #include "noc/noc_parameters.h"
 
+namespace fs = std::filesystem;
+
 using namespace std;
 
 namespace tt::tt_metal {
 
-static void gen_trisc_cpp(const string& src_name, const string& dst_name, vector<string>& prolog)
+static void gen_kernel_cpp(const string& src_name, const string& dst_name, vector<string>& prolog)
 {
     std::ofstream out(dst_name);
     for (auto s: prolog)
@@ -27,6 +30,36 @@ static void gen_trisc_cpp(const string& src_name, const string& dst_name, vector
     out << "#include \"" << src_name << "\"\n";
 }
 
+static string get_absolute_path(const string& file_path_string) {
+    fs::path file_path(file_path_string);
+
+    // If the path doesn't exist as a absolute/relative path, then it must be relative to TT_METAL_HOME.
+    if (!fs::exists(file_path)) {
+        file_path = fs::path(llrt::OptionsG.get_root_dir() + file_path_string);
+        if (!fs::exists(file_path)) {
+            TT_FATAL("Kernel file {} doesn't exist!", file_path_string);
+        }
+    }
+
+    // Convert to absolute path and return
+    return fs::absolute(file_path).string();
+}
+
+void jit_build_genfiles_kernel_include(const JitBuildEnv& env,
+                                   const JitBuildSettings& settings,
+                                   const string& input_hlk_file_path) {
+    // Note: assumes dirs (and descriptors) already created
+    log_trace(tt::LogBuildKernels, "Generating defines for BRISC/NCRISC/ERISC user kernel");
+
+    string out_dir = env.get_out_kernel_root_path() + settings.get_full_kernel_name() + "/";
+    string kernel_header = out_dir + "kernel_includes.hpp";
+
+    // Get absolute path of kernel file to include
+    string abs_file_path = get_absolute_path(input_hlk_file_path);
+
+    vector<string> prolog;
+    gen_kernel_cpp(abs_file_path, kernel_header, prolog);
+}
 void jit_build_genfiles_triscs_src(const JitBuildEnv& env,
                                    const JitBuildSettings& settings,
                                    const string& input_hlk_file_path)
@@ -45,6 +78,9 @@ void jit_build_genfiles_triscs_src(const JitBuildEnv& env,
     string pack_cpp           = pack_base + ".cpp";
     string pack_llk_args_h    = pack_base + "_llk_args.h";
 
+    // Get absolute path of kernel file to include
+    string abs_file_path = get_absolute_path(input_hlk_file_path);
+
     vector<string> unpack_prolog;
     unpack_prolog.push_back("#define TRISC_UNPACK\n");
     unpack_prolog.push_back("#include \"defines_generated.h\"\n");
@@ -56,9 +92,9 @@ void jit_build_genfiles_triscs_src(const JitBuildEnv& env,
     pack_prolog.push_back("#include \"defines_generated.h\"\n");
 
     // TODO(pgk) - is this really worth it?
-    std::thread t0( [&]() { gen_trisc_cpp(input_hlk_file_path, unpack_cpp, unpack_prolog); } );
-    std::thread t1( [&]() { gen_trisc_cpp(input_hlk_file_path, math_cpp, math_prolog); } );
-    std::thread t2( [&]() { gen_trisc_cpp(input_hlk_file_path, pack_cpp, pack_prolog); } );
+    std::thread t0( [&]() { gen_kernel_cpp(abs_file_path, unpack_cpp, unpack_prolog); } );
+    std::thread t1( [&]() { gen_kernel_cpp(abs_file_path, math_cpp, math_prolog); } );
+    std::thread t2( [&]() { gen_kernel_cpp(abs_file_path, pack_cpp, pack_prolog); } );
     t0.join(); t1.join(); t2.join();
 
     // Here we generate an auxiliary header with defines added via add_define() call
@@ -143,14 +179,14 @@ static std::string create_formats_array_string(std::string array_type, std::stri
 }
 
 static std::pair<std::vector<DataFormat>, std::vector<DataFormat>>
-generate_unpack_data_formats(tt_hlk_desc& desc, DataFormat unpack_conditional_dst_format, bool fp32_dest_acc_en) {
+generate_unpack_data_formats(tt_hlk_desc& desc, DataFormat unpack_conditional_dst_format, bool fp32_dest_acc_en, bool preserve_fp32_precision) {
 
     vector<DataFormat> src_formats = tt::get_unpack_src_formats(
         desc.input_buf_dataformat_arr, desc.param_buf_dataformat_arr, desc.intermediate_buf_dataformat_arr);
 
     vector<DataFormat> dst_formats = tt::get_unpack_dst_formats(
         desc.input_buf_dataformat_arr, desc.param_buf_dataformat_arr, desc.intermediate_buf_dataformat_arr,
-        desc.output_buf_dataformat_arr, unpack_conditional_dst_format, fp32_dest_acc_en);
+        desc.output_buf_dataformat_arr, unpack_conditional_dst_format, fp32_dest_acc_en, preserve_fp32_precision);
 
     TT_ASSERT(src_formats.size() == 24 && dst_formats.size() == 24,
         "There must be 8 unpack src/dst formats for each input, param, and intermediate operands.");
@@ -265,7 +301,11 @@ static void generate_data_format_descriptors(JitBuildOptions& options, const tt:
     }
 
     if (tt::is_all_fp32_formats(desc.input_buf_dataformat_arr) && options.fp32_dest_acc_en){
-        unpack_conditional_dst_format = DataFormat::Tf32;
+        if (options.preserve_fp32_precision) {
+            unpack_conditional_dst_format = DataFormat::Float32;
+        } else {
+            unpack_conditional_dst_format = DataFormat::Tf32;
+        }
     }
 
     tt::check_valid_in_out_data_formats(
@@ -275,7 +315,7 @@ static void generate_data_format_descriptors(JitBuildOptions& options, const tt:
         desc.intermediate_buf_dataformat_arr);
 
     vector<DataFormat> unpack_src_formats_all_cbs, unpack_dst_formats_all_cbs;
-    tie(unpack_src_formats_all_cbs, unpack_dst_formats_all_cbs) = generate_unpack_data_formats(desc, unpack_conditional_dst_format, options.fp32_dest_acc_en);
+    tie(unpack_src_formats_all_cbs, unpack_dst_formats_all_cbs) = generate_unpack_data_formats(desc, unpack_conditional_dst_format, options.fp32_dest_acc_en, options.preserve_fp32_precision);
 
     vector<DataFormat> pack_src_formats_all_cbs, pack_dst_formats_all_cbs;
     tie(pack_src_formats_all_cbs, pack_dst_formats_all_cbs) = generate_pack_data_formats(desc, unpack_conditional_dst_format, options.fp32_dest_acc_en, arch);

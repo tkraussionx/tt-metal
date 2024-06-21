@@ -4,10 +4,8 @@
 
 #include "tt_dnn/op_library/transformer_tms/transformer_tms.hpp"
 
-#include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/host_api.hpp"
-#include "tt_metal/tools/profiler/op_profiler.hpp"
 
 namespace tt {
 namespace operations {
@@ -592,7 +590,7 @@ operation::ProgramWithCallbacks SSMEltwiseMul::create_program(
     auto device_compute_with_storage_grid_size = input_tensor_a.device()->compute_with_storage_grid_size();
 
     return multi_core_ssm_eltwise_mul(
-        input_tensor_a, input_tensor_b, output_tensor, hidden_size, device_compute_with_storage_grid_size);
+        input_tensor_a, input_tensor_b, output_tensor, hidden_size, this->math_fidelity, device_compute_with_storage_grid_size);
 }
 
 tt::stl::reflection::Attributes SSMEltwiseMul::attributes() const {
@@ -655,7 +653,7 @@ operation::ProgramWithCallbacks SSM1DSumReduce::create_program(
     const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     auto device_compute_with_storage_grid_size = input_tensor_a.device()->compute_with_storage_grid_size();
-    return multi_core_ssm_1d_sum_reduce(input_tensor_a, output_tensor, device_compute_with_storage_grid_size);
+    return multi_core_ssm_1d_sum_reduce(input_tensor_a, output_tensor, math_fidelity, device_compute_with_storage_grid_size);
 }
 
 tt::stl::reflection::Attributes SSM1DSumReduce::attributes() const {

@@ -634,6 +634,7 @@ void py_module(py::module& m_primary) {
         py::arg("bias").noconvert() = std::nullopt,
         py::arg("output").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         R"doc(
         "Performs a moreh_linear operation.
     )doc");
@@ -653,6 +654,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("weight_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("bias_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         R"doc(
         "Performs a moreh_linear_backward operation.
     )doc");
@@ -669,6 +671,7 @@ void py_module(py::module& m_primary) {
         py::arg("output").noconvert() = std::nullopt,
         py::arg("bias").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         "Performs a moreh_matmul operation.");
 
     // moreh_matmul_backward
@@ -682,6 +685,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_a_grad").noconvert() = std::nullopt,
         py::arg("input_b_grad").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
         R"doc(
         "Performs a moreh_matmul_backward operation.
     )doc");
@@ -797,21 +801,6 @@ void py_module(py::module& m_primary) {
     )doc");
 
     m_primary.def(
-        "add",
-        &tt::operations::primary::add,
-        py::arg("input_a").noconvert(),
-        py::arg("input_b").noconvert(),
-        py::arg("fused_activations") = std::nullopt,
-        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        py::arg("output_dtype").noconvert() = std::nullopt,
-        py::arg("in_place") = false,
-        py::arg("output_tensor").noconvert() = std::nullopt,
-        R"doc(Perform an eltwise-binary add (``{0} + {1}``) on two tensors.
-
-        Both input tensors must have TILE layout. Output tensor will have TILE layout.
-    )doc");
-
-    m_primary.def(
         "bcast",
         &tt::operations::primary::bcast,
         py::arg("input_a").noconvert(),
@@ -820,6 +809,8 @@ void py_module(py::module& m_primary) {
         py::arg("dim"),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("in_place") = false,
+        py::arg("output_tensor").noconvert() = std::nullopt,
+        py::arg("queue_id").noconvert() = 0,
         R"doc(
         Perform a binary elementwise operation ``math_op`` between tensors ``input_a`` and ``input_b``, where values from tensor ``input_b`` are broadcast.
 
@@ -846,6 +837,7 @@ void py_module(py::module& m_primary) {
             "dim", "Dimension on which to broadcast", "BcastOpDim", "W, H, HW", "Yes"
             "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
             "in_place", "Whether to perform bcast in place, without allocating space for output tensor", "Bool", "Default is false", "No"
+            "queue_id", "command queue id", "uint8_t", "Default is 0", "No"
     )doc");
 
     py::enum_<MorehSoftmaxOpParallelizationStrategy>(m_primary, "MorehSoftmaxOpParallelizationStrategy")

@@ -349,8 +349,8 @@ void Cluster::verify_eth_fw() const {
 int Cluster::get_device_aiclk(const chip_id_t &chip_id) const {
     if (this->arch_ == tt::ARCH::BLACKHOLE) {
         // For Blackhole bring up remove AICLK query due to lack of ARC message support
-        log_info(tt::LogDevice, "For Blackhole remove AICLK query due to lack of ARC message support");
-        return 0;
+        log_info(tt::LogDevice, "For Blackhole hardcode AICLK to 800 MHz due to lack of ARC message support");
+        return 800;
     }
     if (this->device_to_mmio_device_.find(chip_id) != this->device_to_mmio_device_.end()) {
         // get_clocks returns MMIO device ID -> clock frequency
@@ -612,7 +612,8 @@ std::vector<std::vector<chip_id_t>> Cluster::get_tunnels_from_mmio_device(chip_i
         }
     }
 
-    log_info(tt::LogMetal, "Found {} FD Tunnels originating from MMIO Device {}", tunnels_from_mmio.size(), mmio_chip_id);
+    log_debug(
+        tt::LogMetal, "Found {} FD Tunnels originating from MMIO Device {}", tunnels_from_mmio.size(), mmio_chip_id);
 
     device_ids = get_devices_controlled_by_mmio_device(mmio_chip_id);
     device_ids.erase(mmio_chip_id);
@@ -642,7 +643,7 @@ std::vector<std::vector<chip_id_t>> Cluster::get_tunnels_from_mmio_device(chip_i
 
     TT_ASSERT(tunnels_from_mmio.size() != 0,"Must have at least 1 tunnel from MMIO Device.");
     uint32_t tunnel_depth = tunnels_from_mmio[0].size();
-    log_info(tt::LogMetal, "Each FD Tunnel is {} deep.", tunnel_depth);
+    log_debug(tt::LogMetal, "Each FD Tunnel is {} deep.", tunnel_depth);
 
     for (auto &dev_vec : tunnels_from_mmio) {
         TT_ASSERT(dev_vec.size() == tunnel_depth,"All tunnels from mmio device must have same depth. Found {}. Expected {}.", dev_vec.size(), tunnel_depth);

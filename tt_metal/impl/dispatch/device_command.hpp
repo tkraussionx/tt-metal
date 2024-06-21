@@ -12,6 +12,10 @@
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
+#include "tt_metal/tt_stl/aligned_allocator.hpp"
+
+template <typename T>
+using vector_memcpy_aligned = std::vector<T, tt::stl::aligned_allocator<T, MEMCPY_ALIGNMENT>>;
 
 template <bool hugepage_write = false>
 class DeviceCommand {
@@ -321,18 +325,29 @@ class DeviceCommand {
     }
 
     void add_prefetch_exec_buf_end() {
-        uint32_t increment_sizeB = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
-        auto initialize_exec_buf_end_cmd = [&](CQPrefetchCmd *exec_buf_end_cmd) {
+        auto initialize_prefetch_exec_buf_end_cmd = [&](CQPrefetchCmd *exec_buf_end_cmd) {
+            // prefetch exec_buf_end behaves as a relay_inline
             exec_buf_end_cmd->base.cmd_id = CQ_PREFETCH_CMD_EXEC_BUF_END;
+            exec_buf_end_cmd->relay_inline.length = sizeof(CQDispatchCmd);
+            exec_buf_end_cmd->relay_inline.stride = sizeof(CQDispatchCmd) + sizeof(CQPrefetchCmd);
         };
-        CQPrefetchCmd *exec_buf_end_cmd_dst = this->reserve_space<CQPrefetchCmd *>(increment_sizeB);
+        auto initialize_dispatch_exec_buf_end_cmd = [&](CQDispatchCmd *exec_buf_end_cmd) {
+            exec_buf_end_cmd->base.cmd_id = CQ_DISPATCH_CMD_EXEC_BUF_END;
+        };
+
+        CQPrefetchCmd *prefetch_exec_buf_end_cmd_dst = this->reserve_space<CQPrefetchCmd *>(sizeof(CQPrefetchCmd));
+        CQDispatchCmd *dispatch_exec_buf_end_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
         if constexpr (hugepage_write) {
-            alignas(MEMCPY_ALIGNMENT) CQPrefetchCmd exec_buf_end_cmd;
-            initialize_exec_buf_end_cmd(&exec_buf_end_cmd);
-            this->memcpy(exec_buf_end_cmd_dst, &exec_buf_end_cmd, sizeof(CQPrefetchCmd));
+            alignas(MEMCPY_ALIGNMENT) CQPrefetchCmd prefetch_exec_buf_end_cmd;
+            alignas(MEMCPY_ALIGNMENT) CQDispatchCmd dispatch_exec_buf_end_cmd;
+            initialize_prefetch_exec_buf_end_cmd(&prefetch_exec_buf_end_cmd);
+            initialize_dispatch_exec_buf_end_cmd(&dispatch_exec_buf_end_cmd);
+            this->memcpy(prefetch_exec_buf_end_cmd_dst, &prefetch_exec_buf_end_cmd, sizeof(CQPrefetchCmd));
+            this->memcpy(dispatch_exec_buf_end_cmd_dst, &dispatch_exec_buf_end_cmd, sizeof(CQDispatchCmd));
         } else {
-            initialize_exec_buf_end_cmd(exec_buf_end_cmd_dst);
+            initialize_prefetch_exec_buf_end_cmd(prefetch_exec_buf_end_cmd_dst);
+            initialize_dispatch_exec_buf_end_cmd(dispatch_exec_buf_end_cmd_dst);
         }
     }
 
@@ -458,7 +473,7 @@ class DeviceCommand {
     template <typename Command>
     void zero(Command *cmd) {
         if constexpr (hugepage_write) {
-            std::vector<char, boost::alignment::aligned_allocator<char, MEMCPY_ALIGNMENT>> zero_cmd(sizeof(Command), 0);
+            vector_memcpy_aligned<char> zero_cmd(sizeof(Command), 0);
             this->memcpy(cmd, zero_cmd.data(), sizeof(Command));
         } else {
             std::fill((uint8_t *)cmd, (uint8_t *)cmd + sizeof(Command), 0);

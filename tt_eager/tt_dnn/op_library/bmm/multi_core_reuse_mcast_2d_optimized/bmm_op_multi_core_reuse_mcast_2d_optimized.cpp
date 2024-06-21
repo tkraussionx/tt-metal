@@ -321,6 +321,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)in0_block_w,          // in0_block_w
             (std::uint32_t)per_core_M,           // in0_block_h
             (std::uint32_t)in0_block_num_tiles,  // in0_block_num_tiles
+            (std::uint32_t) false,               // extract_shard_sub_blocks (not used for interleaved)
+            (std::uint32_t)0,                    // shard_width_in_tiles (not used for interleaved)
+            (std::uint32_t)0,                    // shard_height_in_tiles (not used for interleaved)
             // in0/in1 common args
             (std::uint32_t)num_blocks,  // num_blocks
             // in0 mcast args
@@ -1296,9 +1299,9 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     // TODO: Move these validates to op validate and properly check for this
     TT_FATAL(
         num_blocks_x <= num_cores_x,
-        "Num output blocks along x must be smaller than number of columns in compute grid!");
+        "Num output blocks along x {} must be smaller than or equal to the number of columns in compute grid {}!", num_blocks_x, num_cores_x);
     TT_FATAL(
-        num_blocks_y <= num_cores_y, "Num output blocks along y must be smaller than number of rows in compute grid!");
+        num_blocks_y <= num_cores_y, "Num output blocks along y {} must be smaller than or equal to the number of rows in compute grid {}!", num_blocks_y, num_cores_y);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup

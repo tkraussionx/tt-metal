@@ -5,6 +5,7 @@
 #pragma once
 
 #include <filesystem>
+#include <tuple>
 #include <type_traits>
 
 #include "tensor/tensor.hpp"
@@ -21,6 +22,12 @@ using json = nlohmann::json;
 namespace tt {
 
 namespace tt_metal {
+
+extern std::atomic<uint32_t> operation_id_atomic_count;
+
+inline uint32_t assign_operation_id() {
+    return operation_id_atomic_count.fetch_add(1);
+}
 
 namespace op_profiler {
 
@@ -251,6 +258,48 @@ inline json get_base_json(
     return j;
 }
 
+template <typename operation_t>
+inline json get_base_json(
+    uint32_t operation_id,
+    const typename operation_t::operation_attributes_t& operation_attributes,
+    const typename operation_t::tensor_args_t& tensor_args,
+    typename operation_t::tensor_return_value_t& tensor_return_value) {
+    ZoneScoped;
+    json j;
+    j["global_call_count"] = operation_id;
+
+    auto as_string = [](std::string_view v) -> std::string { return {v.data(), v.size()}; };
+    std::string opName = as_string(tt::stl::get_type_name<operation_t>());
+    std::replace(opName.begin(), opName.end(), ',', ';');
+    j["op_code"] = opName;
+
+    json attributesObj;
+    constexpr auto& attribute_names = std::decay_t<decltype(operation_attributes)>::attribute_names;
+    const auto attribute_values = operation_attributes.attribute_values();
+    [&attributesObj, &attribute_names, &attribute_values]<size_t... Ns>(std::index_sequence<Ns...>) {
+        (
+            [&attributesObj, &attribute_names, &attribute_values] {
+                const auto& attribute_name = std::get<Ns>(attribute_names);
+                const auto& attribute = std::get<Ns>(attribute_values);
+                attributesObj[attribute_name] = fmt::format("{}", attribute);
+            }(),
+            ...);
+    }(std::make_index_sequence<std::tuple_size_v<std::decay_t<decltype(attribute_names)>>>{});
+    j["attributes"] = attributesObj;
+
+    std::vector<json> input_tensors;
+    tt::stl::reflection::visit_object_of_type<Tensor>(
+        [&input_tensors](auto&& tensor) { input_tensors.push_back(get_tensor_json(tensor)); }, tensor_args);
+    j["input_tensors"] = input_tensors;
+
+    std::vector<json> output_tensors;
+    tt::stl::reflection::visit_object_of_type<Tensor>(
+        [&output_tensors](auto&& tensor) { output_tensors.push_back(get_tensor_json(tensor)); }, tensor_return_value);
+    j["output_tensors"] = output_tensors;
+
+    return j;
+}
+
 inline std::string op_meta_data_serialized_json(
     uint32_t opID, const tt::tt_metal::operation::ExternalOperation& op, const std::vector<Tensor>& input_tensors) {
     auto j = get_base_json<true>(opID, op, input_tensors);
@@ -322,6 +371,37 @@ inline std::string op_meta_data_serialized_json(
     }
 }
 
+template <typename operation_t>
+inline std::string op_meta_data_serialized_json(
+    const operation_t& operation,
+    uint32_t operation_id,
+    auto device_id,
+    const auto& program,
+    const auto& program_hash,
+    const auto& operation_attributes,
+    const auto& tensor_args,
+    auto& tensor_return_value) {
+    auto j = get_base_json<operation_t>(operation_id, operation_attributes, tensor_args, tensor_return_value);
+    j["op_type"] = magic_enum::enum_name(OpType::tt_dnn_device);
+    j["device_id"] = device_id;
+    j["op_hash"] = program_hash;
+    j["kernel_info"] = get_kernels_json(program);
+
+    j["optional_input_tensors"] = std::vector<json>{};
+
+    auto perfModel = operation_t::create_op_performance_model(operation_attributes, tensor_args, tensor_return_value);
+    j["performance_model"]["compute_ns"] = perfModel.get_compute_ns();
+    j["performance_model"]["ideal_ns"] = perfModel.get_ideal_ns();
+    j["performance_model"]["bandwidth_ns"] = perfModel.get_bandwidth_ns();
+    j["performance_model"]["input_bws"] = perfModel.get_input_bws();
+    j["performance_model"]["output_bws"] = perfModel.get_output_bws();
+
+    std::string short_str = fmt::format("`TT_DNN_DEVICE_OP: {}, {}, {}, ", j["op_code"], program_hash, device_id);
+
+    std::string ser = j.dump(4);
+    return fmt::format("{}{} ->\n{}`", short_str, operation_id, ser);
+}
+
 #define TracyOpTTNNDevice(                                                                                           \
     op_id, op_hash, is_cached, device_id, operation, program, input_tensors, optional_input_tensors, output_tensors) \
     std::string op_message = op_profiler::op_meta_data_serialized_json(                                              \
@@ -336,6 +416,21 @@ inline std::string op_meta_data_serialized_json(
         output_tensors);                                                                                             \
     std::string op_text = fmt::format("id:{}", op_id);                                                               \
     ZoneText(op_text.c_str(), op_text.size());                                                                       \
+    TracyMessage(op_message.c_str(), op_message.size());
+
+#define TracyOpTNNNDeviceV2(                                                                                           \
+    operation, operation_id, device_id, program, program_hash, operation_attributes, tensor_args, tensor_return_value) \
+    std::string op_message = op_profiler::op_meta_data_serialized_json(                                                \
+        operation,                                                                                                     \
+        operation_id,                                                                                                  \
+        device_id,                                                                                                     \
+        program,                                                                                                       \
+        program_hash,                                                                                                  \
+        operation_attributes,                                                                                          \
+        tensor_args,                                                                                                   \
+        tensor_return_value);                                                                                          \
+    std::string op_text = fmt::format("id:{}", operation_id);                                                          \
+    ZoneText(op_text.c_str(), op_text.size());                                                                         \
     TracyMessage(op_message.c_str(), op_message.size());
 
 #define TracyOpTTNNHost(op_id, operation, input_tensors, output_tensors)                            \
@@ -355,6 +450,8 @@ inline std::string op_meta_data_serialized_json(
 
 #define TracyOpTTNNDevice( \
     op_id, op_hash, is_cached, device_id, operation, program, input_tensors, optional_input_tensors, output_tensors)
+#define TracyOpTNNNDeviceV2( \
+    operation, operation_id, device_id, program, program_hash, operation_attributes, tensor_args, tensor_return_value)
 #define TracyOpTTNNHost(op_id, operation, input_tensors, output_tensors)
 #define TracyOpTTNNExternal(op_id, op, input_tensors)
 

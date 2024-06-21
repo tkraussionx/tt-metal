@@ -6,7 +6,6 @@
 
 #include <fmt/core.h>
 
-#include <boost/core/demangle.hpp>
 #include <experimental/type_traits>
 #include <optional>
 #include <ostream>
@@ -18,16 +17,18 @@
 
 #include "third_party/magic_enum/magic_enum.hpp"
 
+#include "type_name.hpp"
+
 namespace tt {
 namespace stl {
 
 template <typename T>
-std::string get_type_name() {
-    return boost::core::demangle(typeid(T).name());
+constexpr std::string_view get_type_name() {
+    return short_type_name<T>;
 }
 
 template <typename T>
-std::string get_type_name(const T& object) {
+constexpr std::string_view get_type_name(const T& object) {
     return get_type_name<T>();
 }
 
@@ -38,6 +39,11 @@ constexpr bool DEBUG_HASH_OBJECT_FUNCTION = false;
 
 using hash_t = std::uint64_t;
 constexpr hash_t DEFAULT_SEED = 1234;
+
+// stuff this in a header somewhere
+inline int type_hash_counter = 0;
+template <typename T>
+inline const int type_hash = type_hash_counter++;
 
 namespace detail {
 
@@ -356,7 +362,7 @@ template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& vector) {
     os << "{";
     for (auto index = 0; index < vector.size(); index++) {
-        const auto& element = vector[index];
+        const T& element = vector[index];
         os << element;
         if (index != vector.size() - 1) {
             os << ", ";
@@ -379,6 +385,48 @@ std::ostream& operator<<(std::ostream& os, const std::set<T>& set) {
     }
     os << "}";
     return os;
+}
+
+template <typename to_visit_t, typename T>
+    requires std::same_as<std::decay_t<T>, to_visit_t>
+constexpr auto visit_object_of_type(auto callback, T&& value) {
+    callback(value);
+}
+
+template <typename to_visit_t, typename T>
+constexpr auto visit_object_of_type(auto callback, const std::optional<T>& value) {
+    if (value.has_value()) {
+        visit_object_of_type<to_visit_t>(callback, value.value());
+    }
+}
+
+template <typename to_visit_t, typename T>
+constexpr auto visit_object_of_type(auto callback, const std::vector<T>& value) {
+    for (auto& tensor : value) {
+        visit_object_of_type<to_visit_t>(callback, tensor);
+    }
+}
+
+template <typename to_visit_t, typename T, auto N>
+constexpr auto visit_object_of_type(auto callback, const std::array<T, N>& value) {
+    for (auto& tensor : value) {
+        visit_object_of_type<to_visit_t>(callback, tensor);
+    }
+}
+
+template <typename to_visit_t, typename... Ts>
+constexpr auto visit_object_of_type(auto callback, const std::tuple<Ts...>& value) {
+    constexpr auto num_attributes = sizeof...(Ts);
+    [&callback, &value]<size_t... Ns>(std::index_sequence<Ns...>) {
+        (visit_object_of_type<to_visit_t>(callback, std::get<Ns>(value)), ...);
+    }(std::make_index_sequence<num_attributes>{});
+}
+
+template <typename to_visit_t, typename T>
+    requires(not std::same_as<std::decay_t<T>, to_visit_t>) and requires { std::decay_t<T>::attribute_names; }
+constexpr auto visit_object_of_type(auto callback, T&& object) {
+    constexpr auto num_attributes = std::tuple_size_v<decltype(std::decay_t<T>::attribute_names)>;
+    visit_object_of_type<to_visit_t>(callback, object.attribute_values());
 }
 
 }  // namespace reflection

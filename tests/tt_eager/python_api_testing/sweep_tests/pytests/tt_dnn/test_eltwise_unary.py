@@ -4,6 +4,7 @@
 
 import pytest
 import torch
+import numpy as np
 from functools import partial
 from math import pi
 import copy
@@ -641,6 +642,36 @@ class TestEltwiseUnary:
         comparison_func = comparison_funcs.comp_equal
         run_single_pytorch_test(
             "eltwise-heaviside",
+            input_shapes,
+            datagen_func,
+            comparison_func,
+            device,
+            test_args,
+        )
+
+    @skip_for_grayskull("#ToDo: GS implementation needs to be done for remainder op")
+    def test_run_eltwise_unary_remainder(
+        self,
+        input_shapes,
+        device,
+        function_level_defaults,
+        input_mem_config,
+        output_mem_config,
+    ):
+        datagen_func = [
+            generation_funcs.gen_func_with_cast(partial(generation_funcs.gen_rand, low=-1e5, high=1e5), torch.bfloat16)
+        ]
+        test_args = generation_funcs.gen_default_dtype_layout_device(input_shapes)[0]
+        test_args.update({"value": np.random.randint(-100, 100) + 0.5})
+        test_args.update(
+            {
+                "input_mem_config": [input_mem_config],
+                "output_mem_config": output_mem_config,
+            }
+        )
+        comparison_func = comparison_funcs.comp_pcc
+        run_single_pytorch_test(
+            "eltwise-unary_remainder",
             input_shapes,
             datagen_func,
             comparison_func,

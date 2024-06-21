@@ -539,6 +539,17 @@ def left_shift(x, *args, **kwargs):
     return result
 
 
+def unary_remainder(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    result = torch.remainder(x, value)
+    return result
+
+
+def remainder(x, y, *args, **kwargs):
+    result = torch.remainder(x, y)
+    return result
+
+
 def unary_ne(x, *args, **kwargs):
     value = kwargs.pop("scalar")
     result = torch.ne(x, value)
@@ -1385,6 +1396,10 @@ def eltwise_typecast(x, *args, tt_input_dtype, tt_output_dtype, **kwargs):
         return x.to(torch.bfloat16)
     elif tt_input_dtype[0] == ttl.tensor.DataType.BFLOAT16 and tt_output_dtype[0] == ttl.tensor.DataType.INT32:
         return x.to(torch.int32)
+    elif tt_input_dtype[0] == ttl.tensor.DataType.BFLOAT16 and tt_output_dtype[0] == ttl.tensor.DataType.FLOAT32:
+        return x.to(torch.bfloat16).to(torch.float32)
+    elif tt_input_dtype[0] == ttl.tensor.DataType.FLOAT32 and tt_output_dtype[0] == ttl.tensor.DataType.BFLOAT16:
+        return x.to(torch.bfloat16)
     else:
         return x
 

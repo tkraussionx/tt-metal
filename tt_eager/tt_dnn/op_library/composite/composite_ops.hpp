@@ -9,9 +9,11 @@
 #include "tensor/tensor.hpp"
 #include "tensor/tensor_utils.hpp"
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
-#include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 #include "tt_metal/common/constants.hpp"
+
+
+#include "ttnn/operations/eltwise/binary/device/binary_op.hpp"
 
 namespace tt {
 
@@ -193,6 +195,11 @@ Tensor div_no_nan(
     float value,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
+Tensor remainder(
+    const Tensor& input_a,
+    const Tensor& input_b,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+
 Tensor trunc(const Tensor& input, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
 Tensor round(
@@ -359,10 +366,45 @@ Tensor where(
     const float value_false,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
     std::optional<Tensor> output_tensor = std::nullopt);
+Tensor where(
+    uint8_t queue_id,
+    const Tensor& predicate,
+    const Tensor& value_true,
+    const Tensor& value_false,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor = std::nullopt);
+Tensor where(
+    uint8_t queue_id,
+    const Tensor& predicate,
+    const float value_true,
+    const Tensor& value_false,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor = std::nullopt);
+Tensor where(
+    uint8_t queue_id,
+    const Tensor& predicate,
+    const Tensor& value_true,
+    const float value_false,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor = std::nullopt);
+Tensor where(
+    uint8_t queue_id,
+    const Tensor& predicate,
+    const float value_true,
+    const float value_false,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor = std::nullopt);
 
 // on-device tensor creation 0s like @reference_tensor
 Tensor zeros_like(
-    const Tensor& reference_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+    uint8_t queue_id,
+    const Tensor& reference_tensor,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor= std::nullopt);
+Tensor zeros_like(
+    const Tensor& reference_tensor,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor= std::nullopt);
 
 // on-device tensor creation 1s like @reference_tensor
 Tensor ones_like(
@@ -370,9 +412,16 @@ Tensor ones_like(
 
 // on-device tensor creation with value like @reference_tensor
 Tensor full_like(
+    uint8_t queue_id,
     const Tensor& reference_tensor,
     float value,
-    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor= std::nullopt);
+Tensor full_like(
+    const Tensor& reference_tensor,
+    float value,
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<Tensor> output_tensor= std::nullopt);
 
 // on-device tensor creation 0s with shape
 Tensor empty(

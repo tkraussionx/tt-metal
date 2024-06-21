@@ -6,8 +6,6 @@
 
 #include <optional>
 
-#include "tt_dnn/op_library/run_operation.hpp"
-#include "tt_eager/tt_dnn/op_library/work_split.hpp"
 #include "tt_eager/tt_dnn/op_library/reshape/reshape_op.hpp"
 #include "tt_eager/tt_dnn/op_library/composite/composite_ops.hpp"
 #include "tt_dnn/op_library/math.hpp"
@@ -16,7 +14,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 
-#include "third_party/magic_enum/magic_enum.hpp"
+#include "ttnn/operations/eltwise/binary/binary.hpp"
 
 using namespace tt::constants;
 using namespace tt::tt_metal;
@@ -46,16 +44,16 @@ Tensor groupnorm(
      */
 
     Shape shape = a.get_legacy_shape();
-    Tensor ar = reshape(const_cast<Tensor&>(a),shape[0],1,shape[1]*shape[2],shape[3],output_mem_config);
+    Tensor ar = reshape(const_cast<Tensor&>(a), shape[0], 1, shape[1]*shape[2], shape[3], output_mem_config);
     Tensor group_norm_1 = normalize_hw(ar,output_mem_config);
-    Tensor output = reshape (group_norm_1,shape[0],shape[1],shape[2],shape[3],output_mem_config);
+    Tensor output = reshape (group_norm_1, shape[0], shape[1], shape[2], shape[3], output_mem_config);
     if (gamma.has_value() && beta.has_value()) {
-        output = mac(output,gamma.value(),beta.value(),output_mem_config);
+        output = mac(output, gamma.value(), beta.value(), output_mem_config);
     } else {
         if (gamma.has_value()) {
-            output = mul(output,gamma.value()); //gamma_t);
+            output = ttnn::multiply(output, gamma.value()); //gamma_t);
         } else if (beta.has_value()) {
-            output = add(output,beta.value());
+            output = ttnn::add(output, beta.value());
         }
     }
     return output;

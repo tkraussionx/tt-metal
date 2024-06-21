@@ -17,9 +17,11 @@ set(IMPL_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/debug/dprint_server.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/debug/watcher_server.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/trace/trace.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/trace/trace_buffer.cpp
 )
 
 add_library(impl OBJECT ${IMPL_SRC})
+target_link_libraries(impl PRIVATE Boost::smart_ptr)
 target_link_libraries(impl PUBLIC common)
 
 target_include_directories(impl PUBLIC ${PROJECT_SOURCE_DIR}/tt_metal ${CMAKE_CURRENT_SOURCE_DIR})

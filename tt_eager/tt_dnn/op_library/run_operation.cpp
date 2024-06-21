@@ -4,18 +4,19 @@
 
 #include "tt_dnn/op_library/run_operation.hpp"
 
-#include <chrono>
 #include <tt_eager/tensor/tensor.hpp>
 #include <tt_eager/tensor/tensor_utils.hpp>
 
-#include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 #include "tt_metal/tt_stl/reflection.hpp"
-#include "tt_numpy/functions.hpp"
+
+namespace tt::tt_metal {
+    std::atomic<uint32_t> operation_id_atomic_count = 0;
+}
 
 namespace tt::tt_metal::operation {
 
@@ -119,7 +120,7 @@ constexpr auto decorate_device_operation(const Function& function) {
 template <typename OutputTensors>
 OutputTensors run_host_operation(const HostOperation<OutputTensors>& operation, const Tensors& input_tensors) {
     ZoneScopedN("TT_DNN_HOST_OP");
-    uint32_t op_id = assign_id();
+    uint32_t op_id = assign_operation_id();
 
     operation.validate(input_tensors);
     auto output_tensors = operation.compute_output_tensors(input_tensors);
@@ -143,7 +144,7 @@ OutputTensors run_device_operation(
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors) {
     ZoneScopedN("TT_DNN_DEVICE_OP");
-    uint32_t op_id = assign_id();
+    uint32_t op_id = assign_operation_id();
 
     std::function<std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>(
         const DeviceOperation<OutputTensors>&,
@@ -375,6 +376,7 @@ Tensors run_with_autoformat(
     const DeviceOperation<Tensors>& operation,
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors,
+    const OptionalTensors& optional_output_tensors,
     const float pad_value,
     const bool pad_c,
     uint8_t cq_id) {
@@ -414,7 +416,7 @@ Tensors run_with_autoformat(
         }
     }
 
-    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors, {}, cq_id);
+    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors, optional_output_tensors, cq_id);
 
     TT_ASSERT(output_tensors.size() == output_shapes.size());
 
@@ -434,6 +436,7 @@ Tensors run_with_autoformat(
     const std::vector<Layout>& output_layouts,
     const OptionalConstTensors& optional_input_tensors,
     const std::vector<std::optional<FormatParams>>& optional_input_formatting,
+    const OptionalTensors& optional_output_tensors,
     uint8_t cq_id) {
     ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
@@ -472,7 +475,7 @@ Tensors run_with_autoformat(
         }
     }
 
-    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors, {std::nullopt}, cq_id);
+    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors, optional_output_tensors, cq_id);
 
     TT_ASSERT(output_tensors.size() == output_shapes.size());
     TT_ASSERT(output_tensors.size() == output_layouts.size());

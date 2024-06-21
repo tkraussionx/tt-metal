@@ -1,15 +1,24 @@
 set(TTNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/device.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/async_runtime.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/op_library/binary/binary_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/op_library/to_layout/to_layout_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/conv2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/matmul.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/reduction/argmax/device/argmax_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/binary_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/broadcast_height_and_width_multi_core_program_factory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/broadcast_height_multi_core_program_factory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/broadcast_width_multi_core_program_factory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/eltwise/binary/device/element_wise_multi_core_program_factory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/reduction/topk/device/topk_op.cpp
 )
+
 add_library(ttnn_lib OBJECT ${TTNN_SRCS})
 target_compile_options(ttnn_lib PUBLIC -MP -Wno-int-to-pointer-cast -fno-var-tracking)
-target_link_libraries(ttnn_lib PUBLIC compiler_flags metal_header_directories metal_common_libs)
+target_link_libraries(ttnn_lib
+    PUBLIC compiler_flags metal_header_directories metal_common_libs
+    PRIVATE reflect::reflect
+)
 target_include_directories(ttnn_lib PUBLIC
     ${UMD_HOME}
     ${PROJECT_SOURCE_DIR}
@@ -21,8 +30,13 @@ target_include_directories(ttnn_lib PUBLIC
 )
 target_precompile_headers(ttnn_lib PRIVATE
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
+    <functional>
+    <map>
+    <memory>
+    <unordered_map>
+    <variant>
+    <vector>
 )
-
 
 # TODO: should be using pybind11_add_module, but right now it introduces many build problems
 # pybinds will always be built as a shared library

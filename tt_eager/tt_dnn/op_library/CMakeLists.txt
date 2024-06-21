@@ -14,6 +14,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/sharded_partial/sharded_op_partial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sharded_partial/multi_core/sharded_op_partial_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sliding_window_op_infra/sliding_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sliding_window_op_infra/reference_sliding_window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/copy/copy_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/copy/multi_core/copy_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/move/move_op.cpp
@@ -21,8 +22,6 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_overlap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/move/multi_core/move_op_multi_core_sharded.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sliding_window_op_infra/halo_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_binary/eltwise_binary_op.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_binary/multi_core/eltwise_binary_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/eltwise_unary_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/eltwise_unary/multi_core/eltwise_unary_op_sharded.cpp
@@ -216,7 +215,7 @@ set(TT_DNN_SRCS
 
 add_library(tt_dnn OBJECT ${TT_DNN_SRCS})
 
-target_link_libraries(tt_dnn PUBLIC metal_header_directories compiler_flags)
+target_link_libraries(tt_dnn PUBLIC metal_header_directories compiler_flags umd_device)
 target_include_directories(tt_dnn PUBLIC
     ${UMD_HOME}
     ${PROJECT_SOURCE_DIR}
@@ -226,12 +225,29 @@ target_include_directories(tt_dnn PUBLIC
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt
 )
 
-target_precompile_headers(tt_dnn PUBLIC
+target_precompile_headers(tt_dnn PRIVATE
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/magic_enum/magic_enum.hpp
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/compute_kernel_config.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/operation.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt/fmt/core.h
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/fmt/fmt/format.h
+    ${PROJECT_SOURCE_DIR}/tt_eager/tensor/tensor.hpp
+    ${PROJECT_SOURCE_DIR}/tt_eager/tensor/types.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/impl/device/device.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/work_split.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/jit_build/build.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/llrt/tt_cluster.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/impl/program/program.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/host_api.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/impl/buffers/buffer.hpp
+    ${PROJECT_SOURCE_DIR}/tt_eager/tt_dnn/op_library/operation.hpp
+    ${PROJECT_SOURCE_DIR}/tt_metal/common/core_coord.h
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/device_api.h
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/tt_device.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.hpp
+    <functional>
+    <map>
+    <memory>
+    <unordered_map>
+    <variant>
+    <vector>
 )

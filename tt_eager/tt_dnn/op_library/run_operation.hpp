@@ -7,11 +7,11 @@
 #include <optional>
 #include <tt_eager/tensor/tensor.hpp>
 
-#include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
 #include "tt_dnn/op_library/operation_history.hpp"
 #include "tt_stl/concepts.hpp"
+#include "tt_stl/type_name.hpp"
 
 namespace tt::tt_metal {
 
@@ -209,7 +209,7 @@ static void append_operation_to_operation_history(
 
     operation_history::append(operation_history::OperationRecord{
         ttnn_operation_id,
-        boost::core::demangle(typeid(OperationType).name()),
+        std::string(tt::stl::short_type_name<OperationType>),
         operation.get_type_name(),
         operation.attributes(),
         input_tensor_records,
@@ -275,12 +275,6 @@ inline void log_operation(
     const OptionalTensors& optional_output_tensors = {}) {}
 #endif
 
-inline uint32_t assign_id()
-{
-    static std::atomic<uint32_t> atomic_count{0};
-    return atomic_count.fetch_add(1);
-}
-
 template<class OutputTensors=Tensors>
 OutputTensors run(
     const HostOperation<OutputTensors>& operation,
@@ -341,6 +335,7 @@ Tensors run_with_autoformat(
     const DeviceOperation<Tensors>& operation,
     const Tensors& input_tensors,
     const OptionalConstTensors& optional_input_tensors = {},
+    const OptionalTensors& optional_output_tensors = {},
     const float pad_value = 0,
     const bool pad_c = false,
     uint8_t cq_id = 0
@@ -351,13 +346,14 @@ inline auto run_with_autoformat(
     ConcreteOperation&& concrete_op,
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors = {},
+    const std::vector<std::optional<Tensor>>& optional_output_tensors = {},
     const float pad_value = 0,
     const bool pad_c = false,
     uint8_t cq_id = 0
 )-> Tensors {
     using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
     const auto operation = DeviceOperation<Tensors>(concrete_op);
-    return run_with_autoformat(operation, input_tensors, optional_input_tensors, pad_value, pad_c, cq_id);
+    return run_with_autoformat(operation, input_tensors, optional_input_tensors, optional_output_tensors, pad_value, pad_c, cq_id);
 }
 
 Tensors run_with_autoformat(
@@ -367,6 +363,7 @@ Tensors run_with_autoformat(
     const std::vector<Layout>& output_layouts,
     const OptionalConstTensors& optional_input_tensors = {},
     const std::vector<std::optional<FormatParams>>& optional_input_formatting = {},
+    const OptionalTensors& optional_output_tensors = {},
     uint8_t cq_id = 0
 );
 template<typename ConcreteOperation>
@@ -377,11 +374,12 @@ inline auto run_with_autoformat(
     const std::vector<Layout>& output_layouts,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors = {},
     const std::vector<std::optional<FormatParams>>& optional_input_formatting = {},
+    const OptionalTensors& optional_output_tensors = {},
     uint8_t cq_id = 0
 )-> ProgramOutputTensors<ConcreteOperation> {
     using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
     const auto operation = DeviceOperation<OutputTensors>(concrete_op);
-    return run_with_autoformat(operation, input_tensors, input_formatting, output_layouts, optional_input_tensors, optional_input_formatting, cq_id);
+    return run_with_autoformat(operation, input_tensors, input_formatting, output_layouts, optional_input_tensors, optional_input_formatting, optional_output_tensors, cq_id);
 }
 
 void launch_op(
