@@ -12,7 +12,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 
-namespace ttnn::operations::unary {
+namespace ttnn::operations::unary::detail {
 
 // using namespace tt::constants;
 
@@ -20,11 +20,9 @@ namespace ttnn::operations::unary {
 
 // namespace tt_metal {
 
-operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor &output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en, bool preserve_fp32_precision) {
+operation::ProgramWithCallbacks unary_multi_core(const ttnn::Tensor &a, ttnn::Tensor &output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en, bool preserve_fp32_precision) {
 
-    using namespace tt::tt_metal;
-    using namespace tt::constants;
-
+    std::cout<< "Inside ttnn unary_multi_core" << std::endl;
     tt::tt_metal::Program program{};
 
     tt::DataFormat cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(a.get_dtype());
@@ -32,7 +30,7 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor
     tt::DataFormat cb_data_format_output = tt::tt_metal::datatype_to_dataformat_converter(output.get_dtype());
     uint32_t single_tile_size_output = tt::tt_metal::detail::TileSize(cb_data_format_output);
 
-    uint32_t num_tiles = a.volume() / TILE_HW;
+    uint32_t num_tiles = a.volume() / tt::constants::TILE_HW;
 
     tt::tt_metal::Device *device = a.device();
 

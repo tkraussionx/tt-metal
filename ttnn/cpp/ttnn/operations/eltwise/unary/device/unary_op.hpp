@@ -13,13 +13,12 @@
 #include "tt_eager/tensor/tensor_utils.hpp"
 #include "tt_eager/tt_dnn/op_library/compute_kernel_config.hpp"
 
-#include "tensor/tensor.hpp"
 #include "tt_eager/tt_dnn/op_library/run_operation.hpp"
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/dispatch/command_queue.hpp"
-#include "ttnn/core.hpp"
-#include "ttnn/decorators.hpp"
-#include "ttnn/types.hpp"
+// #include "tt_metal/host_api.hpp"
+// #include "tt_metal/impl/dispatch/command_queue.hpp"
+// #include "ttnn/core.hpp"
+// #include "ttnn/decorators.hpp"
+// #include "ttnn/types.hpp"
 
 namespace ttnn::operations::unary {
 
@@ -186,7 +185,7 @@ inline UnaryWithParam string_to_unary_with_param(const std::string& name) {
 
 enum class UnaryOpParallelizationStrategy { MULTI_CORE, SHARDED_MULTI_CORE };
 
-struct EltwiseUnary {
+struct Unary {
     const std::vector<UnaryWithParam> op_chain;
     const MemoryConfig output_mem_config;
     bool fp32_dest_acc_en;
@@ -207,11 +206,6 @@ struct EltwiseUnary {
 
     const operation::Hash compute_program_hash(const std::vector<Tensor>& input_tensors) const;
 };
-
-operation::ProgramWithCallbacks eltwise_unary_sharded(
-    const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en, bool preserve_fp32_precision);
-operation::ProgramWithCallbacks eltwise_unary_multi_core(
-    const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en, bool preserve_fp32_precision);
 
 // }  // namespace tt_metal
 

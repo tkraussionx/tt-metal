@@ -477,28 +477,28 @@ void py_module(py::module& module) {
     detail::bind_sigmoid_accurate(module);
     detail::bind_unary_chain(module);
 
-    detail::bind_unary_operation(module, ttnn::acosh);
-    detail::bind_unary_operation(module, ttnn::asinh);
-    detail::bind_unary_operation(module, ttnn::atanh);
-    detail::bind_unary_operation(module, ttnn::cbrt);
-    detail::bind_unary_operation(module, ttnn::cosh);
-    detail::bind_unary_operation(module, ttnn::deg2rad);
-    detail::bind_unary_operation(module, ttnn::digamma);
-    detail::bind_unary_operation_with_scale_and_shift(module, ttnn::hardswish);
-    detail::bind_unary_operation_with_scale_and_shift(module, ttnn::hardsigmoid);
-    detail::bind_unary_operation_with_low_and_high(module, ttnn::hardtanh);
-    detail::bind_unary_operation(module, ttnn::lgamma);
-    detail::bind_unary_operation(module, ttnn::log1p);
-    detail::bind_unary_operation(module, ttnn::mish);
-    detail::bind_unary_operation(module, ttnn::multigammaln);
-    detail::bind_unary_operation(module, ttnn::rad2deg);
-    // detail::bind_unary_operation(module, ttnn::sigmoid_accurate);
-    detail::bind_unary_operation(module, ttnn::sinh);
-    detail::bind_unary_operation(module, ttnn::softsign);
-    detail::bind_unary_operation(module, ttnn::swish);
-    detail::bind_unary_operation(module, ttnn::tanhshrink);
-    detail::bind_unary_operation_with_diag(module, ttnn::tril);
-    detail::bind_unary_operation_with_diag(module, ttnn::triu);
+    // detail::bind_unary_operation(module, ttnn::acosh);
+    // detail::bind_unary_operation(module, ttnn::asinh);
+    // detail::bind_unary_operation(module, ttnn::atanh);
+    // detail::bind_unary_operation(module, ttnn::cbrt);
+    // detail::bind_unary_operation(module, ttnn::cosh);
+    // detail::bind_unary_operation(module, ttnn::deg2rad);
+    // detail::bind_unary_operation(module, ttnn::digamma);
+    // detail::bind_unary_operation_with_scale_and_shift(module, ttnn::hardswish);
+    // detail::bind_unary_operation_with_scale_and_shift(module, ttnn::hardsigmoid);
+    // detail::bind_unary_operation_with_low_and_high(module, ttnn::hardtanh);
+    // detail::bind_unary_operation(module, ttnn::lgamma);
+    // detail::bind_unary_operation(module, ttnn::log1p);
+    // detail::bind_unary_operation(module, ttnn::mish);
+    // detail::bind_unary_operation(module, ttnn::multigammaln);
+    // detail::bind_unary_operation(module, ttnn::rad2deg);
+    // // detail::bind_unary_operation(module, ttnn::sigmoid_accurate);
+    // detail::bind_unary_operation(module, ttnn::sinh);
+    // detail::bind_unary_operation(module, ttnn::softsign);
+    // detail::bind_unary_operation(module, ttnn::swish);
+    // detail::bind_unary_operation(module, ttnn::tanhshrink);
+    // detail::bind_unary_operation_with_diag(module, ttnn::tril);
+    // detail::bind_unary_operation_with_diag(module, ttnn::triu);
 }
 
 }  // namespace unary

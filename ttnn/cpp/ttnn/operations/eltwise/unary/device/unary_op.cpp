@@ -3,24 +3,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
-#include "unary_op.hpp"
-#include "eltwise_unary_op_multi_core.cpp"
-#include "eltwise_unary_op_sharded.cpp"
 
 #include "third_party/magic_enum/magic_enum.hpp"
-#include "tt_dnn/op_library/bcast/bcast_op.hpp"
-#include "tt_dnn/op_library/composite/composite_ops.hpp"
+
 #include "tt_eager/tensor/tensor_utils.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
+#include "unary_op.hpp"
+#include "unary_program_factory_multicore.cpp"
+#include "unary_program_factory_sharded.cpp"
+
 namespace ttnn::operations::unary {
 
-using namespace tt::constants;
+// using namespace tt::constants;
 
 namespace utils {
-using namespace tt::tt_metal;
 
 union Converter {
    public:
@@ -363,7 +362,7 @@ inline void validate_supported_arch(::tt::ARCH arch, UnaryOpType op_type) {
     }
 }
 
-void EltwiseUnary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const {
+void Unary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto out_mem_config = (!output_tensors.empty() && output_tensors.at(0).has_value()) ? output_tensors.at(0).value().memory_config() : this->output_mem_config;
 
@@ -394,12 +393,12 @@ void EltwiseUnary::validate_with_output_tensors(const std::vector<Tensor> &input
     }
 }
 
-std::vector<tt::tt_metal::Shape> EltwiseUnary::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+std::vector<tt::tt_metal::Shape> Unary::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     return {input_tensor.get_legacy_shape()};
 }
 
-std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
+std::vector<Tensor> Unary::create_output_tensors(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
     if(!output_tensors.empty() && output_tensors.at(0).has_value()){
         return {output_tensors.at(0).value()};
     }
@@ -414,11 +413,11 @@ std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor
             input_tensor.device(),
             this->output_mem_config)};
     }
-    return operation::generic_create_output_tensors(
+    return tt::tt_metal::operation::generic_create_output_tensors(
         *this, input_tensors, this->output_dtype, Layout::TILE, this->output_mem_config);
 }
 
-operation::ProgramWithCallbacks EltwiseUnary::create_program(
+operation::ProgramWithCallbacks Unary::create_program(
     const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
@@ -426,13 +425,13 @@ operation::ProgramWithCallbacks EltwiseUnary::create_program(
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
     switch (parallelization_strategy) {
         case UnaryOpParallelizationStrategy::SHARDED_MULTI_CORE:
-            return eltwise_unary_sharded(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
+            return detail::unary_sharded(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-        default: return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
+        default: return detail::unary_multi_core(input_tensor, output_tensor, this->op_chain, this->fp32_dest_acc_en, this->preserve_fp32_precision);
     }
 }
 
-UnaryOpParallelizationStrategy EltwiseUnary::get_parallelization_strategy(
+UnaryOpParallelizationStrategy Unary::get_parallelization_strategy(
     const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     if (input_tensor.is_sharded())
@@ -442,11 +441,11 @@ UnaryOpParallelizationStrategy EltwiseUnary::get_parallelization_strategy(
     }
 }
 
-const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tensor>& input_tensors) const {
+const tt::tt_metal::operation::Hash Unary::compute_program_hash(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     const auto& input_shape = input_tensor.legacy_shape();
 
-    operation::Hash hash = operation::hash_operation<EltwiseUnary>(
+    tt::tt_metal::operation::Hash hash = operation::hash_operation<Unary>(
         compute_volume(input_shape),
         input_tensor.dtype(),
         std::get<DeviceStorage>(input_tensor.storage()).memory_config(),
