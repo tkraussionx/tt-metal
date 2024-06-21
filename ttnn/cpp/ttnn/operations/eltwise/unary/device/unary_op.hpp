@@ -11,20 +11,12 @@
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_eager/tensor/host_buffer/functions.hpp"
 #include "tt_eager/tensor/tensor_utils.hpp"
-#include "tt_eager/tt_dnn/op_library/compute_kernel_config.hpp"
 
 #include "tt_eager/tt_dnn/op_library/run_operation.hpp"
-// #include "tt_metal/host_api.hpp"
-// #include "tt_metal/impl/dispatch/command_queue.hpp"
-// #include "ttnn/core.hpp"
-// #include "ttnn/decorators.hpp"
-// #include "ttnn/types.hpp"
+
 
 namespace ttnn::operations::unary {
 
-// namespace tt {
-
-// namespace tt_metal {
 
 // These operations have a corresponding LLK available
 enum class UnaryOpType {
@@ -207,13 +199,7 @@ struct Unary {
     const operation::Hash compute_program_hash(const std::vector<Tensor>& input_tensors) const;
 };
 
-// }  // namespace tt_metal
-
-
-// }  // namespace tt
-
 namespace utils {
-// using namespace tt::tt_metal;
 
 bool get_op_approx_mode(UnaryOpType op_type);
 std::pair<string, string> get_op_init_and_func(UnaryOpType op_type, std::vector<float> params = {}, string idst = "0");

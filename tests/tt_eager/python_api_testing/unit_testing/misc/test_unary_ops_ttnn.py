@@ -4,7 +4,6 @@
 
 import torch
 import pytest
-import tt_lib
 import ttnn
 from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import data_gen_with_range, compare_pcc
 
@@ -23,7 +22,7 @@ def test_unary_square_ttnn(input_shapes, device):
 
     cq_id = 0
     ttnn.square(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
-    golden_tensor = torch.square(input_tensor)
+    golden_tensor = torch.square(in_data)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
     assert comp_pass

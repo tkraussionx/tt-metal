@@ -13,7 +13,7 @@
 #include "tt_metal/common/constants.hpp"
 
 
-// #include "ttnn/operations/eltwise/binary/device/binary_op.hpp"
+#include "ttnn/operations/eltwise/binary/device/binary_op.hpp"
 
 namespace tt {
 

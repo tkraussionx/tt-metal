@@ -2,8 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "unary_op.hpp"
 
+#include "unary_program_factory_multicore.hpp"
+#include "unary_program_factory_sharded.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 
 #include "tt_eager/tensor/tensor_utils.hpp"
@@ -11,13 +13,8 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
-#include "unary_op.hpp"
-#include "unary_program_factory_multicore.cpp"
-#include "unary_program_factory_sharded.cpp"
 
 namespace ttnn::operations::unary {
-
-// using namespace tt::constants;
 
 namespace utils {
 
@@ -133,7 +130,11 @@ std::pair<string, string> get_op_init_and_func_parameterized(
         case UnaryOpType::REMAINDER:
             op_init_and_name = {
                 "remainder_tile_init();",
-                fmt::format("remainder_tile({}, {}u, {}u);", idst, Converter::to_hex(param0), Converter::to_hex(1.0f/param0))};
+                fmt::format(
+                    "remainder_tile({}, {}u, {}u);",
+                    idst,
+                    Converter::to_hex(param0),
+                    Converter::to_hex(1.0f / param0))};
             break;
         case UnaryOpType::EXP:
             op_init_and_name = {
@@ -345,9 +346,6 @@ std::map<string, string> get_block_defines(
 
 }  // namespace utils
 
-// namespace tt {
-
-// namespace tt_metal {
 
 inline void validate_supported_arch(::tt::ARCH arch, UnaryOpType op_type) {
     switch (op_type) {
@@ -357,14 +355,15 @@ inline void validate_supported_arch(::tt::ARCH arch, UnaryOpType op_type) {
         case UnaryOpType::RIGHT_SHIFT:
             TT_FATAL(arch == ::tt::ARCH::WORMHOLE_B0, "Op is only supported on Wormhole");
             break;
-        default:
-            return;
+        default: return;
     }
 }
 
 void Unary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    auto out_mem_config = (!output_tensors.empty() && output_tensors.at(0).has_value()) ? output_tensors.at(0).value().memory_config() : this->output_mem_config;
+    auto out_mem_config = (!output_tensors.empty() && output_tensors.at(0).has_value())
+                              ? output_tensors.at(0).value().memory_config()
+                              : this->output_mem_config;
 
     auto arch = input_tensor_a.device()->arch();
     for (const auto& unary_op : this->op_chain) {
@@ -382,10 +381,15 @@ void Unary::validate_with_output_tensors(const std::vector<Tensor> &input_tensor
             input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED,
             "Interleaved memory layout supported");
     }
-    if(!output_tensors.empty() && output_tensors.at(0).has_value()){
+    if (!output_tensors.empty() && output_tensors.at(0).has_value()) {
         const auto output_shape_required = this->compute_output_shapes(input_tensors);
         const auto& out_tensor = output_tensors.at(0).value();
-        TT_FATAL(out_tensor.get_legacy_shape() == output_shape_required.at(0), fmt::format("The input tensors need a shape of {}, however the output tensor is only {}", output_shape_required,  out_tensor.get_legacy_shape()));
+        TT_FATAL(
+            out_tensor.get_legacy_shape() == output_shape_required.at(0),
+            fmt::format(
+                "The input tensors need a shape of {}, however the output tensor is only {}",
+                output_shape_required,
+                out_tensor.get_legacy_shape()));
     }
 
     if (!output_tensors.empty()) {
@@ -405,7 +409,6 @@ std::vector<Tensor> Unary::create_output_tensors(const std::vector<Tensor>& inpu
 
     const auto& input_tensor = input_tensors.at(0);
     if (this->output_mem_config.is_sharded()) {
-        // Shape output_shape = compute_output_shapes(input_tensors).at(0);
         return {create_device_tensor(
             this->compute_output_shapes(input_tensors).at(0),
             this->output_dtype,
@@ -461,8 +464,4 @@ const tt::tt_metal::operation::Hash Unary::compute_program_hash(const std::vecto
 }
 
 
-// }  // namespace tt_metal
-
-// }  // namespace tt
-
-} // namespace ttnn::operations::unary
+}  // namespace ttnn::operations::unary
