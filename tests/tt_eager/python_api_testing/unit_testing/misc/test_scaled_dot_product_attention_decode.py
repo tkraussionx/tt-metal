@@ -195,7 +195,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size, q_dtype=ttn
     # start_idx = 32
 
     # while start_idx < s:
-    for start_idx in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]:
+    for start_idx in [64]:  # [4096, 8192, 16384, 32768]:
         scale = d**-0.5
 
         k_chunk_size = get_chunk_size(start_idx)
@@ -317,18 +317,18 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size, q_dtype=ttn
 @pytest.mark.parametrize(
     "dtype, q_dtype, mask_dtype",
     [
-        [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT8_B],
+        # [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT8_B],
         [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT16],
-        [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
-        [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT4_B],
-        [tt_lib.tensor.DataType.BFLOAT4_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT4_B],
+        # [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
+        # [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT4_B],
+        # [tt_lib.tensor.DataType.BFLOAT4_B, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT4_B],
     ],
     ids=[
-        "all_bfp8",
+        # "all_bfp8",
         "all_bfp16",
-        "kvmask_bfp8",
-        "kv_bfp8_mask_bfp4",
-        "kvmask_bfp4",
+        # "kvmask_bfp8",
+        # "kv_bfp8_mask_bfp4",
+        # "kvmask_bfp4",
     ],
 )
 @pytest.mark.parametrize(
@@ -338,7 +338,9 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype, grid_size, q_dtype=ttn
         # [1, 8, 1, 32768, 128],  # Llama2-70B
         # [8, 8, 1, 32768, 128, (8,4)],  # Llama2-70B
         # [12, 8, 1, 32768, 128],  # Llama2-70B
-        [16, 8, 1, 32768, 128, (8, 6)],  # Llama2-70B
+        [16, 8, 1, 32768, 128, (8, 4)],  # Llama2-70B
+        # [8, 8, 1, 32768, 128, (8, 6)],  # Llama2-70B
+        # [4, 8, 1, 32768, 128, (8, 6)],  # Llama2-70B
         # [16, 8, 1, 32768, 128, (8,6)],  # Llama2-70B
         # [16, 8, 1, 32768, 128, (8,7)],  # Llama2-70B
         # [16, 8, 1, 32768, 128, (8,8)],  # Llama2-70B

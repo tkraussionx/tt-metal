@@ -38,7 +38,7 @@ void kernel_main() {
     constexpr bool is_dram = true;
     constexpr uint32_t cb_out = tt::CB::c_out4;
     constexpr uint32_t cb_intermed_out = tt::CB::c_out3;  // this cb holds the output intermediates from other worker cores
-    constexpr uint32_t cb_out_o = tt::CB::c_out0;
+    constexpr uint32_t cb_out_o = tt::CB::c_in0;
     constexpr uint32_t cb_m_in = tt::CB::c_in6;
     constexpr uint32_t cb_l_in = tt::CB::c_in7;
 
