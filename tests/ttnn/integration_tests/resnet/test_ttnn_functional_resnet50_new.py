@@ -271,7 +271,7 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
 
 
 # @skip_for_wormhole_b0("PCC error with B=16. Fitting issue with B=20 due to 1x1s2 repleacement.")
-@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576, "trace_region_size": 886784}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576, "trace_region_size": 890880}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, act_dtype, weight_dtype, math_fidelity",
     (
@@ -282,33 +282,25 @@ def create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity
         (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
     ),
 )
-def test_resnet_50(device, batch_size, act_dtype, weight_dtype, math_fidelity):
+def test_resnet_50(device, batch_size, act_dtype, weight_dtype, use_program_cache, math_fidelity):
     test_infra = create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity)
     enable_memory_reports()
     test_infra.preprocess_torch_input()
+    # Send input to device
     test_infra.input_tensor = test_infra.input_tensor.to(device)
-    ttnn_zeros = ttnn.from_torch(torch.ones([16, 1, 1, 1000]), dtype=ttnn.bfloat16)
+    # Compile Model and get reference output tensor from host-dispatch
     test_infra.run()
-    print(test_infra.output_tensor)
-    test_infra.input_tensor = test_infra.input_tensor.to(device)
-    test_infra.run()
-    print(test_infra.output_tensor)
+    prev_out = ttnn.to_torch(test_infra.output_tensor)
 
     # Capture Trace
-
-    # tid = ttnn.begin_trace_capture(device, cq_id=0)
-    # test_infra.run()
-    # ttnn.end_trace_capture(device, tid, cq_id = 0)
-    # output_tensor = ttnn.to_torch(test_infra.output_tensor)
-    # print(test_infra.output_tensor)
-    # ttnn.copy_host_to_device_tensor(ttnn_zeros, test_infra.output_tensor)
-    # print(test_infra.output_tensor)
-    # print(test_infra.input_tensor)
-    # test_infra.preprocess_torch_input()
-    # ttnn.clear_l1_state(device)
-    # ttnn.execute_trace(device, tid, cq_id = 0)
-    # output_tensor = ttnn.to_torch(test_infra.output_tensor)
-    # print(test_infra.output_tensor)
-    # More optimized run with caching
-    # test_infra.run()
-    # test_infra.validate()
+    tid = ttnn.begin_trace_capture(device, cq_id=0)
+    test_infra.run()
+    ttnn.end_trace_capture(device, tid, cq_id=0)
+    # Execute trace and compare with host-dispatch output
+    ttnn_zeros = ttnn.from_torch(torch.ones([16, 1, 1, 1000]), dtype=ttnn.bfloat16)
+    for i in range(50):
+        # Zero out output activation buffer to ensure that trace correctly updates outputs
+        ttnn.copy_host_to_device_tensor(ttnn_zeros, test_infra.output_tensor)
+        ttnn.execute_trace(device, tid, cq_id=0)
+        assert_with_pcc(prev_out, ttnn.to_torch(test_infra.output_tensor), pcc=0.99)
+        prev_out = ttnn.to_torch(test_infra.output_tensor)

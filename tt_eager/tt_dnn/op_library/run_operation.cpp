@@ -145,7 +145,6 @@ OutputTensors run_device_operation(
     const OptionalTensors& optional_output_tensors) {
     ZoneScopedN("TT_DNN_DEVICE_OP");
     uint32_t op_id = assign_operation_id();
-
     std::function<std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>(
         const DeviceOperation<OutputTensors>&,
         const Tensors&,

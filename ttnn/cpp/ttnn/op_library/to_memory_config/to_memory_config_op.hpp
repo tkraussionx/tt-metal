@@ -68,7 +68,6 @@ struct ToMemoryConfig {
                         .at(0);
                 } else {
                     // for row-major tensors where shard-spec[1] is different for input shard and output shard
-
                     TT_FATAL(memory_config.is_sharded());
                     Tensor temp = operation::run(
                                       Sharded{
