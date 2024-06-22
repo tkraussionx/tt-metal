@@ -591,9 +591,9 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
     return tensor_impl::to_layout_wrapper(*this, target_layout);
 }
 
-const std::string Tensor::write_to_string() const { return tensor_impl::to_string_wrapper(*this); }
+const std::string Tensor::write_to_string() const { return tensor_impl::to_string_wrapper(*this) + " " + std::to_string(this->device_buffer()->address()); }
 
-void Tensor::print() const { std::cout << write_to_string() << std::endl; }
+void Tensor::print() const { std::cout << write_to_string() << " " << this->device_buffer()->address() <<  std::endl; }
 
 Tensor Tensor::pad(const Shape& output_tensor_shape, const Shape& input_tensor_start, float pad_value) const {
     ZoneScoped;

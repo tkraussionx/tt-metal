@@ -1091,12 +1091,12 @@ class resnet50:
 
     ## merged runs (first and optimized)
     def run(self, input_tensor, device, batch_size, ops_parallel_config, conv_op_cache={}) -> ttnn.Tensor:
-        is_first_run = False
-        if not ops_parallel_config:
-            is_first_run = True
-            logger.debug(f"==== First run")
-        else:
-            logger.debug(f"==== Optimized run")
+        # is_first_run = False
+        is_first_run = True
+        logger.debug(f"==== First run")
+        # if not ops_parallel_config:
+        # else:
+        #     logger.debug(f"==== Optimized run")
 
         if is_wormhole_b0():
             if batch_size == 16:
@@ -1123,7 +1123,7 @@ class resnet50:
                 weights_dtype=self.model_config["WEIGHTS_DTYPE"],
                 math_fidelity=self.model_config["MATH_FIDELITY"],
                 activation="relu",
-                deallocate_activation=True,
+                deallocate_activation=False,
                 input_channels_alignment=16 if not is_wormhole_b0() else 32,
                 act_block_h_override=act_block_h_override,
             ),

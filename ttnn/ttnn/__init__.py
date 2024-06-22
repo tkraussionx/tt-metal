@@ -198,6 +198,7 @@ from ttnn.types import (
 from ttnn.device import (
     Device,
     open_device,
+    clear_l1_state,
     close_device,
     enable_program_cache,
     disable_and_clear_program_cache,

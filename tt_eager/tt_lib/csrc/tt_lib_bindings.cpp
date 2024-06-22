@@ -214,6 +214,10 @@ void DeviceModule(py::module &m_device) {
     m_device.def("DeallocateBuffers", &detail::DeallocateBuffers, R"doc(
         Deallocate all buffers associated with Device handle
     )doc");
+    m_device.def("ClearL1State",
+        [] (Device* device) {
+            device->clear_l1_state();
+        });
     m_device.def("BeginTraceCapture",
         [] (Device* device, const uint8_t cq_id) {
             uint32_t tid = Trace::next_id();

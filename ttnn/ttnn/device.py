@@ -36,6 +36,10 @@ def open_device(
     )
 
 
+def clear_l1_state(device):
+    ttl.device.ClearL1State(device)
+
+
 def close_device(device):
     """
     close_device(device: ttnn.Device) -> None:
