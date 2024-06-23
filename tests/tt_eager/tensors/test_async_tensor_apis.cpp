@@ -11,7 +11,7 @@
 #include "common/constants.hpp"
 #include "tensor/host_buffer/functions.hpp"
 #include "tensor/host_buffer/types.hpp"
-#include "tensor/tensor.hpp"
+#include "tensor/async_tensor.hpp"
 #include "tensor/tensor_impl.hpp"
 #include "tensor/types.hpp"
 #include "tests/tt_metal/tt_metal/unit_tests_common/common/common_fixture.hpp"
@@ -350,4 +350,90 @@ TEST_F(CommonFixture, TestTensorAsyncDataMovement) {
     EXPECT_EQ(readback_tensor.get_dtype(), DataType::FLOAT32);
     EXPECT_EQ(readback_tensor.get_layout(), Layout::ROW_MAJOR);
     EXPECT_EQ(readback_tensor.get_shape(), ttnn::Shape(Shape({1, 1, 32, tensor_stop / 32})));
+}
+
+AsyncTensor async_tensor_identity_copy_function(const AsyncTensor& tensor) { return tensor; }
+
+TEST_F(CommonFixture, TestAsyncTensorMemoryManagement) {
+    Device* device = this->devices_[0];
+    device->set_worker_mode(WorkExecutorMode::ASYNCHRONOUS);
+    uint32_t tensor_start = 0;
+    uint32_t num_tiles = 128;
+    uint32_t tensor_stop = TILE_HEIGHT * TILE_WIDTH * num_tiles;
+    for (int loop = 0; loop < 50; loop++) {
+        // Create Tensors on host
+        AsyncTensor host_async_tensor = AsyncTensor(tt::numpy::arange<float>(tensor_start + loop, tensor_stop + loop, 1));
+        AsyncTensor host_async_tensor2 = AsyncTensor(tt::numpy::arange<float>(tensor_start + 10 * (loop + 1), tensor_stop + 10 * (loop + 1), 1));
+        // Send first tensor to device, readback, verify and deallocate
+        auto device_async_tensor = host_async_tensor.to(device);
+        auto device_async_tensor_addr = device_async_tensor.device_buffer()->address();
+        auto readback_async_tensor = device_async_tensor.cpu();
+        auto buf = std::get<owned_buffer::Buffer<float>>(std::get<OwnedStorage>(readback_async_tensor.get_storage(0)).buffer);
+        for (int i = 0; i < tensor_stop; i++) {
+            EXPECT_EQ(buf[i], i + loop);
+        }
+        device_async_tensor.deallocate();
+        // Send second tensor to device. Verify that its allocated where the first tensor was previously allocated.
+        AsyncTensor device_async_tensor2 = host_async_tensor2.to(device);
+        readback_async_tensor = device_async_tensor2.cpu();
+        EXPECT_EQ(device_async_tensor_addr, device_async_tensor2.device_buffer()->address());
+        // Readback and verify.
+        auto buf1 = std::get<owned_buffer::Buffer<float>>(std::get<OwnedStorage>(readback_async_tensor.get_storage(0)).buffer);
+        for (int i = 0; i < tensor_stop; i++) {
+            EXPECT_EQ(buf1[i], i + 10 * (loop + 1));
+        }
+        // Send another tensor to device.
+        auto device_async_tensor3 = AsyncTensor(tt::numpy::full<float>(Shape({1, 1, TILE_HEIGHT, TILE_WIDTH * num_tiles}), static_cast<float>(loop + 10), DataType::BFLOAT16)).to(device);
+        // Update device_async_tensor2 through assignment (the previous shard held by this tensor should be deallocated automatically).
+        device_async_tensor2 = device_async_tensor3;
+        // Verify that device_async_tensor2 was updated with correct ref_count
+        readback_async_tensor = device_async_tensor2.cpu();
+        auto buf2 = std::get<owned_buffer::Buffer<bfloat16>>(std::get<OwnedStorage>(readback_async_tensor.get_storage(0)).buffer);
+        for (int i = 0; i < tensor_stop; i++) {
+            EXPECT_EQ(bfloat16(buf2[i]), bfloat16(static_cast<float>(loop + 10)));
+        }
+        EXPECT_EQ(device_async_tensor3.get_ref_count(), 2);
+        EXPECT_EQ(device_async_tensor2.get_ref_count(), 2);
+        {
+            // Create a temp tensor by invoking copy constructor.
+            // Ref count should get reset to 2 when this goes out of scope.
+            AsyncTensor copied_tensor(device_async_tensor2);
+            EXPECT_EQ(device_async_tensor3.get_ref_count(), 3);
+            EXPECT_EQ(copied_tensor.get_ref_count(), 3);
+            EXPECT_EQ(device_async_tensor2.get_ref_count(), 3);
+        }
+        EXPECT_EQ(device_async_tensor2.get_ref_count(), 2);
+        EXPECT_EQ(device_async_tensor2.device_buffer()->address(), device_async_tensor3.device_buffer()->address());
+        // Send another tensor to device and ensure that its allocated where device_async_tensor2 was initially allocated.
+        auto device_async_tensor4 = AsyncTensor(tt::numpy::full<float>(Shape({1, 1, TILE_HEIGHT, TILE_WIDTH * num_tiles}), static_cast<float>(loop + 10), DataType::BFLOAT16)).to(device);
+        EXPECT_EQ(device_async_tensor4.device_buffer()->address(), device_async_tensor_addr);
+        // Verify data.
+        readback_async_tensor = device_async_tensor4.cpu();
+        auto buf3 = std::get<owned_buffer::Buffer<bfloat16>>(std::get<OwnedStorage>(readback_async_tensor.get_storage(0)).buffer);
+        for (int i = 0; i < tensor_stop; i++) {
+            EXPECT_EQ(bfloat16(buf3[i]), bfloat16(static_cast<float>(loop + 10)));
+        }
+        // Verify self assignment through identity function.
+        device_async_tensor4 = async_tensor_identity_copy_function(device_async_tensor4);
+        EXPECT_EQ(device_async_tensor4.get_ref_count(), 1);
+        EXPECT_EQ(device_async_tensor4.device_buffer()->address(), device_async_tensor_addr);
+        // Verify move.
+        AsyncTensor device_async_tensor5 = std::move(device_async_tensor4);
+        EXPECT_EQ(device_async_tensor5.get_ref_count(), 1);
+        EXPECT_EQ(device_async_tensor5.device_buffer()->address(), device_async_tensor_addr);
+        // Verify self assignment.
+        device_async_tensor5 = device_async_tensor5;
+        EXPECT_EQ(device_async_tensor5.get_ref_count(), 1);
+        EXPECT_EQ(device_async_tensor5.device_buffer()->address(), device_async_tensor_addr);
+        // Verify move to self.
+        device_async_tensor5 = std::move(device_async_tensor5);
+        EXPECT_EQ(device_async_tensor5.get_ref_count(), 1);
+        EXPECT_EQ(device_async_tensor5.device_buffer()->address(), device_async_tensor_addr);
+
+        // Verify creation and deallocation of empty tensors.
+        AsyncTensor dummy_async_tensor({}, 1);
+        AsyncTensor dummy_async_tensor2({device});
+        dummy_async_tensor.deallocate();
+        dummy_async_tensor2.deallocate();
+    }
 }

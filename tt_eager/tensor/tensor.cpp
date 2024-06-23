@@ -380,10 +380,10 @@ Tensor Tensor::to(CommandQueue& queue, const MemoryConfig& mem_config) const {
                 async_safe_tensor.get_legacy_shape(),
                 async_safe_tensor.get_dtype(),
                 async_safe_tensor.get_layout());
-            auto local_tensor =
-                tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config, std::nullopt);
-            // Populate device tensor
-            device_tensor.populate_buffers_and_metadata(local_tensor);
+            // auto local_tensor =
+            //     tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config, std::nullopt);
+            // // Populate device tensor
+            // device_tensor.populate_buffers_and_metadata(local_tensor);
         }
     });
     // Update main thread ref count for tensors after pushing to queue (update original tensor and returned tensor,
@@ -414,10 +414,10 @@ Tensor Tensor::to(Device* target_device, const MemoryConfig& mem_config) const {
                 async_safe_tensor.get_legacy_shape(),
                 async_safe_tensor.get_dtype(),
                 async_safe_tensor.get_layout());
-            auto local_tensor =
-                tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config, std::nullopt);
-            // Populate device tensor
-            device_tensor.populate_buffers_and_metadata(local_tensor);
+            // auto local_tensor =
+            //     tensor_impl::to_device_wrapper(async_safe_tensor, target_device, mem_config, std::nullopt);
+            // // Populate device tensor
+            // device_tensor.populate_buffers_and_metadata(local_tensor);
         }
     });
     // Update main thread ref count for tensors after pushing to queue (update original tensor and returned tensor,
@@ -452,9 +452,9 @@ Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig& mem_c
         auto& worker = workers_to_use[worker_index];
         worker->push_work([worker, *this, device_tensor, mem_config, num_workers, worker_index]() mutable {
             auto shard = get_shard_for_device(*this, worker, worker_index);
-            if (shard.storage_type() == StorageType::OWNED) {
-                shard = tensor_impl::to_device_wrapper(shard, worker, mem_config, std::nullopt);
-            }
+            // if (shard.storage_type() == StorageType::OWNED) {
+            //     shard = tensor_impl::to_device_wrapper(shard, worker, mem_config, std::nullopt);
+            // }
             insert_buffer_and_shape_for_device(worker, shard, device_tensor, worker_index);
             uint32_t num_workers_completed = (device_tensor.tensor_attributes->num_workers_completed)++;
             if (not num_workers_completed) {
@@ -490,7 +490,7 @@ Tensor Tensor::cpu(bool blocking) const {
                 this->storage_type() == StorageType::DEVICE or this->storage_type() == StorageType::MULTI_DEVICE,
                 "Can only use worker queue for cpu call if tensor is on device.");
             auto shard = get_shard_for_device(*this, target_device);
-            shard = tensor_impl::to_host_wrapper(shard, blocking);
+            // shard = tensor_impl::to_host_wrapper(shard, blocking);
             insert_buffer_and_shape_for_device(target_device, shard, host_tensor, worker_index);
             uint32_t num_workers_completed = (host_tensor.tensor_attributes->num_workers_completed)++;
             if (not num_workers_completed) {

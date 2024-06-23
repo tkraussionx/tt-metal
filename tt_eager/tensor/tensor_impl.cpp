@@ -646,7 +646,7 @@ std::string to_string<bfloat4_b>(const Tensor& tensor, std::optional<DataType> o
 // ======================================================================================
 
 template <typename T>
-Tensor to_host_helper(const Tensor& tensor, bool blocking = true) {
+TensorShard to_host_helper(const TensorShard& tensor, bool blocking = true) {
     TT_ASSERT(tensor.is_allocated(), "Buffer must be allocated on device!");
     auto device_buffer = tensor.device_buffer();
     auto device = tensor.device();
@@ -661,45 +661,32 @@ Tensor to_host_helper(const Tensor& tensor, bool blocking = true) {
         read_data_from_device_buffer<T>(device_buffer, data_vec);
     }
     auto output_buffer = owned_buffer::create<T>(std::move(data_vec));
-    return Tensor(OwnedStorage{output_buffer}, tensor.get_legacy_shape(), tensor.get_dtype(), tensor.get_layout());
+    return TensorShard(OwnedStorage{output_buffer}, tensor.get_legacy_shape(), tensor.get_dtype(), tensor.get_layout());
 }
 
 template <typename T>
-Tensor to_host(const Tensor& tensor, bool blocking) {
+TensorShard to_host(const TensorShard& tensor, bool blocking) {
     if (tensor.storage_type() == StorageType::DEVICE) {
         return to_host_helper<T>(tensor, blocking);
-    } else if (tensor.storage_type() == StorageType::MULTI_DEVICE) {
-        auto devices = get_devices(tensor);
-        Tensor host_tensor({}, devices.size());
-        for (int device_index = 0; device_index < devices.size(); ++device_index) {
-            const auto& device = devices[device_index];
-            auto shard = get_shard_for_device(tensor, device);
-            shard = to_host_helper<T>(shard, blocking);
-            host_tensor.set_shape(tensor.get_shape());
-            host_tensor.set_dtype(tensor.get_dtype());
-            host_tensor.set_layout(tensor.get_layout());
-            insert_buffer_and_shape_for_device(device, shard, host_tensor, device_index);
-        }
-        return host_tensor;
     } else {
         return tensor;
     }
 }
 
-template Tensor to_host<bfloat16>(const Tensor& tensor, bool blocking);
-template Tensor to_host<float>(const Tensor& tensor, bool blocking);
-template Tensor to_host<int32_t>(const Tensor& tensor, bool blocking);
-template Tensor to_host<uint32_t>(const Tensor& tensor, bool blocking);
-template Tensor to_host<uint16_t>(const Tensor& tensor, bool blocking);
-template Tensor to_host<uint8_t>(const Tensor& tensor, bool blocking);
+template TensorShard to_host<bfloat16>(const TensorShard& tensor, bool blocking);
+template TensorShard to_host<float>(const TensorShard& tensor, bool blocking);
+template TensorShard to_host<int32_t>(const TensorShard& tensor, bool blocking);
+template TensorShard to_host<uint32_t>(const TensorShard& tensor, bool blocking);
+template TensorShard to_host<uint16_t>(const TensorShard& tensor, bool blocking);
+template TensorShard to_host<uint8_t>(const TensorShard& tensor, bool blocking);
 
 template <>
-Tensor to_host<bfloat4_b>(const Tensor& tensor, bool blocking) {
+TensorShard to_host<bfloat4_b>(const TensorShard& tensor, bool blocking) {
     return to_host<uint32_t>(tensor, blocking);
 }
 
 template <>
-Tensor to_host<bfloat8_b>(const Tensor& tensor, bool blocking) {
+TensorShard to_host<bfloat8_b>(const TensorShard& tensor, bool blocking) {
     return to_host<uint32_t>(tensor, blocking);
 }
 
@@ -857,8 +844,8 @@ DeviceBuffer to_device_buffer(
 // ======================================================================================
 
 template <typename T>
-Tensor to_device(
-    const Tensor& tensor,
+TensorShard to_device(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue) {
@@ -889,31 +876,31 @@ Tensor to_device(
 
     auto device_buffer = tensor_impl::to_device_buffer<T>(
         tensor.get_storage(), target_device, shape, data_type, layout, memory_config, shard_spec_buffer_opt, queue);
-    return Tensor(DeviceStorage{device_buffer}, shape, data_type, layout);
+    return TensorShard(DeviceStorage{device_buffer}, shape, data_type, layout);
 }
 
-template Tensor to_device<bfloat16>(
-    const Tensor& tensor,
+template TensorShard to_device<bfloat16>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
-template Tensor to_device<float>(
-    const Tensor& tensor,
+template TensorShard to_device<float>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
-template Tensor to_device<int32_t>(
-    const Tensor& tensor,
+template TensorShard to_device<int32_t>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
-template Tensor to_device<uint32_t>(
-    const Tensor& tensor,
+template TensorShard to_device<uint32_t>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
-template Tensor to_device<uint16_t>(
-    const Tensor& tensor,
+template TensorShard to_device<uint16_t>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
@@ -924,8 +911,8 @@ template Tensor to_device<uint8_t>(
     std::optional<std::reference_wrapper<CommandQueue>> queue);
 
 template <>
-Tensor to_device<bfloat4_b>(
-    const Tensor& tensor,
+TensorShard to_device<bfloat4_b>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue) {
@@ -933,8 +920,8 @@ Tensor to_device<bfloat4_b>(
 }
 
 template <>
-Tensor to_device<bfloat8_b>(
-    const Tensor& tensor,
+TensorShard to_device<bfloat8_b>(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue) {

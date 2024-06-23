@@ -9,7 +9,7 @@
 #include "common/bfloat4.hpp"
 #include "common/bfloat8.hpp"
 #include "tensor/host_buffer/functions.hpp"
-#include "tensor/tensor.hpp"
+#include "tensor/async_tensor.hpp"
 #include "tensor/tensor_utils.hpp"
 #include "tensor/types.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
@@ -275,14 +275,14 @@ inline void read_data_from_device_buffer(DeviceBuffer device_buffer, vector<T>& 
 // ======================================================================================
 
 template <typename T>
-Tensor to_host(const Tensor& tensor, bool blocking = true);
+TensorShard to_host(const TensorShard& tensor, bool blocking = true);
 
 template <typename T>
 Tensor to_host_sharded(const Tensor& tensor);
 
 template <typename T>
-Tensor to_device(
-    const Tensor& tensor,
+TensorShard to_device(
+    const TensorShard& tensor,
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
