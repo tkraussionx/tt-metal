@@ -81,7 +81,7 @@ operation::ProgramWithCallbacks argmax_multi_core(
         C,
         H,
         W,
-        dim.value_or(0),
+        (uint32_t) dim.value_or(0),
         (uint32_t) (not dim.has_value()),
     };
 
