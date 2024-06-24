@@ -15,7 +15,8 @@ constexpr uint8_t DefaultQueueId = 0;
 enum class BinaryBackwardOpType {
     ATAN2_BW,
     EMBEDDING_BW,
-    ADDALPHA_BW
+    ADDALPHA_BW,
+    ADD_BW
 };
 
 

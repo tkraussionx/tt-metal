@@ -192,6 +192,7 @@ Pointwise Binary
    ttnn/atan2_bw
    ttnn/embedding_bw
    ttnn/addalpha_bw
+   ttnn/add_bw
 
 Pointwise Ternary
 =================
