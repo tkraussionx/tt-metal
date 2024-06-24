@@ -139,6 +139,8 @@ inline void llk_pack_init(const std::uint32_t pack_output = 16) {
         narrow_tile
     );
 
+    set_packer_strides<untilize, tilize>(pack_src_format[output_id], pack_dst_format[output_id], tile_c_dim);
+
     //TODO: RT is this needed?
     // // To untilize narrow tile (32x16) we just pack 2 faces back to back
     // // Number of datums to pack per row

@@ -91,7 +91,7 @@ ALWI void matmul_tiles_math(uint32_t idst) {
  * | in1_cb_id      | The identifier of the second input circular buffer (CB)       | uint32_t | 0 to 31                                             | False    |
  * | transpose      | The transpose flag for performing transpose operation on B    | uint32_t | Any positive value will indicate tranpose is set    | False    |
  */
-ALWI void mm_init_short(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, const uint32_t transpose=0) {
+ALWI void mm_init_short(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, const uint32_t transpose=0, uint32_t out_cb_id = 16) {
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(in0_cb_id, in1_cb_id, transpose)  ));
     UNPACK(( llk_unpack_AB_matmul_init(in0_cb_id, in1_cb_id, transpose)  ));
 }
@@ -182,7 +182,7 @@ ALWI void matmul_block(uint32_t in0_cb_id, uint32_t in1_cb_id, uint32_t in0_tile
  * | rt_dim         | The row dimension for the output block.                       | uint32_t | Must be equal to block A row dimension              | False    |
  * | kt_dim         | The inner dimension.                                          | uint32_t | Must be equal to block A column dimension           | False    |
  */
-ALWI void mm_block_init_short(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, const uint32_t transpose=0, uint32_t ct_dim = 1, uint32_t rt_dim = 1, uint32_t kt_dim = 1) {
+ALWI void mm_block_init_short(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, const uint32_t transpose=0, uint32_t ct_dim = 1, uint32_t rt_dim = 1, uint32_t kt_dim = 1, uint32_t out_cb_id = 16) {
     UNPACK(( llk_unpack_AB_matmul_init(in0_cb_id, in1_cb_id, transpose, ct_dim, rt_dim, kt_dim) ));
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(in0_cb_id, in1_cb_id, transpose, ct_dim, rt_dim, kt_dim)  ));
 }
