@@ -519,9 +519,12 @@ def test_matmul_2d_in1_dram_sharded(
     grid_size = (8, 4)
 
     in0_block_h = M // grid_size[1] // 32
-    in0_block_w = K // grid_size[0] // 32
-    out_block_h = M // grid_size[1] // 32
-    out_block_w = N // grid_size[0] // 32
+    # in0_block_w = K // grid_size[0] // 32
+    in0_block_w = 1
+    # out_block_h = M // grid_size[1] // 32
+    out_block_h = 1
+    # out_block_w = N // grid_size[0] // 32
+    out_block_w = 1
 
     # full block too large to fit in L1
     if in0_block_h * in0_block_w >= 48 or in0_block_w * out_block_w >= 48:
@@ -572,7 +575,7 @@ def test_matmul_2d_in1_dram_sharded(
     in1_mem_config = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttl.tensor.BufferType.DRAM, in1_shard_spec
     )
-    in1_t = torch2tt_tensor(in1, device, tt_memory_config=in1_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT16)
+    in1_t = torch2tt_tensor(in1, device, tt_memory_config=in1_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT8_B)
 
     if has_bias:
         bias = torch.ones(bias_shape).bfloat16().float()
