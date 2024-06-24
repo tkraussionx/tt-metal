@@ -56,7 +56,7 @@ class TtTransformerBlock(LightweightModule):
             device_mesh=device_mesh,
             state_dict=state_dict,
             args=args,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             layer_num=layer_num,
             weight_key="attention_norm",
         )
@@ -65,7 +65,7 @@ class TtTransformerBlock(LightweightModule):
             device_mesh=device_mesh,
             state_dict=state_dict,
             args=args,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             layer_num=layer_num,
             weight_key="ffn_norm",
         )
@@ -81,7 +81,6 @@ class TtTransformerBlock(LightweightModule):
         H: hidden dim (4096)
         """
         attn_norm_1SBH = self.attention_norm(xs_1SBH)
-
         attn_1SBH = self.attention(
             attn_norm_1SBH,
             start_pos,
@@ -92,8 +91,13 @@ class TtTransformerBlock(LightweightModule):
             user_id,
             mode,
         )
+        # attn_norm_1SBH.deallocate()
         hs_1SBH = ttnn.add(xs_1SBH, attn_1SBH)
+        xs_1SBH.deallocate(True)
+        attn_1SBH.deallocate(True)
         ffn_norm_1SBH = self.ffn_norm(hs_1SBH)
         ffn_1SBH = self.feed_forward(ffn_norm_1SBH, mode=mode)
         out_1SBH = ttnn.add(hs_1SBH, ffn_1SBH)
+        hs_1SBH.deallocate(True)
+        ffn_1SBH.deallocate(True)
         return out_1SBH

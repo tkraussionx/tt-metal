@@ -346,6 +346,8 @@ class TtMixtralAttention(LightweightModule):
             program_config=xqkv_program_config,
         )
 
+        xs_11SH.deallocate(True)
+
         if seq_len > 8192:
             xqkv_fused = ttnn.reshape(xqkv_fused, (1, 1, seq_len, -1))
         # split qkv into heads
@@ -417,6 +419,7 @@ class TtMixtralAttention(LightweightModule):
             attn_output_14SD,
             output_mem_config=ttnn.L1_MEMORY_CONFIG,
         )
+        attn_output_14SD.deallocate(True)
 
         wo_program_config = None
         if seq_len > 2048:
@@ -436,11 +439,10 @@ class TtMixtralAttention(LightweightModule):
 
         if seq_len > 2048:
             output_11SH = ttnn.reshape(output_11SH, (1, 1, seq_len, -1))
-
         output_11BH_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1)
         output_11SH.deallocate(True)
-        output_11BH_reduced = ttnn.experimental.operations.primary.moreh_sum(
-            output_11BH_gathered, dim=1  # , output=None, compute_kernel_config=None
+        output_11BH_reduced = ttnn.experimental.tensor.fast_reduce_nc(
+            output_11BH_gathered, dims=[1], output=None, compute_kernel_config=None
         )
         output_11BH_gathered.deallocate(True)
         return output_11BH_reduced

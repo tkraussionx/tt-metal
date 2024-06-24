@@ -79,7 +79,6 @@ class TtMixtralMLP(LightweightModule):
                 activation="silu" if not pc_1 else None,
                 program_config=pc_1,
             )
-
             w3_out = ttnn.linear(
                 x,
                 self.w3,
@@ -88,8 +87,11 @@ class TtMixtralMLP(LightweightModule):
                 dtype=ttnn.bfloat16,
                 program_config=pc_3,
             )
-            w2_in = w1_out * w3_out
 
+            x.deallocate(True)
+            w2_in = ttnn.multiply(w1_out, w3_out)  # , memory_config = ttnn.L1_MEMORY_CONFIG)
+
+            w3_out.deallocate(True)
             w2_out = ttnn.linear(
                 w2_in,
                 self.w2,
@@ -98,6 +100,8 @@ class TtMixtralMLP(LightweightModule):
                 dtype=ttnn.bfloat16,
                 program_config=pc_2,
             )
+
+            w2_in.deallocate(True)
 
             if seq_len > 2048:
                 w2_out = ttnn.reshape(w2_out, [1, 1, seq_len, self.model_args.dim])

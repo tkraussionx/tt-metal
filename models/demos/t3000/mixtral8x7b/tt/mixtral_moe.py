@@ -101,27 +101,33 @@ class TtMoeLayer(LightweightModule):
         # get weights for top-2 experts
         gate_logits_1SB8 = ttnn.add(gate_logits_1SB8, self.top8_mask_11B_64)
         ttl_topk_values, ttl_topk_indices = ttnn.experimental.operations.primary.topk(gate_logits_1SB8, 32)
+        gate_logits_1SB8.deallocate()
         ttl_topk_values = ttnn.add(ttl_topk_values, self.top2_mask_11BB)
-        # mask_B2 = ttnn.eq(self.expert_mask_11BB, ttl_topk_indices, dtype=ttnn.bfloat16)
         mask_B2 = ttnn.eqz(ttl_topk_indices - self.expert_mask_11BB)
         weights_1SB1 = ttnn.sum(ttnn.softmax(ttl_topk_values, dim=-1) * mask_B2, dim=3)
 
+        ttl_topk_values.deallocate(True)
+        ttl_topk_indices.deallocate(True)
+        mask_B2.deallocate(True)
+
         # MLP and masking
-        weights = expert_i_HH.forward(input_i_1SBH, mode=mode)
+        weights = expert_i_HH(input_i_1SBH, mode=mode)
         results_11BH = ttnn.mul(weights, weights_1SB1)
 
         # all gather
 
         # sum on each device
         if mode == "prefill":
+            # results_11BH = ttnn.experimental.tensor.typecast(results_11BH, dtype=ttnn.bfloat8_b)
             output_11BH_gathered = ttnn.all_gather(results_11BH, dim=1, num_links=1)
             results_11BH.deallocate(True)
-            output_11BH_gathered = ttnn.experimental.operations.primary.moreh_sum(
-                output_11BH_gathered, dim=1  # , output=None, compute_kernel_config=None
+            output_11BH_reduced = ttnn.experimental.tensor.fast_reduce_nc(
+                output_11BH_gathered, dims=[1], output=None, compute_kernel_config=None
             )
+            output_11BH_gathered.deallocate(True)
         else:
             output_11BH_gathered = ttnn.all_gather(results_11BH, dim=2, num_links=1)
             results_11BH.deallocate(True)
-            output_11BH_gathered = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
+            output_11BH_reduced = ttnn.experimental.operations.primary.matmul(self.reduce_mask, output_11BH_gathered)
 
-        return output_11BH_gathered
+        return output_11BH_reduced
