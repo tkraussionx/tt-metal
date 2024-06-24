@@ -24,11 +24,11 @@ namespace ckernel {
  */
 ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb = 16)
 {
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, DST_ACCUM_MODE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, DST_ACCUM_MODE, false/*is_int_en*/, true/*tilize en*/>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
     MATH(( llk_math_pack_sync_init<DST_ACCUM_MODE>() ));
 
-    PACK(( llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE>(ocb) ));
-    PACK(( llk_pack_init(ocb) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE, ReluType::NO_RELU, 0, true/*tilize en*/>(ocb) ));
+    PACK(( llk_pack_init<false, false, true/*tilize en*/>(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<false, DST_ACCUM_MODE>(ocb) ));
 
