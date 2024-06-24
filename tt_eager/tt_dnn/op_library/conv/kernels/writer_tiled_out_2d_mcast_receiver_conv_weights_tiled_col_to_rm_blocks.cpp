@@ -67,128 +67,128 @@ void kernel_main() {
     uint32_t out_start_tile_id_w = get_arg_val<uint32_t>(i); i+=1;
     i+=10;
     uint32_t noop = get_arg_val<uint32_t>(i); i+=1;
-    if(noop) {
-        return;
-    }
+    // if(noop) {
+    //     return;
+    // }
 
-    // mcast args
-    uint32_t weights_mcast_sender_noc_x           = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_sender_noc_y           = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
+    // // mcast args
+    // uint32_t weights_mcast_sender_noc_x           = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_sender_noc_y           = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
 
-    volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
-    uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
+    // volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
+    // uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
 
-    const uint32_t tile_nbytes = get_tile_size(cb_id_out0);
+    // const uint32_t tile_nbytes = get_tile_size(cb_id_out0);
 
-    constexpr uint32_t tile_size_pow2_exponent = 11;    // == 2^11 = 2048 = 2 * 32 * 32 (assuming dtype = 2 bytes)
-    constexpr InterleavedPow2AddrGen<out_in_dram> s = {
-        .bank_base_address = out_addr,
-        .log_base_2_of_page_size = tile_size_pow2_exponent
-    };
+    // constexpr uint32_t tile_size_pow2_exponent = 11;    // == 2^11 = 2048 = 2 * 32 * 32 (assuming dtype = 2 bytes)
+    // constexpr InterleavedPow2AddrGen<out_in_dram> s = {
+    //     .bank_base_address = out_addr,
+    //     .log_base_2_of_page_size = tile_size_pow2_exponent
+    // };
 
-    // read in bias if enabled (done only once for all batches)
-    #ifdef FUSE_BIAS
-    constexpr uint32_t bias_cb_id = get_compile_time_arg_val(3);
-    bool load_bias = true;
-    #endif
+    // // read in bias if enabled (done only once for all batches)
+    // #ifdef FUSE_BIAS
+    // constexpr uint32_t bias_cb_id = get_compile_time_arg_val(3);
+    // bool load_bias = true;
+    // #endif
 
-    // OUTER most loop is looping over out blocks in width dim because blocks from compute are in col major order.
-    // Write out col major blocks in row major layout to output
-    uint32_t out_block_w_start_tile_id = out_start_tile_id;
-    uint32_t out_block_w_start_tile_id_w = out_start_tile_id_w;
-    uint32_t weight_start_tile_id = out_start_tile_id_w;
-    for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
-        uint32_t out_block_h_start_tile_id = out_block_w_start_tile_id;
-        uint32_t out_block_h_start_tile_id_h = out_start_tile_id_h;
-        for(uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
-            // MCAST RECEIVE WEIGHTS
-            // read weight blocks inner dim
-            // read weight slice - 1 block of weights in width dim and full weight matrix height
-            // read slice only once for all activation blocks
-            for(uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer; weight_tile_h_outer_i++) {
-                cb_reserve_back(cb_id_weight, weight_block_num_tiles);
-                // Set weights semaphore value to INVALID
-                noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
+    // // OUTER most loop is looping over out blocks in width dim because blocks from compute are in col major order.
+    // // Write out col major blocks in row major layout to output
+    // uint32_t out_block_w_start_tile_id = out_start_tile_id;
+    // uint32_t out_block_w_start_tile_id_w = out_start_tile_id_w;
+    // uint32_t weight_start_tile_id = out_start_tile_id_w;
+    // for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
+    //     uint32_t out_block_h_start_tile_id = out_block_w_start_tile_id;
+    //     uint32_t out_block_h_start_tile_id_h = out_start_tile_id_h;
+    //     for(uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
+    //         // MCAST RECEIVE WEIGHTS
+    //         // read weight blocks inner dim
+    //         // read weight slice - 1 block of weights in width dim and full weight matrix height
+    //         // read slice only once for all activation blocks
+    //         for(uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer; weight_tile_h_outer_i++) {
+    //             cb_reserve_back(cb_id_weight, weight_block_num_tiles);
+    //             // Set weights semaphore value to INVALID
+    //             noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-                // Atomic increment source core counter
-                noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
+    //             // Atomic increment source core counter
+    //             noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
 
-                // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
-                noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
+    //             // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
+    //             noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
 
-                cb_push_back(cb_id_weight, weight_block_num_tiles);
-            } // for weight_block_height_num_outer
+    //             cb_push_back(cb_id_weight, weight_block_num_tiles);
+    //         } // for weight_block_height_num_outer
 
-            #ifdef FUSE_BIAS
-            if (load_bias) {
-                cb_reserve_back(bias_cb_id, bias_ntiles);
+    //         #ifdef FUSE_BIAS
+    //         if (load_bias) {
+    //             cb_reserve_back(bias_cb_id, bias_ntiles);
 
-                // Set weights semaphore value to INVALID
-                noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
+    //             // Set weights semaphore value to INVALID
+    //             noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-                // Atomic increment source core counter
-                noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
+    //             // Atomic increment source core counter
+    //             noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
 
-                // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
-                noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
+    //             // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
+    //             noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
 
-                cb_push_back(bias_cb_id, bias_ntiles);
-                load_bias = false;
-            }
-            #endif
+    //             cb_push_back(bias_cb_id, bias_ntiles);
+    //             load_bias = false;
+    //         }
+    //         #endif
 
-            #ifndef SHARDED_OUT
-            uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
-            uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
-            for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                uint32_t out_sbw_start_tile_id = out_sbh_start_tile_id;
-                uint32_t out_sbw_start_tile_id_w = out_block_w_start_tile_id_w;
-                for(uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                    uint32_t out_sb_row_start_tile_id = out_sbw_start_tile_id;
-                    // wait for one subblock worth tiles
-                    cb_wait_front(cb_id_out0, out_subblock_tile_count);
-                    uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-                    for(uint32_t h = 0; h < out_subblock_h; h++) {
-                        uint32_t out_tile_id = out_sb_row_start_tile_id;
-                        uint32_t out_tile_id_h = out_sbh_start_tile_id_h + h;
-                        if (out_tile_id_h >= out_height_num_tiles) { // block shape height padding
-                            break;
-                        }
-                        for(uint32_t w = 0; w < out_subblock_w; w++) {
-                            uint32_t out_tile_id_w = out_sbw_start_tile_id_w + w;
-                            if (out_tile_id_w >= out_width_num_tiles) { // block shape width padding
-                                l1_read_addr += tile_nbytes;
-                            } else {
-                                uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
-                                noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
-                                l1_read_addr += tile_nbytes;
-                                out_tile_id += out_next_tile_stride_w;
-                            }
-                        } // out_subblock_w (ntiles)
-                        out_sb_row_start_tile_id += out_next_tile_stride_h;
-                    } // out_subblock_h (ntiles)
-                    noc_async_write_barrier();
-                    cb_pop_front(cb_id_out0, out_subblock_tile_count);
-                    out_sbw_start_tile_id += out_next_subblock_stride_w;
-                    out_sbw_start_tile_id_w += out_subblock_w;
-                } // out_num_subblocks_w
-                out_sbh_start_tile_id += out_next_subblock_stride_h;
-                out_sbh_start_tile_id_h += out_subblock_h;
-            } // out_num_subblocks_h
-            out_block_h_start_tile_id += out_next_block_stride_h;
-            out_block_h_start_tile_id_h += out_block_height_num_tiles;
-            #endif
-        } // out_num_blocks_h
-        out_block_w_start_tile_id += out_next_block_stride_w;
-        out_block_w_start_tile_id_w += weight_block_width_ntiles;
+    //         #ifndef SHARDED_OUT
+    //         uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
+    //         uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
+    //         for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+    //             uint32_t out_sbw_start_tile_id = out_sbh_start_tile_id;
+    //             uint32_t out_sbw_start_tile_id_w = out_block_w_start_tile_id_w;
+    //             for(uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+    //                 uint32_t out_sb_row_start_tile_id = out_sbw_start_tile_id;
+    //                 // wait for one subblock worth tiles
+    //                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
+    //                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+    //                 for(uint32_t h = 0; h < out_subblock_h; h++) {
+    //                     uint32_t out_tile_id = out_sb_row_start_tile_id;
+    //                     uint32_t out_tile_id_h = out_sbh_start_tile_id_h + h;
+    //                     if (out_tile_id_h >= out_height_num_tiles) { // block shape height padding
+    //                         break;
+    //                     }
+    //                     for(uint32_t w = 0; w < out_subblock_w; w++) {
+    //                         uint32_t out_tile_id_w = out_sbw_start_tile_id_w + w;
+    //                         if (out_tile_id_w >= out_width_num_tiles) { // block shape width padding
+    //                             l1_read_addr += tile_nbytes;
+    //                         } else {
+    //                             uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
+    //                             noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
+    //                             l1_read_addr += tile_nbytes;
+    //                             out_tile_id += out_next_tile_stride_w;
+    //                         }
+    //                     } // out_subblock_w (ntiles)
+    //                     out_sb_row_start_tile_id += out_next_tile_stride_h;
+    //                 } // out_subblock_h (ntiles)
+    //                 noc_async_write_barrier();
+    //                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
+    //                 out_sbw_start_tile_id += out_next_subblock_stride_w;
+    //                 out_sbw_start_tile_id_w += out_subblock_w;
+    //             } // out_num_subblocks_w
+    //             out_sbh_start_tile_id += out_next_subblock_stride_h;
+    //             out_sbh_start_tile_id_h += out_subblock_h;
+    //         } // out_num_subblocks_h
+    //         out_block_h_start_tile_id += out_next_block_stride_h;
+    //         out_block_h_start_tile_id_h += out_block_height_num_tiles;
+    //         #endif
+    //     } // out_num_blocks_h
+    //     out_block_w_start_tile_id += out_next_block_stride_w;
+    //     out_block_w_start_tile_id_w += weight_block_width_ntiles;
 
-        // Increment weight start tile id for next block in width dim
-        weight_start_tile_id += weight_next_block_stride_w;
-    } // out_num_blocks_w
+    //     // Increment weight start tile id for next block in width dim
+    //     weight_start_tile_id += weight_next_block_stride_w;
+    // } // out_num_blocks_w
 
-    #ifdef SHARDED_OUT
-    cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
-    #endif
+    // #ifdef SHARDED_OUT
+    // cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    // #endif
 }
