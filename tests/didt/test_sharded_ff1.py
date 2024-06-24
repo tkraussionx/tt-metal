@@ -71,8 +71,6 @@ def test_reproduce_matmul_2d_hang(
     A = torch.randn(a_shape)
     B = torch.randn(b_shape)
 
-    RESULT = torch.matmul(A, B)
-
     a_t = torch2tt_tensor(A, device, ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype)
     b_t = torch2tt_tensor(B, device, ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype)
 
@@ -104,6 +102,8 @@ def test_reproduce_matmul_2d_hang(
         compute_kernel_config=compute_config,
     )
 
+    ref_out = tt2torch_tensor(out)
+
     # if commented out, segfault happens on some of the latter runs
     out.cpu()
 
@@ -124,5 +124,8 @@ def test_reproduce_matmul_2d_hang(
         if i % 100 == 0:
             seconds = time.time() - start_time
             print(f"Iteration {i} done, time elapsed from the beginning: {seconds:.2f} seconds")
+
+            _, output_pcc = comp_pcc(ref_out, tt2torch_tensor(out))
+            print(f"PCC: {output_pcc}")
 
     out.deallocate(True)
