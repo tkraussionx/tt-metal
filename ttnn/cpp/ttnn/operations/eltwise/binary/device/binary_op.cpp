@@ -15,7 +15,7 @@ namespace utils {
 using namespace tt::tt_metal;
 
 std::map<string, string> get_defines(
-    BinaryOpType op_type, const std::optional<DataType> input_dtype, const std::optional<DataType> output_dtype, const std::optional<std::vector<tt::tt_metal::UnaryWithParam>> fused_activations) {
+    BinaryOpType op_type, const std::optional<DataType> input_dtype, const std::optional<DataType> output_dtype, const std::optional<std::vector<tt::tt_metal::UnaryWithParam>> fused_activations, const std::optional<const std::string> activation_pre_in0_0) {
     std::map<string, string> defines;
     string op_name = "sub_tiles";
     string op_binary_type = "EltwiseBinaryType::ELWSUB";
@@ -31,6 +31,10 @@ std::map<string, string> get_defines(
             op_binary_type = "EltwiseBinaryType::ELWSUB";
             break;
         case BinaryOpType::MUL:
+            std::cout << "MUL" << std::endl;
+            if (activation_pre_in0_0.has_value() ) {
+                std::cout << activation_pre_in0_0.value() << std::endl;
+            }
             op_name = "mul_tiles";
             op_binary_type = "EltwiseBinaryType::ELWMUL";
             break;

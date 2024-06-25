@@ -63,7 +63,8 @@ struct ExecuteBinary {
         const std::optional<const DataType> &output_dtype = std::nullopt,
         const std::optional<MemoryConfig> &memory_config = std::nullopt,
         std::optional<Tensor> optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt) {
+        std::optional<FusedActivations> activations = std::nullopt,
+        std::optional<const std::string> activation_pre_in0_0 = std::nullopt) {
 
         if(output_dtype.has_value() && optional_output_tensor.has_value()){
             TT_FATAL(output_dtype.value() == optional_output_tensor.value().get_dtype(), "If both output dtype and output tensor provided dtype should match");
@@ -107,11 +108,17 @@ struct ExecuteBinary {
         if(optional_output_tensor.has_value()) {
             dtype = optional_output_tensor.value().get_dtype();
         }
+        std::cout << "execute_on_worker_thread" << std::endl;
+        if (activation_pre_in0_0.has_value()) {
+            std::cout << activation_pre_in0_0.value() << std::endl;
+        } else {
+            std::cout << "no act" << std::endl;
+        }
 
         return ttnn::device_operation::run<Binary>(
             queue_id,
             Binary::operation_attributes_t{
-                binary_op_type, in_place, activations, output_memory_config, dtype, std::nullopt},
+                binary_op_type, in_place, activations, activation_pre_in0_0, output_memory_config, dtype, std::nullopt},
             Binary::tensor_args_t{input_tensor_a, input_tensor_b, optional_output_tensor});
     }
 
@@ -126,9 +133,11 @@ struct ExecuteBinary {
         const std::optional<const DataType> &output_dtype = std::nullopt,
         const std::optional<MemoryConfig> &memory_config = std::nullopt,
         std::optional<Tensor> optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt)
+        std::optional<FusedActivations> activations = std::nullopt,
+        std::optional<const std::string> activation_pre_in0_0 = std::nullopt)
     {
-        return execute_on_worker_thread(DefaultQueueId, input_tensor_a_arg, input_tensor_b_arg, output_dtype, memory_config, optional_output_tensor, activations);
+        std::cout << "a " <<std::endl;
+        return execute_on_worker_thread(DefaultQueueId, input_tensor_a_arg, input_tensor_b_arg, output_dtype, memory_config, optional_output_tensor, activations, activation_pre_in0_0);
     }
 
     template <typename... Args>
@@ -146,6 +155,8 @@ struct ExecuteBinary {
         const std::optional<Tensor> &optional_output_tensor = std::nullopt,
         std::optional<FusedActivations> activations = std::nullopt) {
 
+            std::cout << "b " <<std::endl;
+
         return ExecuteBinary::execute_on_worker_thread(DefaultQueueId, input_tensor_a, scalar, dtype, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, optional_output_tensor, activations);
     }
 
@@ -162,6 +173,8 @@ struct ExecuteBinary {
         const std::optional<ttnn::MemoryConfig> &memory_config = std::nullopt,
         const std::optional<Tensor> &optional_output_tensor = std::nullopt,
         std::optional<FusedActivations> activations = std::nullopt) {
+
+            std::cout << "c " <<std::endl;
         // Cast Float Scalar to a device tensor
         auto host_buffer = owned_buffer::create<::bfloat16>(static_cast<std::size_t>(TILE_HEIGHT * TILE_WIDTH));
         host_buffer[0] = scalar;

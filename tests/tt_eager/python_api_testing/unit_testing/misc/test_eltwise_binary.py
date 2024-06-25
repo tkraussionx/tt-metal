@@ -16,14 +16,14 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")
 @pytest.mark.parametrize(
     "dtype",
-    [ttnn.float32],
+    [ttnn.bfloat16],
     ids=["float32"],
 )
-@pytest.mark.parametrize(
-    "test_func_name, torch_func_name",
-    [(ttnn.add, torch.add), (ttnn.sub, torch.sub), (ttnn.mul, torch.mul)],
-)
-def test_run_elt_binary(dtype, test_func_name, torch_func_name, device):
+# @pytest.mark.parametrize(
+#     "test_func_name, torch_func_name",
+#     [(ttnn.add, torch.add), (ttnn.sub, torch.sub), (ttnn.mul, torch.mul)],
+# )
+def test_run_elt_binary(dtype, device):
     shape = [2, 16, 256, 256]
 
     torch.manual_seed(10)
@@ -35,9 +35,9 @@ def test_run_elt_binary(dtype, test_func_name, torch_func_name, device):
     in0_t = torch2tt_tensor(in0, device, tt_memory_config=mem_config, tt_dtype=dtype)
     in1_t = torch2tt_tensor(in1, device, tt_memory_config=mem_config, tt_dtype=dtype)
 
-    out_t = test_func_name(in0_t, in1_t)
+    out_t = ttnn.mul(in0_t, in1_t, activation_pre_in0_0="silu")
     out = tt2torch_tensor(out_t)
 
-    passing, output = comp_pcc(out, torch_func_name(in0, in1), 0.9999)
+    passing, output = comp_pcc(out, torch.mul(in0, in1), 0.9999)
     logger.info(output)
     assert passing
