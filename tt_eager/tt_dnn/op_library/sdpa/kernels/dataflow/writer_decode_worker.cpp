@@ -70,6 +70,9 @@ void kernel_main() {
     constexpr uint32_t ml_write_size = PNHt*tile_bytes;
     uint64_t output_write_addr = get_noc_addr(reduce_core_noc_x, reduce_core_noc_y, get_write_ptr(cb_intermed_out)) + worker_offset;
     noc_async_write(get_read_ptr(cb_out), output_write_addr, o_write_size);
+    // for (uint32_t i = 0; i < out_chunk_tiles; i++) {
+    //     noc_async_write(get_read_ptr(cb_out_m), output_write_addr + i*tile_bytes, tile_bytes);
+    // }
     output_write_addr+=o_write_size;
     noc_async_write(get_read_ptr(cb_out_m), output_write_addr, ml_write_size);
     output_write_addr+=ml_write_size;
