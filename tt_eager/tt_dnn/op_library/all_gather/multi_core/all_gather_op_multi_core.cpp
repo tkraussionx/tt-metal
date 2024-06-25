@@ -57,6 +57,83 @@ static std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(AllGatherConfig
 }
 
 
+std::vector<std::vector<uint32_t>> compute_worker_sender_num_transfers(
+    AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t ring_size, uint32_t ring_index, all_gather_op::Topology topology, uint32_t direction
+) {
+    std::vector<std::vector<uint32_t>> worker_sender_num_transfers;
+    worker_sender_num_transfers.reserve(num_links);
+    for (uint32_t l = 0; l < num_links; ++l) {
+        worker_sender_num_transfers.emplace_back(all_gather_config.get_num_eth_buffers_per_edm());
+        for(uint32_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); ++b) {
+            uint32_t &worker_num_transfers = worker_sender_num_transfers.at(l).at(b);
+            switch (topology) {
+                case all_gather_op::Topology::Linear:
+                    worker_num_transfers = direction == 0 ? ring_index + 1 : ring_size - ring_index;
+                    break;
+
+                case all_gather_op::Topology::Ring:
+                    switch (all_gather_config.get_bidirectional_mode()) {
+                        case tt::tt_metal::AllGatherBidirectionalMode::SPLIT_TENSOR:
+                            worker_num_transfers = ring_size - 1;
+                            break;
+
+                        case tt::tt_metal::AllGatherBidirectionalMode::FULL_TENSOR:
+                            worker_num_transfers = all_gather_config.is_buffer_in_clockwise_ring(b) ?
+                                ((((ring_size - 1) - 1) / 2) + 1):
+                                (ring_size - 1) / 2;
+                            break;
+
+                        default:
+                            TT_FATAL("Unsupported bidirectional mode");
+                    };
+                    break;
+
+                default:
+                    TT_FATAL("Unsupported topology");
+            };
+        }
+    }
+
+    return worker_sender_num_transfers;
+}
+std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
+    AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t ring_size, uint32_t ring_index, all_gather_op::Topology topology, uint32_t direction) {
+    std::vector<std::vector<uint32_t>> worker_sender_num_transfers;
+    worker_sender_num_transfers.reserve(num_links);
+    for (uint32_t l = 0; l < num_links; ++l) {
+        worker_sender_num_transfers.emplace_back(all_gather_config.get_num_eth_buffers_per_edm());
+        for(uint32_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); ++b) {
+            uint32_t &worker_num_transfers = worker_sender_num_transfers.at(l).at(b);
+            switch (topology) {
+                case all_gather_op::Topology::Linear:
+                    worker_num_transfers = direction == 0 ? ring_index + 1 : ring_size - ring_index;
+                    break;
+
+                case all_gather_op::Topology::Ring:
+                    switch (all_gather_config.get_bidirectional_mode()) {
+                        case tt::tt_metal::AllGatherBidirectionalMode::SPLIT_TENSOR:
+                            worker_num_transfers = ring_size - 1;
+                            break;
+
+                        case tt::tt_metal::AllGatherBidirectionalMode::FULL_TENSOR:
+                            worker_num_transfers = all_gather_config.is_buffer_in_clockwise_ring(b) ?
+                                ((((ring_size - 1) - 1) / 2) + 1):
+                                (ring_size - 1) / 2;
+                            break;
+
+                        default:
+                            TT_FATAL("Unsupported bidirectional mode");
+                    };
+                    break;
+
+                default:
+                    TT_FATAL("Unsupported topology");
+            };
+        }
+    }
+
+    return worker_sender_num_transfers;
+}
 
 
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
@@ -136,13 +213,13 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     std::vector<CoreCoord> all_worker_receiver_cores;
     all_worker_receiver_cores.reserve(total_worker_core_pairs_used);
 
-
     uint32_t num_input_pages = input_tensor.buffer()->size() / input_page_size;
     uint32_t min_pages_per_link = num_input_pages / num_links;
 
-
-
-    const uint32_t num_full_send_directions = topology == all_gather_op::Topology::Linear ? 2 : 1;
+    bool full_send_both_directions = (
+        topology == all_gather_op::Topology::Linear ||
+        topology == all_gather_op::Topology::Ring && all_gather_config.get_bidirectional_mode() == tt::tt_metal::AllGatherBidirectionalMode::FULL_TENSOR);
+    const uint32_t num_full_send_directions = full_send_both_directions ? 2 : 1;
     constexpr uint32_t max_num_full_send_directions = 2;
 
     std::vector<EriscDatamoverBuilder> clockwise_edm_builders;
@@ -180,22 +257,21 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         // but if we are implementing a line topology, the number of transfers will depend on whether we
         // are setting up the forward/clockwise direction or the backward/counter-clockwise direction and also
         // how far we are from the first/last chip, depending on whether we are in forward or  direction
-        const uint32_t sender_num_transfers = topology == all_gather_op::Topology::Linear ?
-            (direction == 0 ? ring_index + 1: ring_size - ring_index):
-            ring_size - 1;
-        const uint32_t receiver_num_transfers = topology == all_gather_op::Topology::Linear ?
-            sender_num_transfers - 1:
-            ring_size - 1;
+
+        auto const& sender_worker_num_transfers = compute_worker_sender_num_transfers(
+            all_gather_config, num_links, ring_size, ring_index, topology, direction);
+        auto const& receiver_worker_num_transfers = compute_worker_receiver_num_transfers(
+            all_gather_config, num_links, ring_size, ring_index, topology, direction);
         std::vector<CoreCoord> eth_sender_cores;
         eth_sender_cores.reserve(num_links);
         std::vector<CoreCoord> eth_receiver_cores;
         eth_receiver_cores.reserve(num_links);
         // If linear topology, the first chip in the chain will not have a "receiver" eth core (or more correctly,
         // it doesn't have an input clockwise our output counter-clockwise connection)
-        bool is_first_chip_in_chain = direction == 0 ? ring_index == 0 : ring_index == ring_size - 1;
+        bool is_first_chip_in_chain = is_linear && (direction == 0 ? ring_index == 0 : ring_index == ring_size - 1);
         // If linear topology, the last chip in the chain will not have a "sender" eth core (or more correctly,
         // it doesn't have an output clockwise our input counter-clockwise connection)
-        bool is_last_chip_in_chain = direction == 0 ? ring_index == ring_size - 1 : ring_index == 0;
+        bool is_last_chip_in_chain = is_linear && (direction == 0 ? ring_index == ring_size - 1 : ring_index == 0);
 
         uint32_t sender_socket_idx = 0;
         uint32_t receiver_socket_idx = 0;
@@ -317,20 +393,56 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
             TT_ASSERT(rem_pages < pages_per_chunk || num_full_chunks == 0);
             TT_ASSERT(rem_pages <= max_pages_per_chunk);
-            std::vector<uint32_t> num_full_chunks_per_worker(all_gather_config.get_num_eth_buffers_per_edm(), num_full_chunks / all_gather_config.get_num_eth_buffers_per_edm());
-            std::vector<bool> is_channel_shrinkable(all_gather_config.get_num_eth_buffers_per_edm(), false);
-            std::vector<uint32_t> largest_packets_per_channel(all_gather_config.get_num_eth_buffers_per_edm(), 0);
+            std::vector<uint32_t> num_full_chunks_per_worker(all_gather_config.get_num_eth_buffers_per_edm(),0);
             std::vector<uint32_t> rem_pages_per_worker(all_gather_config.get_num_eth_buffers_per_edm(), 0);
-            {
-                uint32_t worker_idx = 0;
-                for (worker_idx = 0; worker_idx < num_full_chunks % all_gather_config.get_num_eth_buffers_per_edm(); ++worker_idx) {
-                    num_full_chunks_per_worker.at(worker_idx)++;
-                }
-                if (rem_pages != 0) {
-                    rem_pages_per_worker.at(worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) = rem_pages;
-                    TT_ASSERT(rem_pages_per_worker.at(worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) * 2 <= cb_num_pages);
+            {   // Compute num_full_chunks_per_worker and rem_pages_per_worker -> This should be pulled into a separte component
+                if (all_gather_config.get_bidirectional_mode() == tt::tt_metal::AllGatherBidirectionalMode::FULL_TENSOR) {
+                    std::size_t num_clockwise_buffers = all_gather_config.get_num_edm_channels_in_clockwise_direction();
+                    std::size_t num_counter_clockwise_buffers = all_gather_config.get_num_edm_channels_in_counter_clockwise_direction();
+                    for (std::size_t b = 0; b < num_clockwise_buffers; b++) {
+                        num_full_chunks_per_worker.at(b) = num_full_chunks / num_clockwise_buffers;
+                    }
+                    for (std::size_t b = num_clockwise_buffers; b < all_gather_config.get_num_eth_buffers_per_edm(); b++) {
+                        num_full_chunks_per_worker.at(b) = num_full_chunks / num_counter_clockwise_buffers;
+                    }
+
+                    uint32_t cw_worker_idx = 0;
+                    uint32_t ccw_worker_idx = 0;
+                    for (std::size_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); b++) {
+                        if (all_gather_config.is_buffer_in_clockwise_ring(b)) {
+                            if (cw_worker_idx < num_full_chunks % num_clockwise_buffers) {
+                                num_full_chunks_per_worker.at(b)++;
+                            }
+                            cw_worker_idx++;
+                        } else {
+                            if (ccw_worker_idx < num_full_chunks % num_counter_clockwise_buffers) {
+                                num_full_chunks_per_worker.at(b)++;
+                            }
+                            ccw_worker_idx++;
+                        }
+                    }
+                    if (rem_pages != 0) {
+                        rem_pages_per_worker.at(cw_worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) = rem_pages;
+                        TT_ASSERT(rem_pages_per_worker.at(cw_worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) * 2 <= cb_num_pages);
+                        rem_pages_per_worker.at(ccw_worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) = rem_pages;
+                        TT_ASSERT(rem_pages_per_worker.at(ccw_worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) * 2 <= cb_num_pages);
+                    }
+                } else {
+                    for (std::size_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); b++) {
+                        num_full_chunks_per_worker.at(b) = num_full_chunks / all_gather_config.get_num_eth_buffers_per_edm();
+                    }
+                    uint32_t worker_idx = 0;
+                    for (worker_idx = 0; worker_idx < num_full_chunks % all_gather_config.get_num_eth_buffers_per_edm(); ++worker_idx) {
+                        num_full_chunks_per_worker.at(worker_idx)++;
+                    }
+                    if (rem_pages != 0) {
+                        rem_pages_per_worker.at(worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) = rem_pages;
+                        TT_ASSERT(rem_pages_per_worker.at(worker_idx % all_gather_config.get_num_eth_buffers_per_edm()) * 2 <= cb_num_pages);
+                    }
                 }
             }
+            std::vector<bool> is_channel_shrinkable(all_gather_config.get_num_eth_buffers_per_edm(), false);
+            std::vector<uint32_t> largest_packets_per_channel(all_gather_config.get_num_eth_buffers_per_edm(), 0);
 
             std::vector<uint32_t> clockwise_link_buffer_num_messages_to_send;
             std::vector<uint32_t> counter_clockwise_link_buffer_num_messages_to_send;
@@ -378,10 +490,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 // link num messages
                 clockwise_link_buffer_num_messages_to_send.push_back(
                     (num_full_chunks_per_worker.at(b) + (rem_pages_per_worker.at(b) > 0 ? 1 : 0)) *
-                    sender_num_transfers);
+                    sender_worker_num_transfers.at(i).at(b));
                 counter_clockwise_link_buffer_num_messages_to_send.push_back(
                     (num_full_chunks_per_worker.at(b) + (rem_pages_per_worker.at(b) > 0 ? 1 : 0)) *
-                    receiver_num_transfers);
+                    receiver_worker_num_transfers.at(i).at(b));
             }
             for(uint32_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); ++b) {
                 log_trace(tt::LogOp, "rem_pages_per_worker[{}]: {}", b, rem_pages_per_worker.at(b));
@@ -473,18 +585,18 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             // 2) num_transfers
                             std::vector<uint32_t> worker_reader_sender_ct_args = {
                                 static_cast<uint32_t>(sharding_info.get_shard_type()),
-                                static_cast<uint32_t>(sender_num_transfers)
+                                static_cast<uint32_t>(sender_worker_num_transfers.at(i).at(b))
                             };
                             log_trace(tt::LogOp, "----worker_reader_sender_ct_args size={}", worker_reader_sender_ct_args.size());
                             log_trace(tt::LogOp, "\tsharding_info.get_shard_type(): {}", sharding_info.get_shard_type());
-                            log_trace(tt::LogOp, "\tnum_transfers: {}", sender_num_transfers);
+                            log_trace(tt::LogOp, "\tnum_transfers: {}", sender_worker_num_transfers.at(i).at(b));
 
                             return worker_reader_sender_ct_args;
                         } else {
                             std::vector<uint32_t> worker_reader_sender_ct_args = {
                                 static_cast<uint32_t>(all_gather_config.is_input_dram()),
                                 static_cast<uint32_t>(all_gather_config.is_output_dram()),
-                                static_cast<uint32_t>(sender_num_transfers),
+                                static_cast<uint32_t>(sender_worker_num_transfers.at(i).at(b)),
                                 static_cast<uint32_t>(num_full_chunks_per_worker.at(b)),
                                 static_cast<uint32_t>(input_page_size),
                                 static_cast<uint32_t>(output_page_size),
@@ -513,7 +625,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             log_trace(tt::LogOp, "Worker {} SR args", b);
                             log_trace(tt::LogOp, "\tall_gather_config.is_input_dram(): {}", all_gather_config.is_input_dram());
                             log_trace(tt::LogOp, "\tall_gather_config.is_output_dram(): {}", all_gather_config.is_output_dram());
-                            log_trace(tt::LogOp, "\tsender_num_transfers: {}", sender_num_transfers);
+                            log_trace(tt::LogOp, "\tsender_num_transfers: {}", sender_worker_num_transfers.at(i).at(b));
                             log_trace(tt::LogOp, "\tnum_full_chunks_per_worker.at(b): {}", num_full_chunks_per_worker.at(b));
                             log_trace(tt::LogOp, "\tinput_page_size: {}", input_page_size);
                             log_trace(tt::LogOp, "\toutput_page_size: {}", output_page_size);
@@ -650,7 +762,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             CoreCoord const& worker_eth_sender_core = is_clockwise_direction ? eth_sender_cores.at(i) : eth_receiver_cores.at(i);
                             std::vector<uint32_t> worker_writer_sender_ct_args = {
                                 static_cast<uint32_t>(all_gather_config.is_output_dram()),
-                                static_cast<uint32_t>(sender_num_transfers),
+                                static_cast<uint32_t>(sender_worker_num_transfers.at(i).at(b)),
                                 static_cast<uint32_t>(num_full_chunks_per_worker.at(b)),
                                 static_cast<uint32_t>(input_page_size),
                                 static_cast<uint32_t>(output_page_size),
@@ -675,7 +787,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             };
                             log_trace(tt::LogOp, "Worker {} SW CT args", b);
                             log_trace(tt::LogOp, "\tall_gather_config.is_output_dram(): {}", all_gather_config.is_output_dram());
-                            log_trace(tt::LogOp, "\tsender_num_transfers: {}", sender_num_transfers);
+                            log_trace(tt::LogOp, "\tsender_num_transfers: {}", sender_worker_num_transfers.at(i).at(b));
                             log_trace(tt::LogOp, "\tnum_full_chunks_per_worker: {}", num_full_chunks_per_worker.at(b));
                             log_trace(tt::LogOp, "\tinput_page_size: {}", input_page_size);
                             log_trace(tt::LogOp, "\toutput_page_size: {}", output_page_size);
@@ -758,7 +870,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                 static_cast<uint32_t>(device->ethernet_core_from_logical_core(worker_eth_sender_core).y), // eth_sender_noc_y
                                 static_cast<uint32_t>(pages_per_eth_l1_buffer.at(b)), //output_tensor_shard_arg_generator.args_struct.num_dest_cores),//pages_per_eth_l1_buffer.at(b)),
                                 static_cast<uint32_t>(sender_worker_writer_semaphore_addr), // writer_send_sem_addr
-                                static_cast<uint32_t>(sender_num_transfers),
+                                static_cast<uint32_t>(sender_worker_num_transfers.at(i).at(b)),
                                 static_cast<uint32_t>(input_tensor_shard_arg_generator.args_struct.num_dest_cores),
                                 static_cast<uint32_t>(cb_num_pages / 2),
                             };
@@ -774,7 +886,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             log_trace(tt::LogOp, "\teth_sender_noc_y: {}", device->ethernet_core_from_logical_core(worker_eth_sender_core).y);
                             log_trace(tt::LogOp, "\tpages_per_eth_l1_buffer: {}", pages_per_eth_l1_buffer.at(b));
                             log_trace(tt::LogOp, "\twriter_send_sem_addr: {}", sender_worker_writer_semaphore_addr);
-                            log_trace(tt::LogOp, "\tnum_transfers: {}", sender_num_transfers);
+                            log_trace(tt::LogOp, "\tnum_transfers: {}", sender_worker_num_transfers.at(i).at(b));
                             output_tensor_shard_arg_generator.dump_to_log();
 
                             return worker_writer_sender_rt_args;
@@ -820,7 +932,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                     TT_ASSERT(!is_linear ||
                         ((is_clockwise_direction && (ring_index != 0)) || (!is_clockwise_direction && ring_index != ring_size - 1))
                     );
-                    // TODO(snijjar): squash before merge
                     uint32_t receiver_ring_index = is_linear?
                         (is_clockwise_direction ? ring_index - 1 : ring_index + 1):
                         (is_clockwise_direction ?
@@ -872,7 +983,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         } else {
                             CoreCoord const& worker_eth_receiver_core = is_clockwise_direction ? eth_receiver_cores.at(i) : eth_sender_cores.at(i);
                             std::vector<uint32_t> worker_receiver_reader_ct_args = {
-                                static_cast<uint32_t>(receiver_num_transfers),
+                                static_cast<uint32_t>(receiver_worker_num_transfers.at(i).at(b)),
                                 static_cast<uint32_t>(num_full_chunks_per_worker.at(b)),
                                 static_cast<uint32_t>(input_page_size),
                                 static_cast<uint32_t>(pages_per_chunk),
@@ -885,7 +996,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             };
 
                             log_trace(tt::LogOp, "Worker {} RR ct args", b);
-                            log_trace(tt::LogOp, "\treceiver_num_transfers: {}", receiver_num_transfers);
+                            log_trace(tt::LogOp, "\treceiver_num_transfers: {}", receiver_worker_num_transfers.at(i).at(b));
                             log_trace(tt::LogOp, "\tnum_full_chunks_per_worker: {}", num_full_chunks_per_worker.at(b));
                             log_trace(tt::LogOp, "\tinput_page_size: {}", input_page_size);
                             log_trace(tt::LogOp, "\tpages_per_chunk: {}", pages_per_chunk);
@@ -943,7 +1054,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             worker_reader_receiver_rt_args.push_back(static_cast<uint32_t>(receiver_eth_sem_addrs.at(b))); // eth_receiver_l1_semaphore_addr
                             worker_reader_receiver_rt_args.push_back(receiver_worker_semaphore_addr); // local_receiver_read_sem_addr
                             worker_reader_receiver_rt_args.push_back(pages_per_eth_l1_buffer.at(b)), //output_tensor_shard_arg_generator.args_struct.num_dest_cores), //pages_per_eth_l1_buffer.at(b)); // num_shards_per_eth_buf
-                            worker_reader_receiver_rt_args.push_back(receiver_num_transfers); // local_receiver_read_sem_addr
+                            worker_reader_receiver_rt_args.push_back(receiver_worker_num_transfers.at(i).at(b)); // local_receiver_read_sem_addr
                             worker_reader_receiver_rt_args.push_back(static_cast<uint32_t>(cb_num_pages / 2)); // local_receiver_read_sem_addr
                             std::copy(output_tensor_shard_addr_gen_args.begin(), output_tensor_shard_addr_gen_args.end(), std::back_inserter(worker_reader_receiver_rt_args));
 
@@ -1002,7 +1113,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         } else {
                             std::vector<uint32_t> worker_writer_receiver_ct_args = {
                                 static_cast<uint32_t>(all_gather_config.is_output_dram()),
-                                static_cast<uint32_t>(receiver_num_transfers),
+                                static_cast<uint32_t>(receiver_worker_num_transfers.at(i).at(b)),
                                 static_cast<uint32_t>(num_full_chunks_per_worker.at(b)),
                                 static_cast<uint32_t>(input_page_size),
                                 static_cast<uint32_t>(output_page_size),
@@ -1029,7 +1140,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
                             log_trace(tt::LogOp, "Worker {} RW ct args", b);
                             log_trace(tt::LogOp, "\tall_gather_config.is_output_dram(): {}", all_gather_config.is_output_dram());
-                            log_trace(tt::LogOp, "\treceiver_num_transfers: {}", receiver_num_transfers);
+                            log_trace(tt::LogOp, "\treceiver_num_transfers: {}", receiver_worker_num_transfers.at(i).at(b));
                             log_trace(tt::LogOp, "\tnum_full_chunks_per_worker.at(b): {}", num_full_chunks_per_worker.at(b));
                             log_trace(tt::LogOp, "\tinput_page_size: {}", input_page_size);
                             log_trace(tt::LogOp, "\toutput_page_size: {}", output_page_size);
@@ -1094,7 +1205,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             worker_receive_writer_rt_args.push_back(sender_worker_reader_semaphore_addr);
 
                             worker_receive_writer_rt_args.push_back(output_tensor_shard_arg_generator.args_struct.num_dest_cores), //pages_per_eth_l1_buffer.at(b));
-                            worker_receive_writer_rt_args.push_back(receiver_num_transfers);
+                            worker_receive_writer_rt_args.push_back(receiver_worker_num_transfers.at(i).at(b));
                             worker_receive_writer_rt_args.push_back(pages_per_buffer.at(b));
                             worker_receive_writer_rt_args.push_back(static_cast<uint32_t>(cb_num_pages / 2));
 

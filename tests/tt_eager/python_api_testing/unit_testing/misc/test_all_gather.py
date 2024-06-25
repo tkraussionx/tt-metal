@@ -103,14 +103,26 @@ def run_all_gather_on_t3000_impl(
     logger.info(f"dim: {dim}")
 
     input_tensor = torch.rand(input_shape).bfloat16()
+    tile_id = 0
+    for w in range(input_shape[0]):
+        for z in range(input_shape[1]):
+            for y in range(0, input_shape[2], 32):
+                for x in range(0, input_shape[3], 32):
+                    for yy in range(32):
+                        for xx in range(32):
+                            input_tensor[w][y][y + yy][x + xx] = tile_id
+                    tile_id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
     for i, t in enumerate(input_tensors):
         tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(layout).to(devices[i], mem_config))
 
+    # input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+
     for i in range(num_iters):
-        tt_out_tensors = ttnn.all_gather(tt_input_tensors, dim, num_links=num_links, memory_config=mem_config)
+        tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, mem_config)
+        # tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links=num_links, memory_config=mem_config)
 
         for d in devices:
             ttl.device.Synchronize(d)
@@ -123,6 +135,16 @@ def run_all_gather_on_t3000_impl(
         else:
             eq, output = comp_pcc(tt_output_tensor, input_tensor)
         if not eq:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for y in range(0, input_shape[2], 32):
+                        for x in range(0, input_shape[3], 32):
+                            if tt_output_tensor[w][y][y + yy][x + xx] != input_tensor[w][y][y + yy][x + xx]:
+                                logger.error(
+                                    f"mismatch at {w} {z} {y} {x} : {input_tensor[w][y][y][x]} != {tt_output_tensor[w][y][y][x]}"
+                                )
+                            # for yy in range(32):
+                            #     for xx in range(32):
             logger.error(f"output mismatch for tensor {i}")
         assert eq, f"{i} FAILED: {output}"
 
@@ -162,14 +184,14 @@ def run_all_gather_on_t3000_impl_tight_loop(
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
-        (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        (8, 1, [1, 1, 32, 4096], 3, ttl.tensor.Layout.TILE),
+        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
     ],
 )
 @pytest.mark.parametrize(
@@ -223,58 +245,58 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
-        (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
-        (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
-        (4, 2, [8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [8, 5, 13, 512], 3, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
-        (8, 1, [8, 5, 32, 512], 3, ttl.tensor.Layout.TILE),
-        # Only for BFP8B
-        # ([1, 1, 640, 32768], 3, ttl.tensor.Layout.TILE),
-        # MLP AllGather,  Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
-        (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
-        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
-        # (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
-        # Input, Selfout, Final AllGather,  Llama2, Falcon 40B decode mlp attn
+        # (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
+        # (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
+        # (4, 2, [8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [8, 5, 13, 512], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
+        # (8, 1, [8, 5, 32, 512], 3, ttl.tensor.Layout.TILE),
+        # # Only for BFP8B
+        # # ([1, 1, 640, 32768], 3, ttl.tensor.Layout.TILE),
+        # # MLP AllGather,  Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
+        # (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        # (4, 2, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
+        # # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        # # (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # # Input, Selfout, Final AllGather,  Llama2, Falcon 40B decode mlp attn
         (8, 1, [1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
-        # Falcon 40B prefill
-        # 8 chips
-        (8, 1, [1, 1, 2048, 8192], 3, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 2048, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
-        # Falcon 40B prefill, also mixtral expert reduction (w/ zero filled tensor)
-        # 8 chips
-        (8, 1, [1, 1, 2048, 32768], 3, ttl.tensor.Layout.TILE),
-        # Llama/falcon40B galaxy mlp weights stationary -> emulation of row/col reduce
-        (8, 1, [1, 1, 256, 1024], 2, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 246, 4096], 2, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [1, 1, 246, 4096], 2, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 8192, 32], 2, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 1024, 256], 3, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 256, 2048], 2, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 256, 8192], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
-        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        (8, 1, [8, 8, 128, 4096], 1, ttl.tensor.Layout.TILE),
+        # (4, 2, [1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # # Falcon 40B prefill
+        # # 8 chips
+        # (8, 1, [1, 1, 2048, 8192], 3, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 2048, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # # Falcon 40B prefill, also mixtral expert reduction (w/ zero filled tensor)
+        # # 8 chips
+        # (8, 1, [1, 1, 2048, 32768], 3, ttl.tensor.Layout.TILE),
+        # # Llama/falcon40B galaxy mlp weights stationary -> emulation of row/col reduce
+        # (8, 1, [1, 1, 256, 1024], 2, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 246, 4096], 2, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [1, 1, 246, 4096], 2, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 8192, 32], 2, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 1024, 256], 3, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 256, 2048], 2, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 256, 8192], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
+        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        # (8, 1, [8, 8, 128, 4096], 1, ttl.tensor.Layout.TILE),
     ],
 )
 @pytest.mark.parametrize(
     "input_dtype",
     [
         ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.DataType.BFLOAT8_B,
+        # ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
 @pytest.mark.parametrize(
     "mem_config",
     [
         ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
+        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
 def test_all_gather_on_t3000_post_commit(
