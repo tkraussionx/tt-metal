@@ -23,8 +23,8 @@ def is_unsupported_case(input_shape, scatter_dim, math_op, mem_config, num_devic
     if mem_config.buffer_type == ttl.tensor.BufferType.L1 and tensor_size_bytes > num_l1_banks * 50 * 1024:
         return True, "L1 buffer can't support large tensor sizes"
 
-    if input_dtype == ttl.tensor.DataType.BFLOAT8_B and tuple(input_shape) == (1, 1, 2048, 1024) and scatter_dim == 3:
-        return True, "Known failure with bfp8_b data format"
+    # if input_dtype == ttl.tensor.DataType.BFLOAT8_B and tuple(input_shape) == (1, 1, 2048, 1024) and scatter_dim == 3:
+    #     return True, "Known failure with bfp8_b data format"
 
     return False, ""
 
@@ -110,21 +110,22 @@ def run_reduce_scatter_test(
         assert not mismatch, f"{i} FAILED: {output}"
 
 
+# ~2:45 extra time in the current state
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
     [
-        (4, 1),
+        # (4, 1),
         (8, 1),
     ],
 )
 @pytest.mark.parametrize(
     "per_chip_output_shape, scatter_dim, layout",
     [
-        # # Has worker slice size warning - defaults to 1x1
+        ([1, 8, 1024, 1024], 3, ttl.tensor.Layout.TILE),
+        ([1, 4, 2048, 1024], 3, ttl.tensor.Layout.TILE),
+        # # # Has worker slice size warning - defaults to 1x1
         ([1, 1, 128, 8192], 3, ttl.tensor.Layout.TILE),
-        # Always fails with bfp8_b
-        ([1, 1, 2048, 1024], 3, ttl.tensor.Layout.TILE),
     ],
 )
 @pytest.mark.parametrize(
@@ -143,79 +144,6 @@ def run_reduce_scatter_test(
 )
 @pytest.mark.parametrize("math_op", [ttl.tensor.ReduceOpMath.SUM])
 def test_reduce_scatter_post_commit(
-    all_devices,
-    num_devices,
-    per_chip_output_shape,
-    scatter_dim,
-    num_links,
-    math_op,
-    input_dtype,
-    layout,
-    mem_config,
-    use_program_cache,
-    function_level_defaults,
-    num_iters=1,
-):
-    run_reduce_scatter_test(
-        all_devices,
-        num_devices,
-        per_chip_output_shape,
-        scatter_dim,
-        num_links,
-        math_op,
-        input_dtype,
-        layout,
-        mem_config,
-        use_program_cache,
-        function_level_defaults,
-        num_iters,
-    )
-
-
-@pytest.mark.timeout(120)
-@pytest.mark.parametrize(
-    "num_devices, num_links",
-    [
-        (4, 1),
-        (8, 1),
-    ],
-)
-@pytest.mark.parametrize(
-    "per_chip_output_shape, scatter_dim, layout",
-    [
-        ([1, 1, 32, 32], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 64], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 64, 64], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 128], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 256], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 512], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 1024], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 32, 2048], 3, ttl.tensor.Layout.TILE),
-        ([1, 1, 128, 1024], 3, ttl.tensor.Layout.TILE),
-        # Has worker slice size warning - defaults to 1x1
-        ([1, 1, 128, 8192], 3, ttl.tensor.Layout.TILE),
-        # Always fails with bfp8_b
-        ([1, 1, 2048, 1024], 3, ttl.tensor.Layout.TILE),
-        # Has worker slice size warning - defaults to 1x1
-        ([1, 1, 2048, 8192], 3, ttl.tensor.Layout.TILE),
-    ],
-)
-@pytest.mark.parametrize(
-    "input_dtype",
-    [
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.DataType.BFLOAT8_B,
-    ],
-)
-@pytest.mark.parametrize(
-    "mem_config",
-    [
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
-    ],
-)
-@pytest.mark.parametrize("math_op", [ttl.tensor.ReduceOpMath.SUM])
-def test_reduce_scatter_nightly(
     all_devices,
     num_devices,
     per_chip_output_shape,

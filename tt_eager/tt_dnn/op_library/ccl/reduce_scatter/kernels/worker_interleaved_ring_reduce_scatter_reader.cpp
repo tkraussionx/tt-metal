@@ -37,7 +37,9 @@ struct reduce_scatter_reader_common_args_t {
         input_tensor_shape(tt::tt_metal::ccl::coord_from_args(arg_idx)),
         tensor_slice_shape(tt::tt_metal::ccl::coord_from_args(arg_idx)),
         worker_slice_shape(tt::tt_metal::ccl::coord_from_args(arg_idx)),
-        worker_slice_offset(tt::tt_metal::ccl::coord_from_args(arg_idx)) {
+        worker_slice_offset(tt::tt_metal::ccl::coord_from_args(arg_idx)),
+        total_eltwise_kernel_num_pages(get_arg_val<uint32_t>(arg_idx++))
+         {
         ASSERT(full_chunk_num_pages > 0);
         ASSERT(page_size > 0);
         ASSERT(ring_size > 0);
@@ -65,6 +67,7 @@ struct reduce_scatter_reader_common_args_t {
     coord_t tensor_slice_shape;
     coord_t worker_slice_shape;
     coord_t worker_slice_offset;
+    uint32_t total_eltwise_kernel_num_pages;
 };
 #ifdef RM_INTERLEAVED
 constexpr bool rm_interleaved_addr_gen_mode = true;
@@ -202,7 +205,6 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = tt::CB::c_in1;
     const DataFormat in0_df = get_dataformat(cb_id_in0);
     auto args = reduce_scatter_reader_unique_args_t<is_sharded, src_is_dram>(arg_idx, in0_df);
-    uint32_t total_eltwise_kernel_num_pages = get_arg_val<uint32_t>(arg_idx++);
 
     ASSERT(args.half_cb_n_pages >= args.full_chunk_num_pages);
 
@@ -250,7 +252,7 @@ void kernel_main() {
         uint32_t const worker_slice_n_pages = valid_worker_slice_shape.x * valid_worker_slice_shape.y;
         ASSERT(
             (args.num_transfers - 1) * worker_slice_n_pages + total_cb_pages_pushed_to_math <=
-            total_eltwise_kernel_num_pages);
+            args.total_eltwise_kernel_num_pages);
         {
             coord_t offset_into_worker_slice = {0, 0};
             for (uint32_t p = 0; p < worker_slice_n_pages; p += args.full_chunk_num_pages) {
@@ -336,13 +338,13 @@ void kernel_main() {
         args.worker_slice_offset = next_slice_offset;
     }
 
-    ASSERT(total_eltwise_kernel_num_pages >= total_cb_pages_pushed_to_math);
+    ASSERT(args.total_eltwise_kernel_num_pages >= total_cb_pages_pushed_to_math);
     DEBUG_STATUS("DRN1");
     // The host code currently doesn't know how to accuractly count the exact number of pages pushed through the
     // math reduce op so it instead provides a known safe lower bound which may be more than actually required by the
     // op. It passes this number to sender and receiver, who will push/pop junk pages to/from the math op to ensure
     // it will complete
-    for (; total_cb_pages_pushed_to_math < total_eltwise_kernel_num_pages; total_cb_pages_pushed_to_math++) {
+    for (; total_cb_pages_pushed_to_math < args.total_eltwise_kernel_num_pages; total_cb_pages_pushed_to_math++) {
         push_filler_pages_to_cb(cb_id_in0, 1);
         push_filler_pages_to_cb(cb_id_in1, 1);
     }

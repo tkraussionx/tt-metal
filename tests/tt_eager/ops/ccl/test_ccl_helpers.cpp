@@ -227,33 +227,33 @@ TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_24_0__InnerShape_24_0__OuterSha
 }
 
 /////////////////////////////////////////
-// Test InterleavedRingReduceScatterTensorSlicer
+// Test RingReduceScatterTensorSlicer
 /////////////////////////////////////////
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_AllWorkersSameRow) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_AllWorkersSameRow) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(4, {2, 2});
     tt_xy_pair tensor_slice_shape = {8, 4};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(2, 0));
     ASSERT_EQ(worker_slice_offsets.at(2), tt_xy_pair(4, 0));
     ASSERT_EQ(worker_slice_offsets.at(3), tt_xy_pair(6, 0));
 }
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_1WorkerWrapToNextRowAligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_1WorkerWrapToNextRowAligned) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(4, {2, 2});
     tt_xy_pair tensor_slice_shape = {6, 4};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(2, 0));
     ASSERT_EQ(worker_slice_offsets.at(2), tt_xy_pair(4, 0));
     ASSERT_EQ(worker_slice_offsets.at(3), tt_xy_pair(0, 2));
 }
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_1WorkerWrapToNextRowMisaligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_1WorkerWrapToNextRowMisaligned) {
     {
         auto worker_slice_shapes = std::vector<tt_xy_pair>(4, {2, 2});
         tt_xy_pair tensor_slice_shape = {5, 4};
-        auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+        auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
             worker_slice_shapes, tensor_slice_shape);
         ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
         ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(2, 0));
@@ -261,10 +261,10 @@ TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_1Wo
         ASSERT_EQ(worker_slice_offsets.at(3), tt_xy_pair(0, 2));
     }
 }
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_MultipleWorkersWrapToNextRowAligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_MultipleWorkersWrapToNextRowAligned) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(8, {2, 2});
     tt_xy_pair tensor_slice_shape = {10, 4};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(2, 0));
@@ -276,10 +276,10 @@ TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_Mul
     ASSERT_EQ(worker_slice_offsets.at(7), tt_xy_pair(4, 2));
 }
 
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_MultipleWorkersWrapToNextRowMisaligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_MultipleWorkersWrapToNextRowMisaligned) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(8, {2, 2});
     tt_xy_pair tensor_slice_shape = {9, 4};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(2, 0));
@@ -291,20 +291,20 @@ TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_Mul
     ASSERT_EQ(worker_slice_offsets.at(7), tt_xy_pair(4, 2));
 }
 
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_NMinus1WorkersWrapToNextRowAligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_NMinus1WorkersWrapToNextRowAligned) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(3, {4, 4});
     tt_xy_pair tensor_slice_shape = {4, 12};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(0, 4));
     ASSERT_EQ(worker_slice_offsets.at(2), tt_xy_pair(0, 8));
 }
 
-TEST(Ccl_InterleavedRingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_NMinus1WorkersWrapToNextRowMisaligned) {
+TEST(Ccl_RingReduceScatterTensorSlicer, ComputeWorkerSliceOffsets_NMinus1WorkersWrapToNextRowMisaligned) {
     auto worker_slice_shapes = std::vector<tt_xy_pair>(3, {4, 3});
     tt_xy_pair tensor_slice_shape = {3, 12};
-    auto const& worker_slice_offsets = ccl::InterleavedRingReduceScatterTensorSlicer::compute_worker_slice_offsets(
+    auto const& worker_slice_offsets = ccl::RingReduceScatterTensorSlicer::compute_worker_slice_offsets(
         worker_slice_shapes, tensor_slice_shape);
     ASSERT_EQ(worker_slice_offsets.at(0), tt_xy_pair(0, 0));
     ASSERT_EQ(worker_slice_offsets.at(1), tt_xy_pair(0, 3));
