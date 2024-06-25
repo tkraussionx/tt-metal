@@ -150,14 +150,13 @@ advance_to_next_transfer_slice_result_t advance_to_next_transfer_slice(
     uint32_t const ring_size,
     uint32_t const curr_ring_idx,
     uint32_t const slice_base_page_offset,
-    uint32_t const bank_base_address,
     coord_t const& input_tensor_shape,
     coord_t const& tensor_slice_shape,
     bool const is_clockwise_direction) {
-    bool const sliced_on_width = tensor_slice_shape.x < input_tensor_shape.x;
+    bool const sliced_only_on_width = tensor_slice_shape.x < input_tensor_shape.x && tensor_slice_shape.y == input_tensor_shape.y;
     uint32_t single_ring_idx_stride =
-        sliced_on_width ? tensor_slice_shape.x : tensor_slice_shape.y * input_tensor_shape.x;
-    uint32_t n_minus_one_ring_indices_stride = sliced_on_width
+        sliced_only_on_width ? tensor_slice_shape.x : tensor_slice_shape.y * input_tensor_shape.x;
+    uint32_t n_minus_one_ring_indices_stride = sliced_only_on_width
                                                    ? tensor_slice_shape.x * (ring_size - 1)
                                                    : tensor_slice_shape.y * input_tensor_shape.x * (ring_size - 1);
 
@@ -223,11 +222,20 @@ void kernel_main() {
     // of the output data movement kernel - short-circuiting past the (reducer) math kernel
     // For tile => shape in tiles
     // For RM => shape in elements
+    uint32_t start_ring_index = args.my_ring_idx;
     while (args.worker_slice_offset.x < args.tensor_slice_shape.x &&
            args.worker_slice_offset.y < args.tensor_slice_shape.y) {
+        // Need to reset back to the start ring index because the last iteration of the tranfers read chunks
+        // loop won't increment after the last iteration since the increment is within the loop body
+        args.my_ring_idx = start_ring_index;
         uint32_t curr_ring_slice_start_page_offset =
-            width_sliced ? args.tensor_slice_shape.x * args.my_ring_idx
-                         : args.tensor_slice_shape.y * args.my_ring_idx * args.input_tensor_shape.x;
+            width_sliced ? args.tensor_slice_shape.x * start_ring_index
+                         : args.tensor_slice_shape.y * start_ring_index * args.input_tensor_shape.x;
+
+        auto const& next_slice_offset = advance_slice_row_major(
+            args.worker_slice_offset, args.worker_slice_shape, args.tensor_slice_shape, args.num_concurrent_workers);
+        bool last_slice_of_worker = next_slice_offset.x >= args.tensor_slice_shape.x ||
+                                    next_slice_offset.y >= args.tensor_slice_shape.y;
 
         const uint32_t worker_relative_start_offset_into_slice =
             args.worker_slice_offset.x + (args.worker_slice_offset.y * args.input_tensor_shape.x);
@@ -261,21 +269,22 @@ void kernel_main() {
                     last_page_of_worker);
                 total_cb_pages_pushed += n_pages;
                 if (n_pages < args.half_cb_n_pages) {
-                    push_filler_pages_to_cb(to_dm_sender_short_circuit_cb, args.half_cb_n_pages - n_pages);
+                    uint32_t num_filler_pages = args.half_cb_n_pages - n_pages;
+                    push_filler_pages_to_cb(to_dm_sender_short_circuit_cb, num_filler_pages);
                     ASSERT(args.half_cb_n_pages > n_pages);
                     ASSERT(p + n_pages == worker_slice_n_pages);
-                    total_cb_pages_pushed += (args.half_cb_n_pages - n_pages);
+                    total_cb_pages_pushed += num_filler_pages;
                 }
             }
         }
 
         for (uint32_t i = 1; i < args.num_transfers; ++i) {
+            bool last_transfer = i == args.num_transfers - 1;
             coord_t offset_into_worker_slice = {0, 0};
             std::tie(args.my_ring_idx, curr_ring_slice_start_page_offset) = advance_to_next_transfer_slice<is_sharded>(
                 args.ring_size,
                 args.my_ring_idx,
                 curr_ring_slice_start_page_offset,
-                args.s.bank_base_address,
                 args.input_tensor_shape,
                 args.tensor_slice_shape,
                 args.is_clockwise_direction);
@@ -306,9 +315,13 @@ void kernel_main() {
                 fetch_chunk(cb_id_in0, n_pages, args.page_size, eth_receiver_l1_base_noc_addr);
                 total_cb_pages_pushed_to_math += n_pages;
                 total_cb_pages_pushed += n_pages;
-                noc_semaphore_inc(
-                    eth_receiver_l1_semaphore_noc_addr,
-                    tt::tt_metal::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
+
+                bool last_worker_message_to_edm = last_transfer && last_slice_of_worker && (p + n_pages >= worker_slice_n_pages);
+                if (!last_worker_message_to_edm) {
+                    noc_semaphore_inc(
+                        eth_receiver_l1_semaphore_noc_addr,
+                        tt::tt_metal::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
+                }
                 if (n_pages < args.half_cb_n_pages) {
                     uint32_t num_filler_pages = args.half_cb_n_pages - n_pages;
                     push_filler_pages_to_cb(cb_id_in0, num_filler_pages);
@@ -320,13 +333,12 @@ void kernel_main() {
             ASSERT(last_page_of_worker);
         }
 
-        args.worker_slice_offset = advance_slice_row_major(
-            args.worker_slice_offset, args.worker_slice_shape, args.tensor_slice_shape, args.num_concurrent_workers);
+        args.worker_slice_offset = next_slice_offset;
     }
 
     ASSERT(total_eltwise_kernel_num_pages >= total_cb_pages_pushed_to_math);
     DEBUG_STATUS("DRN1");
-    // The host code currently doesn't know how ton accuractly count the exact number of pages pushed through the
+    // The host code currently doesn't know how to accuractly count the exact number of pages pushed through the
     // math reduce op so it instead provides a known safe lower bound which may be more than actually required by the
     // op. It passes this number to sender and receiver, who will push/pop junk pages to/from the math op to ensure
     // it will complete
@@ -335,12 +347,8 @@ void kernel_main() {
         push_filler_pages_to_cb(cb_id_in1, 1);
     }
 
-    static_assert(
-        tt::tt_metal::ccl::EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY >
-        tt::tt_metal::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
     noc_semaphore_inc(
         eth_receiver_l1_semaphore_noc_addr,
-        tt::tt_metal::ccl::EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY -
-            tt::tt_metal::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
+        tt::tt_metal::ccl::EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY);
     DEBUG_STATUS("DONE");
 }

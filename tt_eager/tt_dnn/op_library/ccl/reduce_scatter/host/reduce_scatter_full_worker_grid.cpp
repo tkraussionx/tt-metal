@@ -91,15 +91,15 @@ struct ReduceScatterWorkerArgBuilder {
         WorkerTransferInfo const& worker_transfer_info,
         uint32_t worker_idx,
         uint32_t cb_num_pages_per_packet,
-        uint32_t worker_receiver_semaphore_address,
-        uint32_t worker_sender_semaphore_address) :
+        uint32_t worker_sender_semaphore_address,
+        uint32_t worker_receiver_semaphore_address) :
         op_config(op_config),
         topology_config(topology_config),
         worker_input_slice(worker_input_slice),
         worker_transfer_info(worker_transfer_info),
         cb_num_pages_per_packet(cb_num_pages_per_packet),
-        worker_receiver_semaphore_address(worker_receiver_semaphore_address),
-        worker_sender_semaphore_address(worker_sender_semaphore_address) {}
+        worker_sender_semaphore_address(worker_sender_semaphore_address),
+        worker_receiver_semaphore_address(worker_receiver_semaphore_address) {}
 
     std::vector<uint32_t> generate_reduce_op_kernel_ct_args() const {
         log_trace(tt::LogOp, "Reduce Scatter Worker CT Args: None");
@@ -320,8 +320,8 @@ struct ReduceScatterWorkerArgBuilder {
     ccl::InterleavedTensorWorkerSlice const worker_input_slice;
     WorkerTransferInfo const worker_transfer_info;
     uint32_t cb_num_pages_per_packet;
-    uint32_t worker_receiver_semaphore_address;
     uint32_t worker_sender_semaphore_address;
+    uint32_t worker_receiver_semaphore_address;
     bool src_is_dram;
     bool dst_is_dram;
 };
@@ -381,10 +381,10 @@ static void add_worker_config_to_edm_builders(
                     worker_sender_semaphore_address,
                     cw_edm_channel_num_messages_to_send_per_transfer.at(c) * (ring_size - 1),
                     sender_worker_coords);
-            edm_interface_addresses.worker_sender_edm_semaphore_addresses[global_worker_idx] =
-                sender_channel_buffer_info.eth_semaphore_l1_address;
-            edm_interface_addresses.worker_sender_edm_buffer_addresses[global_worker_idx] =
-                sender_channel_buffer_info.eth_buffer_l1_address;
+            edm_interface_addresses.worker_sender_edm_semaphore_addresses.insert({global_worker_idx,
+                sender_channel_buffer_info.eth_semaphore_l1_address});
+            edm_interface_addresses.worker_sender_edm_buffer_addresses.insert({global_worker_idx,
+                sender_channel_buffer_info.eth_buffer_l1_address});
         }
 
         bool receiver_enabled = true;  //(!is_linear || !is_first_chip_in_chain);
@@ -398,10 +398,10 @@ static void add_worker_config_to_edm_builders(
                     worker_receiver_semaphore_address,
                     ccw_edm_channel_num_messages_to_send_per_transfer.at(c) * (ring_size - 1),
                     receiver_worker_coords);
-            edm_interface_addresses.worker_receiver_edm_semaphore_addresses[global_worker_idx] =
-                receiver_channel_buffer_info.eth_semaphore_l1_address;
-            edm_interface_addresses.worker_receiver_edm_buffer_addresses[global_worker_idx] =
-                receiver_channel_buffer_info.eth_buffer_l1_address;
+            edm_interface_addresses.worker_receiver_edm_semaphore_addresses.insert({global_worker_idx,
+                receiver_channel_buffer_info.eth_semaphore_l1_address});
+            edm_interface_addresses.worker_receiver_edm_buffer_addresses.insert({global_worker_idx,
+                receiver_channel_buffer_info.eth_buffer_l1_address});
         }
     }
 }
@@ -910,8 +910,8 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
                 worker_transfer_info,
                 worker,
                 cb_num_pages_per_packet,
-                worker_receiver_semaphore_address,
-                worker_sender_semaphore_address);
+                worker_sender_semaphore_address,
+                worker_receiver_semaphore_address);
 
             log_trace(tt::LogOp, "worker_cores.at(global_worker_index): {}", worker_cores.at(global_worker_index));
             auto [receiver_kernel_id, sender_kernel_id] = build_reduce_scatter_worker(

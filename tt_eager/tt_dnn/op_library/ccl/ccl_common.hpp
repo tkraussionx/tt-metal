@@ -629,6 +629,11 @@ class InterleavedRingReduceScatterTensorSlicer : public LegacyCclTensorSlicer {
                 "Truncated worker slice shape to fit max slice size in tiles: ({},{})",
                 largest_worker_slice_shape.x,
                 largest_worker_slice_shape.y);
+            if (!(largest_worker_slice_shape.x * largest_worker_slice_shape.y > 0)) {
+                log_warning(tt::LogOp, "Computing worker slice shape for reduce scatter resulted in 0 sized slice. Defaulting to 1x1 page per worker, which is likely to lead to suboptimal performance");
+                largest_worker_slice_shape.x = 1;
+                largest_worker_slice_shape.y = 1;
+            }
             TT_ASSERT(largest_worker_slice_shape.x * largest_worker_slice_shape.y > 0);
             for (auto& worker_slice_shape : worker_slice_shapes) {
                 worker_slice_shape = largest_worker_slice_shape;

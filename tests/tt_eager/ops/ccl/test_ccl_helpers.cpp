@@ -123,6 +123,71 @@ TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_1_0__InnerShape_1_1__OuterShape
     ASSERT_EQ(result.y, expected.y);
 }
 
+// Test cases pulled from LLama 70B prefill configurations
+// chip 0 worker 0 link 0 reader unidirectional
+TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_0_0__InnerShape_24_1__OuterShape_32_4__NumWorkers_4) {
+    const auto worker_slice_offset = tt::tt_metal::ccl::coord_t(0, 0);
+    const auto worker_slice_shape = tt::tt_metal::ccl::coord_t(24, 1);
+    const auto tensor_slice_shape = tt::tt_metal::ccl::coord_t(32, 4);
+    const uint32_t num_workers = 4;
+
+    const auto expected = tt::tt_metal::ccl::coord_t(0, 2);
+    auto const& result_offset = tt::tt_metal::ccl::advance_slice_row_major(worker_slice_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_EQ(result_offset.x, expected.x);
+    ASSERT_EQ(result_offset.y, expected.y);
+
+
+    auto const& result_offset2 = tt::tt_metal::ccl::advance_slice_row_major(result_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_TRUE(result_offset2.x >= tensor_slice_shape.x || result_offset2.y >= tensor_slice_shape.y);
+}
+
+TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_24_0__InnerShape_24_1__OuterShape_32_4__NumWorkers_4) {
+    const auto worker_slice_offset = tt::tt_metal::ccl::coord_t(24, 0);
+    const auto worker_slice_shape = tt::tt_metal::ccl::coord_t(24, 1);
+    const auto tensor_slice_shape = tt::tt_metal::ccl::coord_t(32, 4);
+    const uint32_t num_workers = 4;
+
+    const auto expected = tt::tt_metal::ccl::coord_t(24, 2);
+    auto const& result_offset = tt::tt_metal::ccl::advance_slice_row_major(worker_slice_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_EQ(result_offset.x, expected.x);
+    ASSERT_EQ(result_offset.y, expected.y);
+
+    auto const& result_offset2 = tt::tt_metal::ccl::advance_slice_row_major(result_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_TRUE(result_offset2.x >= tensor_slice_shape.x || result_offset2.y >= tensor_slice_shape.y);
+}
+
+TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_0_1__InnerShape_24_1__OuterShape_32_4__NumWorkers_4) {
+    const auto worker_slice_offset = tt::tt_metal::ccl::coord_t(0, 1);
+    const auto worker_slice_shape = tt::tt_metal::ccl::coord_t(24, 1);
+    const auto tensor_slice_shape = tt::tt_metal::ccl::coord_t(32, 4);
+    const uint32_t num_workers = 4;
+
+    const auto expected = tt::tt_metal::ccl::coord_t(0, 3);
+    auto const& result_offset = tt::tt_metal::ccl::advance_slice_row_major(worker_slice_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_EQ(result_offset.x, expected.x);
+    ASSERT_EQ(result_offset.y, expected.y);
+
+    auto const& result_offset2 = tt::tt_metal::ccl::advance_slice_row_major(result_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_TRUE(result_offset2.x >= tensor_slice_shape.x || result_offset2.y >= tensor_slice_shape.y);
+}
+
+
+TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_24_1__InnerShape_24_1__OuterShape_32_4__NumWorkers_4) {
+    const auto worker_slice_offset = tt::tt_metal::ccl::coord_t(24, 1);
+    const auto worker_slice_shape = tt::tt_metal::ccl::coord_t(24, 1);
+    const auto tensor_slice_shape = tt::tt_metal::ccl::coord_t(32, 4);
+    const uint32_t num_workers = 4;
+
+    const auto expected = tt::tt_metal::ccl::coord_t(24, 3);
+    auto const& result_offset = tt::tt_metal::ccl::advance_slice_row_major(worker_slice_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_EQ(result_offset.x, expected.x);
+    ASSERT_EQ(result_offset.y, expected.y);
+
+    auto const& result_offset2 = tt::tt_metal::ccl::advance_slice_row_major(result_offset, worker_slice_shape, tensor_slice_shape, num_workers);
+    ASSERT_TRUE(result_offset2.x >= tensor_slice_shape.x || result_offset2.y >= tensor_slice_shape.y);
+}
+
+
 // Test that we successfully go out of bounds on the last iteration
 TEST(CclHelper_AdvanceSliceRowMajor, InnerOffset_0_1__InnerShape_1_1__OuterShape_2_2__NumActiveSlices_2) {
     auto const& result = tt::tt_metal::ccl::advance_slice_row_major({0, 1}, {1, 1}, {2, 2}, 2);
