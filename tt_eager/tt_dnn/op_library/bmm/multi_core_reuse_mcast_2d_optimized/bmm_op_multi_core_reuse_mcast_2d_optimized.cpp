@@ -455,6 +455,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
+    mm_kernel_defines["MATMUL_1D_2D_OPTIMIZED"] = "1";
+
     if (in0_height_sharded) {
         mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
     }
@@ -783,6 +785,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     const auto& in1_receiver_other_cores =
         grid_to_cores(in0_receiver_in1_receiver_right_half.start, in0_receiver_in1_receiver_right_half.end, true);
     for (const auto& core : cores) {
+        // delay every other row of cores
+        std::vector<uint32_t> mm_compute_args;
+        mm_compute_args.push_back(core.y % 2);
+
+        tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_compute_args);
+
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
         CoreCoord right_core = {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)core.y};
