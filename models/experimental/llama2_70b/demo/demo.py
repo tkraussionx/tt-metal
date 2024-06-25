@@ -4,6 +4,8 @@
 
 import os
 import json
+import dataclasses
+from typing import Optional
 import torch
 import torch.nn.functional as F
 import tt_lib
@@ -24,34 +26,36 @@ from models.experimental.llama2_70b.tt.llama_common import (
 )
 
 
-def main(args):
+def main(model_args, tt_args, data_args):
     # Set random reproducible seed
     torch.manual_seed(0)
 
     # Load ground truth if available
-    if args.ground_truth:
+    if data_args.ground_truth:
         if not os.path.exists(args.ground_truth):
-            logger.info(f"Ground truth file {args.ground_truth} does not exist.")
-            args.ground_truth = None
+            logger.info(f"Ground truth file {data_args.ground_truth} does not exist.")
+            data_args.ground_truth = None
         else:
-            ground_truth_outputs = json.load(open(args.ground_truth, "r"))
+            ground_truth_outputs = json.load(open(data_args.ground_truth, "r"))
 
             if len(ground_truth_outputs) == 0:
                 logger.info("Ground truth outputs are empty")
-                args.ground_truth = None
+                data_args.ground_truth = None
             else:
                 logger.info(f"Loaded {len(ground_truth_outputs)} ground truth outputs")
 
-    generator = build_generator(args)
+    generator = build_generator(model_args, tt_args)
 
     # Load the model and tokenizer
     model, tokenizer = generator.model, generator.tokenizer
 
-    tokenized, prompts = load_prompts_file(args, tokenizer)
+    tokenized, prompts = load_prompts_file(model_args, data_args, tokenizer)
 
     # Run decode
     with torch.no_grad():
-        all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
+        all_text = run_decode(
+            model_args, tt_args, data_args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts
+        )
 
         if args.output_at_end:
             with open(
@@ -73,47 +77,40 @@ def main(args):
         logger.info("Output matches ground truth!")
 
 
-def build_generator(args):
+def build_generator(model_args, tt_args):
     generator = Llama.build(
-        ckpt_dir=args.ckpt_dir,
-        tokenizer_path=args.tokenizer_path,
-        max_seq_len=args.max_seq_len,
-        max_batch_size=args.max_batch_size,
-        skip_model_load=args.skip_model_load,
-        n_layers=1 if args.implementation == "tt" else args.num_layers,
+        ckpt_dir=model_args.ckpt_dir,
+        tokenizer_path=model_args.tokenizer_path,
+        max_seq_len=model_args.max_seq_len,
+        max_batch_size=model_args.max_batch_size,
+        skip_model_load=model_args.skip_model_load,
+        n_layers=1 if model_args.implementation == "tt" else model_args.num_layers,
     )
 
-    state_dict = load_llama_state_dict(args.ckpt_dir, n_layers=args.num_layers)
-
-    if args.implementation == "tt":
+    if model_args.implementation == "tt":
+        state_dict = load_llama_state_dict(model_args.ckpt_dir, n_layers=model_args.num_layers)
         generator.model = TtLlamaModelForGeneration(
-            configuration=generator.model.params,
-            state_dict=state_dict,
-            device_mesh=args.device_mesh,
-            n_devices=args.n_devices,
-            n_layers=args.num_layers,
-            batch=args.max_batch_size,
-            cache_path=args.cache_path,
+            configuration=generator.model.params, state_dict=state_dict, model_args=model_args, tt_args=tt_args
         )
     return generator
 
 
-def load_prompts_file(args, tokenizer):
+def load_prompts_file(model_args, data_args, tokenizer):
     # Load prompts from json
-    prompts = json.load(open(args.prompts_file))
+    prompts = json.load(open(data_args.prompts_file))
     # Encode the prompt
-    if args.chat:
+    if data_args.chat:
         formatter = ChatFormat(tokenizer)
         tokenized = [formatter.encode_dialog_prompt(dialog) for dialog in prompts]
     else:
         tokenized = [tokenizer.encode(x, bos=True, eos=False) for x in prompts]
 
-    if len(tokenized) > args.max_batch_size:
+    if len(tokenized) > model_args.max_batch_size:
         logger.info(
-            f"Warning: prompts file contains {len(tokenized)} prompts, but max batch size is {args.max_batch_size}. Only first {args.max_batch_size} are decoded."
+            f"Warning: prompts file contains {len(tokenized)} prompts, but max batch size is {model_args.max_batch_size}. Only first {model_args.max_batch_size} are decoded."
         )
-        tokenized = tokenized[: args.max_batch_size]
-        prompts = prompts[: args.max_batch_size]
+        tokenized = tokenized[: model_args.max_batch_size]
+        prompts = prompts[: model_args.max_batch_size]
 
     return tokenized, prompts
 
@@ -140,7 +137,17 @@ def prepare_next_input(tokenizer, tokens, input_text_mask, cur_pos, next_token):
     return tokens, eos_reached, prev_pos
 
 
-def run_decode(args, model, tokenizer, prompt_tokens, seq_len, prompts, return_logits=False, return_full_logits=False):
+def run_decode(
+    model_args,
+    tt_args,
+    data_args,
+    model,
+    tokenizer,
+    prompt_tokens,
+    prompts,
+    return_logits=False,
+    return_full_logits=False,
+):
     """
     return_logits: return the logits for the last token
     return_full_logits: return the logits for all tokens
@@ -148,16 +155,16 @@ def run_decode(args, model, tokenizer, prompt_tokens, seq_len, prompts, return_l
     assert not (return_logits and return_full_logits), "return_logits and return_full_logits cannot both be true"
 
     # decode arguments
-    bsz = args.max_batch_size
-    model_args = model.params
-    max_gen_len = args.num_tokens
-    args.greedy = args.top_k == 1  # greedy decoding is top-k with k=1
+    bsz = model_args.max_batch_size
+    model_params = model.params
+    max_gen_len = data_args.num_tokens
+    greedy = data_args.top_k == 1  # greedy decoding is top-k with k=1
 
-    min_prompt_len = min(min(len(t) for t in prompt_tokens) if not args.decode_only else 1, seq_len)
-    max_prompt_len = min(max(len(t) for t in prompt_tokens), seq_len)
-    assert max_prompt_len <= model_args.max_seq_len
-    total_len = min(model_args.max_seq_len, max_gen_len + max_prompt_len)
-    assert total_len <= model_args.max_seq_len
+    min_prompt_len = min(len(t) for t in prompt_tokens) if not tt_args.decode_only else 1
+    max_prompt_len = max(len(t) for t in prompt_tokens)
+    assert max_prompt_len <= model_args.max_kv_context_len
+    total_len = min(model_args.max_kv_context_len, max_gen_len + max_prompt_len)
+    assert total_len <= model_args.max_kv_context_len
 
     # prepare inputs
     tokens, input_text_mask, eos_reached = intialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
@@ -170,15 +177,15 @@ def run_decode(args, model, tokenizer, prompt_tokens, seq_len, prompts, return_l
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
-        logits = model.forward(input_tokens, prev_pos, decode_only=args.decode_only)
+        logits = model.forward(input_tokens, prev_pos, decode_only=tt_args.decode_only)
         # expects logits to be of shape (bsz, 1, vocab_size)
 
         # sample next token
-        if args.greedy:
+        if greedy:
             next_token = torch.argmax(logits[:, -1], dim=-1)
         else:
             next_token = top_pk_logits_efficient(
-                logits[:, -1], p=args.top_p, k=args.top_k, temperature=args.temperature
+                logits[:, -1], p=data_args.top_p, k=data_args.top_k, temperature=data_args.temperature
             )
         next_token = next_token.reshape(-1)
 
@@ -198,7 +205,7 @@ def run_decode(args, model, tokenizer, prompt_tokens, seq_len, prompts, return_l
         if return_full_logits:
             full_logits.append(logits.clone().detach())
 
-    latency_printout(latencies, args, total_len - min_prompt_len)
+    latency_printout(latencies, model_args, total_len - min_prompt_len)
     output = get_all_text(tokenizer, tokens, prompt_tokens, max_gen_len)
 
     if return_logits:
@@ -209,24 +216,26 @@ def run_decode(args, model, tokenizer, prompt_tokens, seq_len, prompts, return_l
     return output
 
 
-def latency_printout(latencies, args, generated_len):
+def latency_printout(latencies, model_args, generated_len):
     latencies = [
         latency for token_pos, latency in enumerate(latencies) if token_pos % 32 != 0
     ]  # We recompute program_cache for multiples of 32
     overall_time = sum(latencies)
-    overall_tokens = args.max_batch_size * len(latencies)
+    overall_tokens = model_args.max_batch_size * len(latencies)
     warmup_batch = 2
     # Skip initial warmup batch
     if len(latencies) > warmup_batch:
         overall_time -= sum(latencies[:warmup_batch])
-        overall_tokens -= warmup_batch * args.max_batch_size
+        overall_tokens -= warmup_batch * model_args.max_batch_size
         latencies = latencies[warmup_batch:]
 
     mean_latency = sum(latencies) / len(latencies) if len(latencies) > 0 else 0
 
     tokens_per_second = 1 / mean_latency if mean_latency != 0 else 0
     overall_tokens_per_second = overall_tokens / overall_time if overall_time != 0 else 0
-    tokens_per_second_per_user = overall_tokens_per_second / args.max_batch_size if args.max_batch_size != 0 else 0
+    tokens_per_second_per_user = (
+        overall_tokens_per_second / model_args.max_batch_size if model_args.max_batch_size != 0 else 0
+    )
     throughput = 1000 * overall_time / overall_tokens if overall_tokens != 0 else 0
 
     logger.info(f"Overall throughput: {throughput:.1f} ms @ {overall_tokens_per_second:.1f} tokens/s")
@@ -268,55 +277,68 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
         return token
 
 
+@dataclasses.dataclass
+class ModelArgs:
+    implementation: str = "tt"
+    llama_version: str = "llama3"
+    ckpt_dir: str = None
+    tokenizer_path: str = None
+    skip_model_load: bool = False
+    max_batch_size: int = 32
+    num_layers: Optional[int] = None
+    max_seq_len: int = 2048
+    max_kv_context_len: int = 4192
+
+
+@dataclasses.dataclass
+class TTModelArgs:
+    device_mesh: Optional[object] = None
+    n_devices: int = 8
+    cache_path: Optional[str] = None
+    decode_only: bool = False
+
+
+@dataclasses.dataclass
+class DataArgs:
+    num_tokens: int = 128
+    prompts_file: str = "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json"
+    output_at_end: bool = True
+    top_p: float = 1.0
+    top_k: int = 1
+    temperature: float = 1.0
+    chat: bool = False
+    ground_truth: Optional[str] = None
+
+
 class Args:
-    def __init__(
-        self,
-        # model args
-        implementation="meta",
-        ckpt_dir="/home/llama-data-repacked-2/llama-2-70b/",
-        tokenizer_path="/home/llama-data/tokenizer.model",
-        skip_model_load=False,
-        max_batch_size=32,
-        num_layers=None,
-        max_seq_len=4096,
-        # Generation args
-        num_tokens=128,
-        prompts_file="models/demos/t3000/llama2_70b/demo/data/multi_prompt.json",
-        output_at_end=True,
-        top_p=1,
-        top_k=1,
-        temperature=1.0,
-        chat=False,
-        ground_truth=None,
-        # TT args
-        device_mesh=None,
-        n_devices=8,
-        cache_path=None,
-        decode_only=False,
-    ):
-        self.implementation = implementation
-        self.ckpt_dir = ckpt_dir
-        self.tokenizer_path = tokenizer_path
-        self.skip_model_load = skip_model_load
-        self.max_batch_size = max_batch_size
-        self.num_layers = num_layers
-        self.max_seq_len = max_seq_len
-        self.num_tokens = num_tokens
-        self.prompts_file = prompts_file
-        self.output_at_end = output_at_end
-        self.top_p = top_p
-        self.top_k = top_k
-        self.temperature = temperature
-        self.chat = chat
-        self.ground_truth = ground_truth
-        self.device_mesh = device_mesh
-        self.n_devices = n_devices
-        self.cache_path = cache_path
-        self.decode_only = decode_only
+    def __init__(self, model_args: ModelArgs, tt_args: TTModelArgs, data_args: DataArgs):
+        self.model_args = model_args
+        self.tt_args = tt_args
+        self.data_args = data_args
+
+    def __getattr__(self, name):
+        for arg_group in [self.model_args, self.tt_args, self.data_args]:
+            if hasattr(arg_group, name):
+                return getattr(arg_group, name)
+        raise AttributeError(f"'Args' object has no attribute '{name}'")
 
 
 def construct_arg(**kwargs):
-    return Args(**kwargs)
+    model_args = ModelArgs()
+    tt_args = TTModelArgs()
+    data_args = DataArgs()
+
+    for key, value in kwargs.items():
+        if hasattr(model_args, key):
+            setattr(model_args, key, value)
+        elif hasattr(tt_args, key):
+            setattr(tt_args, key, value)
+        elif hasattr(data_args, key):
+            setattr(data_args, key, value)
+        else:
+            raise ValueError(f"Unknown argument: {key}")
+
+    return Args(model_args, tt_args, data_args)
 
 
 @pytest.mark.timeout(240000)
@@ -414,5 +436,6 @@ def test_LlamaModel_demo(
         cache_path=cache_path,
         decode_only=decode_only,
         ground_truth=ground_truth,
+        llama_version=llama_version,
     )
-    main(args)
+    main(args.model_args, args.tt_args, args.data_args)
