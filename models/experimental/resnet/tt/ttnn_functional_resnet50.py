@@ -7,7 +7,7 @@ import torch
 from models.utility_functions import (
     is_grayskull,
     is_wormhole_b0,
-    pad_and_fold_conv_activation_for_unity_stride,
+    pad_and_fold_act_2,
 )
 
 hardcoded_matmul_config_linear = {
@@ -590,7 +590,7 @@ class resnet50:
     def preprocessing(self, torch_input_tensor):
         resnet50_first_conv_kernel_size = 3
         resnet50_first_conv_stride = 2
-        input_tensor = pad_and_fold_conv_activation_for_unity_stride(
+        input_tensor = pad_and_fold_act_2(
             torch_input_tensor,
             resnet50_first_conv_kernel_size,
             resnet50_first_conv_kernel_size,

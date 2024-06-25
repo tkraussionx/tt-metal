@@ -1064,6 +1064,32 @@ def ttl_complex_2_torch_complex(tt_tensor):
     return result
 
 
+def pad_and_fold_act_2(activation_pyt_nchw_tensor, pad_h, pad_w, stride_h, stride_w):
+    assert stride_h == stride_w
+    assert activation_pyt_nchw_tensor.shape[2] == activation_pyt_nchw_tensor.shape[3]
+    # Fold activation for unity stride
+    # Pad channel size to 4. This is to make sure L1 read addresses are 16 bit aligned
+    C = _nearest_y(activation_pyt_nchw_tensor.shape[1], 4)
+    # Also, pre-pad the conv left right and top bottom padding
+    activation_pyt_padded = torch.nn.functional.pad(
+        activation_pyt_nchw_tensor, (pad_w, pad_w, pad_h, pad_h, 0, C - activation_pyt_nchw_tensor.shape[1])
+    )
+    # Fold the activation face by stride depth wise i.e. C,H,W -> C*stride_h*stride_w, H/stride_h, W/stride_w
+    assert activation_pyt_padded.shape[2] % stride_h == 0
+    new_height = activation_pyt_padded.shape[2] // stride_h
+    new_width = activation_pyt_padded.shape[2] // stride_w
+
+    batch = activation_pyt_padded.shape[0]
+    channels = activation_pyt_padded.shape[1]
+
+    activation_pyt_padded_inter = activation_pyt_padded.reshape(
+        batch, channels, new_height, stride_h, new_width, stride_w
+    )
+    activation_pyt_padded_folded = torch.permute(activation_pyt_padded_inter, (0, 2, 4, 3, 5, 1))
+
+    return activation_pyt_padded_folded.reshape(batch, new_height, new_width, channels * stride_h * stride_w)
+
+
 def pad_and_fold_conv_activation_for_unity_stride(activation_pyt_nchw_tensor, pad_h, pad_w, stride_h, stride_w):
     assert stride_h == stride_w
     assert activation_pyt_nchw_tensor.shape[2] == activation_pyt_nchw_tensor.shape[3]
