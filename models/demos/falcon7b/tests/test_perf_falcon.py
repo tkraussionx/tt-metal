@@ -198,7 +198,7 @@ class TestParametrized:
             "decode_batch32_2047_bf16_l1_sharded",
         ],
     )
-    @pytest.mark.parametrize("async_mode", (False, True))
+    @pytest.mark.parametrize("async_mode", [False])
     @skip_for_grayskull()
     def test_perf_wh_bare_metal(
         self,

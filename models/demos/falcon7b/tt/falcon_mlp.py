@@ -115,6 +115,12 @@ class TtFalconMLPPrefill(nn.Module):
         self.model_config["MLP_OUTPUT_TENSORS"] = out_tt
 
     def forward(self, x: ttnn.experimental.tensor.Tensor) -> ttnn.experimental.tensor.Tensor:
+        mlp_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+            math_approx_mode=False,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
         if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]:
             for device_id in range(self.num_devices):
                 tt_padding = self.model_config["MLP_PREFILL_PADDING_TENSORS"][device_id][self.seq_len]
@@ -126,6 +132,9 @@ class TtFalconMLPPrefill(nn.Module):
             num_slices = 2 if self.seq_len == 2048 else 1  # seq_len = 1024 num_slices = 1
             padded_hidden_size = self.model_config["MLP_PADDING_VALUE"]
             grid_size = self.model_config["MLP_GRID_SIZE"]
+
+            print("FF1 dt: ", self.dense_h_to_4h_weights[device_id].get_dtype())
+            print("FF2 dt: ", self.dense_4h_to_h_weights[device_id].get_dtype())
 
             for slice_idx in range(num_slices):
                 slices = [
@@ -148,7 +157,7 @@ class TtFalconMLPPrefill(nn.Module):
                         program_config=self.model_config["DENSE_H_TO_4H_MM_PROGCFG"],
                         dtype=ttnn.bfloat16,
                         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-                        compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
+                        compute_kernel_config=mlp_config,
                     )
                     for device_id in range(len(self.devices))
                 ]  # 4544 -> 4608
@@ -162,7 +171,7 @@ class TtFalconMLPPrefill(nn.Module):
                         program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
                         dtype=ttnn.bfloat16,
                         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-                        compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
+                        compute_kernel_config=mlp_config,
                     )
                     for device_id in range(len(self.devices))
                 ]
@@ -196,7 +205,7 @@ class TtFalconMLPPrefill(nn.Module):
                         dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
                         core_grid=get_falcon_default_core_grid(x[device_id].device()),
                         use_1d_systolic_array=True,
-                        compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
+                        compute_kernel_config=mlp_config,
                         activation="gelu",
                     )
                 )
@@ -209,7 +218,7 @@ class TtFalconMLPPrefill(nn.Module):
                     dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                     core_grid=get_falcon_default_core_grid(hidden_states[device_id].device()),
                     use_1d_systolic_array=True,
-                    compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
+                    compute_kernel_config=mlp_config,
                 )
 
         # return TT Tensor

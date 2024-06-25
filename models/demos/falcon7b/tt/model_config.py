@@ -225,6 +225,12 @@ def get_model_config(model_config_str, prefill_seq_len=0, decode_batch_size=32):
         if "MM_WEIGHTS_DTYPE" in key:
             model_config[key] = BFP8_DTYPE
 
+    # FF1
+    model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
+
+    # FF2
+    # model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"] = BFP4_DTYPE
+
     if model_config_str in ("BFLOAT16-L1", "BFLOAT16-L1_SHARDED"):
         if model_config_str == "BFLOAT16-L1_SHARDED":
             model_config["ATTN_MASK_MEMCFG"] = L1_MEMCFG
@@ -324,7 +330,16 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
         )
-    model_config["MLP_KERNEL_CONFIG"] = default_kernel_config
+
+    mlp_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+    model_config["MLP_KERNEL_CONFIG"] = mlp_config
+
+    # model_config["MLP_KERNEL_CONFIG"] = default_kernel_config
 
     mm_h_to_4h_prog_cfg = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
