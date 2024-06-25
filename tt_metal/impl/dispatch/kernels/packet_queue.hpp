@@ -457,10 +457,15 @@ protected:
     inline void advance_next_packet() {
         bool rx_from_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
         bool packet_available = (rx_from_stream && messages_are_available(stream_state)) || (this->get_queue_data_num_words_available_to_send() > 0);
+        // if (rx_from_stream) {
+        //     // DPRINT << "RR: messages_available: {}" << (uint32_t)messages_are_available(stream_state) << "\n";
+        //     DPRINT << "RR: n_words_available: " << (uint32_t)this->get_queue_data_num_words_available_to_send() << "\n";
+        // }
         if(packet_available) {
             if (rx_from_stream) {
-                advance_remote_receiver_stream_to_next_message(
-                    stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
+                DPRINT << "RR: pkt avail\n";
+                // advance_remote_receiver_stream_to_next_message(
+                //     stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
             }
             // uses get_queue_rptr_sent_offset_words
             // -> Under the hood uses local_rptr_sent_val, which is actually a pointer...
@@ -473,6 +478,7 @@ protected:
                 );
             this->curr_packet_header_ptr = next_packet_header_ptr;
             uint32_t packet_size_bytes = curr_packet_header_ptr->get_packet_size_bytes();
+            // DPRINT << "\tpacket_size_bytes=" << packet_size_bytes << "\n";
             if (rx_from_stream) {
                 // Indicates we are a remote receiver receving from a stream.
                 //
@@ -480,6 +486,7 @@ protected:
                 // reading a packet header that came from a stream it means we need to convert
                 // it back to size in bytes, from size in 16B words.
                 packet_size_bytes = packet_size_bytes << 4;
+                // DPRINT << "\t\tpacket_size_bytes=" << packet_size_bytes << "\n";
             }
 
             this->end_of_cmd = curr_packet_header_ptr->get_is_end_of_cmd();
@@ -556,16 +563,21 @@ public:
 
     uint32_t get_queue_data_num_words_available_to_send() const {
         if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+            // DPRINT << "RR stream_id: " << (uint32_t)this->stream_state.local_stream_id << "\n";
+            // DPRINT << "RR stream: " << (uint32_t)this->stream_state.local_stream_id << "\n";
             uint32_t n = fw_managed_rx_stream_num_bytes_available(this->stream_state.local_stream_id, this->stream_state);
+            if (n > 0) {
+                DPRINT << "RR local_msg_info_ptr: " << (uint32_t)this->stream_state.local_msg_info_ptr << "\n";
+                DPRINT << "RR wrptr: " << NOC_STREAM_READ_REG(this->stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX) << "\n";
+            }
+            // DPRINT << "XxX: " << n << "\n";
+            if (!((n & 0xF) == 0)) {
+                DPRINT << "n=" << n << "\n";
+            }
+            ASSERT((n & 0xF) == 0);
             return n >> 4;
         } else {
             uint32_t size = (this->get_queue_local_wptr() - this->get_queue_local_rptr_sent()) & this->queue_size_mask;
-            if (size == 2160 || size == 2352) {
-                DPRINT << "size: " << size << "\n";
-                DPRINT << "wrptr: " << this->get_queue_local_wptr() << "\n";
-                DPRINT << "rdptr: " << this->get_queue_local_rptr_sent() << "\n";
-                DPRINT << "this->queue_size_mask: " << this->queue_size_mask << "\n";
-            }
             return size;
         }
     }
@@ -590,7 +602,6 @@ public:
         }
         // stream -> auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
         if (!this->curr_packet_valid && (this->get_queue_data_num_words_available_to_send() > 0)){
-            DPRINT << "RR: packet_valid: \n";
             // stream:
             //  auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
             //  ASSERT(msg_size_bytes > 0);
@@ -881,7 +892,7 @@ public:
             this->max_eth_send_words : this->max_noc_send_words;
     }
 
-    inline void send_data_to_remote(uint32_t src_addr, uint32_t dest_addr, uint32_t num_words) {
+    inline void send_data_to_remote(uint32_t src_base_addr, uint32_t src_buf_size, uint32_t src_addr, uint32_t dest_addr, uint32_t num_words) {
         if ((this->remote_update_network_type == DispatchRemoteNetworkType::NONE) ||
             (num_words == 0)) {
             return;
@@ -889,8 +900,14 @@ public:
             internal_::eth_send_packet(0, src_addr/PACKET_WORD_SIZE_BYTES, dest_addr/PACKET_WORD_SIZE_BYTES, num_words);
         } else if (this->remote_update_network_type== DispatchRemoteNetworkType::STREAM) {
             // Sending into a stream, from a remote_source_stream on this core, managed by this RISC processor.
+            ASSERT(src_addr >= src_base_addr && (src_addr - src_base_addr) < src_buf_size);
+            // DPRINT << "src_base_addr: " << HEX() << src_base_addr << "\n";
+            // DPRINT << "src_buf_size: " << HEX() << src_buf_size << "\n";
+            // DPRINT << "src_addr: " << HEX() << src_addr << "\n";
             stream_noc_write_from_mux(
-                src_addr,
+                src_base_addr,
+                src_buf_size,
+                src_addr - src_base_addr,
                 dest_addr,
                 num_words*PACKET_WORD_SIZE_BYTES,
                 this->remote_x,
@@ -971,30 +988,38 @@ public:
         bool is_remote_sender_to_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
         bool is_remote_receiver_from_stream = input_queue_ptr->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
 
+        // if (is_remote_sender_to_stream) {
+        //     ;
+        //     uint32_t rdptr = (input_queue_ptr->queue_start_addr_words + input_queue_ptr->get_queue_rptr_sent_offset_words()) * PACKET_WORD_SIZE_BYTES;
+        //     uint32_t num_words = *reinterpret_cast<volatile uint32_t*>(rdptr);
+        //     DPRINT << "rdptr: " << HEX() << rdptr << ", num_words: " << DEC() << num_words << "\n";
+        // }
+
         uint32_t num_words_available_in_input =
             is_remote_receiver_from_stream
                 ? fw_managed_rx_stream_num_bytes_available(
                       input_queue_ptr->stream_state.local_stream_id, input_queue_ptr->stream_state) >>
-                      4
-                : input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
+                      4 :
+
+                (is_remote_sender_to_stream ?
+                    // Don't truncate at end of buffer and allow wraparound
+                    // Additionally, unless we can safely overwrite the packet header, we can't
+                    // batch send multiple packets with a single stream send, since the stream looks
+                    // at the header in the payload for size information
+                    *reinterpret_cast<volatile uint32_t*>((input_queue_ptr->queue_start_addr_words + input_queue_ptr->get_queue_rptr_sent_offset_words()) * PACKET_WORD_SIZE_BYTES) :
+                    input_queue_ptr->input_queue_curr_packet_num_words_available_to_send());
 
         if (is_remote_sender_to_stream) {
             return num_words_available_in_input;
         }
 
         // Streams can properly handle wraparound so we should disable this check for sender_to_stream_mode
-        // if (!is_remote_sender_to_stream) {
-            uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
-            // DPRINT << "num_words_available_in_nput 1: " << num_words_available_in_input << "\n";
-            num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
-            // DPRINT << "num_words_before_input_rptr_wrap: " << num_words_before_input_rptr_wrap << "\n";
-        // }
+        uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
+        // DPRINT << "num_words_available_in_nput 1: " << num_words_available_in_input << "\n";
+        num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
+        // DPRINT << "num_words_before_input_rptr_wrap: " << num_words_before_input_rptr_wrap << "\n";
         uint32_t num_words_free_in_output = this->get_queue_data_num_words_free();
-        if (is_remote_sender_to_stream) {
-            DPRINT << "num_words_available_in_input 2: " << num_words_available_in_input << "\n";
-            DPRINT << "num_words_free_in_output: " << num_words_free_in_output << "\n";
-        }
-        uint32_t num_words_to_forward = std::min(num_words_available_in_input, num_words_free_in_output);
+        uint32_t num_words_to_forward = is_remote_sender_to_stream ? num_words_available_in_input : std::min(num_words_available_in_input, num_words_free_in_output);
 
         if (num_words_to_forward == 0) {
             return 0;
@@ -1018,12 +1043,6 @@ public:
      *
      */
     inline uint32_t forward_data_from_input(uint32_t input_queue_index, bool& full_packet_sent, uint32_t end_of_cmd) {
-
-        // if stream remote sender
-
-        // else if stream remote receiver
-
-        // else
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
         bool input_is_stream = input_queue_ptr->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
         bool output_is_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
@@ -1032,6 +1051,9 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
+        // if (output_is_stream) {
+        //     DPRINT << "\tnum_words_to_forward: " << num_words_to_forward << "\n";
+        // }
 
         if (this->unpacketizer_remove_header && input_queue_ptr->curr_packet_start()) {
             num_words_to_forward--;
@@ -1047,8 +1069,20 @@ public:
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
 
+        if (output_is_stream && num_words_to_forward > 0) {
+            full_packet_sent = true;
+        //     DPRINT << "input_queue_index: " << DEC() << input_queue_index << ENDL();
+        //     DPRINT << "src_addr: " << HEX() << src_addr << ENDL();
+            DPRINT << "num_words_to_forward: " << DEC() << num_words_to_forward << ENDL();
+        //     DPRINT << "dest_addr: " << HEX() << dest_addr << ENDL();
+        }
+
         // Does the actual send
-        this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
+        this->send_data_to_remote(
+            input_queue_ptr->queue_start_addr_words*PACKET_WORD_SIZE_BYTES,
+            input_queue_ptr->queue_size_words*PACKET_WORD_SIZE_BYTES,
+            src_addr, dest_addr, num_words_to_forward);
+
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);
 

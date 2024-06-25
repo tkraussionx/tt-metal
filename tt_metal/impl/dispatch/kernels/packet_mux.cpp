@@ -150,7 +150,7 @@ void kernel_main() {
     if constexpr (use_stream_for_writer) {
         stream_remote_sender_kernel_args_t remote_sender_rt_args;
         arg_idx = remote_sender_rt_args.init_from_rt_args(arg_idx);
-        DPRINT << "RS: phase exchange starting...\n";
+        // DPRINT << "RS: phase exchange starting...\n";
         uint32_t local_starting_phase = notify_remote_receiver_of_starting_phase(
                                             remote_sender_rt_args.local_stream_id,
                                             remote_sender_rt_args.local_stream_tile_header_buffer_addr,//local_stream_buffer_addr,
@@ -159,7 +159,7 @@ void kernel_main() {
                                                 remote_sender_rt_args.remote_dest_noc_y,
                                                 remote_sender_rt_args.first_relay_remote_src_start_phase_addr)) -
                                         1;
-        DPRINT << "RS: phase exchange COMPLETED\n";
+        // DPRINT << "RS: phase exchange COMPLETED\n";
         *reinterpret_cast<volatile uint32_t*>(remote_sender_rt_args.local_stream_tile_header_buffer_addr) = 0;
 
         output_queue.stream_state.init_from_runtime_args(remote_sender_rt_args, local_starting_phase);
@@ -180,7 +180,7 @@ void kernel_main() {
                       output_depacketize_downstream_sem, output_depacketize_local_sem,
                       output_depacketize_remove_header);
 
-    DPRINT << "MUX wait_all_src_dest_ready\n";
+    // DPRINT << "MUX wait_all_src_dest_ready\n";
     if (!wait_all_src_dest_ready(input_queues, mux_fan_in, &output_queue, 1, timeout_cycles)) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
@@ -196,8 +196,10 @@ void kernel_main() {
     uint64_t iter = 0;
     uint64_t start_timestamp = get_timestamp();
     uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
-    DPRINT << "MUX Got to main loop\n";
-    while (!dest_finished && !timeout) {
+    // DPRINT << "MUX Got to main loop\n";
+    uint32_t sends = 0;
+    uint32_t max_sends = std::numeric_limits<uint32_t>::max();
+    while (/*sends < max_sends &&*/ !dest_finished && !timeout) {
         iter++;
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
@@ -211,9 +213,11 @@ void kernel_main() {
             uint32_t words_sent = output_queue.forward_data_from_input(curr_input, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
+                DPRINT << "iter=" << iter << "\n";
                 progress_timestamp = get_timestamp_32b();
             }
             curr_input_partial_packet_sent = !full_packet_sent;
+            sends++;
         }
         if (!curr_input_partial_packet_sent) {
             curr_input++;
@@ -222,7 +226,10 @@ void kernel_main() {
             }
         }
         //
-        output_queue.prev_words_in_flight_check_flush();
+        if constexpr (!use_stream_for_writer) {
+            // Not needed for streams
+            output_queue.prev_words_in_flight_check_flush();
+        }
         dest_finished = output_queue.is_remote_finished();
     }
 

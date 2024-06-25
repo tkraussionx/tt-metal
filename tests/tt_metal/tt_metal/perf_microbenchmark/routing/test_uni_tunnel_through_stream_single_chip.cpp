@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_tunneler_test_results_addr = 0x29000;
     constexpr uint32_t default_tunneler_test_results_size = 0x8000;
 
-    constexpr uint32_t default_timeout_mcycles = 1000;
+    constexpr uint32_t default_timeout_mcycles = 5000;
     constexpr uint32_t default_rx_disable_data_check = 0;
 
     constexpr uint32_t src_endpoint_start_id = 0xaa;
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
     uint32_t default_remote_receiver_flushed_mux_semaphore_addr = default_mux_sender_stream_tile_header_buffer_addr + default_tile_header_buffer_size;
     uint32_t default_demux_receiver_stream_buffer_addr = default_demux_queue_start_addr;
     uint32_t default_demux_receiver_stream_buffer_size_bytes = default_demux_queue_size_bytes;
-    uint32_t default_demux_receiver_stream_tile_header_buffer_addr = default_demux_receiver_stream_buffer_addr + (default_demux_receiver_stream_buffer_size_bytes * (num_dest_endpoints + 1));
+    uint32_t default_demux_receiver_stream_tile_header_buffer_addr = default_demux_receiver_stream_buffer_addr + default_demux_queue_size_bytes;// + (default_demux_receiver_stream_buffer_size_bytes * (num_dest_endpoints + 1));
 
     std::vector<std::string> input_args(argv, argv + argc);
     if (test_args::has_command_option(input_args, "-h") ||

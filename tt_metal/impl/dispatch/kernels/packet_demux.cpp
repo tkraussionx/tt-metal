@@ -240,7 +240,8 @@ void kernel_main() {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
     }
-    DPRINT << "RR: All src_dest ready\n";
+
+    // DPRINT << "RR: All src_dest ready\n";
 
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
 
@@ -260,11 +261,29 @@ void kernel_main() {
             }
         }
         if (input_queue.get_curr_packet_valid()) {
+            // DPRINT << "PDMX: pkt vld\n";
             uint32_t dest = input_queue.get_curr_packet_dest();
             uint8_t output_queue_id = dest_output_queue_id(dest);
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());
             data_words_sent += words_sent;
+            if constexpr (use_stream_for_reader) {
+                // Hack for now to force a flush. This will effectively serialize the writes
+                // without letting scan ahead in the buffer
+                // Not sure if the existing code properly handles buffer wraparound yet or not
+                noc_async_writes_flushed();
+                // if (full_packet_sent) {
+                    uint32_t msg_size_words = *reinterpret_cast<volatile uint32_t*>(input_queue.stream_state.local_msg_info_ptr);
+                    DPRINT << "RR: stream_relay_tiles: " << msg_size_words << "\n";
+                    stream_relay_tiles(input_queue.stream_state.local_stream_id, 1, msg_size_words);
+                    DPRINT << "RR: advance stream\n";
+                    advance_remote_receiver_stream_to_next_message(
+                        input_queue.stream_state,
+                        msg_size_words << 4
+                        //get_next_available_stream_message_size_in_bytes(input_queue.stream_state)
+                        );
+                // }
+            }
             if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
             }
@@ -297,11 +316,14 @@ void kernel_main() {
     set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
     if (timeout) {
+        uint32_t readback_wrptr = NOC_STREAM_READ_REG(input_queue.stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX) << 4;
+        DPRINT << "readback_wrptr: " << readback_wrptr << "\n";
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         // DPRINT << "demux timeout" << ENDL();
         // // input_queue.dprint_object();
         // output_queues[0].dprint_object();
     } else {
+        DPRINT << "Ran to completion\n";
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
     }

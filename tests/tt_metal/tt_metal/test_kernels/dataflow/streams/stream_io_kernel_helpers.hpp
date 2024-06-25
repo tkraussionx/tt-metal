@@ -309,13 +309,13 @@ uint32_t wait_for_remote_source_starting_phase(volatile uint32_t *addr) {
 ///  Remote Sender Helpers
 ////////////////////////////////////////////////
 // FORCE_INLINE
-uint32_t get_sender_stream_config_reg(uint32_t tx_noc_id, uint32_t rx_src_update_noc, bool drain_after_phase_send) {
+uint32_t get_sender_stream_config_reg(uint32_t tx_noc_id, uint32_t rx_src_update_noc, bool next_phase_src_change, bool next_phase_dest_change) {
     uint32_t stream_cfg_reg = 0;
-    bool next_phase_src_dest_change = drain_after_phase_send ? 1 : 0;
+    // bool next_phase_src_dest_change = drain_after_phase_send ? 1 : 0;
     stream_cfg_reg |= STREAM_CFG(OUTGOING_DATA_NOC, tx_noc_id) | STREAM_CFG(REMOTE_SRC_UPDATE_NOC, rx_src_update_noc) |
                       STREAM_CFG(SOURCE_ENDPOINT, 1) | STREAM_CFG(REMOTE_RECEIVER, 1) |
-                      STREAM_CFG(NEXT_PHASE_SRC_CHANGE, next_phase_src_dest_change) |
-                      STREAM_CFG(NEXT_PHASE_DEST_CHANGE, next_phase_src_dest_change) |
+                      STREAM_CFG(NEXT_PHASE_SRC_CHANGE, next_phase_src_change) |
+                      STREAM_CFG(NEXT_PHASE_DEST_CHANGE, next_phase_dest_change) |
                       STREAM_CFG(PHASE_AUTO_ADVANCE, 0) | STREAM_CFG(DATA_AUTO_SEND, 0) |
                       STREAM_CFG(REG_UPDATE_VC_REG, 1);
 
@@ -325,6 +325,7 @@ uint32_t get_sender_stream_config_reg(uint32_t tx_noc_id, uint32_t rx_src_update
 
 // FORCE_INLINE
 void write_message_size_to_message_info_buffer(uint32_t local_msg_info_base_addr, uint32_t message_size_noc_words) {
+    // DPRINT << "*(local_msg_info_base_addr)=message_size_noc_words: " << local_msg_info_base_addr << ", " << message_size_noc_words << "\n";
     *reinterpret_cast<volatile uint32_t *>(local_msg_info_base_addr) = message_size_noc_words;
 }
 
@@ -430,7 +431,7 @@ void stream_noc_write(
         NOC_STREAM_WRITE_REG(
             stream_state.local_stream_id,
             STREAM_MISC_CFG_REG_INDEX,
-            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, true));
+            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, true, true));
 
     } else if (first_message) {
 
@@ -465,7 +466,7 @@ void stream_noc_write(
         NOC_STREAM_WRITE_REG(
             stream_state.local_stream_id,
             STREAM_MISC_CFG_REG_INDEX,
-            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, false));
+            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, false, false));
     }
 
     // Remove this if we want to remove the sync at the end of this function (and instead want to support syncing later)
@@ -512,7 +513,9 @@ void stream_noc_write(
 }
 
 /*// FORCE_INLINE*/ void stream_noc_write_from_mux(
-    uint32_t src_addr,
+    uint32_t src_base_addr,
+    uint32_t src_buf_size,
+    uint32_t src_offset,
     uint32_t dest_addr,
     uint32_t size_bytes,
     uint32_t remote_noc_x,
@@ -523,14 +526,19 @@ void stream_noc_write(
     // This was taken from the autonomous stream test-bench which already correctly stores
     // the message size in 16B words, in the packet header. However, for packet_(mux|demux),
     // the message size is stored in bytes, so we need to override it to be in 16B words
+    uint32_t src_addr = src_base_addr + src_offset;
     uint32_t message_size_noc_words = *reinterpret_cast<volatile uint32_t *>(src_addr);
-    if (!(size_bytes == message_size_noc_words)) {
-        DPRINT << "src_addr: " << src_addr << "\n";
-        DPRINT << "size_bytes = " << size_bytes << " message_size_noc_words = " << message_size_noc_words << "\n";
+    if (!((size_bytes >> 4) == message_size_noc_words)) {
+        DPRINT << "src_addr: " << src_addr << " sz_B = " << size_bytes << " msg_sz_noc_words = " << message_size_noc_words << "\n";
     }
-    ASSERT(size_bytes == message_size_noc_words);
-    message_size_noc_words = message_size_noc_words >> 4;
-    *reinterpret_cast<volatile uint32_t *>(src_addr) = message_size_noc_words;
+    ASSERT((size_bytes >> 4) == message_size_noc_words);
+    ASSERT(size_bytes > 0);
+    // If size in bufffer header from dispatch datapath becomes size in bytes, then we need to include the shift
+    // below
+    // message_size_noc_words = message_size_noc_words >> 4;
+    // *reinterpret_cast<volatile uint32_t *>(src_addr) = message_size_noc_words;
+
+    // For some reason... sender bufer is full... Need to manually set wrptr?
 
     uint32_t dest_noc_reg = 0;
     uint32_t num_tiles = stream_state.num_tiles_sent;
@@ -542,22 +550,30 @@ void stream_noc_write(
     NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_CURR_PHASE_REG_INDEX, stream_state.local_phase_id);
 
     if (first_message) {
-        DPRINT << "Stream Noc Write: reset_stream_message_info_buffer_rdptr \n";
+        // DPRINT << "Stream Noc Write: reset_stream_message_info_buffer_rdptr stream " << stream_state.local_stream_id << "\n";
         reset_stream_message_info_buffer_rdptr(stream_state, stream_state.local_stream_id);
     }
     // copy_from_cb_to_stream_buffer(stream_state, src_addr, message_size_noc_words);
 
     // For mux stream send, we must override the buffer start and size per message because we could be forwarding
     // from any of the mux input buffers
-    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_START_REG_INDEX, src_addr >> 4);
-    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_SIZE_REG_INDEX, message_size_noc_words);
+    // NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_START_REG_INDEX, src_addr >> 4);
+    // NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_SIZE_REG_INDEX, message_size_noc_words);
+    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_START_REG_INDEX, src_base_addr >> 4); //, src_addr >> 4);
+    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_BUF_SIZE_REG_INDEX, src_buf_size >> 4); //message_size_noc_words);
+    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_RD_PTR_REG_INDEX, src_offset >> 4); //message_size_noc_words);
+    uint32_t wrptr = src_offset + (message_size_noc_words << 4);
+    if (wrptr >= src_buf_size) {
+        wrptr -= src_buf_size;
+    }
+    NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_WR_PTR_REG_INDEX, wrptr >> 4); //message_size_noc_words);
 
     uint32_t rx_src_update_noc = 1 - dest_noc_id;
     if (send_last_message_and_drain) {
         NOC_STREAM_WRITE_REG(
             stream_state.local_stream_id,
             STREAM_MISC_CFG_REG_INDEX,
-            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, true));
+            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, true, true));
 
     } else if (first_message) {
         uint32_t rx_src_update_noc = 1 - dest_noc_id;
@@ -589,7 +605,7 @@ void stream_noc_write(
         NOC_STREAM_WRITE_REG(
             stream_state.local_stream_id,
             STREAM_MISC_CFG_REG_INDEX,
-            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, false));
+            get_sender_stream_config_reg(dest_noc_id, rx_src_update_noc, false, false));
     }
 
     // Remove this if we want to remove the sync at the end of this function (and instead want to support syncing later)
@@ -607,13 +623,13 @@ void stream_noc_write(
     NOC_STREAM_WRITE_REG(stream_state.local_stream_id, STREAM_PHASE_ADVANCE_REG_INDEX, 0x1);
 
     if (first_message) {
-        DPRINT << "Stream Noc Write: Handshaking...\n";
+        // DPRINT << "Stream Noc Write: Handshaking...\n";
         // wait for handshake to complete
         while (!stream_phase_is_active(stream_state.local_stream_id)) {
             asm volatile("");
         }
 
-        DPRINT << "Stream Noc Write: ... Done\n";
+        // DPRINT << "Stream Noc Write: ... Done\n";
     }
 
     if (send_last_message_and_drain) {
@@ -631,11 +647,11 @@ void stream_noc_write(
         stream_state.local_phase_id++;
     }
 
-    // DPRINT << "Stream Noc Write: Sending message\n";
+    DPRINT << "Stream Noc Write: Sending message\n";
     stream_relay_tiles(stream_state.local_stream_id, 1, message_size_noc_words);
     // DPRINT << "Stream Noc Write: Waiting for flush\n";
     wait_for_stream_write_complete(stream_state.local_stream_id);
-    DPRINT << "Stream Noc Write: Message sent!\n";
+    DPRINT << "Stream wait_for_stream_write_complete\n";
 
     stream_state.num_tiles_sent = num_tiles;
 }
@@ -834,8 +850,9 @@ FORCE_INLINE void advance_remote_receiver_phase(
     NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_REMOTE_SRC_PHASE_REG_INDEX, ((uint32_t)state.remote_phase_id));
 
     NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MEM_BUF_SPACE_AVAILABLE_ACK_THRESHOLD_REG_INDEX, 0);
-    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr) >> 4);
-    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr) >> 4);
+    // DPRINT << "local_msg_info_ptr: " << state.local_msg_info_ptr_base_address << "\n";
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr_base_address) >> 4);
+    NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX, ((uint32_t)state.local_msg_info_ptr_base_address) >> 4);
 
     NOC_STREAM_WRITE_REG(
         state.local_stream_id,
@@ -845,6 +862,9 @@ FORCE_INLINE void advance_remote_receiver_phase(
     NOC_STREAM_WRITE_REG(
         state.local_stream_id, STREAM_PHASE_AUTO_CFG_HEADER_REG_INDEX, AUTO_CFG_HEADER(0, state.messages_per_phase, 0));
     NOC_STREAM_WRITE_REG(state.local_stream_id, STREAM_PHASE_ADVANCE_REG_INDEX, 0x1);
+
+    // uint32_t readback_wrptr = NOC_STREAM_READ_REG(state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX) << 4;
+    // DPRINT << "readback_wrptr: " << readback_wrptr << "\n";
 }
 
 
@@ -893,6 +913,7 @@ FORCE_INLINE bool messages_are_available(fabric_receiver_stream_state_t &stream_
     uint32_t wrptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
     uint32_t rdptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX);
     uint32_t internal_rdptr = stream_state.local_msg_info_ptr >> 4;
+    DPRINT << "RR msg_avail? wrptr: " << wrptr << ", l_msg_ptr=" << internal_rdptr << "\n";
     bool messages_available = internal_rdptr < wrptr;
     return messages_available;
 }
@@ -906,23 +927,30 @@ FORCE_INLINE std::tuple<uint32_t, uint32_t> get_next_message_info(fabric_receive
 }
 
 // FORCE_INLINE
-bool fw_managed_rx_stream_num_bytes_available_impl(uint32_t stream_id, uint32_t local_msg_info_ptr) {
+uint32_t fw_managed_rx_stream_num_bytes_available_impl(uint32_t stream_id, uint32_t local_msg_info_ptr) {
     uint32_t wrptr = NOC_STREAM_READ_REG(stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
-    uint32_t n_16B_words_available = 0;
-    for (uint32_t internal_rdptr = local_msg_info_ptr >> 4; internal_rdptr < wrptr; internal_rdptr++) {
-        volatile uint32_t *msg_hdr_ptr = reinterpret_cast<volatile uint32_t*>(internal_rdptr << 4);
-        n_16B_words_available += *msg_hdr_ptr;
+    // uint32_t n_16B_words_available = 0;
+    // for (uint32_t internal_rdptr = local_msg_info_ptr >> 4; internal_rdptr < wrptr; internal_rdptr++) {
+    if ((local_msg_info_ptr >> 4) < wrptr) {
+        // DPRINT << "RR wrptr: " << wrptr << ", l_msg_ptr=" << local_msg_info_ptr << "\n";
+        // volatile uint32_t *msg_hdr_ptr = reinterpret_cast<volatile uint32_t*>(internal_rdptr << 4);
+        volatile uint32_t *msg_hdr_ptr = reinterpret_cast<volatile uint32_t*>(local_msg_info_ptr);
+        // DPRINT << "\tmsg_hdr_ptr: " << (uint32_t)msg_hdr_ptr << ", " << *msg_hdr_ptr << "\n";
+        // n_16B_words_available += ;
+        return *msg_hdr_ptr << 4;
+    } else {
+        return 0;
     }
 
-    return n_16B_words_available << 4;
+    // return n_16B_words_available << 4;
 }
 
 // FORCE_INLINE
-bool fw_managed_rx_stream_num_bytes_available(uint32_t stream_id, stream_state_t const& stream_state) {
+uint32_t fw_managed_rx_stream_num_bytes_available(uint32_t stream_id, stream_state_t const& stream_state) {
     return fw_managed_rx_stream_num_bytes_available_impl(stream_id, stream_state.local_msg_info_ptr);
 }
 
 // FORCE_INLINE
-bool fw_managed_rx_stream_num_bytes_available(uint32_t stream_id, fabric_receiver_stream_state_t const& stream_state) {
+uint32_t fw_managed_rx_stream_num_bytes_available(uint32_t stream_id, fabric_receiver_stream_state_t const& stream_state) {
     return fw_managed_rx_stream_num_bytes_available_impl(stream_id, stream_state.local_msg_info_ptr);
 }
