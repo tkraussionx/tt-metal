@@ -1026,8 +1026,13 @@ def matmul(
     layout,
     input_mem_config,
     output_mem_config,
+    xcoregrid=-1,
+    ycoregrid=-1,
     **kwargs,
 ):
+    print("inside")
+    print(xcoregrid)
+    print(ycoregrid)
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
 

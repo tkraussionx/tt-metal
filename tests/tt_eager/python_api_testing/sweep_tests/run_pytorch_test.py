@@ -113,6 +113,8 @@ def generate_test_sweep_parameters(input_test_config, env=""):
 
             env_dict_combinations = make_env_combinations(env_dict)
 
+            coregrid_dict = test_config.get("coregrid", {})
+
             for env_dict in env_dict_combinations:
                 shape_dict = test_config["shape"]
                 datagen_dict = test_config["datagen"]
@@ -129,6 +131,9 @@ def generate_test_sweep_parameters(input_test_config, env=""):
 
                 # Optional test args for dtype, etc...
                 test_args = test_config.get("args", {})
+
+                if coregrid_dict:
+                    test_args["coregrid"] = coregrid_dict
 
                 # Set tests parameters --------------------------
                 test_tt_dtypes = []
@@ -176,6 +181,24 @@ def generate_test_sweep_parameters(input_test_config, env=""):
                                 test_mem_configs[-1].append(MEM_CONFIGS_TT_DICT[buffer_type])
                         else:
                             test_mem_configs[-1] = generation_funcs.supported_mem_configs
+                xcoregrid = -1
+                ycoregrid = -1
+
+                if "coregrid" in test_args:
+                    print("SECOND")
+                    print(coregrid_dict)
+                    xmin = coregrid_dict.get("xmin", {})
+                    ymin = coregrid_dict.get("ymin", {})
+                    xmax = coregrid_dict.get("xmax", {})
+                    ymax = coregrid_dict.get("ymax", {})
+
+                    assert xmin < xmax
+                    assert ymin < ymax
+
+                    xcoregrid = random.randint(xmin, xmax)
+                    ycoregrid = random.randint(ymin, ymax)
+                    print(xcoregrid)
+                    print(ycoregrid)
 
                 if "outputs" in test_args:
                     for out_spec in test_args["outputs"]:
@@ -204,6 +227,8 @@ def generate_test_sweep_parameters(input_test_config, env=""):
                     test_tt_layouts,
                     test_mem_configs,
                     sanitize_args=sanitize_args,
+                    xcoregrid=xcoregrid,
+                    ycoregrid=ycoregrid,
                 ):
                     data_seed = random.randint(0, 20000000)
                     # input_shapes = input_shapes.copy()

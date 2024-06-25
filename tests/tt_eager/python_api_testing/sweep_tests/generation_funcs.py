@@ -436,6 +436,8 @@ def gen_dtype_layout_device(
     layouts=[supported_tt_layouts],
     mem_configs=[supported_mem_configs],  # mem_configs[-1] is output_mem_config
     do_sanitize_args=True,
+    xcoregrid=-1,
+    ycoregrid=-1,
 ):
     # last buffer_types option is for output buffer
     dtype_mem_config_layouts = []
@@ -477,6 +479,8 @@ def gen_dtype_layout_device(
                         "layout": layout,
                         "input_mem_config": input_mem_config,
                         "output_mem_config": out_mem_config,
+                        "xcoregrid": xcoregrid,
+                        "ycoregrid": ycoregrid,
                     }
                 )
 
