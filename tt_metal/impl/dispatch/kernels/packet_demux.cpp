@@ -256,6 +256,7 @@ void kernel_main() {
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
+                DPRINT << "DEMUX TO\n";
                 timeout = true;
                 break;
             }
@@ -274,7 +275,7 @@ void kernel_main() {
                 noc_async_writes_flushed();
                 // if (full_packet_sent) {
                     uint32_t msg_size_words = *reinterpret_cast<volatile uint32_t*>(input_queue.stream_state.local_msg_info_ptr);
-                    DPRINT << "RR: stream_relay_tiles: " << msg_size_words << "\n";
+                    DPRINT << "RR: stream_relay_tiles: " << msg_size_words << ", words_sent=" << words_sent <<"\n";
                     stream_relay_tiles(input_queue.stream_state.local_stream_id, 1, msg_size_words);
                     DPRINT << "RR: advance stream\n";
                     advance_remote_receiver_stream_to_next_message(

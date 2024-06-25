@@ -167,6 +167,7 @@ void kernel_main() {
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
+                DPRINT << "GEN TX TO\n";
                 timeout = true;
                 break;
             }
@@ -177,6 +178,9 @@ void kernel_main() {
             uint32_t curr_data_words_sent = output_queue_ptr->forward_data_from_input(
                 input_queue_id, full_packet_sent, input_queue.get_end_of_cmd());
             data_words_sent += curr_data_words_sent;
+            // if (curr_data_words_sent > 0) {
+            //     DPRINT << "TX ws\n";
+            // }
             progress_timestamp = (curr_data_words_sent > 0) ? get_timestamp_32b() : progress_timestamp;
         } else if (all_packets_initialized) {
             break;

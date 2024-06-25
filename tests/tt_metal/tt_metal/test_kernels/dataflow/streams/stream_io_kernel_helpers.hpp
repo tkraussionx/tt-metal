@@ -528,9 +528,9 @@ void stream_noc_write(
     // the message size is stored in bytes, so we need to override it to be in 16B words
     uint32_t src_addr = src_base_addr + src_offset;
     uint32_t message_size_noc_words = *reinterpret_cast<volatile uint32_t *>(src_addr);
-    if (!((size_bytes >> 4) == message_size_noc_words)) {
-        DPRINT << "src_addr: " << src_addr << " sz_B = " << size_bytes << " msg_sz_noc_words = " << message_size_noc_words << "\n";
-    }
+    // if (!((size_bytes >> 4) == message_size_noc_words)) {
+    //     DPRINT << "src_addr: " << src_addr << " sz_B = " << size_bytes << " msg_sz_noc_words = " << message_size_noc_words << "\n";
+    // }
     ASSERT((size_bytes >> 4) == message_size_noc_words);
     ASSERT(size_bytes > 0);
     // If size in bufffer header from dispatch datapath becomes size in bytes, then we need to include the shift
@@ -647,11 +647,11 @@ void stream_noc_write(
         stream_state.local_phase_id++;
     }
 
-    DPRINT << "Stream Noc Write: Sending message\n";
+    // DPRINT << "Stream Noc Write: Sending message\n";
     stream_relay_tiles(stream_state.local_stream_id, 1, message_size_noc_words);
     // DPRINT << "Stream Noc Write: Waiting for flush\n";
     wait_for_stream_write_complete(stream_state.local_stream_id);
-    DPRINT << "Stream wait_for_stream_write_complete\n";
+    // DPRINT << "Stream wait_for_stream_write_complete\n";
 
     stream_state.num_tiles_sent = num_tiles;
 }
@@ -913,7 +913,7 @@ FORCE_INLINE bool messages_are_available(fabric_receiver_stream_state_t &stream_
     uint32_t wrptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
     uint32_t rdptr = NOC_STREAM_READ_REG(stream_state.local_stream_id, STREAM_MSG_INFO_PTR_REG_INDEX);
     uint32_t internal_rdptr = stream_state.local_msg_info_ptr >> 4;
-    DPRINT << "RR msg_avail? wrptr: " << wrptr << ", l_msg_ptr=" << internal_rdptr << "\n";
+    // DPRINT << "RR msg_avail? wrptr: " << wrptr << ", l_msg_ptr=" << internal_rdptr << "\n";
     bool messages_available = internal_rdptr < wrptr;
     return messages_available;
 }

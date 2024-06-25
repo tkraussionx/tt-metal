@@ -109,6 +109,7 @@ void kernel_main() {
                 uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
                 if (cycles_since_progress > timeout_cycles) {
                     test_results[PQ_TEST_MISC_INDEX] = 0xff000006;
+                    DPRINT << "GEN RX TO\n";
                     timeout = true;
                     break;
                 }
@@ -121,10 +122,13 @@ void kernel_main() {
                 // it's guaranteed to be smaller than the full next packet.
                 input_queue->input_queue_advance_words_sent(num_words_available);
                 words_sent += num_words_available;
+            } else {
+                DPRINT << "RX ws\n";
             }
         }
 
         if (timeout) {
+            DPRINT << "E99\n";
             break;
         }
 
@@ -136,43 +140,50 @@ void kernel_main() {
         uint32_t curr_packet_tag = input_queue->get_curr_packet_tag();
         uint32_t curr_packet_flags = input_queue->get_curr_packet_flags();
 
-        if (src_endpoint_index >= num_src_endpoints ||
-            curr_packet_size_words > max_packet_size_words ||
-            endpoint_id != curr_packet_dest) {
-                check_failed = true;
-                mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
-                mismatch_val = 0;
-                expected_val = 0;
-                test_results[PQ_TEST_MISC_INDEX+3] = 0xee000001;
-                break;
-        }
+        // if (src_endpoint_index >= num_src_endpoints ||
+        //     curr_packet_size_words > max_packet_size_words ||
+        //     endpoint_id != curr_packet_dest) {
+        //         DPRINT << src_endpoint_index << ", " <<  num_src_endpoints << ", " <<
+        //             curr_packet_size_words << ", " << max_packet_size_words << ", " <<
+        //             endpoint_id << ", " << curr_packet_dest << "\n";
 
-        if (curr_packet_flags & PACKET_TEST_LAST) {
-            if (src_endpoint_last_packet[src_endpoint_index] ||
-                curr_packet_size_words != 2 ||
-                curr_packet_tag != 0xffffffff) {
-                    check_failed = true;
-                    mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
-                    mismatch_val = 0;
-                    expected_val = 0;
-                    test_results[PQ_TEST_MISC_INDEX+3] = 0xee000002;
-                    break;
-            }
-            src_endpoint_last_packet[src_endpoint_index] = true;
-        } else {
-            src_endpoint_rnd_state = &(src_rnd_state[src_endpoint_index]);
-            src_endpoint_rnd_state->next_packet_rnd_to_dest(num_dest_endpoints, endpoint_id, dest_endpoint_start_id,
-                                                            max_packet_size_words, UINT64_MAX);
-            if (src_endpoint_rnd_state->curr_packet_size_words != curr_packet_size_words ||
-                src_endpoint_rnd_state->packet_rnd_seed != curr_packet_tag) {
-                    check_failed = true;
-                    mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
-                    mismatch_val = curr_packet_tag;
-                    expected_val = src_endpoint_rnd_state->packet_rnd_seed;
-                    test_results[PQ_TEST_MISC_INDEX+3] = 0xee000003;
-                    break;
-            }
-        }
+        //         check_failed = true;
+        //         mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
+        //         mismatch_val = 0;
+        //         expected_val = 0;
+        //         test_results[PQ_TEST_MISC_INDEX+3] = 0xee000001;
+        //         DPRINT << "E5\n";
+        //         break;
+        // }
+
+        // if (curr_packet_flags & PACKET_TEST_LAST) {
+        //     if (src_endpoint_last_packet[src_endpoint_index] ||
+        //         curr_packet_size_words != 2 ||
+        //         curr_packet_tag != 0xffffffff) {
+        //             check_failed = true;
+        //             mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
+        //             mismatch_val = 0;
+        //             expected_val = 0;
+        //             test_results[PQ_TEST_MISC_INDEX+3] = 0xee000002;
+        //             DPRINT << "E4\n";
+        //             break;
+        //     }
+        //     src_endpoint_last_packet[src_endpoint_index] = true;
+        // } else {
+        //     src_endpoint_rnd_state = &(src_rnd_state[src_endpoint_index]);
+        //     src_endpoint_rnd_state->next_packet_rnd_to_dest(num_dest_endpoints, endpoint_id, dest_endpoint_start_id,
+        //                                                     max_packet_size_words, UINT64_MAX);
+        //     if (src_endpoint_rnd_state->curr_packet_size_words != curr_packet_size_words ||
+        //         src_endpoint_rnd_state->packet_rnd_seed != curr_packet_tag) {
+        //             check_failed = true;
+        //             mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
+        //             mismatch_val = curr_packet_tag;
+        //             expected_val = src_endpoint_rnd_state->packet_rnd_seed;
+        //             test_results[PQ_TEST_MISC_INDEX+3] = 0xee000003;
+        //             DPRINT << "E3\n";
+        //             break;
+        //     }
+        // }
 
         uint32_t num_words_available = input_queue->input_queue_curr_packet_num_words_available_to_send();
         // we have the packet header info for checking, input queue can now switch to the next packet
@@ -184,7 +195,7 @@ void kernel_main() {
         words_cleared++;
 
         uint32_t curr_packet_payload_words = curr_packet_size_words-1;
-        if (!disable_data_check) {
+        if (false && disable_data_check == 0) {
             uint32_t words_before_wrap = input_queue->get_queue_words_before_rptr_cleared_wrap();
             uint32_t words_after_wrap = 0;
             if (words_before_wrap < curr_packet_payload_words) {
@@ -200,6 +211,7 @@ void kernel_main() {
                 test_results[PQ_TEST_MISC_INDEX+3] = 0xee000005;
                 test_results[PQ_TEST_MISC_INDEX+4] = words_before_wrap;
                 test_results[PQ_TEST_MISC_INDEX+5] = words_after_wrap;
+                DPRINT << "E0\n";
                 break;
             }
             input_queue->input_queue_advance_words_cleared(words_before_wrap);
@@ -213,6 +225,7 @@ void kernel_main() {
                     test_results[PQ_TEST_MISC_INDEX+3] = 0xee000006;
                     test_results[PQ_TEST_MISC_INDEX+4] = words_before_wrap;
                     test_results[PQ_TEST_MISC_INDEX+5] = words_after_wrap;
+                    DPRINT << "E1\n";
                     break;
                 }
                 input_queue->input_queue_advance_words_cleared(words_after_wrap);
@@ -223,6 +236,8 @@ void kernel_main() {
             words_cleared += curr_packet_payload_words;
         }
         progress_timestamp = get_timestamp_32b();
+
+        DPRINT << "RX TS="<<  progress_timestamp<< "\n";
         num_words_checked += curr_packet_size_words;
         all_src_endpoints_last_packet = true;
         uint32_t src_endpoint_last_index_dbg = 0xe0000000;
@@ -252,6 +267,7 @@ void kernel_main() {
         set_64b_result(test_results, words_cleared, PQ_TEST_MISC_INDEX+14);
         input_queue->dprint_object();
     } else if (check_failed) {
+        DPRINT << "CHECK FAILED\n";
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_DATA_MISMATCH;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_addr;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_val;

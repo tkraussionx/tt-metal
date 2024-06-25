@@ -204,6 +204,7 @@ void kernel_main() {
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
+                DPRINT << "MUX TIMEOUT\n";
                 timeout = true;
                 break;
             }
@@ -213,8 +214,8 @@ void kernel_main() {
             uint32_t words_sent = output_queue.forward_data_from_input(curr_input, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
-                DPRINT << "iter=" << iter << "\n";
                 progress_timestamp = get_timestamp_32b();
+                DPRINT << "iter=" << iter << ", timestamp=" << progress_timestamp << "\n";
             }
             curr_input_partial_packet_sent = !full_packet_sent;
             sends++;
@@ -226,11 +227,17 @@ void kernel_main() {
             }
         }
         //
-        if constexpr (!use_stream_for_writer) {
+        // if constexpr (!use_stream_for_writer) {
             // Not needed for streams
             output_queue.prev_words_in_flight_check_flush();
-        }
+        // } else {
+
+        //     input_queues[curr_input].input_queue_advance_words_cleared(output_queue.prev_input_queue_words_in_flight[curr_input]);
+        // }
         dest_finished = output_queue.is_remote_finished();
+        if (dest_finished) {
+            DPRINT << "packet_mux dest_finished\n";
+        }
     }
 
     if (!timeout) {

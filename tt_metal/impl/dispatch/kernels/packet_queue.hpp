@@ -409,16 +409,16 @@ public:
 
     void dprint_object() {
         DPRINT << "  id: " << DEC() << static_cast<uint32_t>(this->queue_id) << ENDL();
-        DPRINT << "  start_addr: 0x" << HEX() << static_cast<uint32_t>(this->queue_start_addr_words*PACKET_WORD_SIZE_BYTES) << ENDL();
-        DPRINT << "  size_bytes: 0x" << HEX() << static_cast<uint32_t>(this->queue_size_words*PACKET_WORD_SIZE_BYTES) << ENDL();
-        DPRINT << "  remote_x: " << DEC() << static_cast<uint32_t>(this->remote_x) << ENDL();
-        DPRINT << "  remote_y: " << DEC() << static_cast<uint32_t>(this->remote_y) << ENDL();
-        DPRINT << "  remote_queue_id: " << DEC() << static_cast<uint32_t>(this->remote_queue_id) << ENDL();
-        DPRINT << "  remote_update_network_type: " << DEC() << static_cast<uint32_t>(this->remote_update_network_type) << ENDL();
-        DPRINT << "  ready_status: 0x" << HEX() << this->get_remote_ready_status() << ENDL();
-        DPRINT << "  local_wptr: 0x" << HEX() << this->get_queue_local_wptr() << ENDL();
-        DPRINT << "  local_rptr_sent: 0x" << HEX() << this->get_queue_local_rptr_sent() << ENDL();
-        DPRINT << "  local_rptr_cleared: 0x" << HEX() << this->get_queue_local_rptr_cleared() << ENDL();
+        // DPRINT << "  start_addr: 0x" << HEX() << static_cast<uint32_t>(this->queue_start_addr_words*PACKET_WORD_SIZE_BYTES) << ENDL();
+        // DPRINT << "  size_bytes: 0x" << HEX() << static_cast<uint32_t>(this->queue_size_words*PACKET_WORD_SIZE_BYTES) << ENDL();
+        // DPRINT << "  remote_x: " << DEC() << static_cast<uint32_t>(this->remote_x) << ENDL();
+        // DPRINT << "  remote_y: " << DEC() << static_cast<uint32_t>(this->remote_y) << ENDL();
+        // DPRINT << "  remote_queue_id: " << DEC() << static_cast<uint32_t>(this->remote_queue_id) << ENDL();
+        // DPRINT << "  remote_update_network_type: " << DEC() << static_cast<uint32_t>(this->remote_update_network_type) << ENDL();
+        // DPRINT << "  ready_status: 0x" << HEX() << this->get_remote_ready_status() << ENDL();
+        // DPRINT << "  local_wptr: 0x" << HEX() << this->get_queue_local_wptr() << ENDL();
+        // DPRINT << "  local_rptr_sent: 0x" << HEX() << this->get_queue_local_rptr_sent() << ENDL();
+        // DPRINT << "  local_rptr_cleared: 0x" << HEX() << this->get_queue_local_rptr_cleared() << ENDL();
     }
 };
 
@@ -462,11 +462,11 @@ protected:
         //     DPRINT << "RR: n_words_available: " << (uint32_t)this->get_queue_data_num_words_available_to_send() << "\n";
         // }
         if(packet_available) {
-            if (rx_from_stream) {
-                DPRINT << "RR: pkt avail\n";
-                // advance_remote_receiver_stream_to_next_message(
-                //     stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
-            }
+            // if (rx_from_stream) {
+            //     // DPRINT << "RR: pkt avail\n";
+            //     // advance_remote_receiver_stream_to_next_message(
+            //     //     stream_state, get_next_available_stream_message_size_in_bytes(stream_state));
+            // }
             // uses get_queue_rptr_sent_offset_words
             // -> Under the hood uses local_rptr_sent_val, which is actually a pointer...
             //    I expect this is the current offset...
@@ -566,14 +566,14 @@ public:
             // DPRINT << "RR stream_id: " << (uint32_t)this->stream_state.local_stream_id << "\n";
             // DPRINT << "RR stream: " << (uint32_t)this->stream_state.local_stream_id << "\n";
             uint32_t n = fw_managed_rx_stream_num_bytes_available(this->stream_state.local_stream_id, this->stream_state);
-            if (n > 0) {
-                DPRINT << "RR local_msg_info_ptr: " << (uint32_t)this->stream_state.local_msg_info_ptr << "\n";
-                DPRINT << "RR wrptr: " << NOC_STREAM_READ_REG(this->stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX) << "\n";
-            }
+            // if (n > 0) {
+            //     DPRINT << "RR local_msg_info_ptr: " << (uint32_t)this->stream_state.local_msg_info_ptr << "\n";
+            //     DPRINT << "RR wrptr: " << NOC_STREAM_READ_REG(this->stream_state.local_stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX) << "\n";
+            // }
             // DPRINT << "XxX: " << n << "\n";
-            if (!((n & 0xF) == 0)) {
-                DPRINT << "n=" << n << "\n";
-            }
+            // if (!((n & 0xF) == 0)) {
+            //     DPRINT << "n=" << n << "\n";
+            // }
             ASSERT((n & 0xF) == 0);
             return n >> 4;
         } else {
@@ -736,15 +736,15 @@ public:
     }
 
     void dprint_object() {
-        DPRINT << "Input queue:" << ENDL();
-        packet_queue_state_t::dprint_object();
-        DPRINT << "  packet_valid: " << DEC() << static_cast<uint32_t>(this->curr_packet_valid) << ENDL();
-        DPRINT << "  packet_tag: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_tag) << ENDL();
-        DPRINT << "  packet_src: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_src) << ENDL();
-        DPRINT << "  packet_dest: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_dest) << ENDL();
-        DPRINT << "  packet_flags: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_flags) << ENDL();
-        DPRINT << "  packet_size_words: " << DEC() << static_cast<uint32_t>(this->curr_packet_size_words) << ENDL();
-        DPRINT << "  packet_words_sent: " << DEC() << static_cast<uint32_t>(this->curr_packet_words_sent) << ENDL();
+        // DPRINT << "Input queue:" << ENDL();
+        // packet_queue_state_t::dprint_object();
+        // DPRINT << "  packet_valid: " << DEC() << static_cast<uint32_t>(this->curr_packet_valid) << ENDL();
+        // DPRINT << "  packet_tag: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_tag) << ENDL();
+        // DPRINT << "  packet_src: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_src) << ENDL();
+        // DPRINT << "  packet_dest: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_dest) << ENDL();
+        // DPRINT << "  packet_flags: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_flags) << ENDL();
+        // DPRINT << "  packet_size_words: " << DEC() << static_cast<uint32_t>(this->curr_packet_size_words) << ENDL();
+        // DPRINT << "  packet_words_sent: " << DEC() << static_cast<uint32_t>(this->curr_packet_words_sent) << ENDL();
     }
 
 };
@@ -800,6 +800,7 @@ protected:
             uint32_t words_flushed = this->prev_output_total_words_in_flight;
             if (words_flushed > 0) {
                 for (uint32_t i = 0; i < num_input_queues; i++) {
+                    DPRINT << "FLSH input_queue_id: " << i << ", words=" << words_flushed <<"\n";
                     this->input_queue_array[i].input_queue_advance_words_cleared(this->prev_input_queue_words_in_flight[i]);
                     this->prev_input_queue_words_in_flight[i] = 0;
                 }
@@ -821,20 +822,20 @@ protected:
         }
 
         void dprint_object() {
-            DPRINT << "  curr_output_total_words_in_flight: " << DEC() << this->curr_output_total_words_in_flight << ENDL();
-            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
-                DPRINT << "       from input queue id " << DEC() <<
-                            this->input_queue_array[j].get_queue_id() << ": "
-                            << DEC() << this->curr_input_queue_words_in_flight[j]
-                            << ENDL();
-            }
-            DPRINT << "  prev_output_total_words_in_flight: " << DEC() << this->prev_output_total_words_in_flight << ENDL();
-            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
-                DPRINT << "       from input queue id " << DEC() <<
-                            this->input_queue_array[j].get_queue_id() << ": "
-                            << DEC() << this->prev_input_queue_words_in_flight[j]
-                            << ENDL();
-            }
+            // DPRINT << "  curr_output_total_words_in_flight: " << DEC() << this->curr_output_total_words_in_flight << ENDL();
+            // for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
+            //     DPRINT << "       from input queue id " << DEC() <<
+            //                 this->input_queue_array[j].get_queue_id() << ": "
+            //                 << DEC() << this->curr_input_queue_words_in_flight[j]
+            //                 << ENDL();
+            // }
+            // DPRINT << "  prev_output_total_words_in_flight: " << DEC() << this->prev_output_total_words_in_flight << ENDL();
+            // for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
+            //     DPRINT << "       from input queue id " << DEC() <<
+            //                 this->input_queue_array[j].get_queue_id() << ": "
+            //                 << DEC() << this->prev_input_queue_words_in_flight[j]
+            //                 << ENDL();
+            // }
         }
 
     } input_queue_status;
@@ -915,17 +916,18 @@ public:
                 this->stream_state);
         } else {
             uint64_t noc_dest_addr = get_noc_addr(this->remote_x, this->remote_y, dest_addr);
+            // DPRINT << "RRS: " << noc_dest_addr << "\n";
             noc_async_write(src_addr, noc_dest_addr, num_words*PACKET_WORD_SIZE_BYTES);
         }
     }
 
     inline void remote_wptr_update(uint32_t num_words) {
-        if (this->remote_update_network_type != DispatchRemoteNetworkType::STREAM) {
+        // if (this->remote_update_network_type != DispatchRemoteNetworkType::STREAM) {
             // only manually update the remote wrptr if *not* sending to a stream because
             // if sending to a stream, then the wrptrs will automatically be managed by the
             // stream hardware
             this->advance_queue_remote_wptr(num_words);
-        }
+        // }
     }
 
     inline uint32_t prev_words_in_flight_check_flush() {
@@ -940,6 +942,7 @@ public:
             return words_flushed;
         }
         else if (this->get_num_words_written_not_sent() <= this->input_queue_status.get_curr_output_total_words_in_flight()) {
+            // DPRINT << "RS CHK\n";
             return this->input_queue_status.prev_words_in_flight_flush();
         }
         else {
@@ -1116,9 +1119,9 @@ public:
     }
 
     void dprint_object() {
-        DPRINT << "Output queue:" << ENDL();
-        packet_queue_state_t::dprint_object();
-        this->input_queue_status.dprint_object();
+        // DPRINT << "Output queue:" << ENDL();
+        // packet_queue_state_t::dprint_object();
+        // this->input_queue_status.dprint_object();
     }
 };
 

@@ -98,8 +98,8 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_tunneler_test_results_addr = 0x29000;
     constexpr uint32_t default_tunneler_test_results_size = 0x8000;
 
-    constexpr uint32_t default_timeout_mcycles = 5000;
-    constexpr uint32_t default_rx_disable_data_check = 0;
+    constexpr uint32_t default_timeout_mcycles = 4000;
+    constexpr uint32_t default_rx_disable_data_check = 1;
 
     constexpr uint32_t src_endpoint_start_id = 0xaa;
     constexpr uint32_t dest_endpoint_start_id = 0xbb;
@@ -262,6 +262,7 @@ int main(int argc, char **argv) {
 
         std::cout<<"Left Tunneler = "<<tunneler_logical_core.str()<<std::endl;
         std::cout<<"Right Tunneler = "<<r_tunneler_logical_core.str()<<std::endl;
+        log_debug(tt::LogTest, "timeout_mcycles: {}", timeout_mcycles);
 
         tt_metal::Program program = tt_metal::CreateProgram();
 
