@@ -208,12 +208,12 @@ void kernel_main() {
     }
     input_queue.init(demux_fan_out, rx_queue_start_addr_words, rx_queue_size_words,
                      remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
-
+    DPRINT << "Starting Handshake DEMUX" << ENDL();
     if (!wait_all_src_dest_ready(&input_queue, 1, output_queues, demux_fan_out, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
-
+    DPRINT << "DEMUX Handshake Done" << ENDL();
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     bool timeout = false;
@@ -231,8 +231,10 @@ void kernel_main() {
                 break;
             }
         }
+        DPRINT << "CHECKING FOR VALID PACKET" << ENDL();
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
+            DPRINT << "Dest id: " << dest  << ENDL();
             uint8_t output_queue_id = dest_output_queue_id(dest);
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());

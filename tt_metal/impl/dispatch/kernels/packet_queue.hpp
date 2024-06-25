@@ -422,14 +422,18 @@ protected:
     uint32_t packetizer_page_words_cleared;
 
     inline void advance_next_packet() {
+        DPRINT << "Advance Next Packet" << ENDL();
         if(this->get_queue_data_num_words_available_to_send() > 0) {
+            uint32_t rd_ptr = this->get_queue_rptr_sent_offset_words();
             tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
                 reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(
-                    (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
+                    (this->queue_start_addr_words + rd_ptr)*PACKET_WORD_SIZE_BYTES
                 );
+            DPRINT << "rd_ptr: " << rd_ptr << " " << this->queue_start_addr_words << ENDL();
             this->curr_packet_header_ptr = next_packet_header_ptr;
             uint32_t packet_size_and_flags = next_packet_header_ptr->packet_size_bytes;
             uint32_t packet_size_bytes = packet_size_and_flags & 0xFFFFFFFE;
+            DPRINT << "Packet Size Bytes: " << packet_size_bytes << ENDL();
             this->end_of_cmd = !(packet_size_and_flags & 1);
             this->curr_packet_size_words = packet_size_bytes/PACKET_WORD_SIZE_BYTES;
             if (packet_size_bytes % PACKET_WORD_SIZE_BYTES) {
@@ -546,6 +550,7 @@ public:
         if (!this->curr_packet_valid) {
             this->advance_next_packet();
         }
+        // DPRINT << "Curr packet size words: " << this->curr_packet_size_words << ENDL();
         return this->curr_packet_size_words - this->curr_packet_words_sent;
     }
 
@@ -587,7 +592,9 @@ public:
         if (num_words == 0) {
             return 0;
         }
-        num_words = std::min(num_words, this->get_curr_packet_words_remaining());
+        uint32_t num_words_remaining = this->get_curr_packet_words_remaining();
+        DPRINT << "Num Words: " << num_words << " " <<  num_words_remaining << ENDL();
+        num_words = std::min(num_words, num_words_remaining);
         return num_words;
     }
 
@@ -878,7 +885,9 @@ public:
 
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
         uint32_t num_words_to_forward = this->get_num_words_to_send(input_queue_index);
+        // DPRINT << "Get Data" << ENDL();
         full_packet_sent = (num_words_to_forward == input_queue_ptr->get_curr_packet_words_remaining());
+        // DPRINT << "Done get Data" << ENDL();
         if (num_words_to_forward == 0) {
             return 0;
         }
@@ -890,7 +899,7 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
-
+        DPRINT << "Forward Data " << num_words_to_forward << ENDL();
         uint32_t src_addr =
             (input_queue_ptr->queue_start_addr_words +
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
@@ -921,7 +930,7 @@ public:
             }
             this->cb_mode_inc_remote_sem_val(remote_sem_inc);
         }
-
+        DPRINT << "Forwarded: " << num_words_to_forward << ENDL();
         return num_words_to_forward;
     }
 
@@ -962,7 +971,9 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
             if (!src_ready[i]) {
                 src_ready[i] = input_queue_array[i].is_packetizer_input() ||
                                input_queue_array[i].is_remote_ready();
+
                 if (!src_ready[i]) {
+                    DPRINT << "SRC NOT READY " << i << " " << (int)(input_queue_array[i].is_packetizer_input()) << ENDL();
                     input_queue_array[i].send_remote_ready_notification();
                     all_src_dest_ready = false;
                 } else {
@@ -970,6 +981,7 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 }
             }
         }
+
         for (uint32_t i = 0; i < num_output_queues; i++) {
             if (!dest_ready[i]) {
                 dest_ready[i] = output_queue_array[i].is_remote_ready() ||
@@ -977,6 +989,7 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 if (dest_ready[i]) {
                     output_queue_array[i].send_remote_ready_notification();
                 } else {
+                    DPRINT << "DST NOT READY" << ENDL();
                     all_src_dest_ready = false;
                 }
             }

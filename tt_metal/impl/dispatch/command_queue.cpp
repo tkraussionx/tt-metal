@@ -1063,8 +1063,8 @@ void EnqueueRecordEventCommand::process() {
     std::vector<uint32_t> event_payload(dispatch_constants::EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
     event_payload[0] = this->event_id;
 
-    uint8_t num_hw_cqs =
-        this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
+    uint8_t num_hw_cqs = 1;
+        // this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
     // uint32_t packed_event_payload_sizeB =
     //     align(sizeof(CQDispatchCmd) + (device->is_mmio_capable() ? num_hw_cqs : 1) * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT) +
     //     (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * (device->is_mmio_capable() ? num_hw_cqs : 1));
@@ -1094,7 +1094,6 @@ void EnqueueRecordEventCommand::process() {
     std::vector<CQDispatchWritePackedUnicastSubCmd> unicast_sub_cmds(num_hw_cqs);
     std::vector<std::pair<const void*, uint32_t>> event_payloads(num_hw_cqs);
 
-    // uint8_t cq_base = device->is_mmio_capable() ? 0 : 1;
     for (uint8_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
         tt_cxy_pair dispatch_location;
         if (device->is_mmio_capable()) {
@@ -1109,6 +1108,7 @@ void EnqueueRecordEventCommand::process() {
         unicast_sub_cmds[cq_id] = CQDispatchWritePackedUnicastSubCmd{
             .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, dispatch_physical_core)};
         event_payloads[cq_id] = {event_payload.data(), event_payload.size() * sizeof(uint32_t)};
+        std::cout << "Send record even command to: " << this->device->id() << " " << cq_id << " " << dispatch_physical_core.str() << std::endl;
     }
 
     uint32_t address = this->command_queue_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
@@ -1657,7 +1657,9 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     }
 
     if (blocking) {
+        std::cout << "Calling finish" << std::endl;
         this->finish();
+        std::cout << "Done" << std::endl;
     }
 
     // else {
@@ -2052,7 +2054,9 @@ void HWCommandQueue::finish() {
     ZoneScopedN("HWCommandQueue_finish");
     tt::log_debug(tt::LogDispatch, "Finish for command queue {}", this->id);
     std::shared_ptr<Event> event = std::make_shared<Event>();
+    std::cout << "Send record event" << std::endl;
     this->enqueue_record_event(event);
+    std::cout << "Record Event Done" << std::endl;
     if (tt::llrt::OptionsG.get_test_mode_enabled()) {
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             if (DPrintServerHangDetected()) {

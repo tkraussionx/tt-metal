@@ -1696,7 +1696,7 @@ void configure_for_single_chip(Device *device,
 
         // dispatch_hd and dispatch_d
         uint32_t dispatch_d_preamble_size =
-            packetized_path_en_g ? sizeof(dispatch_packet_header_t) : 0;
+            packetized_path_en_g ? sizeof() : 0;
         dispatch_compile_args[12] = dispatch_downstream_cb_sem;
         dispatch_compile_args[13] = dispatch_h_cb_sem;
         dispatch_compile_args[14] = dispatch_d_preamble_size;

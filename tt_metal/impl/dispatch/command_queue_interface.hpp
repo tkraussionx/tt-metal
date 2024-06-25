@@ -96,7 +96,7 @@ struct dispatch_constants {
             cmddat_q_size_ = 64 * 1024;
             scratch_db_size_ = 20 * 1024;
             dispatch_buffer_block_size = 128 * 1024;
-            prefetch_d_buffer_size_ = 128 * 1024;
+            prefetch_d_buffer_size_ = 64 * 1024;
         }
         TT_ASSERT(cmddat_q_size_ >= 2 * max_prefetch_command_size_);
         TT_ASSERT(scratch_db_size_ % 2 == 0);

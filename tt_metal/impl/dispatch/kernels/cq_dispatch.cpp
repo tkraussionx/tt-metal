@@ -352,6 +352,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
     }
 
     cmd_ptr = data_ptr;
+    DPRINT << "RELAY DONE" << ENDL();
 }
 
 void process_write_host_d() {
@@ -898,6 +899,7 @@ void kernel_main() {
     while (!done) {
         DeviceZoneScopedND("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
         if (cmd_ptr == cb_fence) {
+            DPRINT << "Get cmd" << ENDL();
             get_cb_page<
                 dispatch_cb_base,
                 dispatch_cb_blocks,
@@ -905,6 +907,7 @@ void kernel_main() {
                 my_noc_xy,
                 my_dispatch_cb_sem_id>(
                 cmd_ptr, cb_fence, block_noc_writes_to_clear, block_next_start_addr, rd_block_idx);
+            DPRINT << "GET CMD Done" << ENDL();
         }
 
         done = is_d_variant ? process_cmd_d(cmd_ptr) : process_cmd_h(cmd_ptr);

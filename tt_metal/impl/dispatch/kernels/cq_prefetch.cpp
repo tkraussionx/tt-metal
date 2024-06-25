@@ -858,6 +858,10 @@ bool process_cmd(uint32_t& cmd_ptr,
         if (exec_buf) {
             stride = process_relay_inline_exec_buf_cmd(cmd_ptr, downstream_data_ptr);
         } else {
+            volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
+            volatile CQDispatchCmd tt_l1_ptr *dcmd = (volatile CQDispatchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchCmd));
+            DPRINT << "P Cmd: " << (uint32_t)(cmd->base.cmd_id) << " " << ENDL();
+            DPRINT << "D Cmd: " << (uint32_t)(dcmd->base.cmd_id) << " " << ENDL();
             stride = process_relay_inline_cmd<cmddat_wrap_enable>(cmd_ptr, downstream_data_ptr);
         }
         break;
@@ -927,7 +931,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *dptr =
         (volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *)data_ptr;
     dptr->length = length;
-
+    DPRINT << "Length: " << length << ENDL(); // What does other cq config report? --> reports 192
     uint32_t npages = (length + downstream_cb_page_size - 1) >> downstream_cb_log_page_size;
 
     // Assume the dispatch buffer is big relative to cmddat command size that we can
@@ -947,12 +951,16 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
 
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
     if (downstream_pages_left >= npages) {
+        volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(data_ptr + 32);
+        DPRINT << "Command0: " << (int)(cmd->base.cmd_id) << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
         uint32_t tail_pages = npages - downstream_pages_left;
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
+            volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(data_ptr + 32);
+            DPRINT << "Command1: " << (int)(cmd->base.cmd_id) << ENDL();
             noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
             data_ptr += available;
             length -= available;
