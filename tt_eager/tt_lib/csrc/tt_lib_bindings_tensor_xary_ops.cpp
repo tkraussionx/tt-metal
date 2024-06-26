@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
-#include "tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "tt_lib_bindings_tensor.hpp"
 #include "tt_lib_bindings_tensor_impl.hpp"
 
@@ -175,7 +174,7 @@ namespace tt::tt_metal::detail {
                 "queue_id", "command queue id", "uint8_t", "Default is 0", "No"
 
         )doc");
-    
+
         m_tensor.def("bitwise_xor",bitwise_xor,
             py::arg("input").noconvert(),py::arg("value"),py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,R"doc(
             Computes bitwise_xor of input tensor ``input`` by a scalar ``value``. Input tensor needs to be positive. Support provided only for Wormhole_B0.
@@ -1019,7 +1018,7 @@ namespace tt::tt_metal::detail {
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
 
         )doc");
-        
+
         m_tensor.def("bitwise_or",bitwise_or,
             py::arg("input").noconvert(),py::arg("value"),py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,R"doc(
             Computes bitwise_or of input tensor ``input`` by  a scalar ``value``. Input tensor needs to be positive. Support provided only for Wormhole_B0.
@@ -1350,26 +1349,5 @@ namespace tt::tt_metal::detail {
         R"doc(Perform an eltwise-binary sub on one tensor ``{0}`` and one scalar ``{1}``.)doc",
         R"doc("Scalar", "float", "")doc");
 
-    // softmax
-    m_tensor.def(
-        "softmax",
-        &softmax,
-        py::arg("input").noconvert(),
-        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        py::arg("compute_kernel_config").noconvert() = std::nullopt,
-        "Performs a softmax operation on the last tensor dimension.");
-
-    // softmax with scale and mask, regular mask has a dim of (batch, 1, 1, seq_len), causal mask has a dim of (batch,
-    // 1, seq_len, seq_len)
-    m_tensor.def(
-        "scale_mask_softmax",
-        &transformers::scale_mask_softmax,
-        py::arg("input").noconvert(),
-        py::arg("scale"),
-        py::arg("mask").noconvert(),
-        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        py::arg("is_causal_mask").noconvert() = false,
-        py::arg("compute_kernel_config").noconvert() = std::nullopt,
-        "Performs a fused scale->attention_mask->softmax operation.");
 }
 }  // namespace tt::tt_metal::detail
