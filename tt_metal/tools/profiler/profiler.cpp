@@ -400,6 +400,7 @@ void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(TRACY_ENABLE)
     ZoneScoped;
+    std::unordered_map<uint32_t, std::pair<tracy::TTDeviceEvent, tracy::TTDeviceEvent>> aggregates;
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)
@@ -469,14 +470,56 @@ void DeviceProfiler::pushTracyDeviceResults()
         std::pair<uint32_t, CoreCoord> device_core = {event.chip_id, (CoreCoord){event.core_x,event.core_y}};
         if (event.zone_phase == tracy::TTDeviceEventPhase::begin)
         {
-            TracyTTPushStartZone(device_tracy_contexts[device_core], event);
+            //TracyTTPushStartZone(device_tracy_contexts[device_core], event);
+            if (aggregates.find(event.run_num) == aggregates.end())
+            {
+                aggregates.emplace(event.run_num, std::make_pair(event,event));
+            }
+            else
+            {
+                if (aggregates.at(event.run_num).first.timestamp > event.timestamp)
+                {
+                    aggregates.at(event.run_num).first = event;
+                }
+            }
         }
         else if (event.zone_phase == tracy::TTDeviceEventPhase::end)
         {
-            TracyTTPushEndZone(device_tracy_contexts[device_core], event);
+            //TracyTTPushEndZone(device_tracy_contexts[device_core], event);
+            if (aggregates.find(event.run_num) == aggregates.end())
+            {
+                aggregates.emplace(event.run_num, std::make_pair(event,event));
+            }
+            else
+            {
+                if (aggregates.at(event.run_num).second.timestamp < event.timestamp)
+                {
+                    aggregates.at(event.run_num).second = event;
+                }
+            }
         }
-
     }
+
+    for (auto& device_core: device_cores)
+    {
+        int device_id = device_core.first;
+        auto tracyCtx = TracyTTContext();
+        std::string tracyTTCtxName = fmt::format("Device: {}", device_id);
+
+        TracyTTContextPopulate(tracyCtx, cpuTime, delay, frequency);
+
+        TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
+
+        for (const auto &[opID, zone] : aggregates)
+        {
+            if (zone.first.chip_id == device_id)
+            {
+                TracyTTPushStartZone(tracyCtx, zone.first);
+                TracyTTPushEndZone(tracyCtx, zone.second);
+            }
+        }
+    }
+
     device_events.clear();
 #endif
 }
