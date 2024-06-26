@@ -1219,6 +1219,7 @@ void EnqueueTerminateCommand::process() {
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
     // dispatch and prefetch terminate commands each needs to be a separate fetch queue entry
+    std::cout << "Process Terminate for: " << this->command_queue_id << std::endl;
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
     HugepageDeviceCommand dispatch_command_sequence(cmd_region, cmd_sequence_sizeB);
     dispatch_command_sequence.add_dispatch_terminate();
@@ -1232,6 +1233,7 @@ void EnqueueTerminateCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
+    std::cout << "Terminate processed" << std::endl;
 }
 
 // HWCommandQueue section

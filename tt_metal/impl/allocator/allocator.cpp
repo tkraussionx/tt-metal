@@ -44,13 +44,13 @@ void validate_num_banks(uint32_t num_banks, const BufferType &buffer_type) {
     bool custom_mod_bank_id_calculation_exists = (num_banks == 12 or num_banks == 56 or num_banks == 94 or num_banks == 124 or num_banks == 126);
     bool doesnt_support_interleaved = buffer_type == BufferType::L1_SMALL;
     bool valid_num_banks = (is_pow2_num_banks or custom_mod_bank_id_calculation_exists or doesnt_support_interleaved);
-    if (not valid_num_banks) {
-        TT_THROW(
-            "Invalid number of memory banks for {}. Num banks must be power of 2 or have a dedicated modulo "
-            "implementation",
-            magic_enum::enum_name(buffer_type),
-            num_banks);
-    }
+    // if (not valid_num_banks) {
+    //     TT_THROW(
+    //         "Invalid number of memory banks for {}. Num banks must be power of 2 or have a dedicated modulo "
+    //         "implementation",
+    //         magic_enum::enum_name(buffer_type),
+    //         num_banks);
+    // }
 }
 
 BankManager::BankManager(const BufferType &buffer_type, const std::vector<int64_t> &bank_offsets, uint64_t size_bytes, uint64_t alloc_offset) : buffer_type_(buffer_type) {

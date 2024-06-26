@@ -359,6 +359,7 @@ class SystemMemoryManager {
                 dispatch_core_manager::get(num_hw_cqs).prefetcher_core(device_id, channel, cq_id);
             tt_cxy_pair prefetcher_physical_core =
                 tt_cxy_pair(prefetcher_core.chip, tt::get_physical_core_coordinate(prefetcher_core, core_type));
+            std::cout << "Cq_id: " << +cq_id << " " << "prefetcher: " << prefetcher_physical_core.str() << std::endl;
             this->prefetcher_cores[cq_id] = prefetcher_physical_core;
             this->prefetch_q_writers.emplace_back(tt::Cluster::instance().get_static_tlb_writer(prefetcher_physical_core));
 
@@ -497,7 +498,7 @@ class SystemMemoryManager {
         }
 
         uint32_t issue_q_write_ptr = this->get_issue_queue_write_ptr(cq_id);
-        // std::cout << "Issue queue wptr: " << issue_q_write_ptr << std::endl;
+        std::cout << "Issue queue wptr: " << issue_q_write_ptr << std::endl;
         const uint32_t command_issue_limit = this->get_issue_queue_limit(cq_id);
         if (issue_q_write_ptr + align(cmd_size_B, PCIE_ALIGNMENT) > command_issue_limit) {
             this->wrap_issue_queue_wr_ptr(cq_id);
@@ -662,6 +663,7 @@ class SystemMemoryManager {
         if (stall_prefetcher) {
             command_size_16B |= (1 << ((sizeof(dispatch_constants::prefetch_q_entry_type) * 8) - 1));
         }
+        std::cout << "Sent fetch_q update to: " << this->prefetch_q_dev_ptrs[cq_id] << " " << " for : "  << cq_id << std::endl;
         this->prefetch_q_writers[cq_id].write(this->prefetch_q_dev_ptrs[cq_id], command_size_16B);
         this->prefetch_q_dev_ptrs[cq_id] += sizeof(dispatch_constants::prefetch_q_entry_type);
     }

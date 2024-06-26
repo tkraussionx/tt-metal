@@ -593,7 +593,7 @@ public:
             return 0;
         }
         uint32_t num_words_remaining = this->get_curr_packet_words_remaining();
-        DPRINT << "Num Words: " << num_words << " " <<  num_words_remaining << ENDL();
+        // DPRINT << "Num Words: " << num_words << " " <<  num_words_remaining << ENDL();
         num_words = std::min(num_words, num_words_remaining);
         return num_words;
     }
@@ -905,7 +905,7 @@ public:
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
-
+        DPRINT << "Cmd: " << *((uint8_t*)(src_addr));
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);
@@ -973,7 +973,7 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                                input_queue_array[i].is_remote_ready();
 
                 if (!src_ready[i]) {
-                    DPRINT << "SRC NOT READY " << i << " " << (int)(input_queue_array[i].is_packetizer_input()) << ENDL();
+                    // DPRINT << "SRC NOT READY " << i << " " << (int)(input_queue_array[i].is_packetizer_input()) << ENDL();
                     input_queue_array[i].send_remote_ready_notification();
                     all_src_dest_ready = false;
                 } else {
@@ -989,7 +989,7 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 if (dest_ready[i]) {
                     output_queue_array[i].send_remote_ready_notification();
                 } else {
-                    DPRINT << "DST NOT READY" << ENDL();
+                    // DPRINT << "DST NOT READY" << ENDL();
                     all_src_dest_ready = false;
                 }
             }

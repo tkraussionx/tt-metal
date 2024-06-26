@@ -271,7 +271,8 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // By here, prefetch_q_ready must be false
             // Nothing to fetch, nothing pending, nothing available, stall on host
             DEBUG_STATUS("HQW");
-            DPRINT << "fetch_q_get_cmds stall" << ENDL();
+            DPRINT << "fetch_q_get_cmds stall on addr: " << (uint32_t)(prefetch_q_rd_ptr) << " " <<  MY_NOC_X << " " << MY_NOC_Y << ENDL();
+
             while ((fetch_size = *prefetch_q_rd_ptr) == 0);
             fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
             DEBUG_STATUS("HQD");

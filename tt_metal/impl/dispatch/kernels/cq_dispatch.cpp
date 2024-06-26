@@ -226,6 +226,7 @@ void process_write_host_h() {
             host_completion_queue_write_addr = get_noc_addr_helper(pcie_noc_xy, completion_queue_write_addr);
             block_noc_writes_to_clear[rd_block_idx]+=(last_chunk_size + NOC_MAX_BURST_SIZE - 1) / NOC_MAX_BURST_SIZE; // XXXXX maybe just write the noc internal api counter
         }
+        DPRINT << "Writing: " << *((int*)(data_ptr)) << " " << *((int*)(data_ptr) + 1) << " " << *((int*)(data_ptr) + 2) << " " << *((int*)(data_ptr) + 3) << ENDL();
         noc_async_write(data_ptr, host_completion_queue_write_addr, xfer_size);
         // This will update the write ptr on device and host
         // We flush to ensure the ptr has been read out of l1 before we update it again
@@ -931,6 +932,7 @@ void kernel_main() {
         // in case dispatch_h is connected to a depacketizing stage.
         // TODO: This should be replaced with a signal similar to what packetized
         // components use.
+        DPRINT << "Updating Semaphore for: " << UPSTREAM_NOC_X << " " << UPSTREAM_NOC_Y <<ENDL();
         noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_dispatch_cb_sem_id)), 0x80000000);
     }
 
