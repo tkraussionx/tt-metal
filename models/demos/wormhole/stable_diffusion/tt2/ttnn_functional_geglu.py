@@ -100,10 +100,10 @@ class geglu:
             M, K, N, grid_size
         )
         # TODO: https://github.com/tenstorrent/tt-metal/issues/7560
-        if size == 512:
-            out_subblock_h = 1
-            out_subblock_w = 1
-        program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        # if size == 512:
+        #     out_subblock_h = 1
+        #     out_subblock_w = 1
+        program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
             in0_block_w=in0_block_w,
             out_subblock_h=out_subblock_h,
@@ -113,13 +113,15 @@ class geglu:
             transpose_mcast=False,
             fused_activation=None,
         )
-        proj = ttnn.linear(
+        proj = ttnn.experimental.operations.primary.matmul(
             hidden_states,
             self.parameters.proj.proj_weight,
             bias=self.parameters.proj.proj_bias,
             program_config=program_config,
-            memory_config=self.l1_interleaved_memory_config if interleaved_output else self.block_sharded_memory_config,
-            dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+            output_mem_config=self.l1_interleaved_memory_config
+            if interleaved_output
+            else self.block_sharded_memory_config,
+            output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
             compute_kernel_config=self.compute_kernel_config,
         )
         if interleaved_output:
@@ -133,7 +135,7 @@ class geglu:
         if hidden_states.shape[-2] == 8192:
             proj = ttnn.reallocate(proj)
 
-        program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=grid_size,
             in0_block_w=in0_block_w,
             out_subblock_h=out_subblock_h,
@@ -143,13 +145,15 @@ class geglu:
             transpose_mcast=False,
             fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
         )
-        gate = ttnn.linear(
+        gate = ttnn.experimental.operations.primary.matmul(
             hidden_states,
             self.parameters.proj.gate_weight,
             bias=self.parameters.proj.gate_bias,
             program_config=program_config,
-            memory_config=self.l1_interleaved_memory_config if interleaved_output else self.block_sharded_memory_config,
-            dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+            output_mem_config=self.l1_interleaved_memory_config
+            if interleaved_output
+            else self.block_sharded_memory_config,
+            output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
             compute_kernel_config=self.compute_kernel_config,
         )
         if interleaved_output:

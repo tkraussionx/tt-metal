@@ -118,6 +118,7 @@ def test_geglu_256x256(device, model_name, N, C, H, W, index, reset_seeds):
             1,
         ),
     ],
+    ids=["4096x320", "1024x640", "256x1280", "64x1280"],
 )
 def test_geglu_512x512(device, model_name, N, C, H, W, index, reset_seeds):
     input_shapes = (N, C, H, W)
@@ -140,10 +141,12 @@ def test_geglu_512x512(device, model_name, N, C, H, W, index, reset_seeds):
     ttnn_hidden_state = ttnn.from_torch(torch_hidden_states, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
     ttnn_hidden_state = ttnn.to_device(ttnn_hidden_state, device)
 
-    output = model(config, ttnn_hidden_state)
-    output = ttnn.from_device(output)
-    output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
-    output = ttnn.to_torch(output)
-    output = output.reshape(1, 2, output.shape[-2] // 2, output.shape[-1])
+    for i in range(3000):
+        output = model(config, ttnn_hidden_state)
+        output = ttnn.from_device(output)
+        output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
+        output = ttnn.to_torch(output)
+        output = output.reshape(1, 2, output.shape[-2] // 2, output.shape[-1])
+        print(i)
 
     assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.99)
