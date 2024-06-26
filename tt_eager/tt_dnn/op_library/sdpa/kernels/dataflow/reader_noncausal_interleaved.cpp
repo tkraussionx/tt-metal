@@ -85,19 +85,19 @@ void kernel_main() {
     uint32_t barrier_count = 0;
 
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
-        DPRINT << "nb: " << nb << ENDL();
+        // DPRINT << "nb: " << nb << ENDL();
         const uint32_t q_batch_offset = nb * NKH * St * DHt;
         const uint32_t k_batch_offset = nb * NKH * St * DHt;
         const uint32_t v_batch_offset = nb * NKH * St * DHt;
         const uint32_t mask_batch_offset = nb * NKH * Sq_chunk_t * valid_seqlen_tiles;
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
-            DPRINT << "nq: " << nq << ENDL();
+            // DPRINT << "nq: " << nq << ENDL();
             // In decode mode, n1 = q_shape[1] is actually the batch dim
             const uint32_t kv_nh_offset = nq * St * DHt;
             const uint32_t mask_nh_offset = nq * Sq_chunk_t * valid_seqlen_tiles;
 
             for (uint32_t q_iter = 0; q_iter < q_chunks_per_core; ++q_iter) {
-                DPRINT << "q_iter: " << q_iter << ENDL();
+                // DPRINT << "q_iter: " << q_iter << ENDL();
 
                 // Q is available because it's a sharded input
                 cb_reserve_back(cb_q_in, q_chunk_tiles);
@@ -105,7 +105,7 @@ void kernel_main() {
 
                 // Loop over k_num_chunks, which is the number of chunks in `valid_seq_len`
                 for (uint32_t k_chunk = 0; k_chunk < k_num_chunks; ++k_chunk) {
-                    DPRINT << "k_chunk: " << k_chunk << ENDL();
+                    // DPRINT << "k_chunk: " << k_chunk << ENDL();
                     const uint32_t k_chunk_offset = k_chunk * Sk_chunk_t * DHt;
                     const uint32_t mask_chunk_offset = k_chunk * Sk_chunk_t;
 
@@ -118,7 +118,7 @@ void kernel_main() {
                     for (uint32_t col = 0; col < DHt; ++col) {
                         k_tile_id = k_start_tile_id + col;
                         for (uint32_t row = 0; row < Sk_chunk_t; ++row) {
-                            DPRINT << "k_tile_id: " << k_tile_id << ENDL();
+                            // DPRINT << "k_tile_id: " << k_tile_id << ENDL();
                             noc_async_read_tile(k_tile_id, k_reader, k_write_ptr);
                             k_tile_id += DHt;
                             k_write_ptr += k_tile_bytes;
@@ -140,7 +140,7 @@ void kernel_main() {
                     mask_tile_id = mask_batch_offset + mask_nh_offset + mask_chunk_offset;
                     for (uint32_t row = 0; row < Sq_chunk_t; ++row) {
                         for (uint32_t col = 0; col < Sk_chunk_t; ++col) {
-                            DPRINT << "mask_tile_id: " << mask_tile_id << ENDL();
+                            // DPRINT << "mask_tile_id: " << mask_tile_id << ENDL();
                             noc_async_read_tile(mask_tile_id, mask_reader, mask_write_ptr);
                             mask_tile_id += 1;
                             mask_write_ptr += mask_tile_bytes;
@@ -166,7 +166,7 @@ void kernel_main() {
                     uint32_t v_write_ptr = get_write_ptr(cb_v_in);
                     barrier_count = 0;
                     for (uint32_t tile = 0; tile < k_chunk_tiles; ++tile) {
-                        DPRINT << "v_tile_id: " << v_tile_id << ENDL();
+                        // DPRINT << "v_tile_id: " << v_tile_id << ENDL();
                         noc_async_read_tile(v_tile_id, v_reader, v_write_ptr);
                         v_tile_id += 1;
                         v_write_ptr += v_tile_bytes;
