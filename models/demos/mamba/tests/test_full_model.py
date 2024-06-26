@@ -57,18 +57,20 @@ def run_inference(
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     input_ids = tokenizer("Hello", return_tensors="pt")["input_ids"]
     input_ids = input_ids.repeat(batch, 1)
-
+    incremental_inputs = input_ids.clone()
     mamba_model_pytorch = MambaPytorch(reference_model, num_layers)
     mamba_model_pytorch.eval()
     for _ in range(iterations):
         with torch.no_grad():
-            reference_output = mamba_model_pytorch(input_ids)
+            reference_output = mamba_model_pytorch(incremental_inputs)
+        incremental_inputs = incremental_inputs + 0
 
     config = model_config.create_model_config(batch, reference_model.args.d_model)
     mamba_model_tt = MambaTT(reference_model, device, config, tt_cache_path=cache_dir, num_layers=num_layers)
 
     for _ in range(iterations):
         tt_output = mamba_model_tt(input_ids)
+        input_ids = input_ids + 0
 
     logger.info(comp_allclose(reference_output, tt_output))
 
@@ -89,7 +91,7 @@ def run_inference(
             32,
             0.98,
             64,
-            1,
+            32,
         ),
     ),
 )

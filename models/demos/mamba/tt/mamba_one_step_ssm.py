@@ -128,13 +128,26 @@ class TtMambaSSM(torch.nn.Module):
         )
         ttnn.deallocate(delta_t0)
 
-        delta_t2 = ttnn.softplus(
-            delta_t1,
-            beta=1.0,
-            threshold=20.0,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
-        )
-        ttnn.deallocate(delta_t1)
+        torch_softplus = False
+        if torch_softplus:
+            delta_t1_torch = ttnn.to_torch(delta_t1)
+            ttnn.deallocate(delta_t1)
+            delta_t2 = torch.nn.functional.softplus(delta_t1_torch, beta=1.0, threshold=20.0)
+            delta_t2 = ttnn.from_torch(
+                delta_t2,
+                device=self.device,
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                dtype=self.configs["dtype"]["activations"],
+            )
+        else:
+            delta_t2 = ttnn.softplus(
+                delta_t1,
+                beta=1.0,
+                threshold=20.0,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+            )
+            ttnn.deallocate(delta_t1)
 
         # calculate abar
         abar0 = ttnn.to_memory_config(self.A, memory_config=ttnn.L1_MEMORY_CONFIG)
