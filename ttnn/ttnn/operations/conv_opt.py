@@ -124,7 +124,7 @@ def opimized_conv_new_1(
         out_subblock_h_ntiles=out_subblock_h,
         out_subblock_w_ntiles=out_subblock_w,
     )
-    ttnn._ttnn.operations.conv2d.opt_conv(
+    output = ttnn._ttnn.operations.conv2d.opt_conv(
         input_tensor=input_tensor,
         weight_tensor=weight_tensor,
         device=device,
@@ -142,7 +142,7 @@ def opimized_conv_new_1(
         use_shallow_conv_variant=use_shallow_conv_variant,
     )
 
-    return
+    return output
 
 
 __all__ = []

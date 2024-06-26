@@ -31,7 +31,10 @@ def test_new_conv(device):
     weight_shape = [1, 1, weight_batch * filter_height * filter_width, input_channel]
     torch_input = torch.rand(input_shape, dtype=torch.bfloat16) * 2 - 1
     torch_weight = torch.rand(weight_shape, dtype=torch.bfloat16) * 2 - 1
-    tt_input = ttnn.from_torch(torch_input, device=device, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
+    for i in range(batch_size * input_height * input_width):
+        for j in range(input_channel):
+            torch_input[0, 0, i, j] = j + 0.01 * i
+    tt_input = ttnn.from_torch(torch_input, device=device, dtype=ttnn.bfloat16)
     tt_weight = ttnn.from_torch(torch_weight, device=device, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
     input_2d_height = batch_size * input_height * input_width
     shard_height = batch_size * input_height * input_width
@@ -48,7 +51,7 @@ def test_new_conv(device):
     input_tensor = ttnn.to_memory_config(tt_input, memory_config=in_sharded_mem_config)
     input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
     ##op computation
-    ttnn.opimized_conv_new_1(
+    output = ttnn.opimized_conv_new_1(
         input_tensor,
         tt_weight,
         device,
@@ -61,5 +64,6 @@ def test_new_conv(device):
         ttnn.MathFidelity.HiFi4,
         10,
     )
+    print(output)
     # ttnn.opimized_abc([1, 1, 1, 1], 1024, True, True)
     # ttnn.opimized_conv_new_1(tt_input, tt_weight, [1, 1, 1, 1], 1024, True, True)

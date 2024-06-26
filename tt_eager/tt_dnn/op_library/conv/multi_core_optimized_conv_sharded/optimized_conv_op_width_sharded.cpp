@@ -657,11 +657,11 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
     std::set<CoreRange> all_active_cores_set;
     all_active_cores_set.insert(
         CoreRange(CoreCoord(0, 0), CoreCoord(num_active_cores_x - 1, num_active_cores_y_with_full_x - 1)));
-    if (num_active_cores_x_last_y > 0) {
+    /*if (num_active_cores_x_last_y > 0) {
         all_active_cores_set.insert(CoreRange(
             CoreCoord(0, num_active_cores_y_with_full_x),
             CoreCoord(num_active_cores_x_last_y - 1, num_active_cores_y_with_full_x)));
-    }
+    }*/
     CoreRangeSet all_active_cores(all_active_cores_set);
     std::set<CoreRange> noop_cores_set;
     if (total_noop_cores > 0) {
@@ -818,13 +818,13 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
             assert(read_3x3_window_in_inner_loop == true);
             reader_kernel =
                 "tt_eager/tt_dnn/op_library/conv/kernels/"
-                "reader_conv_activations_2d_mcast_padded_with_halo_3x3_weights_v2.cpp";
+                "reader_conv_width_activations_2d_mcast_padded_with_halo_3x3_weights_v2.cpp";
             writer_mcast_sender_kernel =
                 "tt_eager/tt_dnn/op_library/conv/kernels/"
-                "writer_tiled_out_2d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
+                "writer_width_tiled_out_2d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
             writer_mcast_receiver_kernel =
                 "tt_eager/tt_dnn/op_library/conv/kernels/"
-                "writer_tiled_out_2d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
+                "writer_width_tiled_out_2d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
             act_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
             act_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
@@ -911,8 +911,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
         (uint32_t)num_blocks_act_h_per_core,                              // act_num_blocks_h
         (uint32_t)in0_block_num_tiles,                                    // act_block_num_tiles
         (uint32_t)conv_act_c_blocks,                                      // act_w_num_outer
-        (uint32_t)(transpose_mcast ? num_cores_y - 1 : num_cores_x - 1),  // act_mcast_num_dests
-        (uint32_t)(transpose_mcast ? num_cores_y - 1 : num_cores_x - 1),  // act_mcast_num_cores
+        (uint32_t)(total_active_num_cores - 1),  // act_mcast_num_dests
+        (uint32_t)(total_active_num_cores - 2),  // act_mcast_num_cores
         (uint32_t)act_mcast_sender_semaphore,
         (uint32_t)act_mcast_receiver_semaphore,
         (uint32_t)in0_block_num_tiles * tilized_act_tile_size,  // act_mcast_sender_size_bytes
@@ -1075,6 +1075,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
             .fp32_dest_acc_en = fp32_dest_acc_en,
             .compile_args = compute_kernel_args,
             .defines = compute_defines});
+    std::cout << "compute kernel name -> " << compute_kernel << std::endl;
+    std::cout << "pure_reader -> " << reader_kernel << std::endl;
+    std::cout << "mcast_reader -> " << writer_mcast_sender_kernel << std::endl;
+    std::cout << "mcast_writer -> " << writer_mcast_receiver_kernel << std::endl;
 
     for (uint32_t core_i = 0; core_i < total_active_num_cores; core_i++) {
         uint32_t core_x_i = core_i % num_cores_x;
@@ -1126,8 +1130,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
                     act_mcast_dest_noc_start_y,
                     act_mcast_dest_noc_end_x,
                     act_mcast_dest_noc_end_y,
-                    core_y_i,                          // act_mcast_sender_id (goes down the column)
+                    core_i,                          // act_mcast_sender_id (goes down the column)
                     (uint32_t)bottom_core_physical.x,  // act_mcast_sender_noc_x
+                    (uint32_t)bottom_core_physical.y,  // act_mcast_sender_noc_x
                 };
                 reader_rt_args.insert(
                     reader_rt_args.end(), act_mcast_noc_y.begin(), act_mcast_noc_y.end());  // act_mcast_sender_noc_y
@@ -1151,8 +1156,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
                     act_mcast_dest_noc_start_y,
                     act_mcast_dest_noc_end_x,
                     act_mcast_dest_noc_end_y,
-                    core_x_i,                   // act_mcast_sender_id (goes along the row)
+                    core_i,                   // act_mcast_sender_id (goes along the row)
                     (uint32_t)core_physical.y,  // act_mcast_sender_noc_x
+                    (uint32_t)core_physical.x,  // act_mcast_sender_noc_x
                 };
                 reader_rt_args.insert(
                     reader_rt_args.end(), act_mcast_noc_y.begin(), act_mcast_noc_y.end());  // act_mcast_sender_noc_y
