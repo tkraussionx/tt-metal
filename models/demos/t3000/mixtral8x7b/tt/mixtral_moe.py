@@ -112,7 +112,11 @@ class TtMoeLayer(LightweightModule):
 
         # MLP and masking
         weights = expert_i_HH(input_i_1SBH, mode=mode)
+
         results_11BH = ttnn.mul(weights, weights_1SB1)
+
+        weights.deallocate(True)
+        weights_1SB1.deallocate(True)
 
         # all gather
 

@@ -431,7 +431,7 @@ class TtMixtralAttention(LightweightModule):
             self.wo,
             core_grid=ttnn.CoreGrid(y=8, x=8) if not wo_program_config else None,
             compute_kernel_config=self.compute_kernel,
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             program_config=wo_program_config,
         )

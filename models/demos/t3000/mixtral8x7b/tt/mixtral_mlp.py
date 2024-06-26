@@ -92,12 +92,14 @@ class TtMixtralMLP(LightweightModule):
             w2_in = ttnn.multiply(w1_out, w3_out)  # , memory_config = ttnn.L1_MEMORY_CONFIG)
 
             w3_out.deallocate(True)
+            w1_out.deallocate(True)
+
             w2_out = ttnn.linear(
                 w2_in,
                 self.w2,
                 compute_kernel_config=compute_kernel_config,
                 core_grid=ttnn.CoreGrid(y=8, x=8) if not pc_2 else None,
-                dtype=ttnn.bfloat16,
+                dtype=ttnn.bfloat8_b,
                 program_config=pc_2,
             )
 
