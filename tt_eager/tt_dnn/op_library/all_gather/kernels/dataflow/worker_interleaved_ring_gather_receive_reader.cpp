@@ -57,6 +57,8 @@ void kernel_main() {
             push_filler_pages_to_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
             transfers_completed++;
         }
+        DPRINT << "RR done transfer " << i << "\n";
     }
 
+    DPRINT << "RR DONE";
 }
