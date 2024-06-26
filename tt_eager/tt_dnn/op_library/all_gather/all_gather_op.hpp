@@ -80,7 +80,7 @@ class AllGatherConfig {
 
         // "duplicate" directions are a short hand to enable linear/mesh all-gather topologies with
         // less code-changes. Ideally a new concept is added amongst "num_eth_buffers", "num_workers_per_link", etc.
-        uint32_t num_duplicate_directions = topology == all_gather_op::Topology::Ring ? 1 : 2;
+        uint32_t num_duplicate_directions = (topology == all_gather_op::Topology::Ring && bidirectional_mode != AllGatherBidirectionalMode::FULL_TENSOR) ? 1 : 2;
 
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 

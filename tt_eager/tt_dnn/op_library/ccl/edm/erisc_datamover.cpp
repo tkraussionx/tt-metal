@@ -106,28 +106,30 @@ struct sender_receiver_index_t {
     }
 };
 
+// COMPILE TIME ARGS
+// If true, will enable this erisc's sender functionality
+static constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
+
+// If true, will enable this erisc's receiver functionality
+static constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
+
+static constexpr uint32_t num_senders = get_compile_time_arg_val(2);
+static constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
+
+static constexpr tt::tt_metal::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
+    static_cast<tt::tt_metal::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
+
+static constexpr tt::tt_metal::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
+    static_cast<tt::tt_metal::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
+
+using EDM_CONFIG_T = erisc::datamover::EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal>;
+using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
+
 void kernel_main() {
-    // COMPILE TIME ARGS
-    // If true, will enable this erisc's sender functionality
-    constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
-
-    // If true, will enable this erisc's receiver functionality
-    constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
-
-    constexpr uint32_t num_senders = get_compile_time_arg_val(2);
-    constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
 
     DPRINT << "EDM (enable_sender | enable_receiver) " << uint32_t((enable_sender_side << 16) | enable_receiver_side) << ", on core " << (uint32_t)(my_y[0] << 16 | my_x[0]) << "\n";
 
-    constexpr tt::tt_metal::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
-        static_cast<tt::tt_metal::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
 
-    constexpr tt::tt_metal::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
-        static_cast<tt::tt_metal::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
-
-    constexpr auto EDM_CONFIG = erisc::datamover::EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal>();
-    using EDM_CONFIG_T = decltype(EDM_CONFIG);
-    using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
     std::array<ChannelBufferT, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> buffer_channels;
 
     //
