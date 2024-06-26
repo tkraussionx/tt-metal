@@ -40,7 +40,7 @@ inline void llk_setup_operands(bool apply_delay=false) {
     }
 
     if (apply_delay) {
-        tiles_proc_delay = 6144;  // Delay odd rows of cores
+        tiles_proc_delay = 6144*2;  // Delay odd rows of cores
     }
 }
 
