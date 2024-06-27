@@ -105,7 +105,7 @@ int main() {
 
         {
             DeviceZoneScopedMainN("ERISC-IDLE-FW");
-
+            DPRINT << "Dispatch Kernel Start" << ENDL();
             noc_index = mailboxes->launch.brisc_noc_id;
 
             //UC FIXME: do i need this?
@@ -132,7 +132,7 @@ int main() {
                 DEBUG_SANITIZE_NOC_ADDR(dispatch_addr, 4);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
             }
-
+            // DPRINT << "Dispatch Kernel Done" << ENDL();
             while (1) {
                 RISC_POST_HEARTBEAT(heartbeat);
             }
