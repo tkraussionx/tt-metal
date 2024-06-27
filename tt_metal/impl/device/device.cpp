@@ -756,7 +756,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[14] = 0; //prefetch_sync_sem
                     compile_args[15] = prefetch_d_settings.cb_pages; // prefetch_d only
                     compile_args[16] = prefetch_d_settings.consumer_semaphore_id; // prefetch_d only
-                    compile_args[17] = demux_d_settings.producer_semaphore_id; //prefetch_downstream_cb_sem, // prefetch_d only
+                    compile_args[17] = count; //demux_d_settings.producer_semaphore_id; //prefetch_downstream_cb_sem, // prefetch_d only
                     compile_args[18] = prefetch_d_settings.cb_log_page_size;
                     compile_args[19] = dispatch_constants::PREFETCH_D_BUFFER_BLOCKS; // prefetch_d only
                     compile_args[20] = true;  // is_dram_variant
@@ -790,10 +790,10 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[7] = dispatch_d_settings.command_queue_start_addr;
                     compile_args[8] = dispatch_d_settings.completion_queue_start_addr;
                     compile_args[9] = dispatch_d_settings.completion_queue_size;
-                    compile_args[10] = mux_d_settings.cb_start_address;
+                    compile_args[10] = mux_d_settings.cb_start_address + mux_d_settings.cb_size_bytes * count;
                     compile_args[11] = mux_d_settings.cb_size_bytes;
                     compile_args[12] = dispatch_d_settings.producer_semaphore_id; // unused: local ds semaphore
-                    compile_args[13] = mux_d_settings.consumer_semaphore_id; // unused: remote ds semaphore
+                    compile_args[13] = count; //mux_d_settings.consumer_semaphore_id; // unused: remote ds semaphore
                     compile_args[14] = sizeof(dispatch_packet_header_t); // preamble size
                     compile_args[15] = true,    // split_prefetcher
                     compile_args[16] = 0;
@@ -959,7 +959,9 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.clear();
                 //mux/demux need a semaphore per remote device in the tunnel.
                 //Tunnel includes the mmio device as well, so tunnel.size() - 1 is the number of remote devices.
-                settings.semaphores.resize(tunnel.size()-1);
+                // settings.semaphores.resize(tunnel.size()-1);
+                settings.semaphores.push_back(0);
+                settings.semaphores.push_back(0);
                 settings.producer_semaphore_id = 0;
                 settings.consumer_semaphore_id = 0;
                 tt_cxy_pair mux_location = dispatch_core_manager::get(num_hw_cqs).mux_core(device_id, channel, cq_id);
@@ -1019,7 +1021,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.consumer_semaphore_id = 0;
             settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
             settings.cb_log_page_size = dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE;
-            settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
+            settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages() / 2;
             settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
             tunnel_core_allocations[MUX_D].push_back(std::make_tuple(mux_d_location, settings));
             std::cout << " Remote Chip MUX on " << mux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
@@ -1032,7 +1034,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tunnel_core_allocations[DEMUX_D].push_back(std::make_tuple(demux_d_location, settings));
             std::cout << " Remote Chip DEMUX on " << demux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             settings.semaphores.clear();
-            uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
+            uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages() / 2;
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 settings.semaphores.push_back(0);// prefetch_d_sync_sem
                 settings.semaphores.push_back(0);// prefetch_d_upstream_cb_sem
@@ -1329,6 +1331,7 @@ void Device::compile_command_queue_programs() {
 
             auto [mux_core, mux_settings] = mmio_device_worker_variants[MUX][0];
             for (auto sem : mux_settings.semaphores) {
+                std::cout << "Creating Semaphore for mux: " << sem << std::endl;
                 //size of semaphores vector is number of needed semaphores on the core.
                 //Value of each vector entry is the initialization value for the semaphore.
                 tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_core, sem, mux_settings.dispatch_core_type);
@@ -1693,11 +1696,7 @@ bool Device::close() {
         if (hw_command_queue->manager.get_bypass_mode()) {
             hw_command_queue->record_end();
         }
-        std::cout << "Sending terminate command to CQ" << std::endl;
         hw_command_queue->terminate();
-        // tt_cxy_pair prefetch_core = tt_cxy_pair(0, tt_xy_pair())
-        // tt::Cluster::instance().read_core(
-        //             &fence, sizeof(uint32_t), prefetch_core);
     }
 
     tt_metal::detail::DumpDeviceProfileResults(this, true);
@@ -1805,7 +1804,7 @@ bool Device::close() {
     std::cout << std::endl;
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
 
-    // DprintServerDetach(this);
+    DprintServerDetach(this);
 
     // Assert worker cores
     CoreCoord grid_size = this->logical_grid_size();

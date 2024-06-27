@@ -290,6 +290,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
             noc_inline_dw_write(dst, xfer_size + preamble_size + not_end_of_cmd);
             block_noc_writes_to_clear[rd_block_idx]++;
             downstream_cb_data_ptr += preamble_size;
+            DPRINT << "RELAY TO: " << downstream_cb_data_ptr << ENDL();
             dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
             ASSERT(downstream_cb_data_ptr < downstream_cb_end);
         }
@@ -311,6 +312,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
                         if (downstream_cb_data_ptr == downstream_cb_end) {
                             downstream_cb_data_ptr = downstream_cb_base;
                         }
+                        DPRINT << "RELAY TO: " << downstream_cb_data_ptr << ENDL();
                         dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
                     }
                     cb_fence = dispatch_cb_base;

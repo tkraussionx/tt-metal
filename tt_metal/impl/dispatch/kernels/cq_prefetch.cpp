@@ -932,7 +932,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *dptr =
         (volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *)data_ptr;
     dptr->length = length;
-    DPRINT << "Length: " << length << ENDL(); // What does other cq config report? --> reports 192
+    DPRINT << "Length: " << length << ENDL();
     uint32_t npages = (length + downstream_cb_page_size - 1) >> downstream_cb_log_page_size;
 
     // Assume the dispatch buffer is big relative to cmddat command size that we can
@@ -953,7 +953,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
     if (downstream_pages_left >= npages) {
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(data_ptr + 32);
-        DPRINT << "Command0: " << (int)(cmd->base.cmd_id) << ENDL();
+        DPRINT << "Send Command: " << (int)(cmd->base.cmd_id)  << " to: " << downstream_data_ptr << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
@@ -961,7 +961,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
             volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(data_ptr + 32);
-            DPRINT << "Command1: " << (int)(cmd->base.cmd_id) << ENDL();
+            DPRINT << "Send Command: " << (int)(cmd->base.cmd_id)  << " to: " << downstream_data_ptr << ENDL();
             noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
             data_ptr += available;
             length -= available;
@@ -973,6 +973,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
 
     // XXXXX - painful syncing right now?  move this into get_cmds
     noc_async_writes_flushed();
+    DPRINT << "Sem Inc on: " << downstream_cb_sem_id << " " << npages << ENDL();
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages);
     DPRINT << "NOC ASYNC WRITE DONE" << ENDL();
     return fence;

@@ -146,6 +146,7 @@ void kernel_main() {
 
     for (uint32_t i = 0; i < mux_fan_in; i++) {
         DPRINT << "QueueStartAddrWords: " << rx_queue_start_addr_words + i*rx_queue_size_words << ENDL();
+        // DPRINT << "Input Sem ID: " << input_packetize_local_sem[i] << ENDL();
         input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
                              remote_rx_x[i], remote_rx_y[i], remote_rx_queue_id[i], remote_rx_network_type[i],
                              input_packetize[i], input_packetize_log_page_size[i],
@@ -191,6 +192,9 @@ void kernel_main() {
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
+            }
+            if (words_sent > 0) {
+                DPRINT << "Forwarded: " << words_sent << " for queue: " << curr_input << ENDL();
             }
             curr_input_partial_packet_sent = !full_packet_sent;
         }

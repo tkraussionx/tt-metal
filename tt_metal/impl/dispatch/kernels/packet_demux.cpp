@@ -231,7 +231,7 @@ void kernel_main() {
                 break;
             }
         }
-        DPRINT << "CHECKING FOR VALID PACKET" << ENDL();
+        // DPRINT << "CHECKING FOR VALID PACKET" << ENDL();
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
             DPRINT << "Dest id: " << dest  << ENDL();
@@ -246,6 +246,7 @@ void kernel_main() {
         all_outputs_finished = true;
         for (uint32_t i = 0; i < demux_fan_out; i++) {
             output_queues[i].prev_words_in_flight_check_flush();
+            // DPRINT << "Demux output finished " << i <<  " " << (int)(output_queues[i].is_remote_finished());
             all_outputs_finished &= output_queues[i].is_remote_finished();
         }
     }
@@ -261,6 +262,7 @@ void kernel_main() {
     }
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
+    // DPRINT << "Demux Finished" << ENDL();
     if (!timeout) {
         test_results[PQ_TEST_MISC_INDEX] = 0xff000003;
         input_queue.send_remote_finished_notification();

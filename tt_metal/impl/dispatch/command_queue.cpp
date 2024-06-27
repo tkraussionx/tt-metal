@@ -1063,12 +1063,8 @@ void EnqueueRecordEventCommand::process() {
     std::vector<uint32_t> event_payload(dispatch_constants::EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
     event_payload[0] = this->event_id;
 
-    uint8_t num_hw_cqs = 1;
-        // this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
-    // uint32_t packed_event_payload_sizeB =
-    //     align(sizeof(CQDispatchCmd) + (device->is_mmio_capable() ? num_hw_cqs : 1) * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT) +
-    //     (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * (device->is_mmio_capable() ? num_hw_cqs : 1));
-
+    uint8_t num_hw_cqs =
+        this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
     uint32_t packed_event_payload_sizeB =
         align(sizeof(CQDispatchCmd) + num_hw_cqs * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT) +
         (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * num_hw_cqs);
@@ -1105,15 +1101,16 @@ void EnqueueRecordEventCommand::process() {
         }
 
         CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, core_type);
+        uint8_t noc_idx = (this->device->id()) ? 0  : this->noc_index;
+        std::cout << "Dispatch Core: " << this->device->id() << " " << dispatch_physical_core.str() << " " << +(noc_idx) << " " << this->device->get_noc_unicast_encoding(noc_idx, dispatch_physical_core) << std::endl;
         unicast_sub_cmds[cq_id] = CQDispatchWritePackedUnicastSubCmd{
-            .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, dispatch_physical_core)};
+            .noc_xy_addr = this->device->get_noc_unicast_encoding( noc_idx /* this->noc_index*/, dispatch_physical_core)};
         event_payloads[cq_id] = {event_payload.data(), event_payload.size() * sizeof(uint32_t)};
-        std::cout << "Send record even command to: " << this->device->id() << " " << cq_id << " " << dispatch_physical_core.str() << std::endl;
     }
 
     uint32_t address = this->command_queue_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
     command_sequence.add_dispatch_write_packed<CQDispatchWritePackedUnicastSubCmd>(
-        device->is_mmio_capable() ? num_hw_cqs : 1,
+        num_hw_cqs,
         address,
         dispatch_constants::EVENT_PADDED_SIZE,
         packed_event_payload_sizeB,
@@ -1219,7 +1216,6 @@ void EnqueueTerminateCommand::process() {
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
     // dispatch and prefetch terminate commands each needs to be a separate fetch queue entry
-    std::cout << "Process Terminate for: " << this->command_queue_id << std::endl;
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
     HugepageDeviceCommand dispatch_command_sequence(cmd_region, cmd_sequence_sizeB);
     dispatch_command_sequence.add_dispatch_terminate();
@@ -1233,7 +1229,6 @@ void EnqueueTerminateCommand::process() {
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
-    std::cout << "Terminate processed" << std::endl;
 }
 
 // HWCommandQueue section
@@ -1659,9 +1654,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     }
 
     if (blocking) {
-        std::cout << "Calling finish" << std::endl;
         this->finish();
-        std::cout << "Done" << std::endl;
     }
 
     // else {
@@ -2056,9 +2049,7 @@ void HWCommandQueue::finish() {
     ZoneScopedN("HWCommandQueue_finish");
     tt::log_debug(tt::LogDispatch, "Finish for command queue {}", this->id);
     std::shared_ptr<Event> event = std::make_shared<Event>();
-    std::cout << "Send record event" << std::endl;
     this->enqueue_record_event(event);
-    std::cout << "Record Event Done" << std::endl;
     if (tt::llrt::OptionsG.get_test_mode_enabled()) {
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads) {
             if (DPrintServerHangDetected()) {
