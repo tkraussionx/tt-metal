@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
 #include <stdint.h>
 
 #include "dataflow_api.h"
@@ -98,7 +97,7 @@ void kernel_main() {
     uint64_t in0_mcast_receiver_semaphore_noc_addr =
         in0_multicast_data_noc | (uint64_t)in0_mcast_receiver_semaphore_addr;
 
-    noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+    // noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, VALID);
 
     cb_reserve_back(cb_id_in2, batch * in0_block_num_tiles);
 
@@ -121,7 +120,7 @@ void kernel_main() {
             // produce work participate in receiving.
             if constexpr (core_in_in0_receiver_mcast_grid) {
                 // Set in0 semaphore value to INVALID
-                noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
+                // noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
             }
 
             if (block_id == sender_id) {
@@ -136,13 +135,13 @@ void kernel_main() {
                     noc_shard_read_start_addr += shard_read_width;
 
                     for (uint32_t i = 0; i < shard_height_in_tiles; i++) {
-                        noc_async_read(noc_shard_read_addr, l1_write_extract_shard_in0, shard_read_width);
+                        // noc_async_read(noc_shard_read_addr, l1_write_extract_shard_in0, shard_read_width);
 
                         l1_write_extract_shard_in0 += shard_read_width;
                         noc_shard_read_addr += shard_read_stride;
                     }
 
-                    noc_async_read_barrier();
+                    // noc_async_read_barrier();
                 }
 
                 // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its
@@ -150,12 +149,12 @@ void kernel_main() {
                 // block
                 if constexpr (core_in_in0_receiver_mcast_grid) {
                     // wait for every core in receiver grid EXCLUDING myself
-                    noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests - 1);
+                    // noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests - 1);
                 } else {
                     // wait for every core in receiver grid
-                    noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
+                    // noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
                 }
-                noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
+                // noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
 
                 // Now we have the block in the CB address, we can mcast to dests!
                 uint64_t in0_multicast_data_addr = in0_multicast_data_noc | l1_write_addr_in0;
@@ -167,26 +166,26 @@ void kernel_main() {
                         // Skip if there are no other cores since this core already has the data.
                         // Note: noc_async_write_multicast would hang if called with 0 cores.
                         if constexpr (in0_mcast_num_cores > 1) {
-                            noc_async_write_multicast(
-                                    local_read_addr,
-                                    in0_multicast_data_addr,
-                                    in0_block_size_bytes,
-                                    in0_mcast_num_cores - 1,
-                                    false,
-                                    false);
+                            // noc_async_write_multicast(
+                            //         local_read_addr,
+                            //         in0_multicast_data_addr,
+                            //         in0_block_size_bytes,
+                            //         in0_mcast_num_cores - 1,
+                            //         false,
+                            //         false);
                         }
                     }
                     // Mcast from different CB to another CB
                     else {
                         // multicast to every core in receiver grid
                         // will be a no-op if there is only one core that is the sender and receiver.
-                        noc_async_write_multicast_loopback_src(
-                            local_read_addr,
-                            in0_multicast_data_addr,
-                            in0_block_size_bytes,
-                            in0_mcast_num_cores,
-                            false,
-                            false);
+                        // noc_async_write_multicast_loopback_src(
+                        //     local_read_addr,
+                        //     in0_multicast_data_addr,
+                        //     in0_block_size_bytes,
+                        //     in0_mcast_num_cores,
+                        //     false,
+                        //     false);
                     }
 
                     // We should also multicast the flag to destinations
@@ -196,31 +195,31 @@ void kernel_main() {
                         // Data needs to be written directly in the core.
                         in0_mcast_receiver_semaphore_addr_ptr[0] = in0_mcast_sender_semaphore_valid_addr_ptr[0];
                     } else {
-                        noc_semaphore_set_multicast_loopback_src(
-                                in0_mcast_sender_semaphore_valid_addr,
-                                in0_mcast_receiver_semaphore_noc_addr,
-                                in0_mcast_num_cores,
-                                false,
-                                false);
+                        // noc_semaphore_set_multicast_loopback_src(
+                        //         in0_mcast_sender_semaphore_valid_addr,
+                        //         in0_mcast_receiver_semaphore_noc_addr,
+                        //         in0_mcast_num_cores,
+                        //         false,
+                        //         false);
                     }
                 } else {
                     // If we are not part of receiver grid, always do a regular noc_async_write_multicast to all cores
                     // in receiver grid
-                    noc_async_write_multicast(
-                        local_read_addr,
-                        in0_multicast_data_addr,
-                        in0_block_size_bytes,
-                        in0_mcast_num_cores,
-                        false,
-                        false);
+                    // noc_async_write_multicast(
+                    //     local_read_addr,
+                    //     in0_multicast_data_addr,
+                    //     in0_block_size_bytes,
+                    //     in0_mcast_num_cores,
+                    //     false,
+                    //     false);
 
                     // We should also multicast the flag to destinations
-                    noc_semaphore_set_multicast(
-                        in0_mcast_sender_semaphore_valid_addr,
-                        in0_mcast_receiver_semaphore_noc_addr,
-                        in0_mcast_num_cores,
-                        false,
-                        false);
+                    // noc_semaphore_set_multicast(
+                    //     in0_mcast_sender_semaphore_valid_addr,
+                    //     in0_mcast_receiver_semaphore_noc_addr,
+                    //     in0_mcast_num_cores,
+                    //     false,
+                    //     false);
                 }
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc,
                 // same cmd_buf Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
@@ -230,12 +229,12 @@ void kernel_main() {
                 uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
 
                 // Atomic increment source core counter
-                noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
+                // noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
             }
 
             if constexpr (core_in_in0_receiver_mcast_grid) {
                 // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
-                noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+                // noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             }
 
             cb_push_back(cb_id_in0, in0_block_num_tiles);
