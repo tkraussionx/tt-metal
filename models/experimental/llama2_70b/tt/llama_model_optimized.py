@@ -271,9 +271,9 @@ class TtLlamaModel_optimized:
 
             attn_masks = ttnn.as_tensor(
                 attn_mask,
-                dtype=ttnn.bfloat8_b,
+                dtype=ttnn.bfloat16,
                 layout=ttnn.TILE_LAYOUT,
-                cache_file_name=cache_name(f"attn_masks_decode_{start_pos}"),
+                # cache_file_name=cache_name(f"attn_masks_decode_{start_pos}"),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 device=self.device_mesh,
@@ -284,6 +284,8 @@ class TtLlamaModel_optimized:
             attn_masks = tt_lib.tensor.repeat(
                 attn_masks, repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
             )
+            # if start_pos >= 30:
+            #     breakpoint()
 
         return (
             xs,
