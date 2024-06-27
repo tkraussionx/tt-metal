@@ -98,7 +98,7 @@ operation::ProgramWithCallbacks unary_sharded(const Tensor &input, Tensor &outpu
     std::map<string, string> kernel_defines;
     tt::tt_metal::KernelHandle unary_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/kernels/dataflow/reader_unary_sharded.cpp",
+        "ttnn/cpp/ttnn/operations/eltwise/unary/device/kernels/dataflow/reader_unary_sharded.cpp",
         all_cores,
         tt::tt_metal::ReaderDataMovementConfig(reader_compile_time_args, kernel_defines));
 
