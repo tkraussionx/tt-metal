@@ -59,6 +59,30 @@ def test_multiply_with_scalar(device, scalar):
     assert_with_pcc(torch_output_tensor, output, 0.9999)
 
 
+# fmt: o
+@pytest.mark.parametrize("scalar", [3.0, 0.125])
+# fmt: on
+def test_multiply_with_scalar_sharded(device, scalar):
+    torch_input_tensor_a = torch.arange(1024 * 32).reshape(32, 32, 32).to(dtype=torch.bfloat16)
+    torch_output_tensor = scalar * torch_input_tensor_a
+
+    shard_config = ttnn.create_sharded_memory_config(
+        shape=(32, 32),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    input_tensor_a = ttnn.from_torch(
+        torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, memory_config=shard_config, device=device
+    )
+    output = scalar * input_tensor_a
+    output = ttnn.to_torch(output)
+
+    assert_with_pcc(torch_output_tensor, output, 0.9999)
+    assert output.is_sharded()
+
+
 @pytest.mark.skip(reason="Unable to multiply scalar to tensor with int")
 # fmt: off
 @pytest.mark.parametrize("input_a,scalar", [
