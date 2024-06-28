@@ -153,16 +153,6 @@ def prepare_inputs_ttnn_prefill(x_bsh, device_mesh):
 
     x_1BSH = x_bsh.unsqueeze(0)
 
-    # input goes to L1
-    xs_1BSH = ttnn.from_torch(
-        x_1BSH,
-        device=device_mesh,
-        dtype=ttnn.bfloat16,
-        layout=ttnn.TILE_LAYOUT,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
-    )
-
     # Attention mask
     attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
     attn_mask_torch = torch.triu(attn_mask, diagonal=1)
@@ -177,6 +167,15 @@ def prepare_inputs_ttnn_prefill(x_bsh, device_mesh):
         mesh_mapper=ReplicateTensorToMesh(device_mesh),
     )
 
+    # input goes to L1
+    xs_1BSH = ttnn.from_torch(
+        x_1BSH,
+        device=device_mesh,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
     return xs_1BSH, attn_mask, attn_mask_torch
 
 

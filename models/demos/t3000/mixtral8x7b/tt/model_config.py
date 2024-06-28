@@ -411,8 +411,8 @@ class TtModelArgs:
             "SDPA_PROGCFG"
         ] = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
             compute_with_storage_grid_size=(8, 8),
-            q_chunk_size=128,
-            k_chunk_size=128,
+            q_chunk_size=64,
+            k_chunk_size=64,
         )
 
         self.model_config[

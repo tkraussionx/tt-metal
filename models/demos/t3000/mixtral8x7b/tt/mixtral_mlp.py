@@ -58,7 +58,7 @@ class TtMixtralMLP(LightweightModule):
         """
         if mode == "prefill":
             seq_len = x.shape[-2]
-            if seq_len > 2048:
+            if seq_len >= 2048 // 2:
                 x = ttnn.reshape(x, [1, seq_len // 1024, 1024, self.model_args.dim])
                 compute_kernel_config = self.prefill_mlp_config_8k
                 pc_1 = self.model_config["PREFILL_MLP_W1_PRG_CONFIG"]
@@ -105,7 +105,7 @@ class TtMixtralMLP(LightweightModule):
 
             w2_in.deallocate(True)
 
-            if seq_len > 2048:
+            if seq_len >= 2048:
                 w2_out = ttnn.reshape(w2_out, [1, 1, seq_len, self.model_args.dim])
 
             return w2_out
