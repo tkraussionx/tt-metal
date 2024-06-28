@@ -343,7 +343,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
 
     mm_h_to_4h_prog_cfg = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
-        in0_block_w=3,
+        in0_block_w=3,  # 6 in case of bfp4 weights
         out_subblock_h=1,
         out_subblock_w=1,  # 8,
         per_core_M=4,
@@ -355,7 +355,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
 
     mm_4h_to_h_prog_cfg = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
-        in0_block_w=8,
+        in0_block_w=8,  # 12 in case of bfp4 weights
         out_subblock_h=1,
         out_subblock_w=1,  # 6,
         per_core_M=4,
