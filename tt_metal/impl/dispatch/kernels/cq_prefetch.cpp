@@ -1076,6 +1076,7 @@ void kernel_main_d() {
     uint32_t fence = cmddat_q_base;
 
     bool done = false;
+    uint32_t heartbeat = 0;
     while (!done) {
         // cmds come in packed batches based on HostQ reads in prefetch_h
         // once a packed batch ends, we need to jump to the next page
@@ -1109,7 +1110,6 @@ void kernel_main_d() {
         // Move to next page
         cmd_ptr = round_up_pow2(cmd_ptr, cmddat_q_page_size);
 #if defined(COMPILE_FOR_IDLE_ERISC)
-        uint32_t heartbeat = 0;
         RISC_POST_HEARTBEAT(heartbeat);
 #endif
     }
@@ -1123,7 +1123,7 @@ void kernel_main_d() {
 }
 
 void kernel_main_hd() {
-
+    uint32_t heartbeat = 0;
     uint32_t cmd_ptr = cmddat_q_base;
     uint32_t fence = cmddat_q_base;
     bool done = false;
@@ -1138,7 +1138,6 @@ void kernel_main_hd() {
         done = process_cmd<false, false>(cmd_ptr, downstream_data_ptr, stride);
         cmd_ptr += stride;
 #if defined(COMPILE_FOR_IDLE_ERISC)
-        uint32_t heartbeat = 0;
         RISC_POST_HEARTBEAT(heartbeat);
 #endif
     }

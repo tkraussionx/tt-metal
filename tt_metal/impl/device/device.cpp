@@ -1034,7 +1034,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tunnel_core_allocations[DEMUX_D].push_back(std::make_tuple(demux_d_location, settings));
             std::cout << " Remote Chip DEMUX on " << demux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             settings.semaphores.clear();
-            uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages() / 2;
+            uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 settings.semaphores.push_back(0);// prefetch_d_sync_sem
                 settings.semaphores.push_back(0);// prefetch_d_upstream_cb_sem
