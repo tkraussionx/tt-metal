@@ -875,11 +875,11 @@ void memcpy(
     if (TT_METAL_SLOW_DISPATCH_MODE != nullptr) {
         TT_THROW("SLOW_DISPATCH is not supported for memcpy!");
     }
-    EnqueueReadBuffer(queue, src.device_buffer(), dst, true);
+    EnqueueReadBuffer(queue, src.device_buffer(), dst, blocking);
 }
 
 void memcpy(void* dst, const Tensor& src, const std::optional<std::size_t> transfer_size, bool blocking) {
-    memcpy(src.device()->command_queue(), dst, src, transfer_size, true);
+    memcpy(src.device()->command_queue(), dst, src, transfer_size, blocking);
 }
 
 void memcpy(CommandQueue& queue, Tensor& dst, const void* src, const std::optional<std::size_t> transfer_size) {
@@ -891,7 +891,7 @@ void memcpy(CommandQueue& queue, Tensor& dst, const void* src, const std::option
     if (TT_METAL_SLOW_DISPATCH_MODE != nullptr) {
         TT_THROW("SLOW_DISPATCH is not supported for memcpy!");
     }
-    EnqueueWriteBuffer(queue, dst.device_buffer(), src, true);
+    EnqueueWriteBuffer(queue, dst.device_buffer(), src, false);
 }
 
 void memcpy(Tensor& dst, const void* src, const std::optional<std::size_t> transfer_size) {
@@ -1007,14 +1007,14 @@ void write_tensor(Tensor host_tensor, Tensor device_tensor, uint8_t cq_id) {
                             auto host_storage = std::get<OwnedStorage>(async_safe_tensor.get_storage());
                             std::visit([&host_data](auto&& b) { host_data = b.begin(); }, host_storage.get_buffer());
                         }
-                        EnqueueWriteBuffer(worker->command_queue(cq_id), s.get_buffer(), host_data, true);
+                        EnqueueWriteBuffer(worker->command_queue(cq_id), s.get_buffer(), host_data, false);
                     } else if constexpr (std::is_same_v<MultiDeviceStorage, StorageType>) {
                         auto host_storage = std::get<MultiDeviceHostStorage>(async_safe_tensor.get_storage());
                         std::visit(
                             [worker_index, &host_data](auto&& b) { host_data = b.begin(); },
                             host_storage.get_buffer(worker_index));
                         EnqueueWriteBuffer(
-                            worker->command_queue(cq_id), s.get_buffer_for_device(worker), host_data, true);
+                            worker->command_queue(cq_id), s.get_buffer_for_device(worker), host_data, false);
                     }
                 },
                 device_tensor.get_storage());

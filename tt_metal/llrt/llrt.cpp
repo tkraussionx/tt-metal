@@ -362,7 +362,7 @@ void wait_until_cores_done(chip_id_t device_id,
             bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
 
             if (is_done) {
-                // log_info(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
+                log_debug(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
                 it = not_done_phys_cores.erase(it);
             } else {
                 ++it;
