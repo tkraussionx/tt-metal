@@ -250,10 +250,11 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             }
         }
 
+        int chip_id = device->id();
         clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED);
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED, chip_id);
         counter_clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED);
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED, chip_id);
     }
 
     for (uint32_t direction = 0; direction < num_full_send_directions; direction++) {

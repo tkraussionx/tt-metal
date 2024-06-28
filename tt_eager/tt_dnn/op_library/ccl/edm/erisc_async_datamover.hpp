@@ -383,12 +383,45 @@ FORCE_INLINE void eth_setup_handshake_second_half(std::uint32_t handshake_regist
 
 }
 
+template <typename EDM_CONFIG>
+FORCE_INLINE bool channel_can_make_progress(ChannelBuffer<EDM_CONFIG> const &edm_channel) {
+    switch (edm_channel.get_state()) {
+        case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_READY_FOR_ETH_TRANSFER:
+            // checked condition
+            return edm_channel.eth_is_receiver_channel_send_done();
+        case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_WAITING_FOR_ETH:
+            // checked condition
+            return edm_channel.eth_is_receiver_channel_send_acked() || edm_channel.eth_is_receiver_channel_send_done();
+
+        case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_WAITING_FOR_WORKER: // fallthrough
+            return edm_channel.is_local_semaphore_full();
+        case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_WAITING_FOR_WORKER:
+            // checked condition
+            return edm_channel.is_local_semaphore_full();
+            // return edm_channel.is_local_semaphore_full();
+
+        case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_WAITING_FOR_ETH:
+            // checked condition
+            return edm_channel.eth_bytes_are_available_on_channel();
+            // checked condition
+        case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_SIGNALING_WORKER: return true;
+            default :
+                // DPRINT << "ERR S \n";// << (uint32_t)sender_channel.get_state() << "\n";
+                return false;
+    }
+}
+
 
 FORCE_INLINE void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[4] = 1;
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[5] = 1;
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[6] = 0x1c0ffee1;
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[7] = 0x1c0ffee2;
+
+    // reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[8] = 0;
+    // reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[9] = 0;
+    // reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[10] = 0x4c0ffee1;
+    // reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[11] = 0x5c0ffee2;
 
     erisc_info->channels[0].receiver_ack = 0;
     for (uint32_t i = 1; i < eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS; i++) {
@@ -427,8 +460,8 @@ FORCE_INLINE void sender_eth_send_data_sequence_v2(ChannelBuffer<EDM_CONFIG> &se
     bool need_to_send_completion = sender_buffer_channel.is_send_completion_pending();
 
     if (!need_to_send_completion) {
-            {
-            DeviceZoneScopedN("EDM_TX_PAYLOAD");
+        {
+            //DeviceZoneScopedN("EDM_TX_PAYLOAD_V2");
             static constexpr std::size_t ETH_BYTES_TO_WORDS_SHIFT = 4;
             if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
                 *sender_buffer_channel.channel_bytes_sent_address = sender_buffer_channel.get_current_payload_size();
@@ -454,7 +487,7 @@ FORCE_INLINE void sender_eth_send_data_sequence_v2(ChannelBuffer<EDM_CONFIG> &se
     if constexpr (not EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
         if (need_to_send_completion && !eth_txq_is_busy()) {
             {
-                DeviceZoneScopedN("EDM_TX_PL_A");
+                //DeviceZoneScopedN("EDM_TX_PL_A");
             eth_send_payload_complete_signal_over_channel(
                 sender_buffer_channel.get_eth_transaction_channel(), sender_buffer_channel.get_current_payload_size());
             sender_buffer_channel.set_send_completion_pending(false);
@@ -465,86 +498,86 @@ FORCE_INLINE void sender_eth_send_data_sequence_v2(ChannelBuffer<EDM_CONFIG> &se
 
 }
 
-// template <typename EDM_CONFIG>
-// FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<EDM_CONFIG> &sender_buffer_channel) {
-//     bool did_something = false;
-//     if (sender_buffer_channel.eth_is_receiver_channel_send_done()) {
-//         bool need_to_send_completion = sender_buffer_channel.is_send_completion_pending();
+template <typename EDM_CONFIG>
+FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<EDM_CONFIG> &sender_buffer_channel) {
+    bool did_something = false;
+    if (sender_buffer_channel.eth_is_receiver_channel_send_done()) {
+        bool need_to_send_completion = sender_buffer_channel.is_send_completion_pending();
 
-//         if (!sender_buffer_channel.is_send_completion_pending() && !eth_txq_is_busy()) {
-//                 {
-//                 DeviceZoneScopedN("EDM_TX_PAYLOAD");
-//                 static constexpr std::size_t ETH_BYTES_TO_WORDS_SHIFT = 4;
-//                 if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
-//                     *sender_buffer_channel.channel_bytes_sent_address = sender_buffer_channel.get_current_payload_size();
-//                     *sender_buffer_channel.channel_bytes_acked_address = 0;
-//                 }
-//                 eth_send_bytes_over_channel_payload_only(
-//                     sender_buffer_channel.get_buffer_address(),
-//                     sender_buffer_channel.get_remote_eth_buffer_address(),
-//                     sender_buffer_channel.get_current_payload_size(),
-//                     sender_buffer_channel.get_eth_transaction_channel(),
-//                     sender_buffer_channel.get_current_payload_size(),
-//                     sender_buffer_channel.get_current_payload_size() >> ETH_BYTES_TO_WORDS_SHIFT);
+        if (!sender_buffer_channel.is_send_completion_pending() && !eth_txq_is_busy()) {
+                {
+                //DeviceZoneScopedN("EDM_TX_PAYLOAD");
+                static constexpr std::size_t ETH_BYTES_TO_WORDS_SHIFT = 4;
+                if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
+                    *sender_buffer_channel.channel_bytes_sent_address = sender_buffer_channel.get_current_payload_size();
+                    *sender_buffer_channel.channel_bytes_acked_address = 0;
+                }
+                eth_send_bytes_over_channel_payload_only(
+                    sender_buffer_channel.get_buffer_address(),
+                    sender_buffer_channel.get_remote_eth_buffer_address(),
+                    sender_buffer_channel.get_current_payload_size(),
+                    sender_buffer_channel.get_eth_transaction_channel(),
+                    sender_buffer_channel.get_current_payload_size(),
+                    sender_buffer_channel.get_current_payload_size() >> ETH_BYTES_TO_WORDS_SHIFT);
 
-//                 did_something = true;
-//                 if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
-//                     sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_ETH);
-//                 } else {
-//                     sender_buffer_channel.set_send_completion_pending(true);
-//                     need_to_send_completion = true;
-//                 }
-//             }
-//         }
+                did_something = true;
+                if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
+                    sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_ETH);
+                } else {
+                    sender_buffer_channel.set_send_completion_pending(true);
+                    need_to_send_completion = true;
+                }
+            }
+        }
 
-//         if constexpr (not EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
-//             if (need_to_send_completion && !eth_txq_is_busy()) {
-//                 {
-//                     DeviceZoneScopedN("EDM_TX_PL_A");
-//                 eth_send_payload_complete_signal_over_channel(
-//                     sender_buffer_channel.get_eth_transaction_channel(), sender_buffer_channel.get_current_payload_size());
-//                 sender_buffer_channel.set_send_completion_pending(false);
-//                 sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_ETH);
-//                 did_something = true;
-//                 }
-//             }
-//         }
-//     }
+        if constexpr (not EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
+            if (need_to_send_completion && !eth_txq_is_busy()) {
+                {
+                    //DeviceZoneScopedN("EDM_TX_PL_A");
+                eth_send_payload_complete_signal_over_channel(
+                    sender_buffer_channel.get_eth_transaction_channel(), sender_buffer_channel.get_current_payload_size());
+                sender_buffer_channel.set_send_completion_pending(false);
+                sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_ETH);
+                did_something = true;
+                }
+            }
+        }
+    }
 
-//     return did_something;
-// }
+    return did_something;
+}
 
-// template <typename EDM_CONFIG>
-// FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
-//     ChannelBuffer<EDM_CONFIG> &sender_buffer_channel, uint32_t &num_senders_complete) {
+template <typename EDM_CONFIG>
+FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
+    ChannelBuffer<EDM_CONFIG> &sender_buffer_channel, uint32_t &num_senders_complete) {
 
-//     DeviceZoneScopedN("EDM_TX_NOTIF_W");
-//     bool channel_done = false;
-//     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
-//         channel_done = sender_buffer_channel.all_messages_moved();
-//     } else if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
-//         // Nothing to do here because in this termination mode, we must check the signal in a different state
-//     } else {
-//         ASSERT(false);
-//     }
+    //DeviceZoneScopedN("EDM_TX_NOTIF_W");
+    bool channel_done = false;
+    if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
+        channel_done = sender_buffer_channel.all_messages_moved();
+    } else if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
+        // Nothing to do here because in this termination mode, we must check the signal in a different state
+    } else {
+        ASSERT(false);
+    }
 
-//     sender_buffer_channel.clear_local_semaphore();
-//     sender_buffer_channel.increment_worker_semaphores();
+    sender_buffer_channel.clear_local_semaphore();
+    sender_buffer_channel.increment_worker_semaphores();
 
-//     if (!channel_done) {
-//         sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_WORKER);
-//     } else {
-//         sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
-//         num_senders_complete++;
-//     }
+    if (!channel_done) {
+        sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_WORKER);
+    } else {
+        sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
+        num_senders_complete++;
+    }
 
-//     return true;
-// }
+    return true;
+}
 template <typename EDM_CONFIG>
 FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence_v2(
     ChannelBuffer<EDM_CONFIG> &sender_buffer_channel, uint32_t &num_senders_complete) {
 
-    DeviceZoneScopedN("EDM_TX_NOTIF_W");
+    //DeviceZoneScopedN("EDM_TX_NOTIF_W_V2");
     bool channel_done = false;
     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
         channel_done = sender_buffer_channel.all_messages_moved();
@@ -578,8 +611,10 @@ FORCE_INLINE void sender_eth_check_receiver_ack_sequence_v2(
     sender_buffer_channel.increment_messages_moved();
     sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_SIGNALING_WORKER);
     }
-    sender_notify_workers_if_buffer_available_sequence_v2(sender_buffer_channel, num_senders_complete);
 
+    // Don't need to guard as we can unconditionally notify the workers right away now that
+    // we're in the current state
+    sender_notify_workers_if_buffer_available_sequence_v2(sender_buffer_channel, num_senders_complete);
 }
 
 
@@ -592,7 +627,7 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(
                                            sender_buffer_channel.eth_is_receiver_channel_send_done();
     if (transimission_acked_by_receiver) {
         {
-        DeviceZoneScopedN("EDM_TX_GOT_RX_ACK");
+        //DeviceZoneScopedN("EDM_TX_GOT_RX_ACK");
         // eth_clear_sender_channel_ack(sender_buffer_channel.get_eth_transaction_channel());
         sender_buffer_channel.eth_clear_sender_channel_ack();
         sender_buffer_channel.increment_messages_moved();
@@ -614,52 +649,56 @@ FORCE_INLINE void sender_noc_receive_payload_ack_check_sequence_v2(
 
     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
         if (*sender_channel_buffer.local_semaphore_address == EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY) {
+            DPRINT << "WTF MATE\n";
             sender_channel_buffer.clear_local_semaphore();
             sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
             num_senders_complete++;
+            return;
         }
     }
 
     {
-    DeviceZoneScopedN("EDM_TX_GOT_DATA");
+    //DeviceZoneScopedN("EDM_TX_GOT_DATA_V2");
     // We can clear the semaphore, and wait for space on receiver
     // sender_channel_buffer.clear_local_semaphore();
     sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_READY_FOR_ETH_TRANSFER);
     }
 
-    erisc::datamover::sender_eth_send_data_sequence_v2(sender_channel_buffer);
+    if (channel_can_make_progress(sender_channel_buffer)) {
+        erisc::datamover::sender_eth_send_data_sequence_v2(sender_channel_buffer);
+    }
 
 }
 
-// template <typename EDM_CONFIG>
-// FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(
-//     ChannelBuffer<EDM_CONFIG> &sender_channel_buffer, uint32_t &num_senders_complete) {
-//     bool did_something = false;
+template <typename EDM_CONFIG>
+FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(
+    ChannelBuffer<EDM_CONFIG> &sender_channel_buffer, uint32_t &num_senders_complete) {
+    bool did_something = false;
 
-//     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
-//         if (*sender_channel_buffer.local_semaphore_address == EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY) {
-//             sender_channel_buffer.clear_local_semaphore();
-//             sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
-//             num_senders_complete++;
-//             return true;
-//         }
-//     }
+    if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
+        if (*sender_channel_buffer.local_semaphore_address == EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY) {
+            sender_channel_buffer.clear_local_semaphore();
+            sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
+            num_senders_complete++;
+            return true;
+        }
+    }
 
-//     bool read_finished = sender_channel_buffer.is_local_semaphore_full();
-//     if (read_finished) {
-//         {
-//         DeviceZoneScopedN("EDM_TX_GOT_DATA");
-//         // We can clear the semaphore, and wait for space on receiver
-//         // sender_channel_buffer.clear_local_semaphore();
-//         sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_READY_FOR_ETH_TRANSFER);
-//         did_something = true;
-//         }
+    bool read_finished = sender_channel_buffer.is_local_semaphore_full();
+    if (read_finished) {
+        {
+        //DeviceZoneScopedN("EDM_TX_GOT_DATA");
+        // We can clear the semaphore, and wait for space on receiver
+        // sender_channel_buffer.clear_local_semaphore();
+        sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_READY_FOR_ETH_TRANSFER);
+        did_something = true;
+        }
 
-//         erisc::datamover::sender_eth_send_data_sequence(sender_channel_buffer);
-//     }
+        erisc::datamover::sender_eth_send_data_sequence(sender_channel_buffer);
+    }
 
-//     return did_something;
-// }
+    return did_something;
+}
 
 /////////////////////////////////////////////
 //   RECEIVER SIDE HELPERS
@@ -668,21 +707,21 @@ FORCE_INLINE void sender_noc_receive_payload_ack_check_sequence_v2(
 /*
  *
  */
-// template <typename EDM_CONFIG>
-// FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<EDM_CONFIG> &buffer_channel) {
+template <typename EDM_CONFIG>
+FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<EDM_CONFIG> &buffer_channel) {
 
-//     DeviceZoneScopedN("EDM_RX_NOTIFY_WORKER");
+    //DeviceZoneScopedN("EDM_RX_NOTIFY_WORKER");
 
-//     buffer_channel.clear_local_semaphore();
-//     buffer_channel.increment_worker_semaphores();
-//     buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::RECEIVER_WAITING_FOR_WORKER);
+    buffer_channel.clear_local_semaphore();
+    buffer_channel.increment_worker_semaphores();
+    buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::RECEIVER_WAITING_FOR_WORKER);
 
-//     return true;
-// }
+    return true;
+}
 template <typename EDM_CONFIG>
 FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence_v2(ChannelBuffer<EDM_CONFIG> &buffer_channel) {
 
-    DeviceZoneScopedN("EDM_RX_NOTIFY_WORKER");
+    //DeviceZoneScopedN("EDM_RX_NOTIFY_WORKER_V2");
 
     buffer_channel.clear_local_semaphore();
     buffer_channel.increment_worker_semaphores();
@@ -703,6 +742,8 @@ FORCE_INLINE void receiver_eth_accept_payload_sequence_v2(
 
     buffer_channel.eth_receiver_channel_ack(eth_transaction_ack_word_addr);
     buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::RECEIVER_SIGNALING_WORKER);
+    // Can call unconditionally since we are only notifying the workers and that doesn't
+    // require any further checks
     receiver_eth_notify_workers_payload_available_sequence_v2(buffer_channel);
 }
 
@@ -715,7 +756,7 @@ FORCE_INLINE bool receiver_eth_accept_payload_sequence(
 
     if (buffer_channel.eth_bytes_are_available_on_channel()) {
 
-        DeviceZoneScopedN("EDM_RX_GET_PL");
+        //DeviceZoneScopedN("EDM_RX_GET_PL");
 
         if (!eth_txq_is_busy()) {
             {
@@ -745,8 +786,7 @@ FORCE_INLINE bool receiver_eth_accept_payload_sequence(
 template <typename EDM_CONFIG>
 FORCE_INLINE void receiver_noc_read_worker_completion_check_sequence_v2(
     ChannelBuffer<EDM_CONFIG> &buffer_channel,
-    uint32_t &num_receivers_complete,
-    uint32_t eth_transaction_complete_addr) {
+    uint32_t &num_receivers_complete) {
     bool workers_are_finished_reading = buffer_channel.is_local_semaphore_full();
 
     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
@@ -756,8 +796,7 @@ FORCE_INLINE void receiver_noc_read_worker_completion_check_sequence_v2(
             (*buffer_channel.local_semaphore_address == EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY);
     }
 
-        DeviceZoneScopedN("EDM_RX_DONE_PL");
-        // DeviceZoneScopedN("EDM_RX_SEND_DONE_PL");
+        //DeviceZoneScopedN("EDM_RX_DONE_PL_V2");
         // eth_receiver_channel_done(buffer_channel.get_eth_transaction_channel());
         buffer_channel.eth_receiver_channel_done();
         buffer_channel.increment_messages_moved();
@@ -782,8 +821,7 @@ FORCE_INLINE void receiver_noc_read_worker_completion_check_sequence_v2(
 template <typename EDM_CONFIG>
 FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
     ChannelBuffer<EDM_CONFIG> &buffer_channel,
-    uint32_t &num_receivers_complete,
-    uint32_t eth_transaction_complete_addr) {
+    uint32_t &num_receivers_complete) {
     bool did_something = false;
 
     bool workers_are_finished_reading = buffer_channel.is_local_semaphore_full();
@@ -797,7 +835,7 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
 
     bool can_notify_sender_of_buffer_available = workers_are_finished_reading;
     if (can_notify_sender_of_buffer_available) {
-        DeviceZoneScopedN("EDM_RX_DONE_PL");
+        // DeviceZoneScopedN("EDM_RX_DONE_PL");
         if (!eth_txq_is_busy()) {
             // DeviceZoneScopedN("EDM_RX_SEND_DONE_PL");
             // eth_receiver_channel_done(buffer_channel.get_eth_transaction_channel());
