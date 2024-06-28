@@ -129,13 +129,20 @@ void kernel_main() {
         row_idx = row_start_idx;
         if constexpr(num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
+                {
+                DeviceZoneScopedN("SR_WAIT_FOR_READER");
                 noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
+                }
                 sem_idx++;
                 read_chunk_from_output_tensor(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
             }
         }
         if constexpr(rem_num_pages > 0) {
+            {
+
+            DeviceZoneScopedN("SR_WAIT_FOR_READER");
             noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
+            }
             sem_idx++;
             read_chunk_from_output_tensor(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
             ASSERT(num_pages == 0 || num_pages > rem_num_pages);

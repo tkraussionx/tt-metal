@@ -270,7 +270,11 @@ class EriscDatamoverBuilder {
             this->num_senders,
             this->num_receivers,
             this->buffer_sharing_mode,
-            this->termination_mode};
+            this->termination_mode,
+            1,
+            static_cast<uint32_t>(this->num_senders > 0 && active_channels.at(0).is_sender),
+            1 // merge packet and payload ready signal
+            };
     }
 
     [[nodiscard]]

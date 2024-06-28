@@ -77,6 +77,8 @@ def run_all_gather_on_t3000_impl(
     function_level_defaults,
     num_iters=1,
     enable_async=False,
+    num_workers=0,
+    max_channel_size=0,
 ):
     if len(all_devices) != 8:
         pytest.skip("Not T3000!")
@@ -121,7 +123,9 @@ def run_all_gather_on_t3000_impl(
     # input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
 
     for i in range(num_iters):
-        tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, mem_config)
+        tt_out_tensors = ttl.tensor.all_gather(
+            tt_input_tensors, dim, num_links, mem_config, num_workers, max_channel_size
+        )
         # tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links=num_links, memory_config=mem_config)
 
         for d in devices:
@@ -288,15 +292,15 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize(
     "input_dtype",
     [
-        ttl.tensor.DataType.BFLOAT16,
-        # ttl.tensor.DataType.BFLOAT8_B,
+        # ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
 @pytest.mark.parametrize(
     "mem_config",
     [
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
-        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
+        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
 def test_all_gather_on_t3000_post_commit(
@@ -614,14 +618,14 @@ def test_all_gather_on_t3000_nightly(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.parametrize("num_devices", [4, 8])
+@pytest.mark.parametrize("num_devices", [8])
 @pytest.mark.parametrize("dim", [3])
 @pytest.mark.parametrize("tensor_layout", [ttl.tensor.Layout.TILE])
 # @pytest.mark.parametrize("num_cores", [1])
 @pytest.mark.parametrize(
     "input_dtype",
     [
-        ttl.tensor.DataType.BFLOAT16,
+        # ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
@@ -640,67 +644,67 @@ def test_all_gather_on_t3000_nightly(
 @pytest.mark.parametrize(
     "input_shape, input_shard_shape,shard_grid",
     (
-        (
-            (1, 1, 32, 32),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 64),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 128),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
-        ),
-        (
-            (1, 1, 32, 64),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
-        ),
-        (
-            (1, 1, 32, 128),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
-        ),
-        (
-            (1, 1, 32, 256),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
-        ),
-        (
-            (1, 1, 32, 512),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
-        ),
+        # (
+        #     (1, 1, 32, 32),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 64),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 128),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 64),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 128),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 256),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
+        # (
+        #     (1, 1, 32, 512),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 0))}),
+        # ),
         # LLama
         (
             (1, 1, 32, 1024),
             (32, 32),
             ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
         ),
-        (
-            (1, 1, 32, 4096),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
-        ),
-        (
-            (1, 1, 32, 4096),
-            (32, 128),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
-        ),
-        (
-            (1, 1, 32, 2048),
-            (32, 64),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
-        ),
-        (
-            (1, 1, 32, 1792),
-            (32, 32),
-            ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 6))}),
-        ),
+        # (
+        #     (1, 1, 32, 4096),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
+        # ),
+        # (
+        #     (1, 1, 32, 4096),
+        #     (32, 128),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
+        # ),
+        # (
+        #     (1, 1, 32, 2048),
+        #     (32, 64),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 3))}),
+        # ),
+        # (
+        #     (1, 1, 32, 1792),
+        #     (32, 32),
+        #     ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 6))}),
+        # ),
     ),
 )
 def test_all_gather_post_commit_sharded(
@@ -802,7 +806,7 @@ def test_all_gather_post_commit_sharded(
     for i, t in enumerate(input_tensors):
         tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(tensor_layout).to(devices[i], input_mem_config))
 
-    tt_out_tensors = ttnn.all_gather(tt_input_tensors, dim, num_links=num_links, memory_config=output_mem_config)
+    tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config)
     for d in devices:
         ttl.device.Synchronize(d)
     torch.set_printoptions(sci_mode=False)

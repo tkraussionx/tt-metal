@@ -64,7 +64,10 @@ void kernel_main() {
 
     if constexpr(num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
+            {
+                DeviceZoneScopedN("SW_WAIT_FOR_EDM");
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+            }
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             // TODO: Might be better to split this?
             write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, eth_l1_sender_base_noc_addr, eth_l1_sender_semaphore_addr);
@@ -72,7 +75,10 @@ void kernel_main() {
     }
 
     if constexpr(rem_num_pages > 0) {
+        {
+                DeviceZoneScopedN("SW_WAIT_FOR_EDM");
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+        }
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
         write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size, eth_l1_sender_base_noc_addr,eth_l1_sender_semaphore_addr);
         ASSERT(num_pages == 0 || num_pages > rem_num_pages);
@@ -80,19 +86,24 @@ void kernel_main() {
         pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
     }
 
-    DPRINT << "SW done transfer 0\n";
     // num_transfers = num_devices - 1
     for (uint32_t i = 1; i < num_transfers; ++i) {
         if constexpr(num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
+                {
+                DeviceZoneScopedN("SW_WAIT_FOR_EDM");
                 noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+                }
                 noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
                 send_chunk(cb_id_in0, num_pages, page_size, eth_l1_sender_base_noc_addr);
                 noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
             }
         }
         if constexpr(rem_num_pages > 0) {
+                {
+                DeviceZoneScopedN("SW_WAIT_FOR_EDM");
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+                }
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             send_chunk(cb_id_in0, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
             noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
@@ -100,7 +111,5 @@ void kernel_main() {
             ASSERT(half_cb_n_pages > rem_num_pages);
             pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
         }
-        DPRINT << "SW done transfer " << i << "\n";
     }
-    DPRINT << "SW DONE\n";
 }
