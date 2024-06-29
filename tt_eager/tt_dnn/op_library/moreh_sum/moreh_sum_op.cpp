@@ -26,6 +26,10 @@ inline void check_tensor(
     const std::string& op_name,
     DataType data_type = DataType::BFLOAT16,
     Layout layout = Layout::TILE) {
+
+    log_debug(LogOp, "{}:{} {} {}", __func__, __LINE__, op_name, tensor.get_layout());
+    log_debug(LogOp, "{}:{} {} {}", __func__, __LINE__, op_name, tensor.get_dtype());
+    log_debug(LogOp, "{}:{} {} {}", __func__, __LINE__, op_name, tensor.storage_type());
     TT_FATAL(tensor.get_layout() == layout, "{} only supports tiled layout.", op_name);
     TT_FATAL(tensor.get_dtype() == data_type, "{} only supports data type {}.", op_name, data_type);
     TT_FATAL(tensor.storage_type() == StorageType::DEVICE, "Operands to {} need to be on device!", op_name);
