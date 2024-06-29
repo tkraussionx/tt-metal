@@ -208,12 +208,12 @@ void kernel_main() {
     }
     input_queue.init(demux_fan_out, rx_queue_start_addr_words, rx_queue_size_words,
                      remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
-    DPRINT << "Starting Handshake DEMUX" << ENDL();
+
     if (!wait_all_src_dest_ready(&input_queue, 1, output_queues, demux_fan_out, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
-    DPRINT << "DEMUX Handshake Done" << ENDL();
+
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     bool timeout = false;
@@ -231,10 +231,8 @@ void kernel_main() {
                 break;
             }
         }
-        // DPRINT << "CHECKING FOR VALID PACKET" << ENDL();
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
-            DPRINT << "Dest id: " << dest  << ENDL();
             uint8_t output_queue_id = dest_output_queue_id(dest);
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());
@@ -246,7 +244,6 @@ void kernel_main() {
         all_outputs_finished = true;
         for (uint32_t i = 0; i < demux_fan_out; i++) {
             output_queues[i].prev_words_in_flight_check_flush();
-            // DPRINT << "Demux output finished " << i <<  " " << (int)(output_queues[i].is_remote_finished());
             all_outputs_finished &= output_queues[i].is_remote_finished();
         }
     }
@@ -262,7 +259,6 @@ void kernel_main() {
     }
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
-    // DPRINT << "Demux Finished" << ENDL();
     if (!timeout) {
         test_results[PQ_TEST_MISC_INDEX] = 0xff000003;
         input_queue.send_remote_finished_notification();
@@ -281,5 +277,4 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
-    DPRINT << "Demux Done" << ENDL();
 }

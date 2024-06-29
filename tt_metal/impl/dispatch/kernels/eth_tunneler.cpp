@@ -103,12 +103,12 @@ void kernel_main() {
             &input_queues[i],
             1);
     }
-    DPRINT << "init tunneler" << ENDL();
+
     if (!wait_all_src_dest_ready(input_queues, tunnel_lanes, output_queues, tunnel_lanes, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
-    DPRINT << "Tunneler started" << ENDL();
+
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     bool timeout = false;
@@ -129,13 +129,9 @@ void kernel_main() {
         all_outputs_finished = true;
         for (uint32_t i = 0; i < tunnel_lanes; i++) {
             if (input_queues[i].get_curr_packet_valid()) {
-
                 bool full_packet_sent;
                 uint32_t words_sent =
                     output_queues[i].forward_data_from_input(0, full_packet_sent, input_queues[i].get_end_of_cmd());
-                if (words_sent) {
-                    DPRINT << "Forwarded from lane: " << i << ENDL();
-                }
                 // data_words_sent += words_sent;
                 // if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
@@ -184,5 +180,4 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
-    DPRINT << "Tunnel Done" << ENDL();
 }

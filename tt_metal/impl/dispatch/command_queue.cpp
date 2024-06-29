@@ -1656,11 +1656,6 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     if (blocking) {
         this->finish();
     }
-
-    // else {
-    //     std::shared_ptr<Event> event = std::make_shared<Event>();
-    //     this->enqueue_record_event(event);
-    // }
 }
 
 void HWCommandQueue::enqueue_program(Program& program, bool blocking) {

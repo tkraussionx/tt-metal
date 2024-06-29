@@ -226,7 +226,6 @@ void process_write_host_h() {
             host_completion_queue_write_addr = get_noc_addr_helper(pcie_noc_xy, completion_queue_write_addr);
             block_noc_writes_to_clear[rd_block_idx]+=(last_chunk_size + NOC_MAX_BURST_SIZE - 1) / NOC_MAX_BURST_SIZE; // XXXXX maybe just write the noc internal api counter
         }
-        DPRINT << "Writing: " << *((int*)(data_ptr)) << " " << *((int*)(data_ptr) + 1) << " " << *((int*)(data_ptr) + 2) << " " << *((int*)(data_ptr) + 3) << ENDL();
         noc_async_write(data_ptr, host_completion_queue_write_addr, xfer_size);
         // This will update the write ptr on device and host
         // We flush to ensure the ptr has been read out of l1 before we update it again
@@ -290,7 +289,6 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
             noc_inline_dw_write(dst, xfer_size + preamble_size + not_end_of_cmd);
             block_noc_writes_to_clear[rd_block_idx]++;
             downstream_cb_data_ptr += preamble_size;
-            DPRINT << "RELAY TO: " << downstream_cb_data_ptr << ENDL();
             dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
             ASSERT(downstream_cb_data_ptr < downstream_cb_end);
         }
@@ -312,7 +310,6 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
                         if (downstream_cb_data_ptr == downstream_cb_end) {
                             downstream_cb_data_ptr = downstream_cb_base;
                         }
-                        DPRINT << "RELAY TO: " << downstream_cb_data_ptr << ENDL();
                         dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
                     }
                     cb_fence = dispatch_cb_base;
@@ -355,7 +352,6 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
     }
 
     cmd_ptr = data_ptr;
-    DPRINT << "RELAY DONE" << ENDL();
 }
 
 void process_write_host_d() {
@@ -902,7 +898,6 @@ void kernel_main() {
     while (!done) {
         DeviceZoneScopedND("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
         if (cmd_ptr == cb_fence) {
-            DPRINT << "Get cmd" << ENDL();
             get_cb_page<
                 dispatch_cb_base,
                 dispatch_cb_blocks,
@@ -910,7 +905,6 @@ void kernel_main() {
                 my_noc_xy,
                 my_dispatch_cb_sem_id>(
                 cmd_ptr, cb_fence, block_noc_writes_to_clear, block_next_start_addr, rd_block_idx);
-            DPRINT << "GET CMD Done" << ENDL();
         }
 
         done = is_d_variant ? process_cmd_d(cmd_ptr) : process_cmd_h(cmd_ptr);
@@ -934,7 +928,6 @@ void kernel_main() {
         // in case dispatch_h is connected to a depacketizing stage.
         // TODO: This should be replaced with a signal similar to what packetized
         // components use.
-        DPRINT << "Updating Semaphore for: " << UPSTREAM_NOC_X << " " << UPSTREAM_NOC_Y <<ENDL();
         noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_dispatch_cb_sem_id)), 0x80000000);
     }
 

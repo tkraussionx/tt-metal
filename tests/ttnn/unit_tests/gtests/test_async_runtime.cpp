@@ -185,8 +185,8 @@ TEST(TTNN_MultiDev, Test2CQ2Device) {
         ttnn::write_buffer(1, input_tensor_1, {{}, {}, {}, {}, host_data_1});
         ttnn::record_event(dev1->command_queue(1), write_event); // Record write on cq 1
         // Wait until cq 1 write is complete
-        // ttnn::wait_for_event(dev1->command_queue(0), write_event);
-        ttnn::event_synchronize(write_event);
+        ttnn::wait_for_event(dev1->command_queue(0), write_event);
+        // ttnn::event_synchronize(write_event);
         auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 2}}};
         auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
         auto op2 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::ADD_UNARY_SFPU, 500}}};
@@ -205,8 +205,8 @@ TEST(TTNN_MultiDev, Test2CQ2Device) {
         output_tensor = ttnn::run_operation(0, op2, {output_tensor}).at(0);
         ttnn::record_event(dev1->command_queue(0), workload_event);
         // Wait until cq 0 prog execution is done
-        // ttnn::wait_for_event(dev1->command_queue(1), workload_event);
-        ttnn::event_synchronize(workload_event);
+        ttnn::wait_for_event(dev1->command_queue(1), workload_event);
+        // ttnn::event_synchronize(workload_event);
         // ttnn::read_buffer(1, input_tensor_0, {readback_data_0, {}, {}, {}, {}});
         ttnn::read_buffer(1, output_tensor, {{}, {}, {}, {}, readback_data_1});
 
