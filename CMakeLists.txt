@@ -18,8 +18,8 @@ if (NOT CLANG_17)
     message(FATAL_ERROR "clang-17 not found")
 endif()
 
-set(CMAKE_CXX_COMPILER "${CLANGPP_17}")
-set(CMAKE_C_COMPILER "${CLANG_17}")
+set(CMAKE_CXX_COMPILER "g++-11")
+set(CMAKE_C_COMPILER "gcc-11")
 
 if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
     message(FATAL_ERROR "CMake generation is not allowed within source directory!! Please set a build folder with '-B'!!")
@@ -105,7 +105,7 @@ set(CMAKE_INSTALL_DATAROOTDIR "${PROJECT_BINARY_DIR}/tmp/share")
 ############################################################################################################################
 add_library(metal_common_libs INTERFACE)
 target_link_libraries(metal_common_libs INTERFACE
-    dl z pthread atomic c++ c++abi hwloc numa # system libraries, hwloc has no cmake support, find_package won't find it
+    dl z pthread atomic stdc++ hwloc numa # system libraries, hwloc has no cmake support, find_package won't find it
 )
 
 # Note on flags:
@@ -119,7 +119,7 @@ CHECK_COMPILER_WARNINGS()      # <- add any extra compile warning flags for buil
 
 add_library(compiler_flags INTERFACE)
 target_link_libraries(compiler_flags INTERFACE compiler_warnings)
-target_compile_options(compiler_flags INTERFACE -mavx2 -fPIC -DFMT_HEADER_ONLY -fvisibility-inlines-hidden -fno-lto -stdlib=libc++)
+target_compile_options(compiler_flags INTERFACE -mavx2 -fPIC -DFMT_HEADER_ONLY -fvisibility-inlines-hidden -fno-lto)
 
 if(TT_METAL_VERSIM_DISABLED)
     target_compile_options(compiler_flags INTERFACE -DTT_METAL_VERSIM_DISABLED)
