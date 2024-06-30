@@ -1114,9 +1114,9 @@ void Device::compile_command_queue_programs() {
 
             NOC noc_index = this->hw_command_queues_[cq_id]->noc_index;
 
-            log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
-            log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
-            log_debug(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
+            log_info(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
+            log_info(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
+            log_info(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
 
             uint32_t command_queue_start_addr = get_absolute_cq_offset(channel, cq_id, cq_size);
             uint32_t issue_queue_start_addr = command_queue_start_addr + CQ_START;

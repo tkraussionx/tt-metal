@@ -79,7 +79,9 @@ void kernel_main() {
             noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
             ASSERT(num_pages == 0 || num_pages > rem_num_pages);
             ASSERT(half_cb_n_pages > rem_num_pages);
+            DPRINT << "Push pages start" << ENDL();
             pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
+            DPRINT << "Push pages end" << ENDL();
         }
 
         if (is_clockwise_direction) {

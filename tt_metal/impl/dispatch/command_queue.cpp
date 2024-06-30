@@ -1917,9 +1917,6 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     if (blocking) {
         this->finish();
-    } else {
-        std::shared_ptr<Event> event = std::make_shared<Event>();
-        this->enqueue_record_event(event);
     }
 }
 

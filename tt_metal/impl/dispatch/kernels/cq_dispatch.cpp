@@ -808,10 +808,9 @@ static void process_wait() {
     uint32_t heartbeat = 0;
 #endif
     if (wait) {
+        DPRINT << "START WAIT  " << ENDL();
         while (!wrap_ge(*sem_addr, count)) {
-#if defined(COMPILE_FOR_IDLE_ERISC)
-            RISC_POST_HEARTBEAT(heartbeat);
-#endif
+            // DPRINT << (*sem_addr) << ENDL();
         }
     }
     DEBUG_STATUS("PWD");

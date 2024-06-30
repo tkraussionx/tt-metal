@@ -107,6 +107,7 @@ struct sender_receiver_index_t {
 };
 
 void kernel_main() {
+    DPRINT << "START ERISC KERNEL" << ENDL();
     // COMPILE TIME ARGS
     // If true, will enable this erisc's sender functionality
     constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
@@ -167,7 +168,7 @@ void kernel_main() {
             }
         }
     }
-
+    DPRINT << "Setup reciever args" << ENDL();
     // Receiver args
     uint8_t const receiver_channels_start = get_arg_val<uint32_t>(args_offset++);
     uint32_t const receiver_num_channels = num_receivers;//get_arg_val<uint32_t>(args_offset++);
@@ -206,7 +207,9 @@ void kernel_main() {
     // will always be "receiver" (only for handshake purposes)
     bool act_as_sender_in_handshake =
         (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
+    DPRINT << "Start handhsake " << handshake_addr << " " << (uint32_t)act_as_sender_in_handshake << ENDL();
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    DPRINT << "Done handshake" << ENDL();
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
     uint32_t eth_transaction_complete_addr = handshake_addr + 32;
 
@@ -219,8 +222,10 @@ void kernel_main() {
     bool receivers_in_progress = num_receivers_complete != receiver_num_channels;
 
     auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
-
+    DPRINT << "IPR: " << (uint32_t)(senders_in_progress) << " " << (uint32_t)(receivers_in_progress) << ENDL();
+    DPRINT << "RECIEVER: " << (uint32_t)(enable_receiver_side) << ENDL();
     while (senders_in_progress || receivers_in_progress) {
+        // DPRINT << "In while loop" << ENDL();
         bool did_something_sender = false;
         bool did_something_receiver = false;
 
@@ -261,23 +266,30 @@ void kernel_main() {
         //////////////////////////////////////
         // RECEIVER
         if constexpr (enable_receiver_side) {
+            // DPRINT << "Reciever Mode" << ENDL();
             ChannelBufferT &current_receiver = buffer_channels[send_recv_index.real_index.receiver];
 
             switch (current_receiver.get_state()) {
                 case ChannelBufferT::STATE::WAITING_FOR_ETH:
+                DPRINT << "Accept payload" << ENDL();
                 did_something_receiver = erisc::datamover::receiver_eth_accept_payload_sequence(current_receiver, num_receivers_complete, eth_transaction_ack_word_addr);
                 receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;
+                DPRINT << "Done ACCEPT" << ENDL();
                 break;
 
                 case ChannelBufferT::STATE::SIGNALING_WORKER:
+                // DPRINT << "Notify Worker" << ENDL();
                 did_something_receiver =
                     erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(current_receiver);
+                // DPRINT << "Done notify worker" << ENDL();
                 break;
 
                 case ChannelBufferT::STATE::WAITING_FOR_WORKER:
+                // DPRINT << "Wait for Worker" << ENDL();
                 did_something_receiver = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
                                     current_receiver, num_receivers_complete, eth_transaction_complete_addr);
                 receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;
+                // DPRINT << "Done Wait for Worker" << ENDL();
                 break;
 
                 default:
@@ -320,6 +332,6 @@ void kernel_main() {
             }
         }
     }
-
+    DPRINT << "Done ERISC KERNEL" << ENDL();
     DEBUG_STATUS("DONE");
 }

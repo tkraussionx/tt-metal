@@ -385,18 +385,20 @@ int main() {
             uint32_t kernel_config_base = mailboxes->launch.kernel_config_base;
             l1_arg_base = (uint32_t tt_l1_ptr *)(kernel_config_base + mailboxes->launch.rta_offsets[DISPATCH_CLASS_TENSIX_DM0]);
             if (mailboxes->launch.enables[DISPATCH_CLASS_TENSIX_DM0]) {
+                DPRINT << "Kernel Started" << ENDL();
                 setup_cb_read_write_interfaces(num_cbs_to_early_init, mailboxes->launch.max_cb_index, true, true);
                 kernel_init();
+                DPRINT << "Kernel Done" << ENDL();
             } else {
                 // This was not initialized in kernel_init
                 noc_local_state_init(noc_index);
             }
             DEBUG_STATUS("D");
-
+            DPRINT << "WAIT" << ENDL();
             wait_ncrisc_trisc();
 
             mailboxes->launch.run = RUN_MSG_DONE;
-
+            DPRINT << "Notify dispatch" << ENDL();
             // Notify dispatcher core that it has completed
             if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
                 uint64_t dispatch_addr =

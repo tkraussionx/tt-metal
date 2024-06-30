@@ -761,6 +761,16 @@ void Program::populate_dispatch_data(Device *device) {
         }
     }
     std::uint32_t num_active_cores = 0;
+    // auto worker_cores = this->logical_cores().at(CoreType::WORKER);
+    // auto eth_cores = this->logical_cores().at(CoreType::ETH);
+    // for (auto core : worker_cores) {
+    //     std::cout << core.str() <<  " ";
+    // }
+    // std::cout << std::endl;
+    // for (auto core : eth_cores) {
+    //     std::cout << core.str() <<  " ";
+    // }
+    // std::cout << std::endl;
     num_active_cores += this->logical_cores().at(CoreType::WORKER).size();
     num_active_cores += this->logical_cores().at(CoreType::ETH).size();
     this->program_transfer_info.num_active_cores = num_active_cores;

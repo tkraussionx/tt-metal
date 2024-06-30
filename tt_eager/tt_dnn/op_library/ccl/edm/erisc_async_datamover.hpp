@@ -131,11 +131,13 @@ class ChannelBuffer final {
 
     // Increment the semaphore in the remote L1s of every worker associated with this ChannelBuffer
     FORCE_INLINE void increment_worker_semaphores() {
+        DPRINT << "Inc Worker Sem" << ENDL();
         if constexpr (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED) {
             // We have to be careful that the worker x/y matches for the `noc_index`
             // active on the erisc
             for (std::size_t i = 0; i < this->num_workers; i++) {
                 WorkerXY worker_xy = this->worker_coords[i];
+                DPRINT << (uint32_t)(worker_xy.x) << " " << (uint32_t)(worker_xy.y) << " " << (uint32_t)(this->worker_semaphore_l1_address) << ENDL();
                 uint64_t worker_semaphore_address =
                     get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
 

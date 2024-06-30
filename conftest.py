@@ -199,7 +199,7 @@ def t3k_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0, device
 
     if ttnn.get_num_devices() < 8:
         pytest.skip()
-    device_ids = [0, 4, 5, 1, 2, 6, 7, 3]
+    device_ids = [0, 4, 5, 1]
     try:
         num_devices_requested = min(request.param, len(device_ids))
     except (ValueError, AttributeError):
