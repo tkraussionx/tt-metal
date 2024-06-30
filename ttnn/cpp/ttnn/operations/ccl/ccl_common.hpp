@@ -453,7 +453,7 @@ KernelHandle generate_edm_kernel(
    tt::tt_metal::Program& program,
     Device const* device,
     ccl::EriscDatamoverBuilder const& edm_builder,
-    CoreCoord const& eth_core,
+    CoreRangeSet const& eth_cores,
     NOC noc_id);
 
 void generate_edm_kernels_for_ring_or_linear_topology(
@@ -464,6 +464,13 @@ void generate_edm_kernels_for_ring_or_linear_topology(
     std::vector<ccl::EriscDatamoverBuilder> const& counter_clockwise_edm_builders,
     std::optional<uint32_t> receiver_device_id,
     std::optional<uint32_t> sender_device_id);
+
+void set_edm_runtime_args(
+    tt_metal::Program& program,
+    KernelHandle edm_kernel_handle,
+    ccl::EriscDatamoverBuilder const& edm_builder,
+    CoreCoord const& eth_core
+);
 
 ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     std::size_t num_channels,
