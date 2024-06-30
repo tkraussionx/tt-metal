@@ -19,6 +19,34 @@ std::unique_ptr<CclOpTensorConfig> CclOpTensorConfig::build_all_gather_tensor_co
     }
 }
 
+KernelHandle generate_edm_kernels(
+    tt_metal::Program& program,
+    Device const* device,
+    ccl::EriscDatamoverBuilder const& edm_builder,
+    CoreRangeSet const& eth_cores,
+    NOC noc_id) {
+    // log_trace(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
+    edm_builder.dump_to_log();
+    std::vector<KernelHandle> kernel_handles;
+    std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
+    // Ethernet Kernels
+    std::vector<uint32_t> eth_sender_ct_args = edm_builder.emit_compile_time_args();
+    log_trace(tt::LogOp, "EDM core (x={},y={}):", eth_core.x, eth_core.y);
+    log_trace(tt::LogOp, "CT ARGS:");
+    for (auto const& s : eth_sender_ct_args) {
+        log_trace(tt::LogOp, "\t{}", s);
+    }
+
+    auto eth_sender_kernel = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
+        eth_cores,
+        tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
+    kernel_handles.push_back(eth_sender_kernel);
+
+    return eth_sender_kernel;
+}
+
 void generate_edm_kernels_for_ring_or_linear_topology(
    tt::tt_metal::Program& program,
     Device const* device,
@@ -38,14 +66,36 @@ void generate_edm_kernels_for_ring_or_linear_topology(
             sender_socket_idx = 1;
         }
     }
+
+    std::set<CoreRange> edm_cores;
     for (uint32_t i = 0; i < topology_config.num_links; ++i) {
         bool is_clockwise_direction_edm_enabled =
             !topology_config.is_linear || topology_config.ring_index != topology_config.ring_size - 1;
         if (is_clockwise_direction_edm_enabled) {
-            auto eth_sender_core = topology_config.eth_sender_cores.at(i);
-            log_trace(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
-            auto eth_sender_kernel =
-                ccl::generate_edm_kernel(program, device, clockwise_edm_builders.at(i), eth_sender_core, sender_noc);
+            CoreCoord const& eth_sender_core = topology_config.eth_sender_cores.at(i);
+            edm_cores.insert({eth_sender_core});
+        }
+
+        bool is_counter_clockwise_direction_edm_enabled = !topology_config.is_linear || topology_config.ring_index != 0;
+        if (is_counter_clockwise_direction_edm_enabled) {
+            log_trace(tt::LogOp, "EDM COUNTER CLOCKWISE KERNEL RT ARGS: ");
+            CoreCoord const& eth_receiver_core = topology_config.eth_receiver_cores.at(i);
+            edm_cores.insert({eth_receiver_core});
+        }
+    }
+
+    KernelHandle edm_kernel_handle = generate_edm_kernels(
+        program,
+        device,
+        clockwise_edm_builders.size() > 0 ? clockwise_edm_builders.at(0) : counter_clockwise_edm_builders.at(0),
+        CoreRangeSet(edm_cores),
+        sender_noc);
+
+    for (uint32_t i = 0; i < topology_config.num_links; ++i) {
+        bool is_clockwise_direction_edm_enabled =
+            !topology_config.is_linear || topology_config.ring_index != topology_config.ring_size - 1;
+        if (is_clockwise_direction_edm_enabled) {
+            CoreCoord const& eth_sender_core = topology_config.eth_sender_cores.at(i);
             log_trace(
                 tt::LogOp,
                 "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={})",
@@ -53,14 +103,18 @@ void generate_edm_kernels_for_ring_or_linear_topology(
                 i,
                 eth_sender_core.x,
                 eth_sender_core.y);
+            log_trace(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
+            set_edm_runtime_args(
+                program,
+                edm_kernel_handle,
+                clockwise_edm_builders.at(i),
+                eth_sender_core
+            );
         }
 
         bool is_counter_clockwise_direction_edm_enabled = !topology_config.is_linear || topology_config.ring_index != 0;
         if (is_counter_clockwise_direction_edm_enabled) {
-            log_trace(tt::LogOp, "EDM COUNTER CLOCKWISE KERNEL RT ARGS: ");
-            auto eth_receiver_core = topology_config.eth_receiver_cores.at(i);
-            auto eth_receiver_kernel = ccl::generate_edm_kernel(
-                program, device, counter_clockwise_edm_builders.at(i), eth_receiver_core, receiver_noc);
+            CoreCoord const& eth_receiver_core = topology_config.eth_receiver_cores.at(i);
             log_trace(
                 tt::LogOp,
                 "RingIndex: {}. Link {}. Counter-clockwise EDM Core (x={},y={})",
@@ -68,6 +122,13 @@ void generate_edm_kernels_for_ring_or_linear_topology(
                 i,
                 eth_receiver_core.x,
                 eth_receiver_core.y);
+            log_trace(tt::LogOp, "EDM COUNTER CLOCKWISE KERNEL RT ARGS: ");
+            set_edm_runtime_args(
+                program,
+                edm_kernel_handle,
+                counter_clockwise_edm_builders.at(i),
+                eth_receiver_core
+            );
         }
     }
 }
@@ -79,8 +140,6 @@ KernelHandle generate_edm_kernel(
     CoreCoord const& eth_core,
     NOC noc_id) {
     edm_builder.dump_to_log();
-
-    std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
     // Ethernet Kernels
     std::vector<uint32_t> eth_sender_ct_args = edm_builder.emit_compile_time_args();
     log_trace(tt::LogOp, "EDM core (x={},y={}):", eth_core.x, eth_core.y);
@@ -94,8 +153,16 @@ KernelHandle generate_edm_kernel(
         "ttnn/cpp/ttnn/operations/ccl/kernels/edm/erisc_datamover.cpp",
         eth_core,
        tt::tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
+}
 
-   tt::tt_metal::SetRuntimeArgs(program, eth_sender_kernel, eth_core, edm_clockwise_kernel_rt_args);
+void set_edm_runtime_args(
+    tt_metal::Program& program,
+    KernelHandle edm_kernel_handle,
+    ccl::EriscDatamoverBuilder const& edm_builder,
+    CoreCoord const& eth_core
+) {
+    std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
+    tt_metal::SetRuntimeArgs(program, edm_kernel_handle, eth_core, edm_clockwise_kernel_rt_args);
 
     std::stringstream ss;
     ss << "EDM ARGS:\n";
@@ -103,8 +170,6 @@ KernelHandle generate_edm_kernel(
         ss << "\t" << s << "\n";
     }
     log_trace(tt::LogOp, "{}", ss.str());
-
-    return eth_sender_kernel;
 }
 
 ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
