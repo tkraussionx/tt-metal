@@ -14,7 +14,7 @@ if os.getenv("CI") == "true":
     os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
-    os.environ["TT_METAL_ASYNC_DEVICE_QUEUE"] = "0"  # FIXME: Non-deterministic segfault when closing devices #9519
+    os.environ["TT_METAL_ASYNC_DEVICE_QUEUE"] = "1"
     os.environ["WH_ARCH_YAML"] = "wormhole_b0_80_arch_eth_dispatch.yaml"
 
 import ttnn
@@ -267,16 +267,24 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
         logger.info(f"Prefill finished [{prefill_seq_len} tokens]!")
 
     # Prepare inputs for decode mode (rotary embeddings, attention mask, padding)
-    rot_mats = prepare_rotation_mat_ttnn(
+    current_rot_mat, rot_matrix = get_single_rot_mat(
         model_args.head_dim,
-        model_args.max_seq_len,
         tt_model.device_mesh,
     )
 
     generation_start_pos = prefill_seq_len
     max_generated_tokens = 100
 
-    cache_attention(device_mesh, state_dict, model_args, rot_mats, generation_start_pos, max_generated_tokens, dtype)
+    cache_attention(
+        device_mesh,
+        state_dict,
+        model_args,
+        current_rot_mat,
+        rot_matrix,
+        generation_start_pos,
+        max_generated_tokens,
+        dtype,
+    )
 
     logger.info("Starting inference...")
 
@@ -306,12 +314,12 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                 pt_decode_input,
                 model_args.dim,
                 start_pos,
-                model_args.sliding_window,
+                model_args,
                 tt_model.device_mesh,
             )
 
         # Run ttnn mixtral model
-        tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask, rot_mats)
+        tt_out_11BH = tt_model(decode_input_11BH, start_pos, current_pos, attn_mask)
         # Work around program cache issue https://github.com/tenstorrent/tt-metal/issues/7159
         del decode_input_11BH, attn_mask
         if embed_on_host:
@@ -384,7 +392,6 @@ def run_mixtral_demo(user_input, batch_size, device_mesh, instruct_mode):
                 logger.info("[User {}] {}".format(user, "".join(tokenizer.decode(all_outputs[user]))))
 
 
-@pytest.mark.timeout(10000)
 @pytest.mark.parametrize(
     "input_prompts, instruct_weights",
     [

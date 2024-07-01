@@ -109,7 +109,15 @@ std::map<string, string> get_defines(
         (input_dtype.value() == DataType::UINT16 && output_dtype.value() == DataType::BFLOAT16) ||
         (input_dtype.value() == DataType::INT32 && output_dtype.value() == DataType::BFLOAT16) ||
         (input_dtype.value() == DataType::FLOAT32 && output_dtype.value() == DataType::BFLOAT16) ||
-        (input_dtype.value() == DataType::BFLOAT16 && output_dtype.value() == DataType::FLOAT32))){
+        (input_dtype.value() == DataType::BFLOAT16 && output_dtype.value() == DataType::FLOAT32) ||
+        (input_dtype.value() == DataType::FLOAT32 && output_dtype.value() == DataType::UINT16) ||
+        (input_dtype.value() == DataType::UINT16 && output_dtype.value() == DataType::FLOAT32) ||
+        (input_dtype.value() == DataType::FLOAT32 && output_dtype.value() == DataType::INT32) ||
+        (input_dtype.value() == DataType::INT32 && output_dtype.value() == DataType::FLOAT32) ||
+        (input_dtype.value() == DataType::BFLOAT8_B && output_dtype.value() == DataType::UINT16) ||
+        (input_dtype.value() == DataType::UINT16 && output_dtype.value() == DataType::BFLOAT8_B) ||
+        (input_dtype.value() == DataType::BFLOAT8_B && output_dtype.value() == DataType::INT32) ||
+        (input_dtype.value() == DataType::INT32 && output_dtype.value() == DataType::BFLOAT8_B))){
         TT_ASSERT(defines.count("SFPU_OP_CHAIN_0") == 0 && "SFPU_OP_CHAIN_0 already defined");
 
         auto in_dataformat = std::to_string((uint32_t)datatype_to_dataformat_converter(input_dtype.value()));
@@ -359,6 +367,8 @@ tt::stl::hash::hash_t Binary::compute_program_hash(
     const auto& input_tensor_b = tensor_args.input_tensor_b;
 
     auto program_factory = select_program_factory(attributes, tensor_args);
+    TT_ASSERT(std::holds_alternative<DeviceStorage>(input_tensor_a.get_storage()), fmt::format("Unexpected type {} in {}:{} ",tt::stl::get_active_type_name_in_variant(input_tensor_a.get_storage()),__FILE__, __LINE__));
+    TT_ASSERT(std::holds_alternative<DeviceStorage>(input_tensor_b.get_storage()), fmt::format("Unexpected type {} in {}:{} ",tt::stl::get_active_type_name_in_variant(input_tensor_b.get_storage()),__FILE__, __LINE__));
     operation::Hash hash = operation::hash_operation<Binary>(
         attributes,
         program_factory.index(),

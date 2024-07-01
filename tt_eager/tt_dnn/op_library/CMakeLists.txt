@@ -52,6 +52,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/bcast_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_h/bcast_op_multi_core_h.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_h/bcast_op_sharded_h.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_h/bcast_op_sharded_h_optimised.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_w/bcast_op_multi_core_w.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_hw/bcast_op_multi_core_hw.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bmm/bmm_op.cpp
@@ -109,8 +110,11 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_softmax_backward/softmax_backward_h_large/softmax_backward_h_large.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_softmax_backward/softmax_backward_c_large/softmax_backward_c_large.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_h_impl/moreh_sum_h_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_h_impl/moreh_int_sum_h_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_w_impl/moreh_sum_w_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_w_impl/moreh_int_sum_w_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_nc_impl/moreh_sum_nc_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_nc_impl/moreh_int_sum_nc_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum/moreh_sum_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_sum_backward/moreh_sum_backward_impl/moreh_sum_backward_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/prod/prod_nc/prod_nc.cpp
@@ -173,6 +177,7 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/multi_core_group_attn_matmul/multi_core_group_attn_matmul.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/multi_core_ssm_eltwise_mul/multi_core_ssm_eltwise_mul.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/multi_core_ssm_1d_sum_reduce/multi_core_ssm_1d_sum_reduce.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/multi_core_ssm_prefix_scan/multi_core_ssm_prefix_scan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/run_operation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/split/split_tiled.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/split/split_last_dim_two_chunks_tiled.cpp

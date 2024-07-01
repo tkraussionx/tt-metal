@@ -13,13 +13,13 @@ if os.getenv("CI") == "true":
     os.environ["MIXTRAL_CKPT_DIR"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_TOKENIZER_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
     os.environ["MIXTRAL_CACHE_PATH"] = "/mnt/MLPerf/tt_dnn-models/Mistral/Mixtral-8x7B-v0.1/"
-    os.environ["TT_METAL_ASYNC_DEVICE_QUEUE"] = "0"  # FIXME: Non-deterministic segfault when closing devices #9519
+    os.environ["TT_METAL_ASYNC_DEVICE_QUEUE"] = "1"
     os.environ["WH_ARCH_YAML"] = "wormhole_b0_80_arch_eth_dispatch.yaml"
 
 import ttnn
 from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 
-from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, prepare_rotation_mat_ttnn
+from models.demos.t3000.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn
 from models.demos.t3000.mixtral8x7b.tt.mixtral_model import TtTransformer
 from models.demos.t3000.mixtral8x7b.reference.model import Transformer
 from models.demos.t3000.mixtral8x7b.reference.tokenizer import Tokenizer
@@ -81,12 +81,6 @@ def test_mixtral_model_inference(
         dtype=dtype,
     )
 
-    rot_mat = prepare_rotation_mat_ttnn(
-        model_args.head_dim,
-        model_args.max_seq_len,
-        tt_model.device_mesh,
-    )
-
     generation_start_pos = 0
     generation_length = iterations
     all_tests_pass = True
@@ -112,12 +106,12 @@ def test_mixtral_model_inference(
             tt_decode_input,
             model_args.dim,
             start_pos,
-            model_args.sliding_window,
+            model_args,
             tt_model.device_mesh,
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
         # Work around program cache issue https://github.com/tenstorrent/tt-metal/issues/7159
         del decode_input, attn_mask
         # Convert ttnn tensor to torch tensor

@@ -188,6 +188,7 @@ void Tensor::deallocate(bool force) {
                             auto dealloc_lambda = std::make_shared<std::function<void(Device*)>>(
                                 [force, attr = this->tensor_attributes](Device* worker) mutable {
                                     ZoneScopedN("ShardDeallocate");
+                                    TT_ASSERT(std::holds_alternative<tt::tt_metal::MultiDeviceStorage>(attr->storage), fmt::format("Unexpected type {} in {}:{} ",tt::stl::get_active_type_name_in_variant(attr->storage),__FILE__, __LINE__));
                                     auto& s = std::get<MultiDeviceStorage>(attr->storage);
                                     if (s.has_buffer_for_device(worker)) {
                                         auto& device_buffer = s.get_buffer_for_device(worker);
@@ -809,6 +810,8 @@ const Shape Tensor::strides() const { return detail::compute_strides(this->get_l
 
 uint32_t Tensor::volume() const { return tt::tt_metal::compute_volume(this->get_legacy_shape()); }
 
+uint32_t Tensor::intended_volume() const { return tt::tt_metal::compute_volume(this->get_shape()); }
+
 Tensor create_device_tensor(
     const Shape& shape, DataType data_type, Layout layout, Device* device, const MemoryConfig& memory_config) {
     ZoneScoped;
@@ -855,7 +858,7 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
                 if constexpr (
                     std::is_same_v<DataType, float> or std::is_same_v<DataType, bfloat16> or
                     std::is_same_v<DataType, std::uint32_t> or std::is_same_v<DataType, std::int32_t> or
-                    std::is_same_v<DataType, std::uint16_t>) {
+                    std::is_same_v<DataType, std::uint8_t> or std::is_same_v<DataType, std::uint16_t>) {
                     auto buffer = borrowed_buffer::get_as<DataType>(storage.buffer);
                     return buffer.data();
                 } else {
@@ -891,6 +894,8 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
             return detail::get_raw_host_data_ptr<uint32_t>(tensor);
         case DataType::UINT16:
             return detail::get_raw_host_data_ptr<uint16_t>(tensor);
+        case DataType::UINT8:
+            return detail::get_raw_host_data_ptr<uint8_t>(tensor);
         default:
             TT_THROW("Unsupported data type");
     }
@@ -1035,6 +1040,7 @@ void write_tensor(Tensor host_tensor, Tensor device_tensor, uint8_t cq_id) {
                             auto host_storage = std::get<BorrowedStorage>(async_safe_tensor.get_storage());
                             std::visit([&host_data](auto&& b) { host_data = b.data(); }, host_storage.buffer);
                         } else {
+                            TT_ASSERT(std::holds_alternative<OwnedStorage>(async_safe_tensor.get_storage()), fmt::format("Unexpected type {} in {}:{} ",tt::stl::get_active_type_name_in_variant(async_safe_tensor.get_storage()),__FILE__, __LINE__));
                             auto host_storage = std::get<OwnedStorage>(async_safe_tensor.get_storage());
                             std::visit([&host_data](auto&& b) { host_data = b.begin(); }, host_storage.get_buffer());
                         }

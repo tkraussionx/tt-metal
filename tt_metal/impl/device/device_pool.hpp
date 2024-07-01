@@ -49,7 +49,7 @@ class DevicePool {
 
          _inst->add_devices_to_pool(device_ids);
          _inst->init_firmware_on_active_devices();
-
+         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     }
 
     Device *get_active_device(chip_id_t device_id) const;
@@ -72,6 +72,7 @@ class DevicePool {
     std::mutex lock;
     std::vector<std::unique_ptr<Device>> devices;
     bool skip_remote_devices;
+    std::unordered_set<uint32_t> firmware_built_keys;
 
     // Determine which CPU cores the worker threads need to be placed on for each device
     std::unordered_map<uint32_t, uint32_t> device_to_core_map;

@@ -45,7 +45,6 @@ namespace tt::tt_metal::detail {
         detail::bind_unary_op(m_tensor, "isneginf", isneginf, R"doc(Returns each element of input tensor ``{0}``, is negative infinity or not.)doc");
         detail::bind_unary_op(m_tensor, "isnan", isnan, R"doc(Returns boolean tensor that is True where tensor ``{0}``, is NaN and False elsewhere.)doc");
         detail::bind_unary_op(m_tensor, "sign", sign, R"doc(Returns tensor with the elementwise signum of the input tensor ``{0}``.)doc");
-        detail::bind_unary_op(m_tensor, "square", square, R"doc(Returns tensor with the square of elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "eqz", eqz, R"doc(Returns tensor with the result of equal to zero of all of the elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "nez", nez, R"doc(Returns tensor with the not equal zero of all of the elements of the input tensor ``{0}``.)doc");
         detail::bind_unary_op(m_tensor, "gtz", gtz, R"doc(Returns tensor with the greater than zero of all of the elements of the input tensor ``{0}``.)doc");
@@ -80,6 +79,14 @@ namespace tt::tt_metal::detail {
                 BFLOAT16 -> INT32
                 BFLOAT16 -> FLOAT32
                 FLOAT32 -> BFLOAT16
+                UINT16 -> FLOAT32
+                FLOAT32 -> UINT16
+                INT32 -> FLOAT32
+                FLOAT32 -> INT32
+                UINT16 -> BFLOAT8_B
+                BFLOAT8_B -> UINT16
+                INT32 -> BFLOAT8_B
+                BFLOAT8_B -> INT32
 
             Input tensor must have tt_input_dtype data type.
 
@@ -195,6 +202,39 @@ namespace tt::tt_metal::detail {
 
         )doc");
 
+        m_tensor.def("bitwise_xor",bitwise_xor,
+            py::arg("input").noconvert(),py::arg("value"),py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,R"doc(
+            Computes bitwise_xor of input tensor ``input`` by a scalar ``value``. Input tensor needs to be positive. Support provided only for Wormhole_B0.
+
+            Input tensor must have INT32 data type.
+
+            Output tensor will have INT32 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "input", "Input Tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "value", "scalar value", "int", "", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+
+        )doc");
+
+        m_tensor.def("bitwise_not",bitwise_not,
+            py::arg("input").noconvert(),py::arg("value"),py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,R"doc(
+            Computes bitwise_not of input tensor ``input``. Input tensor needs to be in the range [-2147483647, 2147483647]. Support provided only for Wormhole_B0.
+
+            Input tensor must have INT32 data type.
+
+            Output tensor will have INT32 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "input", "Input Tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+
+        )doc");
+
         m_tensor.def("right_shift",right_shift,
             py::arg("input").noconvert(),py::arg("shift_amt"),py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,R"doc(
             Computes right shift of input tensor ``input`` by ``shift_amt`` bits. ``shift_amt`` range must be [0, 31]. Support provided only for Wormhole_B0.
@@ -232,6 +272,13 @@ namespace tt::tt_metal::detail {
             m_tensor, "unary_remainder", unary_remainder,
             py::arg("value"),
             R"doc(Perform an eltwise-modulus operation on ``{0}`` and ``{1}``. Formula : ``a - a.div(b, rounding_mode="floor") * b`` . Support provided only for WH_B0.)doc",
+            R"doc("value", "float", "")doc"
+
+        );
+        detail::bind_unary_op_with_param(
+            m_tensor, "unary_fmod", unary_fmod,
+            py::arg("value"),
+            R"doc(Perform an eltwise-fmod operation on ``{0}`` and ``{1}``. Formula : ``a - a.div(b, rounding_mode="trunc") * b`` . Support provided only for WH_B0.)doc",
             R"doc("value", "float", "")doc"
 
         );
