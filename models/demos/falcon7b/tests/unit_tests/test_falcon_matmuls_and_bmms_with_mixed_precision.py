@@ -938,3 +938,88 @@ def test_softmax(device, num_cores, seq_len):
 
     print(output)
     assert passing
+
+
+@pytest.mark.parametrize("num_cores", [64])
+def test_ff1(device, num_cores):
+    seq_len = 128
+    in0_width = 4608
+    in1_width = 18432
+
+    in0_shape = [1, 1, seq_len, in0_width]
+    in1_shape = [1, 1, in0_width, in1_width]
+
+    torch.manual_seed(0)
+    torch_in0 = torch.randn(in0_shape).bfloat16().float()
+    torch_in1 = torch.randn(in1_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.experimental.tensor.BufferType.DRAM,
+    )
+
+    width_sharded_memory_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+
+    # tt_lib.tensor.MemoryConfig(
+    #                 tt_lib.tensor.TensorMemoryLayout.WIDTH_SHARDED, tt_lib.tensor.BufferType.L1
+    #             )
+
+    tt_in0 = torch2tt_tensor(
+        torch_in0,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=ttnn.experimental.tensor.DataType.BFLOAT16,
+    )
+
+    tt_in1 = torch2tt_tensor(
+        torch_in1,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=ttnn.experimental.tensor.DataType.BFLOAT4_B,
+    )
+
+    default_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
+    program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=(8, 7),
+        in0_block_w=24,
+        per_core_M=4,
+        per_core_N=12,
+        out_subblock_h=1,
+        out_subblock_w=6,
+        fuse_batch=True,
+        fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
+        mcast_in0=True,
+    )
+
+    tt_out = ttnn.matmul(
+        tt_in0,
+        tt_in1,
+        program_config=program_config,
+        dtype=ttnn.bfloat16,
+        memory_config=dram_interleaved_memory_config,
+        # memory_config=width_sharded_memory_config,
+        compute_kernel_config=default_kernel_config,
+    )
+
+    # tt_out = ttnn.linear(
+    #     tt_in0,
+    #     tt_in1,
+    #     memory_config=dram_interleaved_memory_config,
+    #     dtype=ttnn.experimental.tensor.DataType.BFLOAT16,
+    #     core_grid=ttnn.CoreGrid(y=7, x=8),
+    #     use_1d_systolic_array=True,
+    #     compute_kernel_config=default_kernel_config,
+    #     activation="gelu",
+    # )
+
+    torch_out = tt2torch_tensor(tt_out)
+    pass

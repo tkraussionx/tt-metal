@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
-
 #include "mod_div_lib.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"

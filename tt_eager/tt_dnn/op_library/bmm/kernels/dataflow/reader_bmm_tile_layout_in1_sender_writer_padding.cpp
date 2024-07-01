@@ -197,7 +197,7 @@ void kernel_main() {
                         uint32_t l1_read_addr_in1_temp = l1_read_addr_in1;
                         uint32_t l1_write_addr_in1_temp = l1_write_addr_in1;
                         for (uint32_t w = 0; w < in1_block_w_dram; ++w) {
-                            noc_async_read_tile_dram_sharded_with_state(in1_base_addr, l1_read_addr_in1_temp, l1_write_addr_in1_temp);
+                            // noc_async_read_tile_dram_sharded_with_state(in1_base_addr, l1_read_addr_in1_temp, l1_write_addr_in1_temp);
                             l1_read_addr_in1_temp += in1_single_tile_size_bytes;
                             l1_write_addr_in1_temp += in1_single_tile_size_bytes;
                         }
@@ -208,7 +208,7 @@ void kernel_main() {
                     next_bank_id_and_dram_stride_index += 2;
                 }
                 l1_read_addr_in1_offset += in1_dram_block_size_bytes;
-                noc_async_read_barrier();
+                // noc_async_read_barrier();
             #else
                 #ifndef IN1_SHARDED
                 // Operand 1
@@ -223,7 +223,7 @@ void kernel_main() {
                     uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
                     for(uint32_t w = 0; w < in1_block_w; ++w) {
                         if (w < last_block_w) {
-                            noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                            // noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
                         }
                         l1_write_addr_in1 += in1_single_tile_size_bytes;
                         in1_tensor_tile_id += in1_tensor_stride_w;
@@ -233,28 +233,28 @@ void kernel_main() {
                 in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
                 // Barrier! make sure the reads are done
-                noc_async_read_barrier();
+                // noc_async_read_barrier();
                 #endif
             #endif // IN1_DRAM_SHARDED
 
             #ifndef SKIP_MCAST
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-            noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+            //noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+            //noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
             // Now we have the block in the CB address, we can mcast to dests!
             uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
+            //noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, false, false);
 
             // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
             // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+            //noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
 
             #endif
 
@@ -288,7 +288,7 @@ void kernel_main() {
                     uint32_t in3_block_w_dram = in1_block_w_dram_stride_bytes[next_bank_id_and_dram_stride_index] / bias_single_tile_size_bytes;
 
                     for (uint32_t w = 0; w < in3_block_w_dram; ++w) {
-                        noc_async_read_tile_dram_sharded_with_state(in3_base_addr, l1_read_addr_in3, l1_write_addr_in3);
+                        // noc_async_read_tile_dram_sharded_with_state(in3_base_addr, l1_read_addr_in3, l1_write_addr_in3);
                         l1_read_addr_in3 += bias_single_tile_size_bytes;
                         l1_write_addr_in3 += bias_single_tile_size_bytes;
                         in3_block_size_bytes += bias_single_tile_size_bytes;
@@ -296,40 +296,40 @@ void kernel_main() {
                     l1_write_addr_in3_offset += in1_block_w_dram_stride_bytes[next_bank_id_and_dram_stride_index];
                     next_bank_id_and_dram_stride_index += 2;
                 }
-                noc_async_read_barrier();
+                // noc_async_read_barrier();
                 #else
                 // Copy in1 block into CB, as the default kernel
                 uint32_t in3_tensor_tile_id = in3_tensor_start_tile_id;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
-                        noc_async_read_tile(in3_tensor_tile_id, s3, l1_write_addr_in3);
+                        // noc_async_read_tile(in3_tensor_tile_id, s3, l1_write_addr_in3);
                     }
                     l1_write_addr_in3 += bias_single_tile_size_bytes;
                     in3_tensor_tile_id += in3_tensor_stride_w;
                     in3_block_size_bytes += bias_single_tile_size_bytes;
                 }
                 // Barrier! make sure the reads are done
-                noc_async_read_barrier();
+                // noc_async_read_barrier();
                 #endif
 
                 #ifndef SKIP_MCAST
 
                 // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
                 // the semaphore_addr value back to zero for the next block
-                noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-                noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+                // noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+                // noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
                 // Now we have the block in the CB address, we can mcast to dests!
                 uint64_t in3_multicast_data_addr = in1_multicast_data_noc | in3_start_address;
 
                 // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_async_write_multicast(in3_start_address, in3_multicast_data_addr, in3_block_size_bytes, in1_mcast_num_cores, false, false);
+                // noc_async_write_multicast(in3_start_address, in3_multicast_data_addr, in3_block_size_bytes, in1_mcast_num_cores, false, false);
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
                 // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
                 // We should also multicast the flag to destinations
                 // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
+                // noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false, false);
 
                 #endif
 
@@ -365,7 +365,7 @@ void kernel_main() {
                 for(uint32_t h = 0; h < out_subblock_h_; ++h) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; ++w) {
-                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
+                        // noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
 
                         l1_read_addr+=output_single_tile_size_bytes;
 
@@ -376,7 +376,7 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                noc_async_write_barrier();
+                // noc_async_write_barrier();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }

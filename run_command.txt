@@ -1,0 +1,13 @@
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py -k \"test_FalconDecoder_inference and prefill_seq1024\""
+
+/localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_mlp.py test_FalconMLP_inference
+
+
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_mlp.py -k \"test_FalconMLP_inference and prefill_seq128\""
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_mlp.py -k "test_FalconMLP_inference and prefill_seq1024"
+TT_METAL_DPRINT_CORES=0,0 pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_mlp.py -k "test_FalconMLP_inference and prefill_seq128"
+
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and prefill_seq1024_bf16_dram\""
+
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"test_ff1\""
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_ff1"
