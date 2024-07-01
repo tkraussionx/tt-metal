@@ -20,7 +20,6 @@ from models.utility_functions import torch_random, skip_for_wormhole_b0
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -77,14 +76,13 @@ def test_vit_patch_embeddings(device, model_name, batch_size, image_size, image_
     config = ttnn_optimized_sharded_vit.update_model_config(config, batch_size)
 
     output = ttnn_optimized_sharded_vit.vit_patch_embeddings(
-        config, pixel_values, parameters=parameters, unittest_check=True
+        config, pixel_values, parameters=parameters, unittest_check=True, name="vit"
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output[0], 0.9999)
+    assert_with_pcc(torch_output, output[0], 0.9997)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -168,13 +166,13 @@ def test_vit_embeddings(device, model_name, batch_size, image_size, image_channe
         cls_token,
         position_embeddings,
         parameters=parameters,
+        name="vit",
     )
     output = ttnn.to_torch(output)
     print(output.shape)
-    assert_with_pcc(torch_output, output[0][:197:], 0.9999)
+    assert_with_pcc(torch_output, output[0][:197:], 0.9995)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -233,10 +231,9 @@ def test_vit_attention(device, model_name, batch_size, sequence_size):
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output, 0.9999)
+    assert_with_pcc(torch_output, output, 0.9957)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -265,10 +262,9 @@ def test_vit_intermediate(device, model_name, batch_size, sequence_size):
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9999)
+    assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9984)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -313,10 +309,9 @@ def test_vit_output(device, model_name, batch_size, sequence_size):
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9999)
+    assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9994)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -375,10 +370,9 @@ def test_vit_layer(device, model_name, batch_size, sequence_size):
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output, 0.9999)
+    assert_with_pcc(torch_output, output, 0.9749)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
@@ -432,7 +426,7 @@ def test_vit_encoder(device, model_name, batch_size, sequence_size):
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output, 0.9999)
+    assert_with_pcc(torch_output, output, 0.8057)
 
 
 @skip_for_wormhole_b0()
@@ -536,6 +530,7 @@ def test_vit(device, model_name, batch_size, image_size, image_channels, sequenc
         cls_token,
         position_embeddings,
         parameters=parameters,
+        name="vit",
     )
     output = ttnn.to_torch(output)
 

@@ -151,7 +151,7 @@ def update_model_config(config, batch_size):
 # https://github.com/huggingface/transformers/blob/v4.37.2/src/transformers/models/vit/modeling_vit.py
 
 
-def vit_patch_embeddings(config, pixel_values, *, parameters, unittest_check=False):
+def vit_patch_embeddings(config, pixel_values, *, parameters, unittest_check=False, name="vit"):
     # batch_size, img_c, img_h, img_w = pixel_values.shape # NCHW
     batch_size, img_h, img_w, img_c = pixel_values.shape  # permuted input NHWC
     patch_size = 16
@@ -197,7 +197,7 @@ def vit_patch_embeddings(config, pixel_values, *, parameters, unittest_check=Fal
     # return resharded_pixel_values
 
     if unittest_check:
-        parameters = parameters.vit.embeddings.patch_embeddings
+        parameters = parameters[name].embeddings.patch_embeddings
 
     patch_embedding_output = ttnn.linear(
         folded_pixel_values,
@@ -223,15 +223,16 @@ def vit_embeddings(
     position_embeddings,
     *,
     parameters,
+    name="vit",
 ):
-    parameters = parameters.vit.embeddings
+    parameters = parameters[name].embeddings
 
     l1_memory_config = ttnn.experimental.tensor.MemoryConfig(
         memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
         buffer_type=ttnn.experimental.tensor.BufferType.L1,
     )
 
-    patch_embeddings = vit_patch_embeddings(config, pixel_values, parameters=parameters.patch_embeddings)
+    patch_embeddings = vit_patch_embeddings(config, pixel_values, parameters=parameters.patch_embeddings, name=name)
     embedding_output = ttnn.experimental.tensor.concat([cls_token, patch_embeddings], -2, l1_memory_config)
     embedding_output = ttnn.to_layout(embedding_output, layout=ttnn.TILE_LAYOUT)
     embedding_output = ttnn.add(
@@ -492,21 +493,24 @@ def vit(
     cls_token,
     position_embeddings,
     parameters,
+    name="vit",
 ):
-    embeddings_output = vit_embeddings(config, pixel_values, cls_token, position_embeddings, parameters=parameters)
+    embeddings_output = vit_embeddings(
+        config, pixel_values, cls_token, position_embeddings, parameters=parameters, name=name
+    )
 
     hidden_states = vit_encoder(
         config,
         embeddings_output,
         attention_mask,
-        parameters=parameters.vit.encoder,
+        parameters=parameters[name].encoder,
     )
 
     # Final LayerNorm
     output = ttnn.layer_norm(
         hidden_states,
-        weight=parameters.vit.layernorm.weight,
-        bias=parameters.vit.layernorm.bias,
+        weight=parameters[name].layernorm.weight,
+        bias=parameters[name].layernorm.bias,
         epsilon=config.layer_norm_eps,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         program_config=config.program_configs["layernorm_program_config"],
