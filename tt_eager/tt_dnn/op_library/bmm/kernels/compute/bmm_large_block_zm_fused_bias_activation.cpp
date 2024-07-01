@@ -19,7 +19,7 @@
 
 namespace NAMESPACE {
 
-uint32_t mm_partials_cb_addr = 115520;
+uint32_t mm_partials_cb_addr = 116032;
 
 #define USE_UNPACK_HACK 0
 

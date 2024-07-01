@@ -632,6 +632,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity,
             .fp32_dest_acc_en = fp32_dest_acc_en,
+            .preserve_fp32_precision = true,
             .math_approx_mode = math_approx_mode,
             .compile_args = compute_kernel_args,
             .defines = mm_kernel_defines});
