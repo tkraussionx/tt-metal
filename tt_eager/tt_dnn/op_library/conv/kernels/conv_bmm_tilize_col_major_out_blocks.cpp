@@ -9,7 +9,7 @@
 #include "compute_kernel_api/pack_untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
-//#include "debug/dprint.h"
+#include "debug/dprint.h"
 
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
@@ -140,6 +140,7 @@ void MAIN {
     SFPU_OP_INIT_ACTIVATION
     #endif
     // in1 num blocks w is the outer loop. Output blocks are computed in col major order.
+    DPRINT << "compute_test " << in1_num_blocks_w << " " << in0_num_blocks_h << ENDL();
     for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
 
         for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
@@ -147,7 +148,7 @@ void MAIN {
             unpack_reconfig_data_format_srca(in1_cb_id, in0_pretilize_cb_id);
 
             tilize_in(in0_pretilize_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
-
+            return;
             mm_block_init_short_with_dt(in0_cb_id, in1_cb_id, in0_pretilize_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
             #endif
 

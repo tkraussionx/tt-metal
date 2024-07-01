@@ -69,8 +69,8 @@ def _conv_op_validate_input_tensors(operation_name, input_tensor, *args, **kwarg
     )
 
 
-@ttnn.register_operation(name="ttnn.opimized_conv_new_1", validate_input_tensors=_conv_op_validate_input_tensors)
-def opimized_conv_new_1(
+@ttnn.register_operation(name="ttnn.optimized_conv_new", validate_input_tensors=_conv_op_validate_input_tensors)
+def optimized_conv_new(
     # *,
     input_tensor: ttnn.Tensor,
     weight_tensor: ttnn.Tensor,
@@ -82,17 +82,14 @@ def opimized_conv_new_1(
     untilize_out: bool,
     fuse_relu: bool,
     math_fidelity: ttnn.MathFidelity,
-    # parallelization_config: ttnn.experimental.Tensor.OptimizedConvParallelizationConfig=None,
-    # block_config: ttnn.experimental.tensor.OptimizedConvBlockConfig=None,
     extra_padding_for_32B_alignment: int,
     output_dtype: ttnn.DataType = ttnn.bfloat16,
-    # input_tensor_shape: ttnn.TensorShape=None,
     use_shallow_conv_variant: bool = False,
 ) -> ttnn.Tensor:
     print("OptimizedConvNew2 Python core Side")
 
     grid_size = (12, 3)
-    per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles = 4, 1
+    per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles = 8, 1
     input_tensor_shape = (2, input_height, input_width, 1152)
     act_block_h, act_block_w = per_core_out_matrix_h_ntiles, int(input_tensor_shape[3] / 32)
     out_subblock_h, out_subblock_w = determine_largest_subblock_size(
@@ -105,12 +102,7 @@ def opimized_conv_new_1(
         out_subblock_h,
         out_subblock_w,
     )
-    # act_block_h, act_block_w, out_subblock_h, out_subblock_w = (
-    #     per_core_out_matrix_h_ntiles,
-    #     int(input_tensor_shape[3] / 32),
-    #     1,
-    #     1,
-    # )
+
     opt_conv_parall_conf = ttnn.experimental.tensor.OptimizedConvParallelizationConfig(
         grid_size=grid_size,
         num_cores_nhw=1,

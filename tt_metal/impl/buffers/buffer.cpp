@@ -129,6 +129,7 @@ Buffer::Buffer(
     shard_parameters_(shard_parameters) {
     TT_FATAL(this->device_ != nullptr and this->device_->allocator_ != nullptr);
     validate_buffer_size_and_page_size(size, page_size, buffer_type, buffer_layout, shard_parameters);
+    //std::cout << "Buffer allocation Done " << size << " " << page_size << " buffer_type " << (int)buffer_type << std::endl;
     if (allocate) {
         this->allocate();
     }

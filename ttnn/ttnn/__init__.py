@@ -467,7 +467,7 @@ from ttnn.operations.ccl import all_gather
 from ttnn.operations import transformer
 from ttnn.operations import kv_cache
 from ttnn.operations.conv2d import Conv2d, conv2d, Conv2dConfig
-from ttnn.operations.conv_opt import opimized_conv_new_1
+from ttnn.operations.conv_opt import optimized_conv_new
 
 from ttnn.operations.pool import (
     MaxPool2d,

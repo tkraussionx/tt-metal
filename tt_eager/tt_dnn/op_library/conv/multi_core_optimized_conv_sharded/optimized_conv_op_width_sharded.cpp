@@ -68,6 +68,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
         // incoming data is the input cb instead of raw l1/dram addr
         cb_sharded_act_config.set_globally_allocated_address(*input.buffer());
         cb_sharded_act = tt_metal::CreateCircularBuffer(program, core, cb_sharded_act_config);
+        log_debug(LogOp, "Input CB: {}, npages: {}, pagesize: {}", sharded_act_cb, shard_shape[0], shard_shape[1] * num_bytes_for_df);
 
         if (weight_width_sliced) {
             // For 2D convs, each core creates and tilizes full input matrix then mcasts round robin style
@@ -87,6 +88,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
                     .set_page_size(act_cb_row_major_bfloat16, act_tile_size);
             auto cb_act_row_major_bfloat16 =
                 tt_metal::CreateCircularBuffer(program, core, cb_act_row_major_bfloat16_config);
+            log_debug(LogOp, "weight_width_sliced CB: {}, npages: {}, pagesize: {}", act_cb, num_cb0_tiles, tilized_act_tile_size);
         } else {
             // For 1D convs, locally create act matrix in act_cb, which is always ROW_MAJOR BFLOAT16
             // Then, tilize input in compute
@@ -105,6 +107,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
             CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb, act_df}})
                                                      .set_page_size(act_cb, act_tile_size);
             auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
+            log_debug(LogOp, "not weight_width_sliced CB: {}, npages: {}, pagesize: {}", act_cb_second_reader, num_cb0_tiles, act_tile_size);
         }
     } else {
         TT_ASSERT(false, "Input must be sharded!");
@@ -114,6 +117,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
         CircularBufferConfig(num_cb1_tiles * weight_tile_size, {{weight_cb, weight_df}})
             .set_page_size(weight_cb, weight_tile_size);
     auto cb_weight = tt_metal::CreateCircularBuffer(program, core, cb_weight_config);
+    log_debug(LogOp, "Weight CB: {}, npages: {}, pagesize: {}", weight_cb, num_cb1_tiles, weight_tile_size);
 
     // Used for placing tilized activations
     CircularBufferConfig cb_src0_tilized_config =
@@ -121,6 +125,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
             num_cb0_tilized_tiles * tilized_act_tile_size, {{tilize_mode_tilized_act_cb, tilized_act_df}})
             .set_page_size(tilize_mode_tilized_act_cb, tilized_act_tile_size);
     auto cb_src0_tilized = tt_metal::CreateCircularBuffer(program, core, cb_src0_tilized_config);
+    log_debug(LogOp, "Tilized Act CB: {}, npages: {}, pagesize: {}", tilize_mode_tilized_act_cb, num_cb0_tilized_tiles, tilized_act_tile_size);
 
     CBHandle cb_output = 0;
     if (untilize_out) {
@@ -128,6 +133,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
             CircularBufferConfig(num_output_tiles * interm0_single_tile_size, {{matmul_partials_cb, interm0_df}})
                 .set_page_size(matmul_partials_cb, interm0_single_tile_size);
         auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
+        log_debug(LogOp, "Matmul Partials CB: {}, npages: {}, pagesize: {}", matmul_partials_cb, num_output_tiles, interm0_single_tile_size);
 
         // Supposed to be a small CB only responsible for reorganizing
         // the output blocks to fill the whole "per core output block width"
@@ -135,7 +141,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
             CircularBufferConfig(num_reblock_cb_tiles * out_tile_size, {{untilize_mode_reblock_cb, out_df}})
                 .set_page_size(untilize_mode_reblock_cb, out_tile_size);
         auto cb_reblock = tt_metal::CreateCircularBuffer(program, core, cb_reblock_config);
-
+        log_debug(LogOp, "Reblock CB: {}, npages: {}, pagesize: {}", untilize_mode_reblock_cb, num_reblock_cb_tiles, out_tile_size);
         CircularBufferConfig cb_output_config =
             CircularBufferConfig(num_writer_output_tiles * out_tile_size, {{out0_cb, out_df}})
                 .set_page_size(out0_cb, out_tile_size);
@@ -143,6 +149,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
             cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
         }
         cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+        log_debug(LogOp, "Output CB: {}, npages: {}, pagesize: {}", out0_cb, num_writer_output_tiles, out_tile_size);
     } else {
         // Share buffer if same data format
         if (interm0_df == out_df) {
@@ -157,13 +164,14 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
                 cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
             }
             cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
+            log_debug(LogOp, "Output CB: {}, npages: {}, pagesize: {}", out0_cb, num_output_tiles, out_tile_size);
         } else {
             // Separate buffer if not same data format
             CircularBufferConfig cb_matmul_partials_config =
                 CircularBufferConfig(num_output_tiles * interm0_single_tile_size, {{matmul_partials_cb, interm0_df}})
                     .set_page_size(matmul_partials_cb, interm0_single_tile_size);
             auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
-
+            log_debug(LogOp, "Matmul Partials CB: {}, npages: {}, pagesize: {}", matmul_partials_cb, num_output_tiles, interm0_single_tile_size);
             CircularBufferConfig cb_output_config =
                 CircularBufferConfig(num_output_tiles * out_tile_size, {{out0_cb, out_df}})
                     .set_page_size(out0_cb, out_tile_size);
@@ -171,6 +179,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2_width(
                 cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
             }
             cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+            log_debug(LogOp, "Output CB: {}, npages: {}, pagesize: {}", out0_cb, num_output_tiles, out_tile_size);
         }
     }
 
@@ -780,6 +789,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
     // TODO: Moving this function call to after kernel logic causes pcc fails
     // There are additional CBs and semaphores created in 2D conv in kernel logic,
     // so does order of create_cb calls matter?
+    log_debug(LogOp, "CB Parameters for conv all num_act_cb_tiles: {} num_weight_cb_tiles: {} num_cb0_tilized_tiles: {} "
+                     "writer_output_block_num_tiles: {}",
+              num_act_cb_tiles, num_weight_cb_tiles, num_cb0_tilized_tiles, writer_output_block_num_tiles);
     auto [cb_sharded_act, cb_output] = create_CBs_for_sharded_input_v2_width(
         program,
         a,
@@ -1084,6 +1096,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
         uint32_t core_x_i = core_i % num_cores_x;
         uint32_t core_y_i = core_i / num_cores_x;
         CoreRange core(CoreCoord(core_x_i, core_y_i), CoreCoord(core_x_i, core_y_i));
+        auto test_123 = device->worker_core_from_logical_core(CoreCoord(core_x_i, core_y_i));
+        std::cout << "logical core for core_i" << core_i << " -> " << test_123.x << " " << test_123.y << std::endl;
         bool noop_core = false;
 
         // per core specific args
@@ -1132,7 +1146,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
                     act_mcast_dest_noc_end_y,
                     core_i,                          // act_mcast_sender_id (goes down the column)
                     (uint32_t)bottom_core_physical.x,  // act_mcast_sender_noc_x
-                    (uint32_t)bottom_core_physical.y,  // act_mcast_sender_noc_x
+                    (uint32_t)bottom_core_physical.y,  // act_mcast_sender_noc_y
                 };
                 reader_rt_args.insert(
                     reader_rt_args.end(), act_mcast_noc_y.begin(), act_mcast_noc_y.end());  // act_mcast_sender_noc_y
@@ -1158,7 +1172,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_width_
                     act_mcast_dest_noc_end_y,
                     core_i,                   // act_mcast_sender_id (goes along the row)
                     (uint32_t)core_physical.y,  // act_mcast_sender_noc_x
-                    (uint32_t)core_physical.x,  // act_mcast_sender_noc_x
+                    (uint32_t)core_physical.x,  // act_mcast_sender_noc_y
                 };
                 reader_rt_args.insert(
                     reader_rt_args.end(), act_mcast_noc_y.begin(), act_mcast_noc_y.end());  // act_mcast_sender_noc_y

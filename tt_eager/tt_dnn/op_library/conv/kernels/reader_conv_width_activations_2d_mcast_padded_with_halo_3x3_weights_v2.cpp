@@ -88,7 +88,7 @@ void kernel_main() {
 
     DPRINT << "act_mcast_sender_id " << act_mcast_sender_id << "  " << " act_mcast_sender_noc_x " << act_mcast_sender_noc_x << ENDL();
 
-    volatile tt_l1_ptr uint32_t *act_mcast_sender_noc_y  = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(i)); //i+=1;
+    //volatile tt_l1_ptr uint32_t *act_mcast_sender_noc_y  = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(i)); //i+=1;
     //volatile tt_l1_ptr uint32_t *act_mcast_sender_noc_x  = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(i));
 
     constexpr uint32_t cb_id_act = tt::CB::c_in0;
@@ -181,6 +181,8 @@ void kernel_main() {
         // Compute should function like regular mm
         for (uint32_t act_w_outer_i = 0; act_w_outer_i < 1; act_w_outer_i++) {
             //DPRINT << "debug data " << act_w_outer_i << ENDL();
+            uint sender_core_x = act_w_outer_i % 12 + 1;
+            uint sender_core_y = act_w_outer_i / 12 + 1;
             cb_reserve_back(cb_id_act, act_block_num_tiles);
             if (act_w_outer_i == act_mcast_sender_id) {
                 // MCAST SENDER: send entire tilized input to other cores in column
@@ -226,8 +228,8 @@ void kernel_main() {
                     DPRINT << "transpose_mcast" << ENDL();
                     //act_mcast_sender_semaphore_noc_addr = get_noc_addr(act_mcast_sender_noc_x, act_mcast_sender_noc_y[act_w_outer_i], act_mcast_sender_semaphore_addr);
                 } else {
-                    DPRINT << "else transpose_mcast " << act_mcast_sender_noc_y[act_w_outer_i] << " " <<  act_mcast_sender_noc_x << ENDL();
-                    act_mcast_sender_semaphore_noc_addr = get_noc_addr(1, 1, act_mcast_sender_semaphore_addr);
+                    DPRINT << "else transpose_mcast " << sender_core_x << " " <<  sender_core_y << ENDL();
+                    act_mcast_sender_semaphore_noc_addr = get_noc_addr(sender_core_x, sender_core_y, act_mcast_sender_semaphore_addr);
                 }
                 noc_semaphore_inc(act_mcast_sender_semaphore_noc_addr, 1);
                 DPRINT << "else part 3 " << ENDL();
@@ -238,9 +240,11 @@ void kernel_main() {
                 DPRINT << "else part complete" << ENDL();
             }
            cb_push_back(cb_id_act, act_block_num_tiles);
+           DPRINT << "123 complete" << ENDL();
         //    uint32_t tilized_act_start_address = get_read_ptr(cb_id_act);
         //    print_pages(tilized_act_start_address, 144, 1);
         } // act_w_num_outer
+        DPRINT << "completed_1" << ENDL();
         cb_pop_front(tilized_in0_cb_id, act_block_num_tiles);
         DPRINT << "completed" << ENDL();
     }

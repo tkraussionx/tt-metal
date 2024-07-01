@@ -24,7 +24,7 @@ def test_new_conv(device):
     print("OptimizedConvNew1 Python Side")
 
     update_process_id()
-    batch_size, input_channel, input_height, input_width = 2, 1152, 8, 8
+    batch_size, input_channel, input_height, input_width = 2, 1152, 16, 8
     weight_batch, ncores = 1152, 36
     filter_height, filter_width = 3, 3
     input_shape = [1, 1, batch_size * input_height * input_width, input_channel]
@@ -34,8 +34,14 @@ def test_new_conv(device):
     for i in range(batch_size * input_height * input_width):
         for j in range(input_channel):
             torch_input[0, 0, i, j] = j + 0.01 * i
-    tt_input = ttnn.from_torch(torch_input, device=device, dtype=ttnn.bfloat16)
-    tt_weight = ttnn.from_torch(torch_weight, device=device, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
+    tt_input = ttnn.from_torch(torch_input, device=device, dtype=ttnn.bfloat16, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    tt_weight = ttnn.from_torch(
+        torch_weight,
+        device=device,
+        layout=ttnn.TILE_LAYOUT,
+        dtype=ttnn.bfloat8_b,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
     input_2d_height = batch_size * input_height * input_width
     shard_height = batch_size * input_height * input_width
     print("init complted")
@@ -51,7 +57,8 @@ def test_new_conv(device):
     input_tensor = ttnn.to_memory_config(tt_input, memory_config=in_sharded_mem_config)
     input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
     ##op computation
-    output = ttnn.opimized_conv_new_1(
+    # ttnn.dump_device_memory_state(device, prefix='pre_')
+    output = ttnn.optimized_conv_new(
         input_tensor,
         tt_weight,
         device,
@@ -64,6 +71,7 @@ def test_new_conv(device):
         ttnn.MathFidelity.HiFi4,
         10,
     )
+    # ttnn.dump_device_memory_state(device, prefix='shwe_')
     print(output)
     # ttnn.opimized_abc([1, 1, 1, 1], 1024, True, True)
     # ttnn.opimized_conv_new_1(tt_input, tt_weight, [1, 1, 1, 1], 1024, True, True)

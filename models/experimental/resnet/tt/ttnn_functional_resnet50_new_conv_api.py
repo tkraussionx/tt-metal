@@ -11,6 +11,19 @@ from models.utility_functions import (
 )
 from typing import List
 
+
+def write_to_file(file_name, data):
+    data = data.detach().cpu().numpy()
+    shape = data.shape
+    with open(file_name, "w") as f:
+        for b in range(shape[0]):
+            for f in range(shape[1]):
+                for h in range(shape[2]):
+                    for w in range(shape[3]):
+                        f.write(str(data[b, f, h, w]) + " ")
+                    f.write("\n")
+
+
 hardcoded_matmul_config_linear = {
     8: ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=(8, 4),
