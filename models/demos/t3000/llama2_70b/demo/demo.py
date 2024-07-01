@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from dataclasses import dataclass
 import os
 import json
 import torch
@@ -23,9 +24,62 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
 )
 
 
+@dataclass
+class ModelArgs:
+    implementation: str = "meta"
+    llama_version: str = None
+    ckpt_dir: str = "/home/llama-data-repacked-2/llama-2-70b/"
+    tokenizer_path: str = "/home/llama-data/tokenizer.model"
+    skip_model_load: bool = False
+    max_batch_size: int = 32
+    num_layers: int = None
+    max_seq_len: int = 4096
+    max_kv_context_len: int = 4096
+
+
+@dataclass
+class TTArgs:
+    device_mesh: object = None
+    n_devices: int = 8
+    emulated: bool = False
+    cache_path: str = None
+    decode_only: bool = False
+
+
+@dataclass
+class DataArgs:
+    num_tokens: int = 128
+    prompts_file: str = "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json"
+    output_at_end: bool = True
+    top_p: float = 1
+    top_k: int = 1
+    temperature: float = 1.0
+    chat: bool = False
+    sample_len: int = None
+    ground_truth: str = None
+
+
+@dataclass
+class DemoArgs:
+    model: ModelArgs
+    tt: TTArgs
+    data: DataArgs
+
+
+def construct_arg(**kwargs):
+    model_args = ModelArgs(**{k: v for k, v in kwargs.items() if hasattr(ModelArgs, k)})
+    tt_args = TTArgs(**{k: v for k, v in kwargs.items() if hasattr(TTArgs, k)})
+    data_args = DataArgs(**{k: v for k, v in kwargs.items() if hasattr(DataArgs, k)})
+    return DemoArgs(model=model_args, tt=tt_args, data=data_args)
+
+
 def main(args):
     # Set random reproducible seed
     torch.manual_seed(0)
+
+    model_args = args.model
+    tt_args = args.tt
+    data_args = args.data
 
     # Load ground truth if available
     if args.ground_truth:
@@ -96,22 +150,29 @@ def build_generator(args):
     return generator
 
 
-def load_prompts_file(args, tokenizer):
+def get_sampling_func(top_k, top_p, temperature):
+    if top_k == 1:
+        return lambda x: torch.argmax(x[:, -1], dim=-1).reshape(-1)
+    else:
+        return lambda x: top_pk_logits_efficient(x, p=top_p, k=top_k, temperature=temperature).reshape(-1)
+
+
+def load_prompts_file(model_args, data_args, tokenizer):
     # Load prompts from json
-    prompts = json.load(open(args.prompts_file))
+    prompts = json.load(open(data_args.prompts_file))
     # Encode the prompt
-    if args.chat:
+    if data_args.chat:
         formatter = ChatFormat(tokenizer)
         tokenized = [formatter.encode_dialog_prompt(dialog) for dialog in prompts]
     else:
         tokenized = [tokenizer.encode(x, bos=True, eos=False) for x in prompts]
 
-    if len(tokenized) > args.max_batch_size:
+    if len(tokenized) > model_args.max_batch_size:
         logger.info(
-            f"Warning: prompts file contains {len(tokenized)} prompts, but max batch size is {args.max_batch_size}. Only first {args.max_batch_size} are decoded."
+            f"Warning: prompts file contains {len(tokenized)} prompts, but max batch size is {model_args.max_batch_size}. Only first {model_args.max_batch_size} are decoded."
         )
-        tokenized = tokenized[: args.max_batch_size]
-        prompts = prompts[: args.max_batch_size]
+        tokenized = tokenized[: model_args.max_batch_size]
+        prompts = prompts[: model_args.max_batch_size]
 
     return tokenized, prompts
 
@@ -268,61 +329,6 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
         return token
 
 
-class Args:
-    def __init__(
-        self,
-        # model args
-        implementation="meta",
-        ckpt_dir="/home/llama-data-repacked-2/llama-2-70b/",
-        tokenizer_path="/home/llama-data/tokenizer.model",
-        skip_model_load=False,
-        max_batch_size=32,
-        num_layers=None,
-        max_seq_len=4096,
-        # Generation args
-        num_tokens=128,
-        prompts_file="models/demos/t3000/llama2_70b/demo/data/multi_prompt.json",
-        output_at_end=True,
-        top_p=1,
-        top_k=1,
-        temperature=1.0,
-        chat=False,
-        ground_truth=None,
-        sample_len=None,
-        # TT args
-        device_mesh=None,
-        n_devices=8,
-        cache_path=None,
-        decode_only=False,
-        llama_version="llama2",
-    ):
-        self.implementation = implementation
-        self.ckpt_dir = ckpt_dir
-        self.tokenizer_path = tokenizer_path
-        self.skip_model_load = skip_model_load
-        self.max_batch_size = max_batch_size
-        self.num_layers = num_layers
-        self.max_seq_len = max_seq_len
-        self.num_tokens = num_tokens
-        self.prompts_file = prompts_file
-        self.output_at_end = output_at_end
-        self.top_p = top_p
-        self.top_k = top_k
-        self.temperature = temperature
-        self.chat = chat
-        self.ground_truth = ground_truth
-        self.sample_len = sample_len
-        self.device_mesh = device_mesh
-        self.n_devices = n_devices
-        self.cache_path = cache_path
-        self.decode_only = decode_only
-        self.llama_version = llama_version
-
-
-def construct_arg(**kwargs):
-    return Args(**kwargs)
-
-
 @pytest.mark.timeout(240000)
 @pytest.mark.parametrize(
     "llama_version",
@@ -403,6 +409,7 @@ def test_LlamaModel_demo(
 
     args = construct_arg(
         implementation=implementation,
+        llama_version=llama_verison,
         ckpt_dir=ckpt_dir,
         tokenizer_path=tokenizer_path,
         skip_model_load=skip_model_load,
@@ -418,7 +425,6 @@ def test_LlamaModel_demo(
         n_devices=n_devices,
         cache_path=cache_path,
         decode_only=decode_only,
-        llama_version=llama_version,
         ground_truth=ground_truth,
     )
     main(args)
