@@ -60,9 +60,7 @@ def torch_model():
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 @pytest.mark.parametrize(
     "device_mesh",
-    [
-        2,
-    ],
+    [2, 4, 8, 16, 32],
     indirect=True,
 )
 @pytest.mark.parametrize(
@@ -81,8 +79,8 @@ def test_falcon_decoder(
     torch_model,
     enable_async,
 ):
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(enable_async)
+    # for device in device_mesh.get_device_ids():
+    #    device_mesh.get_device(device).enable_async(enable_async)
 
     torch.manual_seed(0)
     batch = device_batch_size * device_mesh.get_num_devices()
@@ -185,5 +183,5 @@ def test_falcon_decoder(
         pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
     )
 
-    for device in device_mesh.get_device_ids():
-        device_mesh.get_device(device).enable_async(False)
+    # for device in device_mesh.get_device_ids():
+    #    device_mesh.get_device(device).enable_async(False)

@@ -373,6 +373,36 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         }
     }
 
+     //check heartbeat from all galay devices.
+    for (const auto &[device_id, dev] : mmio_devices) {
+        //For each mmio device, first close all the remote tunneled devices.
+        //Close the farthest tunneled device first.
+        auto tunnels_from_mmio = dev->tunnels_from_mmio_;
+        //iterate over all tunnels origination from this mmio device
+        CoreCoord hb_core(7, 6);
+        for (auto t : tunnels_from_mmio) {
+            //iterate over all tunneled devices (tunnel stops) in this tunnel and close them.
+            for (uint32_t ts = 1; ts < t.size(); ts++) {
+                if (devices.find(t[ts]) != devices.end()) {
+                    std::vector<uint32_t> run_mailbox_read_val1;
+                    std::vector<uint32_t> run_mailbox_read_val2;
+
+                    // read a single uint32_t even though launch.run is smaller than that
+                    log_info(tt::LogMetal, "Checking Device {} ARC Heartbeat Before Close", t[ts]);
+                    run_mailbox_read_val1 = llrt::read_hex_vec_from_core(t[ts], hb_core, 0x20, sizeof(uint32_t));
+                    usleep(5000);
+                    run_mailbox_read_val2 = llrt::read_hex_vec_from_core(t[ts], hb_core, 0x20, sizeof(uint32_t));
+                    if (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]) {
+                        log_info(tt::LogMetal, "Device {} ARC is Alive", t[ts]);
+                    } else {
+                        log_info(tt::LogMetal, "Device {} ARC is Dead", t[ts]);
+                    }
+                }
+            }
+        }
+    }
+
+
     for (const auto &[device_id, dev] : mmio_devices) {
         //For each mmio device, first close all the remote tunneled devices.
         //Close the farthest tunneled device first.
@@ -389,6 +419,33 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         //finally close the mmio device
         dev->close();
     }
+
+/*     for (const auto &[device_id, dev] : mmio_devices) {
+        //For each mmio device, first close all the remote tunneled devices.
+        //Close the farthest tunneled device first.
+        auto tunnels_from_mmio = dev->tunnels_from_mmio_;
+        //iterate over all tunnels origination from this mmio device
+        CoreCoord hb_core(7, 6);
+        for (auto t : tunnels_from_mmio) {
+            //iterate over all tunneled devices (tunnel stops) in this tunnel and close them.
+            for (uint32_t ts = 1; ts < t.size(); ts++) {
+                if (devices.find(t[ts]) != devices.end()) {
+                    std::vector<uint32_t> run_mailbox_read_val1;
+                    std::vector<uint32_t> run_mailbox_read_val2;
+
+                    // read a single uint32_t even though launch.run is smaller than that
+                    log_info(tt::LogMetal, "Checking Device {} Heartbeat After Close", t[ts]);
+                    run_mailbox_read_val1 = llrt::read_hex_vec_from_core(t[ts], hb_core, 0x1c, sizeof(uint32_t));
+                    run_mailbox_read_val2 = llrt::read_hex_vec_from_core(t[ts], hb_core, 0x1c, sizeof(uint32_t));
+                    if (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]) {
+                        log_info(tt::LogMetal, "Device {} is Alive", t[ts]);
+                    } else {
+                        log_info(tt::LogMetal, "Device {} is Dead", t[ts]);
+                    }
+                }
+            }
+        }
+    } */
 }
 
 void print_page(
@@ -660,6 +717,23 @@ void ReadShard(const Buffer &buffer, std::vector<uint32_t> &host_buffer, const u
 
 void LaunchProgram(Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done) {
     LaunchProgram(device, *program, wait_until_cores_done);
+}
+
+bool IsArcHeartBeatAlive(uint32_t device_id) {
+    std::vector<uint32_t> run_mailbox_read_val1;
+    std::vector<uint32_t> run_mailbox_read_val2;
+    CoreCoord hb_core(7, 6);
+
+    //log_info(tt::LogMetal, "Checking Device {} ARC Heartbeat Before Close", t[ts]);
+    run_mailbox_read_val1 = llrt::read_hex_vec_from_core(device_id, hb_core, 0x20, sizeof(uint32_t));
+    usleep(5000);
+    run_mailbox_read_val2 = llrt::read_hex_vec_from_core(device_id, hb_core, 0x20, sizeof(uint32_t));
+    return (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]);
+    //if (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]) {
+    //    log_info(tt::LogMetal, "Device {} ARC is Alive", t[ts]);
+    //} else {
+    //    log_info(tt::LogMetal, "Device {} ARC is Dead", t[ts]);
+    //}
 }
 
 void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done) {

@@ -298,8 +298,71 @@ void Cluster::start_driver(chip_id_t mmio_device_id, tt_device_params &device_pa
 Cluster::~Cluster() {
     log_info(tt::LogDevice, "Closing user mode device drivers");
 
+/*     for (const auto &[mmio_device_id, device_driver] : this->mmio_device_id_to_driver_) {
+        auto device_ids = get_devices_controlled_by_mmio_device(mmio_device_id);
+        CoreCoord hb_core(7, 6);
+        std::vector<uint32_t> run_mailbox_read_val1;
+        std::vector<uint32_t> run_mailbox_read_val2;
+        for (auto device_id : device_ids) {
+            if (device_id == mmio_device_id) continue;
+
+            // read a single uint32_t even though launch.run is smaller than that
+            log_info(tt::LogMetal, "Cluster Destructor: Checking Device {} Heartbeat", device_id);
+            run_mailbox_read_val1 = llrt::read_hex_vec_from_core(device_id, hb_core, 0x1c, sizeof(uint32_t));
+            run_mailbox_read_val2 = llrt::read_hex_vec_from_core(device_id, hb_core, 0x1c, sizeof(uint32_t));
+            if (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]) {
+                log_info(tt::LogMetal, "Device {} is Alive. {} - {}", device_id, run_mailbox_read_val1[0], run_mailbox_read_val2[0]);
+            } else {
+                log_info(tt::LogMetal, "Device {} is Dead. {} - {}", device_id, run_mailbox_read_val1[0], run_mailbox_read_val2[0]);
+            }
+        }
+    }
+ */
     for (const auto &[mmio_device_id, device_driver] : this->mmio_device_id_to_driver_) {
-        device_driver->close_device();
+        log_info(tt::LogDevice, "Closing Device {}", mmio_device_id);
+        //if (mmio_device_id != 3) {
+
+/*         auto device_ids = get_devices_controlled_by_mmio_device(mmio_device_id);
+        std::vector<CoreCoord> hb_cores = {CoreCoord(9, 0), CoreCoord(1, 0), CoreCoord(8, 0), CoreCoord(2, 0), CoreCoord(7, 0), CoreCoord(3, 0), CoreCoord(6, 0), CoreCoord(4, 0),
+                                           CoreCoord(9, 6), CoreCoord(1, 6), CoreCoord(8, 6), CoreCoord(2, 6), CoreCoord(7, 6), CoreCoord(3, 6), CoreCoord(6, 6), CoreCoord(4, 6)};
+        std::vector<uint32_t> run_mailbox_read_val1;
+        std::vector<uint32_t> run_mailbox_read_val2;
+        std::vector<uint32_t> arc_read_val1;
+        std::vector<uint32_t> arc_read_val2;
+        for (auto device_id : device_ids) {
+            if (device_id == mmio_device_id) continue;
+
+
+            log_info(tt::LogMetal, "Cluster Destructor: Checking Device {} Heartbeat Before Closing", device_id);
+            for (uint32_t i = 0; i < hb_cores.size(); i++) {
+                arc_read_val1 = llrt::read_hex_vec_from_core(device_id, hb_cores[i], 0x20, 4);
+                run_mailbox_read_val1 = llrt::read_hex_vec_from_core(device_id, hb_cores[i], 0x1c, 4);
+                run_mailbox_read_val2 = llrt::read_hex_vec_from_core(device_id, hb_cores[i], 0x1c, 4);
+                if (run_mailbox_read_val1[0] != run_mailbox_read_val2[0]) {
+                    log_info(tt::LogMetal, "Device {} Eth {} is Alive Before Closing. {} - {}", device_id, hb_cores[i].str(), run_mailbox_read_val1[0], run_mailbox_read_val2[0]);
+                } else {
+                    log_info(tt::LogMetal, "Device {} Eth {} is Dead Before Closing. {} - {}", device_id, hb_cores[i].str(), run_mailbox_read_val1[0], run_mailbox_read_val2[0]);
+                }
+                usleep(5000);
+                arc_read_val2 = llrt::read_hex_vec_from_core(device_id, hb_cores[i], 0x20, 4);
+                if (arc_read_val1[0] != arc_read_val2[0]) {
+                    log_info(tt::LogMetal, "Device {} ARC is Alive Before Closing. {} - {}", device_id, arc_read_val1[0], arc_read_val2[0]);
+                } else {
+                    log_info(tt::LogMetal, "Device {} ARC is Dead Before Closing. {} - {}", device_id, arc_read_val1[0], arc_read_val2[0]);
+                }
+                //TT_FATAL(arc_read_val1[0] != arc_read_val2[0], "ARC is Dead...");
+
+            }
+            CoreCoord arc_core(0, 10);
+            log_info(tt::LogMetal, "Cluster Destructor: Checking Device {} ARC Before Closing", device_id);
+            run_mailbox_read_val1 = llrt::read_hex_vec_from_core(device_id, arc_core, 0x880030074, sizeof(uint32_t));
+            log_info(tt::LogMetal, "Device {} ARC {} is Alive Before Closing. {}", device_id, arc_core.str(), run_mailbox_read_val1[0]);
+
+        }
+ */
+            device_driver->close_device();
+
+        //}
     }
 
     this->mmio_device_id_to_driver_.clear();

@@ -222,7 +222,13 @@ OutputTensors run_device_operation(
     auto program = get_or_create_program(
         operation, input_tensors, optional_input_tensors, output_tensors, optional_output_tensors);
     uint32_t device_id = detail::get_device(input_tensors, optional_input_tensors)->id();
-
+    tt::log_info(
+        tt::LogOp,
+        "Launching Operation: \"{}\" on {}",
+        operation.get_type_name(), device_id);
+    if (!::detail::IsArcHeartBeatAlive(device_id)) {
+        tt::log_warning("ARC on Device {} is Dead...", device_id);
+    }
     // Enqueue or Launch Program
     std::visit(
         [&operation, &input_tensors, &optional_input_tensors, &output_tensors, queue](auto&& program) {

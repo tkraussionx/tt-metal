@@ -93,6 +93,7 @@ namespace tt::tt_metal{
         void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done = true);
         void LaunchProgram(Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done = true);
         void WaitProgramDone(Device *device, Program &program);
+        bool IsArcHeartBeatAlive(uint32_t device_id);
 
         /**
          *  Compiles all kernels within the program, and generates binaries that are written to `$TT_METAL_HOME/built/<device>/kernels/<kernel name>/<kernel hash>`

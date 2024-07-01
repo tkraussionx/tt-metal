@@ -693,7 +693,7 @@ static void dump_core(
 static void __attribute__((noinline)) dump(FILE *f) {
     for (Device *device : devices) {
         if (f != stdout && f != stderr) {
-            log_info(LogLLRuntime, "Watcher checking device {}", device->id());
+            log_debug(LogLLRuntime, "Watcher checking device {}", device->id());
         }
 
         std::set<std::pair<CoreCoord, riscv_id_t>> paused_cores;
