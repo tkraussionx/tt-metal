@@ -181,6 +181,73 @@ std::vector<std::optional<Tensor>> _add_bw_overload(
     return _addalpha_bw(default_queue_id, grad, input, other, 1.0f, output_mem_config, are_required_outputs, input_grad, other_grad);
 }
 
+
+std::vector<std::optional<Tensor>> _mul_bw(
+    uint8_t queue_id,
+    const Tensor& grad,
+    const Tensor& input,
+    const Tensor& other,
+    const MemoryConfig& output_mem_config,
+    const std::vector<bool>& are_required_outputs,
+    std::optional<Tensor> input_grad,
+    std::optional<Tensor> other_grad) {
+    std::vector<std::optional<Tensor>> result;
+
+    if (are_required_outputs.at(0)) {
+        if(input_grad.has_value()){
+            ttnn::multiply(queue_id, grad, other, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, input_grad);
+        } else {
+            input_grad = ttnn::multiply(queue_id, grad, other, std::nullopt, output_mem_config);
+        }
+        result.emplace_back(input_grad);
+    } else {
+        result.emplace_back(std::nullopt);
+    }
+    if (are_required_outputs.at(1)) {
+        if(other_grad.has_value()){
+            ttnn::multiply(queue_id, grad, input, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, other_grad);
+        } else {
+            other_grad = ttnn::multiply(queue_id, grad, input, std::nullopt, output_mem_config);
+        }
+        result.emplace_back(other_grad);
+    } else {
+        result.emplace_back(std::nullopt);
+    }
+
+    return std::move(result);
+}
+
+std::vector<ttnn::Tensor> _mul_bw_inter(
+    const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
+
+    auto result = _mul_bw(0, grad, input, other, output_mem_config, {true, true}, std::nullopt, std::nullopt);
+
+    std::vector<ttnn::Tensor> output_tensors;
+    output_tensors.reserve(result.size());
+
+    for (const auto& opt_tensor : result) {
+        if (opt_tensor) {
+            output_tensors.emplace_back(*opt_tensor);
+        } else {
+            output_tensors.emplace_back();
+        }
+    }
+    return output_tensors;
+}
+
+std::vector<std::optional<Tensor>> _mul_bw_overload(
+    const Tensor& grad,
+    const Tensor& input,
+    const Tensor& other,
+    const MemoryConfig& output_mem_config,
+    const std::vector<bool>& are_required_outputs,
+    std::optional<Tensor> input_grad,
+    std::optional<Tensor> other_grad) {
+        uint8_t default_queue_id = 0;
+    return _mul_bw(default_queue_id, grad, input, other, output_mem_config, are_required_outputs, input_grad, other_grad);
+}
+
+
 std::vector<ttnn::Tensor> _xlogy_bw(
     const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
