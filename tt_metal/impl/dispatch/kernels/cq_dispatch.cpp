@@ -332,7 +332,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
                 dispatch_cb_blocks,
                 dispatch_cb_pages_per_block>(block_noc_writes_to_clear, wr_block_idx);
         }
-
+        DPRINT << "Write" << ENDL();
         noc_async_write<dispatch_cb_page_size>(data_ptr, dst, xfer_size);
         block_noc_writes_to_clear[rd_block_idx]++;  // XXXXX maybe just write the noc internal api counter
         cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(1);  // XXXX optimize, take all available
@@ -344,7 +344,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
             downstream_cb_data_ptr = downstream_cb_base;
         }
     }
-
+    DPRINT << "Write done" << ENDL();
     // Move to next page
     downstream_cb_data_ptr = round_up_pow2(downstream_cb_data_ptr, dispatch_cb_page_size);
     if (downstream_cb_data_ptr == downstream_cb_end) {

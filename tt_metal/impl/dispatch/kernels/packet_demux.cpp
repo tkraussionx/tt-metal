@@ -277,4 +277,5 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
+    DPRINT << "DEMUX DONE" << ENDL();
 }

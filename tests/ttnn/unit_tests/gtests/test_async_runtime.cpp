@@ -177,15 +177,19 @@ TEST(TTNN_MultiDev, Test2CQ2Device) {
         auto input_buffer_1 = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, dev1, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
         auto input_storage_1 = tt::tt_metal::DeviceStorage{input_buffer_1};
         Tensor input_tensor_1 = Tensor(input_storage_1, shape, DataType::BFLOAT16, Layout::TILE);
-        auto write_event = std::make_shared<Event>();
-        auto workload_event = std::make_shared<Event>();
+        auto write_event_dev0 = std::make_shared<Event>();
+        auto workload_event_dev0 = std::make_shared<Event>();
+        auto write_event_dev1 = std::make_shared<Event>();
+        auto workload_event_dev1 = std::make_shared<Event>();
 
         // std::cout << "write to dev1" <<std::endl;
-        // ttnn::write_buffer(1, input_tensor_0, {host_data_0, {}, {}, {}, {}});
+        ttnn::write_buffer(1, input_tensor_0, {host_data_0, {}, {}, {}, {}});
         ttnn::write_buffer(1, input_tensor_1, {{}, {}, {}, {}, host_data_1});
-        ttnn::record_event(dev1->command_queue(1), write_event); // Record write on cq 1
+        ttnn::record_event(dev0->command_queue(1), write_event_dev0); // Record write on cq 1
+        ttnn::record_event(dev1->command_queue(1), write_event_dev1); // Record write on cq 1
         // Wait until cq 1 write is complete
-        ttnn::wait_for_event(dev1->command_queue(0), write_event);
+        ttnn::wait_for_event(dev0->command_queue(0), write_event_dev0);
+        ttnn::wait_for_event(dev1->command_queue(0), write_event_dev1);
         // ttnn::event_synchronize(write_event);
         auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 2}}};
         auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
@@ -203,15 +207,34 @@ TEST(TTNN_MultiDev, Test2CQ2Device) {
         output_tensor = ttnn::run_operation(0, op1, {output_tensor}).at(0);
         output_tensor = ttnn::run_operation(0, op0, {output_tensor}).at(0);
         output_tensor = ttnn::run_operation(0, op2, {output_tensor}).at(0);
-        ttnn::record_event(dev1->command_queue(0), workload_event);
+
+        Tensor output_tensor_dev0 = ttnn::run_operation(0, op0, {input_tensor_0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op0, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op0, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op0, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op1, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op0, {output_tensor_dev0}).at(0);
+        output_tensor_dev0 = ttnn::run_operation(0, op2, {output_tensor_dev0}).at(0);
+        ttnn::record_event(dev0->command_queue(0), workload_event_dev0);
+        ttnn::record_event(dev1->command_queue(0), workload_event_dev1);
         // Wait until cq 0 prog execution is done
-        ttnn::wait_for_event(dev1->command_queue(1), workload_event);
+        ttnn::wait_for_event(dev0->command_queue(1), workload_event_dev0);
+        ttnn::wait_for_event(dev1->command_queue(1), workload_event_dev1);
         // ttnn::event_synchronize(workload_event);
-        // ttnn::read_buffer(1, input_tensor_0, {readback_data_0, {}, {}, {}, {}});
+        ttnn::read_buffer(1, output_tensor_dev0, {readback_data_0, {}, {}, {}, {}});
         ttnn::read_buffer(1, output_tensor, {{}, {}, {}, {}, readback_data_1});
 
         for (int j = 0; j < 32 * 32 * 32; j++) {
-            // std::cout << readback_data_1[i].to_float() << " ";
+            ASSERT_EQ(readback_data_0[i].to_float(), -1 * i * 32 + 500);
+        }
+
+        for (int j = 0; j < 32 * 32 * 32; j++) {
             ASSERT_EQ(readback_data_1[i].to_float(), -1 * (i + 16) * 32 + 500);
         }
     }

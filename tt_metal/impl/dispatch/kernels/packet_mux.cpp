@@ -158,12 +158,12 @@ void kernel_main() {
                       output_depacketize, output_depacketize_log_page_size,
                       output_depacketize_downstream_sem, output_depacketize_local_sem,
                       output_depacketize_remove_header);
-
+    DPRINT << "Handshake start" << ENDL();
     if (!wait_all_src_dest_ready(input_queues, mux_fan_in, &output_queue, 1, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
-
+    DPRINT << "Handshake done" << ENDL();
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     uint32_t curr_input = 0;
@@ -230,4 +230,5 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
+    DPRINT << "Mux done" << ENDL();
 }

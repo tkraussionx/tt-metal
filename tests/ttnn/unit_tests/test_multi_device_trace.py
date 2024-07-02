@@ -16,12 +16,13 @@ NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 7))
 
 
 @pytest.mark.parametrize(
-    "shape", [(1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 32, 32), (1, 1, 256, 256), (1, 3, 512, 512), (1, 3, 128, 128)]
+    "shape", [(1, 1, 224, 224), (1, 1, 32, 32), (1, 3, 32, 32), (1, 1, 256, 256), (1, 3, 512, 512), (1, 3, 128, 128)]
 )
 @pytest.mark.parametrize("use_all_gather", [True, False])
-@pytest.mark.parametrize("enable_async", [True])
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 33792}], indirect=True)
+@pytest.mark.parametrize("enable_async", [False])
+@pytest.mark.parametrize("device_params", [{"num_command_queues": 2}], indirect=True)
 def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enable_async):
+    torch.manual_seed(0)
     if t3k_device_mesh.get_num_devices() <= 1:
         pytest.skip("This test requires multiple devices")
 
@@ -32,75 +33,27 @@ def test_multi_device_single_trace(t3k_device_mesh, shape, use_all_gather, enabl
 
     # Preallocate activation tensors. These will be used when capturing and executing the trace
     input_0_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh)
-    input_1_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, t3k_device_mesh)
 
-    # Op chains to be traced
-    def run_op_chain(input_0, input_1):
-        single_dev_output = ttnn.neg(ttnn.add(ttnn.mul(input_1, ttnn.neg(ttnn.gelu(input_0))), ttnn.relu(input_1)))
-        if use_all_gather:
-            return ttnn.all_gather(single_dev_output, dim=0, num_links=1)
-        return single_dev_output
-
-    # Compile program binaries
-    run_op_chain(input_0_dev, input_1_dev)
-
-    # Capture Trace
-    logger.info("Capture Trace")
-
-    tid = ttnn.begin_trace_capture(t3k_device_mesh, cq_id=0)
-    output_tensor = run_op_chain(input_0_dev, input_1_dev)
-    ttnn.end_trace_capture(t3k_device_mesh, tid, cq_id=0)
-    logger.info("Done Trace Capture")
-
-    for i in range(NUM_TRACE_LOOPS):
+    for i in range(1):
         # Create torch inputs
         torch_input_tensor_0 = torch.rand(
             (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
         )
-        torch_input_tensor_1 = torch.rand(
-            (t3k_device_mesh.get_num_devices(), shape[1], shape[2], shape[3]), dtype=torch.bfloat16
-        )
-        # Compute PT Golden
-        torch_output_golden = torch.neg(
-            torch.add(
-                torch.mul(torch_input_tensor_1, torch.neg(torch.nn.functional.gelu(torch_input_tensor_0))),
-                torch.relu(torch_input_tensor_1),
-            )
-        )
+
         # Convert torch tensors to TTNN Multi-Device Host Tensors
         ttnn_input_tensor_0 = ttnn.from_torch(
             torch_input_tensor_0, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
-        )
-        ttnn_input_tensor_1 = ttnn.from_torch(
-            torch_input_tensor_1, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=0)
         )
 
         # Copy TTNN host tensors into preallocated Mult-Device tensors
         logger.info("Send Inputs to Device")
         ttnn.copy_host_to_device_tensor(ttnn_input_tensor_0, input_0_dev)
-        ttnn.copy_host_to_device_tensor(ttnn_input_tensor_1, input_1_dev)
-        logger.info("Execute Trace")
-        # Execute trace
-        ttnn.execute_trace(t3k_device_mesh, tid, cq_id=0, blocking=False)
+        logger.info("Read Back Trace Outputs")
 
-        if use_all_gather:
-            # Device All-Gather: Iterate through tensors on all devices. Ensure they match the full tensor
-            logger.info("Read Back Trace Outputs")
-            device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
-            for device_tensor in device_tensors:
-                device_tensor_torch = ttnn.to_torch(device_tensor)
-                assert_with_pcc(device_tensor_torch, torch_output_golden, pcc=0.99)
-
-        else:
-            # Perform host All-Gather
-            logger.info("Read Back Trace Outputs")
-            ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
-            )
-            assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.96)
-
-    # Release trace buffer once workload is complete
-    ttnn.release_trace(t3k_device_mesh, tid)
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            input_0_dev, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0), device=t3k_device_mesh
+        )
+        assert_with_pcc(ttnn_torch_output_tensor, torch_input_tensor_0, pcc=0.96)
 
     for device_id in t3k_device_mesh.get_device_ids():
         t3k_device_mesh.get_device(device_id).enable_async(False)

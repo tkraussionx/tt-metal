@@ -941,7 +941,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
         // OK to continue prefetching once the page credits are returned
         stall_state = NOT_STALLED;
     }
-
+    DPRINT << "Send: " << length << ENDL();
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
     if (downstream_pages_left >= npages) {
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);

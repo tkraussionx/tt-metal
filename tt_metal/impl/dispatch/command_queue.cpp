@@ -2060,7 +2060,9 @@ void HWCommandQueue::finish() {
             }
         }
     } else {
+        std::cout << "Start finish for: " << this->device->id() << std::endl;
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads);
+        std::cout << "End finish for: " << this->device->id() << std::endl;
     }
 }
 

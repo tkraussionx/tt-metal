@@ -78,6 +78,10 @@ struct dispatch_constants {
 
     uint32_t prefetch_d_buffer_pages() const { return prefetch_d_buffer_pages_; }
 
+    uint32_t mux_buffer_size(uint8_t num_hw_cqs = 1) const { return prefetch_d_buffer_size_ / num_hw_cqs; }
+
+    uint32_t mux_buffer_pages(uint8_t num_hw_cqs = 2) const { return prefetch_d_buffer_pages_ / num_hw_cqs; }
+
    private:
     dispatch_constants(const CoreType &core_type) {
         TT_ASSERT(core_type == CoreType::WORKER or core_type == CoreType::ETH);
@@ -96,7 +100,7 @@ struct dispatch_constants {
             cmddat_q_size_ = 64 * 1024;
             scratch_db_size_ = 20 * 1024;
             dispatch_buffer_block_size = 128 * 1024;
-            prefetch_d_buffer_size_ = 64 * 1024;
+            prefetch_d_buffer_size_ = 128 * 1024;
         }
         TT_ASSERT(cmddat_q_size_ >= 2 * max_prefetch_command_size_);
         TT_ASSERT(scratch_db_size_ % 2 == 0);

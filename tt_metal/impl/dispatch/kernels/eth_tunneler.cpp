@@ -108,7 +108,7 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
-
+    DPRINT << "Tunnel Start" << ENDL();
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     bool timeout = false;
@@ -180,4 +180,5 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
+    DPRINT << "Tunnel Done" << ENDL();
 }
