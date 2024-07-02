@@ -137,7 +137,6 @@ constexpr uint32_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
 
 
 void kernel_main() {
-
     noc_init();
 
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
@@ -230,5 +229,4 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
-    DPRINT << "Mux done" << ENDL();
 }

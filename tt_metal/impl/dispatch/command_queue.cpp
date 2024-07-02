@@ -1101,7 +1101,7 @@ void EnqueueRecordEventCommand::process() {
         }
 
         CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, core_type);
-        uint8_t noc_idx = (this->device->id()) ? 0  : this->noc_index;
+        uint8_t noc_idx = (this->device->id() >= 4) ? 0  : this->noc_index;
         // std::cout << "Dispatch Core: " << this->device->id() << " " << dispatch_physical_core.str() << " " << +(noc_idx) << " " << this->device->get_noc_unicast_encoding(noc_idx, dispatch_physical_core) << std::endl;
         unicast_sub_cmds[cq_id] = CQDispatchWritePackedUnicastSubCmd{
             .noc_xy_addr = this->device->get_noc_unicast_encoding( noc_idx /* this->noc_index*/, dispatch_physical_core)};
@@ -2060,9 +2060,7 @@ void HWCommandQueue::finish() {
             }
         }
     } else {
-        std::cout << "Start finish for: " << this->device->id() << std::endl;
         while (this->num_entries_in_completion_q > this->num_completed_completion_q_reads);
-        std::cout << "End finish for: " << this->device->id() << std::endl;
     }
 }
 

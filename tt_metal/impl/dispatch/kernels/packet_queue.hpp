@@ -161,7 +161,6 @@ public:
     }
 
     inline uint32_t get_queue_local_wptr() const {
-        DPRINT << "Local wptr: " << *(this->local_wptr_val) << ENDL();
         return *this->local_wptr_val;
     }
 
@@ -170,7 +169,6 @@ public:
     }
 
     inline void advance_queue_local_wptr(uint32_t num_words) {
-        DPRINT << "Advance Loacl Wptr" << ENDL();
         *this->local_wptr_update = num_words << REMOTE_DEST_BUF_WORDS_FREE_INC;
     }
 

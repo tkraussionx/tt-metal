@@ -826,7 +826,7 @@ re_run_command:
             DEBUG_STATUS("!CMD");
             ASSERT(0);
     }
-
+    DPRINT << "Cmd done" << ENDL();
     return done;
 }
 
@@ -920,9 +920,9 @@ void kernel_main() {
             dispatch_cb_blocks,
             dispatch_cb_pages_per_block>(block_noc_writes_to_clear, wr_block_idx);
     }
-
+    DPRINT << "Loop Done" << ENDL();
     noc_async_write_barrier();
-
+    DPRINT << "Barrier done" << ENDL();
     if (is_h_variant && !is_d_variant) {
         // Set upstream semaphore MSB to signal completion and path teardown
         // in case dispatch_h is connected to a depacketizing stage.
@@ -930,12 +930,12 @@ void kernel_main() {
         // components use.
         noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_dispatch_cb_sem_id)), 0x80000000);
     }
-
+    DPRINT << "Posting heartbeat" << ENDL();
 #if defined(COMPILE_FOR_IDLE_ERISC)
     uint32_t heartbeat = 0;
     RISC_POST_HEARTBEAT(heartbeat);
 #endif
-
+    DPRINT << "Release: " << dispatch_cb_pages_per_block << ENDL();
     // Release any held pages from the last block
     if (rd_block_idx != wr_block_idx) {
         // We're 1 block behind
@@ -944,8 +944,11 @@ void kernel_main() {
     uint32_t npages =
         dispatch_cb_pages_per_block - ((block_next_start_addr[rd_block_idx] - cmd_ptr) >> dispatch_cb_log_page_size);
     cb_release_pages<upstream_noc_xy, upstream_dispatch_cb_sem_id>(npages);
-
+    DPRINT << "Release: " << npages << ENDL();
     // Confirm expected number of pages, spinning here is a leak
+    for (int i = 0; i < 100; i++) {
+        DPRINT << *(reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_dispatch_cb_sem_id))) << ENDL();
+    }
     cb_wait_all_pages<my_dispatch_cb_sem_id>(0);
 
     DPRINT << "dispatch_" << is_h_variant << is_d_variant << ": out" << ENDL();

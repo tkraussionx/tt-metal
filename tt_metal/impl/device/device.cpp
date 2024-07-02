@@ -237,9 +237,10 @@ void Device::initialize_and_launch_firmware() {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
         this->initialize_firmware(phys_eth_core, &launch_msg);
     }
-
+    // std::cout << "Inactive Eth Cores: " << std::endl;
     for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
+        // std::cout << eth_core.str() << " " << phys_eth_core.str() << std::endl;
         this->initialize_firmware(phys_eth_core, &launch_msg);
         not_done_cores.insert(phys_eth_core);
     }
@@ -1057,7 +1058,7 @@ void Device::setup_tunnel_for_remote_devices() {
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 settings.semaphores.push_back(0);// dispatch_sem
-                settings.semaphores.push_back(dispatch_buffer_pages);// dispatch_downstream_cb_sem
+                settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs));// dispatch_downstream_cb_sem
                 settings.consumer_semaphore_id = 0;
                 settings.producer_semaphore_id = 1;
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -1604,6 +1605,21 @@ void Device::configure_command_queue_programs() {
             detail::ConfigureDeviceWithProgram(mmio_device, mmio_command_queue_program, true);
             tt::Cluster::instance().l1_barrier(mmio_device_id);
         }
+    }
+}
+
+void Device::update_dispatch_cores_for_multi_cq_eth_dispatch() {
+    if (dispatch_core_manager::get(this->num_hw_cqs()).get_dispatch_core_type(this->id()) == CoreType::ETH) {
+        TT_FATAL(dispatch_core_manager::get(this->num_hw_cqs()).get_dispatch_core_type(this->id()) == CoreType::ETH, "Dispatch with multiple CQs to remote devices is only supported on Ethernet Cores.");
+        auto& dispatch_cores = dispatch_core_manager::get(this->num_hw_cqs()).available_dispatch_cores_by_device.at(this->id());
+        for (const auto& idle_eth_core : this->get_inactive_ethernet_cores()) {
+            if (std::find(dispatch_cores.begin(), dispatch_cores.end(), idle_eth_core) == dispatch_cores.end()) {
+                dispatch_cores.push_back(idle_eth_core);
+            }
+        }
+        // for (const auto& core : dispatch_cores) std::cout << core.str() << " ";
+        // std::cout << std::endl;
+        // std::cout << "Num dispatch cores for: " << this->id() << " " << dispatch_cores.size() << std::endl;
     }
 }
 

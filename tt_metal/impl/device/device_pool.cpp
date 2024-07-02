@@ -137,6 +137,7 @@ void DevicePool::activate_device(chip_id_t id) {
         int core_assigned_to_device = this->device_to_core_map.at(id);
         auto dev =
             new Device(id, this->num_hw_cqs, this->l1_small_size, this->trace_region_size, this->l1_bank_remap, false, core_assigned_to_device);
+        dev->update_dispatch_cores_for_multi_cq_eth_dispatch();
         dev->build_firmware();
         this->devices[id] = std::unique_ptr<Device>(dev);
     } else {
