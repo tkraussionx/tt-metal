@@ -23,7 +23,12 @@ import os
 def test_new_conv(device):
     print("OptimizedConvNew1 Python Side")
 
-    update_process_id()
+    tt_bias_tensor = None
+    reader_patterns_cache = {}
+    use_shallow_conv_variant = (False,)
+    activations_dtype = ttnn.bfloat16
+    weights_dtype = ttnn.bfloat8_b
+    # update_process_id()
     batch_size, input_channel, input_height, input_width = 2, 1152, 16, 8
     weight_batch, ncores = 1152, 36
     filter_height, filter_width = 3, 3
@@ -58,20 +63,55 @@ def test_new_conv(device):
     input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
     ##op computation
     # ttnn.dump_device_memory_state(device, prefix='pre_')
-    output = ttnn.optimized_conv_new(
-        input_tensor,
-        tt_weight,
-        device,
-        [3, 3, 1, 1, 1, 1],
-        weight_batch,
-        input_height,
-        input_width,
-        True,
-        True,
-        ttnn.MathFidelity.HiFi4,
-        10,
-    )
+    stride_h, stride_w, pad_h, pad_w = 1, 1, 1, 1
+
+    # output = ttnn.optimized_conv_new(
+    #     input_tensor,
+    #     tt_weight,
+    #     device,
+    #     [3, 3, 1, 1, 1, 1],
+    #     weight_batch,
+    #     input_height,
+    #     input_width,
+    #     True,
+    #     True,
+    #     ttnn.MathFidelity.HiFi4,
+    #     10,
+    # )
+
+    # return
     # ttnn.dump_device_memory_state(device, prefix='shwe_')
-    print(output)
+    # print(output)
     # ttnn.opimized_abc([1, 1, 1, 1], 1024, True, True)
     # ttnn.opimized_conv_new_1(tt_input, tt_weight, [1, 1, 1, 1], 1024, True, True)
+
+    conv_config = ttnn.Conv2dConfig(
+        dtype=activations_dtype,
+        weights_dtype=weights_dtype,
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        activation=None,
+        conv_shard_scheme="WIDTH",
+        input_channels_alignment=(16 if use_shallow_conv_variant else 32),
+        deallocate_activation=False,
+    )
+
+    [tt_output_tensor_on_device, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
+        input_tensor=tt_input,
+        weight_tensor=tt_weight,
+        in_channels=input_channel,
+        out_channels=weight_batch,
+        device=device,
+        bias_tensor=tt_bias_tensor,
+        kernel_size=(filter_height, filter_width),
+        stride=(stride_h, stride_w),
+        padding=(pad_h, pad_w),
+        batch_size=batch_size,
+        input_height=input_height,
+        input_width=input_width,
+        conv_config=conv_config,
+        conv_op_cache=reader_patterns_cache,
+        reshard_if_not_optimal=False,
+        debug=False,
+    )
+
+    print(tt_output_tensor_on_device)

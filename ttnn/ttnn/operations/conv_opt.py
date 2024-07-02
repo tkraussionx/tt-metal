@@ -89,9 +89,10 @@ def optimized_conv_new(
     print("OptimizedConvNew2 Python core Side")
 
     grid_size = (12, 3)
+    num_cores_c = 36
     per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles = 8, 1
     input_tensor_shape = (2, input_height, input_width, 1152)
-    act_block_h, act_block_w = per_core_out_matrix_h_ntiles, int(input_tensor_shape[3] / 32)
+    act_block_h, act_block_w = per_core_out_matrix_h_ntiles, int(input_tensor_shape[3] / (32))
     out_subblock_h, out_subblock_w = determine_largest_subblock_size(
         per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles, False
     )
@@ -106,7 +107,7 @@ def optimized_conv_new(
     opt_conv_parall_conf = ttnn.experimental.tensor.OptimizedConvParallelizationConfig(
         grid_size=grid_size,
         num_cores_nhw=1,
-        num_cores_c=36,  # todo remove cores variable
+        num_cores_c=num_cores_c,  # todo remove cores variable
         per_core_out_matrix_height_ntiles=per_core_out_matrix_h_ntiles,
         per_core_out_matrix_width_ntiles=per_core_weight_matrix_w_ntiles,
     )

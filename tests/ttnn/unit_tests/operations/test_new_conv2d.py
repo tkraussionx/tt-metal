@@ -62,7 +62,7 @@ def run_conv(
     debug=False,
 ):
     # has_bias = False
-    update_process_id()
+    # update_process_id()
     has_bias = True
     torch.manual_seed(0)
     conv_input_shape = [batch_size, input_channels, input_height, input_width]
