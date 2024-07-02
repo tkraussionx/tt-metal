@@ -5,6 +5,7 @@
 import torch
 import pytest
 import tt_lib
+import ttnn
 from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs import data_gen_with_range, compare_pcc
 
 
@@ -98,7 +99,7 @@ def test_recip(input_shapes, mem_configs, device):
 
     mem_cfg = mem_configs
 
-    tt_output_tensor_on_device = tt_lib.tensor.recip(input_tensor, output_mem_config=mem_cfg)
+    tt_output_tensor_on_device = ttnn.reciprocal(input_tensor, memory_config=mem_cfg)
     golden_tensor = torch.reciprocal(in_data)
 
     comp_pass = compare_pcc([tt_output_tensor_on_device], [golden_tensor])
@@ -118,7 +119,7 @@ def test_recip_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.recip(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.reciprocal(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.reciprocal(in_data)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -222,7 +223,7 @@ def test_unary_gtz_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.gtz(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.gtz(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.gt(in_data, 0)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -242,7 +243,7 @@ def test_unary_lez_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.lez(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.lez(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.le(in_data, 0)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -262,7 +263,7 @@ def test_unary_eqz_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.eqz(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.eqz(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.eq(in_data, 0)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -282,7 +283,7 @@ def test_unary_log_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, 1e-6, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.log(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.log(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.log(in_data)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -302,7 +303,7 @@ def test_unary_sqrt_output(input_shapes, device):
     _, output_tensor = data_gen_with_range(input_shapes, 0, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.sqrt(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.sqrt(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.sqrt(in_data)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
@@ -317,9 +318,7 @@ def test_unary_sqrt_output(input_shapes, device):
         (torch.Size([1, 3, 320, 384])),
     ),
 )
-@pytest.mark.parametrize(
-    "unary_op_fn", [[tt_lib.tensor.neg, torch.neg], [tt_lib.tensor.sign, torch.sign], [tt_lib.tensor.tanh, torch.tanh]]
-)
+@pytest.mark.parametrize("unary_op_fn", [[ttnn.neg, torch.neg], [ttnn.sign, torch.sign], [ttnn.tanh, torch.tanh]])
 def test_unary_ops_output(input_shapes, device, unary_op_fn):
     in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device)
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
@@ -369,7 +368,7 @@ def test_unary_exp(input_shapes, device, fast_and_approx):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    tt_lib.tensor.exp(input_tensor, fast_and_approx=fast_and_approx, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.exp(input_tensor, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.exp(in_data)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
