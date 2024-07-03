@@ -455,8 +455,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
-    mm_kernel_defines["MATMUL_1D_2D_OPTIMIZED"] = "1";
-
     if (in0_height_sharded) {
         mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
     }
@@ -588,6 +586,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
+    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
+
+    // log_info(LogTest, "Selected number of cores for computation is: {}", cores.size());
 
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,             // in0_block_w
@@ -607,7 +608,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         B,                       // batch,
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out};
+        untilize_out,
+        device->arch() == ARCH::WORMHOLE_B0 && cores.size() > WH_B0_MM_MAX_CORES_NO_STAGGER  // whether to apply stagger on odd rows
+        };
 
     // Create compute kernel
     // bool fp32_dest_acc_en = true;
@@ -777,7 +780,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t in0_end_idx = num_blocks_y - 1;
     uint32_t in1_end_idx = num_blocks_x - 1;
-    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
     const auto& in0_sender_cores =
         grid_to_cores(in0_sender.start, in0_sender.end, true);  // Only used for interleaved in0
     const auto& in1_sender_cores = grid_to_cores(in1_sender.start, in1_sender.end, true);
@@ -785,12 +787,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     const auto& in1_receiver_other_cores =
         grid_to_cores(in0_receiver_in1_receiver_right_half.start, in0_receiver_in1_receiver_right_half.end, true);
     for (const auto& core : cores) {
-        // delay every other row of cores
-        std::vector<uint32_t> mm_compute_args;
-        mm_compute_args.push_back(core.y % 2);
-
-        tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_compute_args);
-
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
         CoreCoord right_core = {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)core.y};

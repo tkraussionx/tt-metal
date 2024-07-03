@@ -14,11 +14,14 @@
 #include "llk_operands.h"
 #include "llk_param_structs.h"
 #include "llk_unpack_common.h"
+#include "noc_nonblocking_api.h"
 #include "debug/status.h"
 
 /*************************************************************************
  * LLK UNPACK COMMON
  *************************************************************************/
+
+extern uint32_t tiles_proc_delay;
 
 void llk_zero_operand(std::uint32_t operand) {
     std::uint32_t operand_id = get_operand_id(operand);
@@ -136,4 +139,17 @@ constexpr static std::int32_t MUL_HEADERLESS_TILE_SIZE_AND_INDEX(uint format, ui
         // Keep default as Bfp8?
         default: return ((index << 6) + (index << 2));
     };
+}
+
+inline void llk_setup_stagger(bool apply_delay) {
+    constexpr uint32_t noc_id = 0;
+    uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(noc_id, NOC_ID_LOGICAL);
+    uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
+    uint32_t my_logical_y = (noc_id_logical_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+
+    // DPRINT << "My_logical_y is odd: " << (int)(my_logical_y & 1) << ENDL();
+    if (apply_delay && (my_logical_y & 0x1)) {
+        // DPRINT << "Apply delay:" << (int)apply_delay << " for this cycles:" << 6144 * 2 << ENDL();
+        tiles_proc_delay = 6144 * 2;  // Delay odd rows of cores
+    }
 }

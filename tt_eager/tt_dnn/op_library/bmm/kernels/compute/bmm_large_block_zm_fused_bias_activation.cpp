@@ -15,7 +15,6 @@
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
-
 namespace NAMESPACE {
 
 FORCE_INLINE void reload_from_cb_to_dst(uint32_t in0_cb_id, uint32_t in1_cb_id, uint32_t mm_partials_cb_id, uint32_t out_subblock_num_tiles, uint32_t out_subblock_w, uint32_t out_subblock_h, uint32_t in0_block_w) {
@@ -77,12 +76,6 @@ void MAIN {
     }
     #endif
 
-    #ifdef MATMUL_1D_2D_OPTIMIZED
-        const bool apply_delay = get_arg_val<uint32_t>(0) == 1;
-    #else
-        const bool apply_delay = false;
-    #endif
-
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(0); // inner block size in tiles
     constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1); // outer row block size (in inner row blocks)
     constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(2); // out_subblock_h*in0_block_w*in0_num_subblocks;
@@ -97,6 +90,7 @@ void MAIN {
     constexpr uint32_t batch = get_compile_time_arg_val(11); // batch dim
     constexpr uint32_t out_block_num_tiles = get_compile_time_arg_val(12); // number of tiles in out_block
     constexpr bool untilize_out = get_compile_time_arg_val(13); // untilize output
+    constexpr bool apply_stagger_delay = get_compile_time_arg_val(14); // whether to apply stagger on odd rows
 
     constexpr uint32_t out_block_w = out_subblock_w*in1_num_subblocks;
 
@@ -106,6 +100,9 @@ void MAIN {
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
 
     constexpr uint32_t untilize_mode_out_cb_id = untilize_out ? mm_partials_cb_id : out_cb_id;
+
+    setup_stagger(apply_stagger_delay);
+    // DPRINT << "In MM compute kernel, apply_stagger_delay: " << (int)apply_stagger_delay << ENDL();
 
     #ifdef FUSE_BIAS
     constexpr uint32_t bias_cb_id = tt::CB::c_in3;
@@ -120,7 +117,7 @@ void MAIN {
 
     constexpr bool spill = num_blocks > 1;
 
-    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w, apply_delay);
+    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
     for (uint32_t b = 0; b < batch; b++){
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;

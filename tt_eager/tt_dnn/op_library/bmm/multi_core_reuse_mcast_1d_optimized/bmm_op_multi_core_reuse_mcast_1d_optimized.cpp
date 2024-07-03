@@ -337,8 +337,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
-    mm_kernel_defines["MATMUL_1D_2D_OPTIMIZED"] = "1";
-
     if (output_is_sharded) {
         mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
     }
@@ -433,6 +431,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
+    // log_info(LogTest, "Selected number of cores for computation of 1d_a mm is: {}", num_cores);
+
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,             // in0_block_w
         in0_num_subblocks,       // in0_num_subblocks
@@ -451,7 +451,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,  // untilize_out
+        device->arch() == ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER // whether to apply stagger on odd rows
     };
 
     // Create compute kernel
@@ -1057,8 +1058,6 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
-    mm_kernel_defines["MATMUL_1D_2D_OPTIMIZED"] = "1";
-
     if (in0_is_sharded) {
         mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
     }
@@ -1123,6 +1122,8 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
+    // log_info(LogTest, "Selected number of cores for computation of 1d_b mm is: {}", num_cores);
+
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,             // in0_block_w
         in0_num_subblocks,       // in0_num_subblocks
@@ -1141,7 +1142,8 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,       // untilize_out
+        device->arch() == ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER // whether to apply stagger on odd rows
     };
 
     // Create compute kernel
