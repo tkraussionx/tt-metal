@@ -83,27 +83,6 @@ if not ttnn.CONFIG.enable_fast_runtime_mode:
 
     attach_golden(ttnn.experimental.tensor.create_qkv_heads_from_separate_tensors, _golden_function)
 
-    def _golden_function(input_tensor, scalar, attention_mask, *args, **kwargs):
-        import torch
-
-        input_tensor = input_tensor.float()
-        input_tensor = input_tensor * scalar
-        if attention_mask is not None:
-            input_tensor = input_tensor + attention_mask
-        ret = torch.softmax(input_tensor, dim=-1)
-        return ret
-
-    attach_golden(ttnn.experimental.operations.primary.transformers.scale_mask_softmax_in_place, _golden_function)
-
-    def _golden_function(input_tensor, *args, **kwargs):
-        import torch
-
-        input_tensor = input_tensor.float()
-        ret = torch.softmax(input_tensor, dim=-1)
-        return ret
-
-    attach_golden(ttnn.experimental.operations.primary.softmax_in_place, _golden_function)
-
     def _golden_function(tensor, starts, stops, *args, **kwargs):
         import torch
 
