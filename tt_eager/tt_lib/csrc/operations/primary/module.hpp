@@ -40,7 +40,6 @@
 #include "tt_dnn/op_library/moreh_sum_backward/moreh_sum_backward_op.hpp"
 #include "tt_dnn/op_library/prod/prod_nc_op.hpp"
 #include "tt_dnn/op_library/prod/prod_op_all.hpp"
-#include "tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "tt_dnn/op_library/topk/topk_op.hpp"
 
 namespace py = pybind11;
@@ -779,15 +778,6 @@ void py_module(py::module& m_primary) {
         py::arg("beta_grad").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         "Performs a moreh_layernorm_backward operation.");
-    // softmax
-    m_primary.def(
-        "softmax_in_place",
-        &softmax_in_place,
-        py::arg("input_tensor").noconvert(),
-        py::arg("program_config").noconvert() = transformers::SoftmaxDefaultProgramConfig{},
-        py::arg("compute_kernel_config").noconvert() = std::nullopt,
-        "Performs a softmax operation on the last tensor dimension. Returns a reference to the input tensor modified "
-        "in place.");
 
     m_primary.def(
         "relu",

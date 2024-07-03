@@ -402,7 +402,7 @@ Tensor elementwise operations
 .. autofunction:: tt_lib.tensor.bitwise_xor
 
 .. autofunction:: tt_lib.tensor.bitwise_not
-    
+
 .. autofunction:: tt_lib.tensor.bitwise_and
 
 .. autofunction:: tt_lib.tensor.bitwise_or
@@ -685,8 +685,6 @@ We have a variety of common operations that require fusion of multiple
 base operations together.
 
 .. autofunction:: tt_lib.fused_ops.linear.Linear
-
-.. autofunction:: tt_lib.fused_ops.softmax.softmax
 
 .. autofunction:: tt_lib.fused_ops.layernorm.Layernorm
 

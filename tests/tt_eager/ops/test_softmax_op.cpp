@@ -5,7 +5,6 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_eager/tensor/tensor.hpp"
 #include "ttnn/cpp/ttnn/operations/normalization/softmax/softmax.hpp"
-#include "tt_eager/tt_dnn/op_library/softmax/softmax_op.hpp"
 #include <tt_numpy/functions.hpp>
 
 #include <algorithm>
