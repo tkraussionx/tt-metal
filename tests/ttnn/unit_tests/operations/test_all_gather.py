@@ -79,6 +79,7 @@ def run_all_gather_on_t3000_impl(
     enable_async=False,
     num_workers=0,
     max_channel_size=0,
+    buffers_per_channel=1,
 ):
     if len(all_devices) != 8:
         pytest.skip("Not T3000!")
@@ -113,7 +114,15 @@ def run_all_gather_on_t3000_impl(
 
     input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
     for i in range(num_iters):
-        tt_out_tensor = ttnn.all_gather(input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config)
+        tt_out_tensor = ttnn.all_gather(
+            input_tensor_mesh,
+            dim,
+            num_links=num_links,
+            memory_config=mem_config,
+            num_workers=num_workers,
+            max_channel_size=max_channel_size,
+            buffers_per_channel=buffers_per_channel,
+        )
 
         for d in devices:
             ttl.device.Synchronize(d)
@@ -252,10 +261,10 @@ def test_all_gather_on_t3000_post_commit_looping(
         ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("num_iters", [1]) #1000])  # TODO: restore to 500
-@pytest.mark.parametrize("enable_async", [True]) #True, False])
-@pytest.mark.parametrize("num_workers", [0]) #2, 4, 6, 8])
-@pytest.mark.parametrize("max_channel_size", [0]) #8704, 8720, 13056, 13072, 17408, 17424, 21760, 21776])
+@pytest.mark.parametrize("num_iters", [1])  # 1000])
+@pytest.mark.parametrize("enable_async", [True])  # True, False])
+@pytest.mark.parametrize("num_workers", [0])  # 2, 4, 6, 8])
+@pytest.mark.parametrize("max_channel_size", [0])  # 8704, 8720, 13056, 13072, 17408, 17424, 21760, 21776])
 def test_all_gather_on_t3000_post_commit(
     all_devices,
     num_devices,
@@ -271,6 +280,7 @@ def test_all_gather_on_t3000_post_commit(
     enable_async,
     num_workers,
     max_channel_size,
+    buffers_per_channel,
 ):
     run_all_gather_on_t3000_impl_tight_loop(
         all_devices,
@@ -287,6 +297,8 @@ def test_all_gather_on_t3000_post_commit(
         enable_async,
         num_workers=num_workers,
         max_channel_size=max_channel_size,
+        buffers_per_channel=buffers_per_channel,
+        num_iters=1,
     )
 
 

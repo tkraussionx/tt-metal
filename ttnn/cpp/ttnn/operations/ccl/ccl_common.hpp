@@ -28,6 +28,7 @@ struct RingTopology {
         uint32_t ring_size,
         uint32_t ring_index) :
         num_links(num_links), ring_size(ring_size), ring_index(ring_index), is_linear(topology == Topology::Linear) {
+        TT_ASSERT(num_links > 0);
         eth_sender_cores.reserve(num_links);
         eth_receiver_cores.reserve(num_links);
 
@@ -475,6 +476,7 @@ void set_edm_runtime_args(
 ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     std::size_t num_channels,
     uint32_t page_size,
+    std::size_t num_buffers_per_channel,
     ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
     EriscDataMoverTerminationMode termination_mode);
 

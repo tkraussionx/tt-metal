@@ -703,9 +703,11 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
     bool enable_bidirectional = false;
     auto num_edm_channels = decide_number_of_edm_channels(op_config, max_num_workers, enable_bidirectional);
     log_trace(tt::LogOp, "num_edm_channels: {}", num_edm_channels);
-    auto edm_termination_mode =ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED;
+    auto edm_termination_mode = ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED;
+
+    constexpr std::size_t num_buffers_per_channel = 1; // enable double buffering later
     auto const& edm_builder = create_erisc_datamover_builder(
-        num_edm_channels, op_config.get_page_size(), buffer_sharing_mode, edm_termination_mode);
+        num_edm_channels, op_config.get_page_size(), num_buffers_per_channel, buffer_sharing_mode, edm_termination_mode);
     TT_ASSERT(num_edm_channels > 0);
 
     Tensor const& local_chip_tensor = input_tensors.at(0);

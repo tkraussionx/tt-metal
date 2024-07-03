@@ -31,7 +31,6 @@ KernelHandle generate_edm_kernels(
     std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
     // Ethernet Kernels
     std::vector<uint32_t> eth_sender_ct_args = edm_builder.emit_compile_time_args();
-    log_trace(tt::LogOp, "EDM core (x={},y={}):", eth_core.x, eth_core.y);
     log_trace(tt::LogOp, "CT ARGS:");
     for (auto const& s : eth_sender_ct_args) {
         log_trace(tt::LogOp, "\t{}", s);
@@ -83,6 +82,7 @@ void generate_edm_kernels_for_ring_or_linear_topology(
             edm_cores.insert({eth_receiver_core});
         }
     }
+    TT_ASSERT(edm_cores.size() > 0);
 
     KernelHandle edm_kernel_handle = generate_edm_kernels(
         program,
@@ -175,6 +175,7 @@ void set_edm_runtime_args(
 ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     std::size_t num_channels,
     uint32_t page_size,
+    std::size_t num_buffers_per_channel,
     ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
     ccl::EriscDataMoverTerminationMode termination_mode) {
     TT_ASSERT(num_channels > 0);
@@ -185,18 +186,18 @@ ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     uint32_t edm_buffer_addr = ccl::EriscDatamoverConfig::get_buffers_base_address(num_channels);
     TT_ASSERT(edm_sem_addr > 0);
     TT_ASSERT(edm_buffer_addr > 0);
-    const uint32_t buffer_size = ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, page_size);
+    const uint32_t channel_buffer_size = ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, num_buffers_per_channel, page_size);
     for (std::size_t c = 0; c < num_channels; ++c) {
         edm_sem_addresses.at(c) = edm_sem_addr;
         edm_sem_addr += ccl::EriscDatamoverConfig::semaphore_size;
         edm_buffer_addresses.at(c) = edm_buffer_addr;
-        edm_buffer_addr += buffer_size;
+        edm_buffer_addr += num_buffers_per_channel * (channel_buffer_size + (ccl::EriscDatamoverConfig::enable_merged_payload_and_channel_sync ? ccl::EriscDatamoverConfig::eth_channel_sync_size : 0));
         TT_ASSERT((c == 0) || (edm_buffer_addresses.back() != edm_buffer_addresses.front()));
         TT_ASSERT((c == 0) || (edm_sem_addresses.back() != edm_sem_addresses.front()));
     }
 
     return ccl::EriscDatamoverBuilder(
-        buffer_size,
+        channel_buffer_size,
         ccl::EriscDatamoverConfig::get_edm_handshake_address(),
         edm_sem_addresses,
         edm_buffer_addresses,

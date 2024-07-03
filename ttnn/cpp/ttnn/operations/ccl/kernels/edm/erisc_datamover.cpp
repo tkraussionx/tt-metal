@@ -115,10 +115,13 @@ static constexpr bool use_compile_time_designated_handshake_sender = false;  // 
 static constexpr bool is_handshake_sender = get_compile_time_arg_val(7) != 0;
 
 static constexpr bool merge_channel_sync_and_payload = get_compile_time_arg_val(8) != 0;
-static constexpr uint32_t chip_id = get_compile_time_arg_val(9);
+static constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(9);
+static constexpr uint32_t chip_id = get_compile_time_arg_val(10);
+
+static_assert(num_buffers_per_channel > 0, "compile time argument [9]: num_buffers_per_channel must be > 0");
 
 using EDM_CONFIG_T = erisc::datamover::
-    EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal, merge_channel_sync_and_payload>;
+    EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal, merge_channel_sync_and_payload, num_buffers_per_channel>;
 using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
 
 // Sender is advanceable
@@ -145,6 +148,7 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
                                             bool &receivers_in_progress,
                                             uint32_t eth_transaction_ack_word_addr) {
     DeviceZoneScopedN("EXEC");
+
     switch (edm_channel.get_state()) {
         case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_ETH:
             // DPRINT << "RX WAITING_FOR_ETH\n";
@@ -158,11 +162,11 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
                 receivers_in_progress && num_receivers_complete != receiver_num_channels;
             break;
 
-        case ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER:
-            // Should be removable
-            // Worked with v2 (x2)
-            erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
-            break;
+        // case ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER:
+        //     // Should be removable
+        //     // Worked with v2 (x2)
+        //     erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
+        //     break;
 
         case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_WORKER:
             // DPRINT << "RX WAITING_FOR_WORKER\n";
@@ -189,17 +193,17 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
             erisc::datamover::sender_eth_send_data_sequence_v2(edm_channel);
             break;
 
-        case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:  // Can remove due to short circuit
-            // DPRINT << "SENDER WAITING_FOR_ETH\n";
-            // Worked with v2 (x8)
-            // {
-            //     DeviceZoneScopedN("TX_ACK");
-            // }
-            erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
-                edm_channel, num_senders_complete);
-            senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-            break;
-            /////////////////////////
+        // case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:  // Can remove due to short circuit
+        //     // DPRINT << "SENDER WAITING_FOR_ETH\n";
+        //     // Worked with v2 (x8)
+        //     // {
+        //     //     DeviceZoneScopedN("TX_ACK");
+        //     // }
+        //     erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
+        //         edm_channel, num_senders_complete);
+        //     senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
+        //     break;
+        //     /////////////////////////
 
         default:
             // DPRINT << "STATE BUG\n";
@@ -210,10 +214,9 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
 
 static constexpr bool use_optimized_edm_impl = true;
 
-void kernel_main() {
-    // DPRINT << "EDM (enable_sender | enable_receiver) " << uint32_t((enable_sender_side << 16) | enable_receiver_side)
-    // << ", on core " << (uint32_t)(my_y[0] << 16 | my_x[0]) << "\n";
+static constexpr bool SAVE_CODESPACE = true;
 
+void kernel_main() {
 
     std::array<ChannelBufferT, num_senders + num_receivers> buffer_channels;
 
@@ -221,13 +224,13 @@ void kernel_main() {
     uint32_t args_offset = 0;
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
 
+
     uint8_t const sender_channels_start = get_arg_val<uint32_t>(args_offset++);
     uint32_t const sender_num_channels = num_senders;  // get_arg_val<uint32_t>(args_offset++);
     uint8_t num_senders_with_no_work = 0;
     for (uint32_t channel = 0; channel < sender_num_channels; channel++) {
         uint32_t const sender_buffer_address = get_arg_val<uint32_t>(args_offset++);
         uint32_t const sender_num_messages_to_send = get_arg_val<uint32_t>(args_offset++);
-        DPRINT << "EDMS num_messages: " << sender_num_messages_to_send << "\n";
         // Each channel buffer is at buffer_base + (channel_id * sender_channel_size)
         // Each channel currently constrained to the same buffer size
         uint32_t const sender_channel_size = get_arg_val<uint32_t>(args_offset++);
@@ -262,7 +265,6 @@ void kernel_main() {
     for (uint32_t channel = 0; channel < receiver_num_channels; channel++) {
         uint32_t const receiver_buffers_base_address = get_arg_val<uint32_t>(args_offset++);
         uint32_t const receiver_num_messages_to_send = get_arg_val<uint32_t>(args_offset++);
-        DPRINT << "EDMR num_messages: " << receiver_num_messages_to_send << "\n";
         // Each channel buffer is at buffer_base + (channel_id * sender_channel_size)
         // Each channel currently constrained to the same buffer size
         uint32_t const receiver_channel_size = get_arg_val<uint32_t>(args_offset++);
@@ -297,6 +299,12 @@ void kernel_main() {
         bool act_as_sender_in_handshake =
             (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
         erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+        // if (act_as_sender_in_handshake) {
+        //     DPRINT << "EDMS Y|X = " << (uint32_t)((my_y[0] << 16) | my_x[0]) << "\n";
+        // } else {
+        //     DPRINT << "EDMR Y|X = " << (uint32_t)((my_y[0] << 16) | my_x[0]) << "\n";
+        //     // while(true);
+        // }
     }
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
 
@@ -314,8 +322,9 @@ void kernel_main() {
     // Time with old EDM
     // (32x8192, bfp8, 8 chip, 4 worker) = 34657 cycles
 
-    if constexpr (true)
+    if constexpr (use_optimized_edm_impl)
     {
+
         bool printed = false;
         uint32_t context_switches = 0;
         uint32_t idle_count = 0;
@@ -356,6 +365,9 @@ void kernel_main() {
                                 // {
                                 //     DeviceZoneScopedN("TX_ACK");
                                 // }
+                                // if (edm_channel.get_eth_transaction_channel() == 0) {
+                                    // DPRINT << "EDMS st SENDER_WAITING_FOR_ETH\n";
+                                // }
                                 erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
                                     edm_channel, num_senders_complete);
                                 // Technically only need to do this for message count termination mode
@@ -364,12 +376,16 @@ void kernel_main() {
                             } else if (edm_channel.get_state() == ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER) {
                                 // Should be removable
                                 // Worked with v2 (x2)
+
+                                // if (edm_channel.get_eth_transaction_channel() == 0) {
+                                // DPRINT << "EDMR RECEIVER_SIGNALING_WORKER\n";
+                                // }
                                 erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
                                 any_channels_advanceable = true;
                                 advanceable_channels[index] = i;
                                 index = index == advanceable_oob_idx - 1 ? 0 : index + 1;
 
-                            } else if (!eth_txq_is_busy()) {
+                            } else if (!SAVE_CODESPACE && !eth_txq_is_busy()) {
                                 execute_edm_channel_state(edm_channel,
                                             num_senders_complete,
                                             num_receivers_complete,
@@ -414,6 +430,7 @@ void kernel_main() {
                     any_channels_advanceable = advanceable_channels[advanceable_index] < advanceable_oob_idx;
                 } else {
                     ChannelBufferT &edm_channel = buffer_channels[i];
+                    if constexpr (!SAVE_CODESPACE) {
                     if (erisc::datamover::state_has_no_dependence_on_eth(edm_channel) && channel_can_make_progress(edm_channel)) {
                         if (edm_channel.get_state() == ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH) {
                             // Since we don't depend on tx q space being available, we can just complete this state
@@ -431,8 +448,10 @@ void kernel_main() {
                         } else if (edm_channel.get_state() == ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER) {
                             // Should be removable
                             // Worked with v2 (x2)
+                            // DPRINT << "EDMR RECEIVER_SIGNALING_WORKER\n";
                             erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
                         }
+                    }
                     }
 
                     if constexpr (((advanceable_oob_idx - 1) & advanceable_oob_idx) == 0) {
@@ -562,31 +581,50 @@ void kernel_main() {
         }
     }
 
-    // // DPRINT << "TEARING DOWN\n";
-    // {
-    //     // DeviceZoneScopedN("EDM_TEARDOWN");
-    //     for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
-    //         auto const &channel = buffer_channels[s];
-    //         // We need to explicitly check for channel send done because we may
-    //         // advance sender channel state as soon as we receive an ack. Since we
-    //         // may be the last active channel, and advance to done state just from ack
-    //         // from the receiver ("I got a payload"), then we need to wait for done
-    //         // at the very end here. Otherise if we invoke another erisc op back-to-back,
-    //         // we may mess up transaction state because it's possible for receiver of this
-    //         // op to send the completion done after that one has already started.
-    //         uint32_t wait_count = 0;
-    //         uint32_t wait_max = 50000;
-    //         while (!channel.eth_is_receiver_channel_send_done()) {
-    //             // wait_count++;
-    //             // if (wait_count > wait_max) {
+    // DPRINT << "EDM DONE\n";
 
-    //             //     DEBUG_STATUS("STK");
-    //             //     run_routing();
-    //             //     wait_count = 0;
-    //             // }
-    //         }
-    //     }
-    // }
+    DPRINT << "TEARING DOWN\n";
+    {
+        // DeviceZoneScopedN("EDM_TEARDOWN");
+        for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
+            auto &channel = buffer_channels[s];
+            // We need to explicitly check for channel send done because we may
+            // advance sender channel state as soon as we receive an ack. Since we
+            // may be the last active channel, and advance to done state just from ack
+            // from the receiver ("I got a payload"), then we need to wait for done
+            // at the very end here. Otherise if we invoke another erisc op back-to-back,
+            // we may mess up transaction state because it's possible for receiver of this
+            // op to send the completion done after that one has already started.
+            uint32_t wait_count = 0;
+            uint32_t wait_max = 50000;
+            for (uint8_t buffer_index = 0; buffer_index < num_buffers_per_channel; buffer_index++) {
+                wait_count = 0;
+                channel.buffer_index = buffer_index;
+                if (!channel.is_sender_side) {
+                    // DPRINT << "EDMR ch " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << "\n";
+                    if (!channel.eth_is_receiver_channel_send_done()) {
+                        // DPRINT << "EDMR CH " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << " NOT DONE\n";
+                        channel.eth_receiver_channel_done();
+                    } else {
+                        // DPRINT << "EDMR CH " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << " DONE\n";
+                    }
+                } else {
+                    // DPRINT << "EDMS ch " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << "\n";
+                    if (!channel.eth_is_receiver_channel_send_done()) {
+                        // DPRINT << "EDMS CH " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << " WAITING\n";
+                    }
+                    while (!channel.eth_is_receiver_channel_send_done()) {
+                        wait_count++;
+                        if (wait_count > wait_max) {
+                            // DEBUG_STATUS("STK");
+                            run_routing();
+                            wait_count = 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     DPRINT << "DONE FINAL TEARDOWN " << chip_id << "\n";
     DEBUG_STATUS("DONE");

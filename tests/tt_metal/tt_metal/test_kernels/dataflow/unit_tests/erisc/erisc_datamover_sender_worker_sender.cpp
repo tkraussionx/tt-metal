@@ -3,33 +3,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
+#include <array>
 
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #include "noc_nonblocking_api.h"
 #include "noc_parameters.h"
+#include "tt_eager/tt_dnn/op_library/ccl/kernel_common/worker_edm_utils.hpp"
 
-FORCE_INLINE void send_chunk(
-    const uint32_t max_pages_per_chunk,
-    const uint32_t total_pages_to_send,
-    uint32_t& num_pages_sent,
-    const uint32_t& cb_id,
-    const uint32_t& page_size,
-    uint64_t remote_l1_write_addr,
-    volatile tt_l1_ptr uint32_t* writer_send_semaphore_addr_ptr
-    ) {
 
-    const uint32_t num_pages_this_chunk = std::min(total_pages_to_send - num_pages_sent, max_pages_per_chunk);
-    for (uint32_t i = 0; i < num_pages_this_chunk; ++i) {
-        cb_wait_front(cb_id, 1);
-        uint32_t l1_read_addr = get_read_ptr(cb_id);
-        noc_async_write(l1_read_addr, remote_l1_write_addr, page_size);
-        remote_l1_write_addr += page_size;
-        noc_async_write_barrier();
-        cb_pop_front(cb_id, 1);
-    }
-    num_pages_sent += num_pages_this_chunk;
-}
 
 // Worker core - Data Movement Writer -> Sends to Erisc Data Mover (sender side).
 // -> takes input from local cb and pushes to erisc L1
@@ -44,6 +26,17 @@ void kernel_main() {
     constexpr uint32_t num_pages_per_send = get_compile_time_arg_val(0);
     constexpr uint32_t total_pages_to_send = get_compile_time_arg_val(1);
     constexpr uint32_t page_size = get_compile_time_arg_val(2);
+    constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(3);
+    DPRINT << "SW num_buffers_per_channel: " << num_buffers_per_channel << "\n";
+
+    std::array<uint64_t, num_buffers_per_channel> eth_buffer_addresses;
+    for (uint32_t i = 0; i < num_buffers_per_channel; i++) {
+        eth_buffer_addresses[i] = get_noc_addr(
+            eth_sender_noc_x,
+            eth_sender_noc_y,
+            eth_l1_base_addr + (i * ((num_pages_per_send * page_size) + 16)));//sizeof(eth_channel_sync_t))));
+    }
+
 
     DPRINT << " sws: args:" <<
         "\n\teth_sender_l1_base_addr="<<eth_l1_base_addr<<
@@ -62,8 +55,8 @@ void kernel_main() {
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(writer_send_sem_addr);
 
     // This is different per writer core
-    const uint64_t eth_l1_sender_base_noc_addr =
-        get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_l1_base_addr);
+    // const uint64_t eth_l1_sender_base_noc_addr =
+    //     get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_l1_base_addr);
     // Used to signal eth sender that data is available. This is different per writer core
     const uint64_t eth_l1_sender_semaphore_addr =
         get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_sem_addr);
@@ -74,20 +67,16 @@ void kernel_main() {
     DPRINT << " sws: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
     DPRINT << " sws: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
 
-    uint32_t old_val_NIU_SLV_CMD_ACCEPTED = NOC_STATUS_READ_REG(noc_index, NIU_SLV_REQ_ACCEPTED);
-    uint32_t old_val_NIU_SLV_ATOMIC_RESP_SENT = NOC_STATUS_READ_REG(noc_index, NIU_SLV_ATOMIC_RESP_SENT);
-    uint32_t old_val_NIU_SLV_POSTED_ATOMIC_RECEIVED = NOC_STATUS_READ_REG(noc_index, NIU_SLV_POSTED_ATOMIC_RECEIVED);
-    uint32_t old_val_NIU_SLV_NONPOSTED_ATOMIC_SENT = NOC_STATUS_READ_REG(noc_index, NIU_SLV_NONPOSTED_ATOMIC_RECEIVED);
-
-    bool diffed_NIU_SLV_CMD_ACCEPTED = false;
-    bool diffed_NIU_SLV_ATOMIC_RESP_SENT = false;
-    bool diffed_NIU_SLV_POSTED_ATOMIC_RECEIVED = false;
-    bool diffed_NIU_SLV_NONPOSTED_ATOMIC_SENT = false;
-    while (num_pages_sent < total_pages_to_send) {
+    uint32_t buffer_index = 0;
+    for (uint32_t p = 0; p < total_pages_to_send; p += num_pages_per_send) {
+        uint32_t num_pages_to_send = std::min(num_pages_per_send, total_pages_to_send - p);
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
-
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-        send_chunk(num_pages_per_send, total_pages_to_send, num_pages_sent, cb_id_in0, page_size, eth_l1_sender_base_noc_addr, writer_send_semaphore_addr_ptr);
+        // DPRINT << "SW SEND_CHUNK from buffer index: " << buffer_index << " @ " << eth_buffer_addresses[buffer_index] << " x " << (num_pages_to_send * page_size) << "\n";
+        send_chunk(cb_id_in0, num_pages_to_send, page_size, eth_buffer_addresses[buffer_index]);
         noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
+
+        buffer_index = (buffer_index + 1) % num_buffers_per_channel;
     }
+    DPRINT << "SW DONE\n";
 }

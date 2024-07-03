@@ -27,7 +27,9 @@ struct EriscDatamoverConfig {
     // The memory contents in L1 will be {1, 1, x, x}. By having this dedicated source memory, we
     // avoid the race
     static constexpr std::size_t edm_receiver_first_level_ack_source_word_size = 16;  // ethernet word size
+    static constexpr std::size_t eth_channel_sync_size = 16;  // ethernet word size
     static constexpr std::size_t eth_word_size_bytes = 16;
+    static constexpr bool enable_merged_payload_and_channel_sync = true;
 
     static uint32_t get_edm_handshake_address() { return usable_l1_base_address; }
     static uint32_t get_semaphores_base_address(std::size_t num_edm_channels) {
@@ -39,20 +41,24 @@ struct EriscDatamoverConfig {
         TT_ASSERT(base_address % eth_word_size_bytes == 0);
         return base_address;
     }
-    static uint32_t compute_buffer_size(std::size_t num_edm_channels, uint32_t page_size = eth_word_size_bytes) {
+    static uint32_t compute_buffer_size(std::size_t num_edm_channels, uint32_t num_buffers_per_channel, uint32_t page_size = eth_word_size_bytes) {
         page_size = std::max<uint32_t>(page_size, eth_word_size_bytes);
-        TT_ASSERT(num_edm_channels > 0);
-        uint32_t buffer_size =tt::round_down(
-            (total_l1_buffer_space - get_buffers_base_address(num_edm_channels)) / (num_edm_channels), page_size);
-        log_trace(tt::LogOp, "total_l1_buffer_space: {}", total_l1_buffer_space);
-        log_trace(
-            tt::LogOp, "get_buffers_base_address(num_edm_channels): {}", get_buffers_base_address(num_edm_channels));
-        log_trace(
-            tt::LogOp, "usable buffer space: {}", total_l1_buffer_space - get_buffers_base_address(num_edm_channels));
-        log_trace(tt::LogOp, "num_edm_channels: {}", num_edm_channels);
-        log_trace(tt::LogOp, "page_size: {}", page_size);
 
-        log_trace(tt::LogOp, "Buffer size: {}", buffer_size);
+        TT_ASSERT(num_edm_channels > 0);
+        std::size_t channel_sync_bytes_overhead = (enable_merged_payload_and_channel_sync * 16);
+        std::size_t usable_l1_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - get_buffers_base_address(num_edm_channels);
+        std::size_t max_per_buffer_space = (usable_l1_space / (num_edm_channels * num_buffers_per_channel)) - channel_sync_bytes_overhead;
+        uint32_t buffer_size = round_down(max_per_buffer_space, page_size);
+
+        log_info(tt::LogOp, "total_l1_buffer_space: {}", eth_l1_mem::address_map::MAX_L1_LOADING_SIZE);
+        log_info(
+            tt::LogOp, "get_buffers_base_address(num_edm_channels): {}", get_buffers_base_address(num_edm_channels));
+        log_info(
+            tt::LogOp, "usable buffer space: {}", eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - get_buffers_base_address(num_edm_channels));
+        log_info(tt::LogOp, "num_edm_channels: {}", num_edm_channels);
+        log_info(tt::LogOp, "page_size: {}", page_size);
+
+        log_info(tt::LogOp, "Buffer size: {}", buffer_size);
 
         TT_ASSERT(buffer_size > 0 && buffer_size % page_size == 0);
         return buffer_size;
@@ -125,6 +131,7 @@ class EriscDatamoverBuilder {
             uint32_t worker_semaphore_address,
             uint32_t num_eth_messages_to_forward,
             uint32_t channel,
+            uint32_t num_buffers,
             std::vector<ccl::WorkerXY> const& worker_coords,
             uint32_t largest_message_size_bytes = 0) :
             worker_coords(worker_coords),
@@ -139,6 +146,7 @@ class EriscDatamoverBuilder {
         uint32_t num_eth_messages_to_forward;
         uint32_t channel;
         uint32_t largest_message_size_bytes;
+        uint32_t num_buffers;
         bool is_sender;
     };
 
@@ -171,6 +179,7 @@ class EriscDatamoverBuilder {
     ccl::EriscDataMoverTerminationMode const termination_mode;
     uint32_t num_senders;
     uint32_t num_receivers;
+    std::size_t num_buffers_per_channel;
 
     int chip_id;
 
@@ -190,8 +199,8 @@ class EriscDatamoverBuilder {
         std::vector<uint32_t> const& local_semaphore_addresses,
         std::vector<uint32_t> const& local_buffer_addresses,
         ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
-        ccl::EriscDataMoverTerminationMode termination_mode =
-        ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
+        std::size_t num_buffers_per_channel,
+        ccl::EriscDataMoverTerminationMode termination_mode = ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
         int chip_id = -1) :
         local_semaphore_addresses(local_semaphore_addresses),
         local_buffer_addresses(local_buffer_addresses),
@@ -199,25 +208,27 @@ class EriscDatamoverBuilder {
         handshake_addr(handshake_addr),
         num_channel_buffers(local_buffer_addresses.size()),
         buffer_sharing_mode(buffer_sharing_mode),
+        num_buffers_per_channel(num_buffers_per_channel),
         termination_mode(termination_mode),
         enable_sender(false),
         enable_receiver(false),
         num_senders(0),
         num_receivers(0),
         chip_id(chip_id) {
+        TT_ASSERT(num_buffers_per_channel > 0);
         TT_ASSERT(local_buffer_addresses.size() == local_semaphore_addresses.size());
         active_channels.reserve(num_channel_buffers);
         TT_ASSERT(eth_buffer_size_bytes < 163000);
-        log_trace(tt::LogOp, "EriscDatamoverBuilder:");
+        log_info(tt::LogOp, "EriscDatamoverBuilder:");
         for (auto const& addr : local_semaphore_addresses) {
             TT_ASSERT(addr > 0);
             TT_ASSERT(addr % 16 == 0);
-            log_trace(tt::LogOp, "\tsemaphore_address: {}", addr);
+            log_info(tt::LogOp, "\tsemaphore_address: {}", addr);
         }
         for (auto const& addr : local_buffer_addresses) {
             TT_ASSERT(addr > 0);
             TT_ASSERT(addr % 16 == 0);
-            log_trace(tt::LogOp, "\tbuffer_address: {}", addr);
+            log_info(tt::LogOp, "\tbuffer_address: {}", addr);
         }
     }
 
@@ -231,7 +242,7 @@ class EriscDatamoverBuilder {
         this->num_senders++;
         auto channel = active_channels.size();
         active_channels.emplace_back(
-            true, worker_semaphore_address, num_eth_messages_to_forward, channel, worker_coords, expected_message_size_bytes);
+            true, worker_semaphore_address, num_eth_messages_to_forward, channel, this->num_buffers_per_channel, worker_coords, expected_message_size_bytes);
         log_trace(tt::LogOp, "Adding sender channel:");
         log_trace(tt::LogOp, "\tworker_semaphore_address: {}", active_channels.back().worker_semaphore_address);
         log_trace(tt::LogOp, "\tnum_eth_messages_to_forward: {}", active_channels.back().num_eth_messages_to_forward);
@@ -261,7 +272,7 @@ class EriscDatamoverBuilder {
         this->num_receivers++;
         auto channel = active_channels.size();
         active_channels.emplace_back(
-            false, worker_semaphore_address, num_eth_messages_to_forward, channel, worker_coords, expected_message_size_bytes);
+            false, worker_semaphore_address, num_eth_messages_to_forward, channel, this->num_buffers_per_channel, worker_coords, expected_message_size_bytes);
         log_trace(tt::LogOp, "Adding receiver channel:");
         log_trace(tt::LogOp, "\tworker_semaphore_address: {}", active_channels.back().worker_semaphore_address);
         log_trace(tt::LogOp, "\tnum_eth_messages_to_forward: {}", active_channels.back().num_eth_messages_to_forward);
@@ -283,6 +294,7 @@ class EriscDatamoverBuilder {
             1,
             static_cast<uint32_t>(this->num_senders > 0 && active_channels.at(0).is_sender),
             1, // merge packet and payload ready signal
+            this->num_buffers_per_channel,
             chip_id
             };
     }
@@ -326,9 +338,9 @@ class EriscDatamoverBuilder {
 
     void dump_to_log() const {
         auto const& rt_args = this->emit_runtime_args();
-        log_trace(tt::LogOp, "EDM RT Args:");
+        log_info(tt::LogOp, "EDM RT Args:");
         for (auto const& arg : rt_args) {
-            log_trace(tt::LogOp, "\t{}", arg);
+            log_info(tt::LogOp, "\t{}", arg);
         }
     };
 
