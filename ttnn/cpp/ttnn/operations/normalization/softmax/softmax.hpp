@@ -5,8 +5,8 @@
 #pragma once
 
 #include "tt_dnn/op_library/moreh_softmax/moreh_softmax_op.hpp"
-// #include "tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "device/softmax_op.hpp"
+#include "ttnn/operations/core.hpp"
 
 namespace ttnn {
 namespace operations::normalization {
