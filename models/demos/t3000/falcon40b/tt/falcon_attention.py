@@ -154,7 +154,7 @@ class TtFalconAttention:
         self.num_heads_per_device = self.num_heads // device_mesh.get_num_devices()
         self.tt_cache_path = tt_cache_path
         self.max_batch_size = 32
-
+        self.layer_num = layer_num
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -332,11 +332,19 @@ class TtFalconAttention:
         Decode input shape: [seq_len, 1, batch, hidden_size]
         """
 
+        def save_tensor(filename, tensor):
+            cloned_tensor = ttnn.clone(tensor, ttnn.DRAM_MEMORY_CONFIG, ttnn.bfloat16)
+            host_tensor = ttnn.to_torch(
+                cloned_tensor, device=self.device_mesh, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=-1)
+            )
+            torch.save(host_tensor, filename)
+
         assert not output_attentions
         batch = hidden_states.get_legacy_shape()[0]
         q_len = hidden_states.get_legacy_shape()[2]
         assert layer_past is not None
-
+        filename = f"hidden_states_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, hidden_states)
         # Fused query, key and value projection
         fused_query_key_value = falcon_prefill_matmul(
             hidden_states,
@@ -347,7 +355,8 @@ class TtFalconAttention:
             grid=ttnn.CoreGrid(x=8, y=8) if q_len >= 512 else ttnn.CoreGrid(x=8, y=min(q_len // 32, 8)),
             transpose_mcast=True,
         )
-
+        filename = f"after_fused_query_key_value_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, fused_query_key_value)
         query_layer, key_layer, value_layer = ttnn.experimental.tensor.nlp_create_qkv_heads(
             fused_query_key_value,
             num_heads=self.num_heads // self.num_devices,
@@ -356,7 +365,8 @@ class TtFalconAttention:
             output_mem_config=self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
         )
         fused_query_key_value.deallocate(True)
-
+        save_tensor(f"query_layer_before_rotary_{self.layer_num}_before_sdpa_main.pt", query_layer)
+        save_tensor(f"key_layer_before_rotary_{self.layer_num}_before_sdpa_main.pt", key_layer)
         # Rotary embeddings
         query_layer = self.rotary_embedding(query_layer)
         key_layer = self.rotary_embedding(key_layer)
@@ -372,6 +382,20 @@ class TtFalconAttention:
             ttnn.experimental.tensor.typecast(value_layer, self.model_config["KV_CACHE_DTYPE"]),
             user_id,
         )
+
+        filename = f"query_layer_{self.layer_num}_before_sdpa_main.pt"
+        # host_tensor = ttnn.to_torch(cloned_query_layer, device=self.device_mesh, mesh_composer=ttnn.ConcatMeshToTensor(self.device_mesh, dim=-1))
+        # torch.save(host_tensor, filename)
+        save_tensor(filename, query_layer)
+
+        # ttnn.dump_tensor(file_name=filename, tensor=query_layer)
+        filename = f"key_layer_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, key_layer)
+        # ttnn.dump_tensor(file_name=filename, tensor=key_layer)
+        filename = f"value_layer_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, value_layer)
+        # ttnn.dump_tensor(file_name=filename, tensor=value_layer)
+
         key_layer_transposed = ttnn.experimental.tensor.transpose(
             key_layer,
             -2,
@@ -425,12 +449,14 @@ class TtFalconAttention:
                 value_layer,
                 q_len,
             )
+
             attn_output = convert_to_layout(
                 attn_output,
                 self.model_config["ATTN_OUTPUT_HEIGHT_SHARDED_MEMCFG"],
                 self.model_config["DRAM_MEMCFG"],
             )
-
+        filename = f"attn_output_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, attn_output)
         # Deallocate query, key, value
         query_layer.deallocate(True)
         key_layer_transposed.deallocate(True)
@@ -447,6 +473,9 @@ class TtFalconAttention:
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
         )
+        filename = f"attn_output_after_all_gather_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, attn_output)
+
         attn_output = falcon_prefill_matmul(
             attn_output,
             self.dense_weights,
@@ -456,6 +485,8 @@ class TtFalconAttention:
             overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
             overwrite_subblock_h=1,
         )
+        filename = f"attn_output_after_selfout_{self.layer_num}_before_sdpa_main.pt"
+        save_tensor(filename, attn_output)
         # There are references to tensors in case seq_len > 512
         # so we won't force deallocation
         should_deallocate_tensors = determine_tensor_deallocation(
