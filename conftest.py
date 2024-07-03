@@ -75,7 +75,7 @@ def get_tt_cache_path():
     return get_tt_cache_path_
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def device_params(request):
     return getattr(request, "param", {})
 
@@ -138,7 +138,7 @@ def all_devices(request, device_params):
     ttl.device.CloseDevices(devices)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0, device_params):
     import ttnn
     import tt_lib as ttl
@@ -439,11 +439,11 @@ def pytest_generate_tests(metafunc):
         )
 
     if uses_silicon_arch:
-        metafunc.parametrize("silicon_arch_name", available_archs)
+        metafunc.parametrize("silicon_arch_name", available_archs, scope="session")
         for test_requested_silicon_arch_fixture in test_requested_silicon_arch_fixtures:
             # The values of these arch-specific fixtures should not be used in
             # the test function, so use any parameters, like [True]
-            metafunc.parametrize(test_requested_silicon_arch_fixture, [True])
+            metafunc.parametrize(test_requested_silicon_arch_fixture, [True], scope="session")
 
     input_method = metafunc.config.getoption("--input-method")
     if input_method == "json":
