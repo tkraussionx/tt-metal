@@ -48,8 +48,8 @@ from models.demos.t3000.llama2_70b.demo.demo import main, construct_arg
 @pytest.mark.parametrize(
     "num_tokens, output_at_end, top_p, top_k, temperature",
     (
-        (128, True, 1, 1, 1.0),
-        (128, True, 0.9, 10, 1.0),
+        (2000, True, 1, 1, 1.0),
+        (2000, True, 0.9, 10, 1.0),
     ),
     ids=("greedy", "sampling"),
 )

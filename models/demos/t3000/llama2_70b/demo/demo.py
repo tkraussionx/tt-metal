@@ -50,7 +50,9 @@ def main(args):
 
     # Run decode
     with torch.no_grad():
-        all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
+        for i in range(10000):
+            logger.info(f"Running decode stress test iteration {i}")
+            all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
 
         if args.output_at_end:
             with open(
@@ -80,6 +82,7 @@ def build_generator(args):
         max_batch_size=args.max_batch_size,
         skip_model_load=args.skip_model_load,
         n_layers=1 if args.implementation == "tt" else args.num_layers,
+        # n_layers=args.num_layers, # Since I don't have weights yet, use fake weights
     )
 
     state_dict = load_llama_state_dict(args.ckpt_dir, n_layers=args.num_layers)
@@ -278,7 +281,7 @@ class Args:
         skip_model_load=False,
         max_batch_size=32,
         num_layers=None,
-        max_seq_len=4096,
+        max_seq_len=2048,
         # Generation args
         num_tokens=128,
         prompts_file="models/demos/t3000/llama2_70b/demo/data/multi_prompt.json",
@@ -357,8 +360,8 @@ def construct_arg(**kwargs):
 @pytest.mark.parametrize(
     "num_tokens, output_at_end, top_p, top_k, temperature",
     (
-        (128, True, 1, 1, 1.0),
-        (128, True, 0.9, 10, 1.0),
+        (2000, True, 1, 1, 1.0),
+        (2000, True, 0.9, 10, 1.0),
     ),
     ids=("greedy", "sampling"),
 )
@@ -399,7 +402,7 @@ def test_LlamaModel_demo(
 
     for i in t3k_device_mesh.get_device_ids():
         device = t3k_device_mesh.get_device(i)
-        device.enable_async(True)
+        device.enable_async(False)
 
     args = construct_arg(
         implementation=implementation,

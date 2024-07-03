@@ -81,9 +81,12 @@ class TtLlamaModelForGeneration:
             attn_mask,
         )
 
-        del tt_inp_emb
-        del rot_mat
-        del attn_mask
+        # del tt_inp_emb
+        # del rot_mat
+        # del attn_mask
+        tt_inp_emb.deallocate(True)
+        rot_mat.deallocate(True)
+        attn_mask.deallocate(True)
 
         # for device in self.devices:
         #     ttl.device.Synchronize(device)
@@ -95,7 +98,8 @@ class TtLlamaModelForGeneration:
         # logits = torch.cat([tt2torch_tensor(tt_o) for tt_o in tt_logits], -1)
         logits = logits[..., : self.params.vocab_size].float()
         logits = logits.permute(2, 1, 0, 3).squeeze().unsqueeze(1)  # [batch, 1, vocab_size]
-        del tt_logits
+        # del tt_logits
+        tt_logits.deallocate(True)
 
         return logits
 

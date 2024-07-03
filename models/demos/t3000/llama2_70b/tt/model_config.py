@@ -24,7 +24,7 @@ def pretty_print_model_config(model_config):
 
 
 def get_model_config(
-    llama_version="llama3", batch=32, seq_len=1, num_devices=8, max_batch_size=32, max_context_len=4096
+    llama_version="llama3", batch=32, seq_len=1, num_devices=8, max_batch_size=32, max_context_len=2048
 ):
     llm_mode = "decode" if seq_len == 1 else "prefill"
     assert num_devices == 8

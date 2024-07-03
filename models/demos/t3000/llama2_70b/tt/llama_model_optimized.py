@@ -253,7 +253,7 @@ class TtLlamaModel_optimized:
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
             )
-            rot_mats = ttnn.to_device(rot_mats, self.device_mesh)
+            # rot_mats = ttnn.to_device(rot_mats, self.device_mesh)
 
             rot_mats = tt_lib.tensor.interleaved_to_sharded(
                 rot_mats, sharded_mem_config=self.model_config["ROT_MAT_MM_IN1_MEMCFG"]
@@ -275,7 +275,7 @@ class TtLlamaModel_optimized:
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
                 device=self.device_mesh,
             )
-            attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
+            # attn_masks = ttnn.to_device(attn_masks, self.device_mesh)
 
             repeat_shape = (1, batch, 1, 1)
             attn_masks = tt_lib.tensor.repeat(
