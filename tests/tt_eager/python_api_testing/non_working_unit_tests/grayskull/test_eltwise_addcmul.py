@@ -1,4 +1,5 @@
 from loguru import logger
+from itertools import product
 import random
 import pytest
 import torch
@@ -18,8 +19,12 @@ def run_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, output_mem_c
     y = gen_rand(input_shape, -100, 100)
     z = gen_rand(input_shape, -100, 100)
 
+    x_ref = x.detach().clone()
+    y_ref = y.detach().clone()
+    z_ref = z.detach().clone()
+
     # compute ref value
-    ref_value = pytorch_ops.addcmul(x, y, z, scalar=scalar)
+    ref_value = pytorch_ops.addcmul(x_ref, y_ref, z_ref, scalar=scalar)
 
     tt_result = eltwise_addcmul(
         x=x,
@@ -43,7 +48,20 @@ def run_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, output_mem_c
 
 test_sweep_args = [
     (
-        (5, 3, 96, 64),
+        (4, 5, 128, 96),
+        [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16],
+        [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
+        [
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+        ],
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+        7329721,
+        7.8125,
+    ),
+    (
+        (4, 5, 128, 96),
         [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16],
         [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
         [
@@ -59,7 +77,11 @@ test_sweep_args = [
         (5, 5, 160, 192),
         [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16],
         [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
-        [None, None, ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)],
+        [
+            None,
+            None,
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+        ],
         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
         4931206,
         8.625,

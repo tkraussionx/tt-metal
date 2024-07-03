@@ -1,4 +1,5 @@
 from loguru import logger
+from itertools import product
 import random
 import pytest
 import torch
@@ -8,10 +9,10 @@ import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests import pytorch_ops
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_rand
-from tests.tt_eager.python_api_testing.sweep_tests.tt_lib_ops import eltwise_addcdiv
+from tests.tt_eager.python_api_testing.sweep_tests.tt_lib_ops import eltwise_addcmul
 
 
-def run_eltwise_addcdiv(input_shape, dtype, dlayout, in_mem_config, output_mem_config, data_seed, scalar, device):
+def run_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, output_mem_config, data_seed, scalar, device):
     torch.manual_seed(data_seed)
 
     x = gen_rand(input_shape, -100, 100)
@@ -23,9 +24,9 @@ def run_eltwise_addcdiv(input_shape, dtype, dlayout, in_mem_config, output_mem_c
     z_ref = z.detach().clone()
 
     # compute ref value
-    ref_value = pytorch_ops.addcdiv(x_ref, y_ref, z_ref, scalar=scalar)
+    ref_value = pytorch_ops.addcmul(x_ref, y_ref, z_ref, scalar=scalar)
 
-    tt_result = eltwise_addcdiv(
+    tt_result = eltwise_addcmul(
         x=x,
         y=y,
         z=z,
@@ -37,6 +38,7 @@ def run_eltwise_addcdiv(input_shape, dtype, dlayout, in_mem_config, output_mem_c
         output_mem_config=output_mem_config,
     )
     # compare tt and golden outputs
+
     success, pcc_value = comp_pcc(ref_value, tt_result)
     logger.debug(pcc_value)
     logger.debug(success)
@@ -58,6 +60,19 @@ test_sweep_args = [
         16305027,
         83.0,
     ),
+    (
+        (4, 5, 128, 96),
+        [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT16],
+        [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
+        [
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+        ],
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+        7329721,
+        7.8125,
+    ),
 ]
 
 
@@ -65,6 +80,5 @@ test_sweep_args = [
     "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, scalar",
     (test_sweep_args),
 )
-def test_eltwise_addcdiv(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, scalar, device):
-    for i in range(0, 2):
-        run_eltwise_addcdiv(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, scalar, device)
+def test_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, scalar, device):
+    run_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, scalar, device)

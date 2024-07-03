@@ -73,4 +73,6 @@ test_sweep_args = [
     (test_sweep_args),
 )
 def test_eltwise_xlogy(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
-    run_eltwise_xlogy(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+    for i in range(0, 10):
+        run_eltwise_xlogy(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+
