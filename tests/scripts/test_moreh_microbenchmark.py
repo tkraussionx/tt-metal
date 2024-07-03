@@ -396,100 +396,208 @@ def test_matmul_single_core(
     run_moreh_single_test("matmul single core sharded", command)
 
 
+# @pytest.mark.parametrize(
+#     "iteration, test_vector_small, test_vector_large",
+#     [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
+# )
+# def test_pcie_h2d_dram(iteration, test_vector_small, test_vector_large):
+#     file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_DRAM_Bandwidth.csv"
+#     header = ["Transfer Size", "WriteToDeviceDRAMChannel", "WriteToBuffer", "EnqueueWriteBuffer"]
+#     data = []
+#     for test_point in test_vector_small:
+#         bw_wdd = test_write_device_dram_channel(iteration, 0, test_point)
+#         bw_wb = test_write_buffer(iteration, 0, test_point)
+#         bw_ewb = test_enqueue_write_buffer(iteration, 0, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     for test_point in test_vector_large:
+#         bw_wdd = test_write_device_dram_channel(1, 0, test_point)
+#         bw_wb = test_write_buffer(1, 0, test_point)
+#         bw_ewb = test_enqueue_write_buffer(1, 0, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     generate_csv(file_name, header, data)
+#     return
+
+
+def test_enqueue_write(iter=1, buffer_type=0, page_size=2048, transfer_size=512 * 1024 * 1024):
+    command = (
+        "./build/test/tt_metal/perf_microbenchmark/3_pcie_transfer/test_rw_buffer "
+        + "--num-tests "
+        + str(iter)
+        + " --buffer-type "
+        + str(buffer_type)
+        + " --transfer-size "
+        + str(transfer_size)
+        + " --page-size "
+        + str(page_size)
+        + " --skip-read "
+    )
+    result = run_moreh_single_test("pcie write to device dram", command)
+    output = result.stdout.decode("utf-8")
+    pattern = r"(\d+\.\d+)GB/s"
+    matches = re.findall(pattern, output)
+    values = [float(match) for match in matches]
+    bw = sum(values) / len(values)
+    return bw
+
+
+def test_enqueue_read(iter=1, buffer_type=0, page_size=2048, transfer_size=512 * 1024 * 1024):
+    command = (
+        "./build/test/tt_metal/perf_microbenchmark/3_pcie_transfer/test_rw_buffer "
+        + "--num-tests "
+        + str(iter)
+        + " --buffer-type "
+        + str(buffer_type)
+        + " --transfer-size "
+        + str(transfer_size)
+        + " --page-size "
+        + str(page_size)
+        + " --skip-write "
+    )
+    result = run_moreh_single_test("pcie write to device dram", command)
+    output = result.stdout.decode("utf-8")
+    pattern = r"(\d+\.\d+)GB/s"
+    matches = re.findall(pattern, output)
+    values = [float(match) for match in matches]
+    bw = sum(values) / len(values)
+    return bw
+
+
 @pytest.mark.parametrize(
-    "iteration, test_vector_small, test_vector_large",
-    [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
+    "iteration, page_size_vector, transfer_size",
+    [(10, np.array([512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]), 1024 * 1024 * 1024)],
 )
-def test_pcie_h2d_dram(iteration, test_vector_small, test_vector_large):
-    file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_DRAM_Bandwidth.csv"
-    header = ["Transfer Size", "WriteToDeviceDRAMChannel", "WriteToBuffer", "EnqueueWriteBuffer"]
+def test_pcie_h2d_dram(iteration, page_size_vector, transfer_size):
+    file_name = PROFILER_LOGS_DIR / "moreh_H2D_DRAM_Bandwidth.csv"
+    header = ["Page Size", "EnqueueWriteBuffer"]
     data = []
-    for test_point in test_vector_small:
-        bw_wdd = test_write_device_dram_channel(iteration, 0, test_point)
-        bw_wb = test_write_buffer(iteration, 0, test_point)
-        bw_ewb = test_enqueue_write_buffer(iteration, 0, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
-        data.append(data_entry)
-    for test_point in test_vector_large:
-        bw_wdd = test_write_device_dram_channel(1, 0, test_point)
-        bw_wb = test_write_buffer(1, 0, test_point)
-        bw_ewb = test_enqueue_write_buffer(1, 0, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+    for page_size in page_size_vector:
+        bw = test_enqueue_write(iteration, 0, page_size, transfer_size)
+        data_entry = [page_size, bw]
         data.append(data_entry)
     generate_csv(file_name, header, data)
     return
 
 
 @pytest.mark.parametrize(
-    "iteration, test_vector_small, test_vector_large",
-    [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
+    "iteration, page_size_vector, transfer_size",
+    [(10, np.array([512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]), 1024 * 1024 * 1024)],
 )
-def test_pcie_d2h_dram(iteration, test_vector_small, test_vector_large):
-    file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_DRAM_Bandwidth.csv"
-    header = ["Transfer Size", "ReadFromDeviceDRAMChannel", "ReadFromBuffer", "EnqueueReadBuffer"]
+def test_pcie_d2h_dram(iteration, page_size_vector, transfer_size):
+    file_name = PROFILER_LOGS_DIR / "moreh_D2H_DRAM_Bandwidth.csv"
+    header = ["Page Size", "EnqueueReadBuffer"]
     data = []
-    for test_point in test_vector_small:
-        bw_wdd = test_read_device_dram_channel(iteration, 0, test_point)
-        bw_wb = test_read_buffer(iteration, 0, test_point)
-        bw_ewb = test_enqueue_read_buffer(iteration, 0, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
-        data.append(data_entry)
-    for test_point in test_vector_large:
-        bw_wdd = test_read_device_dram_channel(1, 0, test_point)
-        bw_wb = test_read_buffer(1, 0, test_point)
-        bw_ewb = test_enqueue_read_buffer(1, 0, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+    for page_size in page_size_vector:
+        bw = test_enqueue_read(iteration, 0, page_size, transfer_size)
+        data_entry = [page_size, bw]
         data.append(data_entry)
     generate_csv(file_name, header, data)
     return
 
 
 @pytest.mark.parametrize(
-    "arch, iteration, L1_size, test_vector",
-    [
-        ("grayskull", 2, 1048576, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
-        ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
-    ],
+    "iteration, page_size_vector, transfer_size",
+    [(10, np.array([512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]), 64 * 1024 * 1024)],
 )
-def test_pcie_h2d_l1(arch, iteration, L1_size, test_vector):
-    file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_L1_Bandwidth.csv"
-    header = ["Transfer Size", "WriteToDeviceL1", "WriteToBuffer", "EnqueueWriteBuffer"]
+def test_pcie_h2d_l1(iteration, page_size_vector, transfer_size):
+    file_name = PROFILER_LOGS_DIR / "moreh_H2D_L1_Bandwidth.csv"
+    header = ["Page Size", "EnqueueWriteBuffer"]
     data = []
-    for test_point in test_vector:
-        if test_point < L1_size:
-            bw_wdd = test_write_device_l1(iteration, 1, test_point)
-        else:
-            bw_wdd = 0
-        bw_wb = test_write_buffer(iteration, 1, test_point)
-        bw_ewb = test_enqueue_write_buffer(iteration, 1, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+    for page_size in page_size_vector:
+        bw = test_enqueue_write(iteration, 1, page_size, transfer_size)
+        data_entry = [page_size, bw]
         data.append(data_entry)
     generate_csv(file_name, header, data)
     return
 
 
 @pytest.mark.parametrize(
-    "arch, iteration, L1_size, test_vector",
-    [
-        ("grayskull", 2, 1048576, np.array([4096, 16384, 65536])),
-        ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536])),
-    ],
+    "iteration, page_size_vector, transfer_size",
+    [(10, np.array([512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]), 64 * 1024 * 1024)],
 )
-def test_pcie_d2h_l1(arch, iteration, L1_size, test_vector):
-    file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_L1_Bandwidth.csv"
-    header = ["Transfer Size", "ReadFromDeviceL1", "ReadFromBuffer", "EnqueueReadBuffer"]
+def test_pcie_d2h_l1(iteration, page_size_vector, transfer_size):
+    file_name = PROFILER_LOGS_DIR / "moreh_D2H_L1_Bandwidth.csv"
+    header = ["Page Size", "EnqueueReadBuffer"]
     data = []
-    for test_point in test_vector:
-        if test_point < L1_size:
-            bw_wdd = test_read_device_l1(iteration, 1, test_point)
-        else:
-            bw_wdd = 0
-        bw_wb = test_read_buffer(iteration, 1, test_point)
-        bw_ewb = test_enqueue_read_buffer(iteration, 1, test_point)
-        data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+    for page_size in page_size_vector:
+        bw = test_enqueue_read(iteration, 1, page_size, transfer_size)
+        data_entry = [page_size, bw]
         data.append(data_entry)
     generate_csv(file_name, header, data)
     return
+
+
+# @pytest.mark.parametrize(
+#     "iteration, test_vector_small, test_vector_large",
+#     [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
+# )
+# def test_pcie_d2h_dram(iteration, test_vector_small, test_vector_large):
+#     file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_DRAM_Bandwidth.csv"
+#     header = ["Transfer Size", "ReadFromDeviceDRAMChannel", "ReadFromBuffer", "EnqueueReadBuffer"]
+#     data = []
+#     for test_point in test_vector_small:
+#         bw_wdd = test_read_device_dram_channel(iteration, 0, test_point)
+#         bw_wb = test_read_buffer(iteration, 0, test_point)
+#         bw_ewb = test_enqueue_read_buffer(iteration, 0, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     for test_point in test_vector_large:
+#         bw_wdd = test_read_device_dram_channel(1, 0, test_point)
+#         bw_wb = test_read_buffer(1, 0, test_point)
+#         bw_ewb = test_enqueue_read_buffer(1, 0, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     generate_csv(file_name, header, data)
+#     return
+
+
+# @pytest.mark.parametrize(
+#     "arch, iteration, L1_size, test_vector",
+#     [
+#         ("grayskull", 2, 1048576, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
+#         ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
+#     ],
+# )
+# def test_pcie_h2d_l1(arch, iteration, L1_size, test_vector):
+#     file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_L1_Bandwidth.csv"
+#     header = ["Transfer Size", "WriteToDeviceL1", "WriteToBuffer", "EnqueueWriteBuffer"]
+#     data = []
+#     for test_point in test_vector:
+#         if test_point < L1_size:
+#             bw_wdd = test_write_device_l1(iteration, 1, test_point)
+#         else:
+#             bw_wdd = 0
+#         bw_wb = test_write_buffer(iteration, 1, test_point)
+#         bw_ewb = test_enqueue_write_buffer(iteration, 1, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     generate_csv(file_name, header, data)
+#     return
+
+
+# @pytest.mark.parametrize(
+#     "arch, iteration, L1_size, test_vector",
+#     [
+#         ("grayskull", 2, 1048576, np.array([4096, 16384, 65536])),
+#         ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536])),
+#     ],
+# )
+# def test_pcie_d2h_l1(arch, iteration, L1_size, test_vector):
+#     file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_L1_Bandwidth.csv"
+#     header = ["Transfer Size", "ReadFromDeviceL1", "ReadFromBuffer", "EnqueueReadBuffer"]
+#     data = []
+#     for test_point in test_vector:
+#         if test_point < L1_size:
+#             bw_wdd = test_read_device_l1(iteration, 1, test_point)
+#         else:
+#             bw_wdd = 0
+#         bw_wb = test_read_buffer(iteration, 1, test_point)
+#         bw_ewb = test_enqueue_read_buffer(iteration, 1, test_point)
+#         data_entry = [test_point, bw_wdd, bw_wb, bw_ewb]
+#         data.append(data_entry)
+#     generate_csv(file_name, header, data)
+#     return
 
 
 @pytest.mark.parametrize(
