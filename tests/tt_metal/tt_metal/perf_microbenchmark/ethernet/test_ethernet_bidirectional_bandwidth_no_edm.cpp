@@ -39,10 +39,7 @@ class N300TestDevice {
         num_devices_ = tt::tt_metal::GetNumAvailableDevices();
         if (arch_ == tt::ARCH::WORMHOLE_B0 and tt::tt_metal::GetNumAvailableDevices() >= 2 and
             tt::tt_metal::GetNumPCIeDevices() >= 1) {
-            for (unsigned int id = 0; id < num_devices_; id++) {
-                auto* device = tt::tt_metal::CreateDevice(id);
-                devices_.push_back(device);
-            }
+            devices_ = tt::tt_metal::detail::CreateDevices({0,1,2,3,4,5,6,7});
             tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
 
         } else {
@@ -59,12 +56,12 @@ class N300TestDevice {
     void TearDown() {
         device_open = false;
         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-        for (unsigned int id = 0; id < devices_.size(); id++) {
-            tt::tt_metal::CloseDevice(devices_.at(id));
+        for (auto [device_id, device_ptr] : devices_) {
+            tt::tt_metal::CloseDevice(device_ptr);
         }
     }
 
-    std::vector<tt::tt_metal::Device*> devices_;
+    std::map<chip_id_t, Device *> devices_;
     tt::ARCH arch_;
     size_t num_devices_;
 
@@ -112,7 +109,7 @@ std::tuple<Program,Program> build(
         tt_metal::EthernetConfig {
             .noc = tt_metal::NOC::RISCV_0_default,
             .compile_args = ct_args});
-    tt_metal::SetRuntimeArgs(program0, local_kernel, eth_sender_core, rt_args(true));
+    // tt_metal::SetRuntimeArgs(program0, local_kernel, eth_sender_core, rt_args(true));
 
     remote_kernel = tt_metal::CreateKernel(
         program1,
@@ -121,7 +118,10 @@ std::tuple<Program,Program> build(
         tt_metal::EthernetConfig {
             .noc = tt_metal::NOC::RISCV_0_default,
             .compile_args = ct_args});
-    tt_metal::SetRuntimeArgs(program1, remote_kernel, eth_receiver_core, rt_args(false));
+
+    log_info("Sender core (c={}, x={}, y={}), Receiver core (c={}, x={}, y={})",
+             device0->id(), eth_sender_core.x, eth_sender_core.y, device1->id(), eth_receiver_core.x, eth_receiver_core.y);
+    // tt_metal::SetRuntimeArgs(program1, remote_kernel, eth_receiver_core, rt_args(false));
 
     // Launch
     try {
@@ -157,15 +157,21 @@ void run(
             static_cast<uint32_t>(max_channels_per_direction),
             static_cast<uint32_t>(send_channels_at_offset_0)};
     };
-    log_trace(tt::LogTest, "Running...");
+    log_info(tt::LogTest, "Running...");
 
     tt_metal::SetRuntimeArgs(program0, local_kernel, eth_sender_core, rt_args(true));
     tt_metal::SetRuntimeArgs(program1, remote_kernel, eth_receiver_core, rt_args(false));
 
     tt_metal::EnqueueProgram(device0->command_queue(), program0, false);
     tt_metal::EnqueueProgram(device1->command_queue(), program1, false);
+
+    std::cout << "Calling Finish" << std::endl;
+    tt_metal::Finish(device0->command_queue());
+    tt_metal::Finish(device1->command_queue());
+    std::cout << "DumpDeviceProfileResults" << std::endl;
     tt::tt_metal::detail::DumpDeviceProfileResults(device0);
     tt::tt_metal::detail::DumpDeviceProfileResults(device1);
+    std::cout << "Done dumping results" << std::endl;
 }
 
 bool MeasureBidirectionalBandwidth(
@@ -216,11 +222,11 @@ bool MeasureBidirectionalBandwidth(
         tt::tt_metal::detail::CompileProgram(device0, program0);
         tt::tt_metal::detail::CompileProgram(device1, program1);
     } catch (std::exception& e) {
-        log_trace(tt::LogTest, "Failed compile: {}", e.what());
+        log_info(tt::LogTest, "Failed compile: {}", e.what());
         throw e;
     }
 
-    log_trace(tt::LogTest, "Running...");
+    log_info(tt::LogTest, "Running...");
 
     std::thread th2 = std::thread([&] { tt_metal::detail::LaunchProgram(device0, program0); });
     std::thread th1 = std::thread([&] { tt_metal::detail::LaunchProgram(device1, program1); });
@@ -242,27 +248,30 @@ int main(int argc, char** argv) {
     assert(argc >= 4);
     std::size_t arg_idx = 1;
     std::size_t num_sample_counts = std::stoi(argv[arg_idx++]);
-    log_trace(tt::LogTest, "num_sample_counts: {}", std::stoi(argv[arg_idx]));
+    TT_ASSERT(num_sample_counts > 0);
+    log_info(tt::LogTest, "num_sample_counts: {}", std::stoi(argv[arg_idx]));
     std::vector<std::size_t> sample_counts;
     for (std::size_t i = 0; i < num_sample_counts; i++) {
         sample_counts.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "sample_counts[{}]: {}", i, sample_counts.back());
+        log_info(tt::LogTest, "sample_counts[{}]: {}", i, sample_counts.back());
     }
 
     std::size_t num_sample_sizes = std::stoi(argv[arg_idx++]);
     std::vector<std::size_t> sample_sizes;
-    log_trace(tt::LogTest, "num_sample_sizes: {}", num_sample_sizes);
+    TT_ASSERT(num_sample_sizes > 0);
+    log_info(tt::LogTest, "num_sample_sizes: {}", num_sample_sizes);
     for (std::size_t i = 0; i < num_sample_sizes; i++) {
         sample_sizes.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "sample_sizes[{}]: {}", i, sample_sizes.back());
+        log_info(tt::LogTest, "sample_sizes[{}]: {}", i, sample_sizes.back());
     }
 
     std::size_t num_channel_counts = std::stoi(argv[arg_idx++]);
     std::vector<std::size_t> channel_counts;
-    log_trace(tt::LogTest, "num_channel_counts: {}", num_channel_counts);
+    TT_ASSERT(num_channel_counts > 0);
+    log_info(tt::LogTest, "num_channel_counts: {}", num_channel_counts);
     for (std::size_t i = 0; i < num_channel_counts; i++) {
         channel_counts.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "channel_counts[{}]: {}", i, channel_counts.back());
+        log_info(tt::LogTest, "channel_counts[{}]: {}", i, channel_counts.back());
     }
 
     auto arch = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
@@ -282,59 +291,64 @@ int main(int argc, char** argv) {
     auto const& active_eth_cores = device_0->get_active_ethernet_cores(true);
     auto eth_sender_core_iter = active_eth_cores.begin();
     auto eth_sender_core = *eth_sender_core_iter;
-    eth_sender_core_iter++;
-    if (eth_sender_core_iter != active_eth_cores.end())
-        eth_sender_core = *eth_sender_core_iter;
+    // eth_sender_core_iter++;
+    // if (eth_sender_core_iter != active_eth_cores.end())
+    //     eth_sender_core = *eth_sender_core_iter;
 
     auto [device_id, eth_receiver_core] = device_0->get_connected_ethernet_core(eth_sender_core);
     const auto& device_1 = test_fixture.devices_.at(device_id);
-    tt_metal::detail::EnablePersistentKernelCache();
+    // tt_metal::detail::EnablePersistentKernelCache();
     // Add more configurations here until proper argc parsing added
     bool success = false;
     success = true;
-    for (auto num_samples : sample_counts) {
-        for (auto sample_page_size : sample_sizes) {
-            for (auto max_channels_per_direction : channel_counts) {
-                log_trace(tt::LogTest, "num_samples: {}, sample_page_size: {}, num_channels_per_direction: {}", num_samples, sample_page_size, max_channels_per_direction);
-                KernelHandle local_kernel;
-                KernelHandle remote_kernel;
-                try {
-                    auto [program0,program1] = build(
-                        device_0,
-                        device_1,
-                        eth_sender_core,
-                        eth_receiver_core,
-                        num_samples,
-                        sample_page_size,
-                        max_channels_per_direction,
-                        local_kernel,
-                        remote_kernel
-                    );
-                    run(
-                        device_0,
-                        device_1,
-                        program0,
-                        program1,
-                        local_kernel,
-                        remote_kernel,
+    try {
+        for (auto num_samples : sample_counts) {
+            for (auto sample_page_size : sample_sizes) {
+                for (auto max_channels_per_direction : channel_counts) {
+                    log_info(tt::LogTest, "num_samples: {}, sample_page_size: {}, num_channels_per_direction: {}", num_samples, sample_page_size, max_channels_per_direction);
+                    KernelHandle local_kernel;
+                    KernelHandle remote_kernel;
+                    try {
+                        auto [program0,program1] = build(
+                            device_0,
+                            device_1,
+                            eth_sender_core,
+                            eth_receiver_core,
+                            num_samples,
+                            sample_page_size,
+                            max_channels_per_direction,
+                            local_kernel,
+                            remote_kernel
+                        );
+                        std::cout << "run" << std::endl;
+                        run(
+                            device_0,
+                            device_1,
+                            program0,
+                            program1,
+                            local_kernel,
+                            remote_kernel,
 
-                        eth_sender_core,
-                        eth_receiver_core,
-                        num_samples,
-                        sample_page_size,
-                        max_channels_per_direction
-                    );
-                } catch (std::exception& e) {
-                    log_error(tt::LogTest, "Caught exception: {}", e.what());
-                    test_fixture.TearDown();
-                    return -1;
+                            eth_sender_core,
+                            eth_receiver_core,
+                            num_samples,
+                            sample_page_size,
+                            max_channels_per_direction
+                        );
+                    } catch (std::exception& e) {
+                        log_error(tt::LogTest, "Caught exception: {}", e.what());
+                        test_fixture.TearDown();
+                        return -1;
+                    }
                 }
             }
         }
+    } catch (exception e) {
+        test_fixture.TearDown();
+        // tt_metal::detail::DisablePersistentKernelCache();
+        return -1;
     }
 
-    tt_metal::detail::DisablePersistentKernelCache();
-    test_fixture.TearDown();
 
     return success ? 0 : -1;
 }

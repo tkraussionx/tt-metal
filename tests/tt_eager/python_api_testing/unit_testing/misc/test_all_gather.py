@@ -287,8 +287,8 @@ def test_all_gather_on_t3000_nightly_commit_looping(
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
-        (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
-        (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
+        # (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
+        # (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),           # https://github.com/tenstorrent/tt-metal/issues/9686
@@ -302,7 +302,7 @@ def test_all_gather_on_t3000_nightly_commit_looping(
         # # MLP AllGather,  Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
         # (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
-        # # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
+        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
         # # (8, 1, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),        # https://github.com/tenstorrent/tt-metal/issues/9686
         # # Input, Selfout, Final AllGather,  Llama2, Falcon 40B decode mlp attn
         # (8, 1, [1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
@@ -314,7 +314,7 @@ def test_all_gather_on_t3000_nightly_commit_looping(
         # (8, 1, [1, 1, 2048, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),          # https://github.com/tenstorrent/tt-metal/issues/9686
         # # Falcon 40B prefill, also mixtral expert reduction (w/ zero filled tensor)
         # # 8 chips
-        # (8, 1, [1, 1, 2048, 32768], 3, ttl.tensor.Layout.TILE),          # https://github.com/tenstorrent/tt-metal/issues/9686
+        (8, 1, [1, 1, 2048, 32768], 3, ttl.tensor.Layout.TILE),  # https://github.com/tenstorrent/tt-metal/issues/9686
         # # Llama/falcon40B galaxy mlp weights stationary -> emulation of row/col reduce
         # (8, 1, [1, 1, 256, 1024], 2, ttl.tensor.Layout.TILE),          # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [1, 1, 246, 4096], 2, ttl.tensor.Layout.ROW_MAJOR),          # https://github.com/tenstorrent/tt-metal/issues/9686

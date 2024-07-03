@@ -7,19 +7,45 @@
 #include "eth_l1_address_map.h"
 #include "ethernet/dataflow_api.h"
 #include "debug/assert.h"
+#include "debug/dprint.h"
 
 FORCE_INLINE void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
     if (is_sender) {
+        DPRINT << "SB\n";
+        erisc_info->channels[0].bytes_sent = 0;
+        erisc_info->channels[0].receiver_ack = 0;
+        DPRINT << "erisc_info: " << (uint32_t)&(erisc_info->channels) << "\n";
+        while (eth_txq_is_busy()) {}
         eth_send_bytes(handshake_register_address, handshake_register_address, 16);
-        eth_wait_for_receiver_done();
+        DPRINT << "SWRD\n";
+        while (eth_txq_is_busy()) {}
+        DPRINT << "SWRD2\n";
+        DPRINT << "S &(erisc_info->channels[0].bytes_sent): " << (uint32_t)&(erisc_info->channels[0].bytes_sent) << "\n";
+        internal_::eth_send_packet(
+            0,
+            ((uint32_t)(&(erisc_info->channels[0].bytes_sent))) >> 4,
+            ((uint32_t)(&(erisc_info->channels[0].bytes_sent))) >> 4,
+            1);
+        DPRINT << "SWRD3\n";
+        while (erisc_info->channels[0].bytes_sent != 0) {}
+        DPRINT << "SD\n";
     } else {
-        eth_wait_for_bytes(16);
+
+        DPRINT << "RWFB\n";
+        while (erisc_info->channels[0].bytes_sent == 0) {
+            // run_routing();
+        }
+        // eth_wait_for_bytes(16);
+        DPRINT << "RCD\n";
         eth_receiver_channel_done(0);
+        DPRINT << "RD\n";
     }
 }
 
 static constexpr uint32_t MAX_CHANNELS = 8;
 void kernel_main() {
+
+    DPRINT << "START\n";
     uint32_t arg_idx = 0;
     const uint32_t handshake_addr = get_arg_val<uint32_t>(arg_idx++);
     const uint32_t num_messages = get_arg_val<uint32_t>(arg_idx++);
@@ -35,6 +61,8 @@ void kernel_main() {
     {
         uint32_t channel_addr = handshake_addr + sizeof(eth_channel_sync_t);
         for (uint8_t i = 0; i < num_channels*2; i++) {
+            erisc_info->channels[i].bytes_sent = 0;
+            erisc_info->channels[i].receiver_ack = 0;
             messages_complete[i] = 0;
             channel_addrs[i] = channel_addr;
             channel_addr += message_size;
@@ -48,7 +76,10 @@ void kernel_main() {
     uint8_t senders_end = senders_start + num_channels;
     uint8_t receivers_end = receivers_start + num_channels;
 
+    DPRINT << "is_sender_offset_0 " << (uint32_t)is_sender_offset_0 << "\n";
+    DPRINT << "handshake_addr " << (uint32_t)handshake_addr << "\n";
     eth_setup_handshake(handshake_addr, is_sender_offset_0);
+    DPRINT << "DONE HS\n";
 
     uint32_t ready_to_send_payload = (1 << num_channels) - 1;
     uint32_t ready_to_send_payload_available = 0;

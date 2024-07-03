@@ -7,6 +7,7 @@
 #include <limits>
 #include <random>
 #include <tuple>
+#include <iostream>
 
 #include "tt_metal/common/logger.hpp"
 #include "device/tt_arch_types.h"
@@ -41,10 +42,7 @@ class T3000TestDevice {
         num_devices_ = tt::tt_metal::GetNumAvailableDevices();
         if (arch_ == tt::ARCH::WORMHOLE_B0 and tt::tt_metal::GetNumAvailableDevices() == 8 and
             tt::tt_metal::GetNumPCIeDevices() == 4) {
-            for (unsigned int id = 0; id < num_devices_; id++) {
-                auto* device = tt::tt_metal::CreateDevice(id);
-                devices_.push_back(device);
-            }
+            devices_ = tt::tt_metal::detail::CreateDevices({0,1,2,3,4,5,6,7});
             tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
 
         } else {
@@ -61,12 +59,12 @@ class T3000TestDevice {
     void TearDown() {
         device_open = false;
         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-        for (unsigned int id = 0; id < devices_.size(); id++) {
-            tt::tt_metal::CloseDevice(devices_.at(id));
+        for (auto [device_id, device_ptr] : devices_) {
+            tt::tt_metal::CloseDevice(device_ptr);
         }
     }
 
-    std::vector<tt::tt_metal::Device*> devices_;
+    std::map<chip_id_t, Device *> devices_;
     tt::ARCH arch_;
     size_t num_devices_;
 
@@ -209,7 +207,7 @@ void build_and_run_roundtrip_latency_test(
         std::vector<uint32_t> const& sender_eth_ct_args = {};
         bool is_starting_core = i == 0;
         uint32_t receiver_start_semaphore = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16;//CreateSemaphore(program, eth_receiver_core, 0, CoreType::ETH);
-        log_trace(tt::LogTest, "is_starting_core: {}", (is_starting_core ? 1 : 0));
+        log_info(tt::LogTest, "is_starting_core: {}", (is_starting_core ? 1 : 0));
         std::vector<uint32_t> const& receiver_eth_rt_args = get_eth_receiver_rt_args(
             device,
             is_starting_core,
@@ -273,27 +271,27 @@ void build_and_run_roundtrip_latency_test(
                 .compile_args = {}});
 
 
-        log_trace(tt::LogOp, "-------------Hop: {}, Device: {}:", i, device->id());
-        log_trace(tt::LogOp, "Receiver Kernel Info: Receives from {} on core[logical]: (x={},y={}), [noc]: (x={},y={}):", devices.at(previous_hop)->id(), eth_receiver_core.x, eth_receiver_core.y, device->ethernet_core_from_logical_core(eth_receiver_core).x, device->ethernet_core_from_logical_core(eth_receiver_core).y);
-        log_trace(tt::LogOp, "- RT Args ({})", receiver_eth_rt_args.size());
+        log_info(tt::LogOp, "-------------Hop: {}, Device: {}:", i, device->id());
+        log_info(tt::LogOp, "Receiver Kernel Info: Receives from {} on core[logical]: (x={},y={}), [noc]: (x={},y={}):", devices.at(previous_hop)->id(), eth_receiver_core.x, eth_receiver_core.y, device->ethernet_core_from_logical_core(eth_receiver_core).x, device->ethernet_core_from_logical_core(eth_receiver_core).y);
+        log_info(tt::LogOp, "- RT Args ({})", receiver_eth_rt_args.size());
         for (std::size_t i = 0; i < receiver_eth_rt_args.size(); i++) {
-            log_trace(tt::LogOp, "  - {}: {}", i, receiver_eth_rt_args.at(i));
+            log_info(tt::LogOp, "  - {}: {}", i, receiver_eth_rt_args.at(i));
         }
-        log_trace(tt::LogOp, "Sender Kernel Info: on core[logical]: (x={},y={}), [noc]: (x={},y={}):", eth_sender_core.x, eth_sender_core.y, device->ethernet_core_from_logical_core(eth_sender_core).x, device->ethernet_core_from_logical_core(eth_sender_core).y);
+        log_info(tt::LogOp, "Sender Kernel Info: on core[logical]: (x={},y={}), [noc]: (x={},y={}):", eth_sender_core.x, eth_sender_core.y, device->ethernet_core_from_logical_core(eth_sender_core).x, device->ethernet_core_from_logical_core(eth_sender_core).y);
         for (std::size_t i = 0; i < sender_eth_rt_args.size(); i++) {
-            log_trace(tt::LogOp, "  - {}: {}", i, sender_eth_rt_args.at(i));
+            log_info(tt::LogOp, "  - {}: {}", i, sender_eth_rt_args.at(i));
         }
-        log_trace(tt::LogOp, "Worker Kernel Info: on core[logical]: (x={},y={})", init_worker_core.x, init_worker_core.y);
+        log_info(tt::LogOp, "Worker Kernel Info: on core[logical]: (x={},y={})", init_worker_core.x, init_worker_core.y);
         for (std::size_t i = 0; i < worker_init_rt_args.size(); i++) {
-            log_trace(tt::LogOp, "  - {}: {}", i, worker_init_rt_args.at(i));
+            log_info(tt::LogOp, "  - {}: {}", i, worker_init_rt_args.at(i));
         }
 
         tt_metal::SetRuntimeArgs(program, receiver_kernel, eth_receiver_core, receiver_eth_rt_args);
         tt_metal::SetRuntimeArgs(program, sender_kernel, eth_sender_core, sender_eth_rt_args);
-        log_trace(tt::LogOp, "Setting RT args for receiver. kernel_id: {}, core: (x={},y={})", receiver_kernel, eth_receiver_core.x, eth_receiver_core.y);
-        log_trace(tt::LogOp, "Setting RT args for sender. kernel_id: {}, core: (x={},y={})", sender_kernel, eth_sender_core.x, eth_sender_core.y);
+        log_info(tt::LogOp, "Setting RT args for receiver. kernel_id: {}, core: (x={},y={})", receiver_kernel, eth_receiver_core.x, eth_receiver_core.y);
+        log_info(tt::LogOp, "Setting RT args for sender. kernel_id: {}, core: (x={},y={})", sender_kernel, eth_sender_core.x, eth_sender_core.y);
         tt_metal::SetRuntimeArgs(program, worker_kernel, init_worker_core, worker_init_rt_args);
-        log_trace(tt::LogOp, "Setting RT args for worker. kernel_id: {}, core: (x={},y={})", worker_kernel, init_worker_core.x, init_worker_core.y);
+        log_info(tt::LogOp, "Setting RT args for worker. kernel_id: {}, core: (x={},y={})", worker_kernel, init_worker_core.x, init_worker_core.y);
 
         tt::tt_metal::detail::CompileProgram(device, program);
     }
@@ -387,35 +385,35 @@ int main (int argc, char** argv) {
     assert(argc >= 4);
     std::size_t arg_idx = 1;
     std::size_t num_sample_counts = std::stoi(argv[arg_idx++]);
-    log_trace(tt::LogTest, "num_sample_counts: {}", num_sample_counts);
+    log_info(tt::LogTest, "num_sample_counts: {}", num_sample_counts);
     std::vector<std::size_t> sample_counts;
     for (std::size_t i = 0; i < num_sample_counts; i++) {
         sample_counts.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "sample_counts[{}]: {}", i, sample_counts.back());
+        log_info(tt::LogTest, "sample_counts[{}]: {}", i, sample_counts.back());
     }
 
     std::size_t num_page_sizes = std::stoi(argv[arg_idx++]);
     std::vector<std::size_t> page_sizes;
-    log_trace(tt::LogTest, "num_page_sizes: {}", num_page_sizes);
+    log_info(tt::LogTest, "num_page_sizes: {}", num_page_sizes);
     for (std::size_t i = 0; i < num_page_sizes; i++) {
         page_sizes.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "page_sizes[{}]: {}", i, page_sizes.back());
+        log_info(tt::LogTest, "page_sizes[{}]: {}", i, page_sizes.back());
     }
 
     std::size_t num_max_concurrent_samples = std::stoi(argv[arg_idx++]);
     std::vector<std::size_t> max_concurrent_samples;
-    log_trace(tt::LogTest, "num_max_concurrent_samples: {}", num_max_concurrent_samples);
+    log_info(tt::LogTest, "num_max_concurrent_samples: {}", num_max_concurrent_samples);
     for (std::size_t i = 0; i < num_max_concurrent_samples; i++) {
         max_concurrent_samples.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "max_concurrent_samples[{}]: {}", i, max_concurrent_samples.back());
+        log_info(tt::LogTest, "max_concurrent_samples[{}]: {}", i, max_concurrent_samples.back());
     }
 
     std::size_t num_hop_counts = std::stoi(argv[arg_idx++]);
     std::vector<uint32_t> hop_counts;
-    log_trace(tt::LogTest, "num_hop_counts: {}", num_hop_counts);
+    log_info(tt::LogTest, "num_hop_counts: {}", num_hop_counts);
     for (std::size_t i = 0; i < num_hop_counts; i++) {
         hop_counts.push_back(std::stoi(argv[arg_idx++]));
-        log_trace(tt::LogTest, "hop_counts[{}]: {}", i, hop_counts.back());
+        log_info(tt::LogTest, "hop_counts[{}]: {}", i, hop_counts.back());
     }
     TT_ASSERT(argc == arg_idx);
 
@@ -430,7 +428,7 @@ int main (int argc, char** argv) {
     // Device setup
     std::vector<chip_id_t> device_ids = std::vector<chip_id_t>{0, 1, 2, 3, 4, 5, 6, 7};
 
-    auto get_device_list = [](std::vector<Device*> const& all_devices, std::size_t n_hops) {
+    auto get_device_list = [](std::map<chip_id_t, Device*> &all_devices, std::size_t n_hops) {
         switch (n_hops) {
             case 2:
                 return std::vector<Device*>{all_devices[0], all_devices[1]};
@@ -450,35 +448,40 @@ int main (int argc, char** argv) {
         };
     };
 
-    constexpr std::size_t placeholder_arg_value = 1;
-    for (auto n_hops : hop_counts) {
+    try {
+        constexpr std::size_t placeholder_arg_value = 1;
+        for (auto n_hops : hop_counts) {
 
-        auto devices = get_device_list(test_fixture.devices_, n_hops);
-        std::vector<hop_eth_sockets> hop_eth_sockets = build_eth_sockets_list(devices);
+            auto devices = get_device_list(test_fixture.devices_, n_hops);
+            std::vector<hop_eth_sockets> hop_eth_sockets = build_eth_sockets_list(devices);
 
-        for (auto max_concurrent_samples : max_concurrent_samples) {
-            for (auto num_samples : sample_counts) {
-                for (auto sample_page_size : page_sizes) {
-                    log_trace(tt::LogTest, "Running test with num_devices={}, num_samples={}, sample_page_size={}, max_concurrent_samples={}, n_hops={}",
-                        n_hops, num_samples, sample_page_size, max_concurrent_samples, n_hops);
-                    std::vector<Program> programs = {};
-                    std::vector<KernelHandle> receiver_kernel_ids;
-                    std::vector<KernelHandle> sender_kernel_ids;
-                    tt::tt_metal::build_and_run_roundtrip_latency_test(
-                        devices,
-                        hop_eth_sockets,
-                        num_samples,
-                        sample_page_size,
-                        max_concurrent_samples,
-                        n_hops,
+            for (auto max_concurrent_samples : max_concurrent_samples) {
+                for (auto num_samples : sample_counts) {
+                    for (auto sample_page_size : page_sizes) {
+                        log_info(tt::LogTest, "Running test with num_devices={}, num_samples={}, sample_page_size={}, max_concurrent_samples={}, n_hops={}",
+                            n_hops, num_samples, sample_page_size, max_concurrent_samples, n_hops);
+                        std::vector<Program> programs = {};
+                        std::vector<KernelHandle> receiver_kernel_ids;
+                        std::vector<KernelHandle> sender_kernel_ids;
+                        tt::tt_metal::build_and_run_roundtrip_latency_test(
+                            devices,
+                            hop_eth_sockets,
+                            num_samples,
+                            sample_page_size,
+                            max_concurrent_samples,
+                            n_hops,
 
-                        programs,
-                        receiver_kernel_ids,
-                        sender_kernel_ids
-                    );
+                            programs,
+                            receiver_kernel_ids,
+                            sender_kernel_ids
+                        );
+                    }
                 }
             }
         }
+    } catch (exception e) {
+        test_fixture.TearDown();
+        return -1;
     }
 
     return 0;

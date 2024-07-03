@@ -21,4 +21,5 @@ else
 fi
 
 cmake --build build --target install
+cmake --build build --target tests
 cmake --build build --target programming_examples
