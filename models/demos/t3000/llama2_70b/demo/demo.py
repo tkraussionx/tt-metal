@@ -247,7 +247,7 @@ def run_decode(
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
-        logits = model.forward(input_tokens, prev_pos)
+        logits = model.forward(input_tokens, 126, prev_pos)
 
         next_logits = logits[:, -1, :]  # batch, vocab of last token
         next_token = sampling_func(next_logits)
@@ -257,7 +257,7 @@ def run_decode(
         )
         latencies.append(time() - start)
 
-        if all(eos_reached):
+        if all(eos_reached) or True:
             break
 
         # Decode the entire sequence generated so far and log it
@@ -427,6 +427,7 @@ def test_LlamaModel_demo(
     for i in t3k_device_mesh.get_device_ids():
         device = t3k_device_mesh.get_device(i)
         device.enable_async(True)
+        device.enable_program_cache()
 
     args = construct_arg(
         implementation=implementation,
