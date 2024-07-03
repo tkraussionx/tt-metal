@@ -48,7 +48,7 @@ class TTArgs:
 
 @dataclass
 class DataArgs:
-    num_tokens: int = 128
+    max_output_tokens: int = 128
     prompts_file: str = "models/demos/t3000/llama2_70b/demo/data/multi_prompt.json"
     output_at_end: bool = True
     top_p: float = 1
@@ -82,39 +82,41 @@ def main(args):
     data_args = args.data
 
     # Load ground truth if available
-    if args.ground_truth:
-        if not os.path.exists(args.ground_truth):
-            logger.info(f"Ground truth file {args.ground_truth} does not exist.")
-            args.ground_truth = None
+    if data_args.ground_truth:
+        if not os.path.exists(data_args.ground_truth):
+            logger.info(f"Ground truth file {data_args.ground_truth} does not exist.")
+            data_args.ground_truth = None
         else:
-            ground_truth_outputs = json.load(open(args.ground_truth, "r"))
+            ground_truth_outputs = json.load(open(data_args.ground_truth, "r"))
 
             if len(ground_truth_outputs) == 0:
                 logger.info("Ground truth outputs are empty")
-                args.ground_truth = None
+                data_args.ground_truth = None
             else:
                 logger.info(f"Loaded {len(ground_truth_outputs)} ground truth outputs")
 
-    generator = build_generator(args)
+    generator = build_generator(model_args, tt_args)
 
     # Load the model and tokenizer
     model, tokenizer = generator.model, generator.tokenizer
 
-    tokenized, prompts = load_prompts_file(args, tokenizer)
+    tokenized, prompts = load_prompts_file(model_args, data_args, tokenizer)
 
     # Run decode
     with torch.no_grad():
-        all_text = run_decode(args=args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts)
+        all_text = run_decode(
+            model_args, tt_args, data_args, model=model, tokenizer=tokenizer, prompt_tokens=tokenized, prompts=prompts
+        )
 
-        if args.output_at_end:
+        if data_args.output_at_end:
             with open(
-                f"models/demos/t3000/llama2_70b/demo/data/{args.llama_version}_demo_user_output.json", "w"
+                f"models/demos/t3000/llama2_70b/demo/data/{model_args.llama_version}_demo_user_output.json", "w"
             ) as f:  # Open a file for writing
                 output_json = json.dumps(all_text, indent=4)
                 f.write(output_json)
 
     # Check against ground truth
-    if args.ground_truth:
+    if data_args.ground_truth:
         scores = string_similarity_score(ground_truth_outputs, all_text)
 
         match = sum(scores) == len(scores)
@@ -126,26 +128,26 @@ def main(args):
         logger.info("Output matches ground truth!")
 
 
-def build_generator(args):
+def build_generator(model_args, tt_args):
     generator = Llama.build(
-        ckpt_dir=args.ckpt_dir,
-        tokenizer_path=args.tokenizer_path,
-        max_seq_len=args.max_seq_len,
-        max_batch_size=args.max_batch_size,
-        skip_model_load=args.skip_model_load,
-        n_layers=1 if args.implementation == "tt" else args.num_layers,
+        ckpt_dir=model_args.ckpt_dir,
+        tokenizer_path=model_args.tokenizer_path,
+        max_seq_len=model_args.max_seq_len,
+        max_batch_size=model_args.max_batch_size,
+        skip_model_load=model_args.skip_model_load,
+        # n_layers=1 if model_args.implementation == "tt" else model_args.num_layers,
+        n_layers=model_args.num_layers,
     )
 
-    state_dict = load_llama_state_dict(args.ckpt_dir, n_layers=args.num_layers)
+    # state_dict = load_llama_state_dict(model_args.ckpt_dir, n_layers=model_args.num_layers)
+    state_dict = generator.model.state_dict()
 
-    if args.implementation == "tt":
+    if model_args.implementation == "tt":
         generator.model = TtLlamaModelForGeneration(
             configuration=generator.model.params,
-            state_dict=state_dict,
-            device_mesh=args.device_mesh,
-            n_devices=args.n_devices,
-            n_layers=args.num_layers,
-            cache_path=args.cache_path,
+            state_dict=generator.model.state_dict(),
+            model_args=model_args,
+            tt_args=tt_args,
         )
     return generator
 
@@ -188,7 +190,7 @@ def intialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
     return tokens, input_text_mask, eos_reached
 
 
-def prepare_next_input(tokenizer, tokens, input_text_mask, cur_pos, next_token):
+def prepare_next_input(tokenizer, tokens, input_text_mask, finished_mask, prompt_lens, cur_pos, next_token):
     # only replace token if prompt has already been generated
     next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
     tokens[:, cur_pos] = next_token
@@ -199,7 +201,17 @@ def prepare_next_input(tokenizer, tokens, input_text_mask, cur_pos, next_token):
     return tokens, eos_reached, prev_pos
 
 
-def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=False, return_full_logits=False):
+def run_decode(
+    model_args,
+    tt_args,
+    data_args,
+    model,
+    tokenizer,
+    prompt_tokens,
+    prompts,
+    return_logits=False,
+    return_full_logits=False,
+):
     """
     return_logits: return the logits for the last token
     return_full_logits: return the logits for all tokens
@@ -207,21 +219,24 @@ def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=Fal
     assert not (return_logits and return_full_logits), "return_logits and return_full_logits cannot both be true"
 
     # decode arguments
-    bsz = args.max_batch_size
-    model_args = model.params
-    max_gen_len = args.num_tokens
-    args.greedy = args.top_k == 1  # greedy decoding is top-k with k=1
+    bsz = model_args.max_batch_size
+    output_tokens = data_args.max_output_tokens
 
-    min_prompt_len = min(len(t) for t in prompt_tokens) if not args.decode_only else 1
-    min_prompt_len = min(min_prompt_len, args.sample_len) if args.sample_len else min_prompt_len
-    max_prompt_len = max(len(t) for t in prompt_tokens)
-    max_prompt_len = min(max_prompt_len, args.sample_len) if args.sample_len else max_prompt_len
-    assert max_prompt_len <= model_args.max_seq_len
-    total_len = min(model_args.max_seq_len, max_gen_len + max_prompt_len)
-    assert total_len <= model_args.max_seq_len
+    sampling_func = get_sampling_func(data_args.top_k, data_args.top_p, data_args.temperature)
+
+    prompt_lens = [len(t) for t in prompt_tokens]
+    min_prompt_len = min(prompt_lens) if not tt_args.decode_only else 1
+    max_prompt_len = max(prompt_lens)
+    assert max_prompt_len <= model_args.max_kv_context_len
+    total_len = min(model_args.max_kv_context_len, max_prompt_len + output_tokens)
+    assert total_len <= model_args.max_kv_context_len
+    if total_len != max_prompt_len + output_tokens:
+        logger.warning(
+            f"Requested more output tokens than allowed by model. Truncating to {total_len - max_prompt_len} output tokens."
+        )
 
     # prepare inputs
-    tokens, input_text_mask, eos_reached = intialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
+    tokens, input_text_mask, finished_mask = intialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
     prev_pos = 0
 
     # some profiling and logging
@@ -231,19 +246,14 @@ def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=Fal
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
-        logits = model.forward(input_tokens, prev_pos, decode_only=args.decode_only)
+        logits = model.forward(input_tokens, prev_pos)
         # expects logits to be of shape (bsz, 1, vocab_size)
 
-        # sample next token
-        if args.greedy:
-            next_token = torch.argmax(logits[:, -1], dim=-1)
-        else:
-            next_token = top_pk_logits_efficient(
-                logits[:, -1], p=args.top_p, k=args.top_k, temperature=args.temperature
-            )
-        next_token = next_token.reshape(-1)
+        next_token = sampling_func(logits)
 
-        tokens, eos_reached, prev_pos = prepare_next_input(tokenizer, tokens, input_text_mask, cur_pos, next_token)
+        tokens, eos_reached, prev_pos = prepare_next_input(
+            tokenizer, tokens, input_text_mask, finished_mask, prompt_lens, cur_pos, next_token
+        )
 
         if all(eos_reached):
             break
@@ -259,8 +269,8 @@ def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=Fal
         if return_full_logits:
             full_logits.append(logits.clone().detach())
 
-    latency_printout(latencies, args, total_len - min_prompt_len)
-    output = get_all_text(tokenizer, tokens, prompt_tokens, max_gen_len)
+    latency_printout(latencies, model_args, total_len - min_prompt_len)
+    output = get_all_text(tokenizer, tokens, prompt_tokens, output_tokens)
 
     if return_logits:
         output = (output, logits)
@@ -270,24 +280,26 @@ def run_decode(args, model, tokenizer, prompt_tokens, prompts, return_logits=Fal
     return output
 
 
-def latency_printout(latencies, args, generated_len):
+def latency_printout(latencies, model_args, generated_len):
     latencies = [
         latency for token_pos, latency in enumerate(latencies) if token_pos % 32 != 0
     ]  # We recompute program_cache for multiples of 32
     overall_time = sum(latencies)
-    overall_tokens = args.max_batch_size * len(latencies)
+    overall_tokens = model_args.max_batch_size * len(latencies)
     warmup_batch = 2
     # Skip initial warmup batch
     if len(latencies) > warmup_batch:
         overall_time -= sum(latencies[:warmup_batch])
-        overall_tokens -= warmup_batch * args.max_batch_size
+        overall_tokens -= warmup_batch * model_args.max_batch_size
         latencies = latencies[warmup_batch:]
 
     mean_latency = sum(latencies) / len(latencies) if len(latencies) > 0 else 0
 
     tokens_per_second = 1 / mean_latency if mean_latency != 0 else 0
     overall_tokens_per_second = overall_tokens / overall_time if overall_time != 0 else 0
-    tokens_per_second_per_user = overall_tokens_per_second / args.max_batch_size if args.max_batch_size != 0 else 0
+    tokens_per_second_per_user = (
+        overall_tokens_per_second / model_args.max_batch_size if model_args.max_batch_size != 0 else 0
+    )
     throughput = 1000 * overall_time / overall_tokens if overall_tokens != 0 else 0
 
     logger.info(f"Overall throughput: {throughput:.1f} ms @ {overall_tokens_per_second:.1f} tokens/s")
@@ -361,7 +373,7 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
     ids=("tt-70b-T3000", "meta-70b"),
 )
 @pytest.mark.parametrize(
-    "num_tokens, output_at_end, top_p, top_k, temperature",
+    "max_output_tokens, output_at_end, top_p, top_k, temperature",
     (
         (128, True, 1, 1, 1.0),
         (128, True, 0.9, 10, 1.0),
@@ -379,7 +391,7 @@ def test_LlamaModel_demo(
     skip_model_load,
     num_layers,
     # Generation args
-    num_tokens,
+    max_output_tokens,
     prompts_file,
     output_at_end,
     top_p,
@@ -414,7 +426,7 @@ def test_LlamaModel_demo(
         tokenizer_path=tokenizer_path,
         skip_model_load=skip_model_load,
         num_layers=num_layers,
-        num_tokens=num_tokens,
+        max_output_tokens=max_output_tokens,
         prompts_file=prompts_file,
         output_at_end=output_at_end,
         top_p=top_p,

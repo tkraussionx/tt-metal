@@ -38,7 +38,7 @@ from models.demos.t3000.llama2_70b.demo.demo import (
     intialize_inputs,
     prepare_next_input,
     get_sampling_func,
-    construct_args,
+    construct_arg,
     DemoArgs,
 )
 
@@ -92,8 +92,8 @@ def run_test_generation(args):
         input_tokens = tokens[:, prev_pos:cur_pos]
         # Print all relevant details
         logger.info(f"Input idx {cur_pos}: input_tokens shape: {input_tokens.shape}, prev_pos: {prev_pos}")
-        tt_logits = tt_model.forward(input_tokens, prev_pos, decode_only=tt_args.decode_only)
-        pt_logits = pt_model.forward(input_tokens, prev_pos, decode_only=tt_args.decode_only)
+        tt_logits = tt_model.forward(input_tokens, prev_pos)
+        pt_logits = pt_model.forward(input_tokens, prev_pos)
         # expects logits to be of shape (bsz, 1, vocab_size)
 
         next_token = sampling_func(pt_logits)

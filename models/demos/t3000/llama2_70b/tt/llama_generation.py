@@ -52,12 +52,12 @@ class TtLlamaModelForGeneration:
 
         del state_dict
 
-    def forward(self, tokens: torch.Tensor, start_pos: int, *args, **kwargs):
+    def forward(self, tokens: torch.Tensor, start_pos: int):
         _, seq_len = tokens.shape
-        if seq_len == 1 or kwargs.get("decode_only", False):
-            return self.decode_forward(tokens, start_pos, *args, **kwargs)
+        if seq_len == 1:
+            return self.decode_forward(tokens, start_pos)
         else:
-            return self.prefill_forward(tokens, start_pos, *args, **kwargs)
+            return self.prefill_forward(tokens, start_pos)
 
     def _update_model_config(self, mode, batch, seq_len):
         if self.tt_model.model_config["LLM_MODE"] != mode:
@@ -71,7 +71,7 @@ class TtLlamaModelForGeneration:
             )
             self.tt_model.set_model_config(model_config)
 
-    def decode_forward(self, tokens: torch.Tensor, start_pos: int, *args, **kwargs):
+    def decode_forward(self, tokens: torch.Tensor, start_pos: int):
         self._update_model_config("decode", tokens.shape[0], 1)
         tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(tokens, start_pos)
 
@@ -93,7 +93,36 @@ class TtLlamaModelForGeneration:
 
         return logits
 
-    def prefill_forward(self, tokens: torch.Tensor, start_pos: int, *args, **kwargs):
+    def prefill_forward_single_user(self, tokens: torch.Tensor, start_pos: int, user_id: int):
+        batch, seq_len = tokens.shape
+        assert batch == 1
+        assert start_pos == 0, "start_pos must be 0 for prefill_forward_single_user"
+        assert seq_len in [128, 2048], f"Only prefill up to 128 or 2048 tokens is supported, got {seq_len}"
+
+        self._update_model_config("prefill", batch, seq_len)
+
+        tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(
+            tokens, start_pos=start_pos, valid_seq_len=seq_len
+        )
+
+        tt_logits = self.tt_model(
+            tt_inp_emb,
+            rot_mat,
+            start_pos,
+            attn_mask,
+            user_id=user_id,
+        )
+
+        del tt_inp_emb
+        del rot_mat
+        del attn_mask
+
+        logits = self._process_logits(tt_logits)
+        logits = logits.squeeze(1)
+        del tt_logits
+        return logits
+
+    def prefill_forward(self, tokens: torch.Tensor, start_pos: int):
         batch, seq_len = tokens.shape
         assert seq_len <= 2048, f"Only prefill up to 2048 tokens is supported, got {seq_len}"
 
@@ -109,25 +138,11 @@ class TtLlamaModelForGeneration:
         for user_id in range(batch):
             logger.info(f"Filling kv cache for user {user_id + 1}")
 
+            logits = self.prefill_forward_single_user(prefill_ids[user_id : user_id + 1], start_pos, user_id)
+
             tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(
                 prefill_ids[user_id : user_id + 1], start_pos=0, valid_seq_len=seq_len
             )
-
-            tt_logits = self.tt_model(
-                tt_inp_emb,
-                rot_mat,
-                start_pos,
-                attn_mask,
-                user_id=user_id,
-            )
-
-            del tt_inp_emb
-            del rot_mat
-            del attn_mask
-
-            logits = self._process_logits(tt_logits)
-            logits = logits.squeeze(1)
-            del tt_logits
 
             output_logits[user_id] = logits[:, :seq_len, :]
 
