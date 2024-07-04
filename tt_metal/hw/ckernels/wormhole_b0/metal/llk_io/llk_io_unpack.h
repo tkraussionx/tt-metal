@@ -77,7 +77,7 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     // if (operand == tt::CB::c_in1) {
     if (apply_cnt == 0 && operand == stagger_cb_id) {
         // Apply delay only if second operand has arrived
-        DPRINT << "In llk wait tiles, applying delay of " << tiles_proc_delay << ENDL();
+        // DPRINT << "In llk wait tiles, applying delay of " << tiles_proc_delay << ENDL();
         apply_cnt++;
         wait(tiles_proc_delay);
     }
