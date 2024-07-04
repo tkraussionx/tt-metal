@@ -13,8 +13,8 @@
 #include "tools/profiler/kernel_profiler.hpp"
 
 // MT: Temp extern declaration
-extern uint32_t tiles_proc_delay;
-extern uint32_t apply_cnt;
+uint32_t tiles_proc_delay;
+uint32_t apply_cnt;
 
 using namespace ckernel;
 
@@ -37,6 +37,19 @@ inline void llk_setup_operands() {
         cb_interface[cb_id].fifo_page_size = fifo_page_size;
 
         circular_buffer_config_addr += UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; // move by 3 uint32's
+    }
+}
+
+inline void llk_setup_stagger(bool apply_delay) {
+    constexpr uint32_t noc_id = 0;
+    uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(noc_id, NOC_ID_LOGICAL);
+    uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
+    uint32_t my_logical_y = (noc_id_logical_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+
+    // DPRINT << "My_logical_y is odd: " << (int)(my_logical_y & 1) << ENDL();
+    if (apply_delay && (my_logical_y & 0x1)) {
+        // DPRINT << "Apply delay:" << (int)apply_delay << " for this cycles:" << 6144 * 2 << ENDL();
+        tiles_proc_delay = 6144 * 2;  // Delay odd rows of cores
     }
 }
 
