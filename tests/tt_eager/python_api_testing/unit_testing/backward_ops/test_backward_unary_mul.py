@@ -22,7 +22,7 @@ def test_bw_unary_mul(input_shapes, scalar, device):
     in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device, True)
     grad_data, grad_tensor = data_gen_with_range(input_shapes, -5, 5, device)
 
-    tt_output_tensor_on_device = ttnn.unary_mul_bw(grad_tensor, input_tensor, scalar)
+    tt_output_tensor_on_device = ttnn.mul_bw(grad_tensor, input_tensor, scalar)
 
     in_data.retain_grad()
 
@@ -33,4 +33,5 @@ def test_bw_unary_mul(input_shapes, scalar, device):
     golden_tensor = [in_data.grad]
 
     status = compare_pcc(tt_output_tensor_on_device, golden_tensor)
+    print("status", status)
     assert status

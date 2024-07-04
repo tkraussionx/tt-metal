@@ -81,10 +81,11 @@ Example:
 
 
 void py_module(py::module& module) {
-    detail::bind_unary_backward(
-        module,
-        ttnn::unary_mul_bw,
-        R"doc(Performs backward operations for multiply on :attr:`input_tensor`, :attr:`alpha` with given :attr:`grad_tensor`.)doc");
+//     detail::bind_unary_backward(
+//         module,
+//         ttnn::unary_mul_bw,
+//         R"doc(Performs backward operations for multiply on :attr:`input_tensor`, :attr:`alpha` with given :attr:`grad_tensor`.)doc");
+// }
 
     detail::bind_unary_backward(
         module,
@@ -92,6 +93,7 @@ void py_module(py::module& module) {
         R"doc(Performs backward operations for clamp min value on :attr:`input_tensor`, :attr:`alpha` with given :attr:`grad_tensor`.)doc");
 
 }
+
 
 }  // namespace binary_backward
 }  // namespace operations

@@ -49,6 +49,21 @@ Example:
         module,
         operation,
         doc,
+        //unary overload
+        ttnn::pybind_overload_t{
+            [](const binary_backward_operation_t& self,
+               const ttnn::Tensor& grad_tensor,
+               const ttnn::Tensor& input_tensor,
+               const float alpha,
+               const std::optional<ttnn::MemoryConfig>& memory_config) -> std::vector<ttnn::Tensor> {
+                return self(grad_tensor, input_tensor, alpha, memory_config);
+            },
+            py::arg("grad_tensor"),
+            py::arg("input_tensor"),
+            py::arg("alpha"),
+            py::kw_only(),
+            py::arg("memory_config") = std::nullopt},
+
         ttnn::pybind_overload_t{
             [](const binary_backward_operation_t& self,
                const ttnn::Tensor& grad_tensor,
@@ -81,7 +96,6 @@ Example:
             py::arg("input_tensor_c"),
             py::kw_only(),
             py::arg("memory_config") = std::nullopt},
-
 
         ttnn::pybind_overload_t{
             [](const binary_backward_operation_t& self,
