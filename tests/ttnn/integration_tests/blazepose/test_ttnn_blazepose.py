@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+
+# SPDX-License-Identifier: Apache-2.0
+
+import numpy as np
+import torch
+import cv2
+import os
+import sys
+import pytest
+from pathlib import Path
+import ttnn
+from torch import nn
+from models.experimental.blazepose.demo.blazebase import resize_pad, denormalize_detections
+
+from models.experimental.functional_blazepose.tt.blazepose_utils import (
+    # detection2roi,
+    predict_on_image,
+    # denormalize_detections_ref,
+)
+
+from models.experimental.blazepose.demo.blazepose import BlazePose
+from models.experimental.blazepose.demo.blazepose_landmark import BlazePoseLandmark
+
+from models.experimental.blazepose.visualization import draw_detections, draw_landmarks, draw_roi, POSE_CONNECTIONS
+
+# from models.utility_functions import torch_random, skip_for_wormhole_b0
+from ttnn.model_preprocessing import preprocess_model_parameters
+from tests.ttnn.utils_for_testing import assert_with_pcc
+
+
+def model_location_generator(rel_path):
+    internal_weka_path = Path("/mnt/MLPerf")
+    has_internal_weka = (internal_weka_path / "bit_error_tests").exists()
+
+    if has_internal_weka:
+        return Path("/mnt/MLPerf") / rel_path
+    else:
+        return Path("/opt/tt-metal-models") / rel_path
+
+
+def preprocess_conv_parameter(parameter, *, dtype):
+    parameter = ttnn.from_torch(parameter, dtype=dtype)  # ,layout = ttnn.TILE_LAYOUT)
+    return parameter
+
+
+def custom_preprocessor(model, name):
+    parameters = {}
+    if isinstance(model, nn.Conv2d):
+        weight = model.weight
+        bias = model.bias
+        while weight.dim() < 4:
+            weight = weight.unsqueeze(0)
+        while bias.dim() < 4:
+            bias = bias.unsqueeze(0)
+        parameters["weight"] = preprocess_conv_parameter(weight, dtype=ttnn.bfloat16)
+        parameters["bias"] = preprocess_conv_parameter(bias, dtype=ttnn.bfloat16)
+    return parameters
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+def test_blazepsoe(reset_seeds, device):
+    model_path = model_location_generator("tt_dnn-models/Blazepose/models/")
+    DETECTOR_MODEL = str(model_path / "blazepose.pth")
+    LANDMARK_MODEL = str(model_path / "blazepose_landmark.pth")
+    ANCHORS = str(model_path / "anchors_pose.npy")
+
+    pose_detector = BlazePose()
+    pose_detector.load_weights(DETECTOR_MODEL)
+    pose_detector.load_anchors(ANCHORS)
+    pose_detector.state_dict()
+
+    data_path = model_location_generator("tt_dnn-models/Blazepose/data/")
+    IMAGE_FILE = str(data_path / "yoga.jpg")
+    OUTPUT_FILE = "yoga_output.jpg"
+    image = cv2.imread(IMAGE_FILE)
+    image_height, image_width, _ = image.shape
+    frame = np.ascontiguousarray(image[:, ::-1, ::-1])
+
+    img1, img2, scale, pad = resize_pad(frame)
+
+    normalized_pose_detections = pose_detector.predict_on_image(img2)
+
+    parameters = preprocess_model_parameters(
+        initialize_model=lambda: pose_detector, convert_to_ttnn=lambda *_: True, custom_preprocessor=custom_preprocessor
+    )
+
+    anchors = torch.tensor(np.load(ANCHORS), dtype=torch.float32)
+    anchors = ttnn.from_torch(anchors, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+    img = torch.from_numpy(img2).permute((2, 0, 1)).unsqueeze(0)
+    x = ttnn.from_torch(img, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+    output = predict_on_image(x, parameters, anchors, device)
+    print("output")
+    print(normalized_pose_detections)
+    print(output)
+    assert_with_pcc(normalized_pose_detections[:, :12], output[:, :12], 0.96)
