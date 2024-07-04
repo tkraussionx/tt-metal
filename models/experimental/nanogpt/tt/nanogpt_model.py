@@ -8,6 +8,8 @@ import tt_lib
 from models.helper_funcs import Linear
 import tt_lib.fallback_ops as fallback_ops
 
+import ttnn
+
 import models.experimental.nanogpt.tt.nanogpt_block as nanogpt_block
 from models.experimental.nanogpt.nanogpt_utils import unpad_from_zero
 
@@ -47,7 +49,7 @@ class TtGPT(nn.Module):
 
         self.h = nn.ModuleList(blocks)
 
-        self.ln_f = tt_lib.tensor.layernorm
+        self.ln_f = ttnn.layer_norm
 
         tt_lm_weight = tt_lib.tensor.load_tensor(tt_cache_path + "lm_head.weight" + str(dtype) + ".bin")
 
@@ -87,7 +89,7 @@ class TtGPT(nn.Module):
         for block in self.h:
             tt_x = block.forward(tt_x)
 
-        tt_x = self.ln_f(tt_x, eps=1e-5, gamma=self.gamma, beta=self.beta)
+        tt_x = self.ln_f(tt_x, epsilon=1e-5, weight=self.gamma, bias=self.beta)
         logits = self.lm_head(tt_x)
 
         return logits

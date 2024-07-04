@@ -27,7 +27,7 @@ def create_model_config(batch_size, hidden_size):
         core_grid=ttnn.CoreGrid(y=row, x=col),
         strategy=ttnn.ShardStrategy.WIDTH,
     )
-    configs["SHARDED_NORM_PRGM_CFG"] = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+    configs["SHARDED_NORM_PRGM_CFG"] = ttnn.LayerNormShardedMultiCoreProgramConfig(
         compute_with_storage_grid_size=[col, row],
         subblock_w=(hidden_size // (col * row)) // 32,
         block_h=1,
