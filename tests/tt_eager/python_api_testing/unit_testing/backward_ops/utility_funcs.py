@@ -101,6 +101,7 @@ def compare_results(tt_tensor, golden_tensor, pcc=0.99):
 
 def compare_pcc(tt_tensor, golden_tensor, pcc=0.99):
     status = True
+    print(tt_tensor)
     for i in range(len(tt_tensor)):
         tt_out_tensor = tt_tensor[i].cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
         pt_out_tensor = golden_tensor[i]

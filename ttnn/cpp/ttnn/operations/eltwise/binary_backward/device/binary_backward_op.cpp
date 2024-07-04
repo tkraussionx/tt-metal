@@ -658,8 +658,6 @@ std::function<std::vector<ttnn::Tensor>(const Tensor&, const Tensor&, const Tens
             return _min_or_max_bw<false>;
         case BinaryBackwardOpType::MAX_BW:
             return _min_or_max_bw<true>;
-        case BinaryBackwardOpType::MUL_BW:
-            return _mul_bw_inter;
         default:
             TT_ASSERT(false && "Undefined op type");
             return 0;
@@ -720,8 +718,6 @@ std::function<std::vector<std::optional<ttnn::Tensor>>(uint8_t , const Tensor&, 
             return _add_bw;
         case BinaryBackwardOpType::BINARY_EQ_BW:
             return _binary_eq_bw;
-        case BinaryBackwardOpType::MUL_BW:
-            return _mul_bw;
         default:
             TT_ASSERT(false && "Undefined op type");
             return 0;
@@ -734,8 +730,6 @@ std::function<std::vector<std::optional<ttnn::Tensor>>(const Tensor&, const Tens
             return _add_bw_overload;
         case BinaryBackwardOpType::BINARY_EQ_BW:
             return _binary_eq_bw_overload;
-        case BinaryBackwardOpType::MUL_BW:
-            return _mul_bw_overload;
         default:
             TT_ASSERT(false && "Undefined op type");
             return 0;

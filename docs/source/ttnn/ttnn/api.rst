@@ -153,7 +153,7 @@ Pointwise Unary
    ttnn/triu
    ttnn/tanhshrink
    ttnn/threshold
-   ttnn/unary_mul_bw
+   ttnn/mul_bw
    ttnn/clamp_min_bw
 
 Pointwise Binary
@@ -217,7 +217,6 @@ Pointwise Binary
    ttnn/max_bw
    ttnn/div_bw
    ttnn/lerp_bw
-   ttnn/mul_bw
 
 Pointwise Ternary
 =================
