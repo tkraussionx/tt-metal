@@ -132,7 +132,7 @@ void DevicePool::activate_device(chip_id_t id) {
         this->devices.resize(id + 1);
     }
     if (this->devices[id] == nullptr) {
-        log_info(tt::LogMetal, "DevicePool new device {}", id);
+        log_debug(tt::LogMetal, "DevicePool new device {}", id);
         int core_assigned_to_device = this->device_to_core_map.at(id);
         auto dev =
             new Device(id, this->num_hw_cqs, this->l1_small_size, this->trace_region_size, this->l1_bank_remap, false, core_assigned_to_device);
@@ -144,7 +144,7 @@ void DevicePool::activate_device(chip_id_t id) {
         this->devices[id] = std::unique_ptr<Device>(dev);
     } else {
         const auto& dev = this->devices[id];
-        log_info(tt::LogMetal, "DevicePool re-initialize device {}", id);
+        log_debug(tt::LogMetal, "DevicePool re-initialize device {}", id);
         if (not dev->is_initialized()) {
             dev->initialize(num_hw_cqs, this->l1_small_size, this->trace_region_size, this->l1_bank_remap);
             if (!this->firmware_built_keys.contains(dev->build_key())) {

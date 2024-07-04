@@ -87,6 +87,7 @@ protected:
     uint8_t cb_mode_remote_sem_id;
 
 public:
+
     uint8_t queue_id;
     uint32_t queue_start_addr_words;
     uint32_t queue_size_words;
@@ -601,8 +602,7 @@ public:
         if (num_words == 0) {
             return 0;
         }
-        uint32_t words_remaining = this->get_curr_packet_words_remaining();
-        num_words = std::min(num_words, words_remaining);
+        num_words = std::min(num_words, this->get_curr_packet_words_remaining());
         return num_words;
     }
 
@@ -871,6 +871,7 @@ public:
     inline uint32_t get_num_words_to_send(uint32_t input_queue_index) {
 
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
+
         uint32_t num_words_available_in_input = input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
         uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
         num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
@@ -904,11 +905,13 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
+
         uint32_t src_addr =
             (input_queue_ptr->queue_start_addr_words +
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
+
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);
@@ -933,6 +936,7 @@ public:
             }
             this->cb_mode_inc_remote_sem_val(remote_sem_inc);
         }
+
         return num_words_to_forward;
     }
 
@@ -973,7 +977,6 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
             if (!src_ready[i]) {
                 src_ready[i] = input_queue_array[i].is_packetizer_input() ||
                                input_queue_array[i].is_remote_ready();
-
                 if (!src_ready[i]) {
                     input_queue_array[i].send_remote_ready_notification();
                     all_src_dest_ready = false;
@@ -982,7 +985,6 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 }
             }
         }
-
         for (uint32_t i = 0; i < num_output_queues; i++) {
             if (!dest_ready[i]) {
                 dest_ready[i] = output_queue_array[i].is_remote_ready() ||

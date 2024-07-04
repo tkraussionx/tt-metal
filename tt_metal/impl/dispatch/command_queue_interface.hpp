@@ -499,6 +499,7 @@ class SystemMemoryManager {
         }
 
         uint32_t issue_q_write_ptr = this->get_issue_queue_write_ptr(cq_id);
+
         const uint32_t command_issue_limit = this->get_issue_queue_limit(cq_id);
         if (issue_q_write_ptr + align(cmd_size_B, PCIE_ALIGNMENT) > command_issue_limit) {
             this->wrap_issue_queue_wr_ptr(cq_id);
