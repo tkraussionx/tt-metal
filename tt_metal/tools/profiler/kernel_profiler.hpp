@@ -129,7 +129,7 @@ namespace kernel_profiler{
             eriscBuffer[i] = 0x80000000;
         }
 
-        eriscBuffer [ID_LL] = runCounter;
+        eriscBuffer [ID_LL] = (runCounter & 0xFFFF) | (eriscBuffer [ID_LL] & 0xFFFF0000);
 
 #endif //ERISC_INIT
 #if  defined(COMPILE_FOR_BRISC)
@@ -222,6 +222,13 @@ namespace kernel_profiler{
 
     inline __attribute__((always_inline)) void set_host_counter(uint32_t counterValue)
     {
+#if defined(COMPILE_FOR_ERISC)
+        volatile tt_l1_ptr uint32_t *eriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER);
+
+        eriscBuffer[ID_LL] = (counterValue << 16) | (eriscBuffer[ID_LL] & 0xFFFF);
+#endif //ERISC_INIT
+
+#if  defined(COMPILE_FOR_BRISC)
         volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
         volatile tt_l1_ptr uint32_t *ncriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_NC);
         volatile tt_l1_ptr uint32_t *trisc0Buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_T0);
@@ -233,6 +240,7 @@ namespace kernel_profiler{
         trisc0Buffer[ID_LL] = (counterValue << 16) | (trisc0Buffer[ID_LL] & 0xFFFF);
         trisc1Buffer[ID_LL] = (counterValue << 16) | (trisc1Buffer[ID_LL] & 0xFFFF);
         trisc2Buffer[ID_LL] = (counterValue << 16) | (trisc2Buffer[ID_LL] & 0xFFFF);
+#endif //ERISC_INIT
     }
 
     inline __attribute__((always_inline)) void risc_finished_profiling()
