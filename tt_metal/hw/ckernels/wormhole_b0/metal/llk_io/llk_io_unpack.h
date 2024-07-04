@@ -12,9 +12,9 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
-// MT: Temp extern declaration
-uint32_t tiles_proc_delay;
-uint32_t apply_cnt;
+int tiles_proc_delay;
+int apply_cnt;
+int stagger_cb_id;
 
 using namespace ckernel;
 
@@ -40,7 +40,7 @@ inline void llk_setup_operands() {
     }
 }
 
-inline void llk_setup_stagger(bool apply_delay) {
+inline void llk_setup_stagger(bool apply_delay, int stagger_cb_operand) {
     constexpr uint32_t noc_id = 0;
     uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(noc_id, NOC_ID_LOGICAL);
     uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
@@ -50,6 +50,10 @@ inline void llk_setup_stagger(bool apply_delay) {
     if (apply_delay && (my_logical_y & 0x1)) {
         // DPRINT << "Apply delay:" << (int)apply_delay << " for this cycles:" << 6144 * 2 << ENDL();
         tiles_proc_delay = 6144 * 2;  // Delay odd rows of cores
+        stagger_cb_id = stagger_cb_operand;
+    }
+    else {
+        stagger_cb_operand = 0;
     }
 }
 
@@ -71,9 +75,9 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
 
     // uncomment to add delay on each block and avoid the hang
     // if (operand == tt::CB::c_in1) {
-    if (operand == tt::CB::c_in1 && (apply_cnt == 0)) {
+    if (apply_cnt == 0 && operand == stagger_cb_id) {
         // Apply delay only if second operand has arrived
-        //DPRINT << "In llk wait tiles, applying delay of " << tiles_proc_delay << ENDL();
+        DPRINT << "In llk wait tiles, applying delay of " << tiles_proc_delay << ENDL();
         apply_cnt++;
         wait(tiles_proc_delay);
     }

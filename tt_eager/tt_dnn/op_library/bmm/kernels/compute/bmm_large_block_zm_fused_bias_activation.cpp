@@ -101,7 +101,7 @@ void MAIN {
 
     constexpr uint32_t untilize_mode_out_cb_id = untilize_out ? mm_partials_cb_id : out_cb_id;
 
-    setup_stagger(apply_stagger_delay);
+    setup_stagger(apply_stagger_delay, in1_cb_id);
     // DPRINT << "In MM compute kernel, apply_stagger_delay: " << (int)apply_stagger_delay << ENDL();
 
     #ifdef FUSE_BIAS

@@ -21,8 +21,6 @@
  * LLK UNPACK COMMON
  *************************************************************************/
 
-extern uint32_t tiles_proc_delay;
-
 void llk_zero_operand(std::uint32_t operand) {
     std::uint32_t operand_id = get_operand_id(operand);
     std::uint32_t fifo_base_addr = (cb_interface[operand_id].fifo_limit + 1) - cb_interface[operand_id].fifo_size;

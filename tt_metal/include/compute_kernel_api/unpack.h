@@ -56,8 +56,8 @@ ALWI void unpack_reconfig_data_format_srcb(const uint32_t srcb_old_operand, cons
 /**
  * Helper function to setup stagger on odd rows, based on the passed in argument. This is useful to mitigate di/dt issues on matmuls.
  */
-ALWI void setup_stagger(bool apply_delay) {
-    UNPACK(( llk_setup_stagger(apply_delay) ));
+ALWI void setup_stagger(bool apply_delay, uint32_t stagger_cb_operand) {
+    UNPACK(( llk_setup_stagger(apply_delay, stagger_cb_operand) ));
 }
 
 }
