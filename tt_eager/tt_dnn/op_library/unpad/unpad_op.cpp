@@ -93,7 +93,7 @@ void Unpad::validate(const std::vector<Tensor> &input_tensors) const {
         TT_FATAL(input_tensor_a.volume() % TILE_HW == 0);
         TT_FATAL(
             (output_tensor_shape[-2] % TILE_HEIGHT == 0) && (this->output_tensor_start[-2] % TILE_HEIGHT == 0),
-            "Can only unpad tilized tensor with full tiles");
+            fmt::format("Can only unpad tilized tensor with full tiles {} {}", output_tensor_shape[-2], this->output_tensor_start[-2]));
         TT_FATAL(
             (output_tensor_shape[-1] % TILE_WIDTH == 0) && (this->output_tensor_start[-1] % TILE_WIDTH == 0),
             "Can only unpad tilized tensor with full tiles");

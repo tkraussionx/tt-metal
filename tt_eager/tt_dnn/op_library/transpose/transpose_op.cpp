@@ -214,7 +214,7 @@ Tensor transpose(const Tensor &a, std::int64_t dim1, std::int64_t dim2, const Me
             if ( normalized_dim2 == 3 && normalized_dim1 == 0 ) {
                 transpose_dim = TransposeOpDim::NW;
             } else if (normalized_dim2 == 3 && normalized_dim1 == 1) {
-            transpose_dim = TransposeOpDim::CW;
+                transpose_dim = TransposeOpDim::CW;
             } else if (normalized_dim2 == 3 && normalized_dim1 == 2) {
                 transpose_dim = TransposeOpDim::WH;
             } else if (normalized_dim2 == 2 && normalized_dim1 == 0) {

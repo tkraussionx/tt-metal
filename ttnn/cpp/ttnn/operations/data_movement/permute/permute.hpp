@@ -6,7 +6,6 @@
 
 #include "ttnn/decorators.hpp"
 #include "ttnn/operations/core.hpp"
-#include "tt_eager/tt_dnn/op_library/permute/permute_op.hpp"
 #include "tt_eager/tt_dnn/op_library/run_operation.hpp"
 #include "tt_dnn/op_library/transpose/transpose_op.hpp"
 
@@ -115,9 +114,9 @@ inline Tensor permute_impl(const Tensor &a, std::vector<uint32_t> dims, const Me
     return AutoFormat::format_output_tensor(output, out_shape, device, Layout::TILE);
 }
 
-Tensor permute_launch(const Tensor &a, std::vector<std::int64_t> dims, const MemoryConfig& output_mem_config) {
+inline Tensor permute_launch(const Tensor &a, std::vector<std::int64_t> dims, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
-    operation::launch_with_autoformat( // delete the launch_with_autoformat
+    operation::launch_with_autoformat(
         [dims, output_mem_config]  (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& a = input_tensors.at(0);
             std::vector<uint32_t> normalized_dims(dims.size());
@@ -135,12 +134,13 @@ Tensor permute_launch(const Tensor &a, std::vector<std::int64_t> dims, const Mem
 
 struct Permute {
 
-    static inline ttnn::Tensor execute_on_worker_thread(
+    // switch to execute_on_worker_thread once we don't need autoformat
+    static inline ttnn::Tensor execute_on_main_thread(
         uint8_t queue_id,
         const ttnn::Tensor &input_tensor,
         const std::vector<int>& dims,
-        const std::optional<MemoryConfig>& memory_config,
-        std::optional<ttnn::Tensor> &optional_output_tensor) {
+        const std::optional<MemoryConfig> &memory_config = std::nullopt,
+        std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt) {
         TT_FATAL(!optional_output_tensor.has_value(), "Optional output tensor is not supported for permute operation.");
         const bool initial_input_tensor_on_device = permute::is_on_device(input_tensor);
         const auto input_layout = input_tensor.get_layout();
@@ -195,13 +195,13 @@ struct Permute {
         return output_tensor;
     }
 
-    static inline auto execute_on_worker_thread(
+    static inline auto execute_on_main_thread(
         const ttnn::Tensor &input_tensor,
         const std::vector<int>& dims,
-        const std::optional<MemoryConfig>& memory_config,
-        std::optional<ttnn::Tensor> &optional_output_tensor
+        const std::optional<MemoryConfig> memory_config = std::nullopt,
+        std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt
         ) {
-        return execute_on_worker_thread(DefaultQueueId, input_tensor, dims, memory_config, optional_output_tensor);
+        return execute_on_main_thread(DefaultQueueId, input_tensor, dims, memory_config, optional_output_tensor);
     }
 };
 
