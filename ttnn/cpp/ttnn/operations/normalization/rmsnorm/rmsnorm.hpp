@@ -10,7 +10,7 @@
 namespace ttnn {
 namespace operations::normalization {
 
-struct RMSNorm {
+struct ExecuteRMSNorm {
 
     static inline ttnn::Tensor execute_on_worker_thread(
         const ttnn::Tensor& input_tensor,
@@ -22,13 +22,17 @@ struct RMSNorm {
         const std::optional<const LayerNormProgramConfig>& program_config = std::nullopt,
         const std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
 
-        if (residual_input_tensor.has_value()) {
-            return ttnn::operations::normalization::add_rmsnorm(
-                input_tensor, residual_input_tensor.value(), epsilon, weight, bias, memory_config.value_or(input_tensor.memory_config()), program_config.value_or(LayerNormDefaultProgramConfig{}));
-        } else {
-            return ttnn::operations::normalization::rmsnorm(
-                input_tensor, epsilon, weight, bias, memory_config.value_or(input_tensor.memory_config()), program_config.value_or(LayerNormDefaultProgramConfig{}));
-        }
+        auto arch = input_tensor.storage_type() == StorageType::DEVICE ? input_tensor.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+        auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
+        return operation::run(
+                    LayerNorm{
+                        .norm_type = LayerNormType::RMSNORM,
+                        .eps = epsilon,
+                        .output_mem_config = memory_config.value_or(input_tensor.memory_config()),
+                        .program_config = program_config.value_or(LayerNormDefaultProgramConfig{}),
+                        .compute_kernel_config = kernel_config_val},
+                    {input_tensor},
+                    {residual_input_tensor, weight, bias}).at(0);
     }
 };
 

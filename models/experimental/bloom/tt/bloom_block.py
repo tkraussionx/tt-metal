@@ -7,6 +7,8 @@ import math
 from torch.nn import functional as F
 from torch.nn import LayerNorm
 
+import ttnn
+
 from functools import partial
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
@@ -29,7 +31,7 @@ class TtBloomBlock(torch.nn.Module):
         self.beta = pad_by_zero(state_dict[f"{base_address}.input_layernorm.bias"], device)[0]
         self.gamma = pad_by_zero(state_dict[f"{base_address}.input_layernorm.weight"], device)[0]
         self.input_layernorm = partial(
-            ttl.tensor.layernorm,
+            ttnn.layernorm,
             gamma=self.gamma,
             beta=self.beta,
             eps=self.layer_norm_epsilon,
@@ -42,7 +44,7 @@ class TtBloomBlock(torch.nn.Module):
         self.beta_2 = pad_by_zero(state_dict[f"{base_address}.post_attention_layernorm.bias"], device)[0]
         self.gamma_2 = pad_by_zero(state_dict[f"{base_address}.post_attention_layernorm.weight"], device)[0]
         self.post_attention_layernorm = partial(
-            ttl.tensor.layernorm,
+            ttnn.layernorm,
             gamma=self.gamma_2,
             beta=self.beta_2,
             eps=self.layer_norm_epsilon,
