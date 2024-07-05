@@ -400,7 +400,7 @@ void DeviceProfiler::pushTracyDeviceResults()
 {
 #if defined(TRACY_ENABLE)
     ZoneScoped;
-    std::unordered_map<uint32_t, std::pair<tracy::TTDeviceEvent, tracy::TTDeviceEvent>> aggregates;
+    std::map<uint32_t, std::pair<tracy::TTDeviceEvent, tracy::TTDeviceEvent>> aggregates;
     std::set<std::pair<uint32_t, CoreCoord>> device_cores_set;
     std::vector<std::pair<uint32_t, CoreCoord>> device_cores;
     for (auto& event: device_events)
@@ -470,52 +470,69 @@ void DeviceProfiler::pushTracyDeviceResults()
         std::pair<uint32_t, CoreCoord> device_core = {event.chip_id, (CoreCoord){event.core_x,event.core_y}};
         if (event.zone_phase == tracy::TTDeviceEventPhase::begin)
         {
-            //TracyTTPushStartZone(device_tracy_contexts[device_core], event);
-            if (aggregates.find(event.run_num) == aggregates.end())
-            {
-                aggregates.emplace(event.run_num, std::make_pair(event,event));
-            }
-            else
-            {
-                if (aggregates.at(event.run_num).first.timestamp > event.timestamp)
+            TracyTTPushStartZone(device_tracy_contexts[device_core], event);
+
+            if ((event.zone_name.find("FW") != std::string::npos) && (event.core_y < 11)) {
+                if (aggregates.find(event.run_num) == aggregates.end())
                 {
-                    aggregates.at(event.run_num).first = event;
+                    aggregates.emplace(event.run_num, std::make_pair(event,event));
+                }
+                else
+                {
+                    if (aggregates.at(event.run_num).first.timestamp > event.timestamp)
+                    {
+                        aggregates.at(event.run_num).first = event;
+                    }
                 }
             }
         }
         else if (event.zone_phase == tracy::TTDeviceEventPhase::end)
         {
-            //TracyTTPushEndZone(device_tracy_contexts[device_core], event);
-            if (aggregates.find(event.run_num) == aggregates.end())
-            {
-                aggregates.emplace(event.run_num, std::make_pair(event,event));
-            }
-            else
-            {
-                if (aggregates.at(event.run_num).second.timestamp < event.timestamp)
+            TracyTTPushEndZone(device_tracy_contexts[device_core], event);
+            if ((event.zone_name.find("FW") != std::string::npos) && (event.core_y < 11)) {
+                if (aggregates.find(event.run_num) == aggregates.end())
                 {
-                    aggregates.at(event.run_num).second = event;
+                    aggregates.emplace(event.run_num, std::make_pair(event,event));
+                }
+                else
+                {
+                    if (aggregates.at(event.run_num).second.timestamp < event.timestamp)
+                    {
+                        aggregates.at(event.run_num).second = event;
+                    }
                 }
             }
         }
     }
 
+    std::unordered_map<uint32_t, TracyTTCtx> devicesCtx;
     for (auto& device_core: device_cores)
     {
-        int device_id = device_core.first;
-        auto tracyCtx = TracyTTContext();
-        std::string tracyTTCtxName = fmt::format("Device: {}", device_id);
-
-        TracyTTContextPopulate(tracyCtx, cpuTime, delay, frequency);
-
-        TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
-
-        for (const auto &[opID, zone] : aggregates)
+        uint32_t device_id = device_core.first;
+        if (devicesCtx.find(device_id) == devicesCtx.end())
         {
-            if (zone.first.chip_id == device_id)
+            std::cout << "context" << std::endl;
+            TracyTTCtx tracyCtx = TracyTTContext();
+            std::string tracyTTCtxName = fmt::format("Device: {}", device_id);
+
+            TracyTTContextPopulate(tracyCtx, cpuTime, delay, frequency);
+
+            TracyTTContextName(tracyCtx, tracyTTCtxName.c_str(), tracyTTCtxName.size());
+            devicesCtx.emplace(device_id, tracyCtx);
+
+            for (auto &[opID, zone] : aggregates)
             {
-                TracyTTPushStartZone(tracyCtx, zone.first);
-                TracyTTPushEndZone(tracyCtx, zone.second);
+                if (zone.first.chip_id == device_id)
+                {
+                    zone.first.core_x = 14;
+                    zone.first.core_y = 14;
+                    zone.second.core_x = 14;
+                    zone.second.core_y = 14;
+                    zone.first.zone_name = "OP FW";
+                    zone.first.zone_name = "OP FW";
+                    TracyTTPushStartZone(devicesCtx[device_id], zone.first);
+                    TracyTTPushEndZone(devicesCtx[device_id], zone.second);
+                }
             }
         }
     }
