@@ -4,9 +4,10 @@
 
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 
-#include "tt_dnn/op_library/bcast/bcast_op.hpp"
 #include "tt_dnn/op_library/composite/composite_ops.hpp"
 #include "tt_eager/tensor/tensor_utils.hpp"
+#include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 
 using namespace tt::constants;
 
@@ -492,19 +493,6 @@ const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tenso
     return hash;
 }
 
-// unary op version tie
-template <BcastOpMath OP>
-Tensor tie_binop_to_unary(
-    uint8_t queue_id,
-    const Tensor& input_tensor,
-    float value,
-    const MemoryConfig& output_mem_config,
-    std::optional<Tensor> output_tensor = std::nullopt) {
-    const DataType& dtype = output_tensor.has_value() ? output_tensor.value().get_dtype() : input_tensor.get_dtype();
-    Tensor t_value = ttnn::operations::creation::create_scalar(value, dtype, Layout::TILE, input_tensor.device());
-    return bcast(queue_id, input_tensor, t_value, OP, BcastOpDim::HW, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, output_tensor);
-}
-
 Tensor lte_unary(uint8_t queue_id, const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     return lez(queue_id, sub_unary_sfpu(input_tensor, value, output_mem_config), output_mem_config, output_tensor);
 }
@@ -543,10 +531,10 @@ Tensor eq_unary(float value, const Tensor& input_tensor, const MemoryConfig& out
 
 Tensor div_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     uint8_t default_queue_id = 0;
-    return tie_binop_to_unary<BcastOpMath::MUL>(default_queue_id, input_tensor, 1.0f / value, output_mem_config, output_tensor);
+    return ttnn::multiply(default_queue_id, input_tensor, 1.0f / value, std::nullopt, output_mem_config, output_tensor);
 }
 Tensor div_unary(uint8_t queue_id, const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
-    return tie_binop_to_unary<BcastOpMath::MUL>(queue_id, input_tensor, 1.0f / value, output_mem_config, output_tensor);
+    return ttnn::multiply(queue_id, input_tensor, 1.0f / value, std::nullopt, output_mem_config, output_tensor);
 }
 
 Tensor div_unary(float value, const Tensor& input_tensor, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
@@ -557,7 +545,7 @@ Tensor div_unary(float value, const Tensor& input_tensor, const MemoryConfig& ou
     else{
         output_tensor = recip(input_tensor, output_mem_config);
     }
-    return tie_binop_to_unary<BcastOpMath::MUL>(default_queue_id, output_tensor.value(), value, output_mem_config, output_tensor);
+    return ttnn::multiply(default_queue_id, output_tensor.value(), value, std::nullopt, output_mem_config, output_tensor);
 }
 Tensor div_unary(uint8_t queue_id, float value, const Tensor& input_tensor, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     if(output_tensor.has_value()){
@@ -566,7 +554,7 @@ Tensor div_unary(uint8_t queue_id, float value, const Tensor& input_tensor, cons
     else{
         output_tensor = recip(queue_id, input_tensor, output_mem_config);
     }
-    return tie_binop_to_unary<BcastOpMath::MUL>(queue_id, output_tensor.value(), value, output_mem_config, output_tensor);
+    return ttnn::multiply(queue_id, output_tensor.value(), value, std::nullopt, output_mem_config, output_tensor);
 }
 
 // same as div_unary(value,tensor)
@@ -579,15 +567,15 @@ Tensor rdiv(const Tensor& input_tensor, float value, const MemoryConfig& output_
 
 Tensor mul_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     uint8_t default_queue_id = 0;
-    return tie_binop_to_unary<BcastOpMath::MUL>(default_queue_id, input_tensor, value, output_mem_config, output_tensor);
+    return ttnn::multiply(default_queue_id, input_tensor, value, std::nullopt, output_mem_config, output_tensor);
 }
 Tensor mul_unary(uint8_t queue_id, const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
-    return tie_binop_to_unary<BcastOpMath::MUL>(queue_id, input_tensor, value, output_mem_config, output_tensor);
+    return ttnn::multiply(queue_id, input_tensor, value, std::nullopt, output_mem_config, output_tensor);
 }
 
 Tensor sub_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config) {
     uint8_t default_queue_id = 0;
-    return tie_binop_to_unary<BcastOpMath::SUB>(default_queue_id, input_tensor, value, output_mem_config);
+    return ttnn::subtract(default_queue_id, input_tensor, value, std::nullopt, output_mem_config);
 }
 
 Tensor sub_unary(float value, const Tensor& input_tensor, const MemoryConfig& output_mem_config) {
@@ -596,10 +584,10 @@ Tensor sub_unary(float value, const Tensor& input_tensor, const MemoryConfig& ou
 
 Tensor add_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     uint8_t default_queue_id = 0;
-    return tie_binop_to_unary<BcastOpMath::ADD>(default_queue_id, input_tensor, value, output_mem_config, output_tensor);
+    return ttnn::add(default_queue_id, input_tensor, value, std::nullopt, output_mem_config, output_tensor);
 }
 Tensor add_unary(uint8_t queue_id, const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
-    return tie_binop_to_unary<BcastOpMath::ADD>(queue_id, input_tensor, value, output_mem_config, output_tensor);
+    return ttnn::add(queue_id, input_tensor, value, std::nullopt, output_mem_config, output_tensor);
 }
 
 // symmetric

@@ -415,6 +415,7 @@ def test_falcon7b_attnention_sliced(
             output_mem_config=height_sharded_memory_config,
             in_place=True,
         )
+        ttnn.multiply_(mm_slice, reference_scalar, memory_config=height_sharded_memory_config)
 
         # Deallocating here causes pcc to drop - issue #6638
         # So we have to move it after the entire sequence is finished

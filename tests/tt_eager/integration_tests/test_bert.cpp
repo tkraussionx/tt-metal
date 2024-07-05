@@ -6,7 +6,6 @@
 
 #include "tensor/host_buffer/types.hpp"
 #include "tensor/tensor.hpp"
-#include "tt_dnn/op_library/bcast/bcast_op.hpp"
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
 #include "tt_dnn/op_library/operation.hpp"
@@ -15,6 +14,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_numpy/functions.hpp"
+#include "ttnn/operations/eltwise/binary/binary.hpp"
 
 using Parameters = std::map<std::string, Tensor>;
 
@@ -172,8 +172,7 @@ Tensor qa_head(Tensor&& hidden_states, const Parameters& parameters) {
     auto output = tt::operations::primary::matmul(hidden_states, parameters.at("qa_head_weight"));
     hidden_states.deallocate();
 
-
-    return bcast(output, parameters.at("qa_head_bias"), tt::tt_metal::BcastOpMath::ADD, tt::tt_metal::BcastOpDim::H, l1_memory_config);
+    return ttnn::add(output, parameters.at("qa_head_bias"), std::nullopt, l1_memory_config);
 }
 
 

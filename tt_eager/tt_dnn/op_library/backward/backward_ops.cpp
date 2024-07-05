@@ -1562,11 +1562,11 @@ std::vector<Tensor> _prod_bw(
         temp = tt::tt_metal::change_layout_to_tile(temp, output_mem_config);
     }
     if (dim == 3 || dim == -1) {
-        Tensor grad_result = bcast(reciprocal_input, temp, BcastOpMath::MUL, BcastOpDim::W, output_mem_config);
+        Tensor grad_result = ttnn::multiply(reciprocal_input, temp, std::nullopt, output_mem_config);
         grad_tensor.emplace_back(grad_result);
         return grad_tensor;
     } else if (dim == 2 || dim == -2) {
-        Tensor grad_result = bcast(reciprocal_input, temp, BcastOpMath::MUL, BcastOpDim::H, output_mem_config);
+        Tensor grad_result = ttnn::multiply(reciprocal_input, temp, std::nullopt, output_mem_config);
         grad_tensor.emplace_back(grad_result);
         return grad_tensor;
     } else if (dim == 1 || dim == -3) {
@@ -1588,7 +1588,7 @@ std::vector<Tensor> _prod_bw(
 
         after_permute_dims = {0, 3, 1, 2};
         Tensor result = permute(
-            bcast(tensor_1, tensor_2, BcastOpMath::MUL, BcastOpDim::W, output_mem_config),
+            ttnn::multiply(tensor_1, tensor_2, std::nullopt, output_mem_config),
             after_permute_dims,
             output_mem_config);
         Tensor grad_result = result;
@@ -1622,7 +1622,7 @@ std::vector<Tensor> _prod_bw(
     tensor_2 = AutoFormat::move_tensor_to_device_and_pad(tensor_2, tensor_1.device(),tensor_1.get_layout(), tensor_1.memory_config());
 
     Tensor result = permute(
-        bcast(tensor_1, tensor_2, BcastOpMath::MUL, BcastOpDim::W, output_mem_config),
+        ttnn::multiply(tensor_1, tensor_2, std::nullopt, output_mem_config),
         after_permute_dims,
         output_mem_config);
     Tensor grad_result = result;
