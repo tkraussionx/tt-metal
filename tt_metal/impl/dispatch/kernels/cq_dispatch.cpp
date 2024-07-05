@@ -262,7 +262,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
             xfer_size = length;
             not_end_of_cmd = false;
         }
-
+        DPRINT << "Send to addr: " << downstream_cb_data_ptr << ENDL();
         uint64_t dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
 
         if (preamble_size > 0) {
@@ -317,7 +317,8 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
         noc_async_write<dispatch_cb_page_size>(data_ptr, dst, xfer_size);
         block_noc_writes_to_clear[rd_block_idx]++;  // XXXXX maybe just write the noc internal api counter
         cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(1);  // XXXX optimize, take all available
-
+        noc_async_write_barrier();
+         DPRINT << "Sem Inc: " << *(uint32_t*)(get_noc_addr_helper(downstream_noc_xy, get_semaphore(downstream_cb_sem_id))) << ENDL();
         length -= xfer_size;
         data_ptr += xfer_size;
         downstream_cb_data_ptr += xfer_size;
@@ -930,7 +931,9 @@ re_run_command:
         case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
             DPRINT << "cmd_cross_prefetch_write\n";
             if (is_d_variant && !is_h_variant) {
+                DPRINT << *((uint32_t*)cmd_ptr) << " " << cmd->update_prefetcher.sync_event + 1 << ENDL();
                 relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
+                DPRINT << "Relay done" << ENDL();
             }
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
@@ -980,7 +983,8 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
             break;
         case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
             DPRINT << "cmd_cross_prefetch_write\n";
-            noc_semaphore_inc(get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), 1);
+            DPRINT << *((uint32_t*)cmd_ptr) << " " << cmd->update_prefetcher.sync_event + 1 << ENDL();
+            noc_inline_dw_write(get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), cmd->update_prefetcher.sync_event + 1);
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
         case CQ_DISPATCH_CMD_TERMINATE:

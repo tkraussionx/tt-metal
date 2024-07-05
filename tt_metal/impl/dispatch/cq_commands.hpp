@@ -112,6 +112,13 @@ struct CQPrefetchRelayInlineCmd {
     uint32_t stride;          // explicit stride saves a few insns on device
 } __attribute__((packed));
 
+struct CQPrefetchWaitCmd {
+    uint8_t pad1;
+    uint16_t pad2;
+    uint32_t sync_event;
+    uint32_t stride;
+} __attribute__((packed));
+
 struct CQPrefetchExecBufCmd {
     uint8_t pad1;
     uint16_t pad2;
@@ -128,6 +135,7 @@ struct CQPrefetchCmd {
         CQPrefetchRelayPagedPackedCmd relay_paged_packed;
         CQPrefetchRelayInlineCmd relay_inline;
         CQPrefetchExecBufCmd exec_buf;
+        CQPrefetchWaitCmd event_wait;
         CQGenericDebugCmd debug;
     } __attribute__((packed));
 };
@@ -166,6 +174,7 @@ struct CQDispatchWritePagedCmd {
 constexpr uint32_t CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_NONE      = 0x00;
 constexpr uint32_t CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_MCAST     = 0x01;
 constexpr uint32_t CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_NO_STRIDE = 0x02;
+constexpr uint32_t CQ_DISPATCH_CMD_PACKED_WRITE_RELAY = 0x03;
 
 struct CQDispatchWritePackedCmd {
     uint8_t flags;            // see above
@@ -225,6 +234,12 @@ struct CQDispatchDelayCmd {
     uint32_t delay;
 } __attribute__((packed));
 
+struct CQDispatchUpdatePrefetchCmd {
+    uint8_t pad1;
+    uint16_t pad2;
+    uint32_t sync_event;
+} __attribute__((packed));
+
 struct CQDispatchCmd {
     CQDispatchBaseCmd base;
 
@@ -234,6 +249,7 @@ struct CQDispatchCmd {
         CQDispatchWritePagedCmd write_paged;
         CQDispatchWritePackedCmd write_packed;
         CQDispatchWritePackedLargeCmd write_packed_large;
+        CQDispatchUpdatePrefetchCmd update_prefetcher;
         CQDispatchWaitCmd wait;
         CQGenericDebugCmd debug;
         CQDispatchDelayCmd delay;

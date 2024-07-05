@@ -128,11 +128,12 @@ class DeviceCommand {
         }
     }
 
-    void add_prefetch_wait() {
+    void add_prefetch_wait(uint32_t event_id) {
         uint32_t increment_sizeB = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
         auto initialize_wait_cmd = [&](CQPrefetchCmd *stall_cmd) {
             *stall_cmd = {};
             stall_cmd->base.cmd_id = CQ_PREFETCH_CMD_WAIT;
+            stall_cmd->event_wait.sync_event = event_id;
         };
         CQPrefetchCmd *wait_cmd_dst = this->reserve_space<CQPrefetchCmd *>(increment_sizeB);
         if constexpr (hugepage_write) {
@@ -144,12 +145,13 @@ class DeviceCommand {
         }
     }
 
-    void add_cross_prefetch_write() {
+    void add_cross_prefetch_write(uint32_t event_id) {
         auto initialize_cross_prefetch_write = [&](CQPrefetchCmd *relay_wait, CQDispatchCmd *write_cmd) {
             relay_wait->base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
             relay_wait->relay_inline.length = sizeof(CQDispatchCmd);
             relay_wait->relay_inline.stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
             write_cmd->base.cmd_id = CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE;
+            write_cmd->update_prefetcher.sync_event = event_id;
         };
         CQPrefetchCmd *relay_wait_dst = this->reserve_space<CQPrefetchCmd *>(sizeof(CQPrefetchCmd));
         CQDispatchCmd *write_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));

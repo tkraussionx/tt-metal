@@ -184,8 +184,10 @@ void kernel_main() {
                 break;
             }
         }
+        // DPRINT << "Checking " << curr_input << ENDL();
         if (input_queues[curr_input].get_curr_packet_valid()) {
             bool full_packet_sent;
+            DPRINT << "Forwarding data from: " << curr_input << ENDL();
             uint32_t words_sent = output_queue.forward_data_from_input(curr_input, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
@@ -199,7 +201,9 @@ void kernel_main() {
                 curr_input = 0;
             }
         }
+        // DPRINT << "Wait for flush" << ENDL();
         output_queue.prev_words_in_flight_check_flush();
+        // DPRINT << "End flush" << ENDL();
         dest_finished = output_queue.is_remote_finished();
     }
 

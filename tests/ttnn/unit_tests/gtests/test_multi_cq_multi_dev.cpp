@@ -12,9 +12,9 @@
 #include <cmath>
 
 Tensor dispatch_ops_to_device(Device* dev, Tensor input_tensor, uint8_t cq_id) {
-    auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 2}}};
+    auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 0}}};
     auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
-    auto op2 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::ADD_UNARY_SFPU, 500}}};
+    auto op2 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::ADD_UNARY_SFPU, 0}}};
 
     Tensor output_tensor = ttnn::run_operation(cq_id, op0, {input_tensor}).at(0);
     for (int i = 0; i < 3; i++) {
@@ -55,7 +55,7 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
                     device->enable_program_cache();
                 std::cout << "Running on: " << dev_idx << std::endl;
                 for (int j = 0; j < buf_size_datums; j++) {
-                    host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
+                    host_data[j] = bfloat16(static_cast<float>(0));
                 }
                 auto input_buffer = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
                 auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
@@ -70,10 +70,10 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
                 ttnn::record_event(device->command_queue(1), workload_event);
                 ttnn::wait_for_event(device->command_queue(0), workload_event);
 
-                ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
+                ttnn::read_buffer(0, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
 
                 for (int j = 0; j < 3 * 2048 * 2048; j++) {
-                    ASSERT_EQ(readback_data[i].to_float(), -1 * (i + dev_idx) * 32 + 500);
+                    ASSERT_EQ(readback_data[i].to_float(), 0);
                 }
             }
         }

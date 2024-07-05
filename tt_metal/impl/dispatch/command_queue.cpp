@@ -1250,13 +1250,13 @@ void EnqueueRecordEventCommand::process() {
         unicast_sub_cmds,
         event_payloads);
 
+    if (not device->is_mmio_capable()) {
+        command_sequence.add_cross_prefetch_write(this->event_id);
+    }
     bool flush_prefetch = true;
     command_sequence.add_dispatch_write_host<true>(
         flush_prefetch, dispatch_constants::EVENT_PADDED_SIZE, event_payload.data());
 
-    if (not device->is_mmio_capable()) {
-        command_sequence.add_cross_prefetch_write();
-    }
 
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
@@ -1294,7 +1294,7 @@ void EnqueueWaitForEventCommand::process() {
         command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
     }
     else {
-        command_sequence.add_prefetch_wait();
+        command_sequence.add_prefetch_wait(sync_event.event_id);
     }
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 

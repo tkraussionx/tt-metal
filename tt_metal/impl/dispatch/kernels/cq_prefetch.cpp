@@ -1271,15 +1271,14 @@ void kernel_main_h() {
     uint32_t heartbeat = 0;
     while (!done) {
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);
-
+        DPRINT << "Have cmd" << ENDL();
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
         uint32_t cmd_id = cmd->base.cmd_id;
         if (cmd_id == CQ_PREFETCH_CMD_WAIT) {
             volatile tt_l1_ptr uint32_t* sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(cross_dispatcher_sem_id));
-            DPRINT << "Wait on: " << cross_dispatcher_sem_id << ENDL();
-            while(*sem_addr == 0);
-            noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, (uint32_t)sem_addr), -1);
+            DPRINT << "Wait: " << *sem_addr << " " << cmd->event_wait.sync_event + 1 << ENDL();
+            while(*sem_addr < cmd->event_wait.sync_event + 1);
         }
         // Infer that an exec_buf command is to be executed based on the stall state.
         bool is_exec_buf = (stall_state == STALLED);
