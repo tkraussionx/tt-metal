@@ -220,10 +220,9 @@ void Device::initialize_and_launch_firmware() {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
         this->initialize_firmware(phys_eth_core, &launch_msg);
     }
-    // std::cout << "Inactive Eth Cores: " << std::endl;
+
     for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
-        // std::cout << eth_core.str() << " " << phys_eth_core.str() << std::endl;
         this->initialize_firmware(phys_eth_core, &launch_msg);
         not_done_cores.insert(phys_eth_core);
     }
@@ -360,7 +359,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     uint32_t downstream_cb_base = mux_settings.cb_start_address + mux_settings.cb_size_bytes * mux_sem;
                     settings.upstream_cores.push_back(tt_cxy_pair(0, 0, 0));
                     settings.downstream_cores.push_back(mux_settings.worker_physical_core);
-                    settings.compile_args.resize(22);
+                    settings.compile_args.resize(23);
                     auto& compile_args = settings.compile_args;
                     compile_args[0]  = downstream_cb_base;
                     compile_args[1]  = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
@@ -384,6 +383,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[19] = dispatch_constants::PREFETCH_D_BUFFER_BLOCKS; // prefetch_d only
                     compile_args[20] = false;  // is_dram_variant
                     compile_args[21] = true;    // is_host_variant
+                    compile_args[22] = 3;
                 }
                 break;
             }
@@ -547,15 +547,18 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 uint32_t num_dispatchers = device_worker_variants[DISPATCH].size();
                 TT_ASSERT(device_worker_variants[DEMUX].size() == 1, "Cannot have more than one Demux.");
                 auto demux_settings = std::get<1>(device_worker_variants[DEMUX][0]);
-                auto prefetch_h_settings = std::get<1>(device_worker_variants[PREFETCH][0]);
-                auto prefetch_physical_core = prefetch_h_settings.worker_physical_core;
                 TT_ASSERT(num_dispatchers == demux_settings.semaphores.size(), "Demux does not have required number of semaphores for Dispatchers. Exptected = {}. Fount = {}", num_dispatchers, demux_settings.semaphores.size());
                 uint32_t demux_sem = demux_settings.producer_semaphore_id;
+                uint32_t dispatch_idx = 0;
                 for (auto&[core, settings] : device_worker_variants[DISPATCH]) {
+                    auto prefetch_h_settings = std::get<1>(device_worker_variants[PREFETCH][dispatch_idx]);
+                    auto cross_prefetch_settings = std::get<1>(device_worker_variants[PREFETCH][(dispatch_idx + 1) % 2]);
+                    auto prefetch_physical_core = prefetch_h_settings.worker_physical_core;
+                    auto cross_prefetch_physical_core = cross_prefetch_settings.worker_physical_core;
                     auto dispatch_core_type = settings.dispatch_core_type;
                     settings.upstream_cores.push_back(demux_settings.worker_physical_core);
                     settings.downstream_cores.push_back(tt_cxy_pair(0, 0, 0));
-                    settings.compile_args.resize(21);
+                    settings.compile_args.resize(22);
                     auto& compile_args = settings.compile_args;
                     compile_args[0] = settings.cb_start_address;
                     compile_args[1] = settings.cb_log_page_size;
@@ -578,6 +581,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_dispatchers), // XXXX should this be mux pages?
                     compile_args[19] = false; // is_dram_variant
                     compile_args[20] = true; // is_host_variant
+                    compile_args[21] = NOC_XY_ENCODING(cross_prefetch_physical_core.x, cross_prefetch_physical_core.y);
+                    dispatch_idx++;
                 }
                 break;
             }
@@ -634,6 +639,9 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
             case DEMUX_D:
             {
                 bool is_tunnel_end = device_worker_variants[US_TUNNELER_REMOTE].size() == 0;
+                if (!is_tunnel_end) {
+                    TT_ASSERT(device_worker_variants[US_TUNNELER_REMOTE].size() == 1, "Unexpected number of ethernet tunnelers.");
+                }
                 TT_ASSERT(device_worker_variants[DEMUX_D].size() == 1, "Unexpected number of device demux.");
 
                 auto &tunneler_settings = std::get<1>(device_worker_variants[US_TUNNELER_LOCAL][0]);
@@ -650,7 +658,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 compile_args[3] = device_worker_variants[PREFETCH_D].size() + device_worker_variants[US_TUNNELER_REMOTE].size(); // 3: demux_fan_out
                 uint32_t demux_output_idx = 0;
                 uint32_t demux_output_cb_info_idx = 0;
-                // Tie DEMUX_D outputs to DEMUX_D output queues and set output CB parameters
+                // Tie DEMUX_D outputs to DEMUX_D output queues (prefetch_d and remote tunnel inputs) and set output CB parameters
                 for (const auto& prefetch_d_settings : device_worker_variants[PREFETCH_D]) {
                     auto prefetch_d_setting = std::get<1>(prefetch_d_settings);
                     compile_args[4 + demux_output_idx] = packet_switch_4B_pack(prefetch_d_setting.worker_physical_core.x,
@@ -661,9 +669,6 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[8 + demux_output_cb_info_idx + 1] = prefetch_d_setting.cb_size_bytes >> 4;
                     demux_output_idx++;
                     demux_output_cb_info_idx += 2;
-                }
-                if (!is_tunnel_end) {
-                    TT_ASSERT(device_worker_variants[US_TUNNELER_REMOTE].size() == 1, "Unexpected number of ethernet tunnelers.");
                 }
                 for (const auto& us_tunneler_remote_settings : device_worker_variants[US_TUNNELER_REMOTE]) {
                     auto us_tunneler_remote_setting =  std::get<1>(us_tunneler_remote_settings);
@@ -725,7 +730,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     TT_ASSERT(scratch_db_base + scratch_db_size <= l1_size);
 
                     auto& compile_args = prefetch_d_settings.compile_args;
-                    compile_args.resize(22);
+                    compile_args.resize(23);
                     compile_args[0]  = dispatch_d_settings.cb_start_address;
                     compile_args[1]  = dispatch_d_settings.cb_log_page_size;
                     compile_args[2]  = dispatch_d_settings.cb_pages;
@@ -748,6 +753,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[19] = dispatch_constants::PREFETCH_D_BUFFER_BLOCKS; // prefetch_d only
                     compile_args[20] = true;  // is_dram_variant
                     compile_args[21] = false; // is_host_variant
+                    compile_args[22] = 0;
                     prefetch_d_idx++; // move on to next prefetcher
                 }
                 break;
@@ -766,7 +772,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     auto dispatch_core_type = dispatch_d_settings.dispatch_core_type;
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
-                    dispatch_d_settings.compile_args.resize(21);
+                    dispatch_d_settings.compile_args.resize(22);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
                     compile_args[1] = dispatch_d_settings.cb_log_page_size;
@@ -789,6 +795,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_dispatchers), // mux buffer size is a function of num_cqs
                     compile_args[19] = true; // is_dram_variant
                     compile_args[20] = false; // is_host_variant
+                    compile_args[21] = 0;
                     dispatch_d_idx++; // move on to next dispatcher
                 }
                 break;
@@ -917,10 +924,11 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.push_back(0);
                 settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs));
                 settings.semaphores.push_back(0);
+                settings.semaphores.push_back(0);
                 settings.producer_semaphore_id = 1;
                 tunnel_core_allocations[PREFETCH].push_back(std::make_tuple(prefetch_location, settings));
                 settings.semaphores.clear();
-                // std::cout << "Prefetch_h " << cq_id << " on: " << prefetch_location.str() << " " <<  settings.worker_physical_core.str() << std::endl;
+                std::cout << "Prefetch_h " << cq_id << " on: " << prefetch_location.str() << " " <<  settings.worker_physical_core.str() << std::endl;
             }
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -941,8 +949,8 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
                 tunnel_core_allocations[DISPATCH].push_back(std::make_tuple(dispatch_location, settings));
                 settings.semaphores.clear();
-                // std::cout << "Dispatch_h " <<  cq_id << " on: " <<  dispatch_location.str() << " " << settings.worker_physical_core.str() << std::endl;
-                // log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
+                std::cout << "Dispatch_h " << cq_id << " on: " << dispatch_location.str() << " " <<  settings.worker_physical_core.str() << std::endl;
+                log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
             }
             uint32_t cq_id = 0;  // 1 mux, demux, local tunneler and remote tunneler per chip. Set cq_id to 0.
             if (tunnel_stop == 1) {
@@ -960,14 +968,14 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_size_bytes = dispatch_constants::get(dispatch_core_type).mux_buffer_size(num_hw_cqs);
 
                 tunnel_core_allocations[MUX].push_back(std::make_tuple(mux_location, settings));
-                // std::cout << "Local Chip Mux on: " << mux_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+                std::cout << "Local Chip Mux on: " << mux_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 tt_cxy_pair demux_location = dispatch_core_manager::get(num_hw_cqs).demux_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(demux_location.chip, get_physical_core_coordinate(demux_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_demux.cpp";
                 settings.cb_start_address = L1_UNRESERVED_BASE;
                 settings.cb_size_bytes = 0x10000;
                 tunnel_core_allocations[DEMUX].push_back(std::make_tuple(demux_location, settings));
-                // std::cout << "Local Chip Demux on: " << demux_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+                std::cout << "Local Chip Demux on: " << demux_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
 
             settings.tunnel_stop = tunnel_stop - 1;
@@ -982,7 +990,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.cb_start_address = 0x19000;
             settings.cb_size_bytes = 0x10000;
             tunnel_core_allocations[US_TUNNELER_REMOTE].push_back(std::make_tuple(us_location, settings));
-            // std::cout << "US Remote Tunnel on: " << us_location.str() << " " <<  settings.worker_physical_core.str() << " " << local_location.str() << " " <<  settings.eth_partner_physical_core.str() << std::endl;
+            std::cout << "US Remote Tunnel on: " << us_location.str() << " " <<  settings.worker_physical_core.str() << " " << local_location.str() << " " <<  settings.eth_partner_physical_core.str() << std::endl;
             //all allocation below this are on a remote chip.
             settings.tunnel_stop = tunnel_stop;
 
@@ -992,7 +1000,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.eth_partner_physical_core = temp;
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/eth_tunneler.cpp";
             tunnel_core_allocations[US_TUNNELER_LOCAL].push_back(std::make_tuple(local_location, settings));
-            // std::cout << "US Local Tunnel on: " << settings.worker_physical_core.str() << " " << settings.eth_partner_physical_core.str() << std::endl;
+            std::cout << "US Local Tunnel on: " << settings.worker_physical_core.str() << " " << settings.eth_partner_physical_core.str() << std::endl;
             TT_ASSERT(us_location.chip == us_device,
                 "Upstream Tunneler is on device {} but it is expected to be on device {}", us_location.chip, us_device);
             TT_ASSERT(local_location.chip == device_id,
@@ -1011,7 +1019,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.cb_pages = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs);
             settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
             tunnel_core_allocations[MUX_D].push_back(std::make_tuple(mux_d_location, settings));
-            // std::cout << " Remote Chip MUX on " << mux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+            std::cout << " Remote Chip MUX on " << mux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             tt_cxy_pair demux_d_location = dispatch_core_manager::get(num_hw_cqs).demux_d_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(demux_d_location.chip, get_physical_core_coordinate(demux_d_location, dispatch_core_type));
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_demux.cpp";
@@ -1019,7 +1027,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.cb_start_address = L1_UNRESERVED_BASE;
             settings.cb_size_bytes = 0x10000;
             tunnel_core_allocations[DEMUX_D].push_back(std::make_tuple(demux_d_location, settings));
-            // std::cout << " Remote Chip DEMUX on " << demux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+            std::cout << " Remote Chip DEMUX on " << demux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             settings.semaphores.clear();
             uint32_t dispatch_buffer_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -1039,7 +1047,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
 
                 settings.semaphores.clear();
-                // std::cout << "Prefetch_d " << cq_id << " on " << prefetch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+                std::cout << "Prefetch_d " << cq_id << " on " << prefetch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -1056,7 +1064,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
                 settings.semaphores.clear();
-                // std::cout << "Dispatch_d on " << cq_id << " on " << dispatch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+                std::cout << "Dispatch_d on " << cq_id << " on " << dispatch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
         }
         tunnel_dispatch_core_allocations.insert(std::make_pair(tunnel_id, tunnel_core_allocations));
@@ -1195,7 +1203,8 @@ void Device::compile_command_queue_programs() {
                 dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
                 dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
                 true,   // is_dram_variant
-                true    // is_host_variant
+                true,    // is_host_variant
+                0
             };
 
             configure_kernel_variant(
@@ -1235,7 +1244,8 @@ void Device::compile_command_queue_programs() {
                 0,      // unused prefetch_local_downstream_sem_addr
                 0,      // unused prefetch_downstream_buffer_pages
                 true,   // is_dram_variant
-                true    // is_host_variant
+                true,    // is_host_variant
+                0
             };
 
             configure_kernel_variant(

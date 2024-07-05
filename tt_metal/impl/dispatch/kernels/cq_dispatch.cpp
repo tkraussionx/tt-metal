@@ -43,6 +43,7 @@ constexpr uint32_t prefetch_h_local_downstream_sem_addr = get_compile_time_arg_v
 constexpr uint32_t prefetch_h_max_credits = get_compile_time_arg_val(18);
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(19);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(20);
+constexpr uint32_t cross_prefetcher_core = get_compile_time_arg_val(21);
 
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
@@ -448,7 +449,13 @@ void process_write_paged() {
     addr_gen.bank_base_address = base_addr;
     addr_gen.page_size = page_size;
     uint64_t dst_addr_offset = 0;  // Offset into page.
-
+    if (MY_NOC_X == 7 and MY_NOC_Y == 6) {
+        volatile uint32_t count = 0;
+        volatile uint32_t c2 = 0;
+        // DPRINT << "Start wait" << ENDL();
+        // for(volatile uint32_t i=0; i<100000000; i++);
+        // DPRINT << "End wait" << ENDL();
+    }
     DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
            << " dispatch_cb_page_size: " << dispatch_cb_page_size;
 
@@ -920,7 +927,13 @@ re_run_command:
                 process_exec_buf_end_d();
             }
             break;
-
+        case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
+            DPRINT << "cmd_cross_prefetch_write\n";
+            if (is_d_variant && !is_h_variant) {
+                relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
+            }
+            cmd_ptr += sizeof(CQDispatchCmd);
+            break;
         case CQ_DISPATCH_CMD_TERMINATE:
             DPRINT << "dispatch terminate\n";
             if (is_d_variant && !is_h_variant) {
@@ -965,7 +978,11 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
             DPRINT << "dispatch_h exec_buf_end\n";
             process_exec_buf_end_h();
             break;
-
+        case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
+            DPRINT << "cmd_cross_prefetch_write\n";
+            noc_semaphore_inc(get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), 1);
+            cmd_ptr += sizeof(CQDispatchCmd);
+            break;
         case CQ_DISPATCH_CMD_TERMINATE:
             DPRINT << "dispatch_h terminate\n";
             cmd_ptr += sizeof(CQDispatchCmd);

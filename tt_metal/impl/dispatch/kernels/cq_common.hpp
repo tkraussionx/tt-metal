@@ -184,7 +184,9 @@ uint32_t cb_acquire_pages(uint32_t cb_fence,
         noc_async_atomic_barrier();
 
         DEBUG_STATUS("UAPW");
+        DPRINT << "Wait on SEM" << ENDL();
         while ((available = *sem_addr) == 0);
+        DPRINT << "Wait done" << ENDL();
         DEBUG_STATUS("UAPD");
     }
 

@@ -46,6 +46,7 @@ constexpr uint32_t cmddat_q_blocks = get_compile_time_arg_val(19);
 
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(20);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(21);
+constexpr uint32_t cross_dispatcher_sem_id = get_compile_time_arg_val(22);
 
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
@@ -1127,7 +1128,9 @@ bool process_cmd(uint32_t& cmd_ptr,
         DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
         break;
-
+    case CQ_PREFETCH_CMD_WAIT:
+        stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        break;
     case CQ_PREFETCH_CMD_DEBUG:
         DPRINT << "debug" << ENDL();
         // Splitting debug cmds not implemented for exec_bufs (yet)
@@ -1271,6 +1274,13 @@ void kernel_main_h() {
 
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
         uint32_t cmd_id = cmd->base.cmd_id;
+        if (cmd_id == CQ_PREFETCH_CMD_WAIT) {
+            volatile tt_l1_ptr uint32_t* sem_addr =
+                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(cross_dispatcher_sem_id));
+            DPRINT << "Wait on: " << cross_dispatcher_sem_id << ENDL();
+            while(*sem_addr == 0);
+            noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, (uint32_t)sem_addr), -1);
+        }
         // Infer that an exec_buf command is to be executed based on the stall state.
         bool is_exec_buf = (stall_state == STALLED);
         cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);

@@ -27,7 +27,8 @@ enum CQPrefetchCmdId : uint8_t {
     CQ_PREFETCH_CMD_EXEC_BUF_END = 7,         // finish executing commands from a buffer (return), payload like relay_inline
     CQ_PREFETCH_CMD_STALL = 8,                // drain pipe through dispatcher
     CQ_PREFETCH_CMD_DEBUG = 9,                // log waypoint data to watcher, checksum
-    CQ_PREFETCH_CMD_TERMINATE = 10,           // quit
+    CQ_PREFETCH_CMD_WAIT = 10,                    // wait_for_event: stall until dispatcher signals done
+    CQ_PREFETCH_CMD_TERMINATE = 11,           // quit
 };
 
 // Dispatcher CMD ID enums
@@ -46,6 +47,7 @@ enum CQDispatchCmdId : uint8_t {
     CQ_DISPATCH_CMD_DELAY = 11,             // insert delay (for testing)
     CQ_DISPATCH_CMD_EXEC_BUF_END = 12,      // dispatch_d notify prefetch_h that exec_buf has completed
     CQ_DISPATCH_CMD_TERMINATE = 13,         // quit
+    CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE = 14,
 };
 
 //////////////////////////////////////////////////////////////////////////////

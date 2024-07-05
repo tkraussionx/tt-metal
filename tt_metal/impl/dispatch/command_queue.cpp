@@ -1209,6 +1209,10 @@ void EnqueueRecordEventCommand::process() {
             CQ_PREFETCH_CMD_BARE_MIN_SIZE + dispatch_constants::EVENT_PADDED_SIZE,
             PCIE_ALIGNMENT);  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_LINEAR_HOST + event ID
 
+    if (not device->is_mmio_capable()) {
+        cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    }
+
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
@@ -1250,6 +1254,10 @@ void EnqueueRecordEventCommand::process() {
     command_sequence.add_dispatch_write_host<true>(
         flush_prefetch, dispatch_constants::EVENT_PADDED_SIZE, event_payload.data());
 
+    if (not device->is_mmio_capable()) {
+        command_sequence.add_cross_prefetch_write();
+    }
+
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
@@ -1280,11 +1288,14 @@ void EnqueueWaitForEventCommand::process() {
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
-
-    uint32_t last_completed_event_address =
-        sync_event.cq_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
-    command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
-
+    if (this->device->is_mmio_capable()) {
+        uint32_t last_completed_event_address =
+            sync_event.cq_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
+        command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
+    }
+    else {
+        command_sequence.add_prefetch_wait();
+    }
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
@@ -1899,8 +1910,8 @@ void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> sync_event, b
     if (clear_count) {
         this->manager.reset_event_id(this->id);
     }
-    std::shared_ptr<Event> event = std::make_shared<Event>();
-    this->enqueue_record_event(event);
+    // std::shared_ptr<Event> event = std::make_shared<Event>();
+    // this->enqueue_record_event(event);
 }
 
 void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {

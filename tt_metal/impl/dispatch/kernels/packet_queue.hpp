@@ -875,7 +875,9 @@ public:
         uint32_t num_words_available_in_input = input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
         uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
         num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
+        DPRINT << " Input: " << num_words_available_in_input << ENDL();
         uint32_t num_words_free_in_output = this->get_queue_data_num_words_free();
+        DPRINT << "Output: " << num_words_free_in_output << ENDL();
         uint32_t num_words_to_forward = std::min(num_words_available_in_input, num_words_free_in_output);
 
         if (num_words_to_forward == 0) {
@@ -905,7 +907,7 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
-
+        DPRINT << "Forwarding: " << num_words_to_forward << " to " << +(this->queue_id) << ENDL();
         uint32_t src_addr =
             (input_queue_ptr->queue_start_addr_words +
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
@@ -934,6 +936,7 @@ public:
                 this->unpacketizer_page_words_sent -= this->cb_mode_page_size_words;
                 remote_sem_inc++;
             }
+            // DPRINT << "Inc remote sem: " << remote_sem_inc << ENDL();
             this->cb_mode_inc_remote_sem_val(remote_sem_inc);
         }
 

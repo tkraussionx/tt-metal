@@ -128,6 +128,43 @@ class DeviceCommand {
         }
     }
 
+    void add_prefetch_wait() {
+        uint32_t increment_sizeB = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
+        auto initialize_wait_cmd = [&](CQPrefetchCmd *stall_cmd) {
+            *stall_cmd = {};
+            stall_cmd->base.cmd_id = CQ_PREFETCH_CMD_WAIT;
+        };
+        CQPrefetchCmd *wait_cmd_dst = this->reserve_space<CQPrefetchCmd *>(increment_sizeB);
+        if constexpr (hugepage_write) {
+            alignas(MEMCPY_ALIGNMENT) CQPrefetchCmd wait_cmd;
+            initialize_wait_cmd(&wait_cmd);
+            this->memcpy(wait_cmd_dst, &wait_cmd, sizeof(CQPrefetchCmd));
+        } else {
+            initialize_wait_cmd(wait_cmd_dst);
+        }
+    }
+
+    void add_cross_prefetch_write() {
+        auto initialize_cross_prefetch_write = [&](CQPrefetchCmd *relay_wait, CQDispatchCmd *write_cmd) {
+            relay_wait->base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
+            relay_wait->relay_inline.length = sizeof(CQDispatchCmd);
+            relay_wait->relay_inline.stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+            write_cmd->base.cmd_id = CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE;
+        };
+        CQPrefetchCmd *relay_wait_dst = this->reserve_space<CQPrefetchCmd *>(sizeof(CQPrefetchCmd));
+        CQDispatchCmd *write_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
+
+        if constexpr (hugepage_write) {
+            alignas(MEMCPY_ALIGNMENT) CQPrefetchCmd relay_wait;
+            alignas(MEMCPY_ALIGNMENT) CQDispatchCmd write_cmd;
+            initialize_cross_prefetch_write(&relay_wait, &write_cmd);
+            this->memcpy(relay_wait_dst, &relay_wait, sizeof(CQPrefetchCmd));
+            this->memcpy(write_cmd_dst, &write_cmd, sizeof(CQDispatchCmd));
+        } else {
+            initialize_cross_prefetch_write(write_cmd_dst);
+        }
+    }
+
     void add_prefetch_relay_linear(uint32_t noc_xy_addr, uint32_t lengthB, uint32_t addr) {
         uint32_t increment_sizeB = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
         auto initialize_relay_linear_cmd = [&](CQPrefetchCmd *relay_linear_cmd) {

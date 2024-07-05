@@ -235,9 +235,11 @@ void kernel_main() {
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
             uint8_t output_queue_id = dest_output_queue_id(dest);
+            DPRINT << "Forward to: " << +output_queue_id << ENDL();
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());
             data_words_sent += words_sent;
+            // if (words_sent)
             if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
             }
