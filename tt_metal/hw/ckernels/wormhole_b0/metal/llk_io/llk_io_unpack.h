@@ -12,9 +12,9 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
-int tiles_proc_delay;
-int apply_cnt;
-int stagger_cb_id;
+int tiles_proc_delay = 0;
+int apply_cnt = 0;
+int stagger_cb_id = 0;
 
 using namespace ckernel;
 
@@ -48,7 +48,7 @@ inline void llk_setup_stagger(bool apply_delay, int stagger_cb_operand) {
 
     // DPRINT << "My_logical_y is odd: " << (int)(my_logical_y & 1) << ENDL();
     if (apply_delay && (my_logical_y & 0x1)) {
-        // DPRINT << "Apply delay:" << (int)apply_delay << " for this cycles:" << 6144 * 2 << ENDL();
+        //DPRINT << "Apply delay:" << (int)apply_delay << " for this cycles:" << 6144 * 2 << ENDL();
         tiles_proc_delay = 6144 * 2;  // Delay odd rows of cores
         stagger_cb_id = stagger_cb_operand;
     }
