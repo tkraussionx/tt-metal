@@ -8,6 +8,18 @@ import math
 import ttnn
 
 
+def save_tensor(filename, tensor, device_mesh, to_print=False):
+    cloned_tensor = ttnn.clone(tensor, ttnn.DRAM_MEMORY_CONFIG, ttnn.bfloat16)
+    host_tensor = ttnn.to_torch(
+        cloned_tensor, device=device_mesh, mesh_composer=ttnn.ConcatMeshToTensor(device_mesh, dim=-1)
+    )
+    torch.save(host_tensor, filename)
+    if to_print:
+        print(f"Saved tensor to {filename}")
+        print(ttnn.get_memory_config(tensor))
+        print(tensor)
+
+
 def convert_to_layout(tensor, input_memory_layout, output_memory_layout, clone=False):
     if input_memory_layout == output_memory_layout:
         return tensor

@@ -12,7 +12,7 @@ import ttnn.experimental
 from models.demos.t3000.falcon40b.tt.falcon_attention import TtFalconAttention
 from models.demos.t3000.falcon40b.tt.falcon_mlp import TtFalconMLP
 
-from models.demos.t3000.falcon40b.tt.model_utils import partial_layernorm
+from models.demos.t3000.falcon40b.tt.model_utils import partial_layernorm, save_tensor
 
 
 class TtFalconDecoderLayer:
@@ -194,7 +194,8 @@ class TtFalconDecoderLayer:
         """Input shape: [batch, 1, seq_len, hidden_size]"""
 
         assert not output_attentions
-
+        filename = f"tensors_main/hidden_states_decoder_start_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, hidden_states, self.device_mesh)
         if self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"].is_sharded():
             replicated_hidden_states = ttnn.experimental.tensor.sharded_to_interleaved(
                 hidden_states,
@@ -211,20 +212,23 @@ class TtFalconDecoderLayer:
                 replicated_hidden_states,
                 self.model_config["BFP8_DTYPE"],
             )
-
+        filename = f"tensors_main/hidden_states_decoder_after_typecast_bfp_8_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, replicated_hidden_states, self.device_mesh)
         replicated_hidden_states = ttnn.all_gather(
             replicated_hidden_states,
             dim=3,
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
         )
-
+        filename = f"tensors_main/hidden_states_decoder_after_1st_all_gather_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, replicated_hidden_states, self.device_mesh)
         if self.model_config["LN_INPUT_DTYPE"] != self.model_config["BFP8_DTYPE"]:
             replicated_hidden_states = ttnn.experimental.tensor.typecast(
                 replicated_hidden_states,
                 self.model_config["LN_INPUT_DTYPE"],
             )
-
+        filename = f"tensors_main/hidden_states_decoder_after_typecast_ln_input_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, replicated_hidden_states, self.device_mesh)
         attn_ln_output = partial_layernorm(
             replicated_hidden_states,
             self.ln_attn_gamma,
@@ -248,7 +252,10 @@ class TtFalconDecoderLayer:
             self.model_config["LN_MLP_OUTPUT_DTYPE"],
             self.ln_output_tensors_dict["mlp_layernorm"],
         )
-
+        filename = f"tensors_main/hidden_states_decoder_after_attn_ln_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, attn_ln_output, self.device_mesh)
+        filename = f"tensors_main/hidden_states_decoder_after_mlp_ln_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, mlp_ln_output, self.device_mesh)
         output = hidden_states
 
         # Self Attention
@@ -264,7 +271,13 @@ class TtFalconDecoderLayer:
             use_cache=use_cache,
         )
         attention_output, outputs = attn_outputs[0], attn_outputs[1:]
+        filename = f"tensors_main/output_decoder_after_self_attn_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, attention_output, self.device_mesh)
 
+        # filename=f'tensors_main/k_cache_decoder_after_self_attn_{self.layer_num}_sdpa_main.pt'
+        # # save_tensor(filename, outputs[0], self.device_mesh)
+        # filename=f'tensors_main/v_cache_decoder_after_self_attn_{self.layer_num}_sdpa_main.pt'
+        # # save_tensor(filename, outputs[1], self.device_mesh)
         # Add attn output to residiual first in place to save memory
         # Note that this is only correct in inference when dropout is disabled
         output = ttnn.add(
@@ -274,11 +287,13 @@ class TtFalconDecoderLayer:
             # output_tensor=output,
         )
         attention_output.deallocate(True)
-
+        filename = f"tensors_main/output_decoder_after_add_attn_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, output, self.device_mesh)
         # MLP
         # mlp will deallocate layernorm_output
         mlp_output = self.mlp(mlp_ln_output, llm_mode=llm_mode)
-
+        filename = f"tensors_main/output_decoder_after_mlp_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, mlp_output, self.device_mesh)
         # dropout_add
         # For inference, this is just add
         output = ttnn.add(
@@ -288,7 +303,8 @@ class TtFalconDecoderLayer:
             # output_tensor=output,
         )
         mlp_output.deallocate(True)
-
+        filename = f"tensors_main/output_decoder_after_add_mlp_{self.layer_num}_sdpa_main.pt"
+        # save_tensor(filename, output, self.device_mesh)
         if use_cache:
             outputs = (output,) + outputs
         else:
