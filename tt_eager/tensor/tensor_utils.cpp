@@ -25,7 +25,7 @@ Tensor to_weight_special_padding_tile_layout(
                 (uint32_t)std::ceil((double)weight_matrix_cols / (double)in1_block_w_datums) * in1_block_w_datums;
         }
         // height padding
-        assert(in1_block_h_datums >= w_shape[1] * w_shape[3]);
+        TT_ASSERT(in1_block_h_datums >= w_shape[1] * w_shape[3],in1_block_h_datums,w_shape[1],w_shape[3]);
         uint32_t block_height_padding = in1_block_h_datums - (w_shape[1] * w_shape[3]);
         auto weight_matrix_rows = ((w_shape[1] * w_shape[3]) + block_height_padding) * w_shape[2];
         Shape output_shape = {1, 1, weight_matrix_rows, weight_matrix_cols};

@@ -57,38 +57,50 @@ class YOLOv4:
 class Down1:
     def __init__(self, model) -> None:
         torch_model = model.torch_model
-        self.conv1 = Conv(torch_model, "down1.conv1", [1, 320, 320, 4], (1, 1, 1, 1), act_block_h=64)
+        self.conv1 = Conv(torch_model, "down1.conv1", [1, 320, 320, 3], (1, 1, 1, 1), act_block_h=64)
         self.conv2 = Conv(torch_model, "down1.conv2", [1, 320, 320, 32], (2, 2, 1, 1), reshard=True)
-        self.conv3 = Conv(torch_model, "down1.conv3", [1, 160, 160, 64], (1, 1, 1, 1))
-        self.conv4 = Conv(torch_model, "down1.conv4", [1, 160, 160, 64], (1, 1, 1, 1))
-        self.conv5 = Conv(torch_model, "down1.conv5", [1, 160, 160, 32], (1, 1, 1, 1))
-        self.conv6 = Conv(torch_model, "down1.conv6", [1, 160, 160, 64], (1, 1, 1, 1))
-        self.conv7 = Conv(torch_model, "down1.conv7", [1, 160, 160, 64], (1, 1, 1, 1))
-        self.conv8 = Conv(torch_model, "down1.conv8", [1, 160, 160, 128], (1, 1, 1, 1))
+        self.conv3 = Conv(torch_model, "down1.conv3", [1, 160, 160, 64], (1, 1, 0, 0), deallocate=False)
+        self.conv4 = Conv(torch_model, "down1.conv4", [1, 160, 160, 64], (1, 1, 0, 0), reshard=True, deallocate=False)
+        self.conv5 = Conv(torch_model, "down1.conv5", [1, 160, 160, 64], (1, 1, 0, 0), deallocate=False)
+        self.conv6 = Conv(torch_model, "down1.conv6", [1, 160, 160, 32], (1, 1, 1, 1))
+        self.conv7 = Conv(torch_model, "down1.conv7", [1, 160, 160, 64], (1, 1, 0, 0))
+        self.conv8 = Conv(torch_model, "down1.conv8", [1, 160, 160, 128], (1, 1, 0, 0))
         self.convs = [self.conv1, self.conv2, self.conv3, self.conv4, self.conv5, self.conv6, self.conv7, self.conv8]
 
     def __call__(self, device, input_tensor):
         output_tensor = self.conv1(device, input_tensor)
         output_tensor_split = self.conv2(device, output_tensor)
-        # output_tensor_left = self.conv3(device,output_tensor_split)
 
-        # output_tensor = self.conv4(device,output_tensor_split)
-        # output_tensor = self.conv5(device,output_tensor)
-        # output_tensor = self.conv6(device,output_tensor)
-        # output_tensor = self.conv7(device,output_tensor)
-        # output_tensor = self.conv8(device,output_tensor)
-        return output_tensor_split
+        output_tensor_left = self.conv3(device, output_tensor_split)
+
+        res_block_split = self.conv4(device, output_tensor_split)
+        output_tensor = self.conv5(device, res_block_split)
+        output_tensor = self.conv6(device, output_tensor)
+        output_tensor = res_block_split + output_tensor
+
+        ttnn.deallocate(res_block_split)
+        output_tensor = self.conv7(device, output_tensor)
+        output_tensor = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor)
+        output_tensor_left = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor_left)
+        output_tensor = ttnn.concat([output_tensor, output_tensor_left], dim=3)
+
+        output_tensor = self.conv8(device, output_tensor)
+        return output_tensor
 
     def __str__(self) -> str:
         this_str = ""
+        index = 1
         for conv in self.convs:
-            this_str += str(conv)
+            this_str += str(index) + " " + str(conv)
             this_str += " \n"
+            index += 1
         return this_str
 
 
 class Conv:
-    def __init__(self, model, path, input_params, conv_params, *, act_block_h=None, reshard=False) -> None:
+    def __init__(
+        self, model, path, input_params, conv_params, *, act_block_h=None, reshard=False, deallocate=True
+    ) -> None:
         self.weights, self.bias = fold_bn_to_conv_weights_bias(model, path)
         self.input_params = input_params
         self.kernel_size = (self.weights.shape[2], self.weights.shape[3])
@@ -96,6 +108,7 @@ class Conv:
         self.out_channels = self.weights.shape[0]
         self.act_block_h = act_block_h
         self.reshard = reshard
+        self.deallocate = deallocate
 
     def __str__(self) -> str:
         return f"Conv: {self.weights.shape} {self.bias.shape} {self.kernel_size}"
@@ -113,7 +126,7 @@ class Conv:
             input_channels_alignment=16 if self.input_params[3] < 16 else 32,
             transpose_shards=False,
             reshard_if_not_optimal=self.reshard,
-            deallocate_activation=True,
+            deallocate_activation=self.deallocate,
             reallocate_halo_output=True,
         )
         if self.act_block_h is not None:
@@ -143,5 +156,6 @@ def test_yolo(device):
     yolov4 = YOLOv4("/localdev/smanoj/models/yolov4.pth")
     print(yolov4)
     x = ttnn.from_torch(torch.randn((1, 320, 320, 3), dtype=torch.bfloat16).float(), dtype=ttnn.bfloat16)
+    # x = ttnn.from_torch(torch.randn((1, 160, 160, 64), dtype=torch.bfloat16).float(), dtype=ttnn.bfloat16)
 
     result = yolov4(device, x)
