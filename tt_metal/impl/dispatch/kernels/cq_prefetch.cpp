@@ -46,7 +46,6 @@ constexpr uint32_t cmddat_q_blocks = get_compile_time_arg_val(19);
 
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(20);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(21);
-constexpr uint32_t cross_dispatcher_sem_id = get_compile_time_arg_val(22);
 
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
@@ -262,7 +261,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
                 if (stall_state == STALL_NEXT) {
                     // If the prefetcher state reached here, it is issuing a read to the same "slot", since for exec_buf commands
                     // we will insert a read barrier. Hence, the exec_buf command will be concatenated to a previous command, and
-                    // should not be offset by pramble size.
+                    // should not be offset by preamble size.
                     pending_read_size = read_from_pcie<0>
                         (prefetch_q_rd_ptr, fence, pcie_read_ptr, cmd_ptr, fetch_size);
                     if (pending_read_size != 0) {
@@ -517,6 +516,14 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
     downstream_data_ptr = round_up_pow2(downstream_data_ptr, downstream_cb_page_size);
 
     return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+}
+
+inline uint32_t process_prefetch_h_wait_cmd(uint32_t cmd_ptr) {
+    volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
+    volatile tt_l1_ptr uint32_t* event_addr =
+                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->event_wait.sync_event_addr);
+    while (*event_addr < cmd->event_wait.sync_event);
+    return CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(CQPrefetchHToPrefetchDHeader);
 }
 
 // This fn prefetches data from DRAM memory and writes data to the dispatch core.
@@ -1128,9 +1135,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
         break;
-    case CQ_PREFETCH_CMD_WAIT:
-        stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
-        break;
+
     case CQ_PREFETCH_CMD_DEBUG:
         DPRINT << "debug" << ENDL();
         // Splitting debug cmds not implemented for exec_bufs (yet)
@@ -1274,15 +1279,17 @@ void kernel_main_h() {
         DPRINT << "Have cmd" << ENDL();
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
         uint32_t cmd_id = cmd->base.cmd_id;
-        if (cmd_id == CQ_PREFETCH_CMD_WAIT) {
-            volatile tt_l1_ptr uint32_t* sem_addr =
-                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(cross_dispatcher_sem_id));
-            DPRINT << "Wait: " << *sem_addr << " " << cmd->event_wait.sync_event + 1 << ENDL();
-            while(*sem_addr < cmd->event_wait.sync_event + 1);
+        if (cmd_id == CQ_PREFETCH_CMD_WAIT_FOR_EVENT) {
+            // prefetch_h will stop execution until it recieves an event update from the
+            // dispatch_d core assigned to the other CQ
+            uint32_t stride = process_prefetch_h_wait_cmd(cmd_ptr);
+            cmd_ptr += stride;
         }
-        // Infer that an exec_buf command is to be executed based on the stall state.
-        bool is_exec_buf = (stall_state == STALLED);
-        cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
+        else {
+            // Infer that an exec_buf command is to be executed based on the stall state.
+            bool is_exec_buf = (stall_state == STALLED);
+            cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
+        }
 
         // Note: one fetch_q entry can contain multiple commands
         // The code below assumes these commands arrive individually, packing them would require parsing all cmds

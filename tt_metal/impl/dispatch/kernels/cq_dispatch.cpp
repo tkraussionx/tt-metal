@@ -43,7 +43,6 @@ constexpr uint32_t prefetch_h_local_downstream_sem_addr = get_compile_time_arg_v
 constexpr uint32_t prefetch_h_max_credits = get_compile_time_arg_val(18);
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(19);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(20);
-constexpr uint32_t cross_prefetcher_core = get_compile_time_arg_val(21);
 
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
@@ -220,6 +219,13 @@ void process_write_host_h() {
         data_ptr += xfer_size;
     }
     cmd_ptr = data_ptr;
+}
+
+inline void process_remote_write_h() {
+    volatile tt_l1_ptr CQDispatchCmd *cmd = (volatile tt_l1_ptr CQDispatchCmd *)cmd_ptr;
+    noc_inline_dw_write(get_noc_addr_helper(cmd->write_from_remote.noc_xy_addr, cmd->write_from_remote.addr), cmd->write_from_remote.data);
+    block_noc_writes_to_clear[rd_block_idx]++;
+    cmd_ptr += sizeof(CQDispatchCmd);
 }
 
 void process_exec_buf_end_h() {
@@ -921,12 +927,11 @@ re_run_command:
                 process_exec_buf_end_d();
             }
             break;
-        case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
-            DPRINT << "cmd_cross_prefetch_write\n";
+        case CQ_DISPATCH_CMD_REMOTE_WRITE:
+            DPRINT << "cmd_remote_write\n";
             if (is_d_variant && !is_h_variant) {
-                DPRINT << *((uint32_t*)cmd_ptr) << " " << cmd->update_prefetcher.sync_event + 1 << ENDL();
+                // Relay write to dispatch_h, which will issue it on local chip
                 relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
-                DPRINT << "Relay done" << ENDL();
             }
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
@@ -958,7 +963,7 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
     bool done = false;
 
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
-    volatile uint32_t tt_l1_ptr *cmd_head = (volatile uint32_t tt_l1_ptr *)cmd_ptr;
+
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
             DPRINT << "dispatch_h write_linear_h\n";
@@ -974,12 +979,9 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
             DPRINT << "dispatch_h exec_buf_end\n";
             process_exec_buf_end_h();
             break;
-        case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
-            DPRINT << "cmd_cross_prefetch_write\n";
-            *cmd_head = cmd->update_prefetcher.sync_event + 1;
-            noc_async_write(cmd_ptr, get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), 4);
-            block_noc_writes_to_clear[rd_block_idx]++;
-            cmd_ptr += sizeof(CQDispatchCmd);
+        case CQ_DISPATCH_CMD_REMOTE_WRITE:
+            DPRINT << "cmd_remote_write\n";
+            process_remote_write_h();
             break;
         case CQ_DISPATCH_CMD_TERMINATE:
             DPRINT << "dispatch_h terminate\n";

@@ -11,6 +11,9 @@
 #include "tt_numpy/functions.hpp"
 #include <cmath>
 
+using namespace tt;
+using namespace tt_metal;
+
 Tensor dispatch_ops_to_device(Device* dev, Tensor input_tensor, uint8_t cq_id) {
     auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 2}}};
     auto op1 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::NEG}}};
@@ -47,13 +50,13 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
     auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
     for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
+        log_info(LogTest, "Running outer loop {}", outer_loop);
         for (int i = 0; i < 30; i++) {
             for (auto& dev : devs) {
                 auto dev_idx = dev.first;
                 auto device = dev.second;
                 if (i == 0 and outer_loop == 0)
                     device->enable_program_cache();
-                std::cout << "Running on: " << dev_idx << std::endl;
                 for (int j = 0; j < buf_size_datums; j++) {
                     host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
                 }
@@ -100,32 +103,35 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ0) {
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
     auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
 
+    for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
+        log_info(LogTest, "Running outer loop {}", outer_loop);
+        for (int i = 0; i < 30; i++) {
+            for (auto& dev : devs) {
+                auto dev_idx = dev.first;
+                auto device = dev.second;
+                if (i == 0 and outer_loop == 0)
+                    device->enable_program_cache();
+                for (int j = 0; j < buf_size_datums; j++) {
+                    host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
+                }
+                auto input_buffer = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
+                auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
+                Tensor input_tensor = Tensor(input_storage, shape, DataType::BFLOAT16, Layout::TILE);
 
-    for (int i = 0; i < 30; i++) {
-        for (auto& dev : devs) {
-            auto dev_idx = dev.first;
-            auto device = dev.second;
-            for (int j = 0; j < buf_size_datums; j++) {
-                host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
-            }
-            std::cout << "Running on: " << dev_idx << std::endl;
-            auto input_buffer = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
-            auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
-            Tensor input_tensor = Tensor(input_storage, shape, DataType::BFLOAT16, Layout::TILE);
+                auto write_event = std::make_shared<Event>();
+                auto workload_event = std::make_shared<Event>();
+                ttnn::write_buffer(1, input_tensor, {host_data, host_data, host_data, host_data, host_data, host_data, host_data, host_data});
+                ttnn::record_event(device->command_queue(1), write_event);
+                ttnn::wait_for_event(device->command_queue(0), write_event);
+                auto output_tensor = dispatch_ops_to_device(device, input_tensor, 0);
+                ttnn::record_event(device->command_queue(0), workload_event);
+                ttnn::wait_for_event(device->command_queue(1), workload_event);
+                // std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
 
-            auto write_event = std::make_shared<Event>();
-            auto workload_event = std::make_shared<Event>();
-            ttnn::write_buffer(1, input_tensor, {host_data, host_data, host_data, host_data, host_data, host_data, host_data, host_data});
-            ttnn::record_event(device->command_queue(1), write_event);
-            ttnn::wait_for_event(device->command_queue(0), write_event);
-            auto output_tensor = dispatch_ops_to_device(device, input_tensor, 0);
-            ttnn::record_event(device->command_queue(0), workload_event);
-            ttnn::wait_for_event(device->command_queue(1), workload_event);
-            // std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
-
-            for (int j = 0; j < 3 * 2048 * 2048; j++) {
-                ASSERT_EQ(readback_data[j].to_float(), -1 * (i + dev_idx) * 32 + 500);
+                for (int j = 0; j < 3 * 2048 * 2048; j++) {
+                    ASSERT_EQ(readback_data[j].to_float(), -1 * (i + dev_idx) * 32 + 500);
+                }
             }
         }
     }
@@ -151,25 +157,35 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceWithCQ1Only) {
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
     auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
 
+    for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
+        log_info(LogTest, "Running outer loop {}", outer_loop);
+        for (int i = 0; i < 30; i++) {
+            for (auto& dev : devs) {
+                auto dev_idx = dev.first;
+                auto device = dev.second;
+                if (i == 0 and outer_loop == 0)
+                    device->enable_program_cache();
+                for (int j = 0; j < buf_size_datums; j++) {
+                    host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
+                }
+                auto input_buffer = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
+                auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
+                Tensor input_tensor = Tensor(input_storage, shape, DataType::BFLOAT16, Layout::TILE);
 
-    for (int i = 0; i < 30; i++) {
-        for (auto& dev : devs) {
-            auto dev_idx = dev.first;
-            auto device = dev.second;
-            for (int j = 0; j < buf_size_datums; j++) {
-                host_data[j] = bfloat16(static_cast<float>(i + dev_idx));
-            }
-            auto input_buffer = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
-            auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
-            Tensor input_tensor = Tensor(input_storage, shape, DataType::BFLOAT16, Layout::TILE);
+                auto write_event = std::make_shared<Event>();
+                auto workload_event = std::make_shared<Event>();
 
-            ttnn::write_buffer(1, input_tensor, {host_data, host_data, host_data, host_data, host_data, host_data, host_data, host_data});
-            auto output_tensor = dispatch_ops_to_device(device, input_tensor, 1);
+                ttnn::write_buffer(1, input_tensor, {host_data, host_data, host_data, host_data, host_data, host_data, host_data, host_data});
+                ttnn::record_event(device->command_queue(1), write_event);
+                ttnn::wait_for_event(device->command_queue(1), write_event);
+                auto output_tensor = dispatch_ops_to_device(device, input_tensor, 1);
+                ttnn::record_event(device->command_queue(1), workload_event);
+                ttnn::wait_for_event(device->command_queue(1), workload_event);
+                ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
 
-            ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
-
-            for (int j = 0; j < 3 * 2048 * 2048; j++) {
-                ASSERT_EQ(readback_data[j].to_float(), -1 * (i + dev_idx) * 32 + 500);
+                for (int j = 0; j < 3 * 2048 * 2048; j++) {
+                    ASSERT_EQ(readback_data[j].to_float(), -1 * (i + dev_idx) * 32 + 500);
+                }
             }
         }
     }

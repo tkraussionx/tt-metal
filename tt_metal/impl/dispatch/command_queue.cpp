@@ -1192,7 +1192,7 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
 
 void EnqueueRecordEventCommand::process() {
     std::vector<uint32_t> event_payload(dispatch_constants::EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
-    event_payload[0] = this->event_id + 1;
+    event_payload[0] = this->event_id;
 
     uint8_t num_hw_cqs =
         this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
@@ -1251,8 +1251,13 @@ void EnqueueRecordEventCommand::process() {
         event_payloads);
 
     if (not device->is_mmio_capable()) {
-        command_sequence.add_cross_prefetch_write(this->event_id);
+        for (uint8_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
+            tt_cxy_pair prefetch_location = dispatch_core_manager::get(num_hw_cqs).prefetcher_core(this->device->id(), channel, cq_id);
+            CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_location, core_type);
+            command_sequence.add_dispatch_write_remote(this->event_id, this->device->get_noc_unicast_encoding(this->noc_index, prefetch_physical_core), address);
+        }
     }
+
     bool flush_prefetch = true;
     command_sequence.add_dispatch_write_host<true>(
         flush_prefetch, dispatch_constants::EVENT_PADDED_SIZE, event_payload.data());
@@ -1288,13 +1293,13 @@ void EnqueueWaitForEventCommand::process() {
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
-    if (this->device->is_mmio_capable()) {
-        uint32_t last_completed_event_address =
+    uint32_t last_completed_event_address =
             sync_event.cq_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
-        command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id + 1, this->clear_count);
+    if (this->device->is_mmio_capable()) {
+        command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
     }
     else {
-        command_sequence.add_prefetch_wait(sync_event.event_id);
+        command_sequence.add_prefetch_wait_for_event(sync_event.event_id, last_completed_event_address);
     }
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
 
