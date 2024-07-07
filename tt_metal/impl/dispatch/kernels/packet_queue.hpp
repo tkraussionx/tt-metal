@@ -910,13 +910,11 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
-        DPRINT << "Forwarding: " << num_words_to_forward << " to " << +(this->queue_id) << ENDL();
         uint32_t src_addr =
             (input_queue_ptr->queue_start_addr_words +
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
-        DPRINT << "Cmd: " <<  *((uint32_t*)(src_addr)) << " "  << *((uint32_t*)(src_addr) + 1)  << ENDL();
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);

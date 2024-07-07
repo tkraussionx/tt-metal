@@ -1192,7 +1192,7 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
 
 void EnqueueRecordEventCommand::process() {
     std::vector<uint32_t> event_payload(dispatch_constants::EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
-    event_payload[0] = this->event_id;
+    event_payload[0] = this->event_id + 1;
 
     uint8_t num_hw_cqs =
         this->device->num_hw_cqs();  // Device initialize asserts that there can only be a maximum of 2 HW CQs
@@ -1291,7 +1291,7 @@ void EnqueueWaitForEventCommand::process() {
     if (this->device->is_mmio_capable()) {
         uint32_t last_completed_event_address =
             sync_event.cq_id == 0 ? CQ0_COMPLETION_LAST_EVENT : CQ1_COMPLETION_LAST_EVENT;
-        command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id, this->clear_count);
+        command_sequence.add_dispatch_wait(false, last_completed_event_address, sync_event.event_id + 1, this->clear_count);
     }
     else {
         command_sequence.add_prefetch_wait(sync_event.event_id);

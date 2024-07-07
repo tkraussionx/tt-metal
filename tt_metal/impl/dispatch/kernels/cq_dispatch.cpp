@@ -317,8 +317,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
         noc_async_write<dispatch_cb_page_size>(data_ptr, dst, xfer_size);
         block_noc_writes_to_clear[rd_block_idx]++;  // XXXXX maybe just write the noc internal api counter
         cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(1);  // XXXX optimize, take all available
-        noc_async_write_barrier();
-         DPRINT << "Sem Inc: " << *(uint32_t*)(get_noc_addr_helper(downstream_noc_xy, get_semaphore(downstream_cb_sem_id))) << ENDL();
+
         length -= xfer_size;
         data_ptr += xfer_size;
         downstream_cb_data_ptr += xfer_size;
@@ -450,13 +449,7 @@ void process_write_paged() {
     addr_gen.bank_base_address = base_addr;
     addr_gen.page_size = page_size;
     uint64_t dst_addr_offset = 0;  // Offset into page.
-    if (MY_NOC_X == 7 and MY_NOC_Y == 6) {
-        volatile uint32_t count = 0;
-        volatile uint32_t c2 = 0;
-        // DPRINT << "Start wait" << ENDL();
-        // for(volatile uint32_t i=0; i<100000000; i++);
-        // DPRINT << "End wait" << ENDL();
-    }
+
     DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
            << " dispatch_cb_page_size: " << dispatch_cb_page_size;
 
@@ -965,7 +958,7 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
     bool done = false;
 
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
-
+    volatile uint32_t tt_l1_ptr *cmd_head = (volatile uint32_t tt_l1_ptr *)cmd_ptr;
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
             DPRINT << "dispatch_h write_linear_h\n";
@@ -983,8 +976,9 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
             break;
         case CQ_DISPATCH_CMD_CROSS_PREFETCH_WRITE:
             DPRINT << "cmd_cross_prefetch_write\n";
-            DPRINT << *((uint32_t*)cmd_ptr) << " " << cmd->update_prefetcher.sync_event + 1 << ENDL();
-            noc_inline_dw_write(get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), cmd->update_prefetcher.sync_event + 1);
+            *cmd_head = cmd->update_prefetcher.sync_event + 1;
+            noc_async_write(cmd_ptr, get_noc_addr_helper(cross_prefetcher_core, get_semaphore(3)), 4);
+            block_noc_writes_to_clear[rd_block_idx]++;
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
         case CQ_DISPATCH_CMD_TERMINATE:
