@@ -165,10 +165,8 @@ class TtMambaSSM(torch.nn.Module):
 
         abar2 = ttnn.exp(
             abar1,
-            fast_and_approx=True,
-            output_mem_config=ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1
-            ),
+            fast_and_approximate_mode=True,
+            memory_config=ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
         )
         ttnn.deallocate(abar1)
 

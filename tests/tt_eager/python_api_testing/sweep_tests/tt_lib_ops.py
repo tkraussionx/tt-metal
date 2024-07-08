@@ -403,7 +403,12 @@ def eltwise_rsqrt(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.rsqrt(t0, fast_and_approx, output_mem_config=output_mem_config)
+    input_shape = t0.shape
+    t0 = t0.cpu().pad_to_tile(0)
+    t0 = t0.to(ttl.tensor.Layout.TILE)
+    t0 = t0.to(device)
+    t1 = ttnn.rsqrt(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
+    t1 = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).unpad_from_tile(input_shape)
 
     return tt2torch_tensor(t1)
 
@@ -2609,7 +2614,6 @@ eltwise_isinf = make_unary_op_optional_output(ttnn.isinf)
 eltwise_isposinf = make_unary_op_optional_output(ttnn.isposinf)
 eltwise_isneginf = make_unary_op_optional_output(ttnn.isneginf)
 eltwise_isnan = make_unary_op_optional_output(ttnn.isnan)
-eltwise_rsqrt = make_unary_op_optional_output(ttnn.rsqrt)
 eltwise_erfinv = make_unary_op_optional_output(ttnn.erfinv)
 eltwise_erf = make_unary_op_optional_output_with_fast_approx(ttnn.erf)
 eltwise_erfc = make_unary_op_optional_output_with_fast_approx(ttnn.erfc)
@@ -2643,7 +2647,6 @@ eltwise_sigmoid = make_unary_op_optional_output(ttnn.sigmoid)
 eltwise_sigmoid_accurate = make_unary_op_optional_output(ttnn.sigmoid_accurate)
 eltwise_log_sigmoid = make_unary_op_optional_output(ttnn.log_sigmoid)
 eltwise_swish = make_unary_op(ttl.tensor.swish)
-eltwise_add1 = make_unary_op(ttl.tensor.add1)
 eltwise_log1p = make_unary_op(ttl.tensor.log1p)
 eltwise_mish = make_unary_op(ttl.tensor.mish)
 eltwise_hardswish = make_unary_op(ttl.tensor.hardswish)
@@ -2668,7 +2671,7 @@ transpose_cn = make_unary_op(partial(ttl.tensor.transpose, dim0=0, dim1=1))
 transpose_nh = make_unary_op(partial(ttl.tensor.transpose, dim0=0, dim1=-2))
 transpose_nw = make_unary_op(partial(ttl.tensor.transpose, dim0=0, dim1=-1))
 transpose_cw = make_unary_op(partial(ttl.tensor.transpose, dim0=1, dim1=-1))
-eltwise_floor = make_unary_op(ttl.tensor.floor)
+eltwise_floor = make_unary_op_optional_output(ttnn.floor)
 eltwise_trunc = make_unary_op(ttl.tensor.trunc)
 
 
