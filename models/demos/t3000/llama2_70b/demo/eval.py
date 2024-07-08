@@ -296,7 +296,7 @@ def construct_arg(**kwargs):
     [
         ("wikitext", "test", "wikitext-2-raw-v1", 128, 128, 1, 128, 5.4),
         ("wikitext", "test", "wikitext-2-raw-v1", 128, 2048, 1, 128, 3.4313),
-        ("wikitext", "test", "wikitext-2-raw-v1", 128, 128, 128, 128, 5.4),
+        ("wikitext", "test", "wikitext-2-raw-v1", 128, 128, 128, 32, 5.4),
         ("wikitext", "test", "wikitext-2-raw-v1", 128, 2048, 128, 128, 3.4313),
     ],
     ids=["wikitext-128-0", "wikitext-2k-0", "wikitext-128-128", "wikitext-2k-128"],
