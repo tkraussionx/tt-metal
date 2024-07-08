@@ -1915,8 +1915,6 @@ void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> sync_event, b
     if (clear_count) {
         this->manager.reset_event_id(this->id);
     }
-    // std::shared_ptr<Event> event = std::make_shared<Event>();
-    // this->enqueue_record_event(event);
 }
 
 void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
