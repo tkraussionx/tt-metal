@@ -59,18 +59,6 @@ class TtLlamaModelForGeneration:
         else:
             return self.prefill_forward(tokens, start_pos)
 
-    def _update_model_config(self, mode, batch, seq_len):
-        if self.tt_model.model_config["LLM_MODE"] != mode:
-            logger.info(f"Changing mode to {mode}")
-            model_config = get_model_config(
-                llama_version=self.llama_version,
-                max_batch_size=self.max_batch_size,
-                max_context_len=self.max_kv_context_len,
-                batch=batch,
-                seq_len=seq_len,
-            )
-            self.tt_model.set_model_config(model_config)
-
     def decode_forward(self, tokens: torch.Tensor, start_pos: int):
         self._update_model_config("decode", tokens.shape[0], 1)
         tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(tokens, start_pos)
@@ -155,3 +143,15 @@ class TtLlamaModelForGeneration:
             tt_logits, device=self.device_mesh, mesh_composer=ConcatMeshToTensor(self.device_mesh, dim=3)
         )
         return logits[..., : self.params.vocab_size].float()
+
+    def _update_model_config(self, mode, batch, seq_len):
+        if self.tt_model.model_config["LLM_MODE"] != mode:
+            logger.info(f"Changing mode to {mode}")
+            model_config = get_model_config(
+                llama_version=self.llama_version,
+                max_batch_size=self.max_batch_size,
+                max_context_len=self.max_kv_context_len,
+                batch=batch,
+                seq_len=seq_len,
+            )
+            self.tt_model.set_model_config(model_config)

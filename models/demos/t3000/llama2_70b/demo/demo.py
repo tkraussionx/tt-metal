@@ -135,17 +135,15 @@ def build_generator(model_args, tt_args):
         max_seq_len=model_args.max_seq_len,
         max_batch_size=model_args.max_batch_size,
         skip_model_load=model_args.skip_model_load,
-        # n_layers=1 if model_args.implementation == "tt" else model_args.num_layers,
-        n_layers=model_args.num_layers,
+        n_layers=1 if model_args.implementation == "tt" else model_args.num_layers,
     )
 
-    # state_dict = load_llama_state_dict(model_args.ckpt_dir, n_layers=model_args.num_layers)
-    state_dict = generator.model.state_dict()
+    state_dict = load_llama_state_dict(model_args.ckpt_dir, n_layers=model_args.num_layers)
 
     if model_args.implementation == "tt":
         generator.model = TtLlamaModelForGeneration(
             configuration=generator.model.params,
-            state_dict=generator.model.state_dict(),
+            state_dict=state_dict,
             model_args=model_args,
             tt_args=tt_args,
         )
@@ -179,7 +177,7 @@ def load_prompts_file(model_args, data_args, tokenizer):
     return tokenized, prompts
 
 
-def intialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
+def initialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
     # pad the model to maximum length
     pad_id = tokenizer.pad_id
     tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cpu")
@@ -236,7 +234,7 @@ def run_decode(
         )
 
     # prepare inputs
-    tokens, input_text_mask, finished_mask = intialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
+    tokens, input_text_mask, finished_mask = initialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
     prev_pos = 0
 
     # some profiling and logging
@@ -247,24 +245,21 @@ def run_decode(
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
         logits = model.forward(input_tokens, prev_pos)
-        # expects logits to be of shape (bsz, 1, vocab_size)
 
         next_token = sampling_func(logits)
 
         tokens, eos_reached, prev_pos = prepare_next_input(
             tokenizer, tokens, input_text_mask, finished_mask, prompt_lens, cur_pos, next_token
         )
+        latencies.append(time() - start)
 
         if all(eos_reached):
             break
 
-        # profiling
-        latencies.append(time() - start)
-
         # Decode the entire sequence generated so far and log it
-        # for user_id in range(max(0, bsz - 3), bsz):
-        #     text = tokenizer.decode(tokens[user_id, : cur_pos + 1].tolist())
-        #     logger.info(f"Loop {cur_pos} user {user_id}: {text}\n")
+        for user_id in range(max(0, bsz - 3), bsz):
+            text = tokenizer.decode(tokens[user_id, : cur_pos + 1].tolist())
+            logger.info(f"Loop {cur_pos} user {user_id}: {text}\n")
 
         if return_full_logits:
             full_logits.append(logits.clone().detach())
@@ -421,7 +416,7 @@ def test_LlamaModel_demo(
 
     args = construct_arg(
         implementation=implementation,
-        llama_version=llama_verison,
+        llama_version=llama_version,
         ckpt_dir=ckpt_dir,
         tokenizer_path=tokenizer_path,
         skip_model_load=skip_model_load,
