@@ -52,7 +52,7 @@ class TtEfficientnetSqueezeExcitation(torch.nn.Module):
             kernel_size=1,
         )
 
-        self.activation = tt_lib.tensor.silu
+        self.activation = ttnn.silu
         self.scale_activation = ttnn.sigmoid
 
     def _scale(self, x):
