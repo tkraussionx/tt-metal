@@ -47,8 +47,8 @@ def test_unary_pow_ttnn(input_shapes, exponent, device):
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor], pcc=0.9)
     assert comp_pass
-    
-    
+
+
 @pytest.mark.parametrize(
     "input_shapes",
     (
