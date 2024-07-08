@@ -119,7 +119,6 @@ class TtLlamaModelForGeneration:
             )
             print(times)
             ttnn.release_trace(self.device_mesh, trace_id)
-            breakpoint()
 
             ########### TRACE ###########
         else:
