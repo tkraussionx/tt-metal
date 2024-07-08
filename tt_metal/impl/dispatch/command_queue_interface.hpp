@@ -79,7 +79,7 @@ struct dispatch_constants {
 
     uint32_t mux_buffer_size(uint8_t num_hw_cqs = 1) const { return prefetch_d_buffer_size_ / num_hw_cqs; }
 
-    uint32_t mux_buffer_pages(uint8_t num_hw_cqs = 2) const { return prefetch_d_buffer_pages_ / num_hw_cqs; }
+    uint32_t mux_buffer_pages(uint8_t num_hw_cqs = 1) const { return prefetch_d_buffer_pages_ / num_hw_cqs; }
 
    private:
     dispatch_constants(const CoreType &core_type) {

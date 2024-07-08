@@ -268,7 +268,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
             xfer_size = length;
             not_end_of_cmd = false;
         }
-        DPRINT << "Send to addr: " << downstream_cb_data_ptr << ENDL();
+
         uint64_t dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
 
         if (preamble_size > 0) {
@@ -927,6 +927,7 @@ re_run_command:
                 process_exec_buf_end_d();
             }
             break;
+
         case CQ_DISPATCH_CMD_REMOTE_WRITE:
             DPRINT << "cmd_remote_write\n";
             if (is_d_variant && !is_h_variant) {
@@ -935,6 +936,7 @@ re_run_command:
             }
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
+
         case CQ_DISPATCH_CMD_TERMINATE:
             DPRINT << "dispatch terminate\n";
             if (is_d_variant && !is_h_variant) {

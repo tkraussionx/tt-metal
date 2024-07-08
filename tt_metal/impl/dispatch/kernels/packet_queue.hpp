@@ -389,9 +389,6 @@ public:
         for (uint32_t i = 0; i < local_sem_val; i++) {
             this->advance_queue_local_wptr(this->cb_mode_page_size_words);
         }
-        if (local_sem_val) {
-            DPRINT << "Sem update seen on: " << +this->queue_id << " " << local_sem_val << " " << *this->local_wptr_val << ENDL();
-        }
         this->cb_mode_inc_local_sem_val(-local_sem_val);
     }
 
@@ -878,9 +875,7 @@ public:
         uint32_t num_words_available_in_input = input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
         uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
         num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
-        DPRINT << " Input: " << num_words_available_in_input << ENDL();
         uint32_t num_words_free_in_output = this->get_queue_data_num_words_free();
-        DPRINT << "Output: " << num_words_free_in_output << ENDL();
         uint32_t num_words_to_forward = std::min(num_words_available_in_input, num_words_free_in_output);
 
         if (num_words_to_forward == 0) {
@@ -910,11 +905,13 @@ public:
         if (num_words_to_forward == 0) {
             return 0;
         }
+
         uint32_t src_addr =
             (input_queue_ptr->queue_start_addr_words +
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
+
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);
@@ -937,10 +934,9 @@ public:
                 this->unpacketizer_page_words_sent -= this->cb_mode_page_size_words;
                 remote_sem_inc++;
             }
-            // DPRINT << "Inc remote sem: " << remote_sem_inc << ENDL();
             this->cb_mode_inc_remote_sem_val(remote_sem_inc);
         }
-        DPRINT << "Done forwarding" << ENDL();
+
         return num_words_to_forward;
     }
 

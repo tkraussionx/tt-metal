@@ -1276,7 +1276,7 @@ void kernel_main_h() {
     uint32_t heartbeat = 0;
     while (!done) {
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);
-        DPRINT << "Have cmd" << ENDL();
+
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
         uint32_t cmd_id = cmd->base.cmd_id;
         if (cmd_id == CQ_PREFETCH_CMD_WAIT_FOR_EVENT) {
