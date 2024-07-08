@@ -35,7 +35,7 @@ operation::ProgramWithCallbacks reduce_single_core_hw(const Tensor &a, Tensor& o
     tt::DataFormat src0_cb_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
     uint32_t src0_single_tile_size = tt_metal::detail::TileSize(src0_cb_data_format);
     // Scaler datatype is hardcoded bfloat16 due to tile creation in reader
-    tt::DataFormat scaler_cb_data_format = tt::DataFormat::Float16_b;
+    tt::DataFormat scaler_cb_data_format = tt::DataFormat::Float32;
     uint32_t scaler_single_tile_size = tt_metal::detail::TileSize(scaler_cb_data_format);
     tt::DataFormat dst_cb_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
     uint32_t dst_single_tile_size = tt_metal::detail::TileSize(dst_cb_data_format);
@@ -105,7 +105,7 @@ operation::ProgramWithCallbacks reduce_single_core_hw(const Tensor &a, Tensor& o
         program,
          "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_hw.cpp",
         core,
-        tt_metal::ComputeConfig{.compile_args = compute_kernel_args, .defines = reduce_op_utils::get_defines(reduce_op, ReduceOpDim::HW)}
+        tt_metal::ComputeConfig{.fp32_dest_acc_en = true, .compile_args = compute_kernel_args, .defines = reduce_op_utils::get_defines(reduce_op, ReduceOpDim::HW)}
     );
 
     tt_metal::SetRuntimeArgs(

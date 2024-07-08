@@ -31,7 +31,7 @@ operation::ProgramWithCallbacks reduce_multi_core_w(
     tt::DataFormat src0_cb_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
     uint32_t src0_single_tile_size = tt_metal::detail::TileSize(src0_cb_data_format);
     // Scaler datatype is hardcoded bfloat16 due to tile creation in reader
-    tt::DataFormat scaler_cb_data_format = tt::DataFormat::Float16_b;
+    tt::DataFormat scaler_cb_data_format = tt::DataFormat::Float32;
     uint32_t scaler_single_tile_size = tt_metal::detail::TileSize(scaler_cb_data_format);
     tt::DataFormat dst_cb_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
     uint32_t dst_single_tile_size = tt_metal::detail::TileSize(dst_cb_data_format);
@@ -98,7 +98,7 @@ operation::ProgramWithCallbacks reduce_multi_core_w(
         program,
         "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_w.cpp",
         core_group_1,
-        tt_metal::ComputeConfig{.compile_args = compute_kernel_args_group_1, .defines = reduce_defines});
+        tt_metal::ComputeConfig{.fp32_dest_acc_en = true, .compile_args = compute_kernel_args_group_1, .defines = reduce_defines});
 
     if (!core_group_2.ranges().empty()) {
         vector<uint32_t> compute_kernel_args_group_2 = {
@@ -111,7 +111,7 @@ operation::ProgramWithCallbacks reduce_multi_core_w(
             program,
             "tt_eager/tt_dnn/op_library/reduce/kernels/compute/reduce_w.cpp",
             core_group_2,
-            tt_metal::ComputeConfig{.compile_args = compute_kernel_args_group_2, .defines = reduce_defines});
+            tt_metal::ComputeConfig{.fp32_dest_acc_en = true, .compile_args = compute_kernel_args_group_2, .defines = reduce_defines});
     }
 
     uint32_t out_dim_divider = Wt;
