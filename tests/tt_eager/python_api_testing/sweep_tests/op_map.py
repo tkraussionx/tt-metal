@@ -292,10 +292,6 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_log1p,
         "pytorch_op": pytorch_ops.log1p,
     },
-    "eltwise-add1": {
-        "tt_op": tt_lib_ops.eltwise_add1,
-        "pytorch_op": pytorch_ops.add1,
-    },
     "eltwise-neg": {
         "tt_op": tt_lib_ops.eltwise_neg,
         "pytorch_op": pytorch_ops.neg,
