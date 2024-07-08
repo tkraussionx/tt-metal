@@ -52,9 +52,6 @@ inline void llk_setup_stagger(bool apply_delay, int stagger_cb_operand) {
         tiles_proc_delay = 6144 * 2;  // Delay odd rows of cores
         stagger_cb_id = stagger_cb_operand;
     }
-    else {
-        stagger_cb_operand = 0;
-    }
 }
 
 // Wait for N tiles available in the incoming stream
