@@ -13,6 +13,7 @@
 
 using namespace tt;
 using namespace tt_metal;
+using MultiCommandQueueT3KFixture = ttnn::MultiCommandQueueT3KFixture;
 
 Tensor dispatch_ops_to_device(Device* dev, Tensor input_tensor, uint8_t cq_id) {
     auto op0 = tt::tt_metal::EltwiseUnary{std::vector{tt::tt_metal::UnaryWithParam{tt::tt_metal::UnaryOpType::MUL_UNARY_SFPU, 2}}};
@@ -31,14 +32,12 @@ Tensor dispatch_ops_to_device(Device* dev, Tensor input_tensor, uint8_t cq_id) {
     return output_tensor;
 }
 
-TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
-    // 8 devices with 2 CQs
-    if (tt::tt_metal::GetNumAvailableDevices() < 8 and tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
+TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceProgramsOnCQ1) {
+    // 8 devices with 2 CQs. Enable this test on T3K only.
+    if (tt::tt_metal::GetNumAvailableDevices() < 8 or tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
         GTEST_SKIP();
     }
-    auto devs = tt::tt_metal::detail::CreateDevices({0, 1, 2, 3, 4, 5, 6, 7}, 2);
-    Device* dev0 = devs.at(0);
-    Device* dev1 = devs.at(4);
+
     MemoryConfig mem_cfg = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
         .buffer_type = BufferType::DRAM,
@@ -52,7 +51,7 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
     for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
         log_info(LogTest, "Running outer loop {}", outer_loop);
         for (int i = 0; i < 30; i++) {
-            for (auto& dev : devs) {
+            for (auto& dev : this->devs) {
                 auto dev_idx = dev.first;
                 auto device = dev.second;
                 if (i == 0 and outer_loop == 0)
@@ -81,17 +80,14 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ1) {
             }
         }
     }
-    tt::tt_metal::detail::CloseDevices(devs);
 }
 
-TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ0) {
-    // 8 devices with 2 CQs
-    if (tt::tt_metal::GetNumAvailableDevices() < 8 and tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
+TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceProgramsOnCQ0) {
+    // 8 devices with 2 CQs. Enable this test on T3K only.
+    if (tt::tt_metal::GetNumAvailableDevices() < 8 or tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
         GTEST_SKIP();
     }
-    auto devs = tt::tt_metal::detail::CreateDevices({0, 1, 2, 3, 4, 5, 6, 7}, 2);
-    Device* dev0 = devs.at(0);
-    Device* dev1 = devs.at(4);
+
     MemoryConfig mem_cfg = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
         .buffer_type = BufferType::DRAM,
@@ -106,7 +102,7 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ0) {
     for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
         log_info(LogTest, "Running outer loop {}", outer_loop);
         for (int i = 0; i < 30; i++) {
-            for (auto& dev : devs) {
+            for (auto& dev : this->devs) {
                 auto dev_idx = dev.first;
                 auto device = dev.second;
                 if (i == 0 and outer_loop == 0)
@@ -135,17 +131,14 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceProgramsOnCQ0) {
             }
         }
     }
-    tt::tt_metal::detail::CloseDevices(devs);
 }
 
-TEST(TTNN_MultiDev, Test2CQMultiDeviceWithCQ1Only) {
-    // 8 devices with 2 CQs
-    if (tt::tt_metal::GetNumAvailableDevices() < 8 and tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
+TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceWithCQ1Only) {
+    // 8 devices with 2 CQs. Enable this test on T3K only.
+    if (tt::tt_metal::GetNumAvailableDevices() < 8 or tt::get_arch_from_string(tt::test_utils::get_env_arch_name()) != tt::ARCH::WORMHOLE_B0) {
         GTEST_SKIP();
     }
-    auto devs = tt::tt_metal::detail::CreateDevices({0, 1, 2, 3, 4, 5, 6, 7}, 2);
-    Device* dev0 = devs.at(0);
-    Device* dev1 = devs.at(4);
+
     MemoryConfig mem_cfg = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
         .buffer_type = BufferType::DRAM,
@@ -160,7 +153,7 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceWithCQ1Only) {
     for (int outer_loop = 0; outer_loop < 5; outer_loop++) {
         log_info(LogTest, "Running outer loop {}", outer_loop);
         for (int i = 0; i < 30; i++) {
-            for (auto& dev : devs) {
+            for (auto& dev : this->devs) {
                 auto dev_idx = dev.first;
                 auto device = dev.second;
                 if (i == 0 and outer_loop == 0)
@@ -189,5 +182,4 @@ TEST(TTNN_MultiDev, Test2CQMultiDeviceWithCQ1Only) {
             }
         }
     }
-    tt::tt_metal::detail::CloseDevices(devs);
 }

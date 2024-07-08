@@ -7,6 +7,7 @@
 #include "tt_metal/test_utils/env_vars.hpp"
 #include "tt_metal/impl/dispatch/command_queue.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 namespace ttnn {
 
@@ -34,4 +35,32 @@ class MultiCommandQueueSingleDeviceFixture : public ::testing::Test {
     tt::ARCH arch_;
     size_t num_devices_;
 };
+
+class MultiCommandQueueT3KFixture : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        auto slow_dispatch = getenv("TT_METAL_SLOW_DISPATCH_MODE");
+        arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
+        num_devices_ = tt::tt_metal::GetNumAvailableDevices();
+        if (slow_dispatch) {
+            GTEST_SKIP() << "Skipping Multi CQ test suite, since it can only be run in Fast Dispatch Mode.";
+        }
+        if (num_devices_ < 8 or arch_ != tt::ARCH::WORMHOLE_B0) {
+            GTEST_SKIP() << "Skipping T3K Multi CQ test suite on non T3K machine.";
+        }
+        // Enable Ethernet Dispatch for Multi-CQ tests.
+        setenv("WH_ARCH_YAML", "wormhole_b0_80_arch_eth_dispatch.yaml", true);
+
+        devs = tt::tt_metal::detail::CreateDevices({0, 1, 2, 3, 4, 5, 6, 7}, 2);
+    }
+
+    void TearDown() override {
+        tt::tt_metal::detail::CloseDevices(devs);
+    }
+
+    std::map<chip_id_t, tt::tt_metal::Device*> devs;
+    tt::ARCH arch_;
+    size_t num_devices_;
+};
+
 }
