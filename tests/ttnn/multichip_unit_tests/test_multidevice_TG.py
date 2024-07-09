@@ -8,6 +8,8 @@ import pytest
 import ttnn
 import tempfile
 from loguru import logger
+import ttnn.experimental
+import ttnn.experimental.operations
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 
@@ -205,7 +207,7 @@ def test_galaxy_matmul_2d_fracture(M, K, N, cluster_shape, device_mesh):
     indirect=True,
 )
 @pytest.mark.parametrize(
-    "M,N",
+    "M, N",
     [
         (32, 32768),  # Llama3-70B decode FF1
         (512, 32768),  # Llama3-70B prefill FF1
@@ -297,11 +299,12 @@ class ReplicateShardTensor2dMesh(TensorToMesh):
 @pytest.mark.parametrize(
     "M, N, head_dim, num_heads",
     [
-        (32, 8192, 128, 80),  # Llama3-70B decode attn
+        (32, 8192, 128, 80),  # Llama3-70B decode attn fused_qkv
+        (32, 8192, 128, 64),  # Llama3-70B decode attn selfout
     ],
-    ids=["Llama3-70B-decode-attn"],
+    ids=["Llama3-70B-decode-attn-fused_qkv", "Llama3-70B-decode-attn-selfout"],
 )
-def test_galaxy_attn_qkv(M, N, head_dim, num_heads, cluster_shape, device_mesh):
+def test_galaxy_attn_matmul(M, N, head_dim, num_heads, cluster_shape, device_mesh):
     act_pt = torch.randn(1, 1, M, N)
     qkv_weights_pt = torch.randn(1, 1, N, head_dim * num_heads)
 
@@ -331,7 +334,7 @@ def test_galaxy_attn_qkv(M, N, head_dim, num_heads, cluster_shape, device_mesh):
         act,
         qkv_weights,
         dtype=ttnn.bfloat16,
-        core_grid=ttnn.CoreGrid(y=5, x=8),
+        core_grid=ttnn.CoreGrid(y=5, x=8) if num_heads == 80 else ttnn.CoreGrid(y=4, x=8),
         use_1d_systolic_array=True,
         compute_kernel_config=compute_kernel_attn,
     )
@@ -475,14 +478,7 @@ def test_galaxy_rotary_matmul(batch, seq_len, head_dim, n_local_heads, n_local_k
     k_heads_pt = torch.rand(seq_len, batch, max(n_local_kv_heads, 32), head_dim)
     rot_mat_pt = torch.rand(1, batch, head_dim, head_dim)
 
-    shard_spec_n_cores_grid = ttnn.CoreRangeSet(
-        {
-            ttnn.CoreRange(
-                ttnn.CoreCoord(0, 0),
-                ttnn.CoreCoord(batch - 1, 0),
-            ),
-        }
-    )
+    shard_spec_n_cores_grid = ttnn.CoreRangeSet({num_to_corerange(batch)})
     ROTARY_INPUT_MEMCFG = ttnn.MemoryConfig(
         ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
         ttnn.BufferType.L1,
@@ -734,3 +730,373 @@ class TestUpdateCache:
         logger.info(output_cache)
         logger.info(output_update)
         assert eq_cache and eq_update
+
+
+# TODO: Import from SDPA pytests
+def nearest_n(x, n):
+    return ((x + n - 1) // n) * n
+
+
+def nearest_pow_2(x):
+    if x < 1:
+        raise ValueError("x must be >= 1")
+    import math
+
+    power = math.ceil(math.log2(x))
+    return 1 << power
+    # if (2**math.log2(x) == x):
+    #     return x
+    # return 2**(int(x).bit_length())
+
+
+def num_to_corerange(x):
+    assert x < 8 or x % 8 == 0
+    num_x = min(x, 8)
+    num_y = x // num_x
+    assert num_x * num_y == x
+    return ttnn.experimental.tensor.CoreRange(
+        ttnn.experimental.tensor.CoreCoord(0, 0),
+        ttnn.experimental.tensor.CoreCoord(num_x - 1, num_y - 1),
+    )
+
+
+def get_chunk_size(s):
+    if s <= 32:
+        return 32
+    if s <= 64:
+        return 32
+    if s <= 128:
+        return 32
+    if s <= 256:
+        return 256
+    if s <= 2048:
+        return 512
+    return 512
+
+
+def run_test_sdpa_decode_single_iter(
+    device_mesh,
+    b,
+    nh,
+    nkv,
+    s,
+    d,
+    dtype,
+    grid_size,
+    q_dtype=ttnn.bfloat16,
+    mask_dtype=ttnn.bfloat16,
+    sharded_in=False,
+    sharded_out=False,
+):
+    compute_grid_size = device_mesh.get_device(0).compute_with_storage_grid_size()
+    if grid_size[0] > compute_grid_size.x or grid_size[1] > compute_grid_size.y:
+        pytest.skip(f"Need {grid_size} grid size to run this test but core grid is {compute_grid_size}")
+
+    padded_num_heads = nearest_pow_2(nearest_n(nh, n=32))
+    torch.manual_seed(1234)
+
+    num_parallel_cores = grid_size[0] * grid_size[1] // b
+    if num_parallel_cores == 1:
+        min_pcc = 0.90
+    else:
+        min_pcc = 0.99
+        if q_dtype == ttnn.DataType.BFLOAT8_B:
+            min_pcc = 0.98
+        min_pcc = 0.97 if dtype == ttnn.DataType.BFLOAT4_B else min_pcc
+
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+    dram_memcfg = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
+
+    shard_grid = ttnn.CoreRangeSet({num_to_corerange(b)})
+    shard_spec = ttnn.ShardSpec(shard_grid, (padded_num_heads, d), ttnn.ShardOrientation.ROW_MAJOR, False)
+
+    height_sharded_memcfg = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1, shard_spec)
+
+    K = torch.randn(nkv, b, s, d)
+    V = torch.randn(nkv, b, s, d)
+
+    tt_K = ttnn.from_torch(
+        K,
+        device=device_mesh,
+        dtype=dtype,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=dram_memcfg,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    tt_V = ttnn.from_torch(
+        V,
+        device=device_mesh,
+        dtype=dtype,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=dram_memcfg,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+    start_idx = s // 2
+    scale = d**-0.5
+
+    k_chunk_size = get_chunk_size(start_idx)
+    program_config = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        q_chunk_size=padded_num_heads,
+        k_chunk_size=k_chunk_size,
+    )
+
+    padded_layer_len = nearest_n(start_idx, n=k_chunk_size)
+
+    # Test various sequence lengths
+    logger.debug(f"Testing with sequence length: {start_idx}")
+    logger.debug(f"Using chunk size: {k_chunk_size}")
+    logger.debug(f"Using padded layer length: {padded_layer_len}")
+    logger.debug(f"Using padded num heads: {padded_num_heads}")
+
+    attn_mask = torch.zeros((1, b, padded_num_heads, padded_layer_len))
+    # Assume all users are at same position
+    attn_mask[:, :, :, start_idx:] = torch.finfo(torch.float32).min
+
+    Q = torch.randn(1, b, padded_num_heads, d)
+
+    tt_Q = ttnn.from_torch(
+        Q,
+        device=device_mesh,
+        dtype=dtype,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=dram_memcfg,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    tt_attn_mask = ttnn.from_torch(
+        attn_mask,
+        device=device_mesh,
+        dtype=dtype,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=dram_memcfg,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    tt_back = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention_decode(
+        tt_Q,
+        tt_K,
+        tt_V,
+        tt_attn_mask,
+        scale=scale,
+        program_config=program_config,
+        valid_seq_len=padded_layer_len,
+        compute_kernel_config=compute_kernel_config,
+        output_mem_config=height_sharded_memcfg if sharded_out else dram_memcfg,
+    )
+
+    tt_back = ttnn.to_torch(tt_back, mesh_composer=ListMeshToTensor(device_mesh))[0]
+    tt_back = tt_back[:, :, :nh, :]
+
+    Q_slice = Q[:, :, :nh, :].permute(1, 2, 0, 3)  # b, nh, 1, d
+    K_slice = K[:, :, :padded_layer_len, :].permute(1, 0, 2, 3)  # nh, b, S, d
+    V_slice = V[:, :, :padded_layer_len, :].permute(1, 0, 2, 3)  # nh, b, S, d
+    attn_mask_slice = attn_mask[:, :, :nh, :].permute(1, 2, 0, 3)  # b, nh, 1, S
+    expect = torch.nn.functional.scaled_dot_product_attention(
+        Q_slice, K_slice, V_slice, attn_mask_slice, scale=scale, is_causal=False
+    )  # b, nh, 1, d
+    expect = expect.squeeze().unsqueeze(0)
+
+    out_pass, out_pcc = comp_pcc(expect, tt_back, min_pcc)
+
+    logger.debug(f"python vs pytorch: {out_pcc}")
+    assert out_pass
+
+
+@pytest.mark.parametrize(
+    "device_mesh",
+    [
+        (4, 8),
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "dtype, q_dtype, mask_dtype",
+    [
+        [
+            ttnn.experimental.tensor.DataType.BFLOAT16,
+            ttnn.experimental.tensor.DataType.BFLOAT16,
+            ttnn.experimental.tensor.DataType.BFLOAT16,
+        ],
+    ],
+    ids=[
+        "all_bfp16",
+    ],
+)
+@pytest.mark.parametrize(
+    "b, nh, nkv, s, d, grid_size",
+    ([8, 8, 1, 32768, 128, (8, 8)],),  # Llama3-70B
+)
+def test_sdpa_decode_sharded(device_mesh, b, nh, nkv, s, d, dtype, grid_size, q_dtype, mask_dtype):
+    run_test_sdpa_decode_single_iter(
+        device_mesh, b, nh, nkv, s, d, dtype, grid_size, q_dtype, mask_dtype, sharded_in=True, sharded_out=False
+    )
+    run_test_sdpa_decode_single_iter(
+        device_mesh, b, nh, nkv, s, d, dtype, grid_size, q_dtype, mask_dtype, sharded_in=True, sharded_out=True
+    )
+
+
+@pytest.mark.parametrize(
+    "device_mesh",
+    [
+        (4, 8),
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "batch, seq_len, head_dim, n_local_heads, n_local_kv_heads, padded_local_heads",
+    [
+        (8, 1, 128, 8, 1, 32),  # Llama3-70B decode attn
+    ],
+    ids=["Llama3-70B-decode-attn"],
+)
+def test_galaxy_nlp_concat_heads_decode(
+    batch, seq_len, head_dim, n_local_heads, n_local_kv_heads, padded_local_heads, device_mesh
+):
+    concat_head_input = torch.rand(seq_len, batch, padded_local_heads, head_dim)
+
+    shard_grid = ttnn.CoreRangeSet({num_to_corerange(batch)})
+    SCORES_BATCHED_MM_OUTPUT_MEMCFG = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttnn.BufferType.L1,
+        ttnn.ShardSpec(
+            shard_grid,
+            [
+                padded_local_heads,  # Each core has padded_local_heads
+                head_dim,  # head dim
+            ],
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    concat_head_input_tt = ttnn.from_torch(
+        concat_head_input,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=SCORES_BATCHED_MM_OUTPUT_MEMCFG,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    concat_head_output = ttnn.experimental.tensor.nlp_concat_heads_decode(
+        concat_head_input_tt,
+        num_heads=n_local_heads,
+    )  # (seqlen, 1, batch, hidden_size)
+
+    logger.info(f"concat_head_output: {concat_head_output.memory_config()}")
+
+    # Input: (1, 8, 32(8), 128)
+    # Output: (1, 1, 8, 1024)
+    concat_head_output_pt = concat_head_input[:, :, :n_local_heads].reshape(1, 1, batch, head_dim * n_local_heads)
+
+    # Compare
+    concat_head_output_tt_cpu = ttnn.to_torch(concat_head_output, mesh_composer=ListMeshToTensor(device_mesh))[0]
+    concat_head_output_tt_unpadded = concat_head_output_tt_cpu[:, :, :batch, :]
+    out_pass, output_pcc = comp_pcc(concat_head_output_tt_unpadded, concat_head_output_pt, pcc=0.9999)
+    logger.info(f"PCC value: {output_pcc}")
+
+    assert out_pass
+
+
+def rmsnorm(x, gamma, beta, eps):
+    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps) * gamma + beta
+
+
+@pytest.mark.parametrize(
+    "device_mesh",
+    [
+        (4, 8),
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "M, N",
+    [
+        (32, 8192),  # Llama3-70B decode
+    ],
+    ids=["Llama3-70B-decode"],
+)
+def test_galaxy_layernorm(M, N, device_mesh):
+    layernorm_input = torch.rand(1, 1, M, N) * 2 - 0.95
+    norm_weights = torch.rand(1, 1, 256, 32) * 2 - 1
+    norm_eps = 1e-05
+
+    shard_spec_32_cores_grid = ttnn.CoreRangeSet(
+        {
+            ttnn.CoreRange(
+                ttnn.CoreCoord(0, 0),
+                ttnn.CoreCoord(7, 3),
+            ),
+        }
+    )
+
+    LN_OUTPUT_MEMCFG = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.BufferType.L1,
+        ttnn.ShardSpec(
+            shard_spec_32_cores_grid,
+            [
+                M,
+                N // 32,
+            ],
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    layernorm_input_tt = ttnn.from_torch(
+        layernorm_input,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=LN_OUTPUT_MEMCFG,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    norm_weights_tt = ttnn.from_torch(
+        norm_weights,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.ROW_MAJOR_LAYOUT,
+        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+    )
+
+    LN_COMPUTE_KERNEL_CONFIG = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    LN_PROGCFG = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 4],
+        subblock_w=8,
+        block_h=M // 32,
+        block_w=8,
+        inplace=True,
+    )
+
+    norm_output = ttnn.experimental.operations.primary.rmsnorm(
+        layernorm_input_tt,
+        norm_eps,
+        norm_weights_tt,
+        program_config=LN_PROGCFG,
+        output_mem_config=LN_OUTPUT_MEMCFG,
+        compute_kernel_config=LN_COMPUTE_KERNEL_CONFIG,
+    )
+
+    # Compare
+    beta = torch.zeros(1, 1, 256, 32)
+    norm_output_tt_cpu = ttnn.to_torch(norm_output, mesh_composer=ListMeshToTensor(device_mesh))[0]
+    ref_rmsnorm = rmsnorm(layernorm_input, norm_weights.flatten(), beta.flatten(), norm_eps)
+
+    out_pass, output_pcc = comp_pcc(norm_output_tt_cpu, ref_rmsnorm, pcc=0.999)
+    logger.info(f"PCC value: {output_pcc}")
+
+    assert out_pass
