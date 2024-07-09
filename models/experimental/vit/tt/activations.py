@@ -32,7 +32,7 @@ class GELUActivation(nn.Module):
         )
 
     def forward(self, input: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
-        return self.act(input, output_mem_config=self.out_mem_config_l1)
+        return self.act(input, memory_config=self.out_mem_config_l1)
 
 
 class ClassInstantier(OrderedDict):

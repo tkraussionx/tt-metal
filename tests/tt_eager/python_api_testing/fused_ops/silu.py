@@ -7,6 +7,6 @@ import tt_lib as ttl
 
 
 def SiLU(x):
-    xs = ttl.tensor.sigmoid(x)
-    xs = ttnn.mul(xs, x)
+    xs = ttnn.sigmoid(x)
+    xs = ttnn.multiply(xs, x)
     return xs

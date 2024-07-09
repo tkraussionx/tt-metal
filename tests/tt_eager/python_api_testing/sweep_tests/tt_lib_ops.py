@@ -175,7 +175,7 @@ def eltwise_exp(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.exp(t0, fast_and_approx, output_mem_config=output_mem_config)
+    t1 = ttnn.exp(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -193,7 +193,7 @@ def eltwise_erf(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.erf(t0, fast_and_approx, output_mem_config=output_mem_config)
+    t1 = ttnn.erf(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -211,7 +211,7 @@ def eltwise_erfc(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.erfc(t0, fast_and_approx, output_mem_config=output_mem_config)
+    t1 = ttnn.erfc(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -357,7 +357,7 @@ def eltwise_gelu(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.gelu(t0, fast_and_approx, output_mem_config=output_mem_config)
+    t1 = ttnn.gelu(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1370,7 +1370,7 @@ def eltwise_heaviside(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.heaviside(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.heaviside(t0, scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1388,7 +1388,7 @@ def eltwise_unary_ne(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.unary_ne(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.ne(t0, scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1465,7 +1465,7 @@ def eltwise_unary_gt(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.unary_gt(t0, value, output_mem_config=output_mem_config)
+    t1 = ttnn.gt(t0, value, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1483,7 +1483,7 @@ def eltwise_unary_lt(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.unary_lt(t0, value, output_mem_config=output_mem_config)
+    t1 = ttnn.lt(t0, value, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1790,7 +1790,7 @@ def eltwise_div_unary(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.div_unary(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.multiply(t0, 1 / scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1828,7 +1828,7 @@ def eltwise_mul_unary(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.mul_unary(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.multiply(t0, scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1846,7 +1846,7 @@ def eltwise_sub_unary(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.sub_unary(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.subtract(t0, scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -1864,7 +1864,7 @@ def eltwise_add_unary(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.add_unary(t0, scalar, output_mem_config=output_mem_config)
+    t1 = ttnn.add(t0, scalar, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -2435,7 +2435,7 @@ def eltwise_identity(
     **kwargs,
 ):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.identity(t0, output_mem_config=output_mem_config)
+    t1 = ttnn.identity(t0, memory_config=output_mem_config)
 
     return tt2torch_tensor(t1)
 
@@ -2618,7 +2618,7 @@ eltwise_erfinv = make_unary_op_optional_output(ttnn.erfinv)
 eltwise_erf = make_unary_op_optional_output_with_fast_approx(ttnn.erf)
 eltwise_erfc = make_unary_op_optional_output_with_fast_approx(ttnn.erfc)
 eltwise_gelu = make_unary_op_optional_output_with_fast_approx(ttnn.gelu)
-eltwise_exp = make_unary_op_optional_output(ttnn.exp)
+eltwise_exp = make_unary_op_optional_output_with_fast_approx(ttnn.exp)
 eltwise_softplus = make_unary_op_optional_output(ttnn.softplus)
 eltwise_atanh = make_unary_op(ttl.tensor.atanh)
 eltwise_cosh = make_unary_op(ttl.tensor.cosh)

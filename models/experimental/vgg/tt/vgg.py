@@ -84,7 +84,7 @@ class TtVGG(nn.Module):
     def forward(self, tt_x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         for layer in self.features:
             if layer is ttnn.relu:
-                tt_x = layer(tt_x, output_mem_config=self.output_mem_config)
+                tt_x = layer(tt_x, memory_config=self.output_mem_config)
             else:
                 tt_x = layer(tt_x)
 

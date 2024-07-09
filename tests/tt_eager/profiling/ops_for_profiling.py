@@ -1140,7 +1140,7 @@ def polyval(x):
 
 
 def leaky_relu(x):
-    ttnn.leaky_relu(x, 68)
+    tt_lib.tensor.leaky_relu(x, 68)
 
 
 def softshrink(x):
@@ -1152,11 +1152,11 @@ def hardshrink(x):
 
 
 def elu(x):
-    ttnn.elu(x, 2)
+    tt_lib.tensor.elu(x, 2)
 
 
 def heaviside(x):
-    ttnn.heaviside(x, 0.5)
+    tt_lib.tensor.heaviside(x, 0.5)
 
 
 def logical_xori(x):
@@ -1388,11 +1388,11 @@ def sum_3(x):
 
 
 def erf_slow(x):
-    ttnn.erf(x, fast_and_approx=False)
+    tt_lib.tensor.erf(x, fast_and_approx=False)
 
 
 def erfc_slow(x):
-    ttnn.erfc(x, fast_and_approx=False)
+    tt_lib.tensor.erfc(x, fast_and_approx=False)
 
 
 def rsqrt_slow(x):
@@ -1616,16 +1616,16 @@ all_unary_ops = [
         "name": "tt_lib.tensor.div_unary",
     },
     {
-        "op": ttnn.gelu,
-        "name": "ttnn.gelu",
+        "op": tt_lib.tensor.gelu,
+        "name": "tt_lib.tensor.gelu",
     },
     {
-        "op": ttnn.relu,
-        "name": "ttnn.relu",
+        "op": tt_lib.tensor.relu,
+        "name": "tt_lib.tensor.relu",
     },
     {
-        "op": ttnn.relu6,
-        "name": "ttnn.relu6",
+        "op": tt_lib.tensor.relu6,
+        "name": "tt_lib.tensor.relu6",
     },
     {
         "op": relu_min,
@@ -1636,36 +1636,36 @@ all_unary_ops = [
         "name": "tt_lib.tensor.relu_max",
     },
     {
-        "op": ttnn.exp,
-        "name": "ttnn.exp",
+        "op": tt_lib.tensor.exp,
+        "name": "tt_lib.tensor.exp",
     },
     {
-        "op": ttnn.recip,
-        "name": "ttnn.recip",
+        "op": tt_lib.tensor.recip,
+        "name": "tt_lib.tensor.recip",
     },
     {
-        "op": ttnn.sqrt,
-        "name": "ttnn.sqrt",
+        "op": tt_lib.tensor.sqrt,
+        "name": "tt_lib.tensor.sqrt",
     },
     {
-        "op": ttnn.log,
-        "name": "ttnn.log",
+        "op": tt_lib.tensor.log,
+        "name": "tt_lib.tensor.log",
     },
     {
-        "op": ttnn.log2,
-        "name": "ttnn.log2",
+        "op": tt_lib.tensor.log2,
+        "name": "tt_lib.tensor.log2",
     },
     {
-        "op": ttnn.log10,
-        "name": "ttnn.log10",
+        "op": tt_lib.tensor.log10,
+        "name": "tt_lib.tensor.log10",
     },
     {
         "op": tt_lib.tensor.log1p,
         "name": "tt_lib.tensor.log1p",
     },
     {
-        "op": ttnn.tanh,
-        "name": "ttnn.tanh",
+        "op": tt_lib.tensor.tanh,
+        "name": "tt_lib.tensor.tanh",
     },
     {
         "op": clip,
@@ -1688,8 +1688,8 @@ all_unary_ops = [
         "name": "tt_lib.tensor.cbrt",
     },
     {
-        "op": ttnn.softplus,
-        "name": "ttnn.softplus",
+        "op": tt_lib.tensor.softplus,
+        "name": "tt_lib.tensor.softplus",
     },
     {
         "op": tt_lib.tensor.mish,
@@ -1700,36 +1700,36 @@ all_unary_ops = [
         "name": "tt_lib.tensor.polyval",
     },
     {
-        "op": ttnn.sign,
-        "name": "ttnn.sign",
+        "op": tt_lib.tensor.sign,
+        "name": "tt_lib.tensor.sign",
     },
     {
-        "op": ttnn.abs,
-        "name": "ttnn.abs",
+        "op": tt_lib.tensor.abs,
+        "name": "tt_lib.tensor.abs",
     },
     {
-        "op": ttnn.silu,
-        "name": "ttnn.silu",
+        "op": tt_lib.tensor.silu,
+        "name": "tt_lib.tensor.silu",
     },
     {
         "op": ttnn.square,
         "name": "ttnn.square",
     },
     {
-        "op": ttnn.neg,
-        "name": "ttnn.neg",
+        "op": tt_lib.tensor.neg,
+        "name": "tt_lib.tensor.neg",
     },
     {
         "op": tt_lib.tensor.add1,
         "name": "tt_lib.tensor.add1",
     },
     {
-        "op": ttnn.sigmoid,
-        "name": "ttnn.sigmoid",
+        "op": tt_lib.tensor.sigmoid,
+        "name": "tt_lib.tensor.sigmoid",
     },
     {
-        "op": ttnn.sigmoid_accurate,
-        "name": "ttnn.sigmoid_accurate",
+        "op": tt_lib.tensor.sigmoid_accurate,
+        "name": "tt_lib.tensor.sigmoid_accurate",
     },
     {
         "op": tt_lib.tensor.hardsigmoid,
@@ -1745,7 +1745,7 @@ all_unary_ops = [
     },
     {
         "op": leaky_relu,
-        "name": "ttnn.leaky_relu",
+        "name": "tt_lib.tensor.leaky_relu",
     },
     {
         "op": tt_lib.tensor.softsign,
@@ -1760,12 +1760,12 @@ all_unary_ops = [
         "name": "tt_lib.tensor.hardshrink",
     },
     {
-        "op": ttnn.cos,
-        "name": "ttnn.cos",
+        "op": tt_lib.tensor.cos,
+        "name": "tt_lib.tensor.cos",
     },
     {
-        "op": ttnn.sin,
-        "name": "ttnn.sin",
+        "op": tt_lib.tensor.sin,
+        "name": "tt_lib.tensor.sin",
     },
     {
         "op": tt_lib.tensor.cosh,
@@ -1776,20 +1776,20 @@ all_unary_ops = [
         "name": "tt_lib.tensor.sinh",
     },
     {
-        "op": ttnn.acos,
-        "name": "ttnn.acos",
+        "op": tt_lib.tensor.acos,
+        "name": "tt_lib.tensor.acos",
     },
     {
-        "op": ttnn.asin,
-        "name": "ttnn.asin",
+        "op": tt_lib.tensor.asin,
+        "name": "tt_lib.tensor.asin",
     },
     {
         "op": elu,
-        "name": "ttnn.elu",
+        "name": "tt_lib.tensor.elu",
     },
     {
-        "op": ttnn.exp2,
-        "name": "ttnn.exp2",
+        "op": tt_lib.tensor.exp2,
+        "name": "tt_lib.tensor.exp2",
     },
     {
         "op": tt_lib.tensor.tanhshrink,
@@ -1797,11 +1797,11 @@ all_unary_ops = [
     },
     {
         "op": heaviside,
-        "name": "ttnn.heaviside",
+        "name": "tt_lib.tensor.heaviside",
     },
     {
-        "op": ttnn.atan,
-        "name": "ttnn.atan",
+        "op": tt_lib.tensor.atan,
+        "name": "tt_lib.tensor.atan",
     },
     {
         "op": tt_lib.tensor.atanh,
@@ -1812,32 +1812,32 @@ all_unary_ops = [
         "name": "tt_lib.tensor.logical_xori",
     },
     {
-        "op": ttnn.logical_not_unary,
-        "name": "ttnn.logical_not_unary",
+        "op": tt_lib.tensor.logical_not_unary,
+        "name": "tt_lib.tensor.logical_not_unary",
     },
     {
         "op": bias_gelu_unary,
         "name": "tt_lib.tensor.bias_gelu_unary",
     },
     {
-        "op": ttnn.isfinite,
-        "name": "ttnn.isfinite",
+        "op": tt_lib.tensor.isfinite,
+        "name": "tt_lib.tensor.isfinite",
     },
     {
-        "op": ttnn.isinf,
-        "name": "ttnn.isinf",
+        "op": tt_lib.tensor.isinf,
+        "name": "tt_lib.tensor.isinf",
     },
     {
-        "op": ttnn.isposinf,
-        "name": "ttnn.isposinf",
+        "op": tt_lib.tensor.isposinf,
+        "name": "tt_lib.tensor.isposinf",
     },
     {
-        "op": ttnn.isneginf,
-        "name": "ttnn.isneginf",
+        "op": tt_lib.tensor.isneginf,
+        "name": "tt_lib.tensor.isneginf",
     },
     {
-        "op": ttnn.isnan,
-        "name": "ttnn.isnan",
+        "op": tt_lib.tensor.isnan,
+        "name": "tt_lib.tensor.isnan",
     },
     {
         "op": logit,
@@ -1853,8 +1853,8 @@ all_unary_ops = [
         "name": "tt_lib.tensor.logical_andi",
     },
     {
-        "op": ttnn.erfinv,
-        "name": "ttnn.erfinv",
+        "op": tt_lib.tensor.erfinv,
+        "name": "tt_lib.tensor.erfinv",
     },
     {
         "op": tt_lib.tensor.multigammaln,
@@ -1865,8 +1865,8 @@ all_unary_ops = [
         "name": "tt_lib.tensor.assign_unary",
     },
     {
-        "op": ttnn.i0,
-        "name": "ttnn.i0",
+        "op": tt_lib.tensor.i0,
+        "name": "tt_lib.tensor.i0",
     },
     {
         "op": tt_lib.tensor.digamma,
@@ -1885,28 +1885,28 @@ all_unary_ops = [
         "name": "tt_lib.tensor.polygamma",
     },
     {
-        "op": ttnn.gtz,
-        "name": "ttnn.gtz",
+        "op": tt_lib.tensor.gtz,
+        "name": "tt_lib.tensor.gtz",
     },
     {
-        "op": ttnn.gez,
-        "name": "ttnn.gez",
+        "op": tt_lib.tensor.gez,
+        "name": "tt_lib.tensor.gez",
     },
     {
-        "op": ttnn.ltz,
-        "name": "ttnn.ltz",
+        "op": tt_lib.tensor.ltz,
+        "name": "tt_lib.tensor.ltz",
     },
     {
-        "op": ttnn.lez,
-        "name": "ttnn.lez",
+        "op": tt_lib.tensor.lez,
+        "name": "tt_lib.tensor.lez",
     },
     {
-        "op": ttnn.eqz,
-        "name": "ttnn.eqz",
+        "op": tt_lib.tensor.eqz,
+        "name": "tt_lib.tensor.eqz",
     },
     {
-        "op": ttnn.nez,
-        "name": "ttnn.nez",
+        "op": tt_lib.tensor.nez,
+        "name": "tt_lib.tensor.nez",
     },
     {
         "op": where_unary,
@@ -2113,12 +2113,12 @@ all_unary_ops = [
         "name": "tt_lib.tensor.sum_dim_3",
     },
     {
-        "op": ttnn.log_sigmoid,
-        "name": "ttnn.log_sigmoid",
+        "op": tt_lib.tensor.log_sigmoid,
+        "name": "tt_lib.tensor.log_sigmoid",
     },
     {
-        "op": ttnn.expm1,
-        "name": "ttnn.expm1",
+        "op": tt_lib.tensor.expm1,
+        "name": "tt_lib.tensor.expm1",
     },
     {
         "op": tt_lib.tensor.asinh,
@@ -2129,32 +2129,32 @@ all_unary_ops = [
         "name": "tt_lib.tensor.acosh",
     },
     {
-        "op": ttnn.erf,
-        "name": "ttnn.erf_fast_and_approx_True",
+        "op": tt_lib.tensor.erf,
+        "name": "tt_lib.tensor.erf_fast_and_approx_True",
     },
     {
         "op": erf_slow,
         "name": "tt_lib.tensor.erf_fast_and_approx_False",
     },
     {
-        "op": ttnn.erfc,
-        "name": "ttnn.erfc_fast_and_approx_True",
+        "op": tt_lib.tensor.erfc,
+        "name": "tt_lib.tensor.erfc_fast_and_approx_True",
     },
     {
         "op": erfc_slow,
         "name": "tt_lib.tensor.erfc_fast_and_approx_False",
     },
     {
-        "op": ttnn.rsqrt,
-        "name": "ttnn.rsqrt_fast_and_approx_True",
+        "op": tt_lib.tensor.rsqrt,
+        "name": "tt_lib.tensor.rsqrt_fast_and_approx_True",
     },
     {
         "op": rsqrt_slow,
         "name": "tt_lib.tensor.rsqrt_fast_and_approx_False",
     },
     {
-        "op": ttnn.signbit,
-        "name": "ttnn.signbit",
+        "op": tt_lib.tensor.signbit,
+        "name": "tt_lib.tensor.signbit",
     },
     {
         "op": fill_rm,
