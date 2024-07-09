@@ -12,6 +12,9 @@
 #include "llk_unpack_common_api.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+int tiles_proc_delay = 0;
+int apply_cnt = 0;
+int stagger_cb_id = 0;
 
 using namespace ckernel;
 
@@ -37,6 +40,18 @@ inline void llk_setup_operands() {
     }
 }
 
+inline void llk_setup_stagger(bool apply_delay, int stagger_cb_operand) {
+    constexpr uint32_t noc_id = 0;
+    uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(noc_id, NOC_ID_LOGICAL);
+    uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
+    uint32_t my_logical_y = (noc_id_logical_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+
+    if (apply_delay && (my_logical_y & 0x1)) {
+        tiles_proc_delay = 12288;  // Delay odd rows of cores
+        stagger_cb_id = stagger_cb_operand;
+    }
+}
+
 // Wait for N tiles available in the incoming stream
 inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     // TODO(MO): Manually uncomment until issue #6619 is resolved
@@ -52,6 +67,12 @@ inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
         tiles_received = (std::uint16_t) reg_read((std::uint32_t)tiles_received_ptr);
         num_tiles_recv = tiles_received - cb_interface[input].tiles_acked;
     } while (num_tiles_recv < num_tiles_u);
+
+    if (apply_cnt == 0 && operand == stagger_cb_id) {
+        // Apply delay only if selected operand has arrived
+        apply_cnt++;
+        wait(tiles_proc_delay);
+    }
 }
 
 // Pop N tiles from the incoming stream

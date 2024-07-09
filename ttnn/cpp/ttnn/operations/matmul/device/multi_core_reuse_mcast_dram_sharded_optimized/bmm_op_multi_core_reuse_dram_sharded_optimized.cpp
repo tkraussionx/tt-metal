@@ -679,7 +679,8 @@ operation::ProgramWithCallbacks create_program_dram_sharded(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,  // untilize_out
+        device->arch() == ARCH::WORMHOLE_B0 && all_cores_in_rect_grid_vec.size() > WH_B0_MM_MAX_CORES_NO_STAGGER  // whether to apply stagger on odd rows
     };
 
     // Create compute kernel

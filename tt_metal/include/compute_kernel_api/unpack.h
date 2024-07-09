@@ -5,6 +5,9 @@
 #pragma once
 
 #include "common_globals.h"
+#ifdef TRISC_UNPACK
+#include "llk_io_unpack.h"
+#endif
 
 namespace ckernel {
 
@@ -48,6 +51,13 @@ ALWI void unpack_reconfig_data_format_srcb(const uint32_t srcb_new_operand) {
  */
 ALWI void unpack_reconfig_data_format_srcb(const uint32_t srcb_old_operand, const uint32_t srcb_new_operand) {
     UNPACK(( llk_unpack_reconfig_data_format_srcb(srcb_old_operand, srcb_new_operand) ));
+}
+
+/**
+ * Helper function to setup stagger on odd rows, based on the passed in argument. This is useful to mitigate di/dt issues on matmuls.
+ */
+ALWI void setup_stagger(bool apply_delay, uint32_t stagger_cb_operand) {
+    UNPACK(( llk_setup_stagger(apply_delay, stagger_cb_operand) ));
 }
 
 }

@@ -449,7 +449,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,  // untilize_out
+        device->arch() == ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER // whether to apply stagger on odd rows
     };
 
     // Create compute kernel
@@ -1129,7 +1130,8 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,       // untilize_out
+        device->arch() == ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER // whether to apply stagger on odd rows
     };
 
     // Create compute kernel

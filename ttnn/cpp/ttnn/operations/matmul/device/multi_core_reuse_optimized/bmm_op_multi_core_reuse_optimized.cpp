@@ -173,6 +173,7 @@ operation::ProgramWithCallbacks create_program(
         WriterDataMovementConfig(reader_writer_compile_time_args, mm_kernel_in1_reader_writer_defines)
     );
 
+    uint32_t apply_stagger_on_odd_rows = (uint32_t)(device->arch() == ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER);
     vector<uint32_t> compute_kernel_args_group_1 = {
         in0_block_w, // in0_block_w
         in0_num_subblocks, // in0_num_subblocks
@@ -191,7 +192,8 @@ operation::ProgramWithCallbacks create_program(
         num_blocks_per_core_group_1, // batch
         out_block_tiles,
 
-        untilize_out
+        untilize_out,
+        apply_stagger_on_odd_rows // whether to apply stagger on odd rows
     };
 
     std::map<string, string> mm_kernel_defines;
@@ -228,7 +230,8 @@ operation::ProgramWithCallbacks create_program(
             num_blocks_per_core_group_2, // batch
             out_block_tiles,
 
-            untilize_out
+            untilize_out,
+            apply_stagger_on_odd_rows // whether to apply stagger on odd rows
         };
         auto mm_kernel_group_2_id = tt_metal::CreateKernel(
             program,

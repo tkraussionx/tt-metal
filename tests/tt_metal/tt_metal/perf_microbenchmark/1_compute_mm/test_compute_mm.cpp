@@ -1024,6 +1024,10 @@ tt_metal::Program create_program_single_core (
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
     bool math_approx_mode = false;
+    if (matmul_block) {
+        uint32_t apply_stagger_on_odd_rows = (uint32_t)(device->arch() == ARCH::WORMHOLE_B0 && all_cores.size() > constants::WH_B0_MM_MAX_CORES_NO_STAGGER);
+        compute_kernel_args.push_back(apply_stagger_on_odd_rows);
+    }
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
         matmul_block ?

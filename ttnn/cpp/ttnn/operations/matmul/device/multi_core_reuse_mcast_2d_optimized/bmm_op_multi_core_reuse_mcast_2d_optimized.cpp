@@ -600,6 +600,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
+    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
 
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,             // in0_block_w
@@ -619,7 +620,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         B,                       // batch,
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out};
+        untilize_out,
+        device->arch() == ARCH::WORMHOLE_B0 && cores.size() > WH_B0_MM_MAX_CORES_NO_STAGGER  // whether to apply stagger on odd rows
+        };
 
     // Create compute kernel
     // bool fp32_dest_acc_en = true;
@@ -789,7 +792,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t in0_end_idx = num_blocks_y - 1;
     uint32_t in1_end_idx = num_blocks_x - 1;
-    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
     const auto& in0_sender_interleaved_cores =
         grid_to_cores(in0_sender_interleaved.start, in0_sender_interleaved.end, true);  // Only used for interleaved in0
     const auto& in1_sender_cores = grid_to_cores(in1_sender.start, in1_sender.end, true);
