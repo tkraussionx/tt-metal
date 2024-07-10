@@ -7,6 +7,7 @@ from models.demos.t3000.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
 from models.demos.t3000.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNormSharded, TtRMSNorm
 from ttnn import ReplicateTensorToMesh
 from models.demos.t3000.mixtral8x7b.tt.mixtral_common import LightweightModule, get_single_rot_mat
+import torch
 
 
 class TtTransformer(LightweightModule):
@@ -64,23 +65,21 @@ class TtTransformer(LightweightModule):
 
         self.compute_kernel = self.args.get_compute_kernel_config()
 
-        self.current_rot_mat, self.rot_matrix = get_single_rot_mat(self.args.head_dim, device_mesh)
+        self.current_rot_mat, self.rot_matrix = get_single_rot_mat(self.args.head_dim, device_mesh, start_pos=-1)
+        self.zeros = ttnn.from_torch(
+            torch.zeros(1, 1, self.args.head_dim, self.args.head_dim),
+            device=device_mesh,
+            dtype=dtype,
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        )
+        self.start_pos = 0
 
-    def forward(
-        self,
-        x,
-        start_pos,
-        current_pos,
-        attn_masks,
-    ):
-        if start_pos > 0:
-            # assigning to a new variable to explictly deallocate since matmul creates a new buffer for the output
-            prev_rot_mat = self.current_rot_mat
-            self.current_rot_mat = ttnn.linear(self.rot_matrix, prev_rot_mat)
-            prev_rot_mat.deallocate(True)
+    def forward(self, x, attn_masks):
+        start_pos = self.start_pos
         for i, layer in enumerate(self.layers):
-            x = layer(x, start_pos, current_pos, attn_masks, self.current_rot_mat)
-        attn_masks.deallocate(True)
+            x = layer(x, start_pos, start_pos, attn_masks, self.current_rot_mat)
+        # attn_masks.deallocate(True)
 
         x_norm = self.norm(x)
         outputs = ttnn.matmul(
@@ -91,5 +90,16 @@ class TtTransformer(LightweightModule):
             memory_config=self.model_config["OUTPUT_MM_MEMCFG"],
             compute_kernel_config=self.compute_kernel,
         )
+
+        # self.start_pos +=1
+
+        # assigning to a new variable to explictly deallocate since matmul creates a new buffer for the output
+        prev_rot_mat = self.current_rot_mat
+        current_rot_mat_new = ttnn.linear(
+            self.rot_matrix, prev_rot_mat, compute_kernel_config=self.args.get_compute_kernel_config()
+        )
+        # self.current_rot_mat = ttnn.add(current_rot_mat_new, self.zeros, output_tensor=prev_rot_mat)
+        self.current_rot_mat = ttnn.experimental.tensor.copy(current_rot_mat_new, prev_rot_mat)
+        current_rot_mat_new.deallocate(True)
 
         return outputs

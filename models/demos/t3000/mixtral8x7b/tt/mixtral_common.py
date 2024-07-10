@@ -96,35 +96,35 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, model_args, device_mesh
     # input goes to L1
     xs_1SBH = ttnn.from_torch(
         x_1SBH,
-        device=device_mesh,
+        # device=device_mesh,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        memory_config=ttnn.L1_MEMORY_CONFIG,
+        # memory_config=ttnn.L1_MEMORY_CONFIG,
         mesh_mapper=ReplicateTensorToMesh(device_mesh),
     )
 
     # Attention mask
-    padded_layer_past_len = nearest_32(current_pos + 1)
+    padded_layer_past_len = model_args.max_seq_len  # nearest_32(current_pos + 1)
     attn_mask = torch.zeros(seq_len, 32, 32, padded_layer_past_len)  # [SB4P]
     attn_mask[:, :, :, current_pos + 1 :] = torch.finfo(attn_mask.dtype).min
 
     if model_args.dummy_weights:
         cache_name = None
     else:
-        cache_name = model_args.weight_cache_path(ttnn.bfloat4_b) / (f"attention_mask.{current_pos}")
+        cache_name = model_args.weight_cache_path(ttnn.bfloat4_b) / (f"attention_mask.{current_pos}.trace")
 
     attn_mask = ttnn.as_tensor(
         attn_mask,
-        device=device_mesh,
+        # device=device_mesh,
         dtype=ttnn.bfloat4_b,
         layout=ttnn.TILE_LAYOUT,
-        memory_config=ttnn.create_sharded_memory_config(
-            shape=(32, padded_layer_past_len),
-            core_grid=ttnn.CoreGrid(y=4, x=8),
-            strategy=ttnn.ShardStrategy.HEIGHT,
-            orientation=ttnn.ShardOrientation.ROW_MAJOR,
-            use_height_and_width_as_shard_shape=True,
-        ),
+        # memory_config=ttnn.create_sharded_memory_config(
+        #     shape=(32, padded_layer_past_len),
+        #     core_grid=ttnn.CoreGrid(y=4, x=8),
+        #     strategy=ttnn.ShardStrategy.HEIGHT,
+        #     orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        #     use_height_and_width_as_shard_shape=True,
+        # ),
         mesh_mapper=ReplicateTensorToMesh(device_mesh),
         cache_file_name=cache_name,
     )
@@ -222,7 +222,7 @@ def cache_attention(device_mesh, state_dict, model_args, current_rot_mat, rot_ma
     logger.info("Attention ops cached")
 
 
-def get_single_rot_mat(dhead, device_mesh, theta: float = 1000000.0):
+def get_single_rot_mat(dhead, device_mesh, start_pos=0, theta: float = 1000000.0):
     freqs = 1.0 / (theta ** (torch.arange(0, dhead, 2)[: (dhead // 2)].float() / dhead))
     sin_freqs, cos_freqs = torch.sin(freqs), torch.cos(freqs)
     rot_matrix = torch.zeros(dhead, dhead)
@@ -232,10 +232,20 @@ def get_single_rot_mat(dhead, device_mesh, theta: float = 1000000.0):
     rot_matrix[torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
     rot_matrix = rot_matrix.transpose(-1, -2)
 
-    current_rot_mat = torch.zeros(dhead, dhead)
-    current_rot_mat[torch.arange(0, dhead, 2), torch.arange(0, dhead, 2)] = 1.0
-    current_rot_mat[torch.arange(1, dhead, 2), torch.arange(1, dhead, 2)] = 1.0
+    # Support for start_pos different than 0
+    if start_pos >= 0:
+        freqs = start_pos * freqs
+        sin_freqs, cos_freqs = torch.sin(freqs), torch.cos(freqs)
+        current_rot_mat = torch.zeros(dhead, dhead)
+        current_rot_mat[torch.arange(0, dhead, 2), torch.arange(0, dhead, 2)] = cos_freqs.clone()
+        current_rot_mat[torch.arange(1, dhead, 2), torch.arange(1, dhead, 2)] = cos_freqs.clone()
+        current_rot_mat[torch.arange(0, dhead, 2), torch.arange(1, dhead, 2)] = -sin_freqs.clone()
+        current_rot_mat[torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
 
+    else:
+        current_rot_mat = torch.inverse(rot_matrix)
+        for i in range(-(start_pos + 1)):
+            current_rot_mat = current_rot_mat @ current_rot_mat
     return ttnn.from_torch(
         current_rot_mat.unsqueeze(0).unsqueeze(0),  # 1,1,head_dim,head_dim
         device=device_mesh,
@@ -249,3 +259,17 @@ def get_single_rot_mat(dhead, device_mesh, theta: float = 1000000.0):
         layout=ttnn.TILE_LAYOUT,
         mesh_mapper=ReplicateTensorToMesh(device_mesh),
     )
+
+
+#     return current_rot_mat, rot_matrix
+
+# a, b = get_single_rot_mat(6, None, start_pos = -2)
+
+# a1, b1 = get_single_rot_mat(6, None, start_pos = 0)
+# from models.utility_functions import (
+#     comp_pcc,
+#     comp_allclose,
+# )
+# print(b@b@a, comp_pcc(b@b@a, a1, 0.99))
+# print(b1@a1, comp_pcc(b@b@b@a, b1@a1, 0.99))
+# print(b1@b1@a1, comp_pcc(b@b@b@b@a, b1@b1@a1, 0.99))

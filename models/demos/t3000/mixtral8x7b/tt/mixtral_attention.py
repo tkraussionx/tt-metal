@@ -101,7 +101,7 @@ class TtMixtralAttention(LightweightModule):
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -109,7 +109,7 @@ class TtMixtralAttention(LightweightModule):
             (
                 self.n_kv_heads,
                 self.max_batch_size,
-                self.sliding_window,
+                self.max_seq_len,
                 self.head_dim,
             )
         )
@@ -150,6 +150,26 @@ class TtMixtralAttention(LightweightModule):
         self.q_mem_config = None
         self.k_mem_config = None
 
+        move_one_pos = torch.zeros(1, self.max_batch_size, self.max_seq_len, self.max_seq_len)
+        for i in range(1, self.max_seq_len):
+            move_one_pos[:, :, i, i - 1] = 1
+
+        self.move_one_pos = ttnn.from_torch(
+            move_one_pos,
+            device=self.device_mesh,
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+            dtype=ttnn.bfloat8_b,
+            layout=ttnn.TILE_LAYOUT,
+        )
+
+        self.zeros = ttnn.from_torch(
+            torch.zeros(1, 32, self.max_seq_len, self.head_dim),
+            device=self.device_mesh,
+            mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
+            dtype=ttnn.bfloat8_b,
+            layout=ttnn.TILE_LAYOUT,
+        )
+
     def forward(
         self,
         xs,
@@ -171,7 +191,7 @@ class TtMixtralAttention(LightweightModule):
         D : head_dim (128)
         P : padded_layer_past_len
         """
-        padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
+        padded_layer_past_len = self.model_args.max_seq_len  # min(nearest_32(start_pos + 1), self.sliding_window)
 
         x_11BH = xs
         wo = self.wo
@@ -232,8 +252,14 @@ class TtMixtralAttention(LightweightModule):
         ###
         keys_1BPD = layer_past[0]
         values_1BPD = layer_past[1]
-        ttnn.kv_cache.update_cache_for_token_(keys_1BPD, k_heads_1B1D, current_pos)
-        ttnn.kv_cache.update_cache_for_token_(values_1BPD, v_heads_1B1D, current_pos)
+        keys_1BPD_new = ttnn.matmul(self.move_one_pos, keys_1BPD)
+        values_1BPD_new = ttnn.matmul(self.move_one_pos, values_1BPD)
+        keys_1BPD = ttnn.add(keys_1BPD_new, self.zeros, output_tensor=keys_1BPD)
+        values_1BPD = ttnn.add(values_1BPD_new, self.zeros, output_tensor=values_1BPD)
+        keys_1BPD_new.deallocate(True)
+        values_1BPD_new.deallocate(True)
+        ttnn.kv_cache.update_cache_for_token_(keys_1BPD, k_heads_1B1D, 0)
+        ttnn.kv_cache.update_cache_for_token_(values_1BPD, v_heads_1B1D, 0)
         self.layer_past = [keys_1BPD, values_1BPD]
         k_heads_1B1D.deallocate(True)
         v_heads_1B1D.deallocate(True)
@@ -246,13 +272,14 @@ class TtMixtralAttention(LightweightModule):
         # Attention
         ###
         # transpose keys
+        # print("QKV", q_heads_1B4D, keys_1BPD, values_1BPD)
         keys_1BDP = ttnn.experimental.tensor.transpose(
             keys_1BPD,
             -2,
             -1,
             output_mem_config=self.model_config["HEIGHT_SHARDED_MEMCFG"],
         )
-        keys_1BPD.deallocate(True)
+        # keys_1BPD.deallocate(True)
 
         # scores matmul
 
@@ -268,7 +295,7 @@ class TtMixtralAttention(LightweightModule):
         keys_1BDP.deallocate(True)
 
         # Softmax and scaling
-
+        print("pre sm")
         attn_1B4P = ttnn.experimental.operations.primary.transformers.scale_mask_softmax_in_place(
             attn_1B4P,
             self.scale,
@@ -276,6 +303,7 @@ class TtMixtralAttention(LightweightModule):
             program_config=self.model_config["ATTN_BATCHED_SOFTMAX_PROGCFG"](padded_layer_past_len),
             is_causal_mask=True,
         )
+        print("post sm")
 
         # values matmul
         values_1BPD = ttnn.experimental.tensor.nlp_kv_cache_load_slice(
@@ -291,7 +319,7 @@ class TtMixtralAttention(LightweightModule):
             compute_kernel_config=self.compute_kernel_attn,
         )
         attn_1B4P.deallocate(True)
-        values_1BPD.deallocate(True)
+        # values_1BPD.deallocate(True)
 
         attn_output_11BH = ttnn.experimental.tensor.nlp_concat_heads_decode(
             attn_output_1B4D,
