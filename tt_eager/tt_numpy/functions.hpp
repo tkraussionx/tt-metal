@@ -111,6 +111,25 @@ static Tensor full(
     }
 }
 
+template <typename T>
+Tensor from_vector(
+    const Shape& shape,
+    std::vector<T> data,
+    Layout layout = Layout::ROW_MAJOR,
+    Device* device = nullptr,
+    const MemoryConfig& output_mem_config = MemoryConfig{
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
+    TT_ASSERT(data.size() == tt_metal::compute_volume(shape), "Data size does not match the shape");
+
+    constexpr DataType data_type = detail::get_data_type<T>();
+    auto owned_buffer = tt_metal::owned_buffer::create<T>(std::move(data));
+    auto output = Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout);
+    if (device != nullptr) {
+        output = output.to(device, output_mem_config);
+    }
+    return output;
+}
+
 static Tensor zeros(
     const Shape& shape,
     const DataType data_type = DataType::BFLOAT16,

@@ -29,6 +29,7 @@ set(TT_EAGER_TESTS_OPS
     ops/test_sfpu
     ops/test_sliding_window_ops
     ops/test_fold_op
+    ops/test_embedding_bw
 )
 
 set(TT_EAGER_TESTS_TENSORS
