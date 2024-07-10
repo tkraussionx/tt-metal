@@ -15,26 +15,28 @@ def run_eltwise_lerp_binary(input_shape, dtype, dlayout, in_mem_config, output_m
     x = gen_rand(input_shape, -100, 100)
     y = gen_rand(input_shape, -100, 100)
 
+    x_ref = x.detach().clone()
+    y_ref = y.detach().clone()
+
     # compute ref value
-    ref_value = pytorch_ops.lerp_binary(x, y, weight=weight)
+    ref_value = pytorch_ops.lerp_binary(x_ref, y_ref, weight=weight)
 
-    for i in range(0, 4):
-        tt_result = eltwise_lerp_binary(
-            x=x,
-            y=y,
-            weight=weight,
-            device=device,
-            dtype=dtype,
-            layout=dlayout,
-            input_mem_config=in_mem_config,
-            output_mem_config=output_mem_config,
-        )
+    tt_result = eltwise_lerp_binary(
+        x=x,
+        y=y,
+        weight=weight,
+        device=device,
+        dtype=dtype,
+        layout=dlayout,
+        input_mem_config=in_mem_config,
+        output_mem_config=output_mem_config,
+    )
 
-        success, pcc_value = comp_pcc(ref_value, tt_result)
-        logger.debug(pcc_value)
-        logger.debug(success)
+    success, pcc_value = comp_pcc(ref_value, tt_result)
+    logger.debug(pcc_value)
+    logger.debug(success)
 
-        assert success
+    assert success
 
 
 test_sweep_args = [
@@ -58,4 +60,5 @@ test_sweep_args = [
     (test_sweep_args),
 )
 def test_eltwise_lerp_binary(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, weight, device):
-    run_eltwise_lerp_binary(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, weight, device)
+    for i in range(0, 4):
+        run_eltwise_lerp_binary(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, weight, device)

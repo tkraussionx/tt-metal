@@ -18,8 +18,8 @@ def run_eltwise_addcmul(input_shape, dtype, dlayout, in_mem_config, output_mem_c
     z = gen_rand(input_shape, -100, 100)
 
     x_ref = x.detach().clone()
-    y_ref = x.detach().clone()
-    z_ref = x.detach().clone()
+    y_ref = t.detach().clone()
+    z_ref = z.detach().clone()
 
     # compute ref value
     ref_value = pytorch_ops.addcdiv(x_ref, y_ref, z_ref, scalar=scalar)

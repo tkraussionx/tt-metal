@@ -25,6 +25,10 @@ def run_eltwise_acosh_tests(
 
     x = torch.Tensor(size=input_shape).uniform_(-100, 100).to(torch.bfloat16)
 
+    logger.info(
+        f"Running acosh with input_shape {input_shape} dtype {dtype} dlayout {dlayout} input_mem_config {in_mem_config} output_mem_config {output_mem_config} data_seed {data_seed}"
+    )
+
     try:
         # get ref result
         ref_value = torch.acosh(x)

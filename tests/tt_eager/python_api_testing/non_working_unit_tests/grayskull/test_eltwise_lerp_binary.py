@@ -15,8 +15,11 @@ def run_eltwise_lerp_binary(input_shape, dtype, dlayout, in_mem_config, output_m
     x = gen_rand(input_shape, -100, 100)
     y = gen_rand(input_shape, -100, 100)
 
+    x_ref = x.detach().clone()
+    y_ref = y.detach().clone()
+
     # compute ref value
-    ref_value = pytorch_ops.lerp_binary(x, y, weight=weight)
+    ref_value = pytorch_ops.lerp_binary(x_ref, y_ref, weight=weight)
 
     tt_result = eltwise_lerp_binary(
         x=x,

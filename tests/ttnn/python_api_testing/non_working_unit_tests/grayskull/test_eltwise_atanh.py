@@ -23,10 +23,10 @@ def run_eltwise_atanh_tests(
 ):
     torch.manual_seed(data_seed)
 
-    x = torch.Tensor(size=input_shape).uniform_(-100, 100).to(torch.bfloat16)
+    x = torch.Tensor(size=input_shape[0]).uniform_(-100, 100).to(torch.bfloat16)
 
     logger.info(
-        f"Running atanh with input_shape {input_shape} dtype {dtype} dlayout {dlayout} input_mem_config {in_mem_config} output_mem_config {output_mem_config} scalar {scalar} data_seed {data_seed}"
+        f"Running atanh with input_shape {input_shape} dtype {dtype} dlayout {dlayout} input_mem_config {in_mem_config} output_mem_config {output_mem_config} data_seed {data_seed}"
     )
 
     try:
@@ -46,6 +46,8 @@ def run_eltwise_atanh_tests(
 
     except Exception as e:
         logger.warning(f"Test execution crashed: {e}")
+        print(traceback.format_exc())
+        raise e
 
 
 test_sweep_args = []
