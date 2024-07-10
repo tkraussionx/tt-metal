@@ -63,6 +63,7 @@ def get_model_config(
         "NUM_DEVICES": num_devices,
         "MAX_GRID_SIZE": (8, 8),
         "ALL_GATHER_NUM_LINKS": 1,
+        "REDUCE_SCATTER_NUM_LINKS": 1,
         "MAX_BATCH_SIZE": max_batch_size,
         "MAX_CONTEXT_LEN": max_context_len,
         "COMPUTE_KERNEL_CONFIG": ttl.tensor.WormholeComputeKernelConfig(
@@ -665,7 +666,7 @@ def get_model_config(
             out_subblock_h=1,  # Must be divisible by per_core_M
             out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
             per_core_M=max_mm_seq_tiles // cores_y,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
-            per_core_N=4,  # N / TILE_WIDTH / Grid_Size
+            per_core_N=4 * 8,  # N / TILE_WIDTH / Grid_Size, Multiply by 8 because
             transpose_mcast=False,
             fused_activation=None,
             fuse_batch=False,

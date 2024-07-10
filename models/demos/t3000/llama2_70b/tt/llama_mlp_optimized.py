@@ -84,8 +84,8 @@ class TtLlamaMLP_optimized:
             layout=ttnn.TILE_LAYOUT,
             device=self.device_mesh,
             memory_config=self.model_config["DRAM_MEMCFG"],
-            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=3),
-            cache_file_name=self.cache_path / w2_str,
+            mesh_mapper=ShardTensorToMesh(self.device_mesh, dim=2),
+            # cache_file_name=self.cache_path / w2_str,
         )
         self.w2 = ttnn.to_device(w2_ttnn, self.device_mesh)
         w3_ttnn = ttnn.as_tensor(
@@ -137,12 +137,6 @@ class TtLlamaMLP_optimized:
         w1_out.deallocate(True)
         w3_out.deallocate(True)
 
-        hidden_states = ttnn.all_gather(
-            hidden_states,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-        )
-
         hidden_states = ttnn.matmul(
             hidden_states,
             self.w2,
@@ -151,6 +145,12 @@ class TtLlamaMLP_optimized:
             dtype=self.model_config["BFLOAT16_DTYPE"],
         )
 
+        hidden_states = tt_lib.tensor.reduce_scatter(
+            hidden_states,
+            scatter_split_dim=2,  # Split across ROW
+            reduce_op=tt_lib.tensor.ReduceOpMath.SUM,
+            num_links=self.model_config["REDUCE_SCATTER_NUM_LINKS"],
+        )
         # Prefill Reshape fix (reverse)
         hidden_states = ttnn.reshape(hidden_states, (1, 1, seq_len, self.hidden_size // self.num_devices))
 
