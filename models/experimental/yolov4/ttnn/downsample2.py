@@ -92,7 +92,7 @@ def test_down2(device):
     result_ttnn = ttnn_model(device, ttnn_input)
 
     start_time = time.time()
-    for x in range(2):
+    for x in range(3):
         result_ttnn = ttnn_model(device, ttnn_input)
     print(f"Time taken: {time.time() - start_time}")
     result = ttnn.to_torch(result_ttnn)

@@ -14,7 +14,7 @@ class Down1:
         else:
             torch_model = model.torch_model
         self.torch_model = torch_model
-        self.conv1 = Conv(torch_model, "down1.conv1", [1, 320, 320, 3], (1, 1, 1, 1), act_block_h=64)
+        self.conv1 = Conv(torch_model, "down1.conv1", [1, 320, 320, 3], (1, 1, 1, 1), act_block_h=128)
         self.conv2 = Conv(torch_model, "down1.conv2", [1, 320, 320, 32], (2, 2, 1, 1), reshard=True)
         self.conv3 = Conv(torch_model, "down1.conv3", [1, 160, 160, 64], (1, 1, 0, 0), deallocate=False)
         self.conv4 = Conv(torch_model, "down1.conv4", [1, 160, 160, 64], (1, 1, 0, 0), reshard=True, deallocate=False)
@@ -37,9 +37,10 @@ class Down1:
 
         ttnn.deallocate(res_block_split)
         output_tensor = self.conv7(device, output_tensor)
-        output_tensor = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor)
-        output_tensor_left = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor_left)
-        output_tensor = ttnn.concat([output_tensor, output_tensor_left], dim=3)
+
+        output_tensor = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
+        output_tensor_left = ttnn.experimental.tensor.sharded_to_interleaved(output_tensor_left, ttnn.L1_MEMORY_CONFIG)
+        output_tensor = ttnn.concat([output_tensor, output_tensor_left], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
 
         output_tensor = self.conv8(device, output_tensor)
         return output_tensor
@@ -56,7 +57,7 @@ class Down1:
 
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 def test_down1(device, use_program_cache):
-    ttnn_model = Down1("/localdev/smanoj/models/yolov4.pth")
+    ttnn_model = Down1("/home/ttuser/smanoj/models/yolov4.pth")
 
     torch_input = torch.randn((1, 320, 320, 3), dtype=torch.bfloat16)
     ttnn_input = ttnn.from_torch(torch_input, dtype=ttnn.bfloat16)
@@ -84,7 +85,7 @@ def test_down1(device, use_program_cache):
     result_ttnn = ttnn_model(device, ttnn_input)
 
     start_time = time.time()
-    for x in range(100):
+    for x in range(3):
         result_ttnn = ttnn_model(device, ttnn_input)
     print(f"Time taken: {time.time() - start_time}")
     result = ttnn.to_torch(result_ttnn)

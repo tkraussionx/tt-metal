@@ -43,7 +43,7 @@ class Conv:
 
     def __call__(self, device, input_tensor):
         conv_config = ttnn.Conv2dConfig(
-            dtype=ttnn.bfloat16,
+            dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
             activation="relu",
@@ -52,7 +52,7 @@ class Conv:
             fp32_dest_acc_enabled=False,
             packer_l1_accum_enabled=False,
             input_channels_alignment=16 if self.input_params[3] < 16 else 32,
-            transpose_shards=False,
+            transpose_shards=True,
             reshard_if_not_optimal=self.reshard,
             deallocate_activation=self.deallocate,
             reallocate_halo_output=False,
