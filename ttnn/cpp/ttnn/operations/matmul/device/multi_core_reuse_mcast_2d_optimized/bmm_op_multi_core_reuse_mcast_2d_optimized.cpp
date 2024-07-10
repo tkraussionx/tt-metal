@@ -185,7 +185,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
-
+    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
     //////////////////////////////////////////////////////////////////////////////////////////
     //       IN0 SENDER (interleaved only) and IN1 SENDER (both interleaved and sharded)
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -461,6 +461,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
+    // Apply stagger delay on odd rows, so that only half of cores start doing work at once.
+    // This is done to mitigate di/dt issues.
+    // See issue #9857.
+    if (device->arch() == ARCH::WORMHOLE_B0 && cores.size() > WH_B0_MM_MAX_CORES_NO_STAGGER) {
+        mm_kernel_defines["MM_STAGGER_ODD_ROWS"] = "1";
+    }
+
     if (in0_receiver_interleaved.num_cores() == 0) {
         mm_kernel_in0_sender_interleaved_defines["SKIP_MCAST"] = "1";
     }
@@ -600,7 +607,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
-    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
 
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,             // in0_block_w
@@ -620,8 +626,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         B,                       // batch,
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out,
-        device->arch() == ARCH::WORMHOLE_B0 && cores.size() > WH_B0_MM_MAX_CORES_NO_STAGGER  // whether to apply stagger on odd rows
+        untilize_out
         };
 
     // Create compute kernel

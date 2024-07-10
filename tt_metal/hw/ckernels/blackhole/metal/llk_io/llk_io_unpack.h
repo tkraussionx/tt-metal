@@ -35,8 +35,6 @@ inline void llk_setup_operands() {
     }
 }
 
-inline void llk_setup_stagger(bool apply_delay, int stagger_cb_operand) { }
-
 // Wait for N tiles available in the incoming stream
 inline void llk_wait_tiles(int operand, std::int32_t num_tiles) {
     // TODO(MO): Manually uncomment until issue #6619 is resolved

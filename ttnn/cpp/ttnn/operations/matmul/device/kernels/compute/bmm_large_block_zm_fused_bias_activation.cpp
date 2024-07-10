@@ -95,7 +95,6 @@ void MAIN {
     constexpr uint32_t batch = get_compile_time_arg_val(11); // batch dim
     constexpr uint32_t out_block_num_tiles = get_compile_time_arg_val(12); // number of tiles in out_block
     constexpr bool untilize_out = get_compile_time_arg_val(13); // untilize output
-    constexpr bool apply_stagger_delay = get_compile_time_arg_val(14); // whether to apply stagger on odd rows
 
     constexpr uint32_t out_block_w = out_subblock_w*in1_num_subblocks;
 
@@ -105,8 +104,6 @@ void MAIN {
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
 
     constexpr uint32_t untilize_mode_out_cb_id = untilize_out ? mm_partials_cb_id : out_cb_id;
-
-    setup_stagger(apply_stagger_delay, in1_cb_id);
 
     #ifdef FUSE_BIAS
     constexpr uint32_t bias_cb_id = tt::CB::c_in3;
