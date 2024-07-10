@@ -106,9 +106,17 @@ struct sender_receiver_index_t {
     }
 };
 
+inline void RISC_POST_STATUS_4(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 void kernel_main() {
+    const uint64_t dispatch_sem_addr = get_noc_addr(2, 6, 106656);
+    RISC_POST_STATUS_4(0xdeadbeef);
     // COMPILE TIME ARGS
     // If true, will enable this erisc's sender functionality
+
     constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
 
     // If true, will enable this erisc's receiver functionality
@@ -206,7 +214,12 @@ void kernel_main() {
     // will always be "receiver" (only for handshake purposes)
     bool act_as_sender_in_handshake =
         (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
+    // if (not act_as_sender_in_handshake)
+    //     noc_semaphore_inc(dispatch_sem_addr, 1);
+
+    // RISC_POST_STATUS_4((uint32_t)(act_as_sender_in_handshake) & 0x10);
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    // RISC_POST_STATUS_4(0x5555);
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
     uint32_t eth_transaction_complete_addr = handshake_addr + 32;
 
@@ -322,4 +335,5 @@ void kernel_main() {
     }
 
     DEBUG_STATUS("DONE");
+    RISC_POST_STATUS_4(0x1111);
 }

@@ -731,7 +731,7 @@ void Program::populate_dispatch_data(Device *device) {
                 kernel_bin.process_spans([&](vector<uint32_t>::const_iterator mem_ptr, uint64_t dst, uint32_t len) {
                     uint64_t relo_addr =
                         tt::llrt::relocate_dev_addr(dst, processor_to_local_mem_addr.at(sub_kernels[sub_kernel_index]));
-
+                    std::cout << "Set kernel addr to: " << relo_addr << std::endl;
                     dst_base_addrs[k] = (uint32_t)relo_addr;
                     page_offsets[k] = binaries_data.size() * sizeof(uint32_t) / HostMemDeviceCommand::PROGRAM_PAGE_SIZE;
                     lengths[k] = len * sizeof(uint32_t);

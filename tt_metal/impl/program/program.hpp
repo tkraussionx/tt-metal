@@ -130,7 +130,7 @@ class Program {
     void invalidate_circular_buffer_allocation();
 
     void allocate_circular_buffers();
-
+    std::unordered_map<CoreType, std::unordered_map<KernelHandle, std::shared_ptr<Kernel> >> kernels_;
    private:
     void populate_dispatch_data(Device *device);
 
@@ -171,7 +171,6 @@ class Program {
 
     uint64_t id; // Need to make non-const due to move constructor
     static std::atomic<uint64_t> program_counter;
-    std::unordered_map<CoreType, std::unordered_map<KernelHandle, std::shared_ptr<Kernel> >> kernels_;
     std::unordered_map<CoreType, CoreCoord> grid_extent_;
 
     std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_;

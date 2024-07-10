@@ -155,6 +155,7 @@ void cb_acquire_pages(uint32_t n) {
     DEBUG_STATUS("DAPW");
     // Use a wrapping compare here to compare distance
     // Required for trace which steals downstream credits and may make the value negative
+    // DPRINT << n << " " << *sem_addr << ENDL();
     while (wrap_gt(n, *sem_addr));
     DEBUG_STATUS("DAPD");
     noc_semaphore_inc(get_noc_addr_helper(noc_xy, (uint32_t)sem_addr), -n);

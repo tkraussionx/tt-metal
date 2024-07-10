@@ -162,7 +162,7 @@ void process_write_host_h() {
     // We will send the cmd back in the first X bytes, this makes the logic of reserving/pushing completion queue
     // pages much simpler since we are always sending writing full pages (except for last page)
     uint32_t length = cmd->write_linear_host.length;
-    DPRINT << "process_write_host_h: " << length << ENDL();
+    // DPRINT << "process_write_host_h: " << length << ENDL();
     uint32_t data_ptr = cmd_ptr;
     while (length != 0) {
         // Get a page if needed
@@ -243,7 +243,7 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
         preamble_size == 0 || preamble_size == sizeof(dispatch_packet_header_t),
         "Dispatcher preamble size must be 0 or sizeof(dispatch_packet_header_t)");
 
-    DPRINT << "relay_to_next_cb: " << data_ptr << " " << cb_fence << " " << length << ENDL();
+    // DPRINT << "relay_to_next_cb: " << data_ptr << " " << cb_fence << " " << length << ENDL();
 
     // First page should be valid since it has the command
     ASSERT(data_ptr <= dispatch_cb_end - dispatch_cb_page_size);
@@ -451,8 +451,8 @@ void process_write_paged() {
     addr_gen.page_size = page_size;
     uint64_t dst_addr_offset = 0;  // Offset into page.
 
-    DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
-           << " dispatch_cb_page_size: " << dispatch_cb_page_size;
+    // DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
+    //        << " dispatch_cb_page_size: " << dispatch_cb_page_size;
 
     while (write_length != 0) {
         // TODO #7360: Have more performant handling when page_size > dispatch_cb_page_size by not doing multiple writes
@@ -549,13 +549,13 @@ void process_write_packed(uint32_t flags) {
     data_ptr = round_up_pow2(data_ptr, L1_ALIGNMENT);
     uint32_t stride =
         (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_NO_STRIDE) ? 0 : round_up_pow2(xfer_size, L1_ALIGNMENT);
-    DPRINT << data_ptr << " " << cmd_ptr << " " << xfer_size << " " << dispatch_cb_page_size << ENDL();
+    // DPRINT << data_ptr << " " << cmd_ptr << " " << xfer_size << " " << dispatch_cb_page_size << ENDL();
     ASSERT(stride != 0 || data_ptr - cmd_ptr + xfer_size <= dispatch_cb_page_size);
 
     volatile uint32_t tt_l1_ptr *l1_addr = (uint32_t *)(cmd_ptr + sizeof(CQDispatchCmd));
     cq_noc_async_write_init_state<CQ_NOC_snDL, mcast>(0, dst_addr, xfer_size);
 
-    DPRINT << "dispatch_write_packed: " << xfer_size << " " << stride << " " << data_ptr << " " << count << ENDL();
+    // DPRINT << "dispatch_write_packed: " << xfer_size << " " << stride << " " << data_ptr << " " << count << ENDL();
     uint32_t writes = 0;
     uint32_t mcasts = 0;
     WritePackedSubCmd *sub_cmd_ptr = (WritePackedSubCmd *)l1_cache;
@@ -668,6 +668,7 @@ void process_write_packed_large() {
     CQDispatchWritePackedLargeSubCmd *sub_cmd_ptr = (CQDispatchWritePackedLargeSubCmd *)l1_cache;
 
     while (count != 0) {
+        // DPRINT << "Count: " << count << ENDL();
         uint32_t dst_noc = sub_cmd_ptr->noc_xy_addr;
         uint32_t dst_addr = sub_cmd_ptr->addr;
         uint32_t length = sub_cmd_ptr->length;
@@ -692,6 +693,8 @@ void process_write_packed_large() {
                         ASSERT(cb_fence == dispatch_cb_end);
                         uint32_t orphan_size = cb_fence - data_ptr;
                         if (orphan_size != 0) {
+                            // DPRINT << "Dst Addr: " << dst << ENDL();
+                            // DPRINT << "Data: " << *(uint32_t*)(data_ptr) << *((uint32_t*)(data_ptr) + 1) << ENDL();
                             cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, orphan_size, num_dests);
                             writes++;
                             mcasts += num_dests;
@@ -715,7 +718,8 @@ void process_write_packed_large() {
                     cb_fence, block_next_start_addr, rd_block_idx);
                 cb_fence += n_pages * dispatch_cb_page_size;
             }
-
+            // DPRINT << "Dst Addr: " << dst_addr << ENDL();
+            // DPRINT << "Data: " << *(uint32_t*)(data_ptr) << *((uint32_t*)(data_ptr) + 1) << ENDL();
             cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, xfer_size, num_dests);
             writes++;
             mcasts += num_dests;
@@ -810,7 +814,12 @@ static void process_wait() {
     uint32_t heartbeat = 0;
 #endif
     if (wait) {
+        // int ct = 0;
         while (!wrap_ge(*sem_addr, count)) {
+            // if (ct % 500 == 0) {
+            //     DPRINT << "Sem updated to: " << *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2)) << ENDL();
+            // }
+            // ct++;
 #if defined(COMPILE_FOR_IDLE_ERISC)
             RISC_POST_HEARTBEAT(heartbeat);
 #endif
@@ -847,13 +856,13 @@ re_run_command:
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR:
             DEBUG_STATUS("DWB");
-            DPRINT << "cmd_write\n";
+            // DPRINT << "cmd_write\n";
             process_write();
             DEBUG_STATUS("DWD");
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
-            DPRINT << "cmd_write_linear_h\n";
+            // DPRINT << "cmd_write_linear_h\n";
             if (is_h_variant) {
                 process_write();
             } else {
@@ -862,7 +871,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
-            DPRINT << "cmd_write_linear_h_host\n";
+            // DPRINT << "cmd_write_linear_h_host\n";
             if (is_h_variant) {
                 process_write_host_h();
             } else {
@@ -871,7 +880,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PAGED:
-            DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
+            // DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
             if (cmd->write_paged.is_dram) {
                 process_write_paged<true>();
             } else {
@@ -880,7 +889,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PACKED: {
-            DPRINT << "cmd_write_packed" << ENDL();
+            // DPRINT << "cmd_write_packed" << ENDL();
             uint32_t flags = cmd->write_packed.flags;
             if (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_MCAST) {
                 process_write_packed<true, CQDispatchWritePackedMulticastSubCmd>(flags);
@@ -890,7 +899,7 @@ re_run_command:
         } break;
 
         case CQ_DISPATCH_CMD_WRITE_PACKED_LARGE:
-            DPRINT << "cmd_write_packed_large" << ENDL();
+            // DPRINT << "cmd_write_packed_large" << ENDL();
             process_write_packed_large();
             break;
 
@@ -919,6 +928,7 @@ re_run_command:
             if (is_h_variant) {
                 process_exec_buf_end_h();
             } else {
+                DPRINT << "Got Exec buf end" << ENDL();
                 process_exec_buf_end_d();
             }
             break;
@@ -991,7 +1001,8 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
 
 void kernel_main() {
     DPRINT << "dispatch_" << is_h_variant << is_d_variant << ": start" << ENDL();
-
+    DPRINT << "My NOC XY: " << MY_NOC_X << " " << MY_NOC_Y << ENDL();
+    DPRINT << "Init sem value: " << get_semaphore(2) << " " << *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2)) << ENDL();
     static_assert(is_d_variant || split_dispatch_page_preamble_size == 0);
 
     for (uint32_t i = 0; i < dispatch_cb_blocks; i++) {

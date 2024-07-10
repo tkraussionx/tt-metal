@@ -621,11 +621,15 @@ static void dump_core(
 
     // Ethernet cores have a different mailbox base addr
     uint64_t mailbox_addr = MEM_MAILBOX_BASE;
+    // std::cout << "Tensix Mailbox addr: " << mailbox_addr << std::endl;
     if (is_eth_core) {
-        if (is_active_eth_core)
+        if (is_active_eth_core) {
             mailbox_addr = eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE;
-        else
+        }
+        else {
             mailbox_addr = MEM_IERISC_MAILBOX_BASE;
+            // std::cout << "Idle erisc mailbox addr: " <<  mailbox_addr << std::endl;
+        }
     }
 
     std::vector<uint32_t> data;
@@ -715,6 +719,9 @@ static void __attribute__((noinline)) dump(FILE *f) {
                 CoreDescriptor logical_core = {{x, y}, CoreType::WORKER};
                 if (device->storage_only_cores().find(logical_core.coord) == device->storage_only_cores().end()) {
                     dump_core(f, used_kernel_names, device, logical_core, false, paused_cores);
+                    for (auto k_id : used_kernel_names) {
+                        fprintf(f, "k_id[%d]: %s\n", k_id.first, kernel_names[k_id.first].c_str());
+                    }
                 }
             }
         }
@@ -731,9 +738,6 @@ static void __attribute__((noinline)) dump(FILE *f) {
             }
         }
 
-        for (auto k_id : used_kernel_names) {
-            fprintf(f, "k_id[%d]: %s\n", k_id.first, kernel_names[k_id.first].c_str());
-        }
         fflush(f);
 
         // Handle any paused cores, wait for user input.

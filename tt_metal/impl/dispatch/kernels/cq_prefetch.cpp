@@ -279,7 +279,9 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // By here, prefetch_q_ready must be false
             // Nothing to fetch, nothing pending, nothing available, stall on host
             DEBUG_STATUS("HQW");
+            // DPRINT << "Stall fetch queue" << ENDL();
             while ((fetch_size = *prefetch_q_rd_ptr) == 0);
+            // DPRINT << "Done stall" << ENDL();
             fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
             DEBUG_STATUS("HQD");
         }
@@ -898,6 +900,7 @@ static uint32_t process_exec_buf_relay_inline_cmd(uint32_t& cmd_ptr,
 
     // Assume the downstream buffer is big relative to cmddat command size that we can
     // grab what we need in one chunk
+    // DPRINT << "Acquire pages" << ENDL();
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
 
     uint32_t stride = cmd->relay_inline.stride;
@@ -1171,7 +1174,9 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
 
     // Assume the dispatch buffer is big relative to cmddat command size that we can
     // grab what we need in one chunk
+    // DPRINT << "Acquire pages: " << ENDL();
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
+    // DPRINT << "Done ACQUIRE" << ENDL();
     if (is_exec_buf) {
         // swipe all the downstream page credits from ourselves...
         // prefetch_h stalls sending commands to prefetch_d until notified by dispatch_d that the exec_buf is done
@@ -1182,6 +1187,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
 
         // OK to continue prefetching once the page credits are returned
         stall_state = NOT_STALLED;
+        // DPRINT << "Exec buf processed" << ENDL();
     }
 
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;

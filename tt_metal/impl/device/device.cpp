@@ -907,7 +907,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.semaphores.push_back(0);
             settings.producer_semaphore_id = 1;
             tunnel_core_allocations[PREFETCH].push_back(std::make_tuple(prefetch_location, settings));
-
+            std::cout << "Prefetch_h on: " << prefetch_location.str() << std::endl;
             settings.semaphores.clear();
             tt_cxy_pair dispatch_location = dispatch_core_manager::get(num_hw_cqs).dispatcher_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(dispatch_location.chip, get_physical_core_coordinate(dispatch_location, dispatch_core_type));
@@ -923,6 +923,7 @@ void Device::setup_tunnel_for_remote_devices() {
             CoreCoord compute_grid_size = tt::get_compute_grid_size(device_id, num_hw_cqs);
             settings.num_compute_cores = uint32_t(compute_grid_size.x * compute_grid_size.y);
             tunnel_core_allocations[DISPATCH].push_back(std::make_tuple(dispatch_location, settings));
+            std::cout << "Dispatch_h on: " << dispatch_location.str() << std::endl;
             log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
 
             if (tunnel_stop == 1) {
@@ -1016,10 +1017,11 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
             settings.cb_log_page_size = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
             tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
-
+            std::cout << "Prefetch_d on: " << prefetch_d_location.str() << std::endl;
             settings.semaphores.clear();
             settings.semaphores.push_back(0);// dispatch_sem
-            settings.semaphores.push_back(dispatch_buffer_pages);// dispatch_downstream_cb_sem
+            settings.semaphores.push_back(dispatch_buffer_pages);// dispatch_downstream_cb_sem]
+            settings.semaphores.push_back(0);
             settings.consumer_semaphore_id = 0;
             settings.producer_semaphore_id = 1;
             settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -1030,6 +1032,7 @@ void Device::setup_tunnel_for_remote_devices() {
             settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
             tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
+            std::cout << "DISPATCH_D on: " << dispatch_d_location.str() << std::endl;
         }
         tunnel_dispatch_core_allocations.insert(std::make_pair(tunnel_id, tunnel_core_allocations));
         tunnel_id++;
@@ -1137,8 +1140,8 @@ void Device::compile_command_queue_programs() {
             NOC noc_index = this->hw_command_queues_[cq_id]->noc_index;
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
-            log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
-            log_debug(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
+            log_info(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
+            log_info(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
 
             uint32_t command_queue_start_addr = get_absolute_cq_offset(channel, cq_id, cq_size);
             uint32_t issue_queue_start_addr = command_queue_start_addr + CQ_START;
@@ -2131,7 +2134,7 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
 }
 
 void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking) {
-    constexpr bool check = false;
+    constexpr bool check = true;
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance " + std::to_string(tid) + " must exist on device");
     if constexpr (check) {
         Trace::validate_instance(*this->trace_buffer_pool_[tid]);

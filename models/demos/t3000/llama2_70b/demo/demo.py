@@ -340,7 +340,7 @@ def construct_arg(**kwargs):
     ids=("chat_completion", "text_completion"),
 )
 @pytest.mark.parametrize("decode_only", (True, False), ids=("decode_only", "prefill_decode"))
-@pytest.mark.parametrize("num_layers", (1, 2, 10, 80), ids=("1L", "2L", "10L", "80L"))
+@pytest.mark.parametrize("num_layers", (1, 2, 10, 30, 80), ids=("1L", "2L", "10L", "30L", "80L"))
 @pytest.mark.parametrize(
     "implementation, skip_model_load, n_devices",
     (
@@ -370,6 +370,7 @@ def construct_arg(**kwargs):
     ("models/demos/t3000/llama2_70b/demo/data/llama2_ground_truth.json", None),
     ids=("check_enabled", "check_disabled"),
 )
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 17068032}], indirect=True)
 def test_LlamaModel_demo(
     # model args
     implementation,
