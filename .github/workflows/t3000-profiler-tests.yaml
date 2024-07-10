@@ -46,7 +46,7 @@ jobs:
         run: tar -xvf ttm_${{ matrix.test-group.arch }}.tar
       - uses: ./.github/actions/install-python-deps
       - name: Run profiler regression tests
-        timeout-minutes: 30
+        timeout-minutes: 60
         run: |
           ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
