@@ -195,6 +195,8 @@ std::pair<uint32_t, uint32_t> determine_largest_subblock_size(
             break;
         }
     }
+    std::cout << "block_height " << block_height << " block_width " << block_width <<std::endl;
+    std::cout << "subblock_h " << subblock_h << " subblock_w " << subblock_w <<std::endl;
     TT_ASSERT(subblock_h > 0 && subblock_w > 0);
     return {subblock_h, subblock_w};
 }
@@ -678,7 +680,8 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
             conv_config.dtype,
             {batch_size, input_height, input_width, in_channels},
             conv_config.input_channels_alignment == 16,
-            compute_kernel_config);
+            compute_kernel_config,
+            conv_config.enable_act_doule_buffer);
         // halo_output.deallocate();
         ttnn::operations::core::deallocate(halo_output);
         return {conv_output, output_height, output_width, weight_tensor_on_device, bias_tensor_on_device};

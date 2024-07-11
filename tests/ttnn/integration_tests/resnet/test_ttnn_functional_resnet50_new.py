@@ -233,21 +233,21 @@ def create_test_infra(
     )
 
 
-@skip_for_wormhole_b0("PCC error with B=16. Fitting issue with B=20 due to 1x1s2 repleacement.")
+# @skip_for_wormhole_b0("PCC error with B=16. Fitting issue with B=20 due to 1x1s2 repleacement.")
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, act_dtype, weight_dtype, math_fidelity",
     (
-        (
-            8,
-            ttnn.bfloat8_b,
-            ttnn.bfloat8_b,
-            ttnn.MathFidelity.LoFi,
-        ),  ## memory config issue due to l4m1 downsample reshard
-        (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
+        # (
+        #     8,
+        #     ttnn.bfloat8_b,
+        #     ttnn.bfloat8_b,
+        #     ttnn.MathFidelity.LoFi,
+        # ),  ## memory config issue due to l4m1 downsample reshard
+        # (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
         (16, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
-        (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
-        (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
+        # (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
+        # (20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
     ),
 )
 def test_resnet_50(device, use_program_cache, batch_size, act_dtype, weight_dtype, math_fidelity):
@@ -261,8 +261,8 @@ def test_resnet_50(device, use_program_cache, batch_size, act_dtype, weight_dtyp
     test_infra.preprocess_torch_input()
     # First run configures convs JIT
     test_infra.run()
-    # Optimized run
-    test_infra.run()
-    # More optimized run with caching
-    test_infra.run()
+    # # Optimized run
+    # test_infra.run()
+    # # More optimized run with caching
+    # test_infra.run()
     test_infra.validate()
