@@ -15,20 +15,20 @@ from tests.ttnn.python_api_testing.sweep_tests import ttnn_ops
 from tests.tt_eager.python_api_testing.sweep_tests import pytorch_ops
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal
 from tests.ttnn.utils_for_testing import assert_with_pcc
+from tests.tt_eager.python_api_testing.sweep_tests.tt_lib_ops import eltwise_logical_noti
 
 
-def run_logical_xor_test(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
+def run_logical_noti_test(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
     torch.manual_seed(data_seed)
 
-    x = gen_rand_inf(size=input_shape[0], low=-100, high=100)
-    y = gen_rand_inf(size=input_shape[1], low=-100, high=100)
+    x = gen_rand_inf(size=input_shape, low=-100, high=100)
 
     # compute ref value
-    ref_value = pytorch_ops.logical_xor(x, y)
+    ref_value = pytorch_ops.logical_noti(x, immediate=1)
 
-    tt_result = ttnn_ops.logical_xor(
+    tt_result = eltwise_logical_noti(
         x=x,
-        y=y,
+        immediate=1,
         device=device,
         dtype=dtype,
         layout=dlayout,
@@ -45,15 +45,12 @@ def run_logical_xor_test(input_shape, dtype, dlayout, in_mem_config, out_mem_con
 
 test_sweep_args = [
     (
-        [(4, 7, 32, 96), (4, 7, 32, 96)],
-        [ttnn.bfloat16, ttnn.bfloat16],
-        [ttnn.TILE_LAYOUT, ttnn.TILE_LAYOUT],
-        [
-            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-            ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
-        ],
+        (5, 4, 160, 64),
+        [ttnn.bfloat16],
+        [ttnn.TILE_LAYOUT],
+        [None],
         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
-        16305027,
+        13587334,
     ),
 ]
 
@@ -62,6 +59,7 @@ test_sweep_args = [
     "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed",
     (test_sweep_args),
 )
-def test_logical_xor2(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
+def test_logical_noti(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
     random.seed(0)
-    run_logical_xor_test(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+    for i in range(5):
+        run_logical_noti_test(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
