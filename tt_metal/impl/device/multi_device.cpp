@@ -48,6 +48,7 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
                 }
             }
         }
+
         managed_devices = tt::tt_metal::detail::CreateDevices(galaxy_device_ids, num_command_queues, l1_small_size, trace_region_size);
         for (int i = 0; i < num_requested_devices; i++) {
             mesh_devices.emplace_back(device_ids[i], managed_devices.at(galaxy_device_ids[i]));

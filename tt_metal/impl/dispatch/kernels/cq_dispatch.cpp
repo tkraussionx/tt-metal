@@ -825,6 +825,11 @@ static uint32_t process_debug_cmd(uint32_t cmd_ptr) {
     return cmd_ptr + cmd->debug.stride;
 }
 
+inline void RISC_POST_STATUS(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 static void process_wait() {
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
 
@@ -844,9 +849,11 @@ static void process_wait() {
     DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
     uint32_t heartbeat = 0;
     if (wait) {
+        RISC_POST_STATUS(0x1111);
         while (!wrap_ge(*sem_addr, count)) {
             IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         }
+        RISC_POST_STATUS(0x2222);
     }
     DEBUG_STATUS("PWD");
 

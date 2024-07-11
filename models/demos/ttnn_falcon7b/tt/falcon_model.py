@@ -61,27 +61,30 @@ class TtFalconModelShared:
             mesh_mapper = ShardTensorToMesh(self.device, dim=shard_dim)
 
         # Generate input and attention_mask ---------------------------------------------
+        # print("Dtype: " + str(self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"]) + " " + str(self.model_config["DEFAULT_DTYPE"]))
         if llm_mode == "prefill":
-            tt_embeddings = ttnn.from_torch(
+            tt_embeddings = ttnn.as_tensor(
                 embeddings.unsqueeze(1),
                 device=self.device,
                 memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
                 dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
                 layout=ttnn.TILE_LAYOUT,
                 mesh_mapper=mesh_mapper,
+                use_device_tilizer=True,
             )
 
         elif llm_mode == "decode":
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
             assert sequence_size == 1, "For decode, q_len must be 1!"
 
-            tt_embeddings = ttnn.from_torch(
+            tt_embeddings = ttnn.as_tensor(
                 embeddings.unsqueeze(1).transpose(0, 2),
                 device=self.device,
                 memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
                 dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
                 layout=ttnn.TILE_LAYOUT,
                 mesh_mapper=mesh_mapper,
+                use_device_tilizer=True,
             )
 
         else:
