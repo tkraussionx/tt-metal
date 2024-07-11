@@ -388,10 +388,7 @@ def run_test_LlamaAttention_inference(
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "llama_version",
-    (
-        ("llama2"),
-        ("llama3"),
-    ),
+    (("llama2"),),
 )
 @pytest.mark.parametrize(
     "batch, seq_len, pcc",

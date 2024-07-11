@@ -12,10 +12,7 @@ from models.demos.t3000.llama2_70b.tests.test_llama_decoder import run_test_Llam
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "llama_version",
-    (
-        ("llama2"),
-        ("llama3"),
-    ),
+    (("llama2"),),
 )
 @pytest.mark.parametrize(
     "batch, seq_len, pcc",

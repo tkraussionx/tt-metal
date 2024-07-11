@@ -8,7 +8,7 @@
 #include "eth_l1_address_map.h"
 #include "impl/buffers/buffer.hpp"
 #include "tensor/tensor_impl.hpp"
-#include "tt_dnn/op_library/all_gather/all_gather_op.hpp"
+#include "ttnn/operations/ccl/all_gather/device/all_gather_op.hpp"
 #include "tt_dnn/op_library/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_eager/tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
 #include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
@@ -28,7 +28,7 @@ namespace tt_metal {
 
 using namespace ccl;
 
-static std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t link, uint32_t full_send_direction) {
+static std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(ttnn::utils::AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t link, uint32_t full_send_direction) {
     constexpr uint32_t worker_grid_width = 8;
     const bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_config.get_num_eth_buffers_per_edm();
     std::set<CoreRange> receiver_worker_cores = {};
@@ -62,19 +62,19 @@ static std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(AllGatherConfig
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
 //   (in other words, disable the "bidirectional" send flag)
-operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology) {
+operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, ttnn::utils::all_gather_op::Topology topology) {
     TT_FATAL(!(receiver_device_id == std::nullopt && sender_device_id == std::nullopt), "At least one of receiver_device_id or sender_device_id must be specified");
 
-    bool is_linear = topology == all_gather_op::Topology::Linear;
+    bool is_linear = topology == ttnn::utils::all_gather_op::Topology::Linear;
     std::unique_ptr<CclOpTensorConfig> input_tensor_config = CclOpTensorConfig::build_all_gather_tensor_config(input_tensor);
     std::unique_ptr<CclOpTensorConfig> output_tensor_config = CclOpTensorConfig::build_all_gather_tensor_config(output_tensor);
 
     tt_metal::Program program{};
     const auto& device = input_tensor.device();
-    auto const& all_gather_config = AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology);
+    auto const& all_gather_config = ttnn::utils::AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology);
     auto const& topology_config = ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
 
-    auto const& sharding_info = ShardedAllGatherConfig(input_tensor, output_tensor, dim);
+    auto const& sharding_info = ttnn::utils::ShardedAllGatherConfig(input_tensor, output_tensor, dim);
     bool enable_print = false; // ring_index == 0
     all_gather_config.print();
 
@@ -142,7 +142,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
 
 
-    const uint32_t num_full_send_directions = topology == all_gather_op::Topology::Linear ? 2 : 1;
+    const uint32_t num_full_send_directions = topology == ttnn::utils::all_gather_op::Topology::Linear ? 2 : 1;
     constexpr uint32_t max_num_full_send_directions = 2;
 
     std::vector<EriscDatamoverBuilder> clockwise_edm_builders;
@@ -180,10 +180,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         // but if we are implementing a line topology, the number of transfers will depend on whether we
         // are setting up the forward/clockwise direction or the backward/counter-clockwise direction and also
         // how far we are from the first/last chip, depending on whether we are in forward or  direction
-        const uint32_t sender_num_transfers = topology == all_gather_op::Topology::Linear ?
+        const uint32_t sender_num_transfers = topology == ttnn::utils::all_gather_op::Topology::Linear ?
             (direction == 0 ? ring_index + 1: ring_size - ring_index):
             ring_size - 1;
-        const uint32_t receiver_num_transfers = topology == all_gather_op::Topology::Linear ?
+        const uint32_t receiver_num_transfers = topology == ttnn::utils::all_gather_op::Topology::Linear ?
             sender_num_transfers - 1:
             ring_size - 1;
         std::vector<CoreCoord> eth_sender_cores;
@@ -342,7 +342,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             link_buffer_sender_addresses.reserve(all_gather_config.get_num_eth_buffers_per_edm());
             if (is_sharded) {
                 for(uint32_t b = 0; b < all_gather_config.get_num_eth_buffers_per_edm(); ++b) {
-                    auto input_tensor_shard_arg_generator = InputTensorShardAddrGenArgGenerator(
+                    auto input_tensor_shard_arg_generator = ttnn::utils::InputTensorShardAddrGenArgGenerator(
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
                                     ring_index,
@@ -554,7 +554,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             TT_ASSERT(all_gather_config.get_num_eth_buffers_per_edm() == 1 || all_gather_config.get_num_eth_buffers_per_edm() == 2 || all_gather_config.get_num_eth_buffers_per_edm() == 4 || all_gather_config.get_num_eth_buffers_per_edm() == 8);
                             TT_ASSERT(input_tensor.buffer() != nullptr);
                             auto input_tensor_shard_arg_generator =
-                                InputTensorShardAddrGenArgGenerator(
+                                ttnn::utils::InputTensorShardAddrGenArgGenerator(
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
                                     ring_index,
@@ -567,7 +567,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                     // always tell it we are in counter-clockwise direction (forward read order)
                                     false
                                     );
-                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
+                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = ttnn::utils::OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
                                 all_gather_config, input_tensor, output_tensor,
                                 is_clockwise ?
                                     (ring_index == 0 ? ring_size - 1 : ring_index - 1) :
@@ -576,7 +576,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
                             log_trace(tt::LogOp, "SendReader {} ring_index: {}, start dest worker index: {}, starting chunk into shard: {}", global_worker_index, ring_index, starting_dest_worker_index, starting_chunk_into_shard);
                             auto output_tensor_shard_arg_generator =
-                                OutputTensorShardAddrGenArgGenerator(
+                                ttnn::utils::OutputTensorShardAddrGenArgGenerator(
                                     all_gather_config,
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
@@ -714,14 +714,14 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             // 7)
 
                             bool is_clockwise = is_buffer_in_clockwise_direction(b);
-                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
+                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = ttnn::utils::OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
                                 all_gather_config,
                                 input_tensor,
                                 output_tensor,
                                 // this writes the input tensor to the first output location
                                 ring_index,
                                 global_worker_index);
-                            auto input_tensor_shard_arg_generator = InputTensorShardAddrGenArgGenerator(
+                            auto input_tensor_shard_arg_generator = ttnn::utils::InputTensorShardAddrGenArgGenerator(
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
                                     ring_index,
@@ -735,7 +735,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                     false
                                 );
                             auto output_tensor_shard_arg_generator =
-                                OutputTensorShardAddrGenArgGenerator(
+                                ttnn::utils::OutputTensorShardAddrGenArgGenerator(
                                     all_gather_config,
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
@@ -830,7 +830,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                     uint32_t receiver_output_start_addr_offset = receiver_ring_index * tensor_slicer.output_addr_offset;
 
                     uint32_t receiver_output_start_page_idx = tensor_slicer.output_start_page_idx;
-                    if (topology == all_gather_op::Topology::Linear) {
+                    if (topology == ttnn::utils::all_gather_op::Topology::Linear) {
                         if (is_clockwise_direction) {
                             receiver_output_start_page_idx -= tensor_slicer.output_page_offset;
                         } else {
@@ -911,7 +911,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             // 6) output tensor shard addr gen
                             auto curr_link = i;
                             bool is_clockwise = is_buffer_in_clockwise_direction(b);
-                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
+                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = ttnn::utils::OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
                                 all_gather_config,
                                 input_tensor,
                                 output_tensor,
@@ -920,7 +920,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                     (ring_index == ring_size - 1 ? 0 : ring_index + 1),
                                 global_worker_index);
                             CoreCoord const& worker_eth_receiver_core = is_clockwise_direction ? eth_receiver_cores.at(i) : eth_sender_cores.at(i);
-                            auto input_tensor_shard_arg_generator = InputTensorShardAddrGenArgGenerator(
+                            auto input_tensor_shard_arg_generator = ttnn::utils::InputTensorShardAddrGenArgGenerator(
                                     device,
                                     dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),
                                     ring_index,
@@ -1065,7 +1065,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                             // 2) Output tensor Writer shard addr gen
                             bool is_clockwise = is_buffer_in_clockwise_direction(b);
 
-                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
+                            auto const& [starting_dest_worker_index, starting_chunk_into_shard] = ttnn::utils::OutputTensorShardAddrGenArgGenerator::get_first_output_shard_starting_location(
                                 all_gather_config,
                                 input_tensor,
                                 output_tensor,
@@ -1074,7 +1074,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                                     (ring_index == ring_size - 1 ? 0 : ring_index + 1),
                                 global_worker_index);
                             log_trace(tt::LogOp, "ReceiverWriter {} ring_index: {}, start dest worker index: {}, starting chunk into shard: {}", global_worker_index, ring_index, starting_dest_worker_index, starting_chunk_into_shard);
-                            OutputTensorShardAddrGenArgGenerator output_tensor_shard_arg_generator(
+                            ttnn::utils::OutputTensorShardAddrGenArgGenerator output_tensor_shard_arg_generator(
                                 all_gather_config,
                                 device,
                                 dynamic_cast<CclOpShardedTensorConfig*>(input_tensor_config.get()),

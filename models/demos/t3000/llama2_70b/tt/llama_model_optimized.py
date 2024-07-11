@@ -81,17 +81,21 @@ class TtLlamaModel_optimized:
             for layer_num in tqdm(range(n_layers))
         ]
         logger.info("Done creating layers")
+        print("####1")
 
         # Rotary Embedding
         self.cos, self.sin = precompute_freqs(self.head_dim, self.max_seq_len * 2, self.rope_theta)  # for prefill
         self.rot_emb = freqs_to_rotation_matrix(self.cos, self.sin)  # for decode
+        print("####2")
         # Embedding
         self.tt_embd = TtLlamaEmbedding(
             device_mesh,
             state_dict,
             cache_path,
         )
+        print("####3")
         self.load_weights()
+        print("####4")
 
     def set_model_config(self, model_config):
         self.model_config = model_config
@@ -115,7 +119,7 @@ class TtLlamaModel_optimized:
         else:
             padded_lm_head = None
             pt_norm_weight = None
-
+        print("####5")
         padded_lm_head_ttnn = ttnn.as_tensor(
             padded_lm_head,
             dtype=ttnn.bfloat8_b,
@@ -126,7 +130,7 @@ class TtLlamaModel_optimized:
             cache_file_name=self.cache_path / lm_head_str,
         )
         self.lm_head = ttnn.to_device(padded_lm_head_ttnn, self.device_mesh)
-
+        print("####6")
         norm_ttnn = ttnn.as_tensor(
             pt_norm_weight,
             dtype=ttnn.bfloat16,
@@ -324,7 +328,7 @@ class TtLlamaModel_optimized:
         ### Run all layers
         for layer in self.layers:
             xs = layer(xs, rot_mats, start_pos, attn_masks)  # xs is sharded
-
+        print("4#####")
         xs = ttnn.all_gather(
             xs,
             dim=3,
@@ -341,7 +345,7 @@ class TtLlamaModel_optimized:
             output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             compute_kernel_config=self.model_config["LN_COMPUTE_KERNEL_CONFIG"],
         )
-
+        print("5#####")
         ### Each device does an LM head fracture
         lm_head_out = ttnn.matmul(
             norm_out_replicated,
@@ -354,7 +358,7 @@ class TtLlamaModel_optimized:
             compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
         )
         norm_out_replicated.deallocate(True)
-
+        print("6#####")
         return lm_head_out
 
     def sharded_rmsnorm(self, xs, eps, norm_list):
@@ -423,6 +427,7 @@ class TtLlamaModel_optimized:
         ### Run all layers
         for layer in self.layers:
             xs = layer(xs, rot_mats, start_pos, attn_masks, user_id)  # xs is sharded
+        print("1#####")
 
         ## Gather fractured layers output
         xs = ttnn.all_gather(
@@ -436,7 +441,7 @@ class TtLlamaModel_optimized:
 
         # Deallocate original input to rmsnorm
         xs.deallocate(True)
-
+        print("2#####")
         ### Each device does an LM head fracture
         if self.llama3:
             self.model_config["LM_HEAD_MM_PROGCFG"] = self.model_config["LLAMA3_LM_HEAD_MM_PROGCFG"]
@@ -446,7 +451,7 @@ class TtLlamaModel_optimized:
         max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"]
         batch_dim = 1 if seq_len < max_mm_seq_len else seq_len // max_mm_seq_len  # Find the division factor
         norm_out_replicated = ttnn.reshape(norm_out_replicated, (1, batch_dim, seq_len // batch_dim, -1))
-
+        print("3#####")
         lm_head_out = ttnn.matmul(
             norm_out_replicated,
             self.lm_head,
