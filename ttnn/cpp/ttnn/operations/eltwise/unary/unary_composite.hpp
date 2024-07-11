@@ -87,7 +87,7 @@ struct Power{
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
         return detail::power_fp(DefaultQueueId, input_tensor, exponent, memory_config, optional_output_tensor);
     }
-}
+};
 template <UnaryCompositeOpType unary_comp_op_type>
 struct Unary_composite_ops
 {

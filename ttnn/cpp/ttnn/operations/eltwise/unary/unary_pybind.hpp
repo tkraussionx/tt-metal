@@ -511,7 +511,7 @@ void bind_unary_composite(py::module& module, const unary_operation_t& operation
                 >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
                 >>> output = {1}(tensor)
         )doc",
-        operation.name(),
+        operation.base_name(),
         operation.python_fully_qualified_name());
 
     bind_registered_operation(
