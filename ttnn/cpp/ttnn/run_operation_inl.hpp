@@ -76,6 +76,8 @@ void launch_op(
     // Send host side op compile and run to the worker queue
     // Assert to ensure that worker threads are specified.
     ZoneScopedN("LaunchOp");
+    op_profiler::tracy_message("`TT_SIGNPOST: launch_op_start`");
+
     auto& workers = get_workers(output_tensors);
     std::size_t workers_size = workers.size();
     if (not enable_autoformat_device and workers.empty() or not workers.at(0)->in_main_thread()) {
@@ -268,5 +270,7 @@ void launch_op(
                 workers[0], optional_output_tensor_ref_count[i]);
         }
     }
+
+    op_profiler::tracy_message("`TT_SIGNPOST: launch_op_end`");
 }
 }
