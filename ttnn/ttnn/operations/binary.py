@@ -182,6 +182,78 @@ def _golden_function(input_tensor_a, input_tensor_b, *args, **kwargs):
 ttnn.attach_golden_function(ttnn.squared_difference, golden_function=_golden_function)
 
 
+def _golden_function_addalpha(input_tensor_a, input_tensor_b, alpha, *args, **kwargs):
+    import torch
+
+    return torch.add(input_tensor_a, input_tensor_b, alpha=alpha)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.addalpha, golden_function=_golden_function_addalpha)
+
+
+def _golden_function_subalpha(input_tensor_a, input_tensor_b, alpha, *args, **kwargs):
+    import torch
+
+    return torch.sub(input_tensor_a, input_tensor_b, alpha=alpha)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.subalpha, golden_function=_golden_function_subalpha)
+
+
+def _golden_function_xlogy(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.xlogy(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.xlogy, golden_function=_golden_function_xlogy)
+
+
+def _golden_function_hypot(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.hypot(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.hypot, golden_function=_golden_function_hypot)
+
+
+def _golden_function_maximum(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.maximum(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.maximum, golden_function=_golden_function_maximum)
+
+
+def _golden_function_minimum(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.minimum(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.minimum, golden_function=_golden_function_minimum)
+
+
+def _golden_function_logical_xor(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.logical_xor(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.logical_xor, golden_function=_golden_function_logical_xor)
+
+
+def _golden_function_atan2(input_tensor_a, input_tensor_b, *args, **kwargs):
+    import torch
+
+    return torch.atan2(input_tensor_a, input_tensor_b)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.atan2, golden_function=_golden_function_atan2)
+
+
 def torch_squared_difference(x, y, *args, **kwargs):
     import torch
 
@@ -189,20 +261,6 @@ def torch_squared_difference(x, y, *args, **kwargs):
 
 
 def register_ttl_elt_binary_function(name, ttl_elt_binary_function, op_name):
-    def _golden_function(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
-        import torch
-
-        name_to_torch_function = {
-            "logical_xor": torch.logical_xor,
-            "xlogy": torch.xlogy,
-            "maximum": torch.maximum,
-            "minimum": torch.minimum,
-            "atan2": torch.atan2,
-            "hypot": torch.hypot,
-        }
-        torch_function = name_to_torch_function[name]
-        return torch_function(input_tensor_a, input_tensor_b)
-
     doc = f"""{name}(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, *, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
 
             Performs eltwise-binary {op_name} operation on two tensors :attr:`input_a` and :attr:`input_b`.
@@ -245,20 +303,6 @@ def register_ttl_elt_binary_function(name, ttl_elt_binary_function, op_name):
 
         output_tensor = ttnn.reshape(output_tensor, original_shape)
         return output_tensor
-
-
-TTL_BINARY_ELTWISE_FUNCTIONS = [
-    ("logical_xor", ttl.tensor.logical_xor, "logical XOR (input_a ^ input_b) "),
-    ("xlogy", ttl.tensor.xlogy, "xlogy (input_a * log( input_b ))"),
-    ("maximum", ttl.tensor.max, "maximum "),
-    ("minimum", ttl.tensor.min, "minimum "),
-    ("atan2", ttl.tensor.atan2, "atan2"),
-    ("hypot", ttl.tensor.hypot, "hypotenuse"),
-]
-
-
-for elt_binary_function_name, ttl_elt_binary_function, op_name in TTL_BINARY_ELTWISE_FUNCTIONS:
-    register_ttl_elt_binary_function(elt_binary_function_name, ttl_elt_binary_function, op_name)
 
 
 def _golden_function(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
