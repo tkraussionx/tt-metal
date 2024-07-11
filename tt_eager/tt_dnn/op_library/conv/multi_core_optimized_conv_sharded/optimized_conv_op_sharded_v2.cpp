@@ -558,6 +558,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         log_info("grid_size: {}", p_config.grid_size);
         log_info("packer_l1: {}", packer_l1_acc);
         log_info("split_reader: {}", split_reader);
+        log_info("enable_act_doule_buffer: {}", enable_act_doule_buffer);
         log_info("enable block padding: {}", (per_core_out_matrix_height_ntiles % act_block_h_ntiles != 0));
         log_info("enable subblock padding: {}", enable_subblock_padding);
         log_info("per_core_out_matrix_height_ntiles: {}", per_core_out_matrix_height_ntiles);

@@ -304,6 +304,9 @@ class resnet50Bottleneck:
                 transpose_shards=transpose_shards,
             )
 
+        x = ttnn.reallocate(x)
+        ttnn.dump_device_memory_state(device, "before_reallocate_")
+
         reallocate_halo_output = batch_size == 20
         logger.debug(f"Running conv2")
         print(enable_act_doule_buffer)
@@ -336,6 +339,8 @@ class resnet50Bottleneck:
             ),
             conv_op_cache=conv_op_cache,
         )
+
+        ttnn.dump_device_memory_state(device, "after_allocate_")
 
         logger.debug(
             f"{batch_size} and {input_height} and {self.conv1_input_channels} and {self.conv1_output_channels}"
@@ -673,7 +678,6 @@ class resnet50:
             conv_op_cache=conv_op_cache,
         )
         # Relu is fused with conv1
-
         if self.batch_size == 20:
             x = ttnn.reallocate(x)
 
@@ -724,7 +728,7 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_doule_buffer=False,
+            enable_act_doule_buffer=True,
         )
 
         if is_first_run:
