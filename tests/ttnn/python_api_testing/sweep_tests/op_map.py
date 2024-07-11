@@ -144,6 +144,10 @@ op_map = {
         "tt_op": ttnn_ops.eltwise_gt,
         "pytorch_op": pytorch_ops.gt,
     },
+    "ttnn-eltwise-ge": {
+        "tt_op": ttnn_ops.eltwise_ge,
+        "pytorch_op": pytorch_ops.ge,
+    },
     "ttnn-eltwise-gte": {
         "tt_op": ttnn_ops.eltwise_gte,
         "pytorch_op": pytorch_ops.gte,

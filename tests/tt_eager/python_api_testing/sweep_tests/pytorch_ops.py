@@ -1031,6 +1031,14 @@ def gt(x, y, *args, **kwargs):
         return x > y
 
 
+def ge(x, y, *args, **kwargs):
+    if "scalar" in kwargs:
+        scalar = kwargs.pop("scalar")
+        return torch.ge(x, scalar)
+    else:
+        return torch.ge(x, y)
+
+
 def eq(x, y, *args, **kwargs):
     if "scalar" in kwargs:
         scalar = kwargs.pop("scalar")
