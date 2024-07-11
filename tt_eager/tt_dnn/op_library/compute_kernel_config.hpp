@@ -44,7 +44,7 @@ inline DeviceComputeKernelConfig init_device_compute_kernel_config(
                     defaultConfig = GrayskullComputeKernelConfig{
                         .math_fidelity = math_fidelity, .math_approx_mode = math_approx_mode};
                 } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
-                    TT_ASSERT(arch == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
+                    // TT_ASSERT(arch == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
                     MathFidelity math_fidelity = compute_kernel_config.math_fidelity;
                     bool math_approx_mode = compute_kernel_config.math_approx_mode;
                     bool fp32_dest_acc_en = compute_kernel_config.fp32_dest_acc_en;

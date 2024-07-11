@@ -74,7 +74,7 @@ def test_reproduce_matmul_2d_hang(
     a_t = torch2tt_tensor(A, device, ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype)
     b_t = torch2tt_tensor(B, device, ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype)
 
-    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+    program_config = ttnn._ttnn.operations.matmul.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
         in0_block_w=in_block_w,
         out_subblock_h=out_subblock_h,
@@ -93,12 +93,12 @@ def test_reproduce_matmul_2d_hang(
     )
 
     # First run for a reference output
-    out = ttl.operations.primary.matmul(
+    out = ttnn.matmul(
         a_t,
         b_t,
         program_config=program_config,
-        output_mem_config=out_mem_config,
-        output_dtype=out_dtype,
+        memory_config=out_mem_config,
+        dtype=out_dtype,
         compute_kernel_config=compute_config,
     )
 
@@ -112,12 +112,12 @@ def test_reproduce_matmul_2d_hang(
     # loop_count iterations to test determinism/hang
     for i in range(loop_count):
         out.deallocate(True)
-        out = ttl.operations.primary.matmul(
+        out = ttnn.matmul(
             a_t,
             b_t,
             program_config=program_config,
-            output_mem_config=out_mem_config,
-            output_dtype=out_dtype,
+            memory_config=out_mem_config,
+            dtype=out_dtype,
             compute_kernel_config=compute_config,
         )
 
