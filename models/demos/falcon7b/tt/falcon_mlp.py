@@ -109,7 +109,7 @@ class TtFalconMLPPrefill(nn.Module):
         self.padding_value = model_config["MLP_PADDING_VALUE"]
         self.seq_len = model_config["MLP_SEQ_LEN"]
 
-        # Padding tensor for 1024 and 2048 sequence lengths
+        # Padding tensor for 128 1024 and 2048 sequence lengths
 
         layer_name = f"{base_url}.{layer_num}"
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
@@ -117,12 +117,12 @@ class TtFalconMLPPrefill(nn.Module):
 
         custom_output_shape_h_to_4h = (
             (1, 1, self.padding_value, 4 * self.padding_value)
-            if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]
+            if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [128, 1024, 2048]
             else None
         )
         custom_output_shape_4h_to_h = (
             (1, 1, 4 * self.padding_value, self.padding_value)
-            if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]
+            if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [128, 1024, 2048]
             else None
         )
 
@@ -157,7 +157,7 @@ class TtFalconMLPPrefill(nn.Module):
         mlp_padding_tensors = []
         for device_id in range(self.num_devices):
             mlp_padding_tensor = dict()
-            for seq_len in [1024, 2048]:
+            for seq_len in [128, 1024, 2048]:
                 # If explicitly set in model config, skip padding for larger sequence lengths, used for demo
                 if seq_len > self.max_position_embeddings:
                     continue
@@ -192,17 +192,23 @@ class TtFalconMLPPrefill(nn.Module):
         self.model_config["MLP_OUTPUT_TENSORS"] = out_tt
 
     def forward(self, x: ttnn.experimental.tensor.Tensor) -> ttnn.experimental.tensor.Tensor:
-        if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]:
-            for device_id in range(self.num_devices):
-                tt_padding = self.model_config["MLP_PREFILL_PADDING_TENSORS"][device_id][self.seq_len]
+        for device_id in range(self.num_devices):
+            tt_padding = self.model_config["MLP_PREFILL_PADDING_TENSORS"][device_id][self.seq_len]
 
-                x[device_id] = ttnn.concat([x[device_id], tt_padding], dim=3)
+            x[device_id] = ttnn.concat([x[device_id], tt_padding], dim=3)
 
+        if self.model_config["PREFILL_OPTIMIZED_MODE"] and self.seq_len in [128, 1024, 2048]:
             out_tt = self.model_config["MLP_OUTPUT_TENSORS"]
 
             num_slices = 2 if self.seq_len == 2048 else 1  # seq_len = 1024 num_slices = 1
             padded_hidden_size = self.model_config["MLP_PADDING_VALUE"]
             grid_size = self.model_config["MLP_GRID_SIZE"]
+            grid_size = [8, 4]
+
+            print(
+                "Shard shape is: ",
+                [self.seq_len // num_slices // grid_size[1], padded_hidden_size // grid_size[0]],
+            )
 
             for slice_idx in range(num_slices):
                 slices = [
@@ -265,6 +271,8 @@ class TtFalconMLPPrefill(nn.Module):
         else:
             hidden_states = []
             for device_id in range(len(x)):
+                print("Shape0: ", x[device_id].get_legacy_shape())
+                print("Shape1: ", self.dense_h_to_4h_weights[device_id].get_legacy_shape())
                 hidden_states.append(
                     ttnn.linear(
                         x[device_id],
@@ -288,6 +296,10 @@ class TtFalconMLPPrefill(nn.Module):
                     use_1d_systolic_array=True,
                     compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
                 )
+
+            if self.seq_len == 128:
+                for device_id in range(len(x)):
+                    hidden_states[device_id] = hidden_states[device_id][:, :, :, : self.hidden_size]
 
         # return TT Tensor
         return hidden_states

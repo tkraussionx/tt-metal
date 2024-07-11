@@ -328,10 +328,10 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
 
     mm_h_to_4h_prog_cfg = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
-        in0_block_w=3,
+        in0_block_w=9,
         out_subblock_h=1,
-        out_subblock_w=1,  # 8,
-        per_core_M=4,
+        out_subblock_w=8,  # 8,
+        per_core_M=1,
         per_core_N=72,
         transpose_mcast=False,
         fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
@@ -340,10 +340,10 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
 
     mm_4h_to_h_prog_cfg = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
-        in0_block_w=8,
+        in0_block_w=6,
         out_subblock_h=1,
-        out_subblock_w=1,  # 6,
-        per_core_M=4,
+        out_subblock_w=6,  # 6,
+        per_core_M=1,
         per_core_N=18,
         transpose_mcast=False,
         fused_activation=None,
