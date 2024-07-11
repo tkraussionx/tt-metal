@@ -78,7 +78,7 @@ struct BinaryDeviceOperation {
         struct shared_variables_t {
             KernelHandle binary_reader_kernel_id;
             KernelHandle unary_writer_kernel_id;
-            KernelHandle eltwise_binary_kernel_id;
+            std::map<std::string, std::string> eltwise_defines;
             CBHandle cb_src0;
             CBHandle cb_src1;
             CBHandle cb_output;

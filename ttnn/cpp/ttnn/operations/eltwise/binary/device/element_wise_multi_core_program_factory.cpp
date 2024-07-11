@@ -21,7 +21,7 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     const Tensor& output,
     const KernelHandle binary_reader_kernel_id,
     const KernelHandle unary_writer_kernel_id,
-    const KernelHandle eltwise_binary_kernel_id,
+    const std::map<std::string, std::string> eltwise_defines,
     const CBHandle cb_src0,
     const CBHandle cb_src1,
     const CBHandle cb_output,
@@ -111,11 +111,9 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     uint32_t g2_numcores = core_group_2.num_cores();
 
     std::vector<std::vector<uint32_t>> binary_reader_args;
-    std::vector<std::vector<uint32_t>> eltwise_binary_args;
     std::vector<std::vector<uint32_t>> unary_writer_args;
     if constexpr (initialize_args) {
         binary_reader_args = {cores.size(), std::vector<uint32_t>(4)};
-        eltwise_binary_args = {cores.size(), std::vector<uint32_t>(2)};
         if (block_sharded and not out_sharded)
             unary_writer_args = {cores.size(), std::vector<uint32_t>(7)};
         else
@@ -123,8 +121,45 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     }
 
     auto& cached_reader_args = GetRuntimeArgs(program, binary_reader_kernel_id);
-    auto& cached_eltwise_args = GetRuntimeArgs(program, eltwise_binary_kernel_id);
     auto& cached_writer_args = GetRuntimeArgs(program, unary_writer_kernel_id);
+
+    std::vector<uint32_t> reader_runtime_args_common = {
+        src_buffer_a->address(), src_buffer_b->address()
+    };
+
+    std::vector<uint32_t> compute_compile_time_args_common_g1 = {
+        block_cnt_per_core_group_1, block_size_per_core_group_1
+
+    };
+    std::vector<uint32_t> compute_compile_time_args_common_g2 = {
+        block_cnt_per_core_group_2, block_size_per_core_group_2
+
+    };
+    tt::DataFormat dst_cb_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
+
+    bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 ||
+                            dst_cb_data_format == tt::DataFormat::Int32 ||
+                            dst_cb_data_format == tt::DataFormat::Float32;
+
+    auto eltwise_unary_kernel_group_1_id = tt::tt_metal::CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",
+        core_group_1,
+        tt_metal::ComputeConfig{
+            .fp32_dest_acc_en = fp32_dest_acc_en,
+            .compile_args = compute_compile_time_args_common_g1,
+            .defines = eltwise_defines});
+
+    if (!core_group_2.ranges().empty()) {
+        auto eltwise_unary_kernel_group_2_id = tt::tt_metal::CreateKernel(
+            program,
+            "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",
+            core_group_2,
+            tt::tt_metal::ComputeConfig{
+                .fp32_dest_acc_en = fp32_dest_acc_en,
+                .compile_args = compute_compile_time_args_common_g2,
+                .defines = eltwise_defines});
+    }
 
     for (uint32_t i = 0, num_tiles_read = 0; i < num_cores_total; ++i) {
         const CoreCoord& core = cores.at(i);
@@ -145,8 +180,6 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
             if constexpr (!initialize_args) {
                 auto& reader_args = cached_reader_args.at(core.x).at(core.y);
                 reader_args[2] = 0;
-                auto& eltwise_args = cached_eltwise_args.at(core.x).at(core.y);
-                eltwise_args[0] = 0;
                 auto& writer_args = cached_writer_args.at(core.x).at(core.y);
                 writer_args[1] = 0;
             }
@@ -155,16 +188,13 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
         if constexpr (initialize_args) {
             binary_reader_args[i] = {
                 src_buffer_a->address(), src_buffer_b->address(), num_tiles_per_core, num_tiles_read};
-            eltwise_binary_args[i] = {block_cnt_per_core, block_size_per_core};
         } else {
             auto& reader_args = cached_reader_args.at(core.x).at(core.y);
             reader_args[0] = src_buffer_a->address();
             reader_args[1] = src_buffer_b->address();
             reader_args[2] = num_tiles_per_core;
             reader_args[3] = num_tiles_read;
-            auto& eltwise_args = cached_eltwise_args.at(core.x).at(core.y);
-            eltwise_args[0] = block_cnt_per_core;
-            eltwise_args[1] = block_size_per_core;
+
         }
         if (block_sharded and not out_sharded) {
             uint32_t block_start_width_offset;
@@ -228,7 +258,8 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
 
     if constexpr (initialize_args) {
         SetRuntimeArgs(program, binary_reader_kernel_id, cores, binary_reader_args);
-        SetRuntimeArgs(program, eltwise_binary_kernel_id, cores, eltwise_binary_args);
+        //SetCommonRuntimeArgs(program, eltwise_unary_kernel_group_1_id, cores, eltwise_binary_args_common);
+        //SetCommonRuntimeArgs(program, eltwise_unary_kernel_group_2_id, cores, eltwise_binary_args_common);
         SetRuntimeArgs(program, unary_writer_kernel_id, cores, unary_writer_args);
     }
 
@@ -386,15 +417,6 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         all_device_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args, writer_defines));
 
-    bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 ||
-                            dst_cb_data_format == tt::DataFormat::Int32 ||
-                            dst_cb_data_format == tt::DataFormat::Float32;
-    auto eltwise_binary_kernel_id = tt_metal::CreateKernel(
-        program,
-        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",
-        all_device_cores,
-        tt_metal::ComputeConfig{.fp32_dest_acc_en = fp32_dest_acc_en, .defines = eltwise_defines});
-
     set_eltwise_binary_runtime_args<true>(
         program,
         a,
@@ -402,7 +424,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         output,
         binary_reader_kernel_id,
         unary_writer_kernel_id,
-        eltwise_binary_kernel_id,
+        eltwise_defines,
         cb_src0,
         cb_src1,
         cb_output,
@@ -415,7 +437,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         std::move(program),
         {binary_reader_kernel_id,
          unary_writer_kernel_id,
-         eltwise_binary_kernel_id,
+         eltwise_defines,
          cb_src0,
          cb_src1,
          cb_output,
@@ -443,7 +465,7 @@ void BinaryDeviceOperation::ElementWiseMultiCore::override_runtime_arguments(
         output_tensor,
         shared_variables.binary_reader_kernel_id,
         shared_variables.unary_writer_kernel_id,
-        shared_variables.eltwise_binary_kernel_id,
+        shared_variables.eltwise_defines,
         shared_variables.cb_src0,
         shared_variables.cb_src1,
         shared_variables.cb_output,
