@@ -7,6 +7,7 @@ import pytest
 import torch
 import ttnn
 import traceback
+import tt_lib as ttl
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from tests.ttnn.python_api_testing.sweep_tests import ttnn_ops
@@ -49,8 +50,21 @@ def run_eltwise_acosh_tests(
         print(traceback.format_exc())
         raise e
 
+    logger.info(f"Finished running acosh")
 
-test_sweep_args = [
+
+test_sweep_args = []
+test_sweep_args.append(
+    (
+        (3, 1, 22, 12),
+        [ttnn.bfloat16],
+        [ttnn.TILE_LAYOUT],
+        [ttnn.DRAM_MEMORY_CONFIG],
+        ttnn.DRAM_MEMORY_CONFIG,
+        13040669,
+    )
+)
+test_sweep_args.append(
     (
         (3, 1, 22, 12),
         [ttnn.bfloat16],
@@ -59,12 +73,14 @@ test_sweep_args = [
         ttnn.DRAM_MEMORY_CONFIG,
         6903345,
     ),
-]
-
-
-@pytest.mark.parametrize(
-    "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed",
-    (test_sweep_args),
 )
-def test_eltwise_acosh(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
-    run_eltwise_acosh_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+
+
+def test_eltwise_acosh():
+    device = ttl.device.CreateDevice(0)
+
+    for test_sweep_arg in test_sweep_args:
+        run_eltwise_acosh_tests(*test_sweep_arg, device)
+
+    ttl.device.DeallocateBuffers(device)
+    ttl.device.CloseDevice(device)
