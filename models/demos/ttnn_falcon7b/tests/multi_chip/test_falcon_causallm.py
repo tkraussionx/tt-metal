@@ -7,6 +7,8 @@ import pytest
 from loguru import logger
 import transformers
 import ttnn
+import tt_lib as ttl
+import time
 from models.demos.ttnn_falcon7b.tt.falcon_causallm import TtFalconCausalLM
 from models.demos.ttnn_falcon7b.tt.model_config import (
     get_model_config,
@@ -58,13 +60,13 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        32,
     ],
     indirect=True,
 )
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 20), (False, 1)),
+    ((True, 100), (False, 500)),
 )
 def test_falcon_causal_lm(
     device_mesh,
@@ -168,8 +170,28 @@ def test_falcon_causal_lm(
     )
     # TODO: Generate embeddings and attention_mask on device
     if llm_mode == "prefill":
+        tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
+            llm_mode, model_input, kv_cache_len, num_input_tokens=seq_len
+        )
+        tt_out, tt_layer_present = tt_FalconCausalLM(
+            input_embeddings=tt_embeddings,
+            llm_mode=llm_mode,
+            attention_mask=tt_attention_mask,
+            user_id=0,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=True,
+        )
+        # Explicitly move tensor to host ... in async mode this is faster than calling from torch directly,
+        # due to parallelization of tensor shards
+        tt_out = ttl.tensor.untilize(tt_out, use_multicore=False)
+        tt_out = ttnn.from_device(tt_out)
+        tt_out = ttnn.to_torch(
+            tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
+        ).squeeze(1)
+
+        start = time.time()
         for loop in range(num_loops):
-            tt_outs = []
             tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
                 llm_mode, model_input, kv_cache_len, num_input_tokens=seq_len
             )
@@ -184,10 +206,15 @@ def test_falcon_causal_lm(
             )
             # Explicitly move tensor to host ... in async mode this is faster than calling from torch directly,
             # due to parallelization of tensor shards
+            tt_out = ttl.tensor.untilize(tt_out, use_multicore=False)
             tt_out = ttnn.from_device(tt_out)
             tt_out = ttnn.to_torch(
                 tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
             ).squeeze(1)
+
+        end = time.time()
+        avg_time = (end - start) / num_loops
+        print("Prefill tokens/sec: " + str((seq_len * batch) / avg_time))
 
     elif llm_mode == "decode":
         for loop in range(num_loops):
@@ -202,6 +229,7 @@ def test_falcon_causal_lm(
                 layer_past_len=kv_cache_len,
                 use_cache=True,
             )
+            tt_out = ttl.tensor.untilize(tt_out, use_multicore=False)
             tt_out = ttnn.from_device(tt_out)
             tt_out = ttnn.to_torch(
                 tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh

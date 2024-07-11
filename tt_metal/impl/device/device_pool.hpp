@@ -76,6 +76,7 @@ class DevicePool {
 
     // Determine which CPU cores the worker threads need to be placed on for each device
     std::unordered_map<uint32_t, uint32_t> device_to_core_map;
+    std::unordered_map<uint32_t, uint32_t> cq_reader_to_core_map = {};
 
     void init_firmware_on_active_devices() const;
     void activate_device(chip_id_t id);

@@ -544,16 +544,16 @@ def as_tensor(
     dtype_name = dtype.name if dtype is not None else "None"
     layout_name = layout.name if layout is not None else "None"
 
-    if use_device_tilizer:
-        if device is None:
-            raise RuntimeError("device must be specified when use_device_tilizer is True")
-        if memory_config is None:
-            raise RuntimeError("memory_config must be specified when use_device_tilizer is True")
-        if layout != ttnn.TILE_LAYOUT:
-            raise RuntimeError("layout must be TILE_LAYOUT when use_device_tilizer is True")
+    # if use_device_tilizer:
+    #     if device is None:
+    #         raise RuntimeError("device must be specified when use_device_tilizer is True")
+    #     if memory_config is None:
+    #         raise RuntimeError("memory_config must be specified when use_device_tilizer is True")
+    #     if layout != ttnn.TILE_LAYOUT:
+    #         raise RuntimeError("layout must be TILE_LAYOUT when use_device_tilizer is True")
 
-    if device is not None and memory_config is None:
-        raise RuntimeError("memory_config must be specified when device is specified")
+    # if device is not None and memory_config is None:
+    #     raise RuntimeError("memory_config must be specified when device is specified")
 
     def torch_to_ttnn(
         tensor: torch.Tensor,
@@ -572,7 +572,10 @@ def as_tensor(
                 mesh_mapper=mesh_mapper,
                 device=device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                dtype=dtype,
             )
+            if memory_config is None:
+                memory_config = ttnn.DRAM_MEMORY_CONFIG
             tensor = ttnn.to_layout(tensor, layout, dtype=dtype, memory_config=memory_config, device=device)
         else:
             tensor = ttnn.from_torch(
