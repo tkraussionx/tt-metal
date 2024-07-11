@@ -76,7 +76,6 @@ struct BinaryDeviceOperation {
 
     struct ElementWiseMultiCore {
         struct shared_variables_t {
-            KernelHandle binary_reader_kernel_id;
             KernelHandle unary_writer_kernel_id;
             std::map<std::string, std::string> eltwise_defines;
             CBHandle cb_src0;

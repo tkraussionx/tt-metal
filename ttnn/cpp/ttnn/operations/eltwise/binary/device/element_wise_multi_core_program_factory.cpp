@@ -19,7 +19,6 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     const Tensor& a,
     const Tensor& b,
     const Tensor& output,
-    const KernelHandle binary_reader_kernel_id,
     const KernelHandle unary_writer_kernel_id,
     const std::map<std::string, std::string> eltwise_defines,
     const CBHandle cb_src0,
@@ -110,22 +109,23 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     uint32_t g1_numcores = core_group_1.num_cores();
     uint32_t g2_numcores = core_group_2.num_cores();
 
-    std::vector<std::vector<uint32_t>> binary_reader_args;
     std::vector<std::vector<uint32_t>> unary_writer_args;
     if constexpr (initialize_args) {
-        binary_reader_args = {cores.size(), std::vector<uint32_t>(4)};
         if (block_sharded and not out_sharded)
             unary_writer_args = {cores.size(), std::vector<uint32_t>(7)};
         else
             unary_writer_args = {cores.size(), std::vector<uint32_t>(3)};
     }
-
-    auto& cached_reader_args = GetRuntimeArgs(program, binary_reader_kernel_id);
+    bool src0_is_dram = src_buffer_a->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool src1_is_dram = src_buffer_b->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     auto& cached_writer_args = GetRuntimeArgs(program, unary_writer_kernel_id);
-
-    std::vector<uint32_t> reader_runtime_args_common = {
-        src_buffer_a->address(), src_buffer_b->address()
-    };
+    std::map<string, string> reader_defines;
+    if (src0_sharded) {
+        reader_defines["IN0_SHARDED"] = "1";
+    }
+    if (src1_sharded) {
+        reader_defines["IN1_SHARDED"] = "1";
+    }
 
     std::vector<uint32_t> compute_compile_time_args_common_g1 = {
         block_cnt_per_core_group_1, block_size_per_core_group_1
@@ -164,37 +164,18 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     for (uint32_t i = 0, num_tiles_read = 0; i < num_cores_total; ++i) {
         const CoreCoord& core = cores.at(i);
         uint32_t num_tiles_per_core = 0;
-        uint32_t block_cnt_per_core = 0;
-        uint32_t block_size_per_core = 0;
         if (i < g1_numcores) {
             num_tiles_per_core = num_tiles_per_core_group_1;
-            block_cnt_per_core = block_cnt_per_core_group_1;
-            block_size_per_core = block_size_per_core_group_1;
         } else if (i < num_cores) {
             num_tiles_per_core = num_tiles_per_core_group_2;
-            block_cnt_per_core = block_cnt_per_core_group_2;
-            block_size_per_core = block_size_per_core_group_2;
         } else {
             // Zero out non-working cores RT args. Only necessary in override
             // since initialization pushes zero vectors to unused cores.
             if constexpr (!initialize_args) {
-                auto& reader_args = cached_reader_args.at(core.x).at(core.y);
-                reader_args[2] = 0;
                 auto& writer_args = cached_writer_args.at(core.x).at(core.y);
                 writer_args[1] = 0;
             }
             continue;
-        }
-        if constexpr (initialize_args) {
-            binary_reader_args[i] = {
-                src_buffer_a->address(), src_buffer_b->address(), num_tiles_per_core, num_tiles_read};
-        } else {
-            auto& reader_args = cached_reader_args.at(core.x).at(core.y);
-            reader_args[0] = src_buffer_a->address();
-            reader_args[1] = src_buffer_b->address();
-            reader_args[2] = num_tiles_per_core;
-            reader_args[3] = num_tiles_read;
-
         }
         if (block_sharded and not out_sharded) {
             uint32_t block_start_width_offset;
@@ -253,13 +234,21 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
                 writer_args[2] = num_tiles_read;
             }
         }
+        std::vector<uint32_t> reader_runtime_args_common = {
+            src_buffer_a->address(), src_buffer_b->address()
+        };
+        std::vector<uint32_t> reader_compile_args = {(std::uint32_t)src0_is_dram, (std::uint32_t)src1_is_dram, num_tiles_per_core, num_tiles_read};
+        auto binary_reader_kernel_id = tt::tt_metal::CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/reader_binary_interleaved_start_id.cpp",
+        core,
+        tt_metal::ReaderDataMovementConfig(reader_compile_args, reader_defines));
+        SetRuntimeArgs(program, binary_reader_kernel_id, core, reader_runtime_args_common);
+
         num_tiles_read += num_tiles_per_core;
     }
 
     if constexpr (initialize_args) {
-        SetRuntimeArgs(program, binary_reader_kernel_id, cores, binary_reader_args);
-        //SetCommonRuntimeArgs(program, eltwise_unary_kernel_group_1_id, cores, eltwise_binary_args_common);
-        //SetCommonRuntimeArgs(program, eltwise_unary_kernel_group_2_id, cores, eltwise_binary_args_common);
         SetRuntimeArgs(program, unary_writer_kernel_id, cores, unary_writer_args);
     }
 
@@ -384,30 +373,12 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
     }
     auto cb_output = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_output_config);
 
-    std::map<string, string> reader_defines;
-    if (src0_sharded) {
-        reader_defines["IN0_SHARDED"] = "1";
-    }
-    if (src1_sharded) {
-        reader_defines["IN1_SHARDED"] = "1";
-    }
     std::map<string, string> writer_defines;
     if (out_sharded) {
         writer_defines["OUT_SHARDED"] = "1";
     }
-
-    bool src0_is_dram = src0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    bool src1_is_dram = src1_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    std::vector<uint32_t> reader_compile_time_args = {(std::uint32_t)src0_is_dram, (std::uint32_t)src1_is_dram};
-
     bool dst_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t)output_cb_index, (std::uint32_t)dst_is_dram};
-
-    KernelHandle binary_reader_kernel_id = tt_metal::CreateKernel(
-        program,
-        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/reader_binary_interleaved_start_id.cpp",
-        all_device_cores,
-        tt_metal::ReaderDataMovementConfig(reader_compile_time_args, reader_defines));
 
     KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
         program,
@@ -422,7 +393,6 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         a,
         b,
         output,
-        binary_reader_kernel_id,
         unary_writer_kernel_id,
         eltwise_defines,
         cb_src0,
@@ -435,7 +405,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
 
     return {
         std::move(program),
-        {binary_reader_kernel_id,
+        {
          unary_writer_kernel_id,
          eltwise_defines,
          cb_src0,
@@ -463,7 +433,6 @@ void BinaryDeviceOperation::ElementWiseMultiCore::override_runtime_arguments(
         input_tensor_a,
         input_tensor_b,
         output_tensor,
-        shared_variables.binary_reader_kernel_id,
         shared_variables.unary_writer_kernel_id,
         shared_variables.eltwise_defines,
         shared_variables.cb_src0,
