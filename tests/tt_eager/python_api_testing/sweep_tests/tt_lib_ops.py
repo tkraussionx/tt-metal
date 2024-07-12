@@ -439,7 +439,7 @@ def eltwise_prelu(
 ):
     weight = kwargs["weight"]
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttl.tensor.prelu(t0, weight, output_mem_config=output_mem_config)
+    t1 = ttnn.prelu(t0, weight, memory_config=output_mem_config)
     return tt2torch_tensor(t1)
 
 
@@ -2548,8 +2548,9 @@ eltwise_relu = make_unary_op(ttl.tensor.relu)
 eltwise_relu6 = make_unary_op(ttl.tensor.relu6)
 eltwise_sqrt = make_unary_op(ttl.tensor.sqrt)
 eltwise_cbrt = make_unary_op(ttl.tensor.cbrt)
-eltwise_rad2deg = make_unary_op(ttl.tensor.rad2deg)
-eltwise_deg2rad = make_unary_op(ttl.tensor.deg2rad)
+# will be changed in composite ops
+# eltwise_rad2deg = make_unary_op(ttl.tensor.rad2deg)
+# eltwise_deg2rad = make_unary_op(ttl.tensor.deg2rad)
 eltwise_sign = make_unary_op(ttl.tensor.sign)
 eltwise_signbit = make_unary_op(ttl.tensor.signbit)
 eltwise_abs = make_unary_op(ttl.tensor.abs)
