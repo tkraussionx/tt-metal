@@ -295,7 +295,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
             "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/reader_binary_interleaved_start_id.cpp",
             core,
             tt_metal::ReaderDataMovementConfig(reader_compile_args, reader_defines));
-        SetRuntimeArgs(program, binary_reader_kernel_id, core, reader_runtime_args_common);
+        SetCommonRuntimeArgs(program, binary_reader_kernel_id, reader_runtime_args_common);
         all_reader_kernels_id.push_back(binary_reader_kernel_id);
 
         //writer kernel
@@ -306,7 +306,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
                                                 : "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/writer_binary_interleaved_start_id.cpp",
             core,
             tt_metal::WriterDataMovementConfig(writer_compile_args, writer_defines));
-        SetRuntimeArgs(program, binary_writer_kernel_id, core, writer_runtime_args_common);
+        SetCommonRuntimeArgs(program, binary_writer_kernel_id, writer_runtime_args_common);
         all_writer_kernels_id.push_back(binary_writer_kernel_id);
 
         // increment num_tiles_read
@@ -360,15 +360,16 @@ void BinaryDeviceOperation::ElementWiseMultiCore::override_runtime_arguments(
         };
 
     // Set rt args
-    for (uint32_t i = 0; i < shared_variables.num_cores; ++i) {
-        CoreCoord core = shared_variables.cores.at(i);
-        uintptr_t reader_kernels_id = shared_variables.all_reader_kernels_id[i];
-        uintptr_t writer_kernels_id = shared_variables.all_writer_kernels_id[i];
-
-        SetRuntimeArgs(cached_program.program, reader_kernels_id, core, reader_runtime_args_common);
-        SetRuntimeArgs(cached_program.program, writer_kernels_id, core, writer_runtime_args_common);
-
-    }
+    // for (uint32_t i = 0; i < shared_variables.num_cores; ++i) {
+    //     CoreCoord core = shared_variables.cores.at(i);
+    uintptr_t reader_kernels_id = shared_variables.all_reader_kernels_id[0];
+    uintptr_t writer_kernels_id = shared_variables.all_writer_kernels_id[0];
+    auto& reader_common_args = GetCommonRuntimeArgs(cached_program.program, reader_kernels_id);
+    reader_common_args[0] = reader_runtime_args_common[0];
+    reader_common_args[1] = reader_runtime_args_common[1];
+    auto& writer_common_args = GetCommonRuntimeArgs(cached_program.program, writer_kernels_id);
+    writer_common_args[0] = writer_runtime_args_common[0];
+    // }
 
     bool src0_sharded = input_tensor_a.memory_config().is_sharded();
     bool src1_sharded = input_tensor_b.memory_config().is_sharded();

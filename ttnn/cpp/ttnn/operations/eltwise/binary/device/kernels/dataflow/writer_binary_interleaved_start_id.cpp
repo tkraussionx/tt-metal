@@ -5,7 +5,7 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
-    uint32_t dst_addr  =  get_arg_val<uint32_t>(0);
+    uint32_t dst_addr  =  get_common_arg_val<uint32_t>(0);
     uint32_t num_tiles =  get_compile_time_arg_val(2);
     uint32_t start_id =  get_compile_time_arg_val(3);
 

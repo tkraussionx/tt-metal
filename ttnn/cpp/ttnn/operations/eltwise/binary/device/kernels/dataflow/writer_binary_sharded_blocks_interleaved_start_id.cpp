@@ -5,7 +5,7 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
-    const uint32_t dst_addr  = get_arg_val<uint32_t>(0);
+    const uint32_t dst_addr  = get_common_arg_val<uint32_t>(0);
     const uint32_t block_height_tiles = get_compile_time_arg_val(2);
     const uint32_t block_width_tiles = get_compile_time_arg_val(3);
     const uint32_t unpadded_block_height_tiles = get_compile_time_arg_val(4);
