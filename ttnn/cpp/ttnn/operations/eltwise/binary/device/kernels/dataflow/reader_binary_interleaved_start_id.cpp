@@ -9,6 +9,7 @@ void kernel_main() {
     // same arg indices as in reader_binary_diff_lenghts for compat
     uint32_t src0_addr  = get_arg_val<uint32_t>(0);
     uint32_t src1_addr  = get_arg_val<uint32_t>(1);
+
     uint32_t num_tiles = get_compile_time_arg_val(2);
     uint32_t start_id = get_compile_time_arg_val(3);
 

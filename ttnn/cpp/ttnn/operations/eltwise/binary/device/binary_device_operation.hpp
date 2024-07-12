@@ -76,15 +76,14 @@ struct BinaryDeviceOperation {
 
     struct ElementWiseMultiCore {
         struct shared_variables_t {
-            KernelHandle unary_writer_kernel_id;
-            std::map<std::string, std::string> eltwise_defines;
+            std::vector<uintptr_t> all_reader_kernels_id;
+            std::vector<uintptr_t> all_writer_kernels_id;
+            std::vector<uintptr_t> all_eltwise_kernels_id;
+            uint32_t num_cores;
+            vector<CoreCoord> cores;
             CBHandle cb_src0;
             CBHandle cb_src1;
             CBHandle cb_output;
-            CoreCoord compute_with_storage_grid_size;
-            uint32_t src0_single_tile_size;
-            uint32_t src1_single_tile_size;
-            uint32_t dst_single_tile_size;
         };
         using cached_program_t = ttnn::device_operation::CachedProgram<shared_variables_t>;
 
