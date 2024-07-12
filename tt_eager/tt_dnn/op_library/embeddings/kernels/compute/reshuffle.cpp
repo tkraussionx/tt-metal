@@ -4,6 +4,7 @@
 
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "compute_kernel_api.h"
 
 namespace NAMESPACE {
 void MAIN {
@@ -21,7 +22,11 @@ void MAIN {
     cb_reserve_back(cb_out, 1);
     copy_tile(cb_weights, 0, 0);
 
-    pack_tile(0, cb_out);
+    uint32_t idx_addr = (uint)6868 << 4; // hard coded rd_addr
+    reshuffle_rows_tile_init();
+    reshuffle_rows_tile(0, idx_addr);
+
+    pack_tile(1, cb_out); // reshuffle puts output into Tile 1 in DEST
 
     cb_pop_front(cb_weights, 1);
     cb_pop_front(cb_index, 1);
