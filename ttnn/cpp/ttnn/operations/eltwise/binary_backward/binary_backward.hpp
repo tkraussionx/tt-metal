@@ -30,7 +30,7 @@ struct ExecuteBinaryBackward {
         const MemoryConfig &memory_config,
         const Tensor &input_tensor_b_arg) {
 
-        auto op_type = BinaryBackwardFunction::get_function_type1(binary_backward_op_type);
+        auto op_type = get_function_type1<binary_backward_op_type>();
         return op_type(grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, memory_config);
         }
 
@@ -42,7 +42,7 @@ struct ExecuteBinaryBackward {
             float alpha,
             const Tensor &input_tensor_b_arg,
             const std::optional<MemoryConfig> &memory_config = std::nullopt) {
-            auto op_type = BinaryBackwardFunction::get_function_type1_w_float(binary_backward_op_type);
+            auto op_type = get_function_type1_w_float<binary_backward_op_type>();
             auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
             return op_type(grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, alpha, output_memory_config);
         }
@@ -54,7 +54,7 @@ struct ExecuteBinaryBackward {
             string value,
             const Tensor &input_tensor_b_arg,
             const std::optional<MemoryConfig> &memory_config = std::nullopt) {
-            auto op_type = BinaryBackwardFunction::get_function_type1_w_string(binary_backward_op_type);
+            auto op_type = get_function_type1_w_string<binary_backward_op_type>();
             auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
             return op_type(grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, value, output_memory_config);
         }
@@ -71,7 +71,7 @@ struct ExecuteBinaryBackward {
             std::optional<Tensor> input_a_grad = std::nullopt,
             std::optional<Tensor> input_b_grad = std::nullopt) {
             auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
-            auto op_type = BinaryBackwardFunction::get_function_type3(binary_backward_op_type);
+            auto op_type = get_function_type3<binary_backward_op_type>();
             return op_type(
                 queue_id,
                 grad_tensor_arg,
@@ -95,7 +95,7 @@ struct ExecuteBinaryBackward {
         std::optional<Tensor> input_b_grad = std::nullopt) {
 
         auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
-        auto op_type = BinaryBackwardFunction::get_function_type3_wo_qid(binary_backward_op_type);
+        auto op_type = get_function_type3_wo_qid<binary_backward_op_type>();
         return op_type(grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, output_memory_config, are_required_outputs, input_a_grad, input_b_grad);
     }
 
@@ -113,7 +113,7 @@ struct ExecuteBinaryBackward {
         std::optional<Tensor> input_b_grad = std::nullopt) {
 
         auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
-        auto op_type = BinaryBackwardFunction::get_function_type2(binary_backward_op_type);
+        auto op_type = get_function_type2<binary_backward_op_type>();
         return op_type(queue_id, grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, alpha, output_memory_config, are_required_outputs, input_a_grad, input_b_grad);
     }
 
@@ -130,7 +130,7 @@ struct ExecuteBinaryBackward {
         std::optional<Tensor> input_b_grad = std::nullopt) {
 
         auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
-        auto op_type = BinaryBackwardFunction::get_function_type2_wo_qid(binary_backward_op_type);
+        auto op_type = get_function_type2_wo_qid<binary_backward_op_type>();
         return op_type(grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, alpha, output_memory_config, are_required_outputs, input_a_grad, input_b_grad);
     }
 
