@@ -30,6 +30,15 @@ enum AllGatherMode {
     SINGLE_TILE_HIGH_WIDTH_SHARDED
 };
 
+enum AllGatherBidirectionalMode {
+    // Splits the tensor into two and sends each half in opposite directions
+    // the full width around the ring
+    SPLIT_TENSOR,
+    // Doesn't split the tensor and sends the full tensor in both directions,
+    // half-way around the ring
+    FULL_TENSOR
+};
+
 namespace all_gather_op {
 using ccl::Topology;
 }; // namespace all_gather_op
@@ -52,7 +61,8 @@ class AllGatherConfig {
         input_is_dram(input_tensor.buffer()->buffer_type() == BufferType::DRAM),
         output_is_dram(output_tensor.buffer()->buffer_type() == BufferType::DRAM),
 
-        mode(choose_all_gather_mode(input_tensor, output_tensor, dim))
+        mode(choose_all_gather_mode(input_tensor, output_tensor, dim)),
+        bidirectional_mode(AllGatherBidirectionalMode::FULL_TENSOR)
     {
         TT_ASSERT(erisc_handshake_address >= eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE);
         TT_ASSERT(erisc_handshake_address < eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16);
@@ -75,7 +85,7 @@ class AllGatherConfig {
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
         this->is_sharded = input_tensor.is_sharded();
-        this->num_eth_buffers = (this->enable_bidirectional ? 8 : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
+        this->num_eth_buffers = (this->enable_bidirectional ? /*8*/ 2 /*REVERT TO 8 BEFORE MERGE*/ : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
         if (this->is_sharded) {
             this->num_eth_buffers = std::min(this->num_eth_buffers, input_tensor.shard_spec()->num_cores());
             if ((input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) % (ring_size) != 0 &&
@@ -137,6 +147,7 @@ class AllGatherConfig {
             buffer_index < get_num_edm_channels_in_clockwise_direction() :
             true;
     }
+    AllGatherBidirectionalMode get_bidirectional_mode() const { return this->bidirectional_mode; }
     uint32_t get_num_edm_channels_in_counter_clockwise_direction() const {
         // return all_gather_buffer_params::enable_bidirectional ? all_gather_buffer_params::num_buffers - all_gather_buffer_params::num_buffers / 2 : 0;
         // Force all through counter-clockwise direction
@@ -176,6 +187,7 @@ class AllGatherConfig {
     uint32_t eth_sems_l1_base_byte_address;
     const all_gather_op::Topology topology;
     AllGatherMode mode;
+    AllGatherBidirectionalMode bidirectional_mode;
     bool is_sharded;
     bool enable_bidirectional;
     const bool input_is_dram;

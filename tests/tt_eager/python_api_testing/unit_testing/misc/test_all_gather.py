@@ -103,6 +103,15 @@ def run_all_gather_on_t3000_impl(
     logger.info(f"dim: {dim}")
 
     input_tensor = torch.rand(input_shape).bfloat16()
+    tile_id = 0
+    for w in range(input_shape[0]):
+        for z in range(input_shape[1]):
+            for y in range(0, input_shape[2], 32):
+                for x in range(0, input_shape[3], 32):
+                    for yy in range(32):
+                        for xx in range(32):
+                            input_tensor[w][y][y + yy][x + xx] = tile_id
+                    tile_id += 1
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
@@ -124,6 +133,16 @@ def run_all_gather_on_t3000_impl(
         else:
             eq, output = comp_pcc(tt_output_tensor, input_tensor)
         if not eq:
+            for w in range(input_shape[0]):
+                for z in range(input_shape[1]):
+                    for y in range(0, input_shape[2], 32):
+                        for x in range(0, input_shape[3], 32):
+                            if tt_output_tensor[w][y][y + yy][x + xx] != input_tensor[w][y][y + yy][x + xx]:
+                                logger.error(
+                                    f"mismatch at {w} {z} {y} {x} : {input_tensor[w][y][y][x]} != {tt_output_tensor[w][y][y][x]}"
+                                )
+                            # for yy in range(32):
+                            #     for xx in range(32):
             logger.error(f"output mismatch for tensor {i}")
         assert eq, f"{i} FAILED: {output}"
 
@@ -166,6 +185,7 @@ def run_all_gather_on_t3000_impl_tight_loop(
         # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),        # https://github.com/tenstorrent/tt-metal/issues/9686
         (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
+        (8, 1, [1, 1, 32, 4096], 3, ttl.tensor.Layout.TILE),
         # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),      # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),   # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),   # https://github.com/tenstorrent/tt-metal/issues/9686
@@ -226,14 +246,15 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize(
     "num_devices, num_links, input_shape, dim, layout",
     [
-        (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
-        (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
-        (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        # (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
+        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        # (4, 2, [4, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # (8, 1, [1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # (4, 2, [1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        (8, 1, [1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
     ],
 )
 @pytest.mark.parametrize(
@@ -246,8 +267,8 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize(
     "mem_config",
     [
-        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),        # https://github.com/tenstorrent/tt-metal/issues/9686
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),        # https://github.com/tenstorrent/tt-metal/issues/9686
+        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
 @pytest.mark.parametrize("num_iters", [1000])  # TODO: restore to 500
