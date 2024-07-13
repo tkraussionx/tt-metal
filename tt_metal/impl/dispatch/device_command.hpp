@@ -97,6 +97,8 @@ class DeviceCommand {
         CQPrefetchCmd *relay_wait_dst = this->reserve_space<CQPrefetchCmd *>(sizeof(CQPrefetchCmd));
         CQDispatchCmd *wait_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
+        std::cout << "add dispatch wait S cmd write offsetB " << this->cmd_write_offsetB << std::endl;
+
         if constexpr (hugepage_write) {
             alignas(MEMCPY_ALIGNMENT) CQPrefetchCmd relay_wait;
             alignas(MEMCPY_ALIGNMENT) CQDispatchCmd wait_cmd;
@@ -107,6 +109,8 @@ class DeviceCommand {
             initialize_wait_cmds(relay_wait_dst, wait_cmd_dst);
         }
         this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
+
+        std::cout << "add dispatch wait E cmd write offsetB " << this->cmd_write_offsetB << std::endl;
     }
 
     void add_dispatch_wait_with_prefetch_stall(
@@ -326,6 +330,8 @@ class DeviceCommand {
         uint32_t payload_sizeB = sizeof(CQDispatchCmd) + (flush_prefetch ? data_sizeB : 0);
         this->add_prefetch_relay_inline(flush_prefetch, payload_sizeB);
 
+        std::cout << "Added prefetch relay inline " << this->cmd_write_offsetB << std::endl;
+
         auto initialize_write_cmd = [&](CQDispatchCmd *write_cmd) {
             write_cmd->base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST;
             write_cmd->write_linear_host.is_event = is_event;
@@ -338,6 +344,7 @@ class DeviceCommand {
             alignas(MEMCPY_ALIGNMENT) CQDispatchCmd write_cmd;
             initialize_write_cmd(&write_cmd);
             this->memcpy(write_cmd_dst, &write_cmd, sizeof(CQDispatchCmd));
+            std::cout << "Added dispatch write " << this->cmd_write_offsetB << std::endl;
         } else {
             initialize_write_cmd(write_cmd_dst);
         }
@@ -479,6 +486,8 @@ class DeviceCommand {
             std::is_same<PackedSubCmd, CQDispatchWritePackedMulticastSubCmd>::value);
         bool multicast = std::is_same<PackedSubCmd, CQDispatchWritePackedMulticastSubCmd>::value;
 
+        std::cout << "Add dispatch write packed " << this->cmd_write_offsetB << std::endl;
+
         uint32_t packed_write_max_multicast_sub_cmds = get_packed_write_max_multicast_sub_cmds(packed_write_max_unicast_sub_cmds);
         uint32_t max_num_packed_sub_cmds = std::is_same<PackedSubCmd, CQDispatchWritePackedUnicastSubCmd>::value ? packed_write_max_unicast_sub_cmds : packed_write_max_multicast_sub_cmds;
         TT_FATAL(
@@ -489,6 +498,8 @@ class DeviceCommand {
 
         constexpr bool flush_prefetch = true;
         this->add_prefetch_relay_inline(flush_prefetch, payload_sizeB);
+
+        std::cout << "After prefetch relay inline " << this->cmd_write_offsetB << std::endl;
 
         auto initialize_write_packed_cmd = [&](CQDispatchCmd *write_packed_cmd) {
             write_packed_cmd->base.cmd_id = CQ_DISPATCH_CMD_WRITE_PACKED;
@@ -502,6 +513,8 @@ class DeviceCommand {
         };
         CQDispatchCmd *write_packed_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
+        std::cout << "After reservong space for dispatch " << this->cmd_write_offsetB << std::endl;
+
         if constexpr (hugepage_write) {
             alignas(MEMCPY_ALIGNMENT) CQDispatchCmd write_packed_cmd;
             initialize_write_packed_cmd(&write_packed_cmd);
@@ -514,9 +527,13 @@ class DeviceCommand {
         uint32_t sub_cmds_sizeB = num_sub_cmds * sizeof(PackedSubCmd);
         this->memcpy((char *)this->cmd_region + this->cmd_write_offsetB, &sub_cmds[offset_idx], sub_cmds_sizeB);
 
+        std::cout << "After writing sub cmds of size  " << sub_cmds_sizeB << " write offset is " << this->cmd_write_offsetB << std::endl;
+
         uint32_t increment_sizeB =
             align(sub_cmds_sizeB, L1_ALIGNMENT);  // this assumes CQDispatchCmd is L1_ALIGNEMENT aligned
         this->cmd_write_offsetB += increment_sizeB;
+
+        std::cout << "After aligning write offsetB " << this->cmd_write_offsetB << std::endl;
 
         // copy the actual data
         increment_sizeB = align(packed_data_sizeB, L1_ALIGNMENT);
@@ -529,7 +546,11 @@ class DeviceCommand {
             this->cmd_write_offsetB += increment_sizeB;
         }
 
+        std::cout << "After copying data write offsetB " << this->cmd_write_offsetB << std::endl;
+
         this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
+
+        std::cout << "Add dispatch write packed end " << this->cmd_write_offsetB << std::endl;
     }
 
     // Tuple in data_collection is:
@@ -682,11 +703,13 @@ class DeviceCommand {
 
     void validate_cmd_write(uint32_t data_sizeB) const {
         uint32_t data_endB = this->cmd_write_offsetB + data_sizeB;
-        TT_ASSERT(
+        TT_FATAL(
             data_endB <= this->cmd_sequence_sizeB,
-            "Out of bounds command sequence write: attemping to write {} B but only {} B available",
+            "Out of bounds command sequence write: attemping to write {} B but only {} B available. cmd sequence size {}B cmd offset {}B",
             data_sizeB,
-            this->cmd_sequence_sizeB - this->cmd_write_offsetB);
+            this->cmd_sequence_sizeB - this->cmd_write_offsetB,
+            this->cmd_sequence_sizeB,
+            this->cmd_write_offsetB);
     }
 
     template <typename Command>
