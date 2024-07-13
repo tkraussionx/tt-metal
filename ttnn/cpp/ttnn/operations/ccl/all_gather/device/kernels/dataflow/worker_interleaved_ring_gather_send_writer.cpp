@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
+#include <array>
 #include "dataflow_api.h"
 #include "ttnn/cpp/ttnn/operations/ccl/all_gather/device/kernels/dataflow/worker_ring_gather_utils.hpp"
 
@@ -33,6 +34,7 @@ void kernel_main() {
     constexpr uint32_t eth_sender_noc_x = get_compile_time_arg_val(18);
     constexpr uint32_t eth_sender_noc_y = get_compile_time_arg_val(19);
     constexpr uint32_t half_cb_n_pages = get_compile_time_arg_val(20);
+    constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(21);
     static_assert(half_cb_n_pages > rem_num_pages, "half_cb_n_pages must be greater than or equal to rem_num_pages");
 
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
@@ -49,6 +51,17 @@ void kernel_main() {
     };
     #endif
 
+    std::array<uint64_t, num_buffers_per_channel> eth_buffer_addrs;
+    uint32_t buffer_size = num_pages * page_size;
+    for (uint32_t i = 0; i < num_buffers_per_channel; ++i) {
+        // eth_semaphore_addrs[i] = get_noc_addr(eth_receiver_noc_x, eth_receiver_noc_y, eth_receiver_l1_semaphore_addr + (i * buffer_size));
+        eth_buffer_addrs[i] = get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_base_addr + (i * (buffer_size + 16)));
+        // DPRINT << "RD buffer_addr[" << i << "]: " << (eth_buffer_addrs[i] & 0xFFFFFFFF) << "\n";
+        // DPRINT << "RD sem_addr[" << i << "]: " << (eth_semaphore_addrs[i] & 0xFFFFFFFF) << ", buffer_addr[" << i << "]: " << (eth_buffer_addrs[i] & 0xFFFFFFFF) << "\n";
+    }
+    uint32_t buffer_index = 0;
+
+
     // Used to wait until eth sender has space available
     volatile tt_l1_ptr uint32_t* writer_send_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(writer_send_sem_addr);
 
@@ -56,7 +69,7 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
     // This is different per writer core
-    const uint64_t eth_l1_sender_base_noc_addr = get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_base_addr);
+    // const uint64_t eth_l1_sender_base_noc_addr = get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_base_addr);
     // Used to signal eth sender that data is available. This is different per writer core
     const uint64_t eth_l1_sender_semaphore_addr = get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_sem_addr);
 
@@ -70,7 +83,9 @@ void kernel_main() {
             }
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             // TODO: Might be better to split this?
-            write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, eth_l1_sender_base_noc_addr, eth_l1_sender_semaphore_addr);
+            write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, eth_buffer_addrs[buffer_index], eth_l1_sender_semaphore_addr);
+
+            buffer_index  = (buffer_index == (num_buffers_per_channel - 1)) ? 0 : buffer_index + 1;
         }
     }
 
@@ -80,10 +95,11 @@ void kernel_main() {
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
         }
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-        write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size, eth_l1_sender_base_noc_addr,eth_l1_sender_semaphore_addr);
+        write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size, eth_buffer_addrs[buffer_index],eth_l1_sender_semaphore_addr);
         ASSERT(num_pages == 0 || num_pages > rem_num_pages);
         ASSERT(half_cb_n_pages > rem_num_pages);
         pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
+                buffer_index  = (buffer_index == (num_buffers_per_channel - 1)) ? 0 : buffer_index + 1;
     }
 
     // num_transfers = num_devices - 1
@@ -95,8 +111,10 @@ void kernel_main() {
                 noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
                 }
                 noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-                send_chunk(cb_id_in0, num_pages, page_size, eth_l1_sender_base_noc_addr);
+                send_chunk(cb_id_in0, num_pages, page_size, eth_buffer_addrs[buffer_index]);//eth_l1_sender_base_noc_addr);
                 noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
+
+                buffer_index  = (buffer_index == (num_buffers_per_channel - 1)) ? 0 : buffer_index + 1;
             }
         }
         if constexpr(rem_num_pages > 0) {
@@ -105,11 +123,12 @@ void kernel_main() {
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
                 }
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-            send_chunk(cb_id_in0, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
+            send_chunk(cb_id_in0, rem_num_pages, page_size, eth_buffer_addrs[buffer_index]);//eth_l1_sender_base_noc_addr);
             noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
             ASSERT(num_pages == 0 || num_pages > rem_num_pages);
             ASSERT(half_cb_n_pages > rem_num_pages);
             pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
+            buffer_index  = (buffer_index == (num_buffers_per_channel - 1)) ? 0 : buffer_index + 1;
         }
     }
 }

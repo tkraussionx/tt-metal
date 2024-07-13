@@ -250,8 +250,8 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize(
     "input_dtype",
     [
-        ttl.tensor.DataType.BFLOAT16,
-        # ttl.tensor.DataType.BFLOAT8_B,        # https://github.com/tenstorrent/tt-metal/issues/9686
+        # ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.DataType.BFLOAT8_B,  # https://github.com/tenstorrent/tt-metal/issues/9686
     ],
 )
 @pytest.mark.parametrize(
@@ -265,6 +265,7 @@ def test_all_gather_on_t3000_post_commit_looping(
 @pytest.mark.parametrize("enable_async", [True])  # True, False])
 @pytest.mark.parametrize("num_workers", [0])  # 2, 4, 6, 8])
 @pytest.mark.parametrize("max_channel_size", [0])  # 8704, 8720, 13056, 13072, 17408, 17424, 21760, 21776])
+@pytest.mark.parametrize("buffers_per_channel", [2, 3, 4, 5])
 def test_all_gather_on_t3000_post_commit(
     all_devices,
     num_devices,
@@ -282,7 +283,13 @@ def test_all_gather_on_t3000_post_commit(
     max_channel_size,
     buffers_per_channel,
 ):
-    run_all_gather_on_t3000_impl_tight_loop(
+    if num_workers == 3 and buffers_per_channel >= 5:
+        pytest.skip("Not enough memory for 8 workers and 4 buffers per channel")
+    if num_workers == 8 and buffers_per_channel > 2:
+        pytest.skip("Not enough memory for 8 workers and 4 buffers per channel")
+    if num_workers == 6 and buffers_per_channel > 3:
+        pytest.skip("Not enough memory for 8 workers and 4 buffers per channel")
+    run_all_gather_on_t3000_impl(
         all_devices,
         num_devices,
         input_shape,
@@ -293,12 +300,11 @@ def test_all_gather_on_t3000_post_commit(
         mem_config,
         use_program_cache,
         function_level_defaults,
-        num_iters,
-        enable_async,
+        num_iters=num_iters,
+        enable_async=enable_async,
         num_workers=num_workers,
         max_channel_size=max_channel_size,
         buffers_per_channel=buffers_per_channel,
-        num_iters=1,
     )
 
 

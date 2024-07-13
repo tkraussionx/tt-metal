@@ -111,14 +111,18 @@ namespace operations {
 namespace ccl {
 
 Tensor all_gather(
-    const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const std::optional<MemoryConfig>& memory_config) {
+    const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const std::optional<MemoryConfig>& memory_config,
+    const uint32_t num_workers,
+    const uint32_t max_channel_size,
+    const uint32_t buffers_per_channel
+    ) {
 
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
 
     auto devices = input_tensor.get_workers();
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
     operation::launch_op(
-        [dim, num_links, memory_config, devices](
+        [dim, num_links, memory_config, devices, num_workers, max_channel_size, buffers_per_channel](
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
@@ -141,7 +145,17 @@ Tensor all_gather(
 
             return operation::run(
                 ttnn::AllGather{
-                    dim, num_links, num_devices, device_index, receiver_device_id, sender_device_id, memory_config.value_or(input_tensor.memory_config())},
+                    dim,
+                    num_links,
+                    num_devices,
+                    device_index,
+                    receiver_device_id,
+                    sender_device_id,
+                    memory_config.value_or(input_tensor.memory_config()),
+                    ttnn::ccl::Topology::Ring,
+                    num_workers,
+                    max_channel_size,
+                    buffers_per_channel},
                 {input_tensor});
         },
         {input_tensor},

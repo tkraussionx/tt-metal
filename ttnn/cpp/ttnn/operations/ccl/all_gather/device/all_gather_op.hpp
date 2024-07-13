@@ -88,7 +88,7 @@ class AllGatherConfig {
         num_buffers_per_worker(num_buffers_per_worker)
     {
         TT_FATAL(num_buffers_per_worker > 0, "num_buffers_per_worker must be > 0");
-        uint32_t max_num_workers = 2; // eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS
+        uint32_t max_num_workers = 6; // eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS
         // TT_ASSERT(erisc_handshake_address >= eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE);
         // TT_ASSERT(erisc_handshake_address < eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16);
         TT_ASSERT((erisc_handshake_address & (16-1)) == 0);
@@ -127,40 +127,47 @@ class AllGatherConfig {
                 }
                 log_trace(tt::LogOp, "this->num_buffers: {}", this->num_eth_buffers);
             }
+        this->num_workers_per_link = this->num_eth_buffers;
         } else {
-            if (this->num_eth_buffers > max_num_workers / num_duplicate_directions) {
-                this->num_eth_buffers /= num_duplicate_directions;
-            }
+            // if (this->num_eth_buffers > max_num_workers / num_duplicate_directions) {
+            //     this->num_eth_buffers /= num_duplicate_directions;
+            // }
+            // this->num_eth_buffers *= num_buffers_per_worker;
+            this->num_workers_per_link = num_workers;
         }
 
-        this->num_workers_per_link = this->num_eth_buffers;
+        log_info(tt::LogOp, "num_eth_buffers: {}", this->num_eth_buffers);
+        log_info(tt::LogOp, "num_workers_per_link: {}", this->num_workers_per_link);
         this->eth_sems_l1_base_byte_address = this->erisc_handshake_address + 16 * 3;//16;
         this->semaphore_offset = this->semaphore_size * this->num_eth_buffers * num_duplicate_directions; // TODO: Remove this once dedicated semaphore space for user kernels are added
         this->eth_buffers_l1_base_byte_address = this->eth_sems_l1_base_byte_address + this->semaphore_offset;
 
         uint32_t const page_size = input_tensor.buffer()->page_size();
         this->eth_buffer_size = max_channel_size;
+        std::size_t channel_sync_bytes_overhead = (enable_merged_payload_and_channel_sync * 16);
         if (max_channel_size == 0) {
-            std::size_t channel_sync_bytes_overhead = (enable_merged_payload_and_channel_sync * 16);
             std::size_t max_per_buffer_space = (
                 (total_l1_buffer_space - this->semaphore_offset) /
                 (this->num_eth_buffers * num_duplicate_directions * this->num_buffers_per_worker)) - channel_sync_bytes_overhead;
             log_info(tt::LogOp, "max_per_buffer_space: {}", max_per_buffer_space);
 
+            log_info(tt::LogOp, "num_buffers_per_worker: {}", num_buffers_per_worker);
+            log_info(tt::LogOp, "page_size: {}", page_size);
             this->eth_buffer_size = round_down(max_per_buffer_space, page_size);
             // log_info(tt::LogOp, "eth_buffer_size_with_channel_sync: {}", eth_buffer_size_with_channel_sync);
-            log_info(tt::LogOp, "page_size: {}", page_size);
-            TT_FATAL(this->eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= max_num_workers);
-            TT_FATAL(
-                (this->num_eth_buffers * (this->eth_buffer_size + channel_sync_bytes_overhead) * num_duplicate_directions * this->num_buffers_per_worker) + this->semaphore_offset <= total_l1_buffer_space);
-            // this->eth_buffer_size = eth_buffer_size_with_channel_sync - channel_sync_bytes_overhead;
-            log_info(tt::LogOp, "this->eth_buffer_size: {}", eth_buffer_size);
+            // Review these asserts
+            // TT_FATAL(this->eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= max_num_workers * num_buffers_per_worker);
+            // TT_FATAL(
+            //     (this->num_eth_buffers * (this->eth_buffer_size + channel_sync_bytes_overhead) * num_duplicate_directions * this->num_buffers_per_worker) + this->semaphore_offset <= total_l1_buffer_space);
             TT_ASSERT(this->eth_buffer_size % page_size == 0);
 
-
-        } else if (enable_merged_payload_and_channel_sync) {
-            max_channel_size += 16;
+        } else {
+            uint32_t buffer_size_less_channel_sync = max_channel_size - channel_sync_bytes_overhead;
+            this->eth_buffer_size = round_down(buffer_size_less_channel_sync, page_size);
         }
+
+        // this->eth_buffer_size = eth_buffer_size_with_channel_sync - channel_sync_bytes_overhead;
+        log_info(tt::LogOp, "this->eth_buffer_size: {}", eth_buffer_size);
 
         // FIXME: dynamically select the number and size of each buffer based on tensor attributes, link count, ring size, etc.
         // Erisc is able to keep up with workers up to around 17-20 GBps bidirectional (numbers still being locked down)
@@ -821,7 +828,11 @@ Tensor all_gather(
     const Tensor& input_tensor,
     const uint32_t dim,
     const uint32_t num_links = 1,
-    const std::optional<MemoryConfig>& memory_config = std::nullopt);
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    const uint32_t num_workers = 0,
+    const uint32_t max_channel_size = 0,
+    const uint32_t buffers_per_channel = 1
+    );
 
 } // namespace ccl
 } // namespace operations

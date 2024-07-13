@@ -23,6 +23,7 @@
 #include "tt_metal/test_utils/stimulus.hpp"
 
 #include "tt_eager/tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
+#include "tt_stl/concepts.hpp"
 // #include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
 
 // #include "impl/kernels/kernel_types.hpp"
@@ -680,16 +681,20 @@ bool RunWriteBWTest(
         TT_ASSERT(
             std::any_of(inputs.begin(), inputs.end(), [](uint32_t x) { return x != 0; }),
             "Input buffer expected to not be all 0");
-        if (not pass) {
-            std::cout << "Mismatch output mismatch" << std::endl;
-            std::size_t num_printed_mismatches = 0;
-            for (size_t i = 0; i < readback_data_vec.size() && num_printed_mismatches < 64; i++) {
-                if (readback_data_vec[i] != inputs[i]) {
-                    std::cout << "[" << i << "]: expected " << inputs[i] << " got " << readback_data_vec[i] << std::endl;
-                    num_printed_mismatches++;
+        bool printed_fail = false;
+        bool failed = false;
+        std::size_t num_printed_mismatches = 0;
+        for (size_t i = 0; i < readback_data_vec.size() && num_printed_mismatches < 64; i++) {
+            if (readback_data_vec[i] != inputs[i]) {
+                if (!failed) {
+                    std::cout << "Mismatch output mismatch" << std::endl;
                 }
+                std::cout << "[" << i << "]: expected " << inputs[i] << " got " << readback_data_vec[i] << std::endl;
+                num_printed_mismatches++;
             }
-            std::cout << "... (remaining mismatches omitted)" << std::endl;
+            if (failed) {
+                std::cout << "... (remaining mismatches omitted)" << std::endl;
+            }
         }
         return pass;
     };

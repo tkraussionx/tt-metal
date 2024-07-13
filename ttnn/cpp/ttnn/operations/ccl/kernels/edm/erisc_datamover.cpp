@@ -346,9 +346,8 @@ void kernel_main() {
                 // No message appear to be unacknowledged
                 // ^^^ Before merging sender and receiver state checks
 
-                DeviceZoneScopedN("CHECK_ADVANCEABLE");
+                // DeviceZoneScopedN("CHECK_ADVANCEABLE");
                 {
-                    // DeviceZoneScopedN("EDM_CHECK_ADVANCEABLE_SENDER");
                     uint8_t index = advanceable_index;
                     for (uint8_t i = 0; i < advanceable_oob_idx; i++) {
                         ChannelBufferT &edm_channel = buffer_channels[i];
@@ -362,12 +361,7 @@ void kernel_main() {
                                 // quickly right now If this ends up causing enough bubbles over eth, we can add them to
                                 // a separate list that we check after eth tx q is full or no other channels are
                                 // advanceable
-                                // {
-                                //     DeviceZoneScopedN("TX_ACK");
-                                // }
-                                // if (edm_channel.get_eth_transaction_channel() == 0) {
-                                    // DPRINT << "EDMS st SENDER_WAITING_FOR_ETH\n";
-                                // }
+\
                                 erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
                                     edm_channel, num_senders_complete);
                                 // Technically only need to do this for message count termination mode
@@ -406,7 +400,7 @@ void kernel_main() {
 
             while (any_channels_advanceable) {
                 idle_count = 0;
-                DeviceZoneScopedN("EDM_ADVANCE_OUTER");
+                // DeviceZoneScopedN("EDM_ADVANCE_OUTER");
                 if (!eth_txq_is_busy()) {
                     // DeviceZoneScopedN("EDM_ADVANCE");
                     uint8_t channel = advanceable_channels[advanceable_index];
@@ -608,7 +602,25 @@ void kernel_main() {
                     } else {
                         // DPRINT << "EDMR CH " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << " DONE\n";
                     }
-                } else {
+                }
+            }
+        }
+
+        for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
+            auto &channel = buffer_channels[s];
+            // We need to explicitly check for channel send done because we may
+            // advance sender channel state as soon as we receive an ack. Since we
+            // may be the last active channel, and advance to done state just from ack
+            // from the receiver ("I got a payload"), then we need to wait for done
+            // at the very end here. Otherise if we invoke another erisc op back-to-back,
+            // we may mess up transaction state because it's possible for receiver of this
+            // op to send the completion done after that one has already started.
+            uint32_t wait_count = 0;
+            uint32_t wait_max = 50000;
+            for (uint8_t buffer_index = 0; buffer_index < num_buffers_per_channel; buffer_index++) {
+                wait_count = 0;
+                channel.buffer_index = buffer_index;
+                if (channel.is_sender_side) {
                     // DPRINT << "EDMS ch " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << "\n";
                     if (!channel.eth_is_receiver_channel_send_done()) {
                         // DPRINT << "EDMS CH " << (uint32_t)channel.get_eth_transaction_channel() << ", b_id " << (uint32_t)buffer_index << " WAITING\n";

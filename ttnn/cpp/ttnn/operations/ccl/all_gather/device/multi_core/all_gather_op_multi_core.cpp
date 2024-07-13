@@ -158,7 +158,7 @@ std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
 }
 
 
-constexpr bool merge_receiver_and_sender_workers = true;
+constexpr bool merge_receiver_and_sender_workers = false;
 
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
@@ -176,6 +176,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     const std::size_t num_workers,
     const std::size_t max_channel_size,
     const std::size_t num_buffers_per_channel) {
+    log_info(tt::LogOp, "num_buffers_per_channel: {}", num_buffers_per_channel);
+    TT_ASSERT(num_buffers_per_channel >= 2);
     TT_FATAL(!(receiver_device_id == std::nullopt && sender_device_id == std::nullopt), "At least one of receiver_device_id or sender_device_id must be specified");
 
     bool is_linear = topology == all_gather_op::Topology::Linear;
@@ -760,7 +762,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
                                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
                                 static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
                                 static_cast<uint32_t>(cb_num_pages / 2),
-                                static_cast<uint32_t>(ring_size)
+                                static_cast<uint32_t>(ring_size),
+                                static_cast<uint32_t>(all_gather_config.get_num_buffers_per_worker())
                             };
 
                             log_trace(tt::LogOp, "Worker {} SR args", b);
@@ -925,6 +928,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
                                 static_cast<uint32_t>(device->ethernet_core_from_logical_core(worker_eth_sender_core).x),
                                 static_cast<uint32_t>(device->ethernet_core_from_logical_core(worker_eth_sender_core).y),
                                 static_cast<uint32_t>(cb_num_pages / 2),
+                                static_cast<uint32_t>(all_gather_config.get_num_buffers_per_worker())
                             };
                             log_trace(tt::LogOp, "Worker {} SW CT args", b);
                             log_trace(tt::LogOp, "\tall_gather_config.is_output_dram(): {}", all_gather_config.is_output_dram());
@@ -1193,7 +1197,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
                                 static_cast<uint32_t>(device->ethernet_core_from_logical_core(worker_eth_receiver_core).y),
                                 static_cast<uint32_t>(receiver_eth_sem_addrs.at(b)),
                                 static_cast<uint32_t>(receiver_worker_semaphore_addr),
-                                static_cast<uint32_t>(cb_num_pages / 2)
+                                static_cast<uint32_t>(cb_num_pages / 2),
+                                static_cast<uint32_t>(all_gather_config.get_num_buffers_per_worker())
                             };
 
                             log_trace(tt::LogOp, "Worker {} RR ct args", b);
