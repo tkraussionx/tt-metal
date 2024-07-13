@@ -117,6 +117,8 @@ void kernel_main() {
     constexpr uint32_t num_senders = get_compile_time_arg_val(2);
     constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
 
+    DPRINT << "EDM (enable_sender | enable_receiver) " << uint32_t((enable_sender_side << 16) | enable_receiver_side) << ", on core " << (uint32_t)(my_y[0] << 16 | my_x[0]) << "\n";
+
     constexpr tt::tt_metal::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
         static_cast<tt::tt_metal::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
 

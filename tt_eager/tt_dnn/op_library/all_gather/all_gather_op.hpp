@@ -85,7 +85,7 @@ class AllGatherConfig {
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
         this->is_sharded = input_tensor.is_sharded();
-        this->num_eth_buffers = (this->enable_bidirectional ? /*8*/ 2 /*REVERT TO 8 BEFORE MERGE*/ : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
+        this->num_eth_buffers = (this->enable_bidirectional ? /*8*/ 1 /*REVERT TO 8 BEFORE MERGE*/ : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
         if (this->is_sharded) {
             this->num_eth_buffers = std::min(this->num_eth_buffers, input_tensor.shard_spec()->num_cores());
             if ((input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) % (ring_size) != 0 &&

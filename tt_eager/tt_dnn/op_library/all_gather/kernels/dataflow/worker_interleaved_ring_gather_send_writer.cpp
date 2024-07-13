@@ -80,6 +80,7 @@ void kernel_main() {
         pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
     }
 
+    DPRINT << "SW done transfer 0\n";
     // num_transfers = num_devices - 1
     for (uint32_t i = 1; i < num_transfers; ++i) {
         if constexpr(num_full_chunks > 0) {
@@ -99,6 +100,7 @@ void kernel_main() {
             ASSERT(half_cb_n_pages > rem_num_pages);
             pop_filler_pages_from_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
         }
+        DPRINT << "SW done transfer " << i << "\n";
     }
-
+    DPRINT << "SW DONE\n";
 }

@@ -344,6 +344,7 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<EDM_CONFIG> &sende
             eth_send_payload_complete_signal_over_channel(
                 sender_buffer_channel.get_eth_transaction_channel(), sender_buffer_channel.get_current_payload_size());
             sender_buffer_channel.set_send_completion_pending(false);
+            DPRINT << "EDM SENDER goto waiting for eth: " << sender_buffer_channel.get_eth_transaction_channel() << "\n";
             sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::WAITING_FOR_ETH);
             did_something = true;
         }
@@ -368,8 +369,10 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     sender_buffer_channel.increment_worker_semaphores();
 
     if (!channel_done) {
+        DPRINT << "EDM SENDER goto waiting for worker: " << sender_buffer_channel.get_eth_transaction_channel() << "\n";
         sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::WAITING_FOR_WORKER);
     } else {
+        DPRINT << "EDM SENDER CHANNEL DONE: " << sender_buffer_channel.get_eth_transaction_channel() << "\n";
         sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
         num_senders_complete++;
     }
@@ -387,6 +390,7 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(
     if (transimission_acked_by_receiver) {
         eth_clear_sender_channel_ack(sender_buffer_channel.get_eth_transaction_channel());
         sender_buffer_channel.increment_messages_moved();
+        DPRINT << "EDM SENDER goto signaling worker: " << sender_buffer_channel.get_eth_transaction_channel() << "\n";
         sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SIGNALING_WORKER);
         sender_notify_workers_if_buffer_available_sequence(sender_buffer_channel, num_senders_complete);
         did_something = true;
@@ -406,6 +410,7 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(
     if constexpr (EDM_CONFIG::TERMINATION_MODE == EriscDataMoverTerminationMode::WORKER_INITIATED) {
         if (*sender_channel_buffer.local_semaphore_address == EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY) {
             sender_channel_buffer.clear_local_semaphore();
+            DPRINT << "EDM SENDER goto done: " << sender_channel_buffer.get_eth_transaction_channel() << "\n";
             sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
             num_senders_complete++;
             return true;
@@ -416,6 +421,7 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(
     if (read_finished) {
         // We can clear the semaphore, and wait for space on receiver
         // sender_channel_buffer.clear_local_semaphore();
+        DPRINT << "EDM SENDER goto ready for eth transfers: " << sender_channel_buffer.get_eth_transaction_channel() << "\n";
         sender_channel_buffer.goto_state(ChannelBuffer<EDM_CONFIG>::READY_FOR_ETH_TRANSFER);
         did_something = true;
 
@@ -436,6 +442,7 @@ template <typename EDM_CONFIG>
 FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<EDM_CONFIG> &buffer_channel) {
     buffer_channel.clear_local_semaphore();
     buffer_channel.increment_worker_semaphores();
+    DPRINT << "EDM RECEIVER goto waiting for worker: " << buffer_channel.get_eth_transaction_channel() << "\n";
     buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::WAITING_FOR_WORKER);
 
     return true;
@@ -455,6 +462,7 @@ FORCE_INLINE bool receiver_eth_accept_payload_sequence(
     if (buffer_channel.eth_bytes_are_available_on_channel()) {
         if (!eth_txq_is_busy()) {
             eth_receiver_channel_ack(buffer_channel.get_eth_transaction_channel(), eth_transaction_ack_word_addr);
+            DPRINT << "EDM RECEIVER goto signaling worker: " << buffer_channel.get_eth_transaction_channel() << "\n";
             buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SIGNALING_WORKER);
             did_something = true;
 
@@ -506,8 +514,10 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
             }
 
             if (!channel_done) {
+                DPRINT << "EDM RECEIVER goto wait for eth: " << buffer_channel.get_eth_transaction_channel() << "\n";
                 buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::WAITING_FOR_ETH);
             } else {
+                DPRINT << "EDM RECEIVER CHANNEL DONE: " << buffer_channel.get_eth_transaction_channel() << "\n";
                 buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::DONE);
                 num_receivers_complete++;
             }
