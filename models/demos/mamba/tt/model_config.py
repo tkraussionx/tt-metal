@@ -46,13 +46,13 @@ def create_model_config(batch_size, hidden_size, mode=ModelMode.DECODE, seq_len=
     )
     configs["sharded_scan"] = ttnn.create_sharded_memory_config(
         shape=(1, 1, outer_dim, hidden_size * 2 * latent),
-        core_grid=ttnn.CoreGrid(y=8, x=8),
+        core_grid=ttnn.CoreGrid(y=5, x=8),
         strategy=ttnn.ShardStrategy.WIDTH,
         orientation=ttnn.ShardOrientation.ROW_MAJOR,
     )
     configs["sharded_prev_hidden"] = ttnn.create_sharded_memory_config(
         shape=(1, 1, 1, hidden_size * 2 * latent),
-        core_grid=ttnn.CoreGrid(y=8, x=8),
+        core_grid=ttnn.CoreGrid(y=5, x=8),
         strategy=ttnn.ShardStrategy.WIDTH,
         orientation=ttnn.ShardOrientation.ROW_MAJOR,
     )

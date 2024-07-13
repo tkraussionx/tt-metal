@@ -36,7 +36,7 @@ class PytorchMambaBlock(torch.nn.Module):
             "state-spaces/mamba-2.8b",
             ModelMode.PREFILL,
             1,
-            128,
+            64,
             0.98,
         ),
         (
