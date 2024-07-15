@@ -109,8 +109,13 @@ def permute_conv_weights(weight, bias):
 
 class resnet50Bottleneck:
     expansion: int = 4
+    layer: int
+    module: int
 
-    def __init__(self, parameters, downsample, stride, model_config) -> None:
+    def __init__(self, parameters, downsample, stride, model_config, layer, module) -> None:
+        self.layer = layer
+        self.module = module
+
         # init is just to pre-process pytorch weights and bias tensors
         self.conv1_weight_tensor = parameters.conv1.weight
         self.conv1_bias_tensor = parameters.conv1.bias
@@ -154,6 +159,7 @@ class resnet50Bottleneck:
         height_sharding=None,
         transpose_shards=True,
         packer_l1_acc=True if is_wormhole_b0() else False,
+        enable_act_doule_buffer=False,
     ):
         if self.downsample:
             logger.debug(f"Running downsample")
@@ -180,6 +186,7 @@ class resnet50Bottleneck:
                     reshard_if_not_optimal=reshard_if_not_optimal,
                     transpose_shards=transpose_shards,
                     packer_l1_accum_enabled=packer_l1_acc,
+                    enable_act_doule_buffer=enable_act_doule_buffer,
                 ),
                 conv_op_cache=conv_op_cache,
             )
@@ -302,6 +309,9 @@ class resnet50Bottleneck:
                 reshard_if_not_optimal,
                 height_sharding,
                 transpose_shards=transpose_shards,
+                enable_act_doule_buffer=False
+                if (self.layer == 1 and self.module == 2) or (self.layer == 2 and self.module == 1)
+                else enable_act_doule_buffer,
             )
 
         reallocate_halo_output = batch_size == 20
@@ -400,6 +410,9 @@ class resnet50Bottleneck:
                 ds_reshard,
                 height_sharding,
                 transpose_shards=transpose_shards,
+                enable_act_doule_buffer=False
+                if (self.layer == 1 and self.module == 2) or (self.layer == 2 and self.module == 1)
+                else enable_act_doule_buffer,
             )
 
         assert ttnn.get_memory_config(out) == ttnn.get_memory_config(
@@ -491,6 +504,7 @@ class resnet50:
             blocks=layers[0],
             stride=1,
             model_config=model_config,
+            layer=1,
         )
         self.layer2 = self._make_layer(
             parameters=parameters.layer2,
@@ -498,6 +512,7 @@ class resnet50:
             blocks=layers[1],
             stride=2,
             model_config=model_config,
+            layer=2,
         )
         self.layer3 = self._make_layer(
             parameters=parameters.layer3,
@@ -505,6 +520,7 @@ class resnet50:
             blocks=layers[2],
             stride=2,
             model_config=model_config,
+            layer=3,
         )
         self.layer4 = self._make_layer(
             parameters=parameters.layer4,
@@ -512,6 +528,7 @@ class resnet50:
             blocks=layers[3],
             stride=2,
             model_config=model_config,
+            layer=4,
         )
 
         # All modules in RN50 are unrolled here. One variable for each module. Only specific number of modules supported - layers MUST equal to [3, 4, 6, 3]
@@ -605,6 +622,7 @@ class resnet50:
         blocks: int,
         stride: int,
         model_config=None,
+        layer: int = 0,
     ) -> List[resnet50Bottleneck]:
         layers = []
         layers.append(
@@ -613,6 +631,8 @@ class resnet50:
                 downsample=stride != 1 or self.inplanes != planes * resnet50Bottleneck.expansion,
                 stride=stride,
                 model_config=model_config,
+                layer=layer,
+                module=1,
             )
         )
         self.inplanes = planes * resnet50Bottleneck.expansion
@@ -623,6 +643,8 @@ class resnet50:
                     downsample=False,
                     stride=1,
                     model_config=model_config,
+                    layer=layer,
+                    module=block_num + 1,
                 )
             )
         return layers
@@ -967,7 +989,7 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_doule_buffer=True if whb0_and_b16 else False,
+            enable_act_doule_buffer=False,  ##True if whb0_and_b16 else False,
         )
 
         if is_first_run:
@@ -989,7 +1011,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_doule_buffer=True if whb0_and_b16 else False,
+            enable_act_doule_buffer=False,  ##True if whb0_and_b16 else False,
         )
 
         logger.debug(f"==== Running layer 4 module 3")
@@ -1001,7 +1023,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_doule_buffer=True if whb0_and_b16 else False,
+            enable_act_doule_buffer=False,  ##True if whb0_and_b16 else False,
         )
 
         grid_size = (8, 4)
