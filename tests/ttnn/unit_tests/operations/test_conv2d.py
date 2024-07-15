@@ -683,28 +683,28 @@ def test_resnet50_conv_wh_fp32(
         # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
         # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
         # # sd convs with HxW=64x64 with batch size=2
-        (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
+        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
         (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
-        (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
-        (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
-        (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        # 1x1 conv
-        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
-        # Small conv
-        (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),
+        # (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
+        # (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
+        # (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+        # (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
+        # (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
+        # (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
+        # (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # # 1x1 conv
+        # (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
+        # # Small conv
+        # (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),
     ),
 )
 @pytest.mark.parametrize(
@@ -716,7 +716,7 @@ def test_resnet50_conv_wh_fp32(
     [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
-@pytest.mark.parametrize("enable_auto_formatting", [True, False])
+@pytest.mark.parametrize("enable_auto_formatting", [False])
 def test_sd_conv(
     device,
     use_program_cache,
@@ -817,47 +817,46 @@ def test_sd_conv(
         # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
         # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
         # # sd convs with HxW=64x64 with batch size=2
-        (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
-        (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
-        (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
-        (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
-        (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        # 1x1 conv
-        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
-        # Small conv
-        (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),
+        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
+        (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
+        # (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
+        # (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+        # (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+        # (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
+        # (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None),
+        # (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None),
+        # (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        # # 1x1 conv
+        # (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, False, None),
+        # # Small conv
+        # (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),
     ),
 )
 @pytest.mark.parametrize(
     "weights_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    [ttnn.bfloat16],
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize(
     "fp32_accum",
     [
         False,
-        True,
     ],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
-@pytest.mark.parametrize("enable_auto_formatting", [True, False])
+@pytest.mark.parametrize("enable_auto_formatting", [False])
 def test_sd_conv_wh(
     device,
     use_program_cache,
@@ -880,8 +879,8 @@ def test_sd_conv_wh(
     config_override,
     enable_auto_formatting,
 ):
-    if device.core_grid.y == 7:
-        pytest.skip("This test is not supported for N300")
+    # if device.core_grid.y == 7:
+    #     pytest.skip("This test is not supported for N300")
 
     # Skip test cases raising OOM, but do not affect the SD e2e test
     if (

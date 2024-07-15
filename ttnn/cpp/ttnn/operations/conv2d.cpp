@@ -70,7 +70,9 @@ ParallelConfig determine_parallel_config(
         uint32_t num_cores_nhw =
             height_sharding
                 ? find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
-                : find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0]);
+                : block_shard_orientation == ShardOrientation::COL_MAJOR ?
+                find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0]):
+                find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[1]);
         return num_cores_nhw;
     };
 
@@ -87,6 +89,9 @@ ParallelConfig determine_parallel_config(
                 block_shard_orientation == ShardOrientation::COL_MAJOR ? num_cores_nhw : num_cores_channels;
             uint32_t cores_y =
                 block_shard_orientation == ShardOrientation::COL_MAJOR ? num_cores_channels : num_cores_nhw;
+            std::cout << "total cores for channel " << total_cores_for_channels << " num_cores_channels "<< num_cores_channels << " num_cores_nhw "
+             << num_cores_nhw << " "<< cores_x << "  "<< cores_y << std::endl;
+            std::cout << "device conf " << device_grid_size[0] << "  "<< device_grid_size[1] << " block_shard_orientation " << (int)block_shard_orientation << std::endl;
             CoreRange core_range = CoreRange(CoreCoord({0, 0}), CoreCoord({cores_x - 1, cores_y - 1}));
             CoreRangeSet grid = CoreRangeSet({core_range});
             return grid;
@@ -156,6 +161,7 @@ MemoryConfig create_sharded_memory_config_from_parallel_config(
     TT_ASSERT(channels % num_cores_channels == 0);
     uint32_t channel_shard = channels / num_cores_channels;
     auto shard_spec = ShardSpec{parallel_config.grid, {nhw_shard, channel_shard}, shard_orientation};
+    std::cout << "shard scheme " << (int)shard_scheme << " shard_orientation " << (int)shard_orientation << std::endl;
     return MemoryConfig{shard_scheme, BufferType::L1, shard_spec};
 }
 
@@ -554,7 +560,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
     std::optional<const Conv2dConfig> conv_config_) {
-
+    std::cout << "entering in conv2d" << std::endl;
     Conv2dConfig conv_config = conv_config_.value_or(Conv2dConfig());
     uint32_t output_height = ((input_height - kernel_size[0] + 2 * padding[0]) / stride[0]) + 1;
     uint32_t output_width = ((input_width - kernel_size[1] + 2 * padding[1]) / stride[1]) + 1;

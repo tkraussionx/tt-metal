@@ -71,6 +71,7 @@ def get_sliding_window_op_output_shard_nhw_size(
 
 
 def calculate_shard_grid(grid_size, num_cores_nhw, transpose_mcast=True):
+    # breakpoint()
     num_cores_w, num_cores_h = grid_size
     if transpose_mcast:
         shard_layout = (

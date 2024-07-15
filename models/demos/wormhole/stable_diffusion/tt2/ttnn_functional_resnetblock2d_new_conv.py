@@ -37,8 +37,8 @@ def ttnn_to_torch(input):
 
 
 config_override = {
-    (320, 320, 64, 64): {"act_block_h": 64},
-    (640, 640, 32, 32): {"act_block_h": 64},
+    (320, 320, 64, 64): {"act_block_h": 32},
+    (640, 640, 32, 32): {"act_block_h": 32},
     (640, 1920, 32, 32): {"act_block_h": 32},
     (640, 1280, 32, 32): {"act_block_h": 32},
     (1280, 1920, 16, 16): {"act_block_h": 32},
@@ -47,7 +47,7 @@ config_override = {
     (320, 960, 64, 64): {"act_block_h": 32},
     (640, 960, 32, 32): {"act_block_h": 32},
     (320, 640, 64, 64): {"act_block_h": 32},
-    (640, 320, 64, 64): {"act_block_h": 64},
+    (640, 320, 64, 64): {"act_block_h": 32},
     (640, 640, 64, 64): {"act_block_h": 32},
 }
 
@@ -421,6 +421,7 @@ class resnetBlock2D:
             )
             if self.conv1_config_override and "act_block_h" in self.conv2_config_override:
                 conv_config.act_block_h_override = self.conv1_config_override["act_block_h"]
+                conv_config.act_block_h_override = 32  # self.conv1_config_override["act_block_h"]
             [hidden_states, _out_height, _out_width, self.conv1s_weights[0], self.conv1s_bias[0]] = ttnn.conv2d(
                 input_tensor=hidden_states,
                 weight_tensor=self.conv1s_weights[0],
@@ -579,7 +580,25 @@ class resnetBlock2D:
                 ttnn.experimental.tensor.BcastOpDim.H,
                 output_mem_config=hidden_states.memory_config(),
             )
-
+        # breakpoint()
+        #  xshape = x.shape_without_padding()
+        # ## NOTE: using multicore untilize_with_unpadding results in PCC error
+        # x = ttnn.experimental.tensor.untilize_with_unpadding(
+        #     x,
+        #     [xshape[0] - 1, xshape[1] - 1, xshape[2] - 1, xshape[3] - 1],
+        #     ttnn.L1_MEMORY_CONFIG,
+        #     use_multicore=False,
+        # )
+        # x = ttnn.experimental.tensor.tilize_with_val_padding(
+        #     x,
+        #     xshape,
+        #     0,
+        #     output_mem_config=ttnn.L1_MEMORY_CONFIG,
+        #     use_multicore=True,
+        # )
+        # hidden_states = ttnn.to_memory_config(hidden_states, ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED)
+        a = ttnn.to_torch(hidden_states)
+        hidden_states = ttnn.from_torch(a, device=self.device, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
         hidden_states = ttnn.to_layout(hidden_states, ttnn.ROW_MAJOR_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
         hidden_states = ttnn.to_memory_config(hidden_states, self.second_gn_expected_input_sharded_memory_config)
         hidden_states = ttnn.group_norm(
@@ -628,6 +647,7 @@ class resnetBlock2D:
         )
         if self.conv2_config_override and "act_block_h" in self.conv2_config_override:
             conv_config.act_block_h_override = self.conv2_config_override["act_block_h"]
+        # breakpoint()
         [hidden_states, _out_height, _out_width, self.conv2_weights, self.conv2_bias] = ttnn.conv2d(
             input_tensor=hidden_states,
             weight_tensor=self.conv2_weights,

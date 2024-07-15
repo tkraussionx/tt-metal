@@ -74,20 +74,24 @@ class basic_transformer_block:
 
         sharded_mem_cfg = ttnn.get_memory_config(hidden_states)
         program_config = ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
-            compute_with_storage_grid_size=(8, 8),
+            compute_with_storage_grid_size=(8, 7),
             subblock_w=1,
             block_h=sharded_mem_cfg.shard_spec.shape[0] // 32,
             block_w=sharded_mem_cfg.shard_spec.shape[1] // 32,
             inplace=False,
         )
 
+        print(ttnn.get_memory_config(hidden_states))
+        print(sharded_mem_cfg)
+        print(program_config)
+        print(hidden_states)
         norm_hidden_states = ttnn.layer_norm(
             hidden_states,
             epsilon=1e-05,
             weight=self.parameters.norm1.weight,
             bias=self.parameters.norm1.bias,
             memory_config=sharded_mem_cfg,
-            program_config=program_config,
+            # program_config=program_config,
         )
 
         # 1. Self-Attention

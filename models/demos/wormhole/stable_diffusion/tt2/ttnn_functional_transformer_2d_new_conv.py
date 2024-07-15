@@ -194,6 +194,9 @@ class transformer_2d_model:
         if spilled_residual:
             residual = ttnn.to_memory_config(residual, ttnn.DRAM_MEMORY_CONFIG)
 
+        # breakpoint()
+        a = ttnn.to_torch(hidden_states)
+        hidden_states = ttnn.from_torch(a, device=self.device, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
         hidden_states = ttnn.to_layout(
             hidden_states,
             ttnn.ROW_MAJOR_LAYOUT,
@@ -280,6 +283,10 @@ class transformer_2d_model:
 
         # 2. Blocks
         for block in self.blocks:
+            # breakpoint()
+            print(block)
+            print(hidden_states)
+            print(encoder_hidden_states)
             hidden_states = block(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
