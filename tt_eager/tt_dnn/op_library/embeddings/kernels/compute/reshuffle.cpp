@@ -22,9 +22,16 @@ void MAIN {
     cb_reserve_back(cb_out, 1);
     copy_tile(cb_weights, 0, 0);
 
-    uint32_t idx_addr = (uint)6868 << 4; // hard coded rd_addr
+    // get cb_index pointer from unpack to math thread
+    volatile uint *idx_addr_ptr;
+    uint32_t tile_to_get = 0;
+    cb_get_tile(cb_index, tile_to_get, &idx_addr_ptr);
+    uint32_t idx_addr = reinterpret_cast<uint32_t>(idx_addr_ptr);
+
     reshuffle_rows_tile_init();
     reshuffle_rows_tile(0, idx_addr);
+
+    cb_release_tile(cb_index);
 
     pack_tile(1, cb_out); // reshuffle puts output into Tile 1 in DEST
 
