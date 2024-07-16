@@ -466,7 +466,7 @@ void generate_edm_kernels_for_ring_or_linear_topology(
     std::optional<uint32_t> sender_device_id);
 
 void set_edm_runtime_args(
-    tt_metal::Program& program,
+    tt::tt_metal::Program& program,
     KernelHandle edm_kernel_handle,
     ccl::EriscDatamoverBuilder const& edm_builder,
     CoreCoord const& eth_core

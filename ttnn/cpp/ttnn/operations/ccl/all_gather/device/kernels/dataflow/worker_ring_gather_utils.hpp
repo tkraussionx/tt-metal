@@ -327,8 +327,13 @@ FORCE_INLINE void write_and_send_chunk(
     const uint32_t& page_size,
     uint64_t remote_l1_write_addr,
     uint64_t eth_l1_sender_semaphore_addr) {
+    {
+        DeviceZoneScopedN("CB-WAIT-FRONT");
     cb_wait_front(cb_id, num_pages);
+    }
     uint32_t l1_read_addr = get_read_ptr(cb_id);
+    {
+        DeviceZoneScopedN("WRITE-AND-SEND-CHUNK");
     noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages);
     noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
     // TODO: do eth semaphore inc here
@@ -358,7 +363,11 @@ FORCE_INLINE void write_and_send_chunk(
 #endif
         l1_read_addr += page_size;
     }
-    noc_async_write_barrier();
+    }
+    {
+        DeviceZoneScopedN("WRITE-BARRIER");
+        noc_async_write_barrier();
+    }
     cb_pop_front(cb_id, num_pages);
 }
 
@@ -394,7 +403,12 @@ FORCE_INLINE void write_chunk(
     const uint32_t& row_offset,
     const uint32_t& num_pages,
     const uint32_t& page_size) {
+    {
+        DeviceZoneScopedN("CB-WAIT-FRONT");
     cb_wait_front(cb_id, num_pages);
+    }
+    {
+        DeviceZoneScopedN("WRITE-CHUNK");
     uint32_t l1_read_addr = get_read_ptr(cb_id);
     for (uint32_t i = 0; i < num_pages; ++i) {
 #ifdef RM_INTERLEAVED
@@ -422,7 +436,11 @@ FORCE_INLINE void write_chunk(
 #endif
         l1_read_addr += page_size;
     }
+    }
+    {
+        DeviceZoneScopedN("WRITE-BARRIER");
     noc_async_write_barrier();
+    }
     cb_pop_front(cb_id, num_pages);
 }
 
@@ -448,7 +466,12 @@ FORCE_INLINE void read_chunk_from_input_tensor(
     const uint32_t& num_pages,
     const uint32_t& page_size) {
     const uint32_t end_read_idx = input_page_idx + num_pages;
+    {
+        DeviceZoneScopedN("CB-RESERVE-BACK");
     cb_reserve_back(cb_id, num_pages);
+    }
+    {
+    DeviceZoneScopedN("READ-CHUNK-INPUT");
     uint32_t local_l1_read_addr = get_write_ptr(cb_id);
     for (; input_page_idx < end_read_idx; ++input_page_idx) {
 #ifdef RM_INTERLEAVED
@@ -459,7 +482,11 @@ FORCE_INLINE void read_chunk_from_input_tensor(
 #endif
         local_l1_read_addr += page_size;
     }
-    noc_async_read_barrier();
+    }
+    {
+        DeviceZoneScopedN("READ-BARRIER");
+        noc_async_read_barrier();
+    }
     cb_push_back(cb_id, num_pages);
 }
 
@@ -497,7 +524,12 @@ FORCE_INLINE void read_chunk_from_output_tensor(
     const uint32_t& row_offset,
     const uint32_t& num_pages,
     const uint32_t& page_size) {
-    cb_reserve_back(cb_id, num_pages);
+    {
+        DeviceZoneScopedN("CB-RESERVE-BACK");
+        cb_reserve_back(cb_id, num_pages);
+    }
+    {
+        DeviceZoneScopedN("READ-CHUNK-OUTPUT");
     uint32_t local_l1_read_addr = get_write_ptr(cb_id);
     for (uint32_t i = 0; i < num_pages; ++i) {
 #ifdef RM_INTERLEAVED
@@ -525,7 +557,11 @@ FORCE_INLINE void read_chunk_from_output_tensor(
 #endif
         local_l1_read_addr += page_size;
     }
-    noc_async_read_barrier();
+    }
+    {
+        DeviceZoneScopedN("READ-BARRIER");
+        noc_async_read_barrier();
+    }
     cb_push_back(cb_id, num_pages);
 }
 
@@ -544,7 +580,12 @@ FORCE_INLINE void read_chunk_from_output_tensor_v2(
     bool& last_page_of_worker) {
     // we expected caller to reset this and the last curr_page_idx when we set it true
     ASSERT(last_page_of_worker == false);
-    cb_reserve_back(cb_id, num_pages);
+    {
+        DeviceZoneScopedN("CB-RESERVE_BACK");
+        cb_reserve_back(cb_id, num_pages);
+    }
+    {
+        DeviceZoneScopedN("READ-CHUNK-OUTPUT");
     uint32_t local_l1_read_addr = get_write_ptr(cb_id);
     for (uint32_t i = 0; i < num_pages; ++i) {
 #ifdef RM_INTERLEAVED
@@ -574,7 +615,11 @@ FORCE_INLINE void read_chunk_from_output_tensor_v2(
 #endif
         local_l1_read_addr += page_size;
     }
-    noc_async_read_barrier();
+    }
+    {
+        DeviceZoneScopedN("READ-BARRIER");
+        noc_async_read_barrier();
+    }
     cb_push_back(cb_id, num_pages);
 }
 
@@ -591,7 +636,12 @@ FORCE_INLINE void write_chunk_v2(
     const uint32_t num_pages,
     const uint32_t page_size,
     bool& last_page_of_worker) {
-    cb_wait_front(cb_id, num_pages);
+    {
+        DeviceZoneScopedN("CB-WAIT-FRONT");
+        cb_wait_front(cb_id, num_pages);
+    }
+    {
+        DeviceZoneScopedN("WRITE-CHUNK");
     uint32_t l1_read_addr = get_read_ptr(cb_id);
     for (uint32_t i = 0; i < num_pages; ++i) {
 #ifdef RM_INTERLEAVED
@@ -619,6 +669,10 @@ FORCE_INLINE void write_chunk_v2(
 #endif
         l1_read_addr += page_size;
     }
-    noc_async_write_barrier();
+    }
+    {
+        DeviceZoneScopedN("WRITE-BARRIER");
+        noc_async_write_barrier();
+    }
     cb_pop_front(cb_id, num_pages);
 }

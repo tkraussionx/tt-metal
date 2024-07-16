@@ -206,9 +206,12 @@ void kernel_main() {
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
     // will always be "receiver" (only for handshake purposes)
-    bool act_as_sender_in_handshake =
-        (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
-    erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    {
+        DeviceZoneScopedN("EDM_HS");
+        bool act_as_sender_in_handshake =
+            (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
+        erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    }
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
     uint32_t eth_transaction_complete_addr = handshake_addr + 32;
 
@@ -223,6 +226,7 @@ void kernel_main() {
     auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
 
     while (senders_in_progress || receivers_in_progress) {
+        DeviceZoneScopedN("EDM-LOOP-ITER");
         bool did_something_sender = false;
         bool did_something_receiver = false;
 
@@ -258,6 +262,9 @@ void kernel_main() {
                 default:
                 break;
             };
+            if (did_something_sender) {
+                DeviceZoneScopedN("EDM-DID-SOMETHING-SENDER");
+            }
         }
 
         //////////////////////////////////////
@@ -285,6 +292,9 @@ void kernel_main() {
                 default:
                 break;
             };
+            if (did_something_receiver) {
+                DeviceZoneScopedN("EDM-DID-SOMETHING-RECEIVER");
+            }
         }
         send_recv_index.increment();
         //////////////////////////////////////
