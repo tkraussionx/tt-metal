@@ -9,34 +9,34 @@
 void kernel_main() {
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
     const uint32_t dst_addr = get_arg_val<uint32_t>(1);
+    const uint32_t num_transfers = get_arg_val<uint32_t>(2);
+    const uint32_t num_full_chunks = get_arg_val<uint32_t>(3);
+    const uint32_t page_size = get_arg_val<uint32_t>(4);
+    const uint32_t output_page_size = get_arg_val<uint32_t>(5);
+    const uint32_t num_pages = get_arg_val<uint32_t>(6);
+    const uint32_t rem_num_pages = get_arg_val<uint32_t>(7);
+    const uint32_t input_start_idx = get_arg_val<uint32_t>(8);
+    const uint32_t output_start_idx = get_arg_val<uint32_t>(9);
+    const uint32_t output_start_addr_offset = get_arg_val<uint32_t>(10);
+    const uint32_t row_start_idx = get_arg_val<uint32_t>(11);
+    const uint32_t col_start_idx = get_arg_val<uint32_t>(12);
+    const uint32_t row_offset = get_arg_val<uint32_t>(13);
+    const uint32_t col_offset = get_arg_val<uint32_t>(14);
+    const uint32_t num_rows = get_arg_val<uint32_t>(15);
+    const uint32_t num_cols = get_arg_val<uint32_t>(16);
+    const uint32_t last_output_page_offset = get_arg_val<uint32_t>(17);
+    const uint32_t output_page_offset = get_arg_val<uint32_t>(18);
+    const uint32_t last_output_addr_offset = get_arg_val<uint32_t>(19);
+    const uint32_t output_addr_offset = get_arg_val<uint32_t>(20);
+    const uint32_t input_start_ring_idx = get_arg_val<uint32_t>(21);
+    const uint32_t sem_addr = get_arg_val<uint32_t>(22);
+    const bool is_clockwise_direction = get_arg_val<uint32_t>(23) == 1;
 
     constexpr bool src_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;
-    constexpr uint32_t num_transfers = get_compile_time_arg_val(2);
-    constexpr uint32_t num_full_chunks = get_compile_time_arg_val(3);
-    constexpr uint32_t page_size = get_compile_time_arg_val(4);
-    constexpr uint32_t output_page_size = get_compile_time_arg_val(5);
-    constexpr uint32_t num_pages = get_compile_time_arg_val(6);
-    constexpr uint32_t rem_num_pages = get_compile_time_arg_val(7);
-    constexpr uint32_t input_start_idx = get_compile_time_arg_val(8);
-    constexpr uint32_t output_start_idx = get_compile_time_arg_val(9);
-    constexpr uint32_t output_start_addr_offset = get_compile_time_arg_val(10);
-    constexpr uint32_t row_start_idx = get_compile_time_arg_val(11);
-    constexpr uint32_t col_start_idx = get_compile_time_arg_val(12);
-    constexpr uint32_t row_offset = get_compile_time_arg_val(13);
-    constexpr uint32_t col_offset = get_compile_time_arg_val(14);
-    constexpr uint32_t num_rows = get_compile_time_arg_val(15);
-    constexpr uint32_t num_cols = get_compile_time_arg_val(16);
-    constexpr uint32_t last_output_page_offset = get_compile_time_arg_val(17);
-    constexpr uint32_t output_page_offset = get_compile_time_arg_val(18);
-    constexpr uint32_t last_output_addr_offset = get_compile_time_arg_val(19);
-    constexpr uint32_t output_addr_offset = get_compile_time_arg_val(20);
-    constexpr uint32_t input_start_ring_idx = get_compile_time_arg_val(21);
-    constexpr uint32_t sem_addr = get_compile_time_arg_val(22);
-    constexpr bool is_clockwise_direction = get_compile_time_arg_val(23) == 1;
-    constexpr uint32_t half_cb_n_pages = get_compile_time_arg_val(24);
-    constexpr uint32_t ring_size = get_compile_time_arg_val(25);
-    static_assert(half_cb_n_pages > rem_num_pages, "half_cb_n_pages must be greater than or equal to rem_num_pages");
+    constexpr uint32_t half_cb_n_pages = get_compile_time_arg_val(2);
+    constexpr uint32_t ring_size = get_compile_time_arg_val(3);
+    // static_assert(half_cb_n_pages > rem_num_pages, "half_cb_n_pages must be greater than or equal to rem_num_pages");
 
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 
@@ -69,12 +69,12 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
 
-    if constexpr(num_full_chunks > 0) {
+    if (num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
             read_chunk_from_input_tensor(input_page_idx, cb_id_in0, s, num_pages, page_size);
         }
     }
-    if constexpr(rem_num_pages > 0) {
+    if (rem_num_pages > 0) {
         read_chunk_from_input_tensor(input_page_idx, cb_id_in0, s, rem_num_pages, page_size);
         ASSERT(num_pages == 0 || num_pages > rem_num_pages);
         ASSERT(half_cb_n_pages > rem_num_pages);
@@ -88,38 +88,38 @@ void kernel_main() {
         if (is_clockwise_direction) {
             if (input_ring_idx == 0) {
                 input_ring_idx = ring_size - 1;
-                if constexpr(output_addr_offset != 0) {
+                if (output_addr_offset != 0) {
                     d.bank_base_address += last_output_addr_offset;
                 }
-                if constexpr(output_page_offset != 0) {
+                if (output_page_offset != 0) {
                     output_base_page_idx += last_output_page_offset;
                 }
             } else {
                 input_ring_idx--;
-                if constexpr(output_addr_offset != 0) {
+                if (output_addr_offset != 0) {
                     d.bank_base_address -= output_addr_offset;
                 }
-                if constexpr(output_page_offset != 0) {
+                if (output_page_offset != 0) {
                     output_base_page_idx -= output_page_offset;
                 }
             }
         } else {
             if (input_ring_idx == ring_size - 1) {//0) {
                 input_ring_idx = 0;
-                if constexpr(output_addr_offset != 0) {
+                if (output_addr_offset != 0) {
                     d.bank_base_address -= last_output_addr_offset;
                     // d.bank_base_address = last_output_addr_offset;
                 }
-                if constexpr(output_page_offset != 0) {
+                if (output_page_offset != 0) {
                     output_base_page_idx -= last_output_page_offset;
                     // output_base_page_idx = last_output_page_offset;
                 }
             } else {
                 input_ring_idx++;
-                if constexpr(output_addr_offset != 0) {
+                if (output_addr_offset != 0) {
                     d.bank_base_address += output_addr_offset;
                 }
-                if constexpr(output_page_offset != 0) {
+                if (output_page_offset != 0) {
                     output_base_page_idx += output_page_offset;
                 }
             }
@@ -127,14 +127,14 @@ void kernel_main() {
         output_page_idx = output_base_page_idx;
         col_idx = col_start_idx;
         row_idx = row_start_idx;
-        if constexpr(num_full_chunks > 0) {
+        if (num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
                 noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
                 sem_idx++;
                 read_chunk_from_output_tensor(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
             }
         }
-        if constexpr(rem_num_pages > 0) {
+        if (rem_num_pages > 0) {
             noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
             sem_idx++;
             read_chunk_from_output_tensor(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
