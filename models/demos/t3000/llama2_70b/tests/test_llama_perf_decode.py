@@ -233,7 +233,6 @@ def run_test_LlamaModel_end_to_end(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@skip_for_wormhole_b0("See GH Issue #10323")
 @pytest.mark.timeout(240000)
 @pytest.mark.model_perf_t3000
 @pytest.mark.parametrize(
