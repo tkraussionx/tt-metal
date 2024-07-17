@@ -27,7 +27,7 @@ def run_eltwise_relu_min_tests(
         x = ttnn_ops.setup_ttnn_tensor(x, device, dlayout[0], in_mem_config[0], dtype[0])
 
         tt_result = ttnn.relu_min(x, lower_limit, memory_config=output_mem_config)
-        tt_result = ttnn_tensor_to_torch(tt_result)
+        tt_result = ttnn_ops.ttnn_tensor_to_torch(tt_result)
         logger.info(f"Finished running relu_min")
 
     except Exception as e:
