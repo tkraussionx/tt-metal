@@ -5,6 +5,7 @@
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
 
 namespace NAMESPACE {
+
 void MAIN {
     // compile-time args
     constexpr uint32_t num_output_tiles = get_compile_time_arg_val(0);
@@ -13,6 +14,7 @@ void MAIN {
     constexpr auto cb_in0 = tt::CB::c_in0;
     constexpr auto cb_in1 = tt::CB::c_in1;
     constexpr auto cb_out0 = tt::CB::c_out0;
+    constexpr auto cb_intermed0 = tt::CB::c_intermed0;
     constexpr uint32_t onetile = 1;
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t dst1 = 1;
@@ -33,6 +35,27 @@ void MAIN {
             add_tiles(cb_in0, cb_in1, idx0, idx0, dst0);
             cb_pop_front(cb_in0, onetile);
         }
+        tile_regs_commit();
+
+        // pack fp32 CB to check the bit precision
+        tile_regs_wait();
+        cb_reserve_back(cb_intermed0, onetile);
+        #if defined FP32_DEST_ACC_EN
+            pack_reconfig_data_format(cb_intermed0);
+        #endif
+        pack_tile(dst0, cb_intermed0);
+        cb_push_back(cb_intermed0, onetile);
+        print_bits("batch-dim", 114016);
+        tile_regs_release();
+
+        // unpack to DST
+        tile_regs_acquire();
+        cb_wait_front(cb_intermed0, onetile);
+        #if defined FP32_DEST_ACC_EN
+            unpack_reconfig_data_format_srca(cb_intermed0);
+        #endif
+        copy_tile_to_dst_init_short(cb_intermed0);
+        copy_tile(cb_intermed0, 0, 0);
         tile_regs_commit();
 
         cb_reserve_back(cb_out0, onetile);

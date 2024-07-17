@@ -26,6 +26,7 @@
 #include "compute_kernel_api/mask.h"
 #include "compute_kernel_api/reduce.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "debug/dprint.h"
 
 
 // Deprecated
@@ -33,6 +34,23 @@ ALWI void ACQ() { acquire_dst(tt::DstMode::Half); }
 ALWI void REL() { release_dst(tt::DstMode::Half); }
 
 namespace ckernel {
+
+void printBits(uint32_t n) {
+    for (int i = 31; i >= 0; --i) {
+        (DPRINT << ((n >> i) & 1));
+        if (i % 16 == 0)
+            (DPRINT << ' ');
+    }
+    (DPRINT << ENDL());
+}
+
+FORCE_INLINE void print_bits(const char* dim_str, uint32_t addr) {
+    PACK(volatile tt_l1_ptr float* test_ptrf = reinterpret_cast<volatile tt_l1_ptr float*>(addr);
+         volatile tt_l1_ptr uint32_t* test_ptru = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
+         DPRINT << "(" << dim_str <<  ") print the bit precision of the first element " << test_ptrf[0] << " of the FP32 CB: ";
+         printBits(test_ptru[0]););
+}
+
 
 ALWI void pack_tile_with_dt(uint32_t ifrom_dst, uint32_t icb)
 {

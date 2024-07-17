@@ -4,6 +4,7 @@
 
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/moreh_common.hpp"
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t src_addr = get_arg_val<uint32_t>(0);
@@ -31,6 +32,7 @@ void kernel_main() {
     const InterleavedAddrGenFast<src_is_dram> s = {
         .bank_base_address = src_addr, .page_size = tile_bytes, .data_format = data_format};
 
+    DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
     // read a ublock of tiles from src to CB, and then push the ublock to unpacker
     for (uint32_t i = start_id; i < start_id + num_tiles; i++) {
         cb_reserve_back(cb_id_in0, onetile);

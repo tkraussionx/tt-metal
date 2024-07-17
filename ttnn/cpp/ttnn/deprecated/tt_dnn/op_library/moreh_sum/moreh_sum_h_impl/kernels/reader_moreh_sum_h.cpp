@@ -4,6 +4,7 @@
 
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/moreh_common.hpp"
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -43,6 +44,7 @@ void kernel_main() {
 
     uint32_t w = curr_col_in_batch;
 
+    // DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
     // this reader will read a NHW tensor in NWH order
     for (uint32_t i = 0; i < num_cols; i++) {
         uint32_t curr_id = col_start_tile_id;
