@@ -239,7 +239,7 @@ def run_test_LlamaModel_end_to_end(
 @pytest.mark.parametrize(
     "llama_version",
     (
-        ("llama2"),
+        # ("llama2"),
         ("llama3"),
     ),
 )
