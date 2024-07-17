@@ -586,18 +586,18 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
 
     // log info for debugging opts
     {
-        log_debug(LogOp, "grid_size: {}", p_config.grid_size);
-        log_debug(LogOp, "packer_l1: {}", packer_l1_acc);
-        log_debug(LogOp, "split_reader: {}", split_reader);
-        log_debug(LogOp, "enable_act_double_buffer: {}", enable_act_double_buffer);
-        log_debug(LogOp, "enable block padding: {}", (per_core_out_matrix_height_ntiles % act_block_h_ntiles != 0));
-        log_debug(LogOp, "enable subblock padding: {}", enable_subblock_padding);
-        log_debug(LogOp, "per_core_out_matrix_height_ntiles: {}", per_core_out_matrix_height_ntiles);
-        log_debug(LogOp, "act_block_h_ntiles_padded: {}", act_block_h_ntiles_padded);
-        log_debug(LogOp, "act_block_w_ntiles: {}", act_block_w_ntiles);
-        log_debug(LogOp, "weight_block_w_ntiles: {}", weight_block_w_ntiles);
-        log_debug(LogOp, "out_subblock_h_ntiles_padded: {}", out_subblock_h_ntiles_padded);
-        log_debug(LogOp, "out_subblock_w_ntiles: {}", out_subblock_w_ntiles);
+        log_info(LogOp, "grid_size: {}", p_config.grid_size);
+        log_info(LogOp, "packer_l1: {}", packer_l1_acc);
+        log_info(LogOp, "split_reader: {}", split_reader);
+        log_info(LogOp, "enable_act_double_buffer: {}", enable_act_double_buffer);
+        log_info(LogOp, "enable block padding: {}", (per_core_out_matrix_height_ntiles % act_block_h_ntiles != 0));
+        log_info(LogOp, "enable subblock padding: {}", enable_subblock_padding);
+        log_info(LogOp, "per_core_out_matrix_height_ntiles: {}", per_core_out_matrix_height_ntiles);
+        log_info(LogOp, "act_block_h_ntiles_padded: {}", act_block_h_ntiles_padded);
+        log_info(LogOp, "act_block_w_ntiles: {}", act_block_w_ntiles);
+        log_info(LogOp, "weight_block_w_ntiles: {}", weight_block_w_ntiles);
+        log_info(LogOp, "out_subblock_h_ntiles_padded: {}", out_subblock_h_ntiles_padded);
+        log_info(LogOp, "out_subblock_w_ntiles: {}", out_subblock_w_ntiles);
     }
 
     // For debug

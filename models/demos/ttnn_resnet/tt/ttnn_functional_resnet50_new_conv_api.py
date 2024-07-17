@@ -577,7 +577,9 @@ class resnet50:
         else:
             act_block_h_override = 0
         # input_channels_alignment = 16 if not is_wormhole_b0() else 32
+        b16 = self.batch_size == 16
         whb0_and_b16 = is_wormhole_b0() and self.batch_size == 16
+        gs_and_b16 = not is_wormhole_b0() and self.batch_size == 16
         if not is_wormhole_b0():
             input_channels_alignment = 16
         elif whb0_and_b16:
@@ -593,13 +595,15 @@ class resnet50:
             input_channels_alignment=input_channels_alignment,
             act_block_h_override=act_block_h_override,
             transpose_shards=self.transpose_shards,
-            packer_l1_accum_enabled=True if whb0_and_b16 else False,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
-            enable_split_reader=True if whb0_and_b16 else False,
+            packer_l1_accum_enabled=True if b16 else False,
+            enable_act_double_buffer=True if b16 else False,
+            enable_split_reader=True if b16 else False,
             enable_subblock_padding=False,
         )
         if whb0_and_b16:
             self.conv1_config.act_block_h_override = 256
+        elif gs_and_b16:
+            self.conv1_config.act_block_h_override = 512
 
         self.conv1_kernel_size = (4, 4)
         self.conv1_stride = (1, 1)
@@ -733,6 +737,7 @@ class resnet50:
                 x = ttnn.to_memory_config(x, ops_parallel_config["layer1_module1_input"])
 
         whb0_and_b16 = is_wormhole_b0() and self.batch_size == 16
+        b16 = self.batch_size == 16
 
         x, x_height, x_width = self.layer1_module1(
             x,
@@ -744,9 +749,9 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
-            enable_split_reader=True if whb0_and_b16 else False,
-            enable_subblock_padding=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
+            enable_split_reader=True if b16 else False,
+            enable_subblock_padding=True if b16 else False,
         )
 
         if is_first_run:
@@ -769,8 +774,8 @@ class resnet50:
             conv_op_cache,
             transpose_shards=self.transpose_shards,
             enable_act_double_buffer=False,
-            enable_split_reader=True if whb0_and_b16 else False,
-            enable_subblock_padding=True if whb0_and_b16 else False,
+            enable_split_reader=True if b16 else False,
+            enable_subblock_padding=True if b16 else False,
         )
 
         logger.debug(f"==== Running layer 1 module 3")
@@ -783,8 +788,8 @@ class resnet50:
             conv_op_cache,
             transpose_shards=self.transpose_shards,
             enable_act_double_buffer=False,
-            enable_split_reader=True if whb0_and_b16 else False,
-            enable_subblock_padding=True if whb0_and_b16 else False,
+            enable_split_reader=True if b16 else False,
+            enable_subblock_padding=True if b16 else False,
         )
 
         if self.batch_size == 20 and is_wormhole_b0():
@@ -812,7 +817,7 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -850,7 +855,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -864,7 +869,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -890,7 +895,7 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -914,7 +919,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -928,7 +933,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -942,7 +947,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -956,7 +961,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -971,7 +976,7 @@ class resnet50:
             conv_op_cache,
             eltwise_binary_out_in_place=True,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -1011,7 +1016,7 @@ class resnet50:
             reshard_if_not_optimal=reshard,
             height_sharding=height_shard,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -1035,7 +1040,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
@@ -1049,7 +1054,7 @@ class resnet50:
             x_width,
             conv_op_cache,
             transpose_shards=self.transpose_shards,
-            enable_act_double_buffer=True if whb0_and_b16 else False,
+            enable_act_double_buffer=True if b16 else False,
             enable_split_reader=False,
             enable_subblock_padding=False,
         )

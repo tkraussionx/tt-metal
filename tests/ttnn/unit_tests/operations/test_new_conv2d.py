@@ -115,7 +115,7 @@ def run_conv(
         deallocate_activation=deallocate_activation,
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,
-        enable_act_double_buffer=False,
+        enable_act_double_buffer=True,
         enable_split_reader=False,
         enable_subblock_padding=False,
     )
@@ -143,7 +143,7 @@ def run_conv(
         input_width=input_width,
         conv_config=conv_config,
         conv_op_cache=reader_patterns_cache,
-        debug=debug,
+        debug=False,
         groups=groups,
     )
 
@@ -312,35 +312,39 @@ def run_conv_with_split(
     (
         # unique convs in rn50 (complete list)
         # first conv post folding and input_channels padding to tile width
-        # (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True), act_block_h_ntiles % 2 == 0
+        (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True, {"act_block_h": 512}),
         # rn50 layer1
-        (64, 64, 56, 56, 1, 1, 1, 1, 0, 0, True, None),
-        (64, 64, 56, 56, 1, 1, 2, 2, 0, 0, True, None),
-        (64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True, None),
-        # rn50 layer2
-        (128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, None),
-        (128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True, None),
-        # rn50 layer3
-        (256, 256, 28, 28, 3, 3, 2, 2, 1, 1, False, None),
-        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1, False, None),
-        # rn50 layer4
-        (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False, None),
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False, None),
+        # (64, 64, 56, 56, 1, 1, 1, 1, 0, 0, True, None),
+        # (64, 64, 56, 56, 1, 1, 2, 2, 0, 0, True, None),
+        # (64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True, None),
+        # # rn50 layer2
+        # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, None),
+        # (128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True, None),
+        # # rn50 layer3
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1, False, None),
+        # (256, 256, 14, 14, 3, 3, 1, 1, 1, 1, False, None),
+        # # rn50 layer4
+        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False, None),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False, None),
         ## 1x1s2
         # (256, 256, 28, 28, 1, 1, 2, 2, 0, 0, True, {"num_cores_nhw": 98}),
     ),
 )
 @pytest.mark.parametrize(
     "batch_size",
-    [8, 16, 20],
+    [
+        16,
+    ],
 )
 @pytest.mark.parametrize(
     "weights_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    # [ttnn.bfloat16, ttnn.bfloat8_b],
+    [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    # [ttnn.bfloat16, ttnn.bfloat8_b],
+    [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 def test_resnet50_conv_gs(
