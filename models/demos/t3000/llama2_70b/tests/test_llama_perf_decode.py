@@ -180,7 +180,7 @@ def run_test_LlamaModel_end_to_end(
         model_config,
         configuration,
         cache_path=cache_path,
-        read_cache=True,
+        read_cache=False,
     )
 
     for i in device_mesh.get_device_ids():
