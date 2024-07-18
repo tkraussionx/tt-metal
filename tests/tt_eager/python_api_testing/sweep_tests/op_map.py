@@ -376,10 +376,6 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_sqrt,
         "pytorch_op": pytorch_ops.sqrt,
     },
-    "eltwise-gelu": {
-        "tt_op": tt_lib_ops.eltwise_gelu,
-        "pytorch_op": pytorch_ops.gelu,
-    },
     "eltwise-softmax_in_place": {
         "tt_op": tt_lib_ops.eltwise_softmax_in_place,
         "pytorch_op": pytorch_ops.softmax_in_place,

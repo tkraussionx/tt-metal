@@ -344,24 +344,6 @@ def eltwise_elu(
 
 
 @setup_host_and_device
-def eltwise_gelu(
-    x,
-    *args,
-    fast_and_approx,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
-    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttnn.gelu(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
-
-    return tt2torch_tensor(t1)
-
-
-@setup_host_and_device
 def eltwise_softmax_in_place(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = ttnn.softmax_in_place(t0)
@@ -2702,7 +2684,6 @@ eltwise_isnan = make_unary_op_optional_output(ttnn.isnan)
 eltwise_erfinv = make_unary_op_optional_output(ttnn.erfinv)
 eltwise_erf = make_unary_op_optional_output_with_fast_approx(ttnn.erf)
 eltwise_erfc = make_unary_op_optional_output_with_fast_approx(ttnn.erfc)
-eltwise_gelu = make_unary_op_optional_output_with_fast_approx(ttnn.gelu)
 eltwise_exp = make_unary_op_optional_output_with_fast_approx(ttnn.exp)
 eltwise_softplus = make_unary_op_optional_output(ttnn.softplus)
 eltwise_atanh = make_unary_op(ttl.tensor.atanh)
