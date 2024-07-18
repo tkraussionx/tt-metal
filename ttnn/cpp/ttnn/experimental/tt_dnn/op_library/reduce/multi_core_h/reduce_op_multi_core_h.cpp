@@ -173,7 +173,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
         program,
         "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/reduce/kernels/compute/reduce_h.cpp",
         core_group_1,
-        tt_metal::ComputeConfig{.compile_args = compute_kernel_args_group_1, .defines = reduce_defines});
+        tt_metal::ComputeConfig{.fp32_dest_acc_en = true, .compile_args = compute_kernel_args_group_1, .defines = reduce_defines});
 
     if (!core_group_2.ranges().empty()) {
         vector<uint32_t> compute_kernel_args_group_2 = {
@@ -186,7 +186,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
             program,
             "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/reduce/kernels/compute/reduce_h.cpp",
             core_group_2,
-            tt_metal::ComputeConfig{.compile_args = compute_kernel_args_group_2, .defines = reduce_defines});
+            tt_metal::ComputeConfig{.fp32_dest_acc_en = true, .compile_args = compute_kernel_args_group_2, .defines = reduce_defines});
     }
 
     const auto &cores =

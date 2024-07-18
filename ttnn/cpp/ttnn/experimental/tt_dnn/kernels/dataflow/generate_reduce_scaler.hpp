@@ -6,8 +6,6 @@
 
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
-
 FORCE_INLINE void generate_reduce_scaler(const uint32_t cb_id, const uint32_t scaler) {
     cb_reserve_back(cb_id, 1);
 
@@ -16,6 +14,7 @@ FORCE_INLINE void generate_reduce_scaler(const uint32_t cb_id, const uint32_t sc
     uint32_t write_addr = get_write_ptr(cb_id);
     volatile tt_l1_ptr uint32_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(write_addr);
 
+#ifndef REDUCE_ROW_SUM_VIA_MM
     // Fill tile with zeros
     for (uint32_t i = 0; i < num_zeros_reads; ++i) {
         noc_async_read(zeros_noc_addr, write_addr, MEM_ZEROS_SIZE);
@@ -31,5 +30,11 @@ FORCE_INLINE void generate_reduce_scaler(const uint32_t cb_id, const uint32_t sc
             }
         }
     }
+#else
+    for (int i = 0; i < 1024; i++) {
+        ptr[i] = 0x3f803f80;
+    }
+#endif
+
     cb_push_back(cb_id, 1);
 }

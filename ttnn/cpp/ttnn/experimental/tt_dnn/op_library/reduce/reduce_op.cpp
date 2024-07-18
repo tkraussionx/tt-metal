@@ -38,6 +38,9 @@ std::map<string, string> get_defines(ReduceOpMath reduce_op, ReduceOpDim reduce_
     }
     defines["REDUCE_OP"] = (do_max ? "PoolType::MAX" : "PoolType::SUM" );
     defines["REDUCE_DIM"] = reduce_dim_str;
+    if (reduce_dim == ReduceOpDim::W && reduce_op == ReduceOpMath::SUM) {
+        defines["REDUCE_ROW_SUM_VIA_MM"] = 1;
+    }
     return defines;
 }
 
