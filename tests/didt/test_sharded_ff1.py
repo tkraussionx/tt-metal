@@ -9,7 +9,7 @@ import time
 import ttnn
 
 import tt_lib as ttl
-from models.utility_functions import comp_pcc, torch2tt_tensor, tt2torch_tensor
+from models.utility_functions import comp_pcc, torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
 import torch
 
 
@@ -20,8 +20,10 @@ import torch
         "ff1-hang",
     ],
 )
+@pytest.mark.parametrize("num_devices", [1, 8], ids=["1chips", "8chips"])
 def test_reproduce_matmul_2d_hang(
-    device,
+    num_devices,
+    all_devices,
     seq_len,
     inner_dim,
     weights_n,
@@ -33,6 +35,13 @@ def test_reproduce_matmul_2d_hang(
     loop_count,
     use_program_cache,
 ):
+    devices = []
+    if num_devices == 8:
+        devices = get_devices_for_t3000(all_devices, num_devices)
+    else:
+        devices.append(all_devices[0])
+
+    print("Running on ", num_devices, " devices")
     torch.manual_seed(1234)
 
     in0_mem_config = ttl.tensor.MemoryConfig(
@@ -71,8 +80,11 @@ def test_reproduce_matmul_2d_hang(
     A = torch.randn(a_shape)
     B = torch.randn(b_shape)
 
-    a_t = torch2tt_tensor(A, device, ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype)
-    b_t = torch2tt_tensor(B, device, ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype)
+    a_t = []
+    b_t = []
+    for device_idx in range(num_devices):
+        a_t.append(torch2tt_tensor(A, devices[device_idx], ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype))
+        b_t.append(torch2tt_tensor(B, devices[device_idx], ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype))
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
@@ -92,40 +104,53 @@ def test_reproduce_matmul_2d_hang(
         packer_l1_acc=True,
     )
 
+    out = []
     # First run for a reference output
-    out = ttl.operations.primary.matmul(
-        a_t,
-        b_t,
-        program_config=program_config,
-        output_mem_config=out_mem_config,
-        output_dtype=out_dtype,
-        compute_kernel_config=compute_config,
-    )
+    for device_idx in range(num_devices):
+        out.append(
+            ttl.operations.primary.matmul(
+                a_t[device_idx],
+                b_t[device_idx],
+                program_config=program_config,
+                output_mem_config=out_mem_config,
+                output_dtype=out_dtype,
+                compute_kernel_config=compute_config,
+            )
+        )
 
-    ref_out = tt2torch_tensor(out)
+    ref_out = []
+    for device_idx in range(num_devices):
+        ref_out.append(tt2torch_tensor(out[device_idx]))
 
     # if commented out, segfault happens on some of the latter runs
-    out.cpu()
+    # out.cpu()
+
+    for device_idx in range(num_devices):
+        ttl.device.Synchronize(devices[device_idx])
 
     start_time = time.time()
 
     # loop_count iterations to test determinism/hang
     for i in range(loop_count):
-        out.deallocate(True)
-        out = ttl.operations.primary.matmul(
-            a_t,
-            b_t,
-            program_config=program_config,
-            output_mem_config=out_mem_config,
-            output_dtype=out_dtype,
-            compute_kernel_config=compute_config,
-        )
+        for device_idx in range(num_devices):
+            out[device_idx].deallocate(True)
+            out[device_idx] = ttl.operations.primary.matmul(
+                a_t[device_idx],
+                b_t[device_idx],
+                program_config=program_config,
+                output_mem_config=out_mem_config,
+                output_dtype=out_dtype,
+                compute_kernel_config=compute_config,
+            )
 
         if i % 100 == 0:
             seconds = time.time() - start_time
             print(f"Iteration {i} done, time elapsed from the beginning: {seconds:.2f} seconds")
 
-            _, output_pcc = comp_pcc(ref_out, tt2torch_tensor(out))
-            print(f"PCC: {output_pcc}")
+            for device_idx in range(num_devices):
+                _, output_pcc = comp_pcc(ref_out[device_idx], tt2torch_tensor(out[device_idx]))
+                print(f"PCC: {output_pcc} device: {device_idx}")
 
-    out.deallocate(True)
+    for device_idx in range(num_devices):
+        out[device_idx].deallocate(True)
+        ttl.device.Synchronize(devices[device_idx])
