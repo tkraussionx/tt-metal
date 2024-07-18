@@ -227,6 +227,67 @@ void bind_binary_composite_with_rtol_atol(py::module& module, const binary_opera
             py::arg("memory_config") = std::nullopt});
 }
 
+template <typename binary_operation_t>
+void bind_div(py::module& module, const binary_operation_t& operation, const std::string& description) {
+    auto doc = fmt::format(
+        R"doc({0}(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, *, memory_config: Optional[ttnn.MemoryConfig] = None) -> ttnn.Tensor
+
+            Args:
+                * :attr:`input_tensor_a`
+                * :attr:`input_tensor_b` (ttnn.Tensor or Number)
+                * :attr:`accurate_mode`: ``false`` if input_tensor_b is non-zero, else ``true``.
+                * :attr:`round_mode`
+
+            Keyword Args:
+                * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+
+            Example:
+
+                >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
+                >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
+                >>> output = {1}(tensor1, tensor2/scalar)
+        )doc",
+        operation.base_name(),
+        operation.python_fully_qualified_name(),
+        description);
+
+    bind_registered_operation(
+        module,
+        operation,
+        doc,
+        ttnn::pybind_overload_t{
+            [](const binary_operation_t& self,
+               const Tensor& input_tensor_a,
+               const Tensor& input_tensor_b,
+               bool accurate_mode,
+               string round_mode,
+               const std::optional<MemoryConfig>& memory_config) {
+                    return self(input_tensor_a, input_tensor_b, accurate_mode, round_mode, memory_config);
+                },
+            py::arg("input_tensor_a"),
+            py::arg("input_tensor_b"),
+            py::kw_only(),
+            py::arg("accurate_mode") = false,
+            py::arg("round_mode") = "None",
+            py::arg("memory_config") = std::nullopt},
+
+        ttnn::pybind_overload_t{
+            [](const binary_operation_t& self,
+               const Tensor& input_tensor_a,
+               float value,
+               bool accurate_mode,
+               string round_mode,
+               const std::optional<MemoryConfig>& memory_config) {
+                    return self(input_tensor_a, value, accurate_mode, round_mode, memory_config);
+                },
+            py::arg("input_tensor_a"),
+            py::arg("value"),
+            py::kw_only(),
+            py::arg("accurate_mode") = false,
+            py::arg("round_mode") = "None",
+            py::arg("memory_config") = std::nullopt});
+}
+
 }  // namespace detail
 
 void py_module(py::module& module) {
@@ -392,6 +453,12 @@ void py_module(py::module& module) {
         module,
         ttnn::logical_xor,
         R"doc(Compute logical_xor :attr:`input_tensor_a` and :attr:`input_tensor_b` and returns the tensor with the same layout as :attr:`input_tensor_a`
+        .. math:: \mathrm{{input\_tensor\_a}}_i || \mathrm{{input\_tensor\_b}}_i)doc");
+
+    detail::bind_div(
+        module,
+        ttnn::div,
+        R"doc(Compute div :attr:`input_tensor_a` and :attr:`input_tensor_b` and returns the tensor with the same layout as :attr:`input_tensor_a`
         .. math:: \mathrm{{input\_tensor\_a}}_i || \mathrm{{input\_tensor\_b}}_i)doc");
 
     detail::bind_binary_composite_with_alpha(

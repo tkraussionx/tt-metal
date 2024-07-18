@@ -57,6 +57,32 @@ struct ExecuteBinaryCompositeOpsIsClose
         }
 };
 
+template <BinaryCompositeOpType binary_comp_op_type>
+struct ExecuteBinaryCompositeOpsDiv
+{
+    static Tensor execute_on_worker_thread(
+        const Tensor& input_tensor_a,
+        const Tensor& input_tensor_b,
+        bool accurate_mode = false,
+        string round_mode = "None",
+        const std::optional<MemoryConfig>& memory_config = std::nullopt)
+        {
+            auto op_type = get_function_type_div<binary_comp_op_type>();
+            return op_type(input_tensor_a, input_tensor_b, accurate_mode, round_mode, memory_config);
+        }
+
+    static Tensor execute_on_worker_thread(
+        const Tensor& input_tensor_a,
+        float value,
+        bool accurate_mode = false,
+        string round_mode = "None",
+        const std::optional<MemoryConfig>& memory_config = std::nullopt)
+        {
+            auto op_type = get_function_type_div_overload<binary_comp_op_type>();
+            return op_type(input_tensor_a, value, accurate_mode, round_mode, memory_config);
+        }
+};
+
 }  // namespace binary
 }  // namespace operations
 
@@ -68,6 +94,7 @@ constexpr auto maximum = ttnn::register_operation<operations::binary::ExecuteBin
 constexpr auto atan2 = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOps<operations::binary::BinaryCompositeOpType::ATAN2>>("ttnn::atan2");
 constexpr auto logical_xor = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOps<operations::binary::BinaryCompositeOpType::LOGICAL_XOR>>("ttnn::logical_xor");
 constexpr auto nextafter = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOps<operations::binary::BinaryCompositeOpType::NEXTAFTER>>("ttnn::nextafter");
+constexpr auto div = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOpsDiv<operations::binary::BinaryCompositeOpType::DIV>>("ttnn::div");
 constexpr auto addalpha = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOpsFloat<operations::binary::BinaryCompositeOpType::ADDALPHA>>("ttnn::addalpha");
 constexpr auto subalpha = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOpsFloat<operations::binary::BinaryCompositeOpType::SUBALPHA>>("ttnn::subalpha");
 constexpr auto isclose = ttnn::register_operation<operations::binary::ExecuteBinaryCompositeOpsIsClose<operations::binary::BinaryCompositeOpType::ISCLOSE>>("ttnn::isclose");

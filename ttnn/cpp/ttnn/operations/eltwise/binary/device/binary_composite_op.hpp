@@ -21,6 +21,7 @@ enum class BinaryCompositeOpType {
     MAXIMUM,
     ATAN2,
     LOGICAL_XOR,
+    DIV,
 
 };
 
@@ -31,6 +32,8 @@ Tensor _maximum(const Tensor&, const Tensor&, const std::optional<MemoryConfig>&
 Tensor _atan2(const Tensor&, const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _logical_xor(const Tensor&, const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _nextafter(const Tensor&, const Tensor&, const std::optional<MemoryConfig>&);
+Tensor _div(const Tensor&, const Tensor&, bool, string, const std::optional<MemoryConfig>&);
+Tensor _div_overload(const Tensor&, float, bool, string, const std::optional<MemoryConfig>&);
 Tensor _addalpha(const Tensor&, const Tensor&, float, const std::optional<MemoryConfig>&);
 Tensor _subalpha(const Tensor&, const Tensor&, float, const std::optional<MemoryConfig>&);
 Tensor _isclose(const Tensor&, const Tensor&, float, float, const bool, const std::optional<MemoryConfig>&);
@@ -44,6 +47,9 @@ struct OpHandler_Float;
 
 template <BinaryCompositeOpType OpType>
 struct OpHandler_IsClose;
+
+template <BinaryCompositeOpType OpType>
+struct OpHandler_Div;
 
 
 template <>
@@ -96,6 +102,16 @@ struct OpHandler<BinaryCompositeOpType::LOGICAL_XOR> {
 };
 
 template <>
+struct OpHandler_Div<BinaryCompositeOpType::DIV> {
+    static Tensor handle(const Tensor& t1, const Tensor& t2, bool accurate_mode, string round_mode, const std::optional<MemoryConfig>& mem_cfg) {
+        return _div(t1, t2, accurate_mode, round_mode, mem_cfg);
+    }
+    static Tensor handle(const Tensor& t1, float value, bool accurate_mode, string round_mode, const std::optional<MemoryConfig>& mem_cfg) {
+        return _div_overload(t1, value, accurate_mode, round_mode, mem_cfg);
+    }
+};
+
+template <>
 struct OpHandler_Float<BinaryCompositeOpType::ADDALPHA> {
     static Tensor handle(const Tensor& t1, const Tensor& t2, float alpha, const std::optional<MemoryConfig>& mem_cfg) {
         return _addalpha(t1, t2, alpha, mem_cfg);
@@ -131,6 +147,18 @@ auto get_function_type1() {
 template <BinaryCompositeOpType OpType>
 auto get_function_type2() {
     return &OpHandler_IsClose<OpType>::handle;
+}
+
+using HandleFunctionPtr1 = Tensor (*)(const Tensor&, const Tensor&, bool, std::string, const std::optional<MemoryConfig>&);
+using HandleFunctionPtr2 = Tensor (*)(const Tensor&, float, bool, std::string, const std::optional<MemoryConfig>&);
+
+template <BinaryCompositeOpType OpType>
+auto get_function_type_div() -> HandleFunctionPtr1 {
+    return &OpHandler_Div<OpType>::handle;
+}
+template <BinaryCompositeOpType OpType>
+auto get_function_type_div_overload() -> HandleFunctionPtr2 {
+    return &OpHandler_Div<OpType>::handle;
 }
 
 }

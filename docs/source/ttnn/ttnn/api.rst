@@ -274,6 +274,7 @@ Pointwise Binary
    ttnn/subalpha
    ttnn/multiply
    ttnn/subtract
+   ttnn/div
    ttnn/pow
    ttnn/ldexp
    ttnn/logical_and

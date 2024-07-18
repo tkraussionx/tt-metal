@@ -254,6 +254,17 @@ def _golden_function_atan2(input_tensor_a, input_tensor_b, *args, **kwargs):
 ttnn.attach_golden_function(ttnn._ttnn.operations.binary.atan2, golden_function=_golden_function_atan2)
 
 
+def _golden_function_div(input_tensor_a, input_tensor_b, round_mode, *args, **kwargs):
+    import torch
+
+    if round_mode == "None":
+        return torch.div(input_tensor_a, input_tensor_b, rounding_mode=None)
+    return torch.div(input_tensor_a, input_tensor_b, rounding_mode=round_mode)
+
+
+ttnn.attach_golden_function(ttnn._ttnn.operations.binary.div, golden_function=_golden_function_div)
+
+
 def torch_squared_difference(x, y, *args, **kwargs):
     import torch
 

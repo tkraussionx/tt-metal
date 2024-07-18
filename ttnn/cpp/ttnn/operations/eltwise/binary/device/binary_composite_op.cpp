@@ -161,4 +161,42 @@ Tensor _logical_xor(const Tensor& input_a, const Tensor& input_b, const std::opt
     return result;
 }
 
+Tensor _div_overload(const Tensor& input_a, float value, bool accurate_mode, string round_mode, const std::optional<MemoryConfig>& output_mem_config) {
+    TT_FATAL((round_mode == "None" || round_mode == "trunc" || round_mode == "floor") && "Incorrect rounding mode (expected 'None', 'trunc', or 'floor')");
+    Tensor result = ttnn::multiply(input_a, (1.0f/value), std::nullopt, output_mem_config);
+    if(round_mode == "trunc"){
+        result = trunc(result);
+    }
+    else if(round_mode == "floor"){
+        result = ttnn::floor(result);
+    }
+    return result;
+}
+
+Tensor _div(const Tensor& input_a, const Tensor& input_b, bool accurate_mode, string round_mode, const std::optional<MemoryConfig>& output_mem_config) {
+    TT_FATAL((round_mode == "None" || round_mode == "trunc" || round_mode == "floor") && "Incorrect rounding mode (expected 'None', 'trunc', or 'floor')");
+    Tensor result = ttnn::divide(input_a, input_b);
+
+    if(round_mode == "trunc"){
+        result = trunc(result);
+    }
+    else if(round_mode == "floor"){
+        result = ttnn::floor(result);
+    }
+
+    if (accurate_mode == false) {  // If input_b is non-zero tensor
+        return result;
+    }
+
+    Tensor t_inf = full_like(input_a, std::numeric_limits<float>::infinity());
+    Tensor t_nan = full_like(input_a, std::nanf(""));
+    return where(
+        ttnn::eqz(input_b, output_mem_config),
+        where(
+            ttnn::eqz(input_a, output_mem_config),
+            t_nan,
+            ttnn::multiply(t_inf, ttnn::sign(input_a, output_mem_config), std::nullopt, output_mem_config)),
+        result);
+}
+
 } // namespace ttnn::operations::binary
