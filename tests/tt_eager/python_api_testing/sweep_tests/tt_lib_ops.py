@@ -180,24 +180,6 @@ def eltwise_exp(
 
 
 @setup_host_and_device
-def eltwise_erf(
-    x,
-    *args,
-    fast_and_approx,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
-    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttnn.erf(t0, fast_and_approximate_mode=fast_and_approx, memory_config=output_mem_config)
-
-    return tt2torch_tensor(t1)
-
-
-@setup_host_and_device
 def eltwise_erfc(
     x,
     *args,
@@ -2700,7 +2682,6 @@ eltwise_isposinf = make_unary_op_optional_output(ttnn.isposinf)
 eltwise_isneginf = make_unary_op_optional_output(ttnn.isneginf)
 eltwise_isnan = make_unary_op_optional_output(ttnn.isnan)
 eltwise_erfinv = make_unary_op_optional_output(ttnn.erfinv)
-eltwise_erf = make_unary_op_optional_output_with_fast_approx(ttnn.erf)
 eltwise_erfc = make_unary_op_optional_output_with_fast_approx(ttnn.erfc)
 eltwise_gelu = make_unary_op_optional_output_with_fast_approx(ttnn.gelu)
 eltwise_exp = make_unary_op_optional_output_with_fast_approx(ttnn.exp)

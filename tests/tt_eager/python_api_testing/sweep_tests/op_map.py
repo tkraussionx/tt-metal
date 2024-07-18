@@ -544,10 +544,6 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_unary_ne,
         "pytorch_op": pytorch_ops.unary_ne,
     },
-    "eltwise-erf": {
-        "tt_op": tt_lib_ops.eltwise_erf,
-        "pytorch_op": pytorch_ops.erf,
-    },
     "eltwise-erfc": {
         "tt_op": tt_lib_ops.eltwise_erfc,
         "pytorch_op": pytorch_ops.erfc,
