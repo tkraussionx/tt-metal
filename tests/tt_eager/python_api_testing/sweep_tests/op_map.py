@@ -416,10 +416,6 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_lerp_ternary,
         "pytorch_op": pytorch_ops.lerp_ternary,
     },
-    "eltwise-leaky_relu": {
-        "tt_op": tt_lib_ops.eltwise_leaky_relu,
-        "pytorch_op": pytorch_ops.leaky_relu,
-    },
     "eltwise-prelu": {
         "tt_op": tt_lib_ops.eltwise_prelu,
         "pytorch_op": pytorch_ops.prelu,
