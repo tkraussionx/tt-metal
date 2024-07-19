@@ -1908,6 +1908,7 @@ bool Device::close() {
         }
         hw_command_queue->terminate();
     }
+    log_info(tt::LogMetal, "Closing device1 {}", this->id_);
     this->work_executor.reset();
     tt_metal::detail::DumpDeviceProfileResults(this, true);
 
@@ -1923,8 +1924,10 @@ bool Device::close() {
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     std::unordered_set<CoreCoord> wait_for_cores = not_done_dispatch_cores[mmio_device_id];
 
+    log_info(tt::LogMetal, "Closing device2 {}", this->id_);
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
 
+    log_info(tt::LogMetal, "Closing device3 {}", this->id_);
     DprintServerDetach(this);
     watcher_detach(this);
 
@@ -1944,6 +1947,7 @@ bool Device::close() {
             }
         }
     }
+    log_info(tt::LogMetal, "Closing device4 {}", this->id_);
 
     if (this->id_ != mmio_device_id) {
         for (auto it = not_done_dispatch_cores[mmio_device_id].begin(); it != not_done_dispatch_cores[mmio_device_id].end(); it++) {
@@ -1956,6 +1960,7 @@ bool Device::close() {
             }
         }
     }
+    log_info(tt::LogMetal, "Closing device5 {}", this->id_);
 
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
@@ -1968,6 +1973,7 @@ bool Device::close() {
         }
     }
 
+    log_info(tt::LogMetal, "Closing device6 {}", this->id_);
     this->compute_cores_.clear();
     this->storage_only_cores_.clear();
     this->ethernet_cores_.clear();
