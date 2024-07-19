@@ -1266,10 +1266,6 @@ op_map = {
         "tt_op": tt_lib_ops.rsub_bw,
         "pytorch_op": pytorch_ops.rsub_bw,
     },
-    "binary-le-bw": {
-        "tt_op": tt_lib_ops.binary_le_bw,
-        "pytorch_op": pytorch_ops.binary_le_bw,
-    },
     "clamp-max-bw": {
         "tt_op": tt_lib_ops.clamp_max_bw,
         "pytorch_op": pytorch_ops.clamp_max_bw,

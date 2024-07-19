@@ -1880,7 +1880,7 @@ def binary_le_bw(x, y, *args, **kwargs):
 
     golden_tensor = pyt_y
 
-    return golden_tensor
+    return [golden_tensor, golden_tensor]
 
 
 def clamp_max_bw(x, y, scalar, *args, **kwargs):

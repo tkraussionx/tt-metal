@@ -697,4 +697,8 @@ op_map = {
         "tt_op": ttnn_ops.unpad,
         "pytorch_op": pytorch_ops.unpad,
     },
+    "binary-le-bw": {
+        "tt_op": ttnn_ops.binary_le_bw,
+        "pytorch_op": pytorch_ops.binary_le_bw,
+    },
 }
