@@ -63,19 +63,21 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
 
-    // DPRINT << "rws START\n";
     for (uint32_t i = 0; i < num_transfers; ++i) {
-        // DPRINT << "rws TRANSFER " << i << "\n";
         if constexpr (num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
-                // DPRINT << "rws WRITE FULL CHUNK " << i << "\n";
+                {
+                DeviceZoneScopedN("RS_WRITE_CHUNK");
                 write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
+                }
                 noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
             }
         }
         if constexpr (rem_num_pages > 0) {
-            // DPRINT << "rws WRITE PARTIAL CHUNK " << i << "\n";
+                {
+                DeviceZoneScopedN("RS_WRITE_CHUNK");
             write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
+                }
             noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
             ASSERT(num_pages == 0 || num_pages > rem_num_pages);
             ASSERT(half_cb_n_pages > rem_num_pages);

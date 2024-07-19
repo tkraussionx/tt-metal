@@ -137,7 +137,9 @@ std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
 //   (in other words, disable the "bidirectional" send flag)
-operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology) {
+operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology,
+    const std::size_t num_workers,
+    const std::size_t max_channel_size) {
     TT_FATAL(!(receiver_device_id == std::nullopt && sender_device_id == std::nullopt), "At least one of receiver_device_id or sender_device_id must be specified");
 
     bool is_linear = topology == all_gather_op::Topology::Linear;
@@ -146,8 +148,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
     tt::tt_metal::Program program{};
     const auto& device = input_tensor.device();
-    auto const& all_gather_config = AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology);
-    auto const& topology_config = ttnn::ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
+    auto const& all_gather_config = AllGatherConfig(
+        input_tensor, output_tensor, dim, ring_size, num_links, topology, num_workers, max_channel_size);
+    auto const& topology_config = ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
 
     auto const& sharding_info = ShardedAllGatherConfig(input_tensor, output_tensor, dim);
     bool enable_print = false; // ring_index == 0
@@ -239,16 +242,17 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 edm_sem_addrs_per_link.at(link).push_back(edm_sem_addr);
                 edm_sem_addr += all_gather_config.get_semaphore_size();
                 edm_buffer_addrs_per_link.at(link).push_back(edm_buffer_addr);
-                edm_buffer_addr += all_gather_config.get_eth_buffer_size();
+                edm_buffer_addr += all_gather_config.get_eth_buffer_size() + (all_gather_config.is_payload_and_channel_sync_merged() * 16);
                 TT_ASSERT((direction == 0 && b == 0) || (edm_buffer_addrs_per_link.at(link).back() != edm_buffer_addrs_per_link.at(link).front()));
                 TT_ASSERT((direction == 0 && b == 0) || (edm_sem_addrs_per_link.at(link).back() != edm_sem_addrs_per_link.at(link).front()));
             }
         }
 
+        int chip_id = device->id();
         clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED);
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED, chip_id);
         counter_clockwise_edm_builders.emplace_back(
-            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED);
+            all_gather_config.get_eth_buffer_size(), all_gather_config.get_erisc_handshake_address(), edm_sem_addrs_per_link.at(link), edm_buffer_addrs_per_link.at(link), ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED, ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED, chip_id);
     }
 
     for (uint32_t direction = 0; direction < num_full_send_directions; direction++) {

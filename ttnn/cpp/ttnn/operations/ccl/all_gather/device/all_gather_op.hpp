@@ -58,7 +58,7 @@ class AllGatherConfig {
     }
 
    public:
-    AllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim, uint32_t ring_size, uint32_t num_links, all_gather_op::Topology topology) :
+    AllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim, uint32_t ring_size, uint32_t num_links, all_gather_op::Topology topology, std::size_t num_workers, std::size_t max_channel_size) :
         num_links(num_links),
         semaphore_size(32),
         ring_size(ring_size),
@@ -74,7 +74,8 @@ class AllGatherConfig {
 
         // Sharded currently doesn't support FULL_TENSOR bidirectional due to indexers that require updating in order to support this
         // new mode
-        bidirectional_mode(choose_bidirectional_mode(input_tensor))
+        bidirectional_mode(choose_bidirectional_mode(input_tensor)),
+        enable_merged_payload_and_channel_sync(true)
     {
         TT_ASSERT(erisc_handshake_address >= eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE);
         TT_ASSERT(erisc_handshake_address < eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16);
@@ -97,20 +98,27 @@ class AllGatherConfig {
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
         this->is_sharded = input_tensor.is_sharded();
-        this->num_eth_buffers = (this->enable_bidirectional ? 8 /*1*/ : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
+        this->num_eth_buffers = num_workers;
+        if (num_workers == 0) {
+            this->num_eth_buffers = (this->enable_bidirectional ? 8 /*1*/ : (this->is_sharded && topology != all_gather_op::Topology::Linear ? 8 : 4));
 
-        if (bidirectional_mode == AllGatherBidirectionalMode::FULL_TENSOR) {
-            this->num_eth_buffers = std::min(this->num_eth_buffers, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS / num_duplicate_directions);
-        }
-
-        if (this->is_sharded) {
-            this->num_eth_buffers = std::min(this->num_eth_buffers, input_tensor.shard_spec()->num_cores());
-            if ((input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) % (ring_size) != 0 &&
-                (ring_size % (input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) != 0)) {
-                // Currently don't support misalignment here
-                this->num_eth_buffers = 1;
+            if (bidirectional_mode == AllGatherBidirectionalMode::FULL_TENSOR) {
+                this->num_eth_buffers = std::min(this->num_eth_buffers, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS / num_duplicate_directions);
             }
-            log_trace(tt::LogOp, "this->num_buffers: {}", this->num_eth_buffers);
+
+            if (this->is_sharded) {
+                this->num_eth_buffers = std::min(this->num_eth_buffers, input_tensor.shard_spec()->num_cores());
+                if ((input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) % (ring_size) != 0 &&
+                    (ring_size % (input_tensor.shard_spec()->num_cores() / this->num_eth_buffers) != 0)) {
+                    // Currently don't support misalignment here
+                    this->num_eth_buffers = 1;
+                }
+                log_trace(tt::LogOp, "this->num_buffers: {}", this->num_eth_buffers);
+            }
+        } else {
+            if (this->num_eth_buffers > eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS / num_duplicate_directions) {
+                this->num_eth_buffers /= num_duplicate_directions;
+            }
         }
 
         this->num_workers_per_link = this->num_eth_buffers;
@@ -119,10 +127,15 @@ class AllGatherConfig {
         this->eth_buffers_l1_base_byte_address = this->eth_sems_l1_base_byte_address + this->semaphore_offset;
 
         uint32_t const page_size = input_tensor.buffer()->page_size();
-        this->eth_buffer_size = tt::round_down((total_l1_buffer_space - this->semaphore_offset) / (this->num_eth_buffers * num_duplicate_directions), page_size);
+        this->eth_buffer_size = max_channel_size;
+        if (max_channel_size == 0) {
+            this->eth_buffer_size = round_down((total_l1_buffer_space - this->semaphore_offset) / (this->num_eth_buffers * num_duplicate_directions), page_size + (enable_merged_payload_and_channel_sync * 16));
 
-        TT_FATAL(eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS);
-        TT_FATAL(this->eth_buffer_size * (this->num_eth_buffers * num_duplicate_directions) + this->semaphore_offset <= total_l1_buffer_space);
+            TT_FATAL(eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS);
+            TT_FATAL(this->eth_buffer_size * (this->num_eth_buffers * num_duplicate_directions) + this->semaphore_offset <= total_l1_buffer_space);
+        } else if (enable_merged_payload_and_channel_sync) {
+            max_channel_size += 16;
+        }
 
         // FIXME: dynamically select the number and size of each buffer based on tensor attributes, link count, ring size, etc.
         // Erisc is able to keep up with workers up to around 17-20 GBps bidirectional (numbers still being locked down)
@@ -156,6 +169,7 @@ class AllGatherConfig {
             this->num_workers_per_link;
     }
     uint32_t get_ring_size() const { return this->ring_size; }
+    bool is_payload_and_channel_sync_merged() const { return enable_merged_payload_and_channel_sync;}
     bool is_buffer_in_clockwise_ring(const uint32_t buffer_index) const {
         // For now we split it as lower half => clockwise, upper half => counter-clockwise
         // This is slightly suboptimal since the non-full-chunks go to the upper half.
@@ -209,6 +223,7 @@ class AllGatherConfig {
     bool enable_bidirectional;
     const bool input_is_dram;
     const bool output_is_dram;
+    const bool enable_merged_payload_and_channel_sync;
 };
 
 struct RingInterleavedAllGatherVariantConfig : public AllGatherConfig {
@@ -242,6 +257,8 @@ struct AllGather {
     const std::optional<chip_id_t> sender_device_id;
     const MemoryConfig output_mem_config;
     const all_gather_op::Topology topology;
+    const std::size_t num_workers;
+    const std::size_t max_channel_size;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
     std::vector<tt::tt_metal::Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -269,7 +286,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     const uint32_t ring_index,
     const std::optional<chip_id_t> receiver_device_id,
     const std::optional<chip_id_t> sender_device_id,
-    all_gather_op::Topology topology);
+    all_gather_op::Topology topology,
+    std::size_t num_workers,
+    std::size_t max_channel_size);
 
 struct ShardedAllGatherConfig {
     ShardedAllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim)

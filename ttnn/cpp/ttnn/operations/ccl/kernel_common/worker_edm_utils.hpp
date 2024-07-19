@@ -26,21 +26,32 @@ static FORCE_INLINE coord_t coord_from_args(uint32_t& arg_idx) {
 
 FORCE_INLINE void push_filler_pages_to_cb(const uint32_t& cb_id, uint32_t num_pages) {
     ASSERT(num_pages < cb_interface[cb_id].fifo_num_pages);
+    DeviceZoneScopedN("push_filler_pages_to_cb")
     cb_reserve_back(cb_id, num_pages);
     cb_push_back(cb_id, num_pages);
 }
 FORCE_INLINE void pop_filler_pages_from_cb(const uint32_t& cb_id, uint32_t num_pages) {
     ASSERT(num_pages < cb_interface[cb_id].fifo_num_pages);
+
+    DeviceZoneScopedN("pop_filler_pages_from_cb")
     cb_wait_front(cb_id, num_pages);
     cb_pop_front(cb_id, num_pages);
 }
 
 FORCE_INLINE void fetch_chunk(
     const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_read_addr) {
+    {
+
+        DeviceZoneScopedN("fetch_chunk_cb_r_b")
     cb_reserve_back(cb_id, num_pages);
+    }
     uint32_t l1_write_addr = get_write_ptr(cb_id);
-    noc_async_read(remote_l1_read_addr, l1_write_addr, page_size * num_pages);
-    noc_async_read_barrier();
+    {
+
+        DeviceZoneScopedN("fetch_chunk_read")
+        noc_async_read(remote_l1_read_addr, l1_write_addr, page_size * num_pages);
+        noc_async_read_barrier();
+    }
     cb_push_back(cb_id, num_pages);
 }
 FORCE_INLINE void fetch_chunk_sharded(
@@ -54,11 +65,19 @@ FORCE_INLINE void fetch_chunk_sharded(
 
 FORCE_INLINE void send_chunk(
     const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_write_addr) {
-    cb_wait_front(cb_id, num_pages);
+    {
+
+        DeviceZoneScopedN("send_chunk_cb_w_f")
+        cb_wait_front(cb_id, num_pages);
+    }
     uint32_t l1_read_addr = get_read_ptr(cb_id);
+    {
+
+        DeviceZoneScopedN("send_chunk_write")
     noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages);
     noc_async_write_barrier();
     cb_pop_front(cb_id, num_pages);
+    }
 }
 FORCE_INLINE void send_chunk_sharded(
     const uint32_t& cb_id,

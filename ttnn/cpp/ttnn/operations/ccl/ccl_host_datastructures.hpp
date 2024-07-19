@@ -172,6 +172,8 @@ class EriscDatamoverBuilder {
     uint32_t num_senders;
     uint32_t num_receivers;
 
+    int chip_id;
+
     bool enable_sender;
     bool enable_receiver;
 
@@ -189,7 +191,8 @@ class EriscDatamoverBuilder {
         std::vector<uint32_t> const& local_buffer_addresses,
         ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
         ccl::EriscDataMoverTerminationMode termination_mode =
-            ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) :
+        ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
+        int chip_id = -1) :
         local_semaphore_addresses(local_semaphore_addresses),
         local_buffer_addresses(local_buffer_addresses),
         eth_buffer_size_bytes(eth_buffer_size),
@@ -200,7 +203,8 @@ class EriscDatamoverBuilder {
         enable_sender(false),
         enable_receiver(false),
         num_senders(0),
-        num_receivers(0) {
+        num_receivers(0),
+        chip_id(chip_id) {
         TT_ASSERT(local_buffer_addresses.size() == local_semaphore_addresses.size());
         active_channels.reserve(num_channel_buffers);
         TT_ASSERT(eth_buffer_size_bytes < 163000);
@@ -275,7 +279,12 @@ class EriscDatamoverBuilder {
             this->num_senders,
             this->num_receivers,
             this->buffer_sharing_mode,
-            this->termination_mode};
+            this->termination_mode,
+            1,
+            static_cast<uint32_t>(this->num_senders > 0 && active_channels.at(0).is_sender),
+            1, // merge packet and payload ready signal
+            chip_id
+            };
     }
 
     [[nodiscard]]

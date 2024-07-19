@@ -37,7 +37,11 @@ void kernel_main() {
         if constexpr (num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
                 uint64_t eth_receiver_l1_curr_noc_addr = eth_receiver_l1_base_noc_addr;
+                {
+
+                DeviceZoneScopedN("RR_WAIT_FOR_EDM");
                 noc_semaphore_wait(receiver_read_semaphore_addr_ptr, 1);
+                }
                 noc_semaphore_set(receiver_read_semaphore_addr_ptr, 0);
                 // Read page by page so that writer can be kicked off instead of being blocked waiting for full chunk to be read
                 // Look into perf/optimizations for this
@@ -48,7 +52,11 @@ void kernel_main() {
         }
         if constexpr (rem_num_pages > 0) {
             uint64_t eth_receiver_l1_curr_noc_addr = eth_receiver_l1_base_noc_addr;
+                            {
+
+                DeviceZoneScopedN("RR_WAIT_FOR_EDM");
             noc_semaphore_wait(receiver_read_semaphore_addr_ptr, 1);
+                            }
             noc_semaphore_set(receiver_read_semaphore_addr_ptr, 0);
             fetch_chunk(cb_id_in0, rem_num_pages, page_size, eth_receiver_l1_base_noc_addr);
             noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);

@@ -77,6 +77,8 @@ def run_all_gather_on_t3000_impl(
     function_level_defaults,
     num_iters=1,
     enable_async=False,
+    num_workers=0,
+    max_channel_size=0,
 ):
     if len(all_devices) != 8:
         pytest.skip("Not T3000!")
