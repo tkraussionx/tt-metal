@@ -2066,3 +2066,13 @@ def interleaved_to_sharded_partial(x, num_slices, *args, **kwargs):
 def interleaved_to_sharded_partial_coregrid(x, num_slices, x_core, ycore, *args, **kwargs):
     res = torch.ones(x.shape).bfloat16().float()
     return res
+
+
+def unary_le_bw(x, y, *args, **kwargs):
+    grad_data = x
+
+    pyt_y = torch.zeros_like(grad_data)
+
+    golden_tensor = pyt_y
+
+    return golden_tensor

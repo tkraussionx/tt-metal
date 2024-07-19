@@ -701,4 +701,8 @@ op_map = {
         "tt_op": ttnn_ops.binary_le_bw,
         "pytorch_op": pytorch_ops.binary_le_bw,
     },
+    "unary-le-bw": {
+        "tt_op": ttnn_ops.unary_le_bw,
+        "pytorch_op": pytorch_ops.unary_le_bw,
+    },
 }
