@@ -115,7 +115,7 @@ class TtMixtralMLP(LightweightModule):
                 program_config=self.model_config["FF1_OUTPUT_PROGCFG"],  # SILu activation fused in the op
                 memory_config=self.model_config["FF1_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.model_args.get_compute_kernel_config(),
-                dtype=ttnn.bfloat4_b,
+                dtype=ttnn.bfloat8_b,
             )
             w3_out = ttnn.matmul(
                 x,
@@ -123,7 +123,7 @@ class TtMixtralMLP(LightweightModule):
                 program_config=self.model_config["FF3_OUTPUT_PROGCFG"],
                 memory_config=self.model_config["FF3_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.model_args.get_compute_kernel_config(),
-                dtype=ttnn.bfloat4_b,
+                dtype=ttnn.bfloat8_b,
             )
             w2_in = ttnn.mul(w1_out, w3_out)
 
