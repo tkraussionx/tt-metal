@@ -78,7 +78,7 @@ def run_all_gather_on_t3000_impl(
     num_iters=1,
     enable_async=False,
 ):
-    if len(all_devices) != 8:
+    if len(all_devices) != 9:
         pytest.skip("Not T3000!")
 
     # Use Async mode based on test input config

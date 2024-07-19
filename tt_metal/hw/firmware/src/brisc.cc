@@ -418,6 +418,7 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
             }
+            DeviceZoneSetCounter(mailboxes->launch.kernel_config.host_assigned_op_id);
         }
     }
 
