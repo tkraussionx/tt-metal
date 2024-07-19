@@ -68,6 +68,144 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
 @pytest.mark.skipif(is_watcher_enabled(), reason="Kernel OOM with watcher enabled")
 @skip_for_grayskull("Unsupported in GS since L1 runs OOM with most configs")
 @pytest.mark.parametrize(
+    # "dtype", [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16], ids=["bfp8", "bf16"]
+    "dtype",
+    [tt_lib.tensor.DataType.BFLOAT8_B],
+    ids=["bfp8"],
+)
+@pytest.mark.parametrize("q_chunk_size", [64, 128, 256, 512], ids=["q64", "q128", "q256", "q512"])
+@pytest.mark.parametrize("k_chunk_size", [64, 128, 256, 512], ids=["k64", "k128", "k256", "k512"])
+@pytest.mark.parametrize(
+    "seq_len", [512, 1024, 2048, 4096, 8192, 16384], ids=["s512", "s1024", "s2048", "s4096", "s8192", "s16384"]
+)
+# @pytest.mark.parametrize("seq_len", [512, ])
+@pytest.mark.parametrize("hidden_dim", [2048], ids=["d2048"])
+@pytest.mark.parametrize("head_dim", [64, 128, 256], ids=["h64", "h128", "h256"])
+# @pytest.mark.parametrize("head_dim", [64])
+# @pytest.mark.parametrize(
+#     "b, nh, nkv, s, d",
+#     (
+#         [1, 8, 1, 2048, 128],  # Llama2-70B
+#         [1, 16, 1, 2048, 64],  # Falcon-40B
+#         [1, 71, 1, 2048, 64],  # Falcon-7B
+#         [8, 8, 1, 2048, 128],  # Llama2-70B large batch
+#         [1, 8, 1, 8192, 128],  # Llama2-70B large sequence
+#     ),
+# )
+def test_sdpa_tt_perf(device, seq_len, hidden_dim, head_dim, q_chunk_size, k_chunk_size, dtype):
+    if (seq_len % q_chunk_size != 0) or (seq_len % k_chunk_size != 0):
+        pytest.skip("s must be divisible by q_chunk_size and k_chunk_size")
+    nh = hidden_dim // head_dim
+    nkv = 1
+    b = 16384 // seq_len  # Always 16K tokens total
+
+    tt_lib.device.DisablePersistentKernelCache()
+    run_test_sdpa_tt(device, b, nh, nkv, seq_len, head_dim, q_chunk_size, k_chunk_size, dtype)
+
+
+def run_test_matmul_softmax_tt(device, b, nh, nkv, s, d, dtype):
+    torch.manual_seed(1234)
+
+    compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+        math_fidelity=tt_lib.tensor.MathFidelity.HiFi2,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=False,
+    )
+
+    Q = torch.randn(b, nh, s, d)
+    K = torch.randn(b, nh, s, d)
+    V = torch.randn(b, nh, s, d)
+    attn_mask = torch.full((s, s), torch.finfo(torch.float32).min)
+    attn_mask = torch.triu(attn_mask, diagonal=1).expand(b, 1, -1, -1)
+
+    # Print shapes of all inputs along with input names
+    logger.debug(f"Q: {Q.shape}")
+    logger.debug(f"K: {K.shape}")
+    logger.debug(f"V: {V.shape}")
+    logger.debug(f"attn_mask: {attn_mask.shape}")
+
+    tt_Q = tt_lib.tensor.Tensor(Q, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
+    tt_K = tt_lib.tensor.Tensor(K, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
+    tt_V = tt_lib.tensor.Tensor(V, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
+    tt_attn_mask = tt_lib.tensor.Tensor(attn_mask, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
+
+    key_layer_transposed = ttnn.experimental.tensor.transpose(
+        tt_K,
+        -2,
+        -1,
+        output_mem_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
+
+    slice_size = 512
+    num_slices = s // 512
+
+    def scaled_dot_product_attention(q_slices, key_layer_transposed, attn_mask_slices, value_layer):
+        num_q_slices = q_slices.shape[2] // 512
+
+        for i in range(num_q_slices):
+            # Q * KˆT
+            q_sliced = tt_lib.tensor.unpad(
+                q_slices,
+                (0, 0, i * 512, 0),
+                (q_slices.shape[0] - 1, q_slices.shape[1] - 1, (i + 1) * 512 - 1, q_slices.shape[3] - 1),
+            )
+            attn_weights = ttnn.matmul(
+                q_sliced,
+                key_layer_transposed,
+                compute_kernel_config=compute_kernel_config,
+                dtype=dtype,
+            )
+            # Softmax
+            attn_weights = ttnn.softmax(
+                attn_weights,
+                # program_config=self.model_config["SOFTMAX_PROGCFG"],
+            )
+            # Attention score * V
+            attn_output_slice = ttnn.matmul(
+                attn_weights,
+                value_layer,
+                compute_kernel_config=compute_kernel_config,
+                dtype=dtype,
+            )
+            attn_weights.deallocate(True)
+
+        # return attn_output_slice
+
+    tt_back = scaled_dot_product_attention(tt_Q, key_layer_transposed, tt_attn_mask, tt_V)
+    # tt_back = tt_back.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
+
+    # gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
+
+    # out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
+    # logger.debug(f"python vs pytorch: {out_pcc}")
+    # assert out_pass
+
+
+@pytest.mark.parametrize(
+    # "dtype", [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16], ids=["bfp8", "bf16"]
+    "dtype",
+    [tt_lib.tensor.DataType.BFLOAT16],
+    ids=["bf16"],
+)
+@pytest.mark.parametrize(
+    "seq_len", [512, 1024, 2048, 4096, 8192, 16384], ids=["s512", "s1024", "s2048", "s4096", "s8192", "s16384"]
+)
+@pytest.mark.parametrize("hidden_dim", [2048], ids=["d2048"])
+@pytest.mark.parametrize("head_dim", [64, 128, 256], ids=["h64", "h128", "h256"])
+def test_matmul_softmax_tt_perf(device, seq_len, hidden_dim, head_dim, dtype):
+    nh = hidden_dim // head_dim
+    nkv = 1
+    b = 16384 // seq_len  # Always 16K tokens total
+
+    tt_lib.device.DisablePersistentKernelCache()
+    run_test_matmul_softmax_tt(device, b, nh, nkv, seq_len, head_dim, dtype)
+
+
+# @pytest.mark.skip(reason="ND PCC issues")
+@pytest.mark.skipif(is_watcher_enabled(), reason="Kernel OOM with watcher enabled")
+@skip_for_grayskull("Unsupported in GS since L1 runs OOM with most configs")
+@pytest.mark.parametrize(
     "dtype", [tt_lib.tensor.DataType.BFLOAT8_B, tt_lib.tensor.DataType.BFLOAT16], ids=["bfp8", "bf16"]
 )
 @pytest.mark.parametrize("q_chunk_size", [128, 256], ids=["q128", "q256"])

@@ -163,7 +163,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     uint32_t q_tiles  = Sq_chunk_t * DHt * q_buffer_factor;
     uint32_t k_tiles  = Sk_chunk_t * DHt * 2; // double buffer
     uint32_t v_tiles  = Sk_chunk_t * DHt * 2; // double buffer
-    uint32_t mask_tiles = Sq_chunk_t * Sk_chunk_t * 2; // double buffer
+    uint32_t mask_tiles = Sq_chunk_t * Sk_chunk_t; // double buffer
     uint32_t qk_tiles = Sq_chunk_t * Sk_chunk_t;
     uint32_t out_im_tiles = Sq_chunk_t * DHt;
     uint32_t out0_t = Sq_chunk_t * DHt;
