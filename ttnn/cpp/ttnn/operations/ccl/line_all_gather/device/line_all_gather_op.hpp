@@ -38,6 +38,9 @@ struct LineAllGather {
     const std::optional<chip_id_t> sender_device_id;
     const MemoryConfig output_mem_config;
     const all_gather_op::Topology topology;
+    const std::size_t num_workers;
+    const std::size_t max_channel_size;
+    const std::size_t num_buffers_per_channel;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
     std::vector<tt::tt_metal::Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -52,7 +55,10 @@ Tensor line_all_gather(
     const Tensor& input_tensor,
     const uint32_t dim,
     const uint32_t num_links = 1,
-    const std::optional<MemoryConfig>& memory_config = std::nullopt);
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    const std::size_t num_workers = 0,
+    const std::size_t max_channel_size = 0,
+    const std::size_t num_buffers_per_channel = 1);
 
 } // namespace ccl
 } // namespace operations

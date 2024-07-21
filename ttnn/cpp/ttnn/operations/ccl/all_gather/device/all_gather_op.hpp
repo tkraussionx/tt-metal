@@ -10,8 +10,10 @@
 #include "tensor/tensor.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/common/constants.hpp"
+#include "tt_metal/host_api.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_common.hpp"
+#include "ttnn/experimental/tt_dnn/op_library/run_operation.hpp"
 
 #include <optional>
 #include <vector>
@@ -820,7 +822,10 @@ Tensor all_gather(
     const Tensor& input_tensor,
     const uint32_t dim,
     const uint32_t num_links = 1,
-    const std::optional<MemoryConfig>& memory_config = std::nullopt);
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    const std::size_t num_workers = 0,
+    const std::size_t max_channel_size = 0,
+    const std::size_t buffers_per_channel = 1);
 
 } // namespace ccl
 } // namespace operations
