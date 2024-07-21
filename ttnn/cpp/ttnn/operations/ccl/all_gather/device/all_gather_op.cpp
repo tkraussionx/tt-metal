@@ -9,25 +9,24 @@
 
 #include "tensor/tensor_utils.hpp"
 
-#include "eth_l1_address_map.h"
 
 namespace ttnn {
 
-AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim) {
+ccl::AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim) {
     bool is_sharded = input_tensor.is_sharded();
 
     if (is_sharded) {
         if (input_tensor.buffer()->shard_spec().tensor2d_shape[0] > 1) {
-            return AllGatherMode::FULL_WORKER_GRID_SHARDED;
+            return ccl::AllGatherMode::FULL_WORKER_GRID_SHARDED;
         } else {
-            return AllGatherMode::SINGLE_TILE_HIGH_WIDTH_SHARDED;
+            return ccl::AllGatherMode::SINGLE_TILE_HIGH_WIDTH_SHARDED;
         }
     } else {
-        return AllGatherMode::RING_INTERLEAVED;
+        return ccl::AllGatherMode::RING_INTERLEAVED;
     }
 }
 
-void AllGather::validate(const std::vector<Tensor> &input_tensors) const {
+void ccl::AllGather::validate(const std::vector<Tensor> &input_tensors) const {
     TT_FATAL(input_tensors.size() == 1);
     const auto& input_tensor = input_tensors[0];
     const auto& layout = input_tensors[0].get_layout();
@@ -61,13 +60,13 @@ void AllGather::validate(const std::vector<Tensor> &input_tensors) const {
     }
 }
 
-std::vector<tt::tt_metal::Shape> AllGather::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+std::vector<tt::tt_metal::Shape> ccl::AllGather::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     auto shape = input_tensors[0].get_legacy_shape();
     shape[this->dim] *= this->ring_size;
     return std::vector<tt::tt_metal::Shape>(input_tensors.size(), shape);
 }
 
-std::vector<Tensor> AllGather::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+std::vector<Tensor> ccl::AllGather::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors[0];
     if(this->output_mem_config.is_sharded()) {
         return {create_device_tensor(
@@ -82,7 +81,7 @@ std::vector<Tensor> AllGather::create_output_tensors(const std::vector<Tensor> &
     }
 }
 
-operation::ProgramWithCallbacks AllGather::create_program(const std::vector<Tensor> & input_tensors, std::vector<Tensor> &output_tensors) const {
+operation::ProgramWithCallbacks ccl::AllGather::create_program(const std::vector<Tensor> & input_tensors, std::vector<Tensor> &output_tensors) const {
     AllGatherMode all_gather_mode = choose_all_gather_mode(input_tensors.at(0), output_tensors.at(0), dim);
     switch (all_gather_mode) {
         case AllGatherMode::RING_INTERLEAVED:
@@ -144,7 +143,7 @@ Tensor all_gather(
             }
 
             return operation::run(
-                ttnn::AllGather{
+                ttnn::ccl::AllGather{
                     dim,
                     num_links,
                     num_devices,

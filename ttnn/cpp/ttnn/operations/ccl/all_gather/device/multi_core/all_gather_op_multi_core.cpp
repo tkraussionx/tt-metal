@@ -158,7 +158,7 @@ std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
 }
 
 
-constexpr bool merge_receiver_and_sender_workers = false;
+constexpr bool merge_receiver_and_sender_workers = true;
 
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
@@ -406,7 +406,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
             // Circular Buffer Setup
             uint32_t cb_page_size = is_sharded ? shard_size_in_bytes : input_page_size;
             log_trace(tt::LogOp, "input_page_size: {}", input_page_size);
-            uint32_t cb_num_pages = 2 * max_pages_per_chunk;
+            uint32_t cb_num_pages = (merge_receiver_and_sender_workers ? 6 : 2) * max_pages_per_chunk;
             log_trace(tt::LogOp, "cb_num_pages: {}", cb_num_pages);
             uint32_t src0_cb_index = tt::CB::c_in0;
             CircularBufferConfig cb_src0_config = CircularBufferConfig(cb_num_pages * cb_page_size, {{src0_cb_index, df}})
@@ -425,14 +425,14 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
             CBHandle sender_worker_reader_semaphore_addr;
             if (merge_receiver_and_sender_workers) {
                 CBHandle cb_src0_workers = CreateCircularBuffer(program, workers, cb_src0_config);
-                receiver_worker_semaphore_addr = tt_metal::CreateSemaphore(program, workers, 0);
-                sender_worker_writer_semaphore_addr = tt_metal::CreateSemaphore(program, workers, 0);
+                receiver_worker_semaphore_addr = tt::tt_metal::CreateSemaphore(program, workers, 0);
+                sender_worker_writer_semaphore_addr = tt::tt_metal::CreateSemaphore(program, workers, 0);
             } else {
                 cb_src0_sender_workers = CreateCircularBuffer(program, sender_workers, cb_src0_config);
                 cb_src0_receiver_workers = CreateCircularBuffer(program, receiver_workers, cb_src0_config);
-                receiver_worker_semaphore_addr = tt_metal::CreateSemaphore(program, receiver_workers, 0);
-                sender_worker_writer_semaphore_addr = tt_metal::CreateSemaphore(program, sender_workers, 0);
-                sender_worker_reader_semaphore_addr = tt_metal::CreateSemaphore(program, sender_workers, 0);
+                receiver_worker_semaphore_addr = tt::tt_metal::CreateSemaphore(program, receiver_workers, 0);
+                sender_worker_writer_semaphore_addr = tt::tt_metal::CreateSemaphore(program, sender_workers, 0);
+                sender_worker_reader_semaphore_addr = tt::tt_metal::CreateSemaphore(program, sender_workers, 0);
             }
 
             // Rename this the _channel
@@ -707,15 +707,15 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
                         std::string const& sender_kernel_path = is_sharded ?
                             "a_garbage_file_path" :
                             "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_writer.cpp";
-                        KernelHandle sender_worker_kernel_id = tt_metal::CreateKernel(
+                        KernelHandle sender_worker_kernel_id = tt::tt_metal::CreateKernel(
                             program,
                             sender_kernel_path,
                             sender_worker_cores.at(b),
-                            tt_metal::WriterDataMovementConfig(sender_worker_ct_args, worker_defines));
+                            tt::tt_metal::WriterDataMovementConfig(sender_worker_ct_args, worker_defines));
 
                         sender_worker_kernels.push_back(sender_worker_kernel_id);
 
-                        tt_metal::SetRuntimeArgs(
+                        tt::tt_metal::SetRuntimeArgs(
                             program,
                             sender_worker_kernel_id,
                             sender_worker_cores.at(b),
@@ -1159,15 +1159,15 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
                         std::string const& reader_kernel_path = is_sharded ?
                             "a_garbage_file_path" :
                             "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_reader.cpp";
-                        KernelHandle reader_worker_kernel_id = tt_metal::CreateKernel(
+                        KernelHandle reader_worker_kernel_id = tt::tt_metal::CreateKernel(
                             program,
                             reader_kernel_path,
                             receiver_worker_cores.at(b),
-                            tt_metal::ReaderDataMovementConfig(reader_worker_ct_args, worker_defines));
+                            tt::tt_metal::ReaderDataMovementConfig(reader_worker_ct_args, worker_defines));
 
                         reader_worker_kernels.push_back(reader_worker_kernel_id);
 
-                        tt_metal::SetRuntimeArgs(
+                        tt::tt_metal::SetRuntimeArgs(
                             program,
                             reader_worker_kernel_id,
                             receiver_worker_cores.at(b),

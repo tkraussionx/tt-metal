@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include "ttnn/decorators.hpp"
 #include "ttnn/operations/ccl/all_gather/device/all_gather_op.hpp"
-#include "ttnn/cpp/ttnn/multi_device.hpp"
+
+#include <optional>
 
 namespace ttnn {
 namespace operations {

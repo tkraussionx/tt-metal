@@ -22,7 +22,7 @@
 #include "tt_metal/test_utils/print_helpers.hpp"
 #include "tt_metal/test_utils/stimulus.hpp"
 
-#include "tt_eager/tt_dnn/op_library/ccl/ccl_host_datastructures.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "tt_stl/concepts.hpp"
 // #include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
 
@@ -39,7 +39,7 @@ namespace ccl {
 void set_edm_runtime_args(
     tt_metal::Program& program,
     KernelHandle edm_kernel_handle,
-    ccl::EriscDatamoverBuilder const& edm_builder,
+    ttnn::ccl::EriscDatamoverBuilder const& edm_builder,
     CoreCoord const& eth_core
 ) {
     std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
@@ -56,7 +56,7 @@ void set_edm_runtime_args(
 KernelHandle generate_edm_kernels(
     tt_metal::Program& program,
     Device const* device,
-    ccl::EriscDatamoverBuilder const& edm_builder,
+    ttnn::ccl::EriscDatamoverBuilder const& edm_builder,
     CoreRangeSet const& eth_cores,
     NOC noc_id) {
     // log_info(tt::LogOp, "EDM CLOCKWISE KERNEL RT ARGS: ");
@@ -85,36 +85,36 @@ KernelHandle generate_edm_kernels(
 }
 
 
-ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
+ttnn::ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     std::size_t num_channels,
     uint32_t page_size,
     std::size_t num_buffers_per_channel,
-    ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
-    ccl::EriscDataMoverTerminationMode termination_mode) {
+    ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
+    ttnn::ccl::EriscDataMoverTerminationMode termination_mode) {
     TT_ASSERT(num_channels > 0);
     TT_ASSERT(num_buffers_per_channel > 0);
     std::vector<uint32_t> edm_sem_addresses(num_channels, 0);
     std::vector<uint32_t> edm_buffer_addresses(num_channels, 0);
 
-    uint32_t edm_sem_addr = ccl::EriscDatamoverConfig::get_semaphores_base_address(num_channels);
-    uint32_t edm_buffer_addr = ccl::EriscDatamoverConfig::get_buffers_base_address(num_channels);
+    uint32_t edm_sem_addr = ttnn::ccl::EriscDatamoverConfig::get_semaphores_base_address(num_channels);
+    uint32_t edm_buffer_addr = ttnn::ccl::EriscDatamoverConfig::get_buffers_base_address(num_channels);
     TT_ASSERT(edm_sem_addr > 0);
     TT_ASSERT(edm_buffer_addr > 0);
-    const uint32_t buffer_size = ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, num_buffers_per_channel, page_size);
+    const uint32_t buffer_size = ttnn::ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, num_buffers_per_channel, page_size);
     log_info(tt::LogTest, "num_channels: {}, num_buffers_per_channel: {}, page_size: {}", num_channels, num_buffers_per_channel, page_size);
     log_info(tt::LogTest, "Buffer size: {}", buffer_size);
     for (std::size_t c = 0; c < num_channels; ++c) {
         edm_sem_addresses.at(c) = edm_sem_addr;
-        edm_sem_addr += ccl::EriscDatamoverConfig::semaphore_size;
+        edm_sem_addr += ttnn::ccl::EriscDatamoverConfig::semaphore_size;
         edm_buffer_addresses.at(c) = edm_buffer_addr;
-        edm_buffer_addr += num_buffers_per_channel * (buffer_size + (ccl::EriscDatamoverConfig::enable_merged_payload_and_channel_sync ? ccl::EriscDatamoverConfig::eth_channel_sync_size : 0));
+        edm_buffer_addr += num_buffers_per_channel * (buffer_size + (ttnn::ccl::EriscDatamoverConfig::enable_merged_payload_and_channel_sync ? ttnn::ccl::EriscDatamoverConfig::eth_channel_sync_size : 0));
         TT_ASSERT((c == 0) || (edm_buffer_addresses.back() != edm_buffer_addresses.front()));
         TT_ASSERT((c == 0) || (edm_sem_addresses.back() != edm_sem_addresses.front()));
     }
 
-    return ccl::EriscDatamoverBuilder(
+    return ttnn::ccl::EriscDatamoverBuilder(
         buffer_size,
-        ccl::EriscDatamoverConfig::get_edm_handshake_address(),
+        ttnn::ccl::EriscDatamoverConfig::get_edm_handshake_address(),
         edm_sem_addresses,
         edm_buffer_addresses,
         buffer_sharing_mode,
@@ -186,7 +186,7 @@ void generate_receiver_worker_kernels(
     Device *device,
     CoreCoord const& worker_core,
     CoreCoord const& edm_core,
-    ccl::EriscDatamoverBuilder::ChannelBufferInterface const& edm_channel,
+    ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& edm_channel,
     uint32_t page_size,
     uint32_t num_pages,
     uint32_t num_buffers_per_channel,
@@ -275,7 +275,7 @@ void generate_sender_worker_kernels(
     Device *device,
     CoreCoord const& worker_core,
     CoreCoord const& edm_core,
-    ccl::EriscDatamoverBuilder::ChannelBufferInterface const& edm_channel,
+    ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& edm_channel,
     uint32_t page_size,
     uint32_t num_pages_total,
     uint32_t num_buffers_per_channel,
@@ -477,14 +477,14 @@ bool RunWriteBWTest(
     // EDM Builder Setup
     ////////////////////////////////////////////////////////////////////////////
 
-    ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode = ccl::EriscDataMoverBufferSharingMode::NOT_SHARED;
-    auto edm_termination_mode = ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED;
+    ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode = ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED;
+    auto edm_termination_mode = ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED;
 
     const std::size_t num_edm_channels = num_local_sender_channels + num_remote_sender_channels;
     // TODO: Allow an override of EDM buffer size
-    auto local_chip_edm_builder = create_erisc_datamover_builder(
+    auto local_chip_edm_builder = ccl::create_erisc_datamover_builder(
         num_edm_channels, page_size, num_buffers_per_channel, buffer_sharing_mode, edm_termination_mode);
-    auto remote_chip_edm_builder = create_erisc_datamover_builder(
+    auto remote_chip_edm_builder = ccl::create_erisc_datamover_builder(
         num_edm_channels, page_size, num_buffers_per_channel, buffer_sharing_mode, edm_termination_mode);
 
     const uint32_t num_bytes_per_send = local_chip_edm_builder.get_eth_buffer_size_bytes();
@@ -505,33 +505,33 @@ bool RunWriteBWTest(
     std::vector<CoreCoord> local_receiver_workers;
 
     // setup edm channels
-    std::vector<ccl::EriscDatamoverBuilder::ChannelBufferInterface> local_edm_channels;
-    std::vector<ccl::EriscDatamoverBuilder::ChannelBufferInterface> remote_edm_channels;
+    std::vector<ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface> local_edm_channels;
+    std::vector<ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface> remote_edm_channels;
     for (uint32_t i = 0; i < num_local_sender_channels; i++) {
-        auto const& worker_core = ccl::WorkerXY(
+        auto const& worker_core = ttnn::ccl::WorkerXY(
                             sender_device->worker_core_from_logical_core(worker_cores.at(i)).x,
                             sender_device->worker_core_from_logical_core(worker_cores.at(i)).y);
-        ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_sender_channel_buffer = local_chip_edm_builder.add_sender_channel(
+        ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_sender_channel_buffer = local_chip_edm_builder.add_sender_channel(
             local_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
             {worker_core});
         local_edm_channels.push_back(local_sender_channel_buffer);
-        ccl::EriscDatamoverBuilder::ChannelBufferInterface const& remote_receiver_channel_buffer = remote_chip_edm_builder.add_receiver_channel(
+        ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& remote_receiver_channel_buffer = remote_chip_edm_builder.add_receiver_channel(
             remote_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
             {worker_core});
         remote_edm_channels.push_back(remote_receiver_channel_buffer);
     }
     for (uint32_t i = num_local_sender_channels; i < num_local_sender_channels + num_remote_sender_channels; i++) {
-        auto const& worker_core = ccl::WorkerXY(
+        auto const& worker_core = ttnn::ccl::WorkerXY(
                             receiver_device->worker_core_from_logical_core(worker_cores.at(i)).x,
                             receiver_device->worker_core_from_logical_core(worker_cores.at(i)).y);
-        ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_receiver_channel_buffer = local_chip_edm_builder.add_receiver_channel(
+        ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_receiver_channel_buffer = local_chip_edm_builder.add_receiver_channel(
             local_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
             {worker_core});
         local_edm_channels.push_back(local_receiver_channel_buffer);
-        ccl::EriscDatamoverBuilder::ChannelBufferInterface const& remote_sender_channel_buffer = remote_chip_edm_builder.add_sender_channel(
+        ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& remote_sender_channel_buffer = remote_chip_edm_builder.add_sender_channel(
             remote_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
             {worker_core});
@@ -619,7 +619,7 @@ bool RunWriteBWTest(
         local_chip_edm_builder,
         CoreRangeSet({CoreRange(eth_sender_core)}),
         NOC::NOC_0);
-    set_edm_runtime_args(
+    ccl::set_edm_runtime_args(
         sender_program,
         local_edm_kernel,
         local_chip_edm_builder,
@@ -632,7 +632,7 @@ bool RunWriteBWTest(
         remote_chip_edm_builder,
         CoreRangeSet({CoreRange(eth_receiver_core)}),
         NOC::NOC_0);
-    set_edm_runtime_args(
+    ccl::set_edm_runtime_args(
         receiver_program,
         remote_edm_kernel,
         remote_chip_edm_builder,

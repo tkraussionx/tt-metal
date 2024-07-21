@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ccl_common.hpp"
+#include "ccl_host_datastructures.hpp"
+
 
 #include <cstdint>
-
-#include "ccl_host_datastructures.hpp"
 
 namespace ttnn {
 namespace ccl {
@@ -20,7 +20,7 @@ std::unique_ptr<CclOpTensorConfig> CclOpTensorConfig::build_all_gather_tensor_co
 }
 
 KernelHandle generate_edm_kernels(
-    tt_metal::Program& program,
+    tt::tt_metal::Program& program,
     Device const* device,
     ccl::EriscDatamoverBuilder const& edm_builder,
     CoreRangeSet const& eth_cores,
@@ -36,11 +36,11 @@ KernelHandle generate_edm_kernels(
         log_trace(tt::LogOp, "\t{}", s);
     }
 
-    auto eth_sender_kernel = tt_metal::CreateKernel(
+    auto eth_sender_kernel = tt::tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
         eth_cores,
-        tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
+        tt::tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
     kernel_handles.push_back(eth_sender_kernel);
 
     return eth_sender_kernel;
@@ -153,16 +153,18 @@ KernelHandle generate_edm_kernel(
         "ttnn/cpp/ttnn/operations/ccl/kernels/edm/erisc_datamover.cpp",
         eth_core,
        tt::tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
+
+    return eth_sender_kernel;
 }
 
 void set_edm_runtime_args(
-    tt_metal::Program& program,
+    tt::tt_metal::Program& program,
     KernelHandle edm_kernel_handle,
     ccl::EriscDatamoverBuilder const& edm_builder,
     CoreCoord const& eth_core
 ) {
     std::vector<uint32_t> const& edm_clockwise_kernel_rt_args = edm_builder.emit_runtime_args();
-    tt_metal::SetRuntimeArgs(program, edm_kernel_handle, eth_core, edm_clockwise_kernel_rt_args);
+    tt::tt_metal::SetRuntimeArgs(program, edm_kernel_handle, eth_core, edm_clockwise_kernel_rt_args);
 
     std::stringstream ss;
     ss << "EDM ARGS:\n";

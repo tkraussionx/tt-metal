@@ -48,7 +48,7 @@ struct EriscDatamoverConfig {
         std::size_t channel_sync_bytes_overhead = (enable_merged_payload_and_channel_sync * 16);
         std::size_t usable_l1_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - get_buffers_base_address(num_edm_channels);
         std::size_t max_per_buffer_space = (usable_l1_space / (num_edm_channels * num_buffers_per_channel)) - channel_sync_bytes_overhead;
-        uint32_t buffer_size = round_down(max_per_buffer_space, page_size);
+        uint32_t buffer_size = tt::round_down(max_per_buffer_space, page_size);
 
         log_info(tt::LogOp, "total_l1_buffer_space: {}", eth_l1_mem::address_map::MAX_L1_LOADING_SIZE);
         log_info(
