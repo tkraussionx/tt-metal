@@ -1827,16 +1827,14 @@ def log_bw(x, y, *args, **kwargs):
     return in_data.grad
 
 
-def gt_bw(x, y, *args, **kwargs):
+def gt_bw(x, y, z, *args, **kwargs):
     grad_data = x
-    in_data = y
-    in_data.requires_grad = True
 
-    in_data.retain_grad()
     pyt_y = torch.zeros_like(grad_data)
-    pyt_y.backward(gradient=grad_data)
 
-    return in_data.grad
+    golden_tensor = pyt_y
+
+    return golden_tensor
 
 
 def lt_bw(x, *args, **kwargs):

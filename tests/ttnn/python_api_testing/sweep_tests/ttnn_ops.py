@@ -3405,6 +3405,7 @@ def eltwise_scale_mask_softmax_in_place(
 def gt_bw(
     x,
     y,
+    z,
     *args,
     device,
     dtype,
@@ -3415,15 +3416,17 @@ def gt_bw(
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
 
-    t2 = ttnn.gt_bw(t0, t1, memory_config=output_mem_config)
+    t3 = ttnn.gt_bw(t0, t1, t2, memory_config=output_mem_config)[0]
     print("done1")
-    return ttnn_tensor_to_torch(t2)
+    return ttnn_tensor_to_torch(t3)
 
 
 def lt_bw(
     x,
     y,
+    z,
     *args,
     device,
     dtype,
@@ -3434,15 +3437,17 @@ def lt_bw(
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
 
-    t2 = ttnn.lt_bw(t0, t1, memory_config=output_mem_config)[0]
-
-    return ttnn_tensor_to_torch(t2)
+    t3 = ttnn.lt_bw(t0, t1, t2, memory_config=output_mem_config)[0]
+    print("done1")
+    return ttnn_tensor_to_torch(t3)
 
 
 def ne_bw(
     x,
     y,
+    z,
     *args,
     device,
     dtype,
@@ -3453,10 +3458,11 @@ def ne_bw(
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
 
-    t2 = ttnn.ne_bw(t0, t1, memory_config=output_mem_config)[0]
-
-    return ttnn_tensor_to_torch(t2)
+    t3 = ttnn.ne_bw(t0, t1, t2, memory_config=output_mem_config)[0]
+    print("done1")
+    return ttnn_tensor_to_torch(t3)
 
 
 def relu_bw(
