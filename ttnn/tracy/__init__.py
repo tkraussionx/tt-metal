@@ -37,10 +37,10 @@ def signpost(header, message=None):
 
     if message:
         profiler.tracy_message(f"`TT_SIGNPOST: {header}\n{message}`")
-        logger.info(f"{header} : {message} ")
+        # logger.info(f"{header} : {message} ")
     else:
         profiler.tracy_message(f"`TT_SIGNPOST: {header}`")
-        logger.info(f"{header}")
+        # logger.info(f"{header}")
 
 
 class Profiler:
