@@ -100,7 +100,7 @@ class TtLlamaModelForGeneration:
             logger.info(f"Capturing Trace took: {t2 - t1} seconds.")
 
             logger.info("Starting Trace perf test...")
-            num_iters = 50
+            num_iters = 500
 
             times = []
             import tqdm
