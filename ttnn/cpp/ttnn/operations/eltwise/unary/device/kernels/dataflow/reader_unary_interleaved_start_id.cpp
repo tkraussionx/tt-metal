@@ -4,8 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-
-//#include "debug/dprint.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -26,6 +25,8 @@ void kernel_main() {
         .page_size = tile_bytes,
         .data_format = data_format
     };
+
+    DPRINT << "output cb addr " << get_write_ptr(16) <<  ENDL();
 
     // read a ublock of tiles from src to CB, and then push the ublock to unpacker
     #ifdef BACKWARDS
