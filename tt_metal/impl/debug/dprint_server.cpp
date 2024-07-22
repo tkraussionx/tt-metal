@@ -156,6 +156,7 @@ private:
     std::ofstream* outfile_ = nullptr; // non-cout
     std::ostream* stream_ = nullptr; // either == outfile_ or is &cout
     std::ofstream* noc_log_ = nullptr;
+    std::map<Device*, std::ofstream*> fstream_per_dev;
     std::map<uint32_t, uint32_t> noc_xfer_counts;
 
     // A map to from {device id, core coord x, y, hart index} to the signal code it's waiting for.
@@ -350,6 +351,7 @@ DebugPrintServerContext::DebugPrintServerContext() {
     string file_name = tt::llrt::OptionsG.get_feature_file_name(tt::llrt::RunTimeDebugFeatureDprint);
 
     // Set the output stream according to RTOptions, either a file name or stdout if none specified.
+
     if (file_name != "") {
         outfile_ = new std::ofstream(file_name);
     }
@@ -522,6 +524,8 @@ void DebugPrintServerContext::AttachDevice(Device* device) {
     device_to_core_range_lock_.lock();
     TT_ASSERT(device_to_core_range_.count(device) == 0, "Device {} added to DPRINT server more than once!", device_id);
     device_to_core_range_[device] = print_cores_sanitized;
+    std::string file_name = "dprint_" + std::to_string(device->id()) + ".txt";
+    fstream_per_dev[device] = new std::ofstream(file_name);
     device_to_core_range_lock_.unlock();
     log_info(tt::LogMetal, "DPRINT Server attached device {}", device_id);
 } // AttachDevice
@@ -628,7 +632,7 @@ bool DebugPrintServerContext::PeekOneHartNonBlocking(
     char val = 0;
 
     // If the print server is muted, dump the output to a null stream instead.
-    ostream& stream = (mute_print_server_)? null_stream : *stream_;
+    ostream& stream = *(fstream_per_dev.at(device));//(mute_print_server_)? null_stream : *stream_;
 
     // Check whether this hart is currently waiting on a WAIT to be fulfilled.
     tuple<uint32_t, uint32_t, uint32_t, uint32_t> hart_key {chip_id, core.x, core.y, hart_id};
