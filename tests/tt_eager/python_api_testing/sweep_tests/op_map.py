@@ -1222,14 +1222,6 @@ op_map = {
         "tt_op": tt_lib_ops.sqrt_bw,
         "pytorch_op": pytorch_ops.sqrt_bw,
     },
-    "neg-bw": {
-        "tt_op": tt_lib_ops.relu_bw,
-        "pytorch_op": pytorch_ops.relu_bw,
-    },
-    "log-bw": {
-        "tt_op": tt_lib_ops.log_bw,
-        "pytorch_op": pytorch_ops.log_bw,
-    },
     "rsub-bw": {
         "tt_op": tt_lib_ops.rsub_bw,
         "pytorch_op": pytorch_ops.rsub_bw,
