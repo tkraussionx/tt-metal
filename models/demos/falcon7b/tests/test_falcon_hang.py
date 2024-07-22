@@ -10,7 +10,7 @@ from models.utility_functions import (
 import torch
 
 
-@pytest.mark.parametrize("num_devices", [1, 8], ids=["1chips", "8chips"])
+@pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
 def test_reproduce_lm_head_nd_32(
     all_devices,
     num_devices,
@@ -19,7 +19,7 @@ def test_reproduce_lm_head_nd_32(
     if num_devices == 8:
         devices = get_devices_for_t3000(all_devices, num_devices)
     else:
-        devices.append(all_devices[0])
+        devices = all_devices
 
     print("Running on: ", num_devices, " devices.")
     in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
