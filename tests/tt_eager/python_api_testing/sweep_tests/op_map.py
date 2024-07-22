@@ -1226,10 +1226,6 @@ op_map = {
         "tt_op": tt_lib_ops.log_bw,
         "pytorch_op": pytorch_ops.log_bw,
     },
-    "gt-bw": {
-        "tt_op": tt_lib_ops.gt_bw,
-        "pytorch_op": pytorch_ops.gt_bw,
-    },
     "lt-bw": {
         "tt_op": tt_lib_ops.gt_bw,
         "pytorch_op": pytorch_ops.gt_bw,
