@@ -1222,10 +1222,6 @@ op_map = {
         "tt_op": tt_lib_ops.sqrt_bw,
         "pytorch_op": pytorch_ops.sqrt_bw,
     },
-    "relu-bw": {
-        "tt_op": tt_lib_ops.relu_bw,
-        "pytorch_op": pytorch_ops.relu_bw,
-    },
     "neg-bw": {
         "tt_op": tt_lib_ops.relu_bw,
         "pytorch_op": pytorch_ops.relu_bw,
@@ -1233,18 +1229,6 @@ op_map = {
     "log-bw": {
         "tt_op": tt_lib_ops.log_bw,
         "pytorch_op": pytorch_ops.log_bw,
-    },
-    "gt-bw": {
-        "tt_op": tt_lib_ops.gt_bw,
-        "pytorch_op": pytorch_ops.gt_bw,
-    },
-    "lt-bw": {
-        "tt_op": tt_lib_ops.gt_bw,
-        "pytorch_op": pytorch_ops.gt_bw,
-    },
-    "ne-bw": {
-        "tt_op": tt_lib_ops.ne_bw,
-        "pytorch_op": pytorch_ops.ne_bw,
     },
     "rsub-bw": {
         "tt_op": tt_lib_ops.rsub_bw,
