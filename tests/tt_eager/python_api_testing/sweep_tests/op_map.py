@@ -879,10 +879,6 @@ op_map = {
         "tt_op": tt_lib_ops.where_scalar_optional,
         "pytorch_op": pytorch_ops.where_scalar,
     },
-    "where-bw": {
-        "tt_op": tt_lib_ops.where_bw,
-        "pytorch_op": pytorch_ops.where_bw,
-    },
     # Matmul
     "matmul": {
         "tt_op": tt_lib_ops.matmul,
@@ -1210,21 +1206,9 @@ op_map = {
         "tt_op": tt_lib_ops.addalpha_bw,
         "pytorch_op": pytorch_ops.addalpha_bw,
     },
-    "rsqrt-bw": {
-        "tt_op": tt_lib_ops.rsqrt_bw,
-        "pytorch_op": pytorch_ops.rsqrt_bw,
-    },
     "abs-bw": {
         "tt_op": tt_lib_ops.abs_bw,
         "pytorch_op": pytorch_ops.abs_bw,
-    },
-    "sqrt-bw": {
-        "tt_op": tt_lib_ops.sqrt_bw,
-        "pytorch_op": pytorch_ops.sqrt_bw,
-    },
-    "rsub-bw": {
-        "tt_op": tt_lib_ops.rsub_bw,
-        "pytorch_op": pytorch_ops.rsub_bw,
     },
     "binary-le-bw": {
         "tt_op": tt_lib_ops.binary_le_bw,
