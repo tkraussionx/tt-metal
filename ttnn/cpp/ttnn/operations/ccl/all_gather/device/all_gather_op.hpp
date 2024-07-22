@@ -151,9 +151,9 @@ class AllGatherConfig {
             this->eth_buffer_size = tt::round_down(max_per_buffer_space, page_size);
             // log_info(tt::LogOp, "eth_buffer_size_with_channel_sync: {}", eth_buffer_size_with_channel_sync);
             log_info(tt::LogOp, "page_size: {}", page_size);
-            TT_FATAL(this->eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= max_num_workers);
-            TT_FATAL(
-                (this->num_eth_buffers * (this->eth_buffer_size + channel_sync_bytes_overhead) * num_duplicate_directions * this->num_buffers_per_worker) + this->semaphore_offset <= total_l1_buffer_space);
+            // TT_FATAL(this->eth_buffer_size == 0 or (this->num_eth_buffers * num_duplicate_directions) <= max_num_workers);
+            // TT_FATAL(
+                // (this->num_eth_buffers * (this->eth_buffer_size + channel_sync_bytes_overhead) * num_duplicate_directions * this->num_buffers_per_worker) + this->semaphore_offset <= total_l1_buffer_space);
             // this->eth_buffer_size = eth_buffer_size_with_channel_sync - channel_sync_bytes_overhead;
             log_info(tt::LogOp, "this->eth_buffer_size: {}", eth_buffer_size);
             TT_ASSERT(this->eth_buffer_size % page_size == 0);

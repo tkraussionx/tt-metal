@@ -95,11 +95,11 @@ std::vector<std::vector<uint32_t>> compute_worker_sender_num_transfers(
 
                 case all_gather_op::Topology::Ring:
                     switch (all_gather_config.get_bidirectional_mode()) {
-                        case ttnn::AllGatherBidirectionalMode::SPLIT_TENSOR:
+                        case AllGatherBidirectionalMode::SPLIT_TENSOR:
                             worker_num_transfers = ring_size - 1;
                             break;
 
-                        case ttnn::AllGatherBidirectionalMode::FULL_TENSOR:
+                        case AllGatherBidirectionalMode::FULL_TENSOR:
                             worker_num_transfers = direction == 0 /*all_gather_config.is_buffer_in_clockwise_ring(b)*/ ?
                                 ((((ring_size - 1) - 1) / 2) + 1):
                                 (ring_size - 1) / 2;
@@ -133,11 +133,11 @@ std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
 
                 case all_gather_op::Topology::Ring:
                     switch (all_gather_config.get_bidirectional_mode()) {
-                        case ttnn::AllGatherBidirectionalMode::SPLIT_TENSOR:
+                        case AllGatherBidirectionalMode::SPLIT_TENSOR:
                             worker_num_transfers = ring_size - 1;
                             break;
 
-                        case ttnn::AllGatherBidirectionalMode::FULL_TENSOR:
+                        case AllGatherBidirectionalMode::FULL_TENSOR:
                             worker_num_transfers = direction == 0 /*all_gather_config.is_buffer_in_clockwise_ring(b)*/ ?
                                 ((((ring_size - 1) - 1) / 2) + 1):
                                 (ring_size - 1) / 2;
@@ -243,7 +243,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     bool full_send_both_directions =
         (topology == all_gather_op::Topology::Linear ||
          (topology == all_gather_op::Topology::Ring &&
-          all_gather_config.get_bidirectional_mode() == ttnn::AllGatherBidirectionalMode::FULL_TENSOR));
+          all_gather_config.get_bidirectional_mode() == ttnn::ccl::AllGatherBidirectionalMode::FULL_TENSOR));
     const uint32_t num_full_send_directions = full_send_both_directions ? 2 : 1;
     constexpr uint32_t max_num_full_send_directions = 2;
     // number of worker cores is 2x this since there is 1 worker for the sender buffer and 1 worker for the receiver buffer
@@ -367,7 +367,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
 
         auto is_buffer_in_clockwise_direction = [&all_gather_config,&direction,&topology_config](uint32_t b) {
             TT_ASSERT(direction < max_num_full_send_directions);
-            if (!topology_config.is_linear && all_gather_config.get_bidirectional_mode() == ttnn::AllGatherBidirectionalMode::FULL_TENSOR) {
+            if (!topology_config.is_linear && all_gather_config.get_bidirectional_mode() == ttnn::ccl::AllGatherBidirectionalMode::FULL_TENSOR) {
                 return direction == 0;
             } else {
                 bool in_clockwise_direction = all_gather_config.is_buffer_in_clockwise_ring(b);
