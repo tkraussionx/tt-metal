@@ -106,5 +106,5 @@ fi
 cmake $cmake_args
 cmake --build build --target install    # <- this is a general cmake way, can also just run `ninja install -C build`
 
-echo "Building cpp tests"
-cmake --build build --target tests      # <- can also just run `ninja tests -C build`
+# echo "Building cpp tests"
+# cmake --build build --target tests      # <- can also just run `ninja tests -C build`

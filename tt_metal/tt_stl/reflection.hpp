@@ -468,6 +468,15 @@ constexpr auto visit_object_of_type(auto callback, const std::tuple<Ts...>& valu
     }(std::make_index_sequence<num_attributes>{});
 }
 
+
+template <typename object_t, typename... Ts>
+constexpr auto visit_object_of_type(auto callback, std::tuple<Ts...>& value) {
+    constexpr auto num_attributes = sizeof...(Ts);
+    [&callback, &value]<size_t... Ns>(std::index_sequence<Ns...>) {
+        (visit_object_of_type<object_t>(callback, std::get<Ns>(value)), ...);
+    }(std::make_index_sequence<num_attributes>{});
+}
+
 template <typename object_t, typename T>
     requires(not std::same_as<std::decay_t<T>, object_t>) and requires { std::decay_t<T>::attribute_names; }
 constexpr auto visit_object_of_type(auto callback, T&& object) {
