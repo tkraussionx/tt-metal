@@ -108,9 +108,15 @@ struct sender_receiver_index_t {
 };
 
 
+inline void RISC_POST_STATUS_4(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 void kernel_main() {
     // COMPILE TIME ARGS
     // If true, will enable this erisc's sender functionality
+    RISC_POST_STATUS_4(0x1111111);
     constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
 
     // If true, will enable this erisc's receiver functionality
@@ -202,7 +208,7 @@ void kernel_main() {
             }
         }
     }
-
+    RISC_POST_STATUS_4(0x22222222);
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
     // will always be "receiver" (only for handshake purposes)
@@ -211,7 +217,7 @@ void kernel_main() {
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
     uint32_t eth_transaction_complete_addr = handshake_addr + 32;
-
+    RISC_POST_STATUS_4(0x33333333);
     constexpr uint32_t SWITCH_INTERVAL = 4000000;
     uint32_t did_nothing_count = 0;
 
@@ -221,7 +227,7 @@ void kernel_main() {
     bool receivers_in_progress = num_receivers_complete != receiver_num_channels;
 
     auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
-
+    RISC_POST_STATUS_4(0x44444444);
     while (senders_in_progress || receivers_in_progress) {
         bool did_something_sender = false;
         bool did_something_receiver = false;
@@ -300,7 +306,7 @@ void kernel_main() {
             }
         }
     }
-
+    RISC_POST_STATUS_4(0x5555555);
     for (uint32_t s = 0; s < num_senders + num_receivers; s++ ) {
         auto const& channel = buffer_channels[s];
         // We need to explicitly check for channel send done because we may
