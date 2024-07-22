@@ -94,22 +94,21 @@ struct sender_receiver_index_t {
 };
 
 
-void kernel_main() {
-    // COMPILE TIME ARGS
-    // If true, will enable this erisc's sender functionality
-    constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
+// COMPILE TIME ARGS
+// If true, will enable this erisc's sender functionality
+constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
 
-    // If true, will enable this erisc's receiver functionality
-    constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
+// If true, will enable this erisc's receiver functionality
+constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
 
-    constexpr uint32_t num_senders = get_compile_time_arg_val(2);
-    constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
+constexpr uint32_t num_senders = get_compile_time_arg_val(2);
+constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
 
-static constexpr tt::tt_metal::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
-    static_cast<tt::tt_metal::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
+static constexpr ttnn::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
+    static_cast<ttnn::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
 
-static constexpr tt::tt_metal::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
-    static_cast<tt::tt_metal::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
+static constexpr ttnn::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
+    static_cast<ttnn::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
 
 static constexpr bool use_compile_time_designated_handshake_sender = false;  // get_compile_time_arg_val(6) != 0;
 static constexpr bool is_handshake_sender = get_compile_time_arg_val(7) != 0;

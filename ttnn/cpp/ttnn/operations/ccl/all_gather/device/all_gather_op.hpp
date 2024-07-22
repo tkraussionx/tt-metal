@@ -285,7 +285,7 @@ struct AllGather {
     const std::optional<chip_id_t> receiver_device_id;
     const std::optional<chip_id_t> sender_device_id;
     const MemoryConfig output_mem_config;
-    const all_gather_op::Topology topology;
+    const ttnn::ccl::Topology topology;
     const std::size_t num_workers;
     const std::size_t max_channel_size;
     const std::size_t buffers_per_channel;
@@ -306,7 +306,7 @@ operation::ProgramWithCallbacks all_gather_full_shard_grid(
     const uint32_t ring_index,
     const std::optional<chip_id_t> receiver_device_id,
     const std::optional<chip_id_t> sender_device_id,
-    all_gather_op::Topology topology);
+    ttnn::ccl::Topology topology);
 operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     const Tensor& input_tensor,
     Tensor& output_tensor,
@@ -316,10 +316,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     const uint32_t ring_index,
     const std::optional<chip_id_t> receiver_device_id,
     const std::optional<chip_id_t> sender_device_id,
-    all_gather_op::Topology topology,
-    std::size_t num_workers,
-    std::size_t max_channel_size,
-    std::size_t buffers_per_channel);
+    const ttnn::ccl::Topology topology,
+    const std::size_t num_workers,
+    const std::size_t max_channel_size,
+    const std::size_t buffers_per_channel);
 
 struct ShardedAllGatherConfig {
     ShardedAllGatherConfig(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim)

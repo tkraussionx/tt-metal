@@ -12,6 +12,7 @@
 
 namespace ttnn {
 
+namespace ccl {
 ccl::AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor const& output_tensor, uint32_t dim) {
     bool is_sharded = input_tensor.is_sharded();
 
@@ -24,6 +25,7 @@ ccl::AllGatherMode choose_all_gather_mode(Tensor const& input_tensor, Tensor con
     } else {
         return ccl::AllGatherMode::RING_INTERLEAVED;
     }
+}
 }
 
 void ccl::AllGather::validate(const std::vector<Tensor> &input_tensors) const {
@@ -86,7 +88,7 @@ operation::ProgramWithCallbacks ccl::AllGather::create_program(const std::vector
     switch (all_gather_mode) {
         case AllGatherMode::RING_INTERLEAVED:
         case AllGatherMode::SINGLE_TILE_HIGH_WIDTH_SHARDED:
-            return all_gather_multi_core_with_workers(
+            return ccl::all_gather_multi_core_with_workers(
                 input_tensors[0],
                 output_tensors[0],
                 this->dim,
@@ -94,7 +96,9 @@ operation::ProgramWithCallbacks ccl::AllGather::create_program(const std::vector
                 this->ring_size,
                 this->ring_index,
                 this->receiver_device_id,
-                this->sender_device_id, this->topology, this->num_workers,
+                this->sender_device_id,
+                this->topology,
+                this->num_workers,
                 this->max_channel_size,
                 this->buffers_per_channel);
         break;
@@ -110,10 +114,13 @@ namespace operations {
 namespace ccl {
 
 Tensor all_gather(
-    const Tensor& input_tensor, const uint32_t dim, const uint32_t num_links, const std::optional<MemoryConfig>& memory_config,
-    const uint32_t num_workers,
-    const uint32_t max_channel_size,
-    const uint32_t buffers_per_channel
+    const Tensor& input_tensor,
+    const uint32_t dim,
+    const uint32_t num_links,
+    const std::optional<MemoryConfig>& memory_config,
+    const std::size_t num_workers,
+    const std::size_t max_channel_size,
+    const std::size_t buffers_per_channel
     ) {
 
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");

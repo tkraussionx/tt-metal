@@ -30,14 +30,20 @@ void bind_line_all_gather(py::module& module, const ccl_operation_t& operation, 
                const ttnn::Tensor& input_tensor,
                const uint32_t dim,
                const uint32_t num_links,
-               const std::optional<ttnn::MemoryConfig>& memory_config) -> ttnn::Tensor {
+               const std::optional<ttnn::MemoryConfig>& memory_config,
+               const std::size_t num_workers,
+               const std::size_t max_buffer_size,
+               const std::size_t num_buffers_per_channel) -> ttnn::Tensor {
                 return self(input_tensor, dim, num_links, memory_config);
             },
             py::arg("input_tensor"),
             py::arg("dim"),
             py::kw_only(),
             py::arg("num_links") = 1,
-            py::arg("memory_config") = std::nullopt});
+            py::arg("memory_config") = std::nullopt,
+            py::arg("num_workers") = 0,
+            py::arg("max_buffer_size") = 0,
+            py::arg("num_buffers_per_channel") = 1});
 }
 
 }  // namespace detail

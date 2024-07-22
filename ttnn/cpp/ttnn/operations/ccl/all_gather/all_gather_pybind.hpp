@@ -31,9 +31,9 @@ void bind_all_gather(py::module& module, const ccl_operation_t& operation, const
                const uint32_t dim,
                const uint32_t num_links,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               uint32_t num_workers,
-               uint32_t max_channel_size,
-               uint32_t buffers_per_channel
+               const std::size_t num_workers,
+               const std::size_t max_channel_size,
+               const std::size_t buffers_per_channel
                ) -> ttnn::Tensor {
                 return self(input_tensor, dim, num_links, memory_config, num_workers, max_channel_size, buffers_per_channel);
             },

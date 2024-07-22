@@ -24,7 +24,6 @@
 
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "tt_stl/concepts.hpp"
-// #include "tt_eager/tt_dnn/op_library/ccl/ccl_common.hpp"
 
 // #include "impl/kernels/kernel_types.hpp"
 
@@ -76,7 +75,7 @@ KernelHandle generate_edm_kernels(
 
     auto eth_sender_kernel = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
+        "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/ccl/edm/erisc_datamover.cpp",
         eth_cores,
         tt_metal::EthernetConfig{.noc = noc_id, .compile_args = eth_sender_ct_args});
     kernel_handles.push_back(eth_sender_kernel);

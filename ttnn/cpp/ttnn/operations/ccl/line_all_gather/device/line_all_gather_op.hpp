@@ -37,7 +37,7 @@ struct LineAllGather {
     const std::optional<chip_id_t> receiver_device_id;
     const std::optional<chip_id_t> sender_device_id;
     const MemoryConfig output_mem_config;
-    const all_gather_op::Topology topology;
+    const ttnn::ccl::Topology topology;
     const std::size_t num_workers;
     const std::size_t max_channel_size;
     const std::size_t num_buffers_per_channel;

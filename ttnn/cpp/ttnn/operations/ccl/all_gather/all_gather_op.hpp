@@ -20,9 +20,9 @@ struct ExecuteAllGather {
         const uint32_t dim,
         const uint32_t num_links = 1,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
-        const uint32_t num_workers = 0,
-        const uint32_t max_channel_size = 0,
-        const uint32_t buffers_per_channel = 1) {
+        const std::size_t num_workers = 0,
+        const std::size_t max_channel_size = 0,
+        const std::size_t buffers_per_channel = 1) {
         return ttnn::operations::ccl::all_gather(input_tensor, dim, num_links, memory_config, num_workers, max_channel_size, buffers_per_channel);
     }
 };

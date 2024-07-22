@@ -6,7 +6,7 @@
 #include <array>
 #include "dataflow_api.h"
 #include "debug/dprint.h"
-#include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/all_gather/device/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 template <typename INTERLEAVED_ADDR_GEN_T>
 void stride_for_next_transfer_index(

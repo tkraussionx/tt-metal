@@ -7,7 +7,7 @@
 
 #include "dataflow_api.h"
 #include "debug/dprint.h"
-#include "tt_eager/tt_dnn/op_library/ccl/kernel_common/worker_edm_utils.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_edm_utils.hpp"
 
 
 void kernel_main() {

@@ -23,8 +23,8 @@
 using namespace tt::constants;
 
 namespace ttnn {
+namespace ccl {
 
-using namespace ccl;
 
 static std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t link, uint32_t full_send_direction) {
     constexpr uint32_t worker_grid_width = 8;
@@ -158,7 +158,7 @@ std::vector<std::vector<uint32_t>> compute_worker_receiver_num_transfers(
 }
 
 
-constexpr bool merge_receiver_and_sender_workers = true;
+constexpr bool merge_receiver_and_sender_workers = false;
 
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
@@ -172,7 +172,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     const uint32_t ring_index,
     const std::optional<chip_id_t> receiver_device_id,
     const std::optional<chip_id_t> sender_device_id,
-    all_gather_op::Topology topology,
+    const ttnn::ccl::Topology topology,
     const std::size_t num_workers,
     const std::size_t max_channel_size,
     const std::size_t num_buffers_per_channel) {
@@ -1560,4 +1560,5 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(
     return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
 }
 
+}  // namespace ccl
 }  // namespace ttnn

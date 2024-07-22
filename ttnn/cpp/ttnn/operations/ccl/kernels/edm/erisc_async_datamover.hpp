@@ -125,10 +125,10 @@ class ChannelBuffer final {
         num_messages_moved(0),
         total_num_messages_to_move(total_num_messages_to_move),
         state(
-            is_sender_side ? TERMINATION_MODE == tt::tt_metal::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED
+            is_sender_side ? TERMINATION_MODE == ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED
                                  ? STATE::SENDER_WAITING_FOR_WORKER
                                  : STATE::SENDER_WAITING_FOR_WORKER
-            : TERMINATION_MODE == tt::tt_metal::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED
+            : TERMINATION_MODE == ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED
                 ? STATE::RECEIVER_SIGNALING_WORKER
                 : STATE::RECEIVER_SIGNALING_WORKER),
                 // ? STATE::RECEIVER_WAITING_FOR_ETH
