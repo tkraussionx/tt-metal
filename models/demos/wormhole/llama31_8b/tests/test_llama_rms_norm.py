@@ -30,10 +30,9 @@ def test_llama_rms_norm_inference(device, use_program_cache, reset_seeds):
 
     model_args = TtModelArgs(device)
     state_dict = load_file(model_args.weights_index_path)
-    state_dict = {k[len("model.") :] if k.startswith("model.") else k: v for k, v in state_dict.items()}
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
-    prefix = "layers.0.post_attention_layernorm."
+    prefix = "model.layers.0.post_attention_layernorm."
     partial_state_dict = {k[len(prefix) :]: v for k, v in state_dict.items() if (k.startswith(prefix))}
     reference_model = RefRMSNorm(hidden_size=model_args.dim)
     reference_model.load_state_dict(partial_state_dict)
@@ -45,6 +44,7 @@ def test_llama_rms_norm_inference(device, use_program_cache, reset_seeds):
         layer_num=0,
         weight_key="post_attention_layernorm",
         weight_dtype=dtype,
+        weight_prefix="model.layers",
     )
     input = torch.rand(1, 32, 4096)
     reference_output = reference_model(input)

@@ -60,6 +60,7 @@ class TtTransformerBlock(torch.nn.Module):
             weight_cache_path=weight_cache_path,
             weight_dtype=dtype,
             weight_key="input_layernorm",
+            weight_prefix="model.layers",
         )
         self.ffn_norm = RMSNorm(
             device=device,
@@ -69,6 +70,7 @@ class TtTransformerBlock(torch.nn.Module):
             weight_cache_path=weight_cache_path,
             weight_dtype=dtype,
             weight_key="post_attention_layernorm",
+            weight_prefix="model.layers",
         )
 
     def forward(

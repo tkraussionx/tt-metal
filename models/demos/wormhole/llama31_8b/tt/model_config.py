@@ -7,8 +7,9 @@ import ttnn
 from pathlib import Path
 from models.utility_functions import is_wormhole_b0
 from loguru import logger
-import tarfile
-import urllib.request
+import json
+from transformers import AutoConfig
+from safetensors.torch import load_file
 
 
 class TtModelArgs:
@@ -101,7 +102,7 @@ class TtModelArgs:
 
         # Load weights and tokenizer
         self.weights_index_path = (
-            self.DEFAULT_CKPT_DIR + "/model-00001-of-00004.safetensors"
+            self.model_base_path / "model-00001-of-00004.safetensors"
         )  # "/model.safetensors.index.json"
 
         self.instruct = instruct
@@ -160,3 +161,32 @@ class TtModelArgs:
 
     def get_compute_kernel_config(self):
         return self.compute_kernel_config
+
+    def load_state_dict(self, start_layer=0):
+        """Generate or load state_dict for the first n_layers of the model"""
+        # FIXME: PretrainedConfig is from the devil
+        ref_config = AutoConfig.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        ref_config.num_hidden_layers = self.n_layers
+
+        with open(self.model_base_path / "model.safetensors.index.json", "r") as f:
+            index = json.load(f)
+        required_files = set()
+        for layer, file in index["weight_map"].items():
+            layer_number = int(layer.split(".")[2]) if layer.startswith("model.layers.") else 0
+            if start_layer <= layer_number < self.n_layers + start_layer:
+                required_files.add(file)
+
+        state_dict = {}
+        for i, file in enumerate(sorted(required_files)):
+            logger.info(f"Loading weight file {i+1}/{len(required_files)}: {file}")
+            state_dict.update(load_file(self.model_base_path / file))
+
+        keys_dict = list(state_dict.keys())[:]
+        remv = [
+            f"model.layers.{i}." for i in list(range(0, start_layer)) + list(range(self.n_layers + start_layer, 64))
+        ]
+        for k in keys_dict:
+            if any([r in k for r in remv]):
+                state_dict.pop(k)
+
+        return state_dict

@@ -51,7 +51,7 @@ class TtLlamaAttention(nn.Module):
 
         self.rot_mat = rot_mat  # Rotational matrix in the form of a list of 8K tensors [1,1,head_dim,head_dim] for positional embedding on device
 
-        layer_name = f"layers.{layer_num}.self_attn"
+        layer_name = f"model.layers.{layer_num}.self_attn"
         cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
 
         wq_str = f"{layer_name}.q_proj.weight"

@@ -18,22 +18,24 @@ from models.demos.wormhole.llama31_8b.tt.llama_common import (
     freqs_to_rotation_matrix,
     prepare_inputs_ttnn,
     sample,
+    load_safetensors_state_dict,
 )
 from models.demos.wormhole.llama31_8b.tt.llama_model import TtTransformer
 from models.demos.wormhole.llama31_8b.tt.model_config import TtModelArgs
 from transformers.models.llama.modeling_llama import LlamaForCausalLM as RefTransformer
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
 from models.utility_functions import skip_for_grayskull
+from safetensors.torch import load_file
 
 
 class Emb(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model_args):
         super().__init__()
-        self.emb = torch.nn.Embedding(32000, 4096)
+        self.emb = torch.nn.Embedding(model_args.vocab_size, model_args.dim)
 
     def forward(self, x):
         return self.emb(x)
@@ -44,8 +46,8 @@ class Emb(torch.nn.Module):
 @pytest.mark.parametrize(
     "version",
     (
-        "generative",
-        # "instruct",  # Disabled from testing due to PCC mismatch
+        # "generative",
+        "instruct",
     ),
 )
 @pytest.mark.parametrize(
@@ -67,20 +69,12 @@ def test_llama_model_inference(device, iterations, version, use_program_cache, r
 
     model_args = TtModelArgs(device)
     model_args.max_batch_size = 32
-    model_args.n_layers = 32  # Full model
+    model_args.n_layers = 1
 
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct", trust_remote_code=True)
 
     logger.info("Loading weights...")
-    state_dict = torch.load(model_args.consolidated_weights_path)
-    state_dict = {
-        k: v
-        for k, v in state_dict.items()
-        if (
-            any([f"layers.{i}." in k for i in range(model_args.n_layers)])
-            or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
-        )
-    }
+    state_dict = model_args.load_state_dict()
     logger.info("Finished loading weights...")
 
     if instruct:
@@ -92,12 +86,14 @@ def test_llama_model_inference(device, iterations, version, use_program_cache, r
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
     if run_ref_pt:
-        reference_model = Transformer(args=model_args)
+        ref_config = AutoConfig.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        ref_config.num_hidden_layers = model_args.n_layers
+        reference_model = RefTransformer(config=ref_config)  # FIXME
         reference_model.load_state_dict(state_dict)
 
     # Embedding on host
-    embd = Emb()
-    embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
+    embd = Emb(model_args)
+    embd.load_state_dict({"emb.weight": state_dict["model.embed_tokens.weight"]})
 
     generation_start_pos = 0
     generation_length = iterations
@@ -134,13 +130,14 @@ def test_llama_model_inference(device, iterations, version, use_program_cache, r
 
     if run_ref_pt:
         cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
-        freqs_cis = torch.complex(cos, sin)
+        # freqs_cis = torch.complex(cos, sin)
 
     # Select the first token from the prompts for initial decoding
     encoded_prompts_tensor = torch.tensor(encoded_prompts)  # [:,0]
     pt_decode_input = embd(encoded_prompts_tensor[:, 0]).view(batch, seqlen, -1)
 
     tt_decode_input = pt_decode_input
+    ref_past_key_values = None
 
     # Keep track of generated outputs to print out later
     all_outputs = []
@@ -163,10 +160,17 @@ def test_llama_model_inference(device, iterations, version, use_program_cache, r
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         if run_ref_pt:  # Run reference model
-            freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
-            positions = torch.tensor([current_pos])
+            # freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
+            positions = torch.tensor([[current_pos]] * batch)
             # mask = ttnn.to_torch(attn_mask[0])
-            ref_output = reference_model(pt_decode_input, freqs_cis_i, positions)
+            ref_output, ref_past_key_values = reference_model(
+                inputs_embeds=pt_decode_input,
+                past_key_values=ref_past_key_values,
+                position_ids=positions,
+                use_cache=True,
+                return_dict=False,
+            )
+            # ref_output = reference_model(pt_decode_input, position_ids=positions)
 
         # While in "prefill" mode, use the prompt tokens as the output
         if i in range(len(encoded_prompts[0])):

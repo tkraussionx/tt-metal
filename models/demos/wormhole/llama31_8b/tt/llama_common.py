@@ -6,6 +6,33 @@ import math
 import torch
 import ttnn
 from models.utility_functions import nearest_32
+import json
+from safetensors import safe_open
+from collections import OrderedDict
+import os
+
+
+def load_safetensors_state_dict(directory, load_filter=None):
+    # Load the index file
+    with open(os.path.join(directory, "model.safetensors.index.json"), "r") as f:
+        index = json.load(f)
+
+    # Create an OrderedDict to store the state_dict
+    state_dict = OrderedDict()
+
+    # Iterate through each file in the index
+    for filename, tensor_info in index["weight_map"].items():
+        file_path = os.path.join(directory, filename)
+
+        # Open the safetensors file
+        with safe_open(file_path, framework="pt", device="cpu") as f:
+            # Load each tensor from the file
+            for tensor_name in f.keys():
+                if load_filter is None or load_filter(tensor_name):
+                    tensor = f.get_tensor(tensor_name)
+                    state_dict[tensor_name] = tensor
+
+    return state_dict
 
 
 def generate_cos_sin_cache_ttnn(

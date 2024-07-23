@@ -27,13 +27,13 @@ from models.demos.wormhole.llama31_8b.tt.llama_common import (
 from models.demos.wormhole.llama31_8b.tt.llama_model import TtTransformer
 from models.demos.wormhole.llama31_8b.tt.llama_embedding import TtLlamaEmbedding
 from models.demos.wormhole.llama31_8b.tt.model_config import TtModelArgs
-from models.demos.wormhole.llama31_8b.reference.tokenizer import Tokenizer
+from transformers import AutoTokenizer
 
 
 class Emb(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model_args):
         super().__init__()
-        self.emb = torch.nn.Embedding(32000, 4096)
+        self.emb = torch.nn.Embedding(model_args.vocab_size, model_args.dim)
 
     def forward(self, x):
         return self.emb(x)
@@ -108,25 +108,17 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode):
 
     # Load model args, weights, and tokenizer
     model_args = TtModelArgs(device, instruct=instruct_mode)
-    tokenizer = Tokenizer(model_args.tokenizer_path)
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct", trust_remote_code=True)
 
     model_args.n_layers = 32
 
     logger.info("Loading weights...")
-    state_dict = torch.load(model_args.consolidated_weights_path)
-    state_dict = {
-        k: v
-        for k, v in state_dict.items()
-        if (
-            any([f"layers.{i}." in k for i in range(model_args.n_layers)])
-            or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
-        )
-    }
+    state_dict = model_args.load_state_dict()
     logger.info("Loading weights finished!")
 
     # TODO Should we keep initial embedding on host?
-    embd = Emb()
-    embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
+    embd = Emb(model_args)
+    embd.load_state_dict({"emb.weight": state_dict["model.embed_tokens.weight"]})
 
     generation_start_pos = 0
     max_generated_tokens = 120

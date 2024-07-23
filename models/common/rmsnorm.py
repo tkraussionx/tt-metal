@@ -45,6 +45,7 @@ class RMSNorm(LightweightModule):
         weight_cache_path=None,
         weight_memory_config=ttnn.DRAM_MEMORY_CONFIG,
         weight_dtype=ttnn.bfloat8_b,
+        weight_prefix="layers",
         model_config=None,
         is_sharded=False,
         eps: float = 1e-05,
@@ -56,7 +57,7 @@ class RMSNorm(LightweightModule):
         if layer_num is None:
             weight_name = f"{weight_key}.weight"
         else:
-            weight_name = f"layers.{layer_num}.{weight_key}.weight"
+            weight_name = f"{weight_prefix}.{layer_num}.{weight_key}.weight"
 
         torch_weight = state_dict[weight_name].unsqueeze(0).view(1, 1, dim).expand([1, SHARD_HEIGHT, dim])
         cache_name = None if weight_cache_path is None else weight_cache_path / weight_name
