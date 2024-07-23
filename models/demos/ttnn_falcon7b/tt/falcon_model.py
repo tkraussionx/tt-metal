@@ -65,12 +65,12 @@ class TtFalconModelShared:
         if llm_mode == "prefill":
             tt_embeddings = ttnn.as_tensor(
                 embeddings.unsqueeze(1),
-                device=self.device,
-                memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
+                # device=self.device,
+                # memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
                 dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
                 layout=ttnn.TILE_LAYOUT,
                 mesh_mapper=mesh_mapper,
-                use_device_tilizer=True,
+                # use_device_tilizer=True,
             )
 
         elif llm_mode == "decode":
@@ -79,12 +79,12 @@ class TtFalconModelShared:
 
             tt_embeddings = ttnn.as_tensor(
                 embeddings.unsqueeze(1).transpose(0, 2),
-                device=self.device,
-                memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
+                # device=self.device,
+                # memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
                 dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
                 layout=ttnn.TILE_LAYOUT,
                 mesh_mapper=mesh_mapper,
-                use_device_tilizer=True,
+                # use_device_tilizer=True,
             )
 
         else:
@@ -98,7 +98,7 @@ class TtFalconModelShared:
             sequence_size,
             self.config.num_attention_heads,
             kv_cache_len,
-            self.device,
+            None,
             mesh_mapper=mesh_mapper,
         )
 
