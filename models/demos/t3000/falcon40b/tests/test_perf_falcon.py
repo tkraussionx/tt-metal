@@ -415,10 +415,12 @@ def test_perf_bare_metal(
     "llm_mode, batch, seq_len, kv_cache_len, expected_compile_time, expected_inference_time, num_layers, model_config_str",
     (
         ("prefill", 1, 128, 0, 60, 0.39 + 0.04, 1, "BFLOAT8_B-DRAM"),
+        ("prefill", 1, 128, 0, 60, 0.39 + 0.04, 1, "BFLOAT8_B-L1"),
         ("prefill", 1, 2048, 0, 60, 0.94 + 0.1, 1, "BFLOAT8_B-DRAM"),
     ),
     ids=[
         "prefill_seq128_bfp8_layers1",
+        "prefill_seq128_bfp8_layers1_l1",
         "prefill_seq2048_bfp8_layers1",
     ],
 )
@@ -443,9 +445,14 @@ def test_device_perf_bare_metal(
     get_tt_cache_path,
     t3k_device_mesh,
     use_program_cache,
+    is_ci_env,
 ):
-    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM", "BFLOAT16-DRAM"] or num_devices != 8):
-        pytest.skip("Prefill is only supported for DRAM memory config and 8 chips!")
+    if llm_mode == "prefill" and (
+        model_config_str not in ["BFLOAT8_B-DRAM", "BFLOAT16-DRAM"]
+        and (seq_len <= 128 and model_config_str not in ["BFLOAT8_B-L1"])
+        or num_devices != 8
+    ):
+        pytest.skip("Prefill is only supported for DRAM memory config, L1 memory config for S=128, and 8 chips!")
     if llm_mode == "decode" and model_config_str not in ["BFLOAT8_B-SHARDED"]:
         pytest.skip("Decode is only supported for SHARDED memory config!")
 
@@ -478,4 +485,5 @@ def test_device_perf_bare_metal(
         expected_compile_time,
         expected_inference_time,
         warmup_iterations=10,
+        is_ci_env=is_ci_env,
     )

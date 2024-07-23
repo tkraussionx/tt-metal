@@ -443,6 +443,10 @@ def run_test_FalconCausalLM_end_to_end(
             "BFLOAT16",
             "DRAM",
         ),
+        (
+            "BFLOAT8_B",
+            "L1",
+        ),
     ),
 )
 def test_FalconCausalLM_end_to_end_with_program_cache(
@@ -462,7 +466,7 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
     use_program_cache,
 ):
     model_config_str = f"{data_type}-{memcfg}"
-    if llm_mode == "prefill" and memcfg != "DRAM" or num_devices != 8:
+    if llm_mode == "prefill" and memcfg not in ["DRAM", "L1"] or num_devices != 8:
         pytest.skip("Prefill is only supported for DRAM memory config and 8 chips!")
     if llm_mode == "decode" and memcfg != "SHARDED":
         pytest.skip("Decode is only supported for SHARDED memory config!")
