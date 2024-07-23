@@ -268,7 +268,7 @@ class TtLlamaModel_optimized:
                 dtype=ttnn.bfloat16,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device_mesh,
-                cache_file_name=cache_name(f"rot_mat_decode_b{batch}_{start_pos}"),
+                # cache_file_name=cache_name(f"rot_mat_decode_b{batch}_{start_pos}"),
                 memory_config=self.model_config["DRAM_MEMCFG"],
                 mesh_mapper=ReplicateTensorToMesh(self.device_mesh),
             )
