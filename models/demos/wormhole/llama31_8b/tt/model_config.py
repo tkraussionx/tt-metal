@@ -23,6 +23,15 @@ class TtModelArgs:
     norm_eps = 1e-05
     vocab_size = 128256
 
+    # Llama 3.1 8B names
+    hidden_size = dim
+    intermediate_size = hidden_dim
+    num_attention_heads = n_heads
+    num_hidden_layers = n_layers
+    hidden_act = "silu"
+    mlp_bias = False
+    pretraining_tp = 1
+
     #   "rope_scaling": {
     #     "factor": 8.0,
     #     "low_freq_factor": 1.0,
