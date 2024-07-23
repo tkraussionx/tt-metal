@@ -4,10 +4,22 @@
 
 #include "ttnn/cpp/ttnn/experimental/tt_dnn/kernels/dataflow/moreh_common.hpp"
 #include "ttnn/cpp/ttnn/experimental/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
+#include "debug/dprint.h"
 
 inline uint32_t get_read_tile_id(uint32_t output_tile_id, uint32_t reduce_tile_size, uint32_t inner_tile_size) {
     return ((output_tile_id / inner_tile_size) * reduce_tile_size) + (output_tile_id % inner_tile_size);
 }
+
+// inline void print_cb_details(uint32_t cb_id) {
+//         DPRINT << "cb_id " << cb_id << ": { "
+//                 << "size: " << cb_interface[cb_id].fifo_size << ", "
+//                 << "limit: " << cb_interface[cb_id].fifo_limit << ", "
+//                 << "page_size: " << cb_interface[cb_id].fifo_page_size << ", "
+//                 << "num_pages: " << cb_interface[cb_id].fifo_num_pages << ", "
+//                 << "rd_ptr: " << cb_interface[cb_id].fifo_rd_ptr << ", "
+//                 << "wr_ptr: " << cb_interface[cb_id].fifo_wr_ptr << ", "
+//                 << "wr_tile_ptr: " << cb_interface[cb_id].fifo_wr_tile_ptr << " }" << ENDL();
+// }
 
 void kernel_main() {
     // compile-time args
@@ -26,11 +38,15 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
     constexpr uint32_t cb_id_in0 = 0;
 
+    // print_cb_details(0);
+    // print_cb_details(24);
+
     #ifdef USE_FPU
-    constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t cb_id_intermed0 = 24;
     constexpr uint32_t scaler = 0;
-    generate_reduce_scaler(cb_id_in1, scaler);
+    generate_reduce_scaler(cb_id_intermed0, scaler);
     #endif
+    // print_cb_details(24);
 
     uint32_t l1_write_addr_in0;
     uint32_t input_tile_bytes = get_tile_size(cb_id_in0);
@@ -46,6 +62,7 @@ void kernel_main() {
             noc_async_read_tile(read_tile_id, input_addrg, l1_write_addr_in0);
             noc_async_read_barrier();
             cb_push_back(cb_id_in0, onetile);
+            // print_cb_details(0);
             read_tile_id += inner_tile_size;
         }
     }

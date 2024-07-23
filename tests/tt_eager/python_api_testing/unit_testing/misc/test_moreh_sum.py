@@ -541,3 +541,36 @@ def test_moreh_sum_integer(input_shape, dim, data_type, device):
     logger.debug(f"{torch.equal(torch_output, tt_output_cpu)}")
 
     assert torch.equal(torch_output, tt_output_cpu)
+
+
+@pytest.mark.parametrize(
+    "input_shape",
+    ([1, TILE_HEIGHT, TILE_WIDTH],),
+    ids=[
+        "1, TILE_HEIGHT, TILE_WIDTH",
+    ],
+)
+@pytest.mark.parametrize(
+    "dim",
+    [0],
+    ids=["dim-n"],
+)
+def test_compute_kernel_hang(input_shape, dim, device):
+    torch.manual_seed(3072)
+
+    compute_kernel_config = get_compute_kernel_options(False)
+    (tt_input, tt_output, output_shape, _, torch_input) = get_tensors(
+        input_shape, dim, device, use_randint=False, keep_batch_dim=True
+    )
+
+    cpu_layout = ttl.tensor.Layout.ROW_MAJOR
+    tt_output_cpu = (
+        ttl.operations.primary.moreh_sum(
+            tt_input, dim=dim, keep_batch_dim=True, output=tt_output, compute_kernel_config=compute_kernel_config
+        )
+        .cpu()
+        .to(cpu_layout)
+        .unpad_from_tile(output_shape)
+        .to_torch()
+    )
+    breakpoint()
