@@ -22,8 +22,20 @@ class TtModelArgs:
     n_kv_heads = 8
     norm_eps = 1e-05
     vocab_size = 128256
-
+    max_seq_len = 131072
+    rope_theta = 500000.0
+    rope_scaling = {
+        "factor": 8.0,
+        "low_freq_factor": 1.0,
+        "high_freq_factor": 4.0,
+        "original_max_position_embeddings": 8192,
+        "type": "llama3",
+    }
     # Llama 3.1 8B names
+    attention_bias = False
+    attention_dropout = 0.0
+    num_attention_heads = n_heads
+    num_key_value_heads = n_kv_heads
     hidden_size = dim
     intermediate_size = hidden_dim
     num_attention_heads = n_heads
@@ -31,20 +43,13 @@ class TtModelArgs:
     hidden_act = "silu"
     mlp_bias = False
     pretraining_tp = 1
-
-    #   "rope_scaling": {
-    #     "factor": 8.0,
-    #     "low_freq_factor": 1.0,
-    #     "high_freq_factor": 4.0,
-    #     "original_max_position_embeddings": 8192,
-    #     "rope_type": "llama3"
-    #   },
-    #   "rope_theta": 500000.0,
+    max_position_embeddings = max_seq_len
+    _attn_implementation = "eager"
+    rms_norm_eps = norm_eps
 
     # Parameters for our use
     max_batch_size = 32
-    max_seq_len = 131072
-    kv_seq_len = 1024  # TODO Update the initial cache size when scaling up (Should be window_size == 4096)
+    kv_seq_len = 1024  # TODO Update the initial cache size when scaling up (max_seq_len)
 
     # Default folder location for weights and cached files
     DEFAULT_CKPT_DIR = os.getenv("LLAMA31_8B_CKPT_DIR", "/proj_sw/user_dev/hf_data/llama/llama31_8b/")

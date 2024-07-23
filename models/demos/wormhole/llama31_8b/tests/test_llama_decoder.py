@@ -20,12 +20,13 @@ from models.demos.wormhole.llama31_8b.tt.llama_common import (
 )
 from models.demos.wormhole.llama31_8b.tt.llama_decoder import TtTransformerBlock
 from models.demos.wormhole.llama31_8b.tt.model_config import TtModelArgs
-from models.demos.wormhole.llama31_8b.reference.model import TransformerBlock
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer as RefTransformerBlock
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
 from models.utility_functions import skip_for_grayskull
+from safetensors.torch import load_file
 
 
 @skip_for_grayskull("Requires wormhole_b0 to run")
@@ -37,14 +38,16 @@ def test_llama_decoder_inference(device, iterations, use_program_cache, reset_se
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(device)
-    state_dict = torch.load(model_args.consolidated_weights_path)
+    state_dict = load_file(model_args.weights_index_path)
+    state_dict = {k[len("model.") :] if k.startswith("model.") else k: v for k, v in state_dict.items()}
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
-    partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
+    prefix = "layers.0."
+    partial_state_dict = {k[len(prefix) :]: v for k, v in state_dict.items() if (k.startswith(prefix))}
 
     model_args.max_batch_size = 32
 
-    reference_model = TransformerBlock(args=model_args)
+    reference_model = RefTransformerBlock(config=model_args, layer_idx=0)
     reference_model.load_state_dict(partial_state_dict)
 
     generation_start_pos = 0
@@ -102,10 +105,10 @@ def test_llama_decoder_inference(device, iterations, use_program_cache, reset_se
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
-        positions = torch.tensor([current_pos])
+        positions = torch.tensor([[current_pos]] * batch)
 
         # Reference model
-        ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)
+        (ref_output,) = reference_model(pt_decode_input, position_ids=positions)
 
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch)
 

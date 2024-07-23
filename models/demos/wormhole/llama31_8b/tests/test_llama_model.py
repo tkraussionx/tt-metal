@@ -21,8 +21,8 @@ from models.demos.wormhole.llama31_8b.tt.llama_common import (
 )
 from models.demos.wormhole.llama31_8b.tt.llama_model import TtTransformer
 from models.demos.wormhole.llama31_8b.tt.model_config import TtModelArgs
-from models.demos.wormhole.llama31_8b.reference.model import Transformer
-from models.demos.wormhole.llama31_8b.reference.tokenizer import Tokenizer
+from transformers.models.llama.modeling_llama import LlamaForCausalLM as RefTransformer
+from transformers import AutoTokenizer
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -69,7 +69,7 @@ def test_llama_model_inference(device, iterations, version, use_program_cache, r
     model_args.max_batch_size = 32
     model_args.n_layers = 32  # Full model
 
-    tokenizer = Tokenizer(model_args.tokenizer_path)
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct", trust_remote_code=True)
 
     logger.info("Loading weights...")
     state_dict = torch.load(model_args.consolidated_weights_path)
