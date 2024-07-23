@@ -464,7 +464,18 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     uint32_t in0_mcast_reducer_semaphore{};
     std::vector<uintptr_t> all_reader_kernels_id;
     std::vector<uintptr_t> all_writer_kernels_id;
-    std::vector<uintptr_t> all_compute_kernels_id;
+
+    // Compute
+    auto compute_kernels_id = CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/sdpa/kernels/compute/sdpa_flash_decode.cpp",
+        core_grid,
+        tt_metal::ComputeConfig{
+            .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
+            .compile_args = compute_compile_time_args_common,
+            .defines = defines
+    });
+
     for (uint32_t i = 0; i < num_active_cores; ++i) {
         CoreCoord core = core_group[i];
         uint32_t worker_id = i % num_cores_per_batch - 1;
@@ -524,22 +535,8 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             ));
         }
 
-        // Compute
-        std::vector<uint32_t> compute_compile_time_args = compute_compile_time_args_common;
-        compute_compile_time_args.insert(compute_compile_time_args.end(), {do_reduce});
-        auto compute_kernels_id = CreateKernel(
-            program,
-            "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/sdpa/kernels/compute/sdpa_flash_decode.cpp",
-            core,
-            tt_metal::ComputeConfig{
-                .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
-                .compile_args = compute_compile_time_args,
-                .defines = defines
-        });
-
         all_reader_kernels_id.push_back(reader_kernels_id);
         all_writer_kernels_id.push_back(writer_kernels_id);
-        all_compute_kernels_id.push_back(compute_kernels_id);
     }
 
     uint32_t q_addr = q_buffer->address();
@@ -571,7 +568,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
         uintptr_t reader_kernels_id = all_reader_kernels_id[i];
         uintptr_t writer_kernels_id = all_writer_kernels_id[i];
-        uintptr_t compute_kernels_id = all_compute_kernels_id[i];
 
         if (do_reduce) {
             batch_id++;
@@ -589,7 +585,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         {
             SetRuntimeArgs(program, writer_kernels_id, core, { k_chunk_start_i, k_chunk_end_i});
         }
-        SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i});
+        SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
     }
 
     auto override_runtime_arguments_callback = [
@@ -597,7 +593,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         core_group,
         all_reader_kernels_id,
         all_writer_kernels_id,
-        all_compute_kernels_id,
+        compute_kernels_id,
         num_cores_per_batch,
         is_output_sharded,
         cb_out4_id,
@@ -648,7 +644,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
             uintptr_t reader_kernels_id = all_reader_kernels_id[i];
             uintptr_t writer_kernels_id = all_writer_kernels_id[i];
-            uintptr_t compute_kernels_id = all_compute_kernels_id[i];
 
             if (do_reduce) {
                 batch_id++;
@@ -666,7 +661,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             {
                 SetRuntimeArgs(program, writer_kernels_id, core, { k_chunk_start_i, k_chunk_end_i});
             }
-            SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i});
+            SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
         }
 
         if (is_output_sharded) {
