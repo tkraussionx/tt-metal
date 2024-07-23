@@ -263,12 +263,14 @@ class TtLlamaAttention_optimized:
     ):
         # K CACHE UPDATE
         keys = self.layer_past[0]
-        ttnn.experimental.tensor.update_cache(keys, key_layer, start_pos, batch_offset=batch_offset)
+        # ttnn.experimental.tensor.update_cache(keys, key_layer, start_pos, batch_offset=batch_offset)
+        ttnn.experimental.operations.primary.transformers.paged_update_cache(keys, key_layer, start_pos)
         key_layer.deallocate(True)
 
         # V CACHE UPDATE
         values = self.layer_past[1]
-        ttnn.experimental.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
+        # ttnn.experimental.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
+        ttnn.experimental.operations.primary.transformers.paged_update_cache(values, value_layer, start_pos)
         value_layer.deallocate(True)
 
         attn_output = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention_decode(
