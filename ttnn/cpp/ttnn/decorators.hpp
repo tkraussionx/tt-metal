@@ -4,11 +4,13 @@
 
 #pragma once
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/operation.hpp"
 #include "ttnn/run_operation.hpp"
-#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "ttnn/core.hpp"
+#include "ttnn/common.hpp"
 
 namespace ttnn {
 namespace decorators {
@@ -182,6 +184,37 @@ static const std::string python_fully_qualified_name(const char* cpp_fully_quali
     return replace(std::string{cpp_fully_qualified_name}, "::", ".");
 }
 
+/***
+ * We allow to call op as
+ * `ttnn::add(DefaultQueueId, a, b)`
+ * or
+ * `ttnn::add(a, b)`
+ * Op developers only have to define an operation with queueId as the first argument
+ * So if an op is called without it, we provide DefaultQueueId inside
+ * This allows to reduce amount of code maintained by op developers
+ */
+template <typename Operation, typename... Args>
+static auto execute_on_worker_thread_with_queue_check(Args&&... args) {
+    if constexpr (!std::is_same_v<std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>, QueueId>) {
+        // If the first argument is not of type QueueId, call with DefaultQueueId
+        return Operation::execute_on_worker_thread(DefaultQueueId, std::forward<Args>(args)...);
+    } else {
+        // Otherwise, call with the provided arguments
+        return Operation::execute_on_worker_thread(std::forward<Args>(args)...);
+    }
+}
+
+template <typename Operation, typename... Args>
+static auto execute_on_main_thread_with_queue_check(Args&&... args) {
+    if constexpr (!std::is_same_v<std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>, QueueId>) {
+        // If the first argument is not of type QueueId, call with DefaultQueueId
+        return Operation::execute_on_main_thread(DefaultQueueId, std::forward<Args>(args)...);
+    } else {
+        // Otherwise, call with the provided arguments
+        return Operation::execute_on_main_thread(std::forward<Args>(args)...);
+    }
+}
+
 }  // namespace detail
 
 template <auto id, typename concrete_operation_t>
@@ -229,7 +262,8 @@ struct operation_t {
                         [cpp_fully_qualified_name](auto&&... args) -> Tensors {
                             return detail::map_execute_on_worker_thread_return_to_launch_op_return<
                                 concrete_operation_t>(
-                                concrete_operation_t::execute_on_worker_thread(std::forward<decltype(args)>(args)...));
+                                detail::execute_on_worker_thread_with_queue_check<concrete_operation_t>(std::forward<args_t>(args)...));
+                                //concrete_operation_t::execute_on_worker_thread(std::forward<decltype(args)>(args)...));
                         },
                         execute_on_worker_thread_args);
                 },
@@ -256,7 +290,8 @@ struct operation_t {
             }
 
         } else {
-            auto output = concrete_operation_t::execute_on_main_thread(std::forward<decltype(args)>(args)...);
+            auto output = detail::execute_on_main_thread_with_queue_check<concrete_operation_t>(std::forward<args_t>(args)...);
+            //auto output = concrete_operation_t::execute_on_main_thread(std::forward<decltype(args)>(args)...);
             tt::log_debug(tt::LogOp, "Finished  C++ ttnn operation: {}", this->cpp_fully_qualified_name);
             return output;
         }
