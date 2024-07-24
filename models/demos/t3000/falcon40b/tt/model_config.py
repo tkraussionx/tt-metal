@@ -727,7 +727,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     model_config["KV_CACHE_MEMCFG"] = DRAM_MEMCFG
     model_config["KV_CACHE_DTYPE"] = BFP8_DTYPE
 
-    model_config["ATTN_MASK_DTYPE"] = BFP4_DTYPE
+    # model_config["ATTN_MASK_DTYPE"] = BFP8_DTYPE  # SPDA op requires all inputs to have the same dtype and only supposts bfp8 and fp16
 
     model_config["WORD_EMBEDDING_OUTPUT_DTYPE"] = BFLOAT16_DTYPE  # embeddings output and the residual stream
 
@@ -738,9 +738,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     head_dim = 64
     hidden_size = model_config_entries["hidden_size"]
-    vocab_size = model_config_entries["vocab_size"]
-    num_attention_heads = model_config_entries["num_attention_heads"]
-    num_kv_heads = model_config_entries["num_kv_heads"]
 
     batch_size, seq_len = input_shape[0], input_shape[1]
     row_height = seq_len
@@ -819,7 +816,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     layernorm_max_num_cores_y = 8
 
     layernorm_slice_size = 1024
-
     (
         layernorm_block_sharded_mem_config,
         layernorm_block_sharded_prg_config,
@@ -984,6 +980,15 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
                 False,
             ),
         )
+
+    q_chunk_size = min(seq_len, 256)
+    k_chunk_size = min(seq_len, 256)
+
+    model_config["SDPA_PROGCFG"] = ttnn.experimental.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 7],
+        q_chunk_size=q_chunk_size,
+        k_chunk_size=k_chunk_size,
+    )
 
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")

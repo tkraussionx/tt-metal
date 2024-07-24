@@ -10,15 +10,7 @@ from typing import Optional, Tuple
 import ttnn
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh
 
-from models.utility_functions import (
-    torch2tt_tensor,
-    tt2torch_tensor,
-    pad_by_zero,
-    nearest_32,
-)
-from models.demos.t3000.falcon40b.tt.model_utils import (
-    convert_to_layout,
-)
+from models.utility_functions import nearest_32
 
 from models.demos.t3000.falcon40b.tt.model_utils import falcon_prefill_matmul, determine_tensor_deallocation
 
@@ -369,72 +361,19 @@ class TtFalconAttention:
             ttnn.experimental.tensor.typecast(value_layer, self.model_config["KV_CACHE_DTYPE"]),
             user_id,
         )
-        key_layer_transposed = ttnn.experimental.tensor.transpose(
+        attn_output = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention(
+            query_layer,
             key_layer,
-            -2,
-            -1,
-            output_mem_config=self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"],
+            value_layer,
+            attention_mask,
+            is_causal=True,
+            scale=self.scalar,
+            program_config=self.model_config["SDPA_PROGCFG"],
         )
-        key_layer.deallocate(True)
-
-        slice_size = self.model_config["attention_params"]["attention_slice_size"]
-        num_slices = self.model_config["attention_params"]["attention_num_slices"]
-
-        if num_slices > 1:
-            if not hasattr(self, "sliced_attn_output"):
-                self.online_preprocessing(llm_mode, q_len)
-            attn_output_tensor = self.sliced_attn_output
-
-            for slice_i in range(num_slices):
-                # Partially slice and convert activations to sharded
-                q_slices = ttnn.experimental.tensor.interleaved_to_sharded_partial(
-                    query_layer,
-                    (8, 8),
-                    [slice_size * 16 // 64, self.head_dim],  # each slice is [1,16,128,64], we use 64 cores
-                    num_slices,
-                    slice_i,
-                    ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                    ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
-                )
-                attn_output_slice = self.scaled_dot_product_attention(
-                    q_slices,
-                    key_layer_transposed,
-                    attention_mask,
-                    value_layer,
-                    q_len,
-                )
-                ttnn.experimental.tensor.sharded_to_interleaved_partial(
-                    attn_output_slice,
-                    attn_output_tensor,
-                    num_slices,
-                    slice_i,
-                    self.model_config["DRAM_MEMCFG"],
-                )
-                attn_output_slice.deallocate(True)
-                attn_output = attn_output_tensor
-                q_slices.deallocate(True)
-        else:
-            query_layer = convert_to_layout(
-                query_layer,
-                self.model_config["DRAM_MEMCFG"],
-                self.model_config["QUERY_HEIGHT_SHARDED_MEMCFG"],
-            )
-            attn_output = self.scaled_dot_product_attention(
-                query_layer,
-                key_layer_transposed,
-                attention_mask,
-                value_layer,
-                q_len,
-            )
-            attn_output = convert_to_layout(
-                attn_output,
-                self.model_config["ATTN_OUTPUT_HEIGHT_SHARDED_MEMCFG"],
-                self.model_config["DRAM_MEMCFG"],
-            )
 
         # Deallocate query, key, value
+        key_layer.deallocate(True)
         query_layer.deallocate(True)
-        key_layer_transposed.deallocate(True)
         value_layer.deallocate(True)
 
         # Output projection

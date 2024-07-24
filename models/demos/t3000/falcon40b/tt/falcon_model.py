@@ -191,7 +191,6 @@ class TtFalconModelShared:
             assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
             tt_attention_mask = self.slice_attn_mask(sequence_size)
-
             # Genereate ln output tensors for prefill if not existing
             do_generate_ln_tensors = (
                 sequence_size > self.model_config["layernorm_params"]["slice_size"]
@@ -250,7 +249,6 @@ class TtFalconModelShared:
 
         for layer in self.layers:
             layer.online_preprocessing(llm_mode, sequence_size)
-
         return tt_inputs, tt_attention_mask
 
     @abstractmethod
