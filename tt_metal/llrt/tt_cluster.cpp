@@ -122,7 +122,11 @@ std::filesystem::path get_cluster_desc_yaml() {
     if (val != 0)
         throw std::runtime_error("Cluster Generation with create-ethernet-map Failed!");
 
-    return fs::absolute(cluster_desc_path);
+    if (getenv("TT_MULTI_GALAXY_ETH_MAP_YAML")) {
+        return fs::absolute(tt::llrt::OptionsG.get_root_dir() + getenv("TT_MULTI_GALAXY_ETH_MAP_YAML"));
+    } else {
+        return fs::absolute(cluster_desc_path);
+    }
 }
 
 bool Cluster::is_galaxy_cluster() const {
@@ -174,10 +178,11 @@ void Cluster::generate_cluster_descriptor() {
     }
 
     uint32_t total_num_hugepages = get_num_hugepages();
+    bool skip_hp_check = bool(getenv("TT_MULTI_GALAXY_ETH_MAP_YAML"));
     if (this->is_tg_cluster_) {
         // TODO: don't think this check is correct, we want to have total num hugepages == num chips even for Galaxy
         TT_FATAL(
-            this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size()/4,
+            skip_hp_check or this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size()/4,
             "Machine setup error: Insufficient number of hugepages available, expected >= {} for {} devices but have {}. "
             "Increase number of hugepages!",
             this->cluster_desc_->get_all_chips().size()/4,
@@ -186,7 +191,7 @@ void Cluster::generate_cluster_descriptor() {
     } else {
     // TODO (abhullar): ignore hugepage set up for BH bringup
         TT_FATAL(
-            this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
+            skip_hp_check or this->arch_ == tt::ARCH::BLACKHOLE or total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
             "Machine setup error: Insufficient number of hugepages available, expected one per device ({}) but have {}. "
             "Increase number of hugepages!",
             this->cluster_desc_->get_all_chips().size(),
