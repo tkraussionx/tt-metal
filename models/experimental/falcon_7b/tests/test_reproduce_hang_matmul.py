@@ -18,8 +18,8 @@ import torch
 INPUT_PER_CORE_HEIGHT = 128
 INPUT_PER_CORE_WIDTH = 576
 OUTPUT_PER_CORE_WIDTH = 2304  # (ie. dense_h_to_4h)
-BLACKHOLE_GRID_Y = 9
-BLACKHOLE_GRID_X = 14
+BLACKHOLE_GRID_Y = 10
+BLACKHOLE_GRID_X = 13
 GRID_Y = BLACKHOLE_GRID_Y
 GRID_X = BLACKHOLE_GRID_X
 
@@ -117,7 +117,7 @@ def test_reproduce_matmul_2d_hang(
         fused_activation=None,
     )
 
-    compute_config = ttnn.WormholeComputeKernelConfig(
+    compute_config = ttnn.types.BlackholeComputeKernelConfig(
         math_fidelity=ttnn.MathFidelity.LoFi,
         math_approx_mode=False,
         fp32_dest_acc_en=False,
