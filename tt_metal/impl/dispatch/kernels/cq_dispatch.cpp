@@ -284,27 +284,29 @@ void relay_to_next_cb(uint32_t data_ptr, uint32_t length) {
 
         // Get a page if needed
         if (data_ptr + xfer_size > cb_fence) {
-            // Check for block completion
+            // Check for block completion and issue orphan writes for this block
+            // before proceeding to next block
             if (cb_fence == block_next_start_addr[rd_block_idx]) {
-                // Check for dispatch_cb wrap
-                if (rd_block_idx == dispatch_cb_blocks - 1) {
-                    ASSERT(cb_fence == dispatch_cb_end);
-                    uint32_t orphan_size = cb_fence - data_ptr;
-                    if (orphan_size != 0) {
-                        noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
-                        block_noc_writes_to_clear[rd_block_idx]++;
-                        length -= orphan_size;
-                        xfer_size -= orphan_size;
-                        downstream_cb_data_ptr += orphan_size;
-                        if (downstream_cb_data_ptr == downstream_cb_end) {
-                            downstream_cb_data_ptr = downstream_cb_base;
-                        }
-                        dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
+                uint32_t orphan_size = cb_fence - data_ptr;
+                if (orphan_size != 0) {
+                    noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
+                    block_noc_writes_to_clear[rd_block_idx]++;
+                    length -= orphan_size;
+                    xfer_size -= orphan_size;
+                    downstream_cb_data_ptr += orphan_size;
+                    if (downstream_cb_data_ptr == downstream_cb_end) {
+                        downstream_cb_data_ptr = downstream_cb_base;
                     }
+                    dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
+                }
+                // Handle wrapping on dispatch cb
+                if (rd_block_idx == dispatch_cb_blocks - 1) {
                     cb_fence = dispatch_cb_base;
                     data_ptr = dispatch_cb_base;
+                } else {
+                    data_ptr += orphan_size;
                 }
-
+                // Once all pages in current block have been accounted for in block_noc_writes_to_clear, move to next block
                 move_rd_to_next_block<dispatch_cb_blocks>(block_noc_writes_to_clear, rd_block_idx);
             }
 
@@ -380,28 +382,31 @@ void process_write_linear(uint32_t num_mcast_dests) {
 
         // Get a page if needed
         if (data_ptr + xfer_size > cb_fence) {
-            // Check for block completion
+            // Check for block completion and issue orphan writes for this block
+            // before proceeding to next block
             if (cb_fence == block_next_start_addr[rd_block_idx]) {
-                // Check for dispatch_cb wrap
-                if (rd_block_idx == dispatch_cb_blocks - 1) {
-                    uint32_t orphan_size = dispatch_cb_end - data_ptr;
-                    if (orphan_size != 0) {
-                        if constexpr (multicast) {
-                            noc_async_write_multicast<dispatch_cb_page_size>(
-                                data_ptr, dst, orphan_size, num_mcast_dests);
-                        } else {
-                            noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
-                        }
-                        block_noc_writes_to_clear[rd_block_idx]++;
-                        length -= orphan_size;
-                        xfer_size -= orphan_size;
-                        dst_addr += orphan_size;
+                uint32_t orphan_size = cb_fence - data_ptr;
+                if (orphan_size != 0) {
+                    if constexpr (multicast) {
+                        noc_async_write_multicast<dispatch_cb_page_size>(
+                            data_ptr, dst, orphan_size, num_mcast_dests);
+                    } else {
+                        noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
                     }
+                    block_noc_writes_to_clear[rd_block_idx]++;
+                    length -= orphan_size;
+                    xfer_size -= orphan_size;
+                    dst_addr += orphan_size;
+                }
+                // Handle wrapping on dispatch cb
+                if (rd_block_idx == dispatch_cb_blocks - 1) {
                     cb_fence = dispatch_cb_base;
                     data_ptr = dispatch_cb_base;
-                    dst = get_noc_addr_helper(dst_noc, dst_addr);
+                } else {
+                    data_ptr += orphan_size;
                 }
-
+                dst = get_noc_addr_helper(dst_noc, dst_addr);
+                // Once all pages in current block have been accounted for in block_noc_writes_to_clear, move to next block
                 move_rd_to_next_block<dispatch_cb_blocks>(block_noc_writes_to_clear, rd_block_idx);
             }
 
@@ -471,21 +476,24 @@ void process_write_paged() {
 
         // Get a Dispatch page if needed
         if (data_ptr + xfer_size > cb_fence) {
-            // Check for block completion
+            // Check for block completion and issue orphan writes for this block
+            // before proceeding to next block
             if (cb_fence == block_next_start_addr[rd_block_idx]) {
-                // Check for dispatch_cb wrap
+                uint32_t orphan_size = cb_fence - data_ptr;
+                if (orphan_size != 0) {
+                    noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
+                    block_noc_writes_to_clear[rd_block_idx]++;
+                    write_length -= orphan_size;
+                    xfer_size -= orphan_size;
+                    dst_addr_offset += orphan_size;
+                    dst = addr_gen.get_noc_addr(page_id, dst_addr_offset);
+                }
+                // Handle wrapping on dispatch cb
                 if (rd_block_idx == dispatch_cb_blocks - 1) {
-                    uint32_t orphan_size = dispatch_cb_end - data_ptr;
-                    if (orphan_size != 0) {
-                        noc_async_write<dispatch_cb_page_size>(data_ptr, dst, orphan_size);
-                        block_noc_writes_to_clear[rd_block_idx]++;
-                        write_length -= orphan_size;
-                        xfer_size -= orphan_size;
-                        dst_addr_offset += orphan_size;
-                    }
                     cb_fence = dispatch_cb_base;
                     data_ptr = dispatch_cb_base;
-                    dst = addr_gen.get_noc_addr(page_id, dst_addr_offset);
+                } else {
+                    data_ptr += orphan_size;
                 }
                 move_rd_to_next_block<dispatch_cb_blocks>(block_noc_writes_to_clear, rd_block_idx);
             }
@@ -573,22 +581,24 @@ void process_write_packed(uint32_t flags) {
         uint64_t dst = get_noc_addr_helper(dst_noc, dst_addr);
         // Get a page if needed
         if (data_ptr + xfer_size > cb_fence) {
-            // Check for block completion
+            // Check for block completion and issue orphan writes for this block
+            // before proceeding to next block
             uint32_t orphan_size = 0;
             if (cb_fence == block_next_start_addr[rd_block_idx]) {
-                // Check for dispatch_cb wrap
+                orphan_size = cb_fence - data_ptr;
+                if (orphan_size != 0) {
+                    cq_noc_async_write_with_state<CQ_NOC_SNdL>(data_ptr, dst, orphan_size, num_dests);
+                    writes++;
+                    mcasts += num_dests;
+                }
+                // Handle wrapping on dispatch cb
                 if (rd_block_idx == dispatch_cb_blocks - 1) {
-                    ASSERT(cb_fence == dispatch_cb_end);
-                    orphan_size = cb_fence - data_ptr;
-                    if (orphan_size != 0) {
-                        cq_noc_async_write_with_state<CQ_NOC_SNdL>(data_ptr, dst, orphan_size, num_dests);
-                        writes++;
-                        mcasts += num_dests;
-                    }
                     cb_fence = dispatch_cb_base;
                     data_ptr = dispatch_cb_base;
                 }
-
+                else {
+                    data_ptr += orphan_size;
+                }
                 block_noc_writes_to_clear[rd_block_idx] += writes;
                 noc_nonposted_writes_num_issued[noc_index] += writes;
                 noc_nonposted_writes_acked[noc_index] += mcasts;
@@ -692,25 +702,26 @@ void process_write_packed_large() {
 
             // Get a page if needed
             if (data_ptr + xfer_size > cb_fence) {
-                // Check for block completion
+                // Check for block completion and issue orphan writes for this block
+                // before proceeding to next block
                 if (cb_fence == block_next_start_addr[rd_block_idx]) {
-                    // Check for dispatch_cb wrap
+                    uint32_t orphan_size = cb_fence - data_ptr;
+                    if (orphan_size != 0) {
+                        cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, orphan_size, num_dests);
+                        writes++;
+                        mcasts += num_dests;
+                        length -= orphan_size;
+                        xfer_size -= orphan_size;
+                        dst_addr += orphan_size;
+                    }
+                    // Handle wrapping on dispatch cb
                     if (rd_block_idx == dispatch_cb_blocks - 1) {
-                        ASSERT(cb_fence == dispatch_cb_end);
-                        uint32_t orphan_size = cb_fence - data_ptr;
-                        if (orphan_size != 0) {
-                            cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, orphan_size, num_dests);
-                            writes++;
-                            mcasts += num_dests;
-                            length -= orphan_size;
-                            xfer_size -= orphan_size;
-                            dst_addr += orphan_size;
-                        }
                         cb_fence = dispatch_cb_base;
                         data_ptr = dispatch_cb_base;
-                        dst = get_noc_addr_helper(dst_noc, dst_addr);
+                    } else {
+                        data_ptr += orphan_size;
                     }
-
+                    dst = get_noc_addr_helper(dst_noc, dst_addr);
                     block_noc_writes_to_clear[rd_block_idx] += writes;
                     noc_nonposted_writes_num_issued[noc_index] += writes;
                     writes = 0;
