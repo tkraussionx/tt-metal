@@ -64,6 +64,7 @@ class AllGatherConfig {
             this->num_workers_per_link;
     }
     uint32_t get_ring_size() const { return this->ring_size; }
+    bool is_payload_and_channel_sync_merged() const { return enable_merged_payload_and_channel_sync;}
     bool is_buffer_in_clockwise_ring(const uint32_t buffer_index) const {
         // For now we split it as lower half => clockwise, upper half => counter-clockwise
         // This is slightly suboptimal since the non-full-chunks go to the upper half.
@@ -115,6 +116,7 @@ class AllGatherConfig {
     bool enable_bidirectional;
     const bool input_is_dram;
     const bool output_is_dram;
+    const bool enable_merged_payload_and_channel_sync;
 };
 
 struct AllGather {
