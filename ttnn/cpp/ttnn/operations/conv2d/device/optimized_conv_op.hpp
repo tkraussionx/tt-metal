@@ -33,6 +33,23 @@ struct OptimizedConvParallelizationConfig {
     }
 };
 
+
+struct OptimizedConvParallelizationConfigNew {
+    CoreCoord grid_size; // (x,y)
+    uint32_t num_cores_nhw;
+    uint32_t per_core_out_matrix_height;
+    uint32_t per_core_out_matrix_width;
+    // std::size_t in0_block_w;
+    // std::size_t out_subblock_h;
+    // std::size_t out_subblock_w;
+    // std::size_t per_core_M;
+    // std::size_t per_core_N;
+
+    CoreCoord get_grid_size() const {
+        return this->grid_size;
+    }
+};
+
 struct OptimizedConvBlockConfig {
     uint32_t act_block_h_ntiles;
     uint32_t act_block_w_ntiles;

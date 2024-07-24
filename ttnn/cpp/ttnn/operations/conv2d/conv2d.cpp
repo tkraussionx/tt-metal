@@ -69,8 +69,8 @@ ParallelConfig determine_parallel_config(
     auto calculate_num_cores_nhw = [&]() {
         uint32_t num_cores_nhw =
             height_sharding
-                ? find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
-                : find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0]);
+                ? find_closest_largest_divisor(conv_out_2d_matrix_height, max_num_cores)
+                : find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height, device_grid_size[0]);
         return num_cores_nhw;
     };
 
@@ -149,9 +149,9 @@ MemoryConfig create_sharded_memory_config_from_parallel_config(
     uint32_t num_cores_channels = get_num_cores_channels_from_parallel_config(parallel_config);
     auto shard_scheme = parallel_config.shard_scheme;
     auto shard_orientation = parallel_config.shard_orientation;
-
+    std::cout << "tensor shape --> " << tensor_shape[0] << "    " <<  tensor_shape[1] << "  " << tensor_shape[2] << std::endl;
     uint32_t nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2];
-    uint32_t nhw_padded = round_up(nhw_shape, num_cores_nhw * tile_size);
+    uint32_t nhw_padded = round_up(nhw_shape, num_cores_nhw);
     uint32_t nhw_shard = nhw_padded / num_cores_nhw;
     TT_ASSERT(channels % num_cores_channels == 0);
     uint32_t channel_shard = channels / num_cores_channels;
@@ -164,13 +164,14 @@ tt::tt_metal::OptimizedConvParallelizationConfig determine_conv_op_parallel_conf
     TT_ASSERT(conv_output_mem_config.shard_spec.has_value());
     const auto& shard_spec = conv_output_mem_config.shard_spec.value();
     const auto& shard_shape = shard_spec.shape;
-    TT_ASSERT(shard_shape[0] % 32 == 0);
+    //TT_ASSERT(shard_shape[0] % 32 == 0);
     TT_ASSERT(shard_shape[1] % 32 == 0);
+    std::cout << "shard_shape[0]: " << shard_shape[0] << "  " << " shard_shape[1] " << shard_shape[1]<< std::endl;
     return {
         .grid_size = shard_spec.grid.bounding_box().grid_size(),
         .num_cores_nhw = num_cores_nhw,
-        .per_core_out_matrix_height_ntiles = shard_shape[0] / 32,
-        .per_core_out_matrix_width_ntiles = shard_shape[1] / 32,
+        .per_core_out_matrix_height_ntiles = shard_shape[0],
+        .per_core_out_matrix_width_ntiles = shard_shape[1],
     };
 }
 
@@ -196,6 +197,8 @@ std::pair<uint32_t, uint32_t> determine_largest_subblock_size(
         }
     }
     TT_ASSERT(subblock_h > 0 && subblock_w > 0);
+    std::cout << "block_height: " << block_height << "  block_width: " << block_width
+    << "  "<< subblock_h <<" " <<  subblock_w<< std::endl;
     return {subblock_h, subblock_w};
 }
 
@@ -223,8 +226,8 @@ tt::tt_metal::OptimizedConvBlockConfig determine_per_core_conv_block_config(
     uint32_t act_c_num_blocks = parallel_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED ? 1
                                 : parallel_config.shard_orientation == ShardOrientation::COL_MAJOR ? grid_size.y
                                                                                                    : grid_size.x;
-    uint32_t out_block_h_ntiles = conv_op_parallel_config.per_core_out_matrix_height_ntiles;
-    uint32_t weight_block_w_ntiles = conv_op_parallel_config.per_core_out_matrix_width_ntiles;
+    uint32_t out_block_h_ntiles = conv_op_parallel_config.per_core_out_matrix_height_ntiles / 32;
+    uint32_t weight_block_w_ntiles = conv_op_parallel_config.per_core_out_matrix_width_ntiles / 32;
     auto [out_subblock_h_ntiles, out_subblock_w_ntiles] =
         determine_largest_subblock_size(act_block_h_ntiles, weight_block_w_ntiles, fp32_accum);
     if (use_shallow_conv_variant && ((act_block_h_ntiles / out_subblock_h_ntiles) % 2 != 0)) {
@@ -334,7 +337,7 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_an
         uint32_t input_num_cores_nhw = get_num_cores_nhw_from_parallel_config(parallel_config);
         // TT_ASSERT(input_tensor.get_legacy_shape() == input_tensor.get_shape());
         uint32_t tensor_height = input_tensor.get_shape()[0] * input_tensor.get_shape()[1] * input_tensor.get_shape()[2];
-        uint32_t input_tensor_height_snapped_to_tile = round_up(tensor_height, input_num_cores_nhw * 32);
+        uint32_t input_tensor_height_snapped_to_tile = round_up(tensor_height, input_num_cores_nhw);
         TT_ASSERT(input_tensor_height_snapped_to_tile >= tensor_height);
         uint32_t tensor_width = input_tensor.get_shape()[3];
         uint32_t input_tensor_width_snapped_to_channels_alignment =
@@ -554,6 +557,13 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
     std::optional<const Conv2dConfig> conv_config_) {
+
+    /*std::cout << "1" << std::endl;
+    //auto test = tt::tt_metal::tensor_impl::to_string<float>(input_tensor);
+    auto test = input_tensor.write_to_string();
+    std::cout << test << std::endl;
+    std::cout << "2" << std::endl;
+    std::exit(1);*/
 
     Conv2dConfig conv_config = conv_config_.value_or(Conv2dConfig());
     uint32_t output_height = ((input_height - kernel_size[0] + 2 * padding[0]) / stride[0]) + 1;

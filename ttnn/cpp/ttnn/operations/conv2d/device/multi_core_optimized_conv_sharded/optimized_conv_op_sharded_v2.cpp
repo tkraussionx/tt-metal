@@ -233,6 +233,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     bool enable_act_double_buffer,
     bool enable_split_reader,
     bool enable_subblock_padding) {
+    std::cout << "reached here exiting" << std::endl;
+    //std::exit(1);
     bool pass = true;
     tt_metal::Device* device = a.device();
     TT_ASSERT(a.get_layout() == Layout::ROW_MAJOR, "Conv activation should be in row major layout");
@@ -240,7 +242,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_ASSERT(output_channels <= b.get_legacy_shape()[3], "Invalid weight shape. Incorrect weight tensor.");
     uint32_t act_block_h_ntiles = block_config.act_block_h_ntiles;
     uint32_t act_block_w_ntiles = block_config.act_block_w_ntiles;
-    uint32_t weight_block_w_ntiles = parallelization_config.per_core_out_matrix_width_ntiles;
+    uint32_t weight_block_w_ntiles = parallelization_config.per_core_out_matrix_width_ntiles / TILE_WIDTH;
     uint32_t out_block_h_ntiles = parallelization_config.per_core_out_matrix_height_ntiles;
     uint32_t out_subblock_h_ntiles = block_config.out_subblock_h_ntiles;
     uint32_t out_subblock_w_ntiles = block_config.out_subblock_w_ntiles;
@@ -358,7 +360,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     assert(num_cores_x < 13);
     assert(num_cores_y < 10);
     uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height_ntiles;
-    uint32_t per_core_out_matrix_width_ntiles = p_config.per_core_out_matrix_width_ntiles;
+    uint32_t per_core_out_matrix_width_ntiles = p_config.per_core_out_matrix_width_ntiles / TILE_WIDTH;
 
     // weight_width_sliced determines is 1d-sysarr-conv or 2d-sysarr-conv
     bool weight_width_sliced = per_core_out_matrix_width_ntiles < weight_matrix_width_ntiles;
@@ -712,7 +714,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     log_debug(LogOp, "num_blocks_out_h_per_core: {}", num_blocks_out_h_per_core);
 
     assert(act_matrix_height_ntiles % per_core_out_matrix_height_ntiles == 0);
-    uint32_t total_active_num_cores_per_weight_slice = act_matrix_height_ntiles / per_core_out_matrix_height_ntiles;
+    uint32_t total_active_num_cores_per_weight_slice = (act_matrix_height_ntiles * 32) / per_core_out_matrix_height_ntiles;
     assert(total_active_num_cores_per_weight_slice <= total_num_cores_per_weight_slice);
     uint32_t total_noop_cores = total_num_cores_per_weight_slice - total_active_num_cores_per_weight_slice;
     uint32_t total_active_num_cores = total_active_num_cores_per_weight_slice * num_weight_slices_width;
@@ -1415,7 +1417,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         }
 
     }  // for num_cores
-
+    std::cout << "complete " << std::endl;
     auto mcast_sender_cores_vec = grid_to_cores(mcast_sender_cores.start, mcast_sender_cores.end, true);
     auto mcast_receiver_cores_vec = corerange_to_cores(mcast_receiver_cores, std::nullopt, true);
     auto override_runtime_arguments_callback =
@@ -1491,6 +1493,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
                 UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
             }
         };
+    std::cout << "just before runtime." << std::endl;
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
 
