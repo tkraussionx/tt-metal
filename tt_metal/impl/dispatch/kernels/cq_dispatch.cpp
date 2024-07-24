@@ -816,7 +816,6 @@ static void process_wait() {
     DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
     uint32_t heartbeat = 0;
     if (wait) {
-        int ct = 0;
         while (!wrap_ge(*sem_addr, count)) {
             IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         }

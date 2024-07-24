@@ -1121,7 +1121,6 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.producer_semaphore_id = 1;
                 tunnel_core_allocations[PREFETCH].push_back(std::make_tuple(prefetch_location, settings));
                 settings.semaphores.clear();
-                std::cout << "Prefetch_h on: " << prefetch_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -1144,7 +1143,6 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.num_compute_cores = uint32_t(compute_grid_size.x * compute_grid_size.y);
                 tunnel_core_allocations[DISPATCH].push_back(std::make_tuple(dispatch_location, settings));
                 settings.semaphores.clear();
-                std::cout << "Dispatch_h on: " << dispatch_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
             }
             uint32_t cq_id = 0;  // 1 mux, demux, local tunneler and remote tunneler per chip. Set cq_id to 0.
@@ -1235,7 +1233,6 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
                 settings.cb_log_page_size = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
                 tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
-                std::cout << "PREFETCH_D on: " << prefetch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 settings.semaphores.clear();
             }
 
@@ -1252,7 +1249,6 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
-                std::cout << "DISPATCH_D on: " << dispatch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 settings.semaphores.clear();
             }
         }

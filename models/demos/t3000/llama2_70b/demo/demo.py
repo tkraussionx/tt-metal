@@ -247,7 +247,7 @@ def run_decode(
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
-        logits = model.forward(input_tokens, 126, prev_pos)
+        logits = model.forward(input_tokens, 126)
 
         next_logits = logits[:, -1, :]  # batch, vocab of last token
         next_token = sampling_func(next_logits)
