@@ -13,6 +13,7 @@ namespace normalization {
 struct ExecuteGroupNorm {
 
     static inline ttnn::Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         const int num_groups,
         const float epsilon,
@@ -77,7 +78,8 @@ struct ExecuteGroupNorm {
                 .output_mem_config=output_mem_config,
                 .program_config=program_config},
                 {input_tensor},
-                {gamma, beta, input_mask}).at(0);
+                {gamma, beta, input_mask},
+                queue_id).at(0);
     }
 };
 

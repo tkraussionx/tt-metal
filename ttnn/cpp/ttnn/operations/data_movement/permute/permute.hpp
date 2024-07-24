@@ -37,7 +37,7 @@ Tensor permute_launch(const Tensor &a, std::vector<std::int64_t> dims, const Mem
 struct ExecutePermute {
 
     static inline ttnn::Tensor execute_on_main_thread_composite(
-        uint8_t queue_id,
+        QueueId queue_id,
         const ttnn::Tensor &input_tensor,
         const std::vector<int64_t>& dims,
         const std::optional<MemoryConfig>& memory_config) {
@@ -50,7 +50,7 @@ struct ExecutePermute {
 
 
     static inline ttnn::Tensor execute_on_main_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const ttnn::Tensor &input_tensor,
         const std::vector<int64_t>& dims,
         const std::optional<MemoryConfig>& memory_config,
@@ -111,24 +111,6 @@ struct ExecutePermute {
 
         return output_tensor;
     }
-
-
-    static inline auto execute_on_main_thread(
-        const ttnn::Tensor &input_tensor,
-        const std::vector<int64_t>& dims,
-        const std::optional<MemoryConfig>& memory_config
-        ) {
-        return execute_on_main_thread(0, input_tensor, dims, memory_config);
-    }
-
-
-    static inline auto execute_on_main_thread(
-        const ttnn::Tensor &input_tensor,
-        const std::vector<int64_t>& dims
-        ) {
-        return execute_on_main_thread(input_tensor, dims, std::nullopt);
-    }
-
 };
 
 }  // namespace operations::data_movement

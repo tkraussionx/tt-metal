@@ -64,7 +64,7 @@ std::vector<ttnn::Tensor> _embedding_bw(
 }
 
 std::vector<std::optional<ttnn::Tensor>> _addalpha_bw(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& grad,
     const Tensor& input,
     const Tensor& other,
@@ -115,7 +115,7 @@ std::vector<ttnn::Tensor> _sub_bw(
 }
 
 std::vector<std::optional<Tensor>> _add_bw(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& grad,
     const Tensor& input,
     const Tensor& other,
@@ -127,8 +127,9 @@ std::vector<std::optional<Tensor>> _add_bw(
 }
 
 std::vector<ttnn::Tensor> _add_bw_inter(
+    QueueId queue_id,
     const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
-    auto result =  _add_bw(0, grad, input, other, output_mem_config, {true, true}, std::nullopt, std::nullopt);
+    auto result =  _add_bw(queue_id, grad, input, other, output_mem_config, {true, true}, std::nullopt, std::nullopt);
     std::vector<ttnn::Tensor> output_tensors;
     output_tensors.reserve(result.size());
 
@@ -140,18 +141,6 @@ std::vector<ttnn::Tensor> _add_bw_inter(
         }
     }
     return output_tensors;
-}
-
-std::vector<std::optional<Tensor>> _add_bw_overload(
-    const Tensor& grad,
-    const Tensor& input,
-    const Tensor& other,
-    const MemoryConfig& output_mem_config,
-    const std::vector<bool>& are_required_outputs,
-    std::optional<Tensor> input_grad,
-    std::optional<Tensor> other_grad) {
-    uint8_t default_queue_id = 0;
-    return _addalpha_bw(default_queue_id, grad, input, other, 1.0f, output_mem_config, are_required_outputs, input_grad, other_grad);
 }
 
 std::vector<ttnn::Tensor> _xlogy_bw(
@@ -318,18 +307,6 @@ std::vector<ttnn::Tensor> _eq_bw_inter(
     return output_tensors;
 }
 
-std::vector<std::optional<Tensor>> _eq_bw_overload(
-    const Tensor& grad,
-    const Tensor& input,
-    const Tensor& other,
-    const MemoryConfig& output_mem_config,
-    const std::vector<bool>& are_required_outputs,
-    std::optional<Tensor> input_grad,
-    std::optional<Tensor> other_grad) {
-    uint8_t default_queue_id = 0;
-    return _eq_bw(default_queue_id, grad, input, other, output_mem_config, are_required_outputs, input_grad, other_grad);
-}
-
 std::vector<Tensor> _assign_bw(
     const Tensor& grad, const Tensor& input, const Tensor& other, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
@@ -348,7 +325,7 @@ std::vector<Tensor> _concat_bw(
         input.get_legacy_shape()[2] - 1,
         input.get_legacy_shape()[3] - 1};
 
-    Tensor grad_a = ttnn::slice(0, grad, start_index, end_index, std::nullopt);
+    Tensor grad_a = ttnn::slice(grad, start_index, end_index, std::nullopt);
     grad_tensor.emplace_back(grad_a);
 
     std::vector<uint32_t> start_index_2 = {0, 0, 0, 0};
@@ -367,7 +344,7 @@ std::vector<Tensor> _concat_bw(
         grad.get_legacy_shape()[1] - 1,
         grad.get_legacy_shape()[2] - 1,
         grad.get_legacy_shape()[3] - 1};
-    Tensor grad_b = ttnn::slice(0, grad, start_index_2, end_index_2, std::nullopt);
+    Tensor grad_b = ttnn::slice(grad, start_index_2, end_index_2, std::nullopt);
     grad_tensor.emplace_back(grad_b);
 
     return grad_tensor;
@@ -525,7 +502,7 @@ std::vector<Tensor> _lerp_bw(
 }
 
 std::vector<std::optional<Tensor>> _mul_bw(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& grad,
     const Tensor& input,
     const Tensor& other,
@@ -576,19 +553,6 @@ std::vector<ttnn::Tensor> _mul_bw_inter(
     }
     return output_tensors;
 }
-
-std::vector<std::optional<Tensor>> _mul_bw_overload(
-    const Tensor& grad,
-    const Tensor& input,
-    const Tensor& other,
-    const MemoryConfig& output_mem_config,
-    const std::vector<bool>& are_required_outputs,
-    std::optional<Tensor> input_grad,
-    std::optional<Tensor> other_grad) {
-        uint8_t default_queue_id = 0;
-    return _mul_bw(default_queue_id, grad, input, other, output_mem_config, are_required_outputs, input_grad, other_grad);
-}
-
 
 std::function<std::vector<ttnn::Tensor>(const Tensor&, const Tensor&, const Tensor&, const MemoryConfig&)> BinaryBackwardFunction::get_function_type1(BinaryBackwardOpType OpType){
     switch (OpType) {
@@ -656,20 +620,6 @@ std::function<std::vector<std::optional<ttnn::Tensor>>(uint8_t , const Tensor&, 
             return _eq_bw;
         case BinaryBackwardOpType::MUL_BW:
             return _mul_bw;
-        default:
-            TT_ASSERT(false && "Undefined op type");
-            return 0;
-    }
-}
-
-std::function<std::vector<std::optional<ttnn::Tensor>>(const Tensor&, const Tensor&, const Tensor&, const MemoryConfig&, const std::vector<bool>&, std::optional<Tensor>, std::optional<Tensor>)> BinaryBackwardFunction::get_function_type3_wo_qid(BinaryBackwardOpType OpType){
-    switch (OpType) {
-        case BinaryBackwardOpType::ADD_BW:
-            return _add_bw_overload;
-        case BinaryBackwardOpType::EQ_BW:
-            return _eq_bw_overload;
-        case BinaryBackwardOpType::MUL_BW:
-            return _mul_bw_overload;
         default:
             TT_ASSERT(false && "Undefined op type");
             return 0;

@@ -14,7 +14,7 @@ namespace unary {
 namespace detail {
 
 // TODO: decide on a structure for composite ops
-Tensor _power_fp(uint8_t queue_id, const Tensor& input_a, float exponent, const std::optional<MemoryConfig>& output_mem_config, const std::optional<Tensor>& output_tensor) {
+Tensor _power_fp(QueueId queue_id, const Tensor& input_a, float exponent, const std::optional<MemoryConfig>& output_mem_config, const std::optional<Tensor>& output_tensor) {
     TT_FATAL(exponent >= 0.0f, "works for positive exponents only");
     const uint32_t exponent_floor = static_cast<uint32_t>(std::floor(exponent));
     if (static_cast<float>(exponent_floor) == exponent) {
@@ -38,7 +38,7 @@ Tensor _power_fp(uint8_t queue_id, const Tensor& input_a, float exponent, const 
 }
 
 Tensor power_fp(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& input_a,
     float exponent,
     const std::optional<MemoryConfig>& output_mem_config  = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
@@ -51,7 +51,7 @@ Tensor power_fp(
 struct Power{
 
     static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const Tensor& input_tensor,
         uint32_t exponent,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
@@ -60,28 +60,12 @@ struct Power{
     }
 
     static Tensor execute_on_worker_thread(
-        const Tensor& input_tensor,
-        uint32_t exponent,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt,
-        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
-        return ttnn::power(DefaultQueueId, input_tensor, exponent, memory_config, optional_output_tensor);
-    }
-
-    static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const Tensor& input_tensor,
         float exponent,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
         const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
         return detail::power_fp(queue_id, input_tensor, exponent, memory_config, optional_output_tensor);
-    }
-
-    static Tensor execute_on_worker_thread(
-        const Tensor& input_tensor,
-        float exponent,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt,
-        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
-        return detail::power_fp(DefaultQueueId, input_tensor, exponent, memory_config, optional_output_tensor);
     }
 };
 template <UnaryCompositeOpType unary_comp_op_type>
@@ -159,7 +143,7 @@ struct ExecuteUnaryCompositeOpWithThresholdValue
 
 
 // re-implement tt_eager composite unary op => ttnn composite unary ops.
-Tensor rdiv(uint8_t queue_id, const Tensor& input_tensor, float value, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
+Tensor rdiv(QueueId queue_id, const Tensor& input_tensor, float value, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     float t_inf = std::numeric_limits<float>::infinity();
     Tensor recip_result = ttnn::reciprocal(queue_id, input_tensor, memory_config, optional_output_tensor);
     Tensor result = ttnn::multiply(queue_id, recip_result, value, std::nullopt, memory_config, optional_output_tensor);
@@ -169,7 +153,7 @@ Tensor rdiv(uint8_t queue_id, const Tensor& input_tensor, float value, const std
 }
 
 // To be used for div op overloading in binary composite
-Tensor div_unary(uint8_t queue_id, const Tensor& input_tensor, float value, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
+Tensor div_unary(QueueId queue_id, const Tensor& input_tensor, float value, const std::optional<MemoryConfig>& memory_config = std::nullopt, const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
     return ttnn::multiply(queue_id, input_tensor, (1.0f / value), std::nullopt, memory_config, optional_output_tensor);
 }
 
@@ -178,7 +162,7 @@ Tensor div_unary(uint8_t queue_id, const Tensor& input_tensor, float value, cons
 // TODO: implement these composite unary ops with optional output tensor and queue id.
 
 Tensor tril(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& input_tensor,
     int32_t diag=0,
     const std::optional<MemoryConfig>& memory_config = std::nullopt,
@@ -186,7 +170,7 @@ Tensor tril(
     return tt::tt_metal::tril(input_tensor, diag, memory_config.value_or(input_tensor.memory_config()));
 }
 Tensor triu(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& input_tensor,
     int32_t diag=0,
     const std::optional<MemoryConfig>& memory_config = std::nullopt,

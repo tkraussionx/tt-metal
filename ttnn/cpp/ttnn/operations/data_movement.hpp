@@ -20,6 +20,7 @@ namespace data_movement {
 struct UpSample {
 
     static ttnn::Tensor execute_on_worker_thread(
+        QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         std::variant<int, std::array<int, 2>, std::array<int, 3>, std::array<int, 4>> scale_factor,
         std::optional<MemoryConfig> output_mem_config = std::nullopt) {
@@ -78,6 +79,7 @@ struct UpSample {
 struct Repeat {
 
     static ttnn::Tensor execute_on_worker_thread(
+        QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         const ttnn::Shape& shape,
         std::optional<MemoryConfig> output_mem_config = std::nullopt) {
@@ -92,7 +94,8 @@ struct RepeatInterleave {
     // # This operation does not support the following cases:
     // #   - Shape([2[32], 2[32]]) -> repeats = 2, dim = 0
     // #   - Shape([2[32], 2[32]]) -> repeats = Tensor[1,2], dim = 1
-    static ttnn::Tensor execute_on_worker_thread(const ttnn::Tensor& input_tensor,
+    static ttnn::Tensor execute_on_worker_thread(QueueId queue_id,
+                                                 const ttnn::Tensor& input_tensor,
                                                  uint32_t repeats,
                                                  int32_t dim,
                                                  std::optional<MemoryConfig> output_mem_config = std::nullopt) {

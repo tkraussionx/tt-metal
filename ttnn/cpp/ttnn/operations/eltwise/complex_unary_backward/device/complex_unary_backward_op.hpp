@@ -14,7 +14,6 @@
 namespace ttnn::operations::complex_unary_backward {
 using ComplexTensor = complex_binary::ComplexTensor;
 
-constexpr uint8_t DefaultQueueId = 0;
 enum class ComplexUnaryBackwardOpType {
     POLAR_BW,
     IMAG_BW,

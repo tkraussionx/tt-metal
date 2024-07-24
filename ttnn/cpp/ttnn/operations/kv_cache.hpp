@@ -12,16 +12,18 @@ namespace kv_cache {
 
 struct ExecuteFillCache {
     static ttnn::Tensor execute_on_worker_thread(
+        QueueId queue_id,
         const ttnn::Tensor& cache, const ttnn::Tensor& input, const uint32_t batch_index) {
         operation::run(
             tt::tt_metal::UpdateCache{batch_index, 0, 0, tt::tt_metal::UpdateCacheOpType::FILL},
-            std::vector<ttnn::Tensor>{cache, input});
+            std::vector<ttnn::Tensor>{cache, input}, queue_id);
         return cache;
     }
 };
 
 struct ExecuteUpdateCache {
     static ttnn::Tensor execute_on_worker_thread(
+        QueueId queue_id,
         const ttnn::Tensor& cache,
         const ttnn::Tensor& input,
         const uint32_t update_index,
@@ -31,7 +33,7 @@ struct ExecuteUpdateCache {
         operation::run(
             tt::tt_metal::UpdateCache{
                 0, update_index, batch_offset, tt::tt_metal::UpdateCacheOpType::UPDATE, kernel_config_val},
-            std::vector<ttnn::Tensor>{cache, input});
+            std::vector<ttnn::Tensor>{cache, input}, queue_id);
         return cache;
     }
 };

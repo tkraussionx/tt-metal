@@ -30,6 +30,7 @@ template <ReduceType reduce_type>
 struct Reduce {
 
     static Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const Tensor& input_tensor_arg,
         const std::optional<std::variant<int, std::vector<int>>>& dim_arg,
         const bool keepdim,
@@ -148,7 +149,7 @@ struct Reduce {
         }
 
         output_tensor =
-            ttnn::reshape(output_tensor, ttnn::Shape{tt::tt_metal::Shape{output_shape, padded_output_shape}});
+            ttnn::reshape(queue_id, output_tensor, ttnn::Shape{tt::tt_metal::Shape{output_shape, padded_output_shape}});
 
         return output_tensor;
     }

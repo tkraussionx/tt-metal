@@ -16,7 +16,7 @@ namespace copy {
 namespace detail {
 
 inline Tensor execute_on_worker_thread(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& input_tensor,
     const std::vector<ttnn::operations::unary::UnaryWithParam>& op_chain,
     const std::optional<MemoryConfig>& memory_config = std::nullopt,
@@ -40,7 +40,7 @@ inline Tensor execute_on_worker_thread(
 
 struct Typecast {
     static Tensor execute_on_worker_thread(
-        const uint8_t queue_id,
+        const QueueId queue_id,
         const Tensor& input,
         const DataType& output_dtype,
         const std::optional<MemoryConfig>& memory_config_arg = std::nullopt,
@@ -58,16 +58,6 @@ struct Typecast {
             optional_output_tensor);
     }
 
-    static Tensor execute_on_worker_thread(
-        const Tensor& input,
-        const DataType& output_dtype,
-        const std::optional<MemoryConfig>& memory_config_arg = std::nullopt,
-        const std::optional<Tensor>& optional_output_tensor = std::nullopt) {
-
-        constexpr uint8_t DefaultQueueId = 0;
-        return execute_on_worker_thread(DefaultQueueId, input, output_dtype, memory_config_arg, optional_output_tensor);
-    }
-
 // eltwise_typecast implementation in tt_eager :
 // ---------------------------------------------
 // inline Tensor eltwise_typecast(
@@ -77,7 +67,7 @@ struct Typecast {
 //     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG)
 
     static ttnn::Tensor execute_on_worker_thread(
-        const uint8_t queue_id,
+        const QueueId queue_id,
         const Tensor& input_tensor,
         const DataType& tt_input_dtype,
         const DataType& tt_output_dtype,

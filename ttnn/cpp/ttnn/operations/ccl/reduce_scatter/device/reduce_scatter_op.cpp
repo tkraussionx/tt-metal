@@ -74,7 +74,8 @@ std::vector<Tensor> reduce_scatter_impl(
     const uint32_t scatter_dim,
     const uint32_t num_links,
     const MemoryConfig& output_mem_config,
-    const ttnn::ccl::Topology topology) {
+    const ttnn::ccl::Topology topology,
+    const QueueId queue_id) {
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
 
     std::vector<Tensor> output_tensors;
@@ -104,7 +105,7 @@ std::vector<Tensor> reduce_scatter_impl(
             sender_device_id,
             output_mem_config,
             topology});
-        output_tensors.push_back(operation::run(ops[i], {input_tensors.at(i)}).at(0));
+        output_tensors.push_back(operation::run(ops[i], {input_tensors.at(i)}).at(0), queue_id);
     }
     return output_tensors;
 }
@@ -114,10 +115,11 @@ std::vector<Tensor> reduce_scatter(
     const uint32_t scatter_dim,
     ReduceOpMath math_op,
     const uint32_t num_links,
-    const MemoryConfig& output_mem_config) {
+    const MemoryConfig& output_mem_config,
+    const QueueId queue_id) {
     ttnn::operations::binary::BinaryOpType binary_op_type = convert_reduce_type_to_eltwise_type(math_op);
     return reduce_scatter_impl(
-        input_tensors, binary_op_type, scatter_dim, num_links, output_mem_config,ttnn::ccl::Topology::Ring);
+        input_tensors, binary_op_type, scatter_dim, num_links, output_mem_config,ttnn::ccl::Topology::Ring, queue_id);
 }
 } // namespace ccl
 } // namespace operations

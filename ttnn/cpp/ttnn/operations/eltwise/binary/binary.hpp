@@ -29,7 +29,7 @@ constexpr bool is_associative(BinaryOpType op) {
 
 // Tensor - Scalar
 inline Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         BinaryOpType binary_op_type,
         const ttnn::Tensor &input_tensor,
         const float scalar,
@@ -63,7 +63,7 @@ inline Tensor execute_on_worker_thread(
 
 // Scalar - Tensor
 inline Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         BinaryOpType binary_op_type,
         const float scalar,
         const ttnn::Tensor &input_tensor,
@@ -91,7 +91,7 @@ template <BinaryOpType binary_op_type, bool in_place>
 struct BinaryOperation {
 
     static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         const Tensor &input_tensor_a_arg,
         const Tensor &input_tensor_b_arg,
         const std::optional<const DataType> &output_dtype = std::nullopt,
@@ -150,37 +150,7 @@ struct BinaryOperation {
     }
 
     static Tensor execute_on_worker_thread(
-        const Tensor &input_tensor_a_arg,
-        const Tensor &input_tensor_b_arg,
-        const std::optional<const DataType> &output_dtype = std::nullopt,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt,
-        std::optional<Tensor> optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt)
-    {
-        return execute_on_worker_thread(DefaultQueueId, input_tensor_a_arg, input_tensor_b_arg, output_dtype, memory_config, optional_output_tensor, activations);
-    }
-
-    // TODO: this case should use BinaryWithScalarProgramConfig and there should be a custom kernel to run this
-    // Currently, this is exactly how tt::tt_metal::add_unary works
-    static Tensor execute_on_worker_thread(
-        const ttnn::Tensor &input_tensor_a,
-        const float scalar,
-        const std::optional<const DataType> &dtype = std::nullopt,
-        const std::optional<ttnn::MemoryConfig> &memory_config = std::nullopt,
-        const std::optional<Tensor> &optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt) {
-        return BinaryOperation::execute_on_worker_thread(
-            DefaultQueueId,
-            input_tensor_a,
-            scalar,
-            dtype,
-            memory_config,
-            optional_output_tensor,
-            activations);
-    }
-
-    static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         const ttnn::Tensor &input_tensor_a,
         const float scalar,
         const std::optional<const DataType> &dtype = std::nullopt,
@@ -209,8 +179,9 @@ struct BinaryOperation {
 
 template <BinaryOpType binary_op_type, bool in_place>
 struct RelationalBinary {
+
     static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         const Tensor &input_tensor_a_arg,
         const Tensor &input_tensor_b_arg,
         const std::optional<const DataType> &output_dtype = std::nullopt,
@@ -238,7 +209,7 @@ struct RelationalBinary {
         auto output_memory_config = memory_config.value_or(input_tensor_a.memory_config());
 
         // TODO(arakhmati): #7731 - remove this!
-        auto repeat_smaller = [&output_memory_config](const auto &first, auto &second) {
+        auto repeat_smaller = [&output_memory_config, queue_id](const auto &first, auto &second) {
             const auto first_shape = first.get_shape();
             const auto second_shape = second.get_shape();
 
@@ -248,7 +219,7 @@ struct RelationalBinary {
                 first_shape[-3] == second_shape[-3]) {
                 tt::log_warning(tt::LogOp, "Using repeat op to broadcast batch dim");
                 Shape repeats({first_shape[0], 1, 1, 1});
-                second = ttnn::repeat(second, repeats, output_memory_config);
+                second = ttnn::repeat(queue_id, second, repeats, output_memory_config);
             }
         };
         repeat_smaller(input_tensor_a, input_tensor_b);
@@ -267,23 +238,7 @@ struct RelationalBinary {
     }
 
     static Tensor execute_on_worker_thread(
-        const Tensor &input_tensor_a_arg,
-        const Tensor &input_tensor_b_arg,
-        const std::optional<const DataType> &output_dtype = std::nullopt,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt,
-        std::optional<Tensor> optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt) {
-        return execute_on_worker_thread(
-            DefaultQueueId,
-            input_tensor_a_arg,
-            input_tensor_b_arg,
-            output_dtype,
-            memory_config,
-            optional_output_tensor,
-            activations);
-    }
-
-    static Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const ttnn::Tensor &input_tensor_a,
         const float scalar,
         const std::optional<const DataType> &dtype = std::nullopt,
@@ -291,30 +246,19 @@ struct RelationalBinary {
         const std::optional<Tensor> &optional_output_tensor = std::nullopt,
         std::optional<FusedActivations> activations = std::nullopt) {
         return utils::execute_on_worker_thread(
-            DefaultQueueId, binary_op_type, input_tensor_a, scalar, memory_config, optional_output_tensor);
-    }
-
-    static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
-        const ttnn::Tensor &input_tensor_a,
-        const float scalar,
-        const std::optional<const DataType> &dtype = std::nullopt,
-        const std::optional<ttnn::MemoryConfig> &memory_config = std::nullopt,
-        const std::optional<Tensor> &optional_output_tensor = std::nullopt,
-        std::optional<FusedActivations> activations = std::nullopt) {
-        return utils::execute_on_worker_thread(
-            DefaultQueueId, binary_op_type, input_tensor_a, scalar, memory_config, optional_output_tensor);
+            queue_id, binary_op_type, input_tensor_a, scalar, memory_config, optional_output_tensor);
     }
     // scalar - tensor combination not available on Pytorch for this op
+    // scrutinize, order of arguments mattes in binary operations!!!
     static Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         const float scalar,
         const ttnn::Tensor &input_tensor_a,
         const std::optional<const DataType> &dtype = std::nullopt,
         const std::optional<ttnn::MemoryConfig> &memory_config = std::nullopt,
         const std::optional<Tensor> &optional_output_tensor = std::nullopt) {
         return utils::execute_on_worker_thread(
-            DefaultQueueId, binary_op_type, scalar, input_tensor_a, memory_config, optional_output_tensor);
+            queue_id, binary_op_type, scalar, input_tensor_a, memory_config, optional_output_tensor);
     }
 };
 

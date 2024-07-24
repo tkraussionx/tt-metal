@@ -396,7 +396,7 @@ void bind_softplus(py::module& module, const unary_operation_t& operation) {
                const float threshold,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<Tensor>& output_tensor,
-               const uint8_t queue_id) {
+               const QueueId queue_id) {
                 return self(queue_id, input, beta, threshold, memory_config, output_tensor);
             },
             py::arg("input_tensor"),
@@ -442,7 +442,7 @@ void bind_sigmoid_accurate(py::module& module, const unary_operation_t& operatio
                const Tensor& input_tensor,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<Tensor>& output_tensor,
-               const uint8_t queue_id) -> ttnn::Tensor {
+               const QueueId queue_id) -> ttnn::Tensor {
                 return self(queue_id, input_tensor, memory_config, output_tensor);
             },
             py::arg("input_tensor"),
@@ -489,7 +489,7 @@ void bind_unary_chain(py::module& module, const unary_operation_t& operation) {
                const FusedActivations& ops_chain,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<Tensor>& output_tensor,
-               const uint8_t queue_id) {
+               const QueueId queue_id) {
                 return self(queue_id, input_tensor, ops_chain, memory_config, output_tensor);
             },
             py::arg("input_tensor"),
@@ -536,7 +536,7 @@ void bind_identity(py::module& module, const unary_operation_t& operation) {
                const Tensor& input_tensor,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<Tensor>& output_tensor,
-               const uint8_t queue_id) {
+               const QueueId queue_id) {
                 return self(queue_id, input_tensor, memory_config, output_tensor);
             },
             py::arg("input_tensor"),
@@ -584,7 +584,7 @@ void bind_power(py::module& module, const unary_operation_t& operation) {
                uint32_t exponent,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<Tensor>& output_tensor,
-               const uint8_t queue_id) -> ttnn::Tensor {
+               const QueueId queue_id) -> ttnn::Tensor {
                 return self(queue_id, input_tensor, exponent, memory_config, output_tensor);
             },
             py::arg("input_tensor"),
@@ -601,7 +601,7 @@ void bind_power(py::module& module, const unary_operation_t& operation) {
                 float exponent,
                 const std::optional<MemoryConfig>& memory_config,
                 const std::optional<Tensor>& output_tensor,
-                const uint8_t queue_id) -> ttnn::Tensor {
+                const QueueId queue_id) -> ttnn::Tensor {
                     return self(queue_id, input_tensor, exponent, memory_config, output_tensor);
                 },
                 py::arg("input_tensor"),

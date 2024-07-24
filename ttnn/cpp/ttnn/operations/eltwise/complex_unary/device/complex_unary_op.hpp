@@ -14,7 +14,6 @@
 namespace ttnn::operations::complex_unary {
 using ComplexTensor = complex_binary::ComplexTensor;
 
-constexpr uint8_t DefaultQueueId = 0;
 enum class ComplexUnaryOpType {
     REAL,
     IMAG,

@@ -54,7 +54,8 @@ namespace ccl{
     const uint32_t scatter_split_dim,
     ReduceOpMath reduce_op  = ReduceOpMath::SUM,
     const uint32_t num_links = 1,
-    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    const QueueId queue_id = 0);
 } // namespace ccl
 } // namespace operations
 

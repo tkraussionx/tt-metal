@@ -11,8 +11,6 @@
 
 namespace ttnn::operations::experimental::transformer {
 
-constexpr uint8_t DefaultQueueId = 0;
-
 struct ConcatenateHeadsDeviceOperation {
     CoreCoord compute_with_storage_grid_size;
     MemoryConfig output_mem_config;

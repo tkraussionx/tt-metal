@@ -45,7 +45,7 @@ void bind_tilize(py::module &module) {
                const std::optional<MemoryConfig> &memory_config,
                std::optional<DataType> output_dtype,
                bool use_multicore,
-               uint8_t queue_id) { return self(queue_id, input_tensor, memory_config, output_dtype, use_multicore); },
+               QueueId queue_id) { return self(queue_id, input_tensor, memory_config, output_dtype, use_multicore); },
             py::arg("input_tensor"),
             py::kw_only(),
             py::arg("memory_config") = std::nullopt,

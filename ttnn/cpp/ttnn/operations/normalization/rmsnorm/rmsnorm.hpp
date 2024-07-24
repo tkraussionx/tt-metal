@@ -12,6 +12,7 @@ namespace operations::normalization {
 struct ExecuteRMSNorm {
 
     static inline ttnn::Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         float epsilon = 1e-12,
         const std::optional<const ttnn::Tensor>& weight = std::nullopt,
@@ -31,7 +32,8 @@ struct ExecuteRMSNorm {
                         .program_config = program_config.value_or(LayerNormDefaultProgramConfig{}),
                         .compute_kernel_config = kernel_config_val},
                     {input_tensor},
-                    {residual_input_tensor, weight, bias}).at(0);
+                    {residual_input_tensor, weight, bias},
+                    queue_id).at(0);
     }
 };
 

@@ -19,12 +19,13 @@ struct ExecuteComplexBinaryType1 {
 
     //Type 1: 1 input tensor
     static ComplexTensor execute_on_main_thread(
+        const QueueId queue_id,
         const ComplexTensor &input_tensor_a_arg,
         const ComplexTensor &input_tensor_b_arg,
         const MemoryConfig &memory_config) {
 
         auto op_type = get_function_complex_binary<complex_binary_op_type>();
-        return op_type(input_tensor_a_arg, input_tensor_b_arg, memory_config);
+        return op_type(queue_id, input_tensor_a_arg, input_tensor_b_arg, memory_config);
         }
 
 };

@@ -14,11 +14,12 @@ namespace ccl {
 struct ExecuteLineAllGather {
 
     static ttnn::Tensor execute_on_main_thread(
+        const QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         const uint32_t dim,
         const uint32_t num_links = 1,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt) {
-        return ttnn::operations::ccl::line_all_gather(input_tensor, dim, num_links, memory_config);
+        return ttnn::operations::ccl::line_all_gather(input_tensor, dim, num_links, memory_config, queue_id);
     }
 };
 

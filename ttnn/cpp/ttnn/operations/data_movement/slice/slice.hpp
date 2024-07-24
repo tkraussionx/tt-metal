@@ -15,14 +15,11 @@ namespace data_movement {
 
 struct ExecuteSlice {
     static ttnn::Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         tt::tt_metal::Shape output_tensor_start,
         tt::tt_metal::Shape output_tensor_end,
         const std::optional<MemoryConfig>& memory_config_arg) {
-
-
-
 
         if (input_tensor.storage_type() != StorageType::DEVICE) {
             tt::tt_metal::Shape output_tensor_shape = {
@@ -76,15 +73,7 @@ struct ExecuteSlice {
     }
 
     static ttnn::Tensor execute_on_worker_thread(
-        const ttnn::Tensor& input_tensor,
-        tt::tt_metal::Shape output_tensor_start,
-        tt::tt_metal::Shape output_tensor_end,
-        const std::optional<MemoryConfig>& memory_config_arg) {
-        return execute_on_worker_thread(0, input_tensor, output_tensor_start, output_tensor_end, memory_config_arg);
-    }
-
-    static ttnn::Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         tt::tt_metal::Array1D output_tensor_start,
         tt::tt_metal::Array1D output_tensor_end,
@@ -96,49 +85,6 @@ struct ExecuteSlice {
             tt::tt_metal::Shape(output_tensor_end),
             memory_config_arg);
     }
-
-
-    static ttnn::Tensor execute_on_worker_thread(
-        uint8_t queue_id,
-        const ttnn::Tensor& input_tensor,
-        tt::tt_metal::Array4D output_tensor_start,
-        tt::tt_metal::Array4D output_tensor_end,
-        const std::optional<MemoryConfig>& memory_config_arg) {
-        return execute_on_worker_thread(
-            queue_id,
-            input_tensor,
-            tt::tt_metal::Shape(output_tensor_start),
-            tt::tt_metal::Shape(output_tensor_end),
-            memory_config_arg);
-    }
-
-    static ttnn::Tensor execute_on_worker_thread(
-        const ttnn::Tensor& input_tensor,
-        tt::tt_metal::Array4D output_tensor_start,
-        tt::tt_metal::Array4D output_tensor_end,
-        const std::optional<MemoryConfig>& memory_config_arg) {
-        return execute_on_worker_thread(0, input_tensor, output_tensor_start, output_tensor_end, memory_config_arg);
-    }
-
-
-    static ttnn::Tensor execute_on_worker_thread(
-        const ttnn::Tensor& input_tensor,
-        tt::tt_metal::Array4D output_tensor_start,
-        tt::tt_metal::Array4D output_tensor_end) {
-        return execute_on_worker_thread(0, input_tensor, output_tensor_start, output_tensor_end, std::nullopt);
-    }
-
-
-
-
-
-
-
-
-
-
-
-
 };
 
 }  // namespace data_movement

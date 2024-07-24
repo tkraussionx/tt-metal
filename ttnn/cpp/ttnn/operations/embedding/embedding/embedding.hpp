@@ -17,7 +17,7 @@ namespace embedding {
 
 struct Embedding {
     static inline Tensor execute_on_worker_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const Tensor& input_tensor_arg,
         const Tensor& weight_arg,
         const std::optional<int>& pad_token = std::nullopt,
@@ -53,20 +53,6 @@ struct Embedding {
         embeddings = ttnn::reshape(embeddings, ttnn::Shape{{batch_size, sentence_size, hidden_embedding_dim}});
         return embeddings;
     }
-
-    static inline auto execute_on_worker_thread(
-        const Tensor& input_tensor_arg,
-        const Tensor& weight_arg,
-        const std::optional<int>& pad_token = std::nullopt,
-        const Layout& layout = ttnn::ROW_MAJOR_LAYOUT,
-        EmbeddingsType embeddings_type = EmbeddingsType::GENERIC,
-        const std::optional<const DataType> output_dtype = std::nullopt,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt,
-        std::optional<Tensor> optional_output_tensor = std::nullopt
-        ) {
-            constexpr auto DefaultQueueId = 0;
-            return execute_on_worker_thread(DefaultQueueId, input_tensor_arg, weight_arg, pad_token, layout, embeddings_type, output_dtype, memory_config, optional_output_tensor);
-        }
 };
 
 }  // namespace embedding

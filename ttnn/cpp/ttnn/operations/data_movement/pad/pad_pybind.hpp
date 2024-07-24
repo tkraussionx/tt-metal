@@ -52,7 +52,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, padding, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -71,7 +71,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -91,7 +91,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -111,7 +111,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -131,7 +131,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -151,7 +151,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -171,7 +171,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -191,7 +191,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),
@@ -211,7 +211,7 @@ void bind_pad(py::module& module) {
                 const float value,
                 const bool use_multicore,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, output_padded_shape, input_tensor_start, value, use_multicore, memory_config);
                 },
                 py::arg("input_tensor"),

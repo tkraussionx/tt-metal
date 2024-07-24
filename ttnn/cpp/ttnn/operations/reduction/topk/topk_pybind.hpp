@@ -64,7 +64,7 @@ void bind_reduction_topk_operation(py::module& module) {
                 const bool sorted,
                 std::optional<std::tuple<ttnn::Tensor, ttnn::Tensor>> optional_output_tensors,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, k, dim, largest, sorted,
                     memory_config, optional_output_tensors);
                 },

@@ -263,6 +263,7 @@ template <bool in_place>
 struct ExecuteAttentionSoftmax {
 
     static ttnn::Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         const std::optional<int>& head_size_arg = std::nullopt,
         const std::optional<const ttnn::Tensor>& attention_mask = std::nullopt,
@@ -292,7 +293,7 @@ struct ExecuteAttentionSoftmax {
                                      kernel_config_val,
                                      false},
                                  {input_tensor},
-                                 {attention_mask})
+                                 {attention_mask}, queue_id)
                                  .at(0);
         return output_tensor;
     }

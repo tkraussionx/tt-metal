@@ -15,6 +15,7 @@ struct ExecuteSoftmax {
 
     // softmax
     static ttnn::Tensor execute_on_worker_thread(
+        const QueueId queue_id,
         const ttnn::Tensor& input_tensor,
         const int dim_arg,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
@@ -26,15 +27,15 @@ struct ExecuteSoftmax {
             dim = rank + dim;
         }
 
-        auto input_tensor_4D = ttnn::unsqueeze_to_4D(input_tensor);
+        auto input_tensor_4D = ttnn::unsqueeze_to_4D(input_tensor); // todo queue_id
         if (dim == rank - 1) {
             auto output_tensor =
-                ttnn::operations::normalization::softmax(input_tensor_4D, memory_config.value_or(input_tensor.memory_config()), compute_kernel_config);
-            return ttnn::reshape(output_tensor, input_shape);
+                ttnn::operations::normalization::softmax(input_tensor_4D, memory_config.value_or(input_tensor.memory_config()), compute_kernel_config); // todo queue_id
+            return ttnn::reshape(output_tensor, input_shape); // todo queue_id
         } else {
             auto dim_4D = dim + 4 - rank;
-            auto output_tensor = tt::operations::primary::moreh_softmax(input_tensor_4D, dim_4D);
-            return ttnn::reshape(output_tensor, input_shape);
+            auto output_tensor = tt::operations::primary::moreh_softmax(input_tensor_4D, dim_4D); // todo queue_id
+            return ttnn::reshape(output_tensor, input_shape); // todo queue_id
         }
     }
 };

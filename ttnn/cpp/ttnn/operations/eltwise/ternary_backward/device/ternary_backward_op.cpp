@@ -63,7 +63,7 @@ std::vector<Tensor> _addcdiv_bw(
 }
 
 std::vector<OptionalTensor> _where_bw(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& grad,
     const Tensor& condition,
     const Tensor& input,

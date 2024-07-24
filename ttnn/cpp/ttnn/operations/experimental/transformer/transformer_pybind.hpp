@@ -42,7 +42,7 @@ void bind_experimental_transformer_operations(py::module& module) {
                 const CoreCoord& compute_with_storage_grid_size,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
                 std::optional<ttnn::Tensor> optional_output_tensor,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, compute_with_storage_grid_size, memory_config, optional_output_tensor);
                 },
                 py::arg("input_tensor").noconvert(),

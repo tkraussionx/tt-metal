@@ -12,15 +12,12 @@ namespace ttnn::operations::examples {
 // This is the main operation that will be called by the user
 struct ExampleOperation {
     // This how the user can call the operation
-    static Tensor execute_on_main_thread(uint8_t queue_id, const Tensor &input_tensor) {
+    static Tensor execute_on_main_thread(QueueId queue_id, const Tensor &input_tensor) {
         return ttnn::device_operation::run<ExampleDeviceOperation>(
             queue_id,
             ExampleDeviceOperation::operation_attributes_t{.attribute = true, .some_other_attribute = 42},
             ExampleDeviceOperation::tensor_args_t{input_tensor});
     }
-
-    // This how the user can call the operation
-    static Tensor execute_on_main_thread(const Tensor &input_tensor) { return execute_on_main_thread(0, input_tensor); }
 
     // execute_on_main_thread can be overloaded to take any number of arguments
 

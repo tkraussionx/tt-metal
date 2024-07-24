@@ -17,7 +17,7 @@ namespace ternary {
 using FloatOrTensor = std::variant<Tensor, float>;
 
 inline Tensor _where_op(
-    uint8_t queue_id,
+    const QueueId queue_id,
     const Tensor& predicate,
     const FloatOrTensor& value_true,
     const FloatOrTensor& value_false,
@@ -46,7 +46,7 @@ inline Tensor _where_op(
 
 
 Tensor WhereOp::_where(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& predicate,
     const Tensor& value_true,
     const Tensor& value_false,
@@ -57,7 +57,7 @@ Tensor WhereOp::_where(
 }
 
 Tensor WhereOp::_where(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& predicate,
     const float value_true,
     const Tensor& value_false,
@@ -68,7 +68,7 @@ Tensor WhereOp::_where(
 }
 
 Tensor WhereOp::_where(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& predicate,
     const Tensor& value_true,
     const float value_false,
@@ -79,7 +79,7 @@ Tensor WhereOp::_where(
 }
 
 Tensor WhereOp::_where(
-    uint8_t queue_id,
+    QueueId queue_id,
     const Tensor& predicate,
     const float value_true,
     const float value_false, const std::optional<MemoryConfig>& output_mem_config, std::optional<Tensor> output_tensor) {

@@ -77,7 +77,7 @@ struct ExecuteTernaryBackwardOptional {
     //Q_ID, type1 args, optional output tensor for inputs based on are_required_outputs value
 
     static std::vector<OptionalTensor> execute_on_main_thread(
-        uint8_t queue_id,
+        const QueueId queue_id,
         const Tensor &grad_tensor_arg,
         const Tensor &input_tensor_a_arg,
         const Tensor &input_tensor_b_arg,
@@ -91,24 +91,6 @@ struct ExecuteTernaryBackwardOptional {
         auto op_type = get_ternary_fn_opt_output<ternary_backward_op_type>();
         return op_type(queue_id, grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, input_tensor_c_arg, output_memory_config, are_required_outputs, input_a_grad, input_b_grad);
     }
-
-    //type1 args, optional output tensor for inputs based on are_required_outputs value
-
-    static std::vector<OptionalTensor> execute_on_main_thread(
-        const Tensor &grad_tensor_arg,
-        const Tensor &input_tensor_a_arg,
-        const Tensor &input_tensor_b_arg,
-        const Tensor &input_tensor_c_arg,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt,
-        const std::vector<bool>& are_required_outputs = std::vector<bool>{true, true},
-        OptionalTensor input_a_grad = std::nullopt,
-        OptionalTensor input_b_grad = std::nullopt) {
-
-        auto output_memory_config = memory_config.value_or(input_tensor_a_arg.memory_config());
-        auto op_type = get_ternary_fn_opt_output<ternary_backward_op_type>();
-        return op_type(DefaultQueueId, grad_tensor_arg, input_tensor_a_arg, input_tensor_b_arg, input_tensor_c_arg, output_memory_config, are_required_outputs, input_a_grad, input_b_grad);
-    }
-
 };
 
 }  // operations::ternary_backward

@@ -12,8 +12,6 @@
 
 namespace ttnn::operations::ternary_backward {
 
-constexpr uint8_t DefaultQueueId = 0;
-
 using OptionalTensor = std::optional<Tensor>;
 
 enum class TernaryBackwardOpType {
@@ -64,7 +62,7 @@ struct OpHandler_float<TernaryBackwardOpType::ADDCDIV_BW> {
 
 template <>
 struct OpHandler_Where<TernaryBackwardOpType::WHERE_BW> {
-    static std::vector<OptionalTensor> handle(uint8_t queue_id, const Tensor& t1, const Tensor& t2, const Tensor& t3,
+    static std::vector<OptionalTensor> handle(QueueId queue_id, const Tensor& t1, const Tensor& t2, const Tensor& t3,
                                                      const Tensor& t4, const MemoryConfig& mem_cfg, const std::vector<bool>& are_required_outputs,
                                                      OptionalTensor input_grad, OptionalTensor other_grad) {
         return _where_bw(queue_id, t1, t2, t3, t4, mem_cfg, are_required_outputs, input_grad, other_grad);

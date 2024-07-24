@@ -24,7 +24,6 @@
 
 namespace ttnn::operations::binary {
 
-constexpr uint8_t DefaultQueueId = 0;
 enum class BinaryOpType {
     ADD,
     SUB,

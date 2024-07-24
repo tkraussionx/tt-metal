@@ -14,7 +14,6 @@
 namespace ttnn::operations::complex_binary_backward {
 using ComplexTensor = complex_binary::ComplexTensor;
 
-constexpr uint8_t DefaultQueueId = 0;
 enum class ComplexBinaryBackwardOpType {
     COMPLEX_ADD_BW,
     COMPLEX_SUB_BW,

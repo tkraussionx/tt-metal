@@ -132,8 +132,6 @@ bool is_parametrized_type(T val) {
     return false;
 }
 
-constexpr uint8_t DefaultQueueId = 0;
-
 struct UnaryWithParam {
     UnaryOpType op_type;
     std::vector<float> params;

@@ -167,7 +167,7 @@ struct ExecuteUnaryBackwardOptionalFloat {
 
     //Q_ID, type1 args, optional output tensor for input based on are_required_outputs value
     static std::vector<std::optional<Tensor>> execute_on_main_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const Tensor &grad_tensor_arg,
         const Tensor &input_tensor_arg,
         float parameter,
@@ -179,21 +179,6 @@ struct ExecuteUnaryBackwardOptionalFloat {
         auto op_type = get_function_unary_optional_float<unary_backward_op_type>();
         return op_type(queue_id, grad_tensor_arg, input_tensor_arg, parameter, output_memory_config, are_required_outputs, input_grad);
     }
-
-    //type1 args, optional output tensor for inputs based on are_required_outputs value
-    static std::vector<std::optional<Tensor>> execute_on_main_thread(
-        const Tensor &grad_tensor_arg,
-        const Tensor &input_tensor_arg,
-        float parameter,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt,
-        const std::vector<bool>& are_required_outputs = std::vector<bool>{true},
-        std::optional<Tensor> input_grad = std::nullopt) {
-
-        auto output_memory_config = memory_config.value_or(input_tensor_arg.memory_config());
-        auto op_type = get_function_unary_optional_float<unary_backward_op_type>();
-        return op_type(DefaultQueueId, grad_tensor_arg, input_tensor_arg, parameter, output_memory_config, are_required_outputs, input_grad);
-    }
-
 };
 
 //OpHandler_unary_optional : get_function_unary_optional
@@ -208,7 +193,7 @@ struct ExecuteUnaryBackwardOptional {
 
     //Q_ID, type1 args, optional output tensor for input based on are_required_outputs value
     static std::vector<std::optional<Tensor>> execute_on_main_thread(
-        uint8_t queue_id,
+        QueueId queue_id,
         const Tensor &grad_tensor_arg,
         const Tensor &input_tensor_arg,
         const std::optional<MemoryConfig> &memory_config = std::nullopt,
@@ -219,20 +204,6 @@ struct ExecuteUnaryBackwardOptional {
         auto op_type = get_function_unary_optional<unary_backward_op_type>();
         return op_type(queue_id, grad_tensor_arg, input_tensor_arg, output_memory_config, are_required_outputs, input_grad);
     }
-
-    //type1 args, optional output tensor for inputs based on are_required_outputs value
-    static std::vector<std::optional<Tensor>> execute_on_main_thread(
-        const Tensor &grad_tensor_arg,
-        const Tensor &input_tensor_arg,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt,
-        const std::vector<bool>& are_required_outputs = std::vector<bool>{true},
-        std::optional<Tensor> input_grad = std::nullopt) {
-
-        auto output_memory_config = memory_config.value_or(input_tensor_arg.memory_config());
-        auto op_type = get_function_unary_optional<unary_backward_op_type>();
-        return op_type(DefaultQueueId, grad_tensor_arg, input_tensor_arg, output_memory_config, are_required_outputs, input_grad);
-    }
-
 };
 
 //OpHandler_prod_bw : get_function_prod_bw

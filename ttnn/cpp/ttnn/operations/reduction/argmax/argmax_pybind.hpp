@@ -51,7 +51,7 @@ void bind_reduction_argmax_operation(py::module& module) {
                 const std::optional<int> dim,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
                 std::optional<ttnn::Tensor> optional_output_tensor,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, dim, memory_config, optional_output_tensor);
                 },
                 py::arg("input_tensor").noconvert(),

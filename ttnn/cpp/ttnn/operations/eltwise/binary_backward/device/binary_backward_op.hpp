@@ -12,7 +12,6 @@
 
 namespace ttnn::operations::binary_backward {
 
-constexpr uint8_t DefaultQueueId = 0;
 enum class BinaryBackwardOpType {
     ATAN2_BW,
     EMBEDDING_BW,
@@ -64,7 +63,7 @@ std::vector<ttnn::Tensor> _lerp_bw( const Tensor& grad, const Tensor& input, con
 std::vector<ttnn::Tensor> _concat_bw( const Tensor& grad, const Tensor& input, const Tensor& other, int dim = 0, const std::optional<MemoryConfig>& output_mem_config = std::nullopt);
 
 //OpHandler_binary_bw_opt_float_default : get_function_binary_bw_opt_float_default
-std::vector<std::optional<ttnn::Tensor>> _addalpha_bw( uint8_t queue_id, const Tensor& grad, const Tensor& input, const Tensor& other, float alpha = 1.0f, const std::optional<MemoryConfig>& output_mem_config = std::nullopt, const std::vector<bool>& are_required_outputs = std::vector<bool>{true, true}, std::optional<Tensor> input_grad = std::nullopt, std::optional<Tensor> other_grad = std::nullopt);
+std::vector<std::optional<ttnn::Tensor>> _addalpha_bw( QueueId queue_id, const Tensor& grad, const Tensor& input, const Tensor& other, float alpha = 1.0f, const std::optional<MemoryConfig>& output_mem_config = std::nullopt, const std::vector<bool>& are_required_outputs = std::vector<bool>{true, true}, std::optional<Tensor> input_grad = std::nullopt, std::optional<Tensor> other_grad = std::nullopt);
 
 // OpHandler struct template
 template <BinaryBackwardOpType OpType>
@@ -98,7 +97,7 @@ struct OpHandler_binary_bw<BinaryBackwardOpType::RSUB_BW> {
 
 template <>
 struct OpHandler_binary_bw_opt_float_default<BinaryBackwardOpType::ADDALPHA_BW> {
-    static std::vector<std::optional<ttnn::Tensor>> handle( uint8_t queue_id, const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad, std::optional<Tensor> other_grad ) {
+    static std::vector<std::optional<ttnn::Tensor>> handle( QueueId queue_id, const Tensor& grad, const Tensor& input, const Tensor& other, float alpha, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad, std::optional<Tensor> other_grad ) {
         return _addalpha_bw( queue_id, grad, input, other, alpha, output_mem_config, are_required_outputs, input_grad, other_grad);
     }
 };

@@ -52,13 +52,15 @@ Example:
             [](const complex_unary_operation_t& self,
                const ComplexTensor& input_tensor_a,
                const ComplexTensor& input_tensor_b,
-               const ttnn::MemoryConfig& memory_config) -> ComplexTensor {
-                return self(input_tensor_a, input_tensor_b, memory_config);
+               const ttnn::MemoryConfig& memory_config,
+               uint8_t queue_id) -> ComplexTensor {
+                return self(QueueId(queue_id), input_tensor_a, input_tensor_b, memory_config);
             },
             py::arg("input_tensor_a"),
             py::arg("input_tensor_b"),
             py::kw_only(),
-            py::arg("memory_config")});
+            py::arg("memory_config"),
+            py::arg("queue_id") = 0});
 }
 
 }  // namespace detail

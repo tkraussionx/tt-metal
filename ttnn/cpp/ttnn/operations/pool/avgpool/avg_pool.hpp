@@ -32,6 +32,7 @@ namespace pool {
 
 struct GlobalAveragePool2D {
     static Tensor execute_on_worker_thread(
+        QueueId queue_id,
         const Tensor& input,
         const std::optional<MemoryConfig>& memory_config_arg = std::nullopt,
         const std::optional<DataType>& output_dtype = std::nullopt) {

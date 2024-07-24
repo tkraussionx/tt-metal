@@ -11,8 +11,6 @@
 
 namespace ttnn::operations::reduction {
 
-constexpr uint8_t DefaultQueueId = 0;
-
 struct ArgMax {
     const DataType output_dtype;
     const std::optional<int> dim;

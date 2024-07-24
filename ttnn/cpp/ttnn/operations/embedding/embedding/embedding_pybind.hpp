@@ -67,8 +67,8 @@ void bind_embedding(py::module& module) {
             const std::optional<const DataType> output_dtype,
             std::optional<ttnn::Tensor> &optional_output_tensor,
             const std::optional<ttnn::MemoryConfig>& memory_config,
-            uint8_t queue_id) {
-                return self(queue_id, input_tensor, weight, padding_idx, layout, embeddings_type, output_dtype, memory_config, optional_output_tensor);
+            QueueId queue_id) {
+                return self(Queue_Id(queue_id), input_tensor, weight, padding_idx, layout, embeddings_type, output_dtype, memory_config, optional_output_tensor);
             },
             py::arg("input_tensor").noconvert(),
             py::arg("weight").noconvert(),

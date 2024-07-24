@@ -48,7 +48,7 @@ void bind_slice(py::module& module) {
                 const tt::tt_metal::Array4D & slice_start,
                 const tt::tt_metal::Array4D & slice_end,
                 const std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, input_tensor, slice_start, slice_end, memory_config);
                 },
                 py::arg("input_tensor"),

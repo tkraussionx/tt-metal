@@ -50,7 +50,7 @@ Example:
                 const int dim,
                 std::optional<ttnn::Tensor> &optional_output_tensor,
                 std::optional<ttnn::MemoryConfig>& memory_config,
-                uint8_t queue_id) {
+                QueueId queue_id) {
                     return self(queue_id, tensors, dim, memory_config, optional_output_tensor);
                 },
                 py::arg("tensors"),
