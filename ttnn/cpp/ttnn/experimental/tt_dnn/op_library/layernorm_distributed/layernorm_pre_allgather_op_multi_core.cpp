@@ -168,6 +168,10 @@ operation::ProgramWithCallbacks layernorm_pre_allgather_multi_core(
 
 
     bool tile_dtype_is_bfloat16 = a.get_dtype() == tt::tt_metal::DataType::BFLOAT16;
+
+    std::map<string, string> reader_defines;
+    reader_defines["REDUCE_ROW_SUM_VIA_MM"] = "1";
+
     std::map<string, string> compute_defines;
 
     if (is_rmsnorm) {
@@ -178,7 +182,7 @@ operation::ProgramWithCallbacks layernorm_pre_allgather_multi_core(
         program,
         "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/layernorm_distributed/kernels/dataflow/reader_unary_interleaved_ln_rm_gb_pre_allgather.cpp",
         all_cores,
-        tt_metal::ReaderDataMovementConfig(reader_compile_time_args)
+        tt_metal::ReaderDataMovementConfig(reader_compile_time_args, reader_defines)
     );
 
     auto writer_kernels_id = CreateKernel(

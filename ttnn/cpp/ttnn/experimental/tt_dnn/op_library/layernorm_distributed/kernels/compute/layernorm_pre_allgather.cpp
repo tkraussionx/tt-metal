@@ -13,7 +13,7 @@
 #define REDUCE_OP PoolType::SUM
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
-#include "compute_kernel_api/reduce.h"
+#include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/bcast.h"
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/layernorm.h"
@@ -41,6 +41,8 @@ void MAIN {
     cb_wait_front(cb_reduce, 1); // comes from the reader
 
     binary_op_init_common(cb_inp, cb_reduce, cb_x2);
+
+    mm_init(cb_reduce, cb_x2);
 
     for (uint32_t ncht = 0; ncht < NCHt; ncht++) {
 
@@ -70,19 +72,18 @@ void MAIN {
          */
         unpack_reconfig_data_format(cb_x2, cb_reduce);
         pack_reconfig_data_format(cb_out);
-        reduce_init_delta<false>();
+        mm_init_short(cb_reduce, cb_x2, 1);
         cb_wait_front(cb_x2, Wt);
         cb_reserve_back(cb_out, onetile);
         ACQ();
         for (uint32_t wtr = 0; wtr<Wt; wtr++) {
-            reduce_tile(cb_x2, cb_reduce, wtr, 0, dst0);
+            matmul_tiles(cb_x2, cb_reduce, wtr, 0, dst0, false);
         }
         pack_tile(dst0, cb_out, 0);
         REL();
         cb_push_back(cb_out, onetile);
         cb_pop_front(cb_x2, Wt);
 
-        reduce_revert_delta();
 
         #ifndef RMSNORM
 
@@ -91,17 +92,14 @@ void MAIN {
          */
         unpack_reconfig_data_format(cb_inp, cb_reduce);
         pack_reconfig_data_format(cb_out);
-        reduce_init_delta<false>();
         cb_reserve_back(cb_out, onetile);
         ACQ();
         for (uint32_t wtr = 0; wtr<Wt; wtr++) {
-            reduce_tile(cb_inp, cb_reduce, wtr, 0, dst0);
+            matmul_tiles(cb_inp, cb_reduce, wtr, 0, dst0, false);
         }
         pack_tile(dst0, cb_out, 1);
         REL();
         cb_push_back(cb_out, onetile);
-
-        reduce_revert_delta();
 
         #endif
 

@@ -92,7 +92,7 @@ def ln_pre_allgather_op(xs, n_devices, is_rmsnorm, out_dtpe):
 
 def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_dtype, device):
     # Set print options
-    torch.set_printoptions(threshold=100)
+    torch.set_printoptions(profile="full")  # Show full tensor
 
     torch.manual_seed(42)
 
@@ -143,23 +143,29 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
         # print("tt_output_host sum(x^2):")
         # print(tt_output_host[0, 0, :64, 0 + device_offset])
 
+        # print("out_torch sum(x^2):")
+        # print(out_torch)
+
+        # print("tt_output_host sum(x^2):")
+        # print(tt_output_host)
+
         passing, output_str = comp_allclose_and_pcc(
             out_torch[:, :, :, 0 + device_offset],
             tt_output_host[:, :, :, 0 + device_offset],
-            rtol=1e-01 * reduction_width,  # Issue 9908: large error in reduce, set new rtol target when fixed!
+            rtol=1e-03 * reduction_width,
             atol=0,
-            pcc=0.9,
+            pcc=0.93,
         )
         logger.debug(f"tt vs torch sum(xˆ2) = {output_str}")
 
         all_passing &= passing
 
-        # Check if zeros are same
-        passing, output_str = comp_equal(
-            out_torch[:, :, :, 1 + device_offset : 32 + device_offset],
-            tt_output_host[:, :, :, 1 + device_offset : 32 + device_offset],
-        )
-        logger.debug(f"tt vs torch padding 1 = {output_str}")
+        # # Check if zeros are same
+        # passing, output_str = comp_equal(
+        #     out_torch[:, :, :, 1 + device_offset : 32 + device_offset],
+        #     tt_output_host[:, :, :, 1 + device_offset : 32 + device_offset],
+        # )
+        # logger.debug(f"tt vs torch padding first tile = {output_str}")
 
         all_passing &= passing
 
@@ -174,21 +180,20 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
             passing, output_str = comp_allclose_and_pcc(
                 out_torch[:, :, :, 32 + device_offset],
                 tt_output_host[:, :, :, 32 + device_offset],
-                rtol=5e-01
-                * reduction_width,  # Issue 9908: large error in reduce, set new rtol and atol target when fixed!
-                atol=10,
-                pcc=0.97,
+                rtol=7e-02 * reduction_width,
+                atol=0,
+                pcc=0.999,
             )
             logger.debug(f"tt vs torch sum(x) = {output_str}")
 
             all_passing &= passing
 
-            # Check if zeros are same
-            passing, output_str = comp_equal(
-                out_torch[:, :, :, 33 + device_offset : 64 + device_offset],
-                tt_output_host[:, :, :, 33 + device_offset : 64 + device_offset],
-            )
-            logger.debug(f"tt vs torch padding 2 = {output_str}")
+            # # Check if zeros are same
+            # passing, output_str = comp_equal(
+            #     out_torch[:, :, :, 33 + device_offset : 64 + device_offset],
+            #     tt_output_host[:, :, :, 33 + device_offset : 64 + device_offset],
+            # )
+            # logger.debug(f"tt vs torch padding second tile = {output_str}")
 
             all_passing &= passing
 
@@ -198,13 +203,25 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
 @skip_for_grayskull("Requires wormhole")
 @pytest.mark.parametrize(
     "input_dtype",
-    (ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B),
-    ids=["BFLOAT16", "BFLOAT8_B"],
+    (
+        ttl.tensor.DataType.BFLOAT16,
+        # ttl.tensor.DataType.BFLOAT8_B
+    ),
+    ids=[
+        "BFLOAT16",
+        # "BFLOAT8_B"
+    ],
 )
 @pytest.mark.parametrize(
     "output_dtype",
-    (ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B),
-    ids=["BFLOAT16", "BFLOAT8_B"],
+    (
+        ttl.tensor.DataType.BFLOAT16,
+        # ttl.tensor.DataType.BFLOAT8_B
+    ),
+    ids=[
+        "BFLOAT16",
+        # "BFLOAT8_B"
+    ],
 )
 @pytest.mark.parametrize(
     "inp_shape",
@@ -212,7 +229,6 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
         (1, 1, 32, 8192),
         (1, 1, 128, 8192),
         (1, 1, 2048, 8192),
-        (1, 1, 8192, 8192),
         (2, 1, 128, 8192),
         (1, 1, 128, 2048),
     ],

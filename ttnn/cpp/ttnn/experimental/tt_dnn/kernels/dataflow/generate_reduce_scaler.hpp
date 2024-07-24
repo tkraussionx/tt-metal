@@ -31,8 +31,13 @@ FORCE_INLINE void generate_reduce_scaler(const uint32_t cb_id, const uint32_t sc
         }
     }
 #else
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 512; i++) {
         ptr[i] = 0x3f803f80;
+        // if (i % 16 == 0) {
+        //     ptr[i] = 0x00003f80;
+        // } else {
+        //     ptr[i] = 0x00000000;
+        // }
     }
 #endif
 
