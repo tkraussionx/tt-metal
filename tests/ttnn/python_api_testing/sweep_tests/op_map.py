@@ -749,4 +749,8 @@ op_map = {
         "tt_op": ttnn_ops.where_bw,
         "pytorch_op": pytorch_ops.where_bw,
     },
+    "addcmul-bw": {
+        "tt_op": ttnn_ops.addcmul_bw,
+        "pytorch_op": pytorch_ops.addcmul_bw,
+    },
 }
