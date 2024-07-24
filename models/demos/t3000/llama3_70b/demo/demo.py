@@ -46,7 +46,7 @@ from models.demos.t3000.llama2_70b.demo.demo import main, construct_arg
     ids=("tt-70b-T3000", "meta-70b"),
 )
 @pytest.mark.parametrize(
-    "max_output_tokens, output_at_end, top_p, top_k, temperature",
+    "num_tokens, output_at_end, top_p, top_k, temperature",
     (
         (128, True, 1, 1, 1.0),
         (128, True, 0.9, 10, 1.0),
@@ -59,14 +59,6 @@ from models.demos.t3000.llama2_70b.demo.demo import main, construct_arg
     ids=("check_enabled", "check_disabled"),
 )
 @pytest.mark.parametrize(
-    "max_batch_size, max_context_len",
-    (
-        (32, 2048),
-        (16, 8192),
-    ),
-    ids=("short_context", "long_context"),
-)
-@pytest.mark.parametrize(
     "device_params", [{"trace_region_size": 17068032}], indirect=True
 )  # TODO: Update once trace fails
 def test_LlamaModel_demo(
@@ -75,7 +67,7 @@ def test_LlamaModel_demo(
     skip_model_load,
     num_layers,
     # Generation args
-    max_output_tokens,
+    num_tokens,
     prompts_file,
     output_at_end,
     top_p,
@@ -88,8 +80,6 @@ def test_LlamaModel_demo(
     decode_only,
     llama_version,
     ground_truth,
-    max_batch_size,
-    max_context_len,
     use_program_cache,
 ):
     logger.info("Running LlamaModel demo")
@@ -111,10 +101,8 @@ def test_LlamaModel_demo(
         ckpt_dir=ckpt_dir,
         tokenizer_path=tokenizer_path,
         skip_model_load=skip_model_load,
-        max_batch_size=max_batch_size,
-        max_kv_context_len=max_context_len,
         num_layers=num_layers,
-        max_output_tokens=max_output_tokens,
+        num_tokens=num_tokens,
         prompts_file=prompts_file,
         output_at_end=output_at_end,
         top_p=top_p,
