@@ -4,6 +4,7 @@
 
 #include "ttnn/operations/data_movement/transpose/transpose.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/copy/copy_op.hpp"
+#include "ttnn/operations/core/core.hpp"
 
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -96,7 +97,16 @@ Tensor permute_(const Tensor &a, std::vector<uint32_t> dims, const MemoryConfig&
     } else {
         TT_ASSERT(false, "Illegal permute args");
     }
-    return AutoFormat::format_output_tensor(output, out_shape, device, Layout::TILE);
+    const auto input_layout = a.get_layout();
+    if(input_layout == Layout::TILE and (out_shape[2] % 32 != 0 or out_shape[3] % 32 != 0)) {
+        return ttnn::to_layout(output, ttnn::ROW_MAJOR_LAYOUT, std::nullopt, std::nullopt, (Device *)nullptr);
+    }
+    else {
+        return output; 
+    }
+
+
+    //return AutoFormat::format_output_tensor(output, out_shape, device, Layout::TILE);
 }
 
 Tensor permute_launch(const Tensor &a, std::vector<std::int64_t> dims, const MemoryConfig& output_mem_config) {
