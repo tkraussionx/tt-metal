@@ -146,11 +146,6 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
     DeviceZoneScopedN("EXEC");
     switch (edm_channel.get_state()) {
         case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_ETH:
-            // DPRINT << "RX WAITING_FOR_ETH\n";
-            // Worked with v2 (x3)
-            // {
-            //     DeviceZoneScopedN("RX_ETH");
-            // }
             erisc::datamover::receiver_eth_accept_payload_sequence_v2(
                 edm_channel, num_receivers_complete, eth_transaction_ack_word_addr);
             receivers_in_progress =
@@ -159,13 +154,10 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
 
         case ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER:
             // Should be removable
-            // Worked with v2 (x2)
             erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
             break;
 
         case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_WORKER:
-            // DPRINT << "RX WAITING_FOR_WORKER\n";
-            // Worked with v2 (x2)
             erisc::datamover::receiver_noc_read_worker_completion_check_sequence_v2(
                 edm_channel, num_receivers_complete);
             receivers_in_progress =
@@ -174,26 +166,16 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
 
         //////////////
         case ChannelBufferT::STATE::SENDER_WAITING_FOR_WORKER:
-            // {
-            //     DeviceZoneScopedN("RX_WW");
-            // }
             erisc::datamover::sender_noc_receive_payload_ack_check_sequence_v2(
                 edm_channel, num_senders_complete);
             senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
             break;
 
         case ChannelBufferT::STATE::SENDER_READY_FOR_ETH_TRANSFER:
-            // DPRINT << "SENDER READY_FOR_ETH_TRANSFER\n";
-            // Worked with v2 (x7)
             erisc::datamover::sender_eth_send_data_sequence_v2(edm_channel);
             break;
 
         case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:  // Can remove due to short circuit
-            // DPRINT << "SENDER WAITING_FOR_ETH\n";
-            // Worked with v2 (x8)
-            // {
-            //     DeviceZoneScopedN("TX_ACK");
-            // }
             erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
                 edm_channel, num_senders_complete);
             senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
@@ -210,10 +192,6 @@ FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
 static constexpr bool use_optimized_edm_impl = true;
 
 void kernel_main() {
-    // DPRINT << "EDM (enable_sender | enable_receiver) " << uint32_t((enable_sender_side << 16) | enable_receiver_side)
-    // << ", on core " << (uint32_t)(my_y[0] << 16 | my_x[0]) << "\n";
-
-
     std::array<ChannelBufferT, num_senders + num_receivers> buffer_channels;
 
     // SENDER ARGS
@@ -305,7 +283,6 @@ void kernel_main() {
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
 
     constexpr uint32_t SWITCH_INTERVAL = 2000000000;
-    // constexpr uint32_t SWITCH_INTERVAL = 100000;
 
     uint32_t num_senders_complete = !enable_sender_side ? sender_num_channels : num_senders_with_no_work;
     uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : num_receivers_with_no_work;
@@ -331,56 +308,44 @@ void kernel_main() {
         while (senders_in_progress || receivers_in_progress) {
             {  // No more channels are advanceable so start checking through all of them to see if any are advanceable
 
-                // No channels stuck in advanceable state
-                // No message appear to be unacknowledged
-                // ^^^ Before merging sender and receiver state checks
+                uint8_t index = advanceable_index;
+                for (uint8_t i = 0; i < advanceable_oob_idx; i++) {
+                    ChannelBufferT &edm_channel = buffer_channels[i];
+                    if (edm_channel.is_done()) {
+                        continue;
+                    }
+                    bool advanceable = !edm_channel.is_done() && channel_can_make_progress(edm_channel);
+                    if (advanceable) {
+                        if (edm_channel.get_state() == ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH) {
+                            // Since we don't depend on tx q space being available, we can just complete this state
+                            // quickly right now If this ends up causing enough bubbles over eth, we can add them to
+                            // a separate list that we check after eth tx q is full or no other channels are
+                            // advanceable
+                            erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
+                                edm_channel, num_senders_complete);
+                            // Technically only need to do this for message count termination mode
+                            senders_in_progress =
+                                senders_in_progress && num_senders_complete != sender_num_channels;
+                        } else if (edm_channel.get_state() == ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER) {
+                            // Should be removable
+                            erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
+                            any_channels_advanceable = true;
+                            advanceable_channels[index] = i;
+                            index = index == advanceable_oob_idx - 1 ? 0 : index + 1;
 
-                DeviceZoneScopedN("CHECK_ADVANCEABLE");
-                {
-                    // DeviceZoneScopedN("EDM_CHECK_ADVANCEABLE_SENDER");
-                    uint8_t index = advanceable_index;
-                    for (uint8_t i = 0; i < advanceable_oob_idx; i++) {
-                        ChannelBufferT &edm_channel = buffer_channels[i];
-                        if (edm_channel.is_done()) {
-                            continue;
-                        }
-                        bool advanceable = !edm_channel.is_done() && channel_can_make_progress(edm_channel);
-                        if (advanceable) {
-                            if (edm_channel.get_state() == ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH) {
-                                // Since we don't depend on tx q space being available, we can just complete this state
-                                // quickly right now If this ends up causing enough bubbles over eth, we can add them to
-                                // a separate list that we check after eth tx q is full or no other channels are
-                                // advanceable
-                                // {
-                                //     DeviceZoneScopedN("TX_ACK");
-                                // }
-                                erisc::datamover::sender_eth_check_receiver_ack_sequence_v2(
-                                    edm_channel, num_senders_complete);
-                                // Technically only need to do this for message count termination mode
-                                senders_in_progress =
-                                    senders_in_progress && num_senders_complete != sender_num_channels;
-                            } else if (edm_channel.get_state() == ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER) {
-                                // Should be removable
-                                // Worked with v2 (x2)
-                                erisc::datamover::receiver_eth_notify_workers_payload_available_sequence_v2(edm_channel);
-                                any_channels_advanceable = true;
-                                advanceable_channels[index] = i;
-                                index = index == advanceable_oob_idx - 1 ? 0 : index + 1;
-
-                            } else if (!eth_txq_is_busy()) {
-                                execute_edm_channel_state(edm_channel,
-                                            num_senders_complete,
-                                            num_receivers_complete,
-                                            sender_num_channels,
-                                            receiver_num_channels,
-                                            senders_in_progress,
-                                            receivers_in_progress,
-                                            eth_transaction_ack_word_addr);
-                            } else {
-                                any_channels_advanceable = true;
-                                advanceable_channels[index] = i;
-                                index = index == advanceable_oob_idx - 1 ? 0 : index + 1;
-                            }
+                        } else if (!eth_txq_is_busy()) {
+                            execute_edm_channel_state(edm_channel,
+                                        num_senders_complete,
+                                        num_receivers_complete,
+                                        sender_num_channels,
+                                        receiver_num_channels,
+                                        senders_in_progress,
+                                        receivers_in_progress,
+                                        eth_transaction_ack_word_addr);
+                        } else {
+                            any_channels_advanceable = true;
+                            advanceable_channels[index] = i;
+                            index = index == advanceable_oob_idx - 1 ? 0 : index + 1;
                         }
                     }
                 }
@@ -388,7 +353,6 @@ void kernel_main() {
 
             while (any_channels_advanceable) {
                 idle_count = 0;
-                DeviceZoneScopedN("EDM_ADVANCE_OUTER");
                 if (!eth_txq_is_busy()) {
                     // DeviceZoneScopedN("EDM_ADVANCE");
                     uint8_t channel = advanceable_channels[advanceable_index];
@@ -444,147 +408,36 @@ void kernel_main() {
             idle_count++;
 
             if (idle_count > SWITCH_INTERVAL) {
-                // DeviceZoneScopedN("CTX_SWITCH");
-                // context_switches++;
-                // if (context_switches == (700 * (chip_id + 1)) && !printed) {
-                //     printed = true;
-                //     DPRINT << "STATE DUMP\n";
-                //     for (uint32_t i = 0; i < eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS; i++) {
-                //         uint8_t channel = buffer_channels[i].get_eth_transaction_channel();
-                //         DPRINT << "\tChip: " << (uint32_t)chip_id <<
-                //                 ", Ch " << (uint32_t)channel <<
-                //                 " St " << (uint32_t)buffer_channels[i].get_state() << "\n";
-
-                //         uint32_t ech_bytes_sent = erisc_info->channels[channel].bytes_sent;
-                //         uint32_t ech_receiver_ack = erisc_info->channels[channel].receiver_ack;
-                //         uint32_t edm_bytes_sent = *buffer_channels[i].channel_bytes_sent_address;
-                //         uint32_t edm_receiver_ack = *buffer_channels[i].channel_bytes_acked_address;
-
-                //         DPRINT << "\t\tech (bs|ra): " << HEX() << (uint32_t)((ech_bytes_sent << 16) | ech_receiver_ack) << DEC() <<"\n";
-                //         DPRINT << "\t\tedm_bf bs addr: " << HEX() << (uint32_t)(buffer_channels[i].channel_bytes_sent_address) << DEC() <<"\n";
-                //         DPRINT << "\t\tedm_bf ra addr: " << HEX() << (uint32_t)(buffer_channels[i].channel_bytes_acked_address) << DEC() <<"\n";
-                //         DPRINT << "\t\tedm_bf (bs|ra): " << HEX() << (uint32_t)((edm_bytes_sent << 16) | edm_receiver_ack) << DEC() <<"\n";
-                //         DPRINT << "\t\tlocal_semaphore: " << (uint32_t)(*buffer_channels[i].local_semaphore_address) <<"\n";
-                //     }
-                // }
                 idle_count = 0;
                 run_routing();
             }
         }
-        // DPRINT << "DONE MAIN LOOP@@\n";
     }
-    // else {
-        // uint32_t did_nothing_count = 0;
-        // auto send_recv_index = sender_receiver_index_t<num_senders, num_receivers>(
-        //     sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
-        // while (senders_in_progress || receivers_in_progress) {
-        //     DeviceZoneScopedN("EDM_LOOP_ITER");
-        //     bool did_something_sender = false;
-        //     bool did_something_receiver = false;
 
-        //     uint32_t num_receivers_complete_old = num_receivers_complete;
-        //     uint32_t num_senders_complete_old = num_senders_complete;
-        //     //////////////////////////////////////
-        //     // SENDER
-        //     if constexpr (enable_sender_side) {
-        //         ChannelBufferT &current_sender = buffer_channels[send_recv_index.real_index.sender];
-        //         switch (current_sender.get_state()) {
-        //             case ChannelBufferT::STATE::SENDER_WAITING_FOR_WORKER:
-        //             did_something_sender =
-        //                 erisc::datamover::sender_noc_receive_payload_ack_check_sequence(current_sender,
-        //                 num_senders_complete);
-        //             senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-        //             break;
+    {
+        // DeviceZoneScopedN("EDM_TEARDOWN");
+        for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
+            auto const &channel = buffer_channels[s];
+            // We need to explicitly check for channel send done because we may
+            // advance sender channel state as soon as we receive an ack. Since we
+            // may be the last active channel, and advance to done state just from ack
+            // from the receiver ("I got a payload"), then we need to wait for done
+            // at the very end here. Otherise if we invoke another erisc op back-to-back,
+            // we may mess up transaction state because it's possible for receiver of this
+            // op to send the completion done after that one has already started.
+            uint32_t wait_count = 0;
+            uint32_t wait_max = 50000;
+            while (!channel.eth_is_receiver_channel_send_done()) {
+                wait_count++;
+                if (wait_count > wait_max) {
 
-        //             case ChannelBufferT::STATE::SENDER_READY_FOR_ETH_TRANSFER:
-        //             did_something_sender = erisc::datamover::sender_eth_send_data_sequence(current_sender);
-        //                 break;
-
-        //             // case ChannelBufferT::STATE::SIGNALING_WORKER:
-        //             // did_something_sender = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
-        //             //                     current_sender, num_senders_complete);
-        //             // senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-        //             // break;
-
-        //             case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:
-        //             did_something_sender =
-        //                 erisc::datamover::sender_eth_check_receiver_ack_sequence(current_sender,
-        //                 num_senders_complete);
-        //             senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-        //             break;
-
-        //             default:
-        //             break;
-        //         };
-        //     }
-
-        //     //////////////////////////////////////
-        //     // RECEIVER
-        //     if constexpr (enable_receiver_side) {
-        //         ChannelBufferT &current_receiver = buffer_channels[send_recv_index.real_index.receiver];
-
-        //         switch (current_receiver.get_state()) {
-        //             case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_ETH:
-        //             did_something_receiver = erisc::datamover::receiver_eth_accept_payload_sequence(current_receiver,
-        //             num_receivers_complete, eth_transaction_ack_word_addr); receivers_in_progress =
-        //             receivers_in_progress && num_receivers_complete != receiver_num_channels; break;
-
-        //             case ChannelBufferT::STATE::RECEIVER_SIGNALING_WORKER:
-        //             did_something_receiver =
-        //                 erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(current_receiver);
-        //             break;
-
-        //             case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_WORKER:
-        //             did_something_receiver = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
-        //                                 current_receiver, num_receivers_complete);
-        //             receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;
-        //             break;
-
-        //             default:
-        //             break;
-        //         };
-        //     }
-        //     send_recv_index.increment();
-        //     //////////////////////////////////////
-
-        //     // Enabling this block as is (with all the "did_something"s, seems to cause a loss of about
-        //     // 0.5 GBps in throughput)
-        //     if (did_something_sender || did_something_receiver) {
-        //         did_nothing_count = 0;
-        //     } else {
-        //         if (did_nothing_count++ > SWITCH_INTERVAL) {
-        //             did_nothing_count = 0;
-        //             run_routing();
-        //         }
-        //     }
-        // }
-    // }
-
-    // // DPRINT << "TEARING DOWN\n";
-    // {
-    //     // DeviceZoneScopedN("EDM_TEARDOWN");
-    //     for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
-    //         auto const &channel = buffer_channels[s];
-    //         // We need to explicitly check for channel send done because we may
-    //         // advance sender channel state as soon as we receive an ack. Since we
-    //         // may be the last active channel, and advance to done state just from ack
-    //         // from the receiver ("I got a payload"), then we need to wait for done
-    //         // at the very end here. Otherise if we invoke another erisc op back-to-back,
-    //         // we may mess up transaction state because it's possible for receiver of this
-    //         // op to send the completion done after that one has already started.
-    //         uint32_t wait_count = 0;
-    //         uint32_t wait_max = 50000;
-    //         while (!channel.eth_is_receiver_channel_send_done()) {
-    //             // wait_count++;
-    //             // if (wait_count > wait_max) {
-
-    //             //     DEBUG_STATUS("STK");
-    //             //     run_routing();
-    //             //     wait_count = 0;
-    //             // }
-    //         }
-    //     }
-    // }
+                    DEBUG_STATUS("STK");
+                    run_routing();
+                    wait_count = 0;
+                }
+            }
+        }
+    }
 
     // DPRINT << "DONE FINAL TEARDOWN " << chip_id << "\n";
     DEBUG_STATUS("DONE");

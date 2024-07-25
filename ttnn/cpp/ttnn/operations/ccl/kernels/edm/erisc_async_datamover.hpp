@@ -57,34 +57,31 @@ class ChannelBuffer final {
     enum STATE : uint8_t {
         DONE = 0,
 
-        // // For sender: means we are ready to tell the worker(s) that the buffer is available for writing into
-        // //
-        // SIGNALING_WORKER,
-
-        // // For sender: we are waiting for the payload to arrive in L1; we are checking local semaphore for worker
-        // // completion For receiver: we are waiting for worker to complete pull of payload from L1; we are checking local
-        // // semaphore for worker completion
-        // WAITING_FOR_WORKER,
-
-        // // For sender: means workers have signalled (via semaphores) that the buffer payload is
-        // //             ready in L1
-        // // For receiver:
-        // READY_FOR_ETH_TRANSFER,
-
-        // // For sender: means we are waiting for ack from receiver that payload was received
-        // // For receiver: means we are waitinf for a payload from sender
-        // WAITING_FOR_ETH,
-
-                // For sender: means we are ready to tell the worker(s) that the buffer is available for writing into
-        //
+        // we are ready to tell the worker(s) that the buffer is available for writing into
         SENDER_SIGNALING_WORKER,
+
+        // we are waiting for the payload to arrive in L1; we are checking local semaphore for worker
+        // completion
         SENDER_WAITING_FOR_WORKER,
+
+        // means workers have signalled (via semaphores) that the buffer payload is
         SENDER_READY_FOR_ETH_TRANSFER,
+
+        // means we are waiting for ack from receiver that payload was received
         SENDER_WAITING_FOR_ETH,
 
+        // We received a packet from ethernet and we can signal the downstream worker to signal
+        // packet availability
         RECEIVER_SIGNALING_WORKER,
+
+        // we are waiting for worker to complete pull of payload from L1; we are checking local
+        // semaphore for worker completion
         RECEIVER_WAITING_FOR_WORKER,
+
+        // Ready to accept the next packet from sender
         RECEIVER_READY_FOR_ETH_TRANSFER,
+
+        // means we are waitinf for a payload from sender
         RECEIVER_WAITING_FOR_ETH,
     };
 
@@ -137,8 +134,6 @@ class ChannelBuffer final {
             : TERMINATION_MODE == ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED
                 ? STATE::RECEIVER_SIGNALING_WORKER
                 : STATE::RECEIVER_SIGNALING_WORKER),
-                // ? STATE::RECEIVER_WAITING_FOR_ETH
-                // : STATE::RECEIVER_WAITING_FOR_ETH),
         is_sender_completion_pending(false),
         is_sender_side(is_sender_side) {
         clear_local_semaphore();
@@ -200,11 +195,7 @@ class ChannelBuffer final {
 
     [[nodiscard]] STATE get_state() const { return this->state; }
 
-    FORCE_INLINE void goto_state(STATE s) {
-
-        // DPRINT << "EDMS goto " << (uint32_t)s << ": " << this->get_eth_transaction_channel() << "\n";
-        this->state = s;
-        }
+    FORCE_INLINE void goto_state(STATE s) { this->state = s; }
 
     [[nodiscard]] FORCE_INLINE bool is_waiting_for_workers_core() const {
         return this->state == STATE::WAITING_FOR_WORKER;
@@ -221,7 +212,6 @@ class ChannelBuffer final {
     [[nodiscard]] FORCE_INLINE bool is_done() const { return this->state == STATE::DONE; }
 
     [[nodiscard]] FORCE_INLINE uint32_t get_eth_transaction_channel() const {
-        // ASSERT(this->eth_transaction_channel < eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS);
         return this->eth_transaction_channel;
     }
     [[nodiscard]] FORCE_INLINE std::size_t get_remote_eth_buffer_address() const { return this->address; }
@@ -246,24 +236,23 @@ class ChannelBuffer final {
     FORCE_INLINE void eth_clear_sender_channel_ack() const { *this->channel_bytes_acked_address = 0; /*erisc_info->channels[channel].receiver_ack = 0;*/ }
     FORCE_INLINE void eth_receiver_channel_ack(uint32_t eth_transaction_ack_word_addr) const {
         if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
-        // assert(channel < 4);
-        *this->channel_bytes_acked_address = 1;
-        ASSERT(reinterpret_cast<volatile uint32_t*>(eth_transaction_ack_word_addr)[0] == 1);
-        reinterpret_cast<volatile uint32_t*>(eth_transaction_ack_word_addr)[1] = 1;
-        // Make sure we don't alias the erisc_info eth_channel_sync_t
-        ASSERT(eth_transaction_ack_word_addr != ((uint32_t)(this->channel_bytes_acked_address)) >> 4);
-        internal_::eth_send_packet(
-            0,
-            eth_transaction_ack_word_addr >> 4,
-            ((uint32_t)(this->channel_bytes_acked_address)) >> 4,
-            1);
+
+            *this->channel_bytes_acked_address = 1;
+            ASSERT(reinterpret_cast<volatile uint32_t*>(eth_transaction_ack_word_addr)[0] == 1);
+            reinterpret_cast<volatile uint32_t*>(eth_transaction_ack_word_addr)[1] = 1;
+            // Make sure we don't alias the erisc_info eth_channel_sync_t
+            ASSERT(eth_transaction_ack_word_addr != ((uint32_t)(this->channel_bytes_acked_address)) >> 4);
+            internal_::eth_send_packet(
+                0,
+                eth_transaction_ack_word_addr >> 4,
+                ((uint32_t)(this->channel_bytes_acked_address)) >> 4,
+                1);
         } else {
             ::eth_receiver_channel_ack(this->get_eth_transaction_channel(), eth_transaction_ack_word_addr);
         }
     }
     FORCE_INLINE void eth_receiver_channel_done() const {
         if constexpr (EDM_CONFIG::MERGE_CHANNEL_SYNC_AND_PAYLOAD) {
-                // assert(channel < 4);
             *this->channel_bytes_sent_address = 0;
             *this->channel_bytes_acked_address = 0;
             internal_::eth_send_packet(
@@ -446,28 +435,20 @@ template <typename EDM_CONFIG>
 FORCE_INLINE bool channel_can_make_progress(ChannelBuffer<EDM_CONFIG> const &edm_channel) {
     switch (edm_channel.get_state()) {
         case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_READY_FOR_ETH_TRANSFER:
-            // checked condition
             return edm_channel.eth_is_receiver_channel_send_done();
         case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_WAITING_FOR_ETH:
-            // checked condition
             return edm_channel.eth_is_receiver_channel_send_acked() || edm_channel.eth_is_receiver_channel_send_done();
 
         case ChannelBuffer<EDM_CONFIG>::STATE::SENDER_WAITING_FOR_WORKER: // fallthrough
             return edm_channel.is_local_semaphore_full();
         case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_WAITING_FOR_WORKER:
-            // checked condition
             return edm_channel.is_local_semaphore_full();
-            // return edm_channel.is_local_semaphore_full();
 
-        // case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_WAITING_FOR_ETH:
         case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_SIGNALING_WORKER:
-            // checked condition
             return edm_channel.eth_bytes_are_available_on_channel();
-            // checked condition
-        // case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_SIGNALING_WORKER: return true;
+
         case ChannelBuffer<EDM_CONFIG>::STATE::RECEIVER_WAITING_FOR_ETH: return true;
             default :
-                // DPRINT << "ERR S \n";// << (uint32_t)sender_channel.get_state() << "\n";
                 return false;
     }
 }
