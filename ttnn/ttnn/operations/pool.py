@@ -23,7 +23,7 @@ from ttnn.operations.conv.sliding_window_op_utils import (
     calculate_memory_config,
 )
 
-from typing import Union, Tuple, Dict
+from typing import Union, Tuple, Dict, List
 
 from tt_lib.utils import _nearest_32
 import tt_lib as ttl
@@ -69,6 +69,35 @@ max_pool2d = ttnn.register_python_operation(name="ttnn.max_pool2d", golden_funct
 
 max_pool2d_legacy = ttnn.register_python_operation(name="ttnn.max_pool2d_legacy", golden_function=golden_maxpool2d)(
     ttnn._ttnn.operations.pool.max_pool2d_legacy
+)
+
+
+def golden_maxpool2d_new(
+    input_tensor: ttnn.Tensor,
+    batch_size: int,
+    input_h: int,
+    input_w: int,
+    kernel_size: List[int],
+    stride: List[int],
+    padding: List[int],
+    dilation: List[int],
+    *,
+    device: ttnn.Device,
+):
+    import torch
+
+    kernel_size = (kernel_size[0], kernel_size[1])
+    stride = (stride[0], stride[1])
+    padding = (padding[0], padding[1])
+    dilation = (dilation[0], dilation[1])
+
+    return torch.nn.functional.max_pool2d(
+        input_tensor, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
+    )
+
+
+max_pool2d_new = ttnn.register_python_operation(name="ttnn.max_pool2d_new", golden_function=golden_maxpool2d_new)(
+    ttnn._ttnn.operations.pool.max_pool2d_new
 )
 
 

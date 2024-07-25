@@ -1104,6 +1104,12 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(
         nblocks);
 }
 
+}  // namespace tt_metal
+}  // namespace tt
+
+
+namespace ttnn::operations::pool {
+
 operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2_new(
     const Tensor& input,
     Tensor& output,
@@ -1133,7 +1139,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2_new(
     auto reader_indices_on_device =
         sliding_window::move_config_tensor_to_device(reader_indices, parallel_config, is_block_sharded, input.device());
 
-    detail::AddConfigBuffer(program, reader_indices_on_device.device_buffer());
+    tt::tt_metal::detail::AddConfigBuffer(program, reader_indices_on_device.device_buffer());
 
     auto in_n = sliding_window_config.batch_size_;
     auto in_h = sliding_window_config.input_hw_.first;
@@ -1169,5 +1175,4 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2_new(
         1);
 }
 
-}  // namespace tt_metal
-}  // namespace tt
+} // namespace ttnn::operations::pool

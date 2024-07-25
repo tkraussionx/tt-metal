@@ -13,12 +13,50 @@
 #include "ttnn/types.hpp"
 
 namespace py = pybind11;
+
 namespace ttnn {
 namespace operations {
-namespace maxpool {
 
+namespace pool {
 
 void py_module(py::module& module) {
+
+    module.def(
+        "max_pool2d_new",
+        &max_pool2d_new,
+        py::arg("input_tensor").noconvert(),
+        py::arg("batch_size").noconvert(),
+        py::arg("input_h").noconvert(),
+        py::arg("input_w").noconvert(),
+        py::arg("channels").noconvert(),
+        py::arg("kernel_size").noconvert(),
+        py::arg("stride").noconvert(),
+        py::arg("padding").noconvert(),
+        py::arg("dilation").noconvert(),
+        py::kw_only(),
+        py::arg("device").noconvert(),
+        R"doc(
+        Max Pool 2D
+        +-------------------+-------------------------------+---------------+-------------+----------+
+        | Argument          | Description                   | Data type     | Valid range | Required |
+        +===================+===============================+===============+=============+==========+
+        | input             | Input activations tensor      | Tensor        |             | Yes      |
+        | in_n              | Input nbatch                  | Tensor        |             | Yes      |
+        | in_h              | Input height                  | Tensor        |             | Yes      |
+        | in_w              | Input width                   | Tensor        |             | Yes      |
+        | kernel_h          | kernel window height          | uint32_t      |             | Yes      |
+        | kernel_w          | kernel window width           | uint32_t      |             | Yes      |
+        | stride_h          | stride in height dim          | uint32_t      |             | No       |
+        | stride_w          | stride in width dim           | uint32_t      |             | No       |
+        | pad_h             | padding in height dim         | uint32_t      |             | No       |
+        | pad_w             | padding in width dim          | uint32_t      |             | No       |
+        | dilation_h        | kernel dilation in height dim | uint32_t      |             | No       |
+        | dilation_w        | kernel dilation in width dim  | uint32_t      |             | No       |
+        | memory_config     | Output memory config          | MemoryConfig  |             | No       |
+        +-------------------+-------------------------------+---------------+-------------+----------+
+    )doc");
+
+
     module.def(
         "max_pool2d",
         &max_pool2d,
