@@ -16,8 +16,20 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
 
+#include "debug/dprint.h"
+
 
 namespace NAMESPACE {
+inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
+    DPRINT << "======" << ENDL();
+    for (int32_t r = 0; r < 32; ++ r) {
+    //for (int32_t r = 0; r < 1; ++ r) {
+        SliceRange sr = SliceRange{.h0 = r, .h1 = r+1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+        DPRINT << (uint)r << " " << TileSlice(cb_id, tile_id, sr, true, untilize) << ENDL();
+    }
+    DPRINT << "++++++" << ENDL();
+}
+
 template<uint32_t in0, uint32_t in1, uint32_t num_tiles>
 void max_block_inplace() {
     // inputs come in full, outputs go out full
@@ -72,6 +84,44 @@ void reduce_c() {
     }
 
    reduce_revert_delta<reduce_dim>(out_cb);
+   UNPACK(tensix_sync()); // Workaround for issue #9370
+}
+
+template<uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols>
+void reduce_sum_mm() {
+    // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
+    // Precondition: scale_cb has 1 produced
+    // Precondition: out_cb has rows free
+    // Postcondition: in0_cb has rows*cols produced
+    // Precondition: scale_cb has 1 produced
+    // Postcondition: out_cb has rows produced
+
+    mm_init(in0_cb, scale_cb, out_cb);
+
+    const uint32_t num_tiles = rows * cols;
+    cb_wait_front(scale_cb, 1);
+    cb_wait_front(in0_cb, num_tiles);
+    cb_reserve_back(out_cb, rows);
+
+    constexpr uint32_t reduce_dst_idx = 0;
+
+    for (uint32_t i = 0; i < rows; i++) {
+        acquire_dst(tt::DstMode::Half);
+        // mm_init_short(in0_cb, scale_cb, 0);
+        for (uint32_t j = 0; j < cols; j++) {
+            // reduce_tile<pool_type, reduce_dim>(in0_cb, scale_cb, i*cols+j, 0, reduce_dst_idx);
+            matmul_tiles(in0_cb, scale_cb, i*cols+j, 0, reduce_dst_idx, false);
+        }
+
+        cb_reserve_back(out_cb, 1);
+        pack_tile(reduce_dst_idx, out_cb);
+        // print_full_tile(in0_cb, 0);
+        // print_full_tile(scale_cb, 0);
+        // print_full_tile(out_cb, 0);
+        cb_push_back(out_cb, 1);
+        release_dst(tt::DstMode::Half);
+    }
+
    UNPACK(tensix_sync()); // Workaround for issue #9370
 }
 
@@ -436,7 +486,8 @@ void MAIN {
                     sub_exp_block_bcast_cols_inplace<cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t>();
 
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
-                    reduce_c<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
+                    // reduce_c<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
+                    reduce_sum_mm<cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
 
                     /* OUT_IM = QK @ V_CHUNK */
                     matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w, false /*transpose*/);

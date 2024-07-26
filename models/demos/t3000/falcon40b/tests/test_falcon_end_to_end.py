@@ -418,10 +418,11 @@ def run_test_FalconCausalLM_end_to_end(
     (
         1,
         4,
+        6,
         12,
         60,
     ),
-    ids=["layers_1", "layers_4", "layers_12", "layers_60"],
+    ids=["layers_1", "layers_4", "layers_6", "layers_12", "layers_60"],
 )
 @pytest.mark.parametrize(
     "model_version",
