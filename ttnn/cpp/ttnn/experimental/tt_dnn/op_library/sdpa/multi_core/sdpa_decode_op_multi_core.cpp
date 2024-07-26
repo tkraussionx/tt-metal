@@ -167,12 +167,13 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
     // create core group, which is a 1D list of cores sorted by reducer1, worker, ..., reducer2, worker, ..., reducer n, worker, ...
     std::vector<CoreCoord> core_group;
+    std::vector<CoreCoord> core_group_idle;
     uint32_t num_reducers = B;
     if (is_q_sharded || is_output_sharded) {
         int reducer_idx = 0;
         int worker_idx = num_reducers;
 
-        for (int i = 0; i < num_active_cores; ++i) {
+        for (int i = 0; i < num_cores_available; ++i) {
             CoreCoord core;
             if (i%num_cores_per_batch==0){
                 core = {reducer_idx % grid_size.x, reducer_idx / grid_size.x};
@@ -182,12 +183,20 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
                 core = {worker_idx % grid_size.x, worker_idx / grid_size.x};
                 worker_idx++;
             }
-            core_group.push_back(core);
+            if (i < num_active_cores) {
+                core_group.push_back(core);
+            } else {
+                core_group_idle.push_back(core);
+            }
         }
     } else {
         for (int i = 0; i < num_active_cores; ++i) {
             CoreCoord core = {i % grid_size.x, i / grid_size.x};
-            core_group.push_back(core);
+            if (i < num_active_cores) {
+                core_group.push_back(core);
+            } else {
+                core_group_idle.push_back(core);
+            }
         }
     }
 
@@ -412,6 +421,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     }
     auto cb_out4_id = CreateCircularBuffer(program, core_grid, c_out4_config);
 
+    // *** Create Kernels and Compile Time Args ***
     // Reduce ops need to multiply by a scalar. We always want to multiply by 1.0f
     bfloat16 bfloat_identity_scalar = bfloat16(1.0f);
     uint32_t packed_identity_scalar = pack_two_bfloat16_into_uint32({bfloat_identity_scalar, bfloat_identity_scalar});
@@ -560,6 +570,21 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
         SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
     }
+    if (num_active_cores < num_cores_available) {
+        // Set the rest of the cores to idle
+        for (uint32_t i = 0; i < core_group_idle.size(); ++i) {
+            CoreCoord core = core_group_idle[i];
+            // reader runtime args
+            std::vector<uint32_t> reader_rt_args = { 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+            // writer runtime args
+            std::vector<uint32_t> writer_rt_args = { 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+            SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
+            SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
+            SetRuntimeArgs(program, compute_kernels_id, core, { 0, 0, 0, 0});
+        }
+    }
 
     auto override_runtime_arguments_callback = [
         num_active_cores,
@@ -571,9 +596,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         is_output_sharded,
         cb_out4_id,
         B,
-        k_chunk_size,
-        reduce_core_physical_xs,
-        reduce_core_physical_ys
+        k_chunk_size
         ]
     (
         const void* operation,
@@ -610,6 +633,10 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
         int batch_id = -1;
 
+        auto& reader_args_by_core = GetRuntimeArgs(program, reader_kernels_id);
+        auto& writer_args_by_core = GetRuntimeArgs(program, writer_kernels_id);
+        auto& compute_args_by_core = GetRuntimeArgs(program, compute_kernels_id);
+
         // Set rt args
         for (uint32_t i = 0; i < num_active_cores; ++i) {
             CoreCoord core = core_group[i];
@@ -627,19 +654,37 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             k_chunk_start_i = all_chunk_assignments[2*i];
             k_chunk_end_i = all_chunk_assignments[2*i+1];
 
+            auto& reader_args = reader_args_by_core[core.x][core.y];
+            auto& writer_args = writer_args_by_core[core.x][core.y];
+            auto& compute_args = compute_args_by_core[core.x][core.y];
+
             // reader runtime args
-            std::vector<uint32_t> reader_rt_args = { q_addr, k_addr, v_addr, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, !do_reduce};
-            reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
-            reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
+            reader_args[0] = q_addr;
+            reader_args[1] = k_addr;
+            reader_args[2] = v_addr;
+            reader_args[3] = PSt_i;
+            reader_args[4] = k_num_chunks_i;
+            reader_args[5] = k_chunk_start_i;
+            reader_args[6] = k_chunk_end_i;
+            reader_args[7] = cur_batch;
+            reader_args[8] = !do_reduce;
 
             // writer runtime args
-            std::vector<uint32_t> writer_rt_args = { out_addr, cur_pos_i, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, worker_id, !do_reduce};
-            writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
-            writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
+            writer_args[0] = out_addr;
+            writer_args[1] = cur_pos_i;
+            writer_args[2] = PSt_i;
+            writer_args[3] = k_num_chunks_i;
+            writer_args[4] = k_chunk_start_i;
+            writer_args[5] = k_chunk_end_i;
+            writer_args[6] = cur_batch;
+            writer_args[7] = worker_id;
+            writer_args[8] = !do_reduce;
 
-            SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
-            SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
-            SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
+            // compute runtime args
+            compute_args[0] = k_num_chunks_i;
+            compute_args[1] = k_chunk_start_i;
+            compute_args[2] = k_chunk_end_i;
+            compute_args[3] = do_reduce;
         }
 
         if (is_output_sharded) {
