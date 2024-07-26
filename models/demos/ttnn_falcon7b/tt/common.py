@@ -150,9 +150,9 @@ def create_attention_mask(
             attention_mask.expand(-1, num_attention_heads, -1, -1),
             dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
-            # device=device,
+            device=device,
             mesh_mapper=mesh_mapper,
-            # use_device_tilizer=True,
+            use_device_tilizer=True,
         )
     elif llm_mode == "decode":
         q_len, kv_len = sequence_length, kv_cache_length + 1
@@ -177,9 +177,9 @@ def create_attention_mask(
             (attention_mask_padded.transpose(0, 2)).expand(-1, num_attention_heads, -1, -1),
             dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
-            # device=device,
+            device=device,
             mesh_mapper=mesh_mapper,
-            # use_device_tilizer=True,
+            use_device_tilizer=True,
         )
     else:
         raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")

@@ -25,7 +25,7 @@ from models.demos.ttnn_falcon7b.tt.common import (
 
 from loguru import logger
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor
-
+from tqdm import tqdm
 
 PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 
@@ -60,13 +60,13 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        32,
+        16,
     ],
     indirect=True,
 )
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 25), (False, 100)),
+    ((True, 20000), (False, 100)),
 )
 def test_falcon_causal_lm(
     device_mesh,
@@ -191,8 +191,7 @@ def test_falcon_causal_lm(
         ).squeeze(1)
 
         start = time.time()
-        for loop in range(num_loops):
-            print("Running loop: " + str(loop))
+        for loop in tqdm(range(10000)):
             tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
                 llm_mode, model_input, kv_cache_len, num_input_tokens=seq_len
             )
@@ -235,7 +234,7 @@ def test_falcon_causal_lm(
             tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim), device=device_mesh
         ).squeeze(1)
         start = time.time()
-        for loop in range(num_loops):
+        for loop in tqdm(range(10000)):
             tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
                 llm_mode, model_input, kv_cache_len, num_input_tokens=kv_len
             )

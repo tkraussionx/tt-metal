@@ -172,6 +172,9 @@ std::map<chip_id_t, Device *> CreateDevices(
     if (is_galaxy) {
         TT_FATAL(num_hw_cqs < 2, "Multiple Command Queues are not Currently Supported on Galaxy Systems");
     }
+    for (const auto& id : device_ids) {
+        std::cout << id << " : " << RING_BUFFER_ADDR << " : " << DISPATCH_MESSAGE_ADDR <<  std::endl;
+    }
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size, trace_region_size);
     std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     std::map<chip_id_t, Device *> ret_devices;

@@ -56,8 +56,6 @@ int get_cpu_core_for_device_worker_thread(
                 core_assigned_to_device = cpu_cores_per_numa_node.at(0).at((mmio_controlled_device_id * 2) % num_cores_in_numa_node);
                 cpu_core_assigned_to_completion_queue = cpu_cores_per_numa_node.at(0).at((mmio_controlled_device_id * 2 + 1) % num_cores_in_numa_node);
             }
-            std::cout << "Device: " << mmio_controlled_device_id << " mapped to: " << numa_node_for_device << " on core: " << core_assigned_to_device << std::endl;
-            std::cout << "Device: " << mmio_controlled_device_id << " cq reader mapped to: " << numa_node_for_device << " on core: " << cpu_core_assigned_to_completion_queue << std::endl;
         } else {
             // NUMA node reported by UMD does not exist on host. Use round-robin binding policy for this worker thread.
             log_warning(
@@ -160,7 +158,6 @@ void DevicePool::activate_device(chip_id_t id) {
     if (this->devices[id] == nullptr) {
         log_debug(tt::LogMetal, "DevicePool new device {}", id);
         int core_assigned_to_device = this->device_to_core_map.at(id);
-        int core_assigned_to_cq = this->cq_reader_to_core_map.at(id);
         auto dev =
             new Device(id, this->num_hw_cqs, this->l1_small_size, this->trace_region_size, this->l1_bank_remap, false, core_assigned_to_device, core_assigned_to_device);
             dev->update_dispatch_cores_for_multi_cq_eth_dispatch();
