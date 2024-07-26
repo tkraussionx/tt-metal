@@ -21,19 +21,19 @@ FORCE_INLINE void generate_reduce_mm_scaler(const uint32_t cb_id, const uint32_t
     }
     noc_async_read_barrier();
 
-    // for (int i = 0; i < 512; i++) {
-    //     ptr[i] = 0x3f803f80;
-    // }
-
-    // First row ones, zeros elsewhere
-    if (scaler != 0) {
-        for (int k = 0; k < 2; ++k) {
-            uint32_t idx = k << 7;
-            for (int j = 0; j < 8; ++j) {
-                ptr[idx + j] = scaler;
-            }
-        }
+    for (int i = 0; i < 512; i++) {
+        ptr[i] = 0x3f803f80;
     }
+
+    // // First row ones, zeros elsewhere
+    // if (scaler != 0) {
+    //     for (int k = 0; k < 2; ++k) {
+    //         uint32_t idx = k << 7;
+    //         for (int j = 0; j < 8; ++j) {
+    //             ptr[idx + j] = scaler;
+    //         }
+    //     }
+    // }
 
     // // First column ones, zeros elsewhere
     // uint32_t scaler_single = scaler >> 16;
