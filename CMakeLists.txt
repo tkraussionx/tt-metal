@@ -72,6 +72,24 @@ option(ENABLE_CODE_TIMERS "Enable code timers" OFF)
 option(TT_METAL_VERSIM_DISABLED "Disable TT_METAL_VERSIM" ON)
 option(ENABLE_TRACY "Enable Tracy Profiling" OFF)
 
+set(SANITIZERS_LIST
+    "address"
+    "thread"
+    "undefined"
+)
+option(ENABLE_SANITIZER "Enable Sanitizer [${SANITIZERS_LIST}]" "")
+
+# Check if the ENABLE_SANITIZER value is in the SANITIZERS_LIST
+if(ENABLE_SANITIZER)
+    list(FIND SANITIZERS_LIST ${ENABLE_SANITIZER} _index)
+    if(_index EQUAL -1)
+        message(FATAL_ERROR "Invalid value for ENABLE_SANITIZER: ${ENABLE_SANITIZER}. Choose from ${SANITIZERS_LIST}.")
+    endif()
+
+    add_compile_options(-fsanitize=${ENABLE_SANITIZER})
+    add_link_options(-fsanitize=${ENABLE_SANITIZER})
+endif()
+
 # Default to building everything as a shared lib
 if($ENV{TT_METAL_CREATE_STATIC_LIB})
     option(BUILD_SHARED_LIBS "Create shared library" OFF)

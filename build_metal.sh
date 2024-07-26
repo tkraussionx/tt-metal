@@ -57,13 +57,15 @@ show_help() {
     echo "  -e  Enable CMAKE_EXPORT_COMPILE_COMMANDS."
     echo "  -c  Enable ccache for the build."
     echo "  -b  Set the build type. Default is Release. Other options are Debug, RelWithDebInfo, and CI."
+    echo "  -s sanitizer      Enable sanitizer (options: address, thread, undefined)"
 }
 
 # Parse CLI options
 export_compile_commands="OFF"
 enable_ccache="OFF"
+enable_sanitizer=""
 build_type="Release"
-while getopts "hecb:" opt; do
+while getopts "hecb:s:" opt; do
     case ${opt} in
         h )
             show_help
@@ -77,6 +79,9 @@ while getopts "hecb:" opt; do
             ;;
         b )
             build_type="$OPTARG"
+            ;;
+        s )
+            enable_sanitizer="$OPTARG"
             ;;
         \? )
             show_help
@@ -92,7 +97,7 @@ fi
 echo "Building tt-metal in $build_type mode"
 mkdir -p build_$build_type
 ln -nsf build_$build_type build
-cmake_args="-B build_$build_type -G Ninja -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_EXPORT_COMPILE_COMMANDS=$export_compile_commands"
+cmake_args="-B build_$build_type -G Ninja -DCMAKE_BUILD_TYPE=$build_type -DENABLE_SANITIZER=$enable_sanitizer -DCMAKE_EXPORT_COMPILE_COMMANDS=$export_compile_commands"
 
 if [ "$enable_ccache" = "ON" ]; then
     cmake_args="$cmake_args -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
