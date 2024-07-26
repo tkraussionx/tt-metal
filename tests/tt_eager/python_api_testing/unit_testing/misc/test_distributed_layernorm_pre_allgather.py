@@ -160,12 +160,12 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
 
         all_passing &= passing
 
-        # # Check if zeros are same
-        # passing, output_str = comp_equal(
-        #     out_torch[:, :, :, 1 + device_offset : 32 + device_offset],
-        #     tt_output_host[:, :, :, 1 + device_offset : 32 + device_offset],
-        # )
-        # logger.debug(f"tt vs torch padding first tile = {output_str}")
+        # Check if zeros are same
+        passing, output_str = comp_equal(
+            out_torch[:, :, :, 1 + device_offset : 32 + device_offset],
+            tt_output_host[:, :, :, 1 + device_offset : 32 + device_offset],
+        )
+        logger.debug(f"tt vs torch padding first tile = {output_str}")
 
         all_passing &= passing
 
@@ -188,12 +188,12 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, input_dtype, output_d
 
             all_passing &= passing
 
-            # # Check if zeros are same
-            # passing, output_str = comp_equal(
-            #     out_torch[:, :, :, 33 + device_offset : 64 + device_offset],
-            #     tt_output_host[:, :, :, 33 + device_offset : 64 + device_offset],
-            # )
-            # logger.debug(f"tt vs torch padding second tile = {output_str}")
+            # Check if zeros are same
+            passing, output_str = comp_equal(
+                out_torch[:, :, :, 33 + device_offset : 64 + device_offset],
+                tt_output_host[:, :, :, 33 + device_offset : 64 + device_offset],
+            )
+            logger.debug(f"tt vs torch padding second tile = {output_str}")
 
             all_passing &= passing
 

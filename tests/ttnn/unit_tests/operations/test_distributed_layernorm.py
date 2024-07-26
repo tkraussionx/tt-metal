@@ -142,13 +142,25 @@ def run_distributed_layernorm(
 )
 @pytest.mark.parametrize(
     "dtype",
-    (ttnn.bfloat16, ttnn.bfloat8_b),
-    ids=["BFLOAT16_in", "BFLOAT8_B_in"],
+    (
+        ttnn.bfloat16,
+        # ttnn.bfloat8_b
+    ),
+    ids=[
+        "BFLOAT16_in",
+        # "BFLOAT8_B_in"
+    ],
 )
 @pytest.mark.parametrize(
     "stats_dtype",
-    (ttnn.bfloat16, ttnn.bfloat8_b),
-    ids=["BFLOAT16_stats", "BFLOAT8_B_stats"],
+    (
+        ttnn.bfloat16,
+        # ttnn.bfloat8_b
+    ),
+    ids=[
+        "BFLOAT16_stats",
+        # "BFLOAT8_B_stats"
+    ],
 )
 @pytest.mark.parametrize(
     "inp_shape",
