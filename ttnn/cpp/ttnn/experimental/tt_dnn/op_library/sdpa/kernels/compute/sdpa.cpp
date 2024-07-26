@@ -116,7 +116,7 @@ void reduce_sum_mm() {
         cb_reserve_back(out_cb, 1);
         pack_tile(reduce_dst_idx, out_cb);
         // print_full_tile(in0_cb, 0);
-        // print_full_tile(scale_cb, 0);
+        // print_full_tile(scale_cb, 0, 1);
         // print_full_tile(out_cb, 0);
         cb_push_back(out_cb, 1);
         release_dst(tt::DstMode::Half);
@@ -415,6 +415,7 @@ void MAIN {
     constexpr uint32_t cb_mask_in = tt::CB::c_in3;
     constexpr uint32_t cb_scale_in = tt::CB::c_in4;
     constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
+    constexpr uint32_t cb_identity_scale_mm_in = tt::CB::c_in6;
 
     constexpr uint32_t cb_qk_im = tt::CB::c_intermed0;
     constexpr uint32_t cb_out_im = tt::CB::c_intermed1;
@@ -487,7 +488,7 @@ void MAIN {
 
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
                     // reduce_c<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
-                    reduce_sum_mm<cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
+                    reduce_sum_mm<cb_qk_im, cb_identity_scale_mm_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
 
                     /* OUT_IM = QK @ V_CHUNK */
                     matmul_blocks(cb_qk_im, cb_v_in, cb_out_im, Sq_chunk_t, DHt, Sk_chunk_t, out_num_blocks, out_in0_num_subblocks, out_in1_num_subblocks, out_in0_block_w, out_subblock_h, out_subblock_w, false /*transpose*/);

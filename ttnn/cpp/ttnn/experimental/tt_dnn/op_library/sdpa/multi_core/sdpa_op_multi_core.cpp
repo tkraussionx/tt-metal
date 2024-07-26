@@ -288,7 +288,7 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
     defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
     defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
-    defines["REDUCE_ROW_SUM_VIA_MM"] = "1";
+    // defines["REDUCE_ROW_SUM_VIA_MM"] = "1";
     uint32_t balanced_q_parallel = (q_per_core*q_parallel_factor == q_num_chunks) && (q_per_core % 2 == 0);
     if (balanced_q_parallel) {
         defines["BALANCED_Q_PARALLEL"] = "1";
@@ -378,6 +378,10 @@ operation::ProgramWithCallbacks sdpa_multi_core(
     // identity scale input
     auto c_in5_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in5, scalar_df}}).set_page_size(CB::c_in5, scalar_tile_size);
     auto cb_in5_id = CreateCircularBuffer(program, core_grid, c_in5_config);
+
+    // identity scale input mm
+    auto c_in6_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{CB::c_in6, scalar_df}}).set_page_size(CB::c_in6, scalar_tile_size);
+    auto cb_in6_id = CreateCircularBuffer(program, core_grid, c_in6_config);
 
     // cb_qk_im
     auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{CB::c_intermed0, im_df}}).set_page_size(CB::c_intermed0, im_tile_size);
