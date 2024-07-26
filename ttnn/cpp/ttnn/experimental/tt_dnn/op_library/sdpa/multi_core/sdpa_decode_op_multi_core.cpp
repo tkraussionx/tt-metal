@@ -444,31 +444,24 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     log_debug("reduce_core_physical_xs: {}", reduce_core_physical_xs);
     log_debug("reduce_core_physical_ys: {}", reduce_core_physical_ys);
 
+    // Common Compile time Args
+    auto in0_mcast_reducer_semaphore = tt_metal::CreateSemaphore(program, core_grid, 0);
+
     std::vector<uint32_t> reader_compile_time_args_common = {
-        // interleaved accessor args
         B, PNHt, St, DHt, Sk_chunk_t, num_active_cores, is_q_sharded
     };
 
-    std::vector<uint32_t> writer_reducer_compile_time_args_common = {
-        // interleaved accessor args
+    std::vector<uint32_t> writer_compile_time_args_common = {
         B, PNHt, St, DHt,
         packed_identity_scalar,
         scale_union.u,
         num_cores_per_batch,
-        num_active_cores
-    };
-
-    std::vector<uint32_t> writer_worker_compile_time_args_common = {
-        // interleaved accessor args
-        B, PNHt, St, DHt,
-        packed_identity_scalar,
-        scale_union.u,
-        num_cores_per_batch,
-        num_active_cores
+        num_active_cores,
+        in0_mcast_reducer_semaphore,
+        is_output_sharded,
     };
 
     std::vector<uint32_t> compute_compile_time_args_common = {
-        // matmul args
         St, DHt, PNHt, Sk_chunk_t,
         qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
         out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks,
@@ -484,9 +477,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     defines["LOG2_MUL_BCAST_GRANULARITY"] = std::to_string(log2_mul_bcast_granularity);
     defines["DHT_GRANULARITY"] = std::to_string(dht_granularity);
     defines["LOG2_DHT_GRANULARITY"] = std::to_string(log2_dht_granularity);
-
-    uint32_t in0_mcast_reducer_semaphore{};
-    std::vector<uintptr_t> all_writer_kernels_id;
 
     // Compute
     auto compute_kernels_id = CreateKernel(
@@ -509,50 +499,15 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             defines
     ));
 
-    for (uint32_t i = 0; i < num_active_cores; ++i) {
-        CoreCoord core = core_group[i];
-        uint32_t worker_id = i % num_cores_per_batch - 1;
-        bool do_reduce = (worker_id == -1);
-        uint32_t cur_batch = i / num_cores_per_batch;
-        if (do_reduce) {
-            in0_mcast_reducer_semaphore = tt_metal::CreateSemaphore(program, core, 0);
-        }
-
-        log_debug("i = {} -------------------------------------", i);
-        log_debug("core: {}", core);
-        log_debug("worker_id: {}", worker_id);
-        log_debug("is reducer: {}", do_reduce);
-        log_debug("cur_batch: {}", cur_batch);
-        log_debug("reduce_core_noc_x: {}", reduce_core_physical_xs[cur_batch]);
-        log_debug("reduce_core_noc_y: {}", reduce_core_physical_ys[cur_batch]);
-
-        // Writer
-        uintptr_t writer_kernels_id;
-        std::vector<uint32_t> writer_compile_time_args = do_reduce ? writer_reducer_compile_time_args_common : writer_worker_compile_time_args_common;
-        if (do_reduce) {
-            writer_compile_time_args.insert(writer_compile_time_args.end(), {in0_mcast_reducer_semaphore, cur_batch, is_output_sharded});
-            writer_kernels_id = CreateKernel(
-                program,
-                "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/sdpa/kernels/dataflow/writer_decode_reducer.cpp",
-                core,
-                tt_metal::WriterDataMovementConfig(
-                    writer_compile_time_args,
-                    defines
-            ));
-        } else {
-            writer_compile_time_args.insert(writer_compile_time_args.end(), {in0_mcast_reducer_semaphore, reduce_core_physical_xs[cur_batch], reduce_core_physical_ys[cur_batch], cur_batch, worker_id});
-            writer_kernels_id = CreateKernel(
-                program,
-                "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/sdpa/kernels/dataflow/writer_decode_worker.cpp",
-                core,
-                tt_metal::WriterDataMovementConfig(
-                    writer_compile_time_args,
-                    defines
-            ));
-        }
-
-        all_writer_kernels_id.push_back(writer_kernels_id);
-    }
+    // Writer
+    auto writer_kernels_id = CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/experimental/tt_dnn/op_library/sdpa/kernels/dataflow/writer_decode_all.cpp",
+        core_grid,
+        tt_metal::WriterDataMovementConfig(
+            writer_compile_time_args_common,
+            defines
+    ));
 
     uint32_t q_addr = q_buffer->address();
     uint32_t k_addr = k_buffer->address();
@@ -581,8 +536,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         uint32_t worker_id = i % num_cores_per_batch - 1;
         bool do_reduce = (worker_id == -1);
 
-        uintptr_t writer_kernels_id = all_writer_kernels_id[i];
-
         uint32_t cur_batch = i / num_cores_per_batch;
         if (do_reduce) {
             batch_id++;
@@ -593,17 +546,18 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         k_chunk_start_i = all_chunk_assignments[2*i];
         k_chunk_end_i = all_chunk_assignments[2*i+1];
 
+        // reader runtime args
         std::vector<uint32_t> reader_rt_args = { q_addr, k_addr, v_addr, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, !do_reduce};
         reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
         reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
+        // writer runtime args
+        std::vector<uint32_t> writer_rt_args = { out_addr, cur_pos_i, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, worker_id, !do_reduce};
+        writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
+        writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
+
         SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
-        if (do_reduce) {
-            SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, cur_pos_i, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i});
-        } else
-        {
-            SetRuntimeArgs(program, writer_kernels_id, core, { k_chunk_start_i, k_chunk_end_i});
-        }
+        SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
         SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
     }
 
@@ -611,7 +565,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         num_active_cores,
         core_group,
         reader_kernels_id,
-        all_writer_kernels_id,
+        writer_kernels_id,
         compute_kernels_id,
         num_cores_per_batch,
         is_output_sharded,
@@ -663,8 +617,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             uint32_t worker_id = i % num_cores_per_batch - 1;
             bool do_reduce = (worker_id == -1);
 
-            uintptr_t writer_kernels_id = all_writer_kernels_id[i];
-
             uint32_t cur_batch = i / num_cores_per_batch;
             if (do_reduce) {
                 batch_id++;
@@ -675,18 +627,18 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             k_chunk_start_i = all_chunk_assignments[2*i];
             k_chunk_end_i = all_chunk_assignments[2*i+1];
 
-
+            // reader runtime args
             std::vector<uint32_t> reader_rt_args = { q_addr, k_addr, v_addr, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, !do_reduce};
             reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
             reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
+            // writer runtime args
+            std::vector<uint32_t> writer_rt_args = { out_addr, cur_pos_i, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, cur_batch, worker_id, !do_reduce};
+            writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
+            writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
+
             SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
-            if (do_reduce) {
-                SetRuntimeArgs(program, writer_kernels_id, core, { out_addr, cur_pos_i, PSt_i, k_num_chunks_i, k_chunk_start_i, k_chunk_end_i});
-            } else
-            {
-                SetRuntimeArgs(program, writer_kernels_id, core, { k_chunk_start_i, k_chunk_end_i});
-            }
+            SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
             SetRuntimeArgs(program, compute_kernels_id, core, { k_num_chunks_i, k_chunk_start_i, k_chunk_end_i, do_reduce});
         }
 

@@ -43,6 +43,10 @@ void kernel_main() {
     uint32_t reduce_core_noc_x = all_reducer_noc_x[cur_batch];
     uint32_t reduce_core_noc_y = all_reducer_noc_y[cur_batch];
 
+    if (k_chunk_start == k_chunk_end) {
+        return; // early exit because no computes needs to be done
+    }
+
     constexpr uint32_t q_chunk_tiles = PNHt * DHt;
     constexpr uint32_t k_chunk_tiles = Sk_chunk_t * DHt;
     constexpr uint32_t mask_chunk_tiles = PNHt * Sk_chunk_t;

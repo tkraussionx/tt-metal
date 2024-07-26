@@ -483,7 +483,9 @@ void MAIN {
     const bool do_reduce = get_arg_val<uint32_t>(3) == 1;
     // const uin32_t idle_core = get_arg_val<uint32_t>(4);
 
-    // if (idle_core)    return;
+    if (k_chunk_start == k_chunk_end) {
+        return; // early exit because no computes needs to be done
+    }
 
     mm_init();
     cb_wait_front(cb_q_in, q_chunk_tiles);
