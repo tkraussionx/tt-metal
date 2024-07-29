@@ -51,7 +51,7 @@ constexpr static std::uint32_t PROFILER_RISC_COUNT = 5;
 static_assert (PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC > PROFILER_L1_BUFFER_SIZE);
 
 constexpr static std::uint32_t L1_KERNEL_CONFIG_BASE = PROFILER_L1_END_ADDRESS;
-constexpr static std::uint32_t L1_KERNEL_CONFIG_SIZE = 3 * 1024 + L1_ALIGNMENT; // alignment between unique&common RTAs
+constexpr static std::uint32_t L1_KERNEL_CONFIG_SIZE = 4 * 1024 + 256;
 
 constexpr static std::uint32_t IDLE_ERISC_L1_KERNEL_CONFIG_BASE = 32 * 1024;
 
