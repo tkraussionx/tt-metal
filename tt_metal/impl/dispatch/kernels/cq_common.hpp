@@ -77,22 +77,31 @@ enum CQNocSend {
     CQ_NOC_SEND = 1,
 };
 
+inline void RISC_POST_STATUS(uint32_t status, uint32_t addr = 0xFFB2010C) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(addr);
+    ptr[0] = status;
+}
 template<enum CQNocFlags flags, enum CQNocWait wait = CQ_NOC_WAIT, enum CQNocSend send = CQ_NOC_SEND>
 FORCE_INLINE
 void cq_noc_async_write_with_state(uint32_t src_addr, uint64_t dst_addr, uint32_t size = 0, uint32_t ndests = 1) {
 
     if constexpr (wait) {
         DEBUG_STATUS("NSSW");
+        RISC_POST_STATUS(454);
         while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
         DEBUG_STATUS("NSSD");
+        RISC_POST_STATUS(464);
     }
+
 
     if constexpr (flags & CQ_NOC_FLAG_SRC) {
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
     }
+    // RISC_POST_STATUS(432);
     if constexpr (flags & CQ_NOC_FLAG_DST) {
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_addr);
     }
+    // RISC_POST_STATUS(285);
     if constexpr (flags & CQ_NOC_FLAG_NOC) {
 #ifdef ARCH_BLACKHOLE
         // Handles writing to PCIe
@@ -100,14 +109,17 @@ void cq_noc_async_write_with_state(uint32_t src_addr, uint64_t dst_addr, uint32_
 #endif
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(dst_addr >> NOC_ADDR_COORD_SHIFT) & NOC_COORDINATE_MASK);
     }
+    // RISC_POST_STATUS(734);
     if constexpr (flags & CQ_NOC_FLAG_LEN) {
         ASSERT(size <= NOC_MAX_BURST_SIZE);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE, size);
-     }
+    }
+    // RISC_POST_STATUS(2343);
     if constexpr (send) {
         DEBUG_SANITIZE_NOC_WRITE_TRANSACTION_FROM_STATE(noc_index);
         NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     }
+    // RISC_POST_STATUS(754);
 }
 
 template<enum CQNocFlags flags, bool mcast = false>
@@ -133,6 +145,8 @@ void cq_noc_async_write_init_state(uint32_t src_addr, uint64_t dst_addr, uint32_
         (linked ? NOC_CMD_VC_LINKED : 0x0) |
         (mcast ? ((multicast_path_reserve ? NOC_CMD_PATH_RESERVE : 0) | NOC_CMD_BRCST_PACKET) : 0x0) |
         (posted ? 0 : NOC_CMD_RESP_MARKED);
+
+    RISC_POST_STATUS(noc_cmd_field, RING_BUFFER_ADDR + 4 * 29);
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
 

@@ -89,9 +89,10 @@ constexpr uint32_t l1_cache_elements = (max_write_packed_cmd > max_write_packed_
     max_write_packed_cmd : max_write_packed_large_cmd;
 constexpr uint32_t l1_cache_elements_rounded =
     ((l1_cache_elements + l1_to_local_cache_copy_chunk - 1) / l1_to_local_cache_copy_chunk) *
-    l1_to_local_cache_copy_chunk;
+    l1_to_local_cache_copy_chunk + (l1_to_local_cache_copy_chunk - 1);
 
 static uint32_t l1_cache[l1_cache_elements_rounded];
+
 
 FORCE_INLINE volatile uint32_t *get_cq_completion_read_ptr() {
     return reinterpret_cast<volatile uint32_t *>(CQ_COMPLETION_READ_PTR);
@@ -463,8 +464,8 @@ void process_write_paged() {
     addr_gen.page_size = page_size;
     uint64_t dst_addr_offset = 0;  // Offset into page.
 
-    DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
-           << " dispatch_cb_page_size: " << dispatch_cb_page_size;
+    // DPRINT << "process_write_paged - pages: " << pages << " page_size: " << page_size
+    //        << " dispatch_cb_page_size: " << dispatch_cb_page_size;
 
     while (write_length != 0) {
         // TODO #7360: Have more performant handling when page_size > dispatch_cb_page_size by not doing multiple writes
@@ -564,13 +565,13 @@ void process_write_packed(uint32_t flags) {
     data_ptr = round_up_pow2(data_ptr, L1_ALIGNMENT);
     uint32_t stride =
         (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_NO_STRIDE) ? 0 : round_up_pow2(xfer_size, L1_ALIGNMENT);
-    DPRINT << data_ptr << " " << cmd_ptr << " " << xfer_size << " " << dispatch_cb_page_size << ENDL();
+    // DPRINT << data_ptr << " " << cmd_ptr << " " << xfer_size << " " << dispatch_cb_page_size << ENDL();
     ASSERT(stride != 0 || data_ptr - cmd_ptr + xfer_size <= dispatch_cb_page_size);
 
     volatile uint32_t tt_l1_ptr *l1_addr = (uint32_t *)(cmd_ptr + sizeof(CQDispatchCmd));
     cq_noc_async_write_init_state<CQ_NOC_snDL, mcast>(0, dst_addr, xfer_size);
 
-    DPRINT << "dispatch_write_packed: " << xfer_size << " " << stride << " " << data_ptr << " " << count << ENDL();
+    // DPRINT << "dispatch_write_packed: " << xfer_size << " " << stride << " " << data_ptr << " " << count << ENDL();
     uint32_t writes = 0;
     uint32_t mcasts = 0;
     WritePackedSubCmd *sub_cmd_ptr = (WritePackedSubCmd *)l1_cache;
@@ -679,17 +680,39 @@ void process_write_packed_large() {
     constexpr uint32_t sub_cmd_size = sizeof(CQDispatchWritePackedLargeSubCmd);
     careful_copy_from_l1_to_local_cache<l1_to_local_cache_copy_chunk, l1_cache_elements_rounded>(
         (volatile uint32_t tt_l1_ptr *)(cmd_ptr + sizeof(CQDispatchCmd)), count * sub_cmd_size / sizeof(uint32_t), l1_cache);
-
+    DPRINT<<"copy done"<<ENDL();
     uint32_t writes = 0;
     uint32_t mcasts = noc_nonposted_writes_acked[noc_index];
     CQDispatchWritePackedLargeSubCmd *sub_cmd_ptr = (CQDispatchWritePackedLargeSubCmd *)l1_cache;
-
+    RISC_POST_STATUS(0xf0000000 | count, RING_BUFFER_ADDR);
+    RISC_POST_STATUS(alignment, RING_BUFFER_ADDR + 4 * 1);
+    RISC_POST_STATUS(data_ptr, RING_BUFFER_ADDR + 4 * 2);
+    RISC_POST_STATUS(dispatch_cb_base, RING_BUFFER_ADDR + 4 * 30);
+    RISC_POST_STATUS(dispatch_cb_end, RING_BUFFER_ADDR + 4 * 31);
+    uint32_t i = 0;
     while (count != 0) {
+        // RISC_POST_STATUS(99);
         uint32_t dst_noc = sub_cmd_ptr->noc_xy_addr;
         uint32_t dst_addr = sub_cmd_ptr->addr;
         uint32_t length = sub_cmd_ptr->length;
         uint32_t num_dests = sub_cmd_ptr->num_mcast_dests;
         uint32_t pad_size = align(length, alignment) - length;
+        RISC_POST_STATUS(noc_nonposted_atomics_acked[noc_index], RING_BUFFER_ADDR + 4 * 4);
+        RISC_POST_STATUS(noc_nonposted_writes_num_issued[noc_index], RING_BUFFER_ADDR + 4 * 5);
+        RISC_POST_STATUS(noc_reads_num_issued[noc_index], RING_BUFFER_ADDR + 4 * 6);
+        RISC_POST_STATUS(noc_nonposted_writes_acked[noc_index], RING_BUFFER_ADDR + 4 * 7);
+        RISC_POST_STATUS(count, RING_BUFFER_ADDR + 4 * 8);
+        RISC_POST_STATUS(0xdead0000 | count, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        RISC_POST_STATUS(dst_noc, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        i %= 256;
+        RISC_POST_STATUS(dst_addr, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        i %= 256;
+        RISC_POST_STATUS(length, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        i %= 256;
+        RISC_POST_STATUS(num_dests, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        i %= 256;
+        RISC_POST_STATUS(pad_size, PRINT_BUFFER_IDLE_ER + 4 * i++);
+        i %= 256;
 
         sub_cmd_ptr++;
 
@@ -699,6 +722,7 @@ void process_write_packed_large() {
 
         while (length != 0) {
             uint32_t xfer_size = (length > dispatch_cb_page_size) ? dispatch_cb_page_size : length;
+            // RISC_POST_STATUS(i, RING_BUFFER_ADDR + 4 + 3);
 
             // Get a page if needed
             if (data_ptr + xfer_size > cb_fence) {
@@ -707,12 +731,27 @@ void process_write_packed_large() {
                 if (cb_fence == block_next_start_addr[rd_block_idx]) {
                     uint32_t orphan_size = cb_fence - data_ptr;
                     if (orphan_size != 0) {
+                        // RISC_POST_STATUS(length, PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
                         cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, orphan_size, num_dests);
+                        RISC_POST_STATUS(NOC_READ_REG(NOC_CTRL), PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
+                        RISC_POST_STATUS(NOC_READ_REG(NOC_TARG_ADDR_LO), PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
+                        RISC_POST_STATUS(NOC_READ_REG(NOC_RET_ADDR_COORDINATE), PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
+                        RISC_POST_STATUS(NOC_READ_REG(NOC_RET_ADDR_LO), PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
+                        RISC_POST_STATUS(NOC_READ_REG(NOC_AT_LEN_BE), PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
+                        // RISC_POST_STATUS(count, PRINT_BUFFER_IDLE_ER + 4 * i++);
+                        i %= 256;
                         writes++;
                         mcasts += num_dests;
                         length -= orphan_size;
                         xfer_size -= orphan_size;
                         dst_addr += orphan_size;
+                        // RISC_POST_STATUS(i, RING_BUFFER_ADDR + 4 * 3);
                     }
                     // Handle wrapping on dispatch cb
                     if (rd_block_idx == dispatch_cb_blocks - 1) {
@@ -724,17 +763,36 @@ void process_write_packed_large() {
                     dst = get_noc_addr_helper(dst_noc, dst_addr);
                     block_noc_writes_to_clear[rd_block_idx] += writes;
                     noc_nonposted_writes_num_issued[noc_index] += writes;
+                    // noc_async_writes_flushed();
                     writes = 0;
+                    // DPRINT<<"m"<<ENDL();
                     move_rd_to_next_block<dispatch_cb_blocks>(block_noc_writes_to_clear, rd_block_idx);
+                    // DPRINT<<"m d"<<ENDL();
                 }
 
                 // Wait for dispatcher to supply a page (this won't go beyond the buffer end)
+                DPRINT<<"acq"<<ENDL();
                 uint32_t n_pages = cb_acquire_pages<my_noc_xy, my_dispatch_cb_sem_id, dispatch_cb_log_page_size>(
                     cb_fence, block_next_start_addr, rd_block_idx);
                 cb_fence += n_pages * dispatch_cb_page_size;
+                DPRINT<<"acq d"<<ENDL();
             }
-
+            // RISC_POST_STATUS(2);
+            // RISC_POST_STATUS(length, PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
             cq_noc_async_write_with_state<CQ_NOC_SnDL>(data_ptr, dst, xfer_size, num_dests);
+            RISC_POST_STATUS(NOC_READ_REG(NOC_CTRL), PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
+            RISC_POST_STATUS(NOC_READ_REG(NOC_TARG_ADDR_LO), PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
+            RISC_POST_STATUS(NOC_READ_REG(NOC_RET_ADDR_COORDINATE), PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
+            RISC_POST_STATUS(NOC_READ_REG(NOC_RET_ADDR_LO), PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
+            RISC_POST_STATUS(NOC_READ_REG(NOC_AT_LEN_BE), PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
+            // RISC_POST_STATUS(count, PRINT_BUFFER_IDLE_ER + 4 * i++);
+            i %= 256;
             writes++;
             mcasts += num_dests;
             length -= xfer_size;
@@ -779,8 +837,9 @@ void process_write_packed_large() {
 
         count--;
     }
+    RISC_POST_STATUS(0x0, RING_BUFFER_ADDR);
     noc_nonposted_writes_acked[noc_index] = mcasts;
-
+    DPRINT<<"done"<<ENDL();
     cmd_ptr = data_ptr;
 }
 
@@ -861,13 +920,13 @@ re_run_command:
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR:
             DEBUG_STATUS("DWB");
-            DPRINT << "cmd_write\n";
+            // DPRINT << "cmd_write\n";
             process_write();
             DEBUG_STATUS("DWD");
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
-            DPRINT << "cmd_write_linear_h\n";
+            // DPRINT << "cmd_write_linear_h\n";
             if (is_h_variant) {
                 process_write();
             } else {
@@ -876,7 +935,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
-            DPRINT << "cmd_write_linear_h_host\n";
+            // DPRINT << "cmd_write_linear_h_host\n";
             if (is_h_variant) {
                 process_write_host_h();
             } else {
@@ -885,7 +944,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PAGED:
-            DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
+            // DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
             if (cmd->write_paged.is_dram) {
                 process_write_paged<true>();
             } else {
@@ -894,7 +953,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PACKED: {
-            DPRINT << "cmd_write_packed" << ENDL();
+            // DPRINT << "cmd_write_packed" << ENDL();
             uint32_t flags = cmd->write_packed.flags;
             if (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_MCAST) {
                 process_write_packed<true, CQDispatchWritePackedMulticastSubCmd>(flags);
@@ -909,7 +968,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WAIT:
-            DPRINT << "cmd_wait" << ENDL();
+            // DPRINT << "cmd_wait" << ENDL();
             process_wait();
             break;
 
@@ -918,18 +977,18 @@ re_run_command:
         case CQ_DISPATCH_CMD_SINK: DPRINT << "cmd_sink" << ENDL(); break;
 
         case CQ_DISPATCH_CMD_DEBUG:
-            DPRINT << "cmd_debug" << ENDL();
+            // DPRINT << "cmd_debug" << ENDL();
             cmd_ptr = process_debug_cmd(cmd_ptr);
             goto re_run_command;
             break;
 
         case CQ_DISPATCH_CMD_DELAY:
-            DPRINT << "cmd_delay" << ENDL();
+            // DPRINT << "cmd_delay" << ENDL();
             process_delay_cmd();
             break;
 
         case CQ_DISPATCH_CMD_EXEC_BUF_END:
-            DPRINT << "cmd_exec_buf_end\n";
+            // DPRINT << "cmd_exec_buf_end\n";
             if (is_h_variant) {
                 process_exec_buf_end_h();
             } else {
@@ -938,7 +997,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_REMOTE_WRITE:
-            DPRINT << "cmd_remote_write\n";
+            // DPRINT << "cmd_remote_write\n";
             if (is_d_variant && !is_h_variant) {
                 // Relay write to dispatch_h, which will issue it on local chip
                 relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
@@ -947,7 +1006,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_TERMINATE:
-            DPRINT << "dispatch terminate\n";
+            // DPRINT << "dispatch terminate\n";
             if (is_d_variant && !is_h_variant) {
                 relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
             }
@@ -964,6 +1023,7 @@ re_run_command:
             DPRINT << HEX() << *((uint32_t *)cmd_ptr + 2) << ENDL();
             DPRINT << HEX() << *((uint32_t *)cmd_ptr + 3) << ENDL();
             DEBUG_STATUS("!CMD");
+            while(1);
             ASSERT(0);
     }
 
@@ -977,21 +1037,21 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
 
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
-            DPRINT << "dispatch_h write_linear_h\n";
+            // DPRINT << "dispatch_h write_linear_h\n";
             process_write();
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
-            DPRINT << "dispatch_h linear_h_host\n";
+            // DPRINT << "dispatch_h linear_h_host\n";
             process_write_host_h();
             break;
 
         case CQ_DISPATCH_CMD_EXEC_BUF_END:
-            DPRINT << "dispatch_h exec_buf_end\n";
+            // DPRINT << "dispatch_h exec_buf_end\n";
             process_exec_buf_end_h();
             break;
         case CQ_DISPATCH_CMD_REMOTE_WRITE:
-            DPRINT << "cmd_remote_write\n";
+            // DPRINT << "cmd_remote_write\n";
             process_remote_write_h();
             break;
         case CQ_DISPATCH_CMD_TERMINATE:
@@ -1009,6 +1069,7 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr) {
             DPRINT << HEX() << *((uint32_t *)cmd_ptr + 2) << ENDL();
             DPRINT << HEX() << *((uint32_t *)cmd_ptr + 3) << ENDL();
             DEBUG_STATUS("!CMD");
+            while(1);
             ASSERT(0);
     }
 
@@ -1041,6 +1102,7 @@ void kernel_main() {
     uint32_t heartbeat = 0;
     while (!done) {
         DeviceZoneScopedND("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
+        // DPRINT<<"Get"<<ENDL();
         if (cmd_ptr == cb_fence) {
             get_cb_page<
                 dispatch_cb_base,
@@ -1050,7 +1112,7 @@ void kernel_main() {
                 my_dispatch_cb_sem_id>(
                 cmd_ptr, cb_fence, block_noc_writes_to_clear, block_next_start_addr, rd_block_idx);
         }
-
+        // DPRINT<<"Get done"<<ENDL();
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
 
         done = is_d_variant ? process_cmd_d(cmd_ptr) : process_cmd_h(cmd_ptr);

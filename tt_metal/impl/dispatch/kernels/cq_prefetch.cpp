@@ -653,7 +653,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
     uint32_t amt_read = 0;
     uint32_t scratch_read_addr = scratch_db_top[0];
 
-    while (read_length <= amt_to_read) {
+    while (read_length <= amt_to_read and read_length != 0) {
         uint32_t page_id = sub_cmd->start_page;
         uint32_t log_page_size = sub_cmd->log_page_size;
         uint32_t base_addr = sub_cmd->base_addr;
@@ -700,7 +700,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         uint32_t amt_to_write = amt_read;
         amt_read = 0;
         amt_to_read = (scratch_db_half_size > total_length) ? total_length : scratch_db_half_size;
-        while (read_length <= amt_to_read) {
+        while (read_length <= amt_to_read and read_length != 0) {
             uint32_t page_id = sub_cmd->start_page;
             uint32_t log_page_size = sub_cmd->log_page_size;
             uint32_t base_addr = sub_cmd->base_addr;
