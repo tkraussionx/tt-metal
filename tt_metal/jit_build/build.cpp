@@ -112,6 +112,7 @@ void JitBuildEnv::init(uint32_t build_key, tt::ARCH arch) {
 
     if (tt::llrt::OptionsG.get_kernels_nullified()) {
         this->defines_ += "-DDEBUG_NULL_KERNELS ";
+        this->defines_ += "-DKERNEL_RUN_TIME=147550 ";
     }
 
     if (tt::llrt::OptionsG.get_watcher_debug_delay()) {
