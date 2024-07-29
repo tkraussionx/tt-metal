@@ -26,6 +26,7 @@ void kernel_main() {
     constexpr uint32_t Sk_chunk_t = get_compile_time_arg_val(4);  // number of tiles in seqlen of a k/v/mask chunk
     constexpr uint32_t num_cores = get_compile_time_arg_val(5);
     constexpr bool is_q_sharded = get_compile_time_arg_val(6);
+    constexpr uint32_t k_heads = get_compile_time_arg_val(7);
 
     const uint32_t q_addr  = get_arg_val<uint32_t>(0);
     const uint32_t k_addr  = get_arg_val<uint32_t>(1);
@@ -48,7 +49,7 @@ void kernel_main() {
     }
 
     constexpr uint32_t q_chunk_tiles = PNHt * DHt;
-    constexpr uint32_t k_chunk_tiles = Sk_chunk_t * DHt;
+    constexpr uint32_t k_chunk_tiles = Sk_chunk_t * DHt * k_heads;
     constexpr uint32_t mask_chunk_tiles = PNHt * Sk_chunk_t;
 
     constexpr bool is_dram = true;
@@ -122,14 +123,14 @@ void kernel_main() {
     };
 
     // Offset for current batch
-    const uint32_t k_batch_offset = cur_batch * St * DHt;
-    const uint32_t v_batch_offset = cur_batch * St * DHt;
+    const uint32_t k_batch_offset = cur_batch * St * DHt * k_heads;
+    const uint32_t v_batch_offset = cur_batch * St * DHt * k_heads;
 
     // DPRINT << "[Reader] read Q" << ENDL();
 
     // Then, read K, V, Mask k_chunk_tiles at a time
-    const uint32_t k_chunk_offset = k_chunk_start * Sk_chunk_t * DHt;
-    const uint32_t v_chunk_offset = k_chunk_start * Sk_chunk_t * DHt;
+    const uint32_t k_chunk_offset = k_chunk_start * Sk_chunk_t * DHt * k_heads;
+    const uint32_t v_chunk_offset = k_chunk_start * Sk_chunk_t * DHt * k_heads;
     const uint32_t mask_chunk_offset = k_chunk_start * Sk_chunk_t;
     uint32_t k_start_tile_id = k_batch_offset + k_chunk_offset;
     uint32_t v_start_tile_id = v_batch_offset + v_chunk_offset;
@@ -143,7 +144,7 @@ void kernel_main() {
         barrier_count = 0;
         for (uint32_t col = 0; col < DHt; ++col) {
             uint32_t k_tile_id = k_start_tile_id + col;
-            for (uint32_t row = 0; row < Sk_chunk_t; ++row) {
+            for (uint32_t row = 0; row < Sk_chunk_t * k_heads; ++row) {
                 noc_async_read_tile(k_tile_id, k_reader, k_write_ptr);
                 k_tile_id += DHt;
                 k_write_ptr += k_tile_bytes;

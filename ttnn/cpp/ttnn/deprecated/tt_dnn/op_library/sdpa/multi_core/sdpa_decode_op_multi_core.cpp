@@ -77,8 +77,8 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
     /*
     Q: 1 x B x PNH x DH
-    K: 1 x B x S x DH
-    V: 1 x B x S x DH
+    K: B x K x S x DH
+    V: B x K x S x DH
     */
 
     /*
@@ -89,7 +89,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     const auto q_shape = input_tensor_q.get_legacy_shape();
     const auto k_shape = input_tensor_k.get_legacy_shape();
     // Use k_shape for S and DH since Q might be different for decode
-    uint32_t B = q_shape[1], PNH = q_shape[2], S = k_shape[2], DH = k_shape[3];
+    uint32_t B = q_shape[1], PNH = q_shape[2], S = k_shape[2], DH = k_shape[3], K= k_shape[1];
     uint32_t St = S/TILE_HEIGHT;
     uint32_t DHt = DH/TILE_WIDTH;
     uint32_t PNHt = PNH/TILE_HEIGHT;
@@ -208,8 +208,8 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
     uint32_t q_tiles  = PNHt * DHt;
-    uint32_t k_tiles  = Sk_chunk_t * DHt * 2; // double buffer
-    uint32_t v_tiles  = Sk_chunk_t * DHt * 2; // double buffer
+    uint32_t k_tiles  = K * Sk_chunk_t * DHt * 2; // double buffer
+    uint32_t v_tiles  = K * Sk_chunk_t * DHt * 2; // double buffer
     uint32_t qk_tiles = PNHt * Sk_chunk_t;
     uint32_t out_im_tiles = PNHt * DHt;
     uint32_t out0_t = PNHt * DHt;
@@ -458,7 +458,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     auto in0_mcast_reducer_semaphore = tt_metal::CreateSemaphore(program, core_grid, 0);
 
     std::vector<uint32_t> reader_compile_time_args_common = {
-        B, PNHt, St, DHt, Sk_chunk_t, num_active_cores, is_q_sharded
+        B, PNHt, St, DHt, Sk_chunk_t, num_active_cores, is_q_sharded, K
     };
 
     std::vector<uint32_t> writer_compile_time_args_common = {
@@ -475,7 +475,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         St, DHt, PNHt, Sk_chunk_t,
         qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
         out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks,
-        num_cores_per_batch
+        num_cores_per_batch, K
     };
 
     std::map<string, string> defines;
