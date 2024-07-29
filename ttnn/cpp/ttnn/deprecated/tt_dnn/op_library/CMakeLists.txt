@@ -130,7 +130,6 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/reshape/reshape_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/composite/composite_ops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/optimizer_ops.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/complex/complex_ops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/loss/loss_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/transformer_tms.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/transformer_tms/multi_core_split_query_key_value_and_split_heads/multi_core_split_query_key_value_and_split_heads.cpp
