@@ -136,9 +136,10 @@ def all_devices(request, device_params):
     request.node.pci_ids = [ttl.device.GetPCIeDeviceID(i) for i in device_ids]
 
     # Get only physical devices
+    device_ids = [11, 10, 9, 12]
     devices = ttl.device.CreateDevices(device_ids, **device_params)
 
-    yield [devices[i] for i in range(num_devices)]
+    yield [devices[i] for i in devices]
 
     for device in devices.values():
         ttl.device.DumpDeviceProfiler(device)

@@ -1227,7 +1227,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         tt::tt_metal::WriterDataMovementConfig(worker_receive_writer_ct_args, worker_defines));
 
                     worker_writer_receiver_kernels.push_back(worker_receive_writer_kernel_id);
-
+                    std::cout << "Set RTAs for core: " << receiver_worker_cores.at(b).str() << " KId: " << worker_receive_writer_kernel_id << " IDX: "  << b << " " << worker_writer_receiver_kernels.size() - 1 << std::endl;
                     tt::tt_metal::SetRuntimeArgs(
                         program,
                         worker_receive_writer_kernel_id,
@@ -1273,6 +1273,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         bool is_sharded = input_tensors[0].is_sharded();
         const auto& input = input_tensors[0];
         const auto& output = output_tensors[0];
+        std::cout << "calling override runtime args" << std::endl;
         for (uint32_t i = 0; i < total_worker_core_pairs_used; ++i) {
             if (is_sharded) {
                 auto &worker_reader_sender_runtime_args = GetRuntimeArgs(program, worker_reader_sender_kernels.at(i), all_worker_sender_cores.at(i));
@@ -1305,7 +1306,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 worker_writer_sender_runtime_args[0] = output.buffer()->address();
 
                 auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, worker_writer_receiver_kernels.at(i), all_worker_receiver_cores.at(i));
+                // if (worker_writer_receiver_runtime_args.size()) {
+                std::cout << "Done getting RTA: " << all_worker_receiver_cores.at(i).str() << " " << "KId: " << worker_writer_receiver_kernels.at(i) << std::endl;
                 worker_writer_receiver_runtime_args[0] = output.buffer()->address();
+                // }
             }
         }
     };

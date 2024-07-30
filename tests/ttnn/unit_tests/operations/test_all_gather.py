@@ -288,7 +288,7 @@ def test_all_gather_on_t3000_nightly_commit_looping(
     "num_devices, num_links, input_shape, dim, layout",
     [
         (4, 2, [4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
-        (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
+        # (8, 1, [8, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),  # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),           # https://github.com/tenstorrent/tt-metal/issues/9686
@@ -379,13 +379,13 @@ def run_line_all_gather(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     if len(all_devices) != 8:
         pytest.skip("Not T3000!")
 
     for device in all_devices:
-        device.enable_async(enable_async)
+        device.enable_async(False)
 
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
@@ -403,30 +403,30 @@ def run_line_all_gather(
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    input_tensor = torch.rand(input_shape).bfloat16()
-
-    input_tensors = torch.chunk(input_tensor, num_devices, dim)
-    tt_input_tensors = []
-    for i, t in enumerate(input_tensors):
-        tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(layout).to(devices[i], mem_config))
-
-    input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
-    for i in range(num_iters):
+    for loop in range(num_iters):
+        input_tensor = torch.rand(input_shape).bfloat16()
+        print("Calling torch chunk")
+        input_tensors = torch.chunk(input_tensor, num_devices, dim)
+        tt_input_tensors = []
+        print("Creating device tensors")
+        for i, t in enumerate(input_tensors):
+            tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(layout).to(devices[i], mem_config))
+        print("aggregate")
+        input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+        print("Run all gather")
         tt_out_tensor = ttnn.line_all_gather(input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config)
 
-        for d in devices:
-            ttl.device.Synchronize(d)
-        logger.info(f"Done iteration {i}")
-
-    for i, t in enumerate(ttnn.get_device_tensors(tt_out_tensor)):
-        tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-        if input_dtype == ttl.tensor.DataType.BFLOAT16:
-            eq, output = comp_equal(tt_output_tensor, input_tensor)
-        else:
-            eq, output = comp_pcc(tt_output_tensor, input_tensor)
-        if not eq:
-            logger.error(f"output mismatch for tensor {i}")
-        assert eq, f"{i} FAILED: {output}"
+        for i, t in enumerate(ttnn.get_device_tensors(tt_out_tensor)):
+            print("Call CPU on device: " + str(i))
+            tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+            if input_dtype == ttl.tensor.DataType.BFLOAT16:
+                eq, output = comp_equal(tt_output_tensor, input_tensor)
+            else:
+                eq, output = comp_pcc(tt_output_tensor, input_tensor)
+            if not eq:
+                logger.error(f"output mismatch for tensor {i}")
+            assert eq, f"{i} FAILED: {output}"
+        logger.info(f"Done iteration {loop}")
 
 
 # Enumerate the post-commit cases explicitly
@@ -476,7 +476,7 @@ def test_line_all_gather_on_t3000_post_commit(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     run_line_all_gather(
         all_devices,

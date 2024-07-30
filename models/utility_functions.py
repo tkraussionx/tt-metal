@@ -1050,6 +1050,9 @@ def get_devices_for_t3000(all_devices, num_devices):
     For 8 devices, return in a ring pattern.
     """
     assert num_devices <= len(all_devices), "Not enough devices detected!"
+    return all_devices
+    # hamiltonian_ring_indices = [11, 10, 9, 12]
+    # return [all_devices[i] for i in hamiltonian_ring_indices]
 
     if num_devices <= 4:
         return all_devices[:num_devices]
