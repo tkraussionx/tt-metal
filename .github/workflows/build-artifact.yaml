@@ -58,13 +58,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-${{ matrix.arch }}-main
       - name: Build regular tt-metal and libs
-        if: ${{ !inputs.profiler-build }}
+        if: ${{ !inputs.profiler-build }} && steps.cache.outputs.cache-hit != 'true' 
         run: |
           cmake -B build -G Ninja
           cmake --build build --target tests
           cmake --build build --target install
       - name: Build profiler tt-metal and libs
-        if: ${{ inputs.profiler-build }}
+        if: ${{ inputs.profiler-build }} && steps.cache.outputs.cache-hit != 'true'
         run: ./scripts/build_scripts/build_with_profiler_opt.sh
       - name: 'Tar files'
         run: tar -cvf ttm_${{ matrix.arch }}.tar build/lib ttnn/ttnn/*.so build/programming_examples build/test build/tools runtime
