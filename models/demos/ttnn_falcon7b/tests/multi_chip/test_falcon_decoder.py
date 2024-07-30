@@ -168,25 +168,25 @@ def test_falcon_decoder(
 
         tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=shard_dim)).squeeze(1)
 
-        # tt_layer_present = (
-        #     ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-        #     ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
-        # )
-        # if llm_mode == "decode":
-        #     tt_out = tt_out.transpose(0, 1)
-        # tt_layer_present = (
-        #     tt_layer_present[0][:, :kv_len, :],
-        #     tt_layer_present[1][:, :kv_len, :],
-        # )
+        tt_layer_present = (
+            ttnn.to_torch(tt_layer_present[0], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+            ttnn.to_torch(tt_layer_present[1], mesh_composer=ConcatMeshToTensor(device_mesh, dim=0)).squeeze(1),
+        )
+        if llm_mode == "decode":
+            tt_out = tt_out.transpose(0, 1)
+        tt_layer_present = (
+            tt_layer_present[0][:, :kv_len, :],
+            tt_layer_present[1][:, :kv_len, :],
+        )
 
-        # passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
-        # logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
-        # assert_with_pcc(
-        #     pytorch_layer_present[0].squeeze(1), tt_layer_present[0].to(pytorch_layer_present[0].dtype), expected_pcc
-        # )
-        # assert_with_pcc(
-        #     pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
-        # )
+        passed, pcc = assert_with_pcc(pytorch_out, tt_out.to(pytorch_out.dtype), expected_pcc)
+        logger.success(f"Passed: pcc: {pcc}, expected: {expected_pcc}")
+        assert_with_pcc(
+            pytorch_layer_present[0].squeeze(1), tt_layer_present[0].to(pytorch_layer_present[0].dtype), expected_pcc
+        )
+        assert_with_pcc(
+            pytorch_layer_present[1].squeeze(1), tt_layer_present[1].to(pytorch_layer_present[1].dtype), expected_pcc
+        )
 
     for device in device_mesh.get_device_ids():
         device_mesh.get_device(device).enable_async(False)
