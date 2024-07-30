@@ -44,6 +44,19 @@ jobs:
       - name: Update submodules
         run: |
           git submodule update --init --recursive
+      - name: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/build/lib
+            ${{ github.workspace }}/ttnn/ttnn/*.so
+            ${{ github.workspace }}/build/programming_examples
+            ${{ github.workspace }}/build/test
+            ${{ github.workspace }}/build/tools
+            ${{ github.workspace }}/runtime
+          key: ${{ runner.os }}-build-${{ matrix.arch }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ matrix.arch }}-main
       - name: Build regular tt-metal and libs
         if: ${{ !inputs.profiler-build }}
         run: |
