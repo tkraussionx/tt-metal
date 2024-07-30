@@ -146,6 +146,10 @@ class Program {
 
    private:
     void populate_dispatch_data(Device *device);
+    void add_kernel_bin_transfer_info(
+        Device *device,
+        const vector<pair<transfer_info_cores, uint32_t>>& dst_noc_info,
+        const vector<KernelHandle>& kernel_ids);
 
     // Buffers temporarily owned by the program
     std::vector<std::shared_ptr<Buffer>> owned_buffer_pool = {};
