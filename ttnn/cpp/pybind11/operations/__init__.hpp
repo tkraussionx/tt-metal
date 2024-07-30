@@ -28,6 +28,7 @@
 #include "ttnn/operations/eltwise/ternary_backward/ternary_backward_pybind.hpp"
 #include "ttnn/operations/eltwise/unary_backward/unary_backward_pybind.hpp"
 #include "ttnn/operations/eltwise/complex_unary/complex_unary_pybind.hpp"
+#include "ttnn/operations/eltwise/complex_binary/complex_binary_pybind.hpp"
 #include "ttnn/operations/data_movement/data_movement_pybind.hpp"
 #include "ttnn/operations/embedding/embedding_pybind.hpp"
 #include "ttnn/operations/matmul/matmul_pybind.hpp"
@@ -71,6 +72,9 @@ void py_module(py::module& module) {
 
     auto m_complex_unary = module.def_submodule("complex_unary", "complex_unary operations");
     complex_unary::py_module(m_complex_unary);
+
+    auto m_complex_binary = module.def_submodule("complex_binary", "complex_binary operations");
+    complex_binary::py_module(m_complex_binary);
 
     auto m_ternary = module.def_submodule("ternary", "ternary operations");
     ternary::py_module(m_ternary);

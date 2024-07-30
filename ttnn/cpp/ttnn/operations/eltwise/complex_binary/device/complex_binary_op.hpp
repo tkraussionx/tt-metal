@@ -17,6 +17,7 @@ enum class ComplexBinaryOpType {
     SUB,
     MUL,
     DIV,
+    COMPLEX_TENSOR,
 };
 
 class ComplexTensor {
@@ -60,6 +61,13 @@ template <>
 struct OpHandler<ComplexBinaryOpType::ADD> {
     static ComplexTensor handle( const ComplexTensor& input_a, const ComplexTensor& input_b, const MemoryConfig& output_mem_config ) {
         return _add(input_a, input_b, output_mem_config);
+    }
+};
+
+template <>
+struct OpHandler<ComplexBinaryOpType::COMPLEX_TENSOR> {
+    static ComplexTensor handle( const Tensor& input_a, const Tensor& input_b, const std::optional<MemoryConfig>& output_mem_config ) {
+        return ComplexTensor({input_a, input_b});
     }
 };
 

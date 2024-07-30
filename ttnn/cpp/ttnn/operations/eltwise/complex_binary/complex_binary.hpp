@@ -26,6 +26,21 @@ struct ExecuteComplexBinaryType1 {
     }
 };
 
+template <ComplexBinaryOpType complex_binary_op_type>
+struct ExecuteComplexBinary {
+
+    static ComplexTensor operator()(
+        const Tensor &input_tensor_a_arg,
+        const Tensor &input_tensor_b_arg,
+        const std::optional<MemoryConfig> &memory_config) {
+        return ComplexTensor({input_tensor_a_arg, input_tensor_b_arg});
+    }
+};
+
 } //namespace operations::complex_binary
+
+constexpr auto complex_tensor = ttnn::register_operation<
+    "ttnn::complex_tensor",
+    operations::complex_binary::ExecuteComplexBinary<operations::complex_binary::ComplexBinaryOpType::COMPLEX_TENSOR>>();
 
 } //namespace ttnn
