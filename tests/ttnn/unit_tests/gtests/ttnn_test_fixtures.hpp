@@ -13,7 +13,7 @@
 #include "ttnn/device.hpp"
 #include "tests/tt_metal/test_utils/env_vars.hpp"
 #include "tt_metal/hostdevcommon/common_values.hpp"
-#include "tt_metal/impl/device/multi_device.hpp"
+#include "tt_metal/impl/device/device_mesh.hpp"
 
 namespace ttnn {
 
@@ -66,7 +66,7 @@ class T3kMultiDeviceFixture : public ::testing::Test {
         }
         const auto T3K_DEVICE_IDS = ttnn::multi_device::DeviceIds{0, 4, 5, 1, 2, 6, 7, 3};
         constexpr auto DEFAULT_NUM_COMMAND_QUEUES = 1;
-        device_mesh_ = std::make_unique<ttnn::multi_device::DeviceMesh>(
+        device_mesh_ = std::make_unique<tt::tt_metal::DeviceMesh>(
             ttnn::multi_device::DeviceGrid{1, num_devices},
             T3K_DEVICE_IDS,
             DEFAULT_L1_SMALL_SIZE,
@@ -75,7 +75,7 @@ class T3kMultiDeviceFixture : public ::testing::Test {
     }
 
     void TearDown() override { device_mesh_.reset(); }
-    std::unique_ptr<ttnn::multi_device::DeviceMesh> device_mesh_;
+    std::unique_ptr<tt::tt_metal::DeviceMesh> device_mesh_;
 };
 
 }  // namespace ttnn::multi_device::test
