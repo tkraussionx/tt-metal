@@ -58,7 +58,7 @@ def test_reproduce_lm_head_nd_32(
 
     nd_output_count = 0
 
-    for i in range(10000):
+    for i in range(100000):
         for device_idx in range(num_devices):
             out[device_idx].deallocate(True)
             out[device_idx] = ttl.tensor.falcon_lm_head_matmul(
