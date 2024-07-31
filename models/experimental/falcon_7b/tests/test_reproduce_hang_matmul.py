@@ -38,6 +38,16 @@ def test_reproduce_matmul_2d_hang(
 ):
     torch.manual_seed(1234)
 
+    logical_chip_id_to_coordinates = [None] * 8
+    logical_chip_id_to_coordinates[0] = (1, 0)
+    logical_chip_id_to_coordinates[1] = (0, 0)
+    logical_chip_id_to_coordinates[2] = (0, 1)
+    logical_chip_id_to_coordinates[3] = (1, 1)
+    logical_chip_id_to_coordinates[4] = (2, 1)
+    logical_chip_id_to_coordinates[5] = (3, 1)
+    logical_chip_id_to_coordinates[6] = (3, 0)
+    logical_chip_id_to_coordinates[7] = (2, 0)
+
     devices = []
     if num_devices == 8:
         devices = get_devices_for_t3000(all_devices, num_devices)
@@ -139,7 +149,9 @@ def test_reproduce_matmul_2d_hang(
             )
         for device_idx in range(num_devices):
             if num_devices != 1:
-                print("Start sync logicalDeviceID: ", device_idx)
+                print(
+                    "Start sync logicalDeviceID: ", device_idx, " coords: ", logical_chip_id_to_coordinates[device_idx]
+                )
             else:
                 print("Start single device sync")
             ttl.device.Synchronize(devices[device_idx])
