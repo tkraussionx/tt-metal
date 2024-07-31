@@ -225,6 +225,11 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     std::vector<EriscDatamoverBuilder> counter_clockwise_edm_builders;
     TT_ASSERT(num_full_send_directions > 0);
 
+    std::vector<std::pair<KernelHandle, CoreCoord>> receive_reader_kernel_core_list;
+    std::vector<std::pair<KernelHandle, CoreCoord>> receive_writer_kernel_core_list;
+    std::vector<std::pair<KernelHandle, CoreCoord>> send_reader_kernel_core_list;
+    std::vector<std::pair<KernelHandle, CoreCoord>> send_writer_kernel_core_list;
+
     // TODO: move to all-gather config
     auto edm_sem_addrs_per_link = std::vector<std::vector<uint32_t>>(num_links);
     auto edm_buffer_addrs_per_link = std::vector<std::vector<uint32_t>>(num_links);
@@ -724,6 +729,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         tt::tt_metal::ReaderDataMovementConfig(worker_send_reader_ct_args, worker_defines));
 
                     worker_reader_sender_kernels.push_back(worker_reader_sender_kernel_id);
+                    send_reader_kernel_core_list.push_back({worker_reader_sender_kernel_id, sender_worker_cores.at(b)});
 
                     tt::tt_metal::SetRuntimeArgs(
                         program,
@@ -899,6 +905,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         tt::tt_metal::WriterDataMovementConfig(worker_sender_writer_ct_args, worker_defines));
 
                     worker_writer_sender_kernels.push_back(worker_sender_writer_kernel_id);
+                    send_writer_kernel_core_list.push_back({worker_sender_writer_kernel_id, sender_worker_cores.at(b)});
 
                     tt::tt_metal::SetRuntimeArgs(
                         program,
@@ -1075,6 +1082,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         tt::tt_metal::ReaderDataMovementConfig(worker_receiver_reader_ct_args, worker_defines));
 
                     worker_reader_receiver_kernels.push_back(worker_receiver_reader_kernel_id);
+                    receive_reader_kernel_core_list.push_back({worker_receiver_reader_kernel_id, receiver_worker_cores.at(b)});
 
                     tt::tt_metal::SetRuntimeArgs(
                         program,
@@ -1227,6 +1235,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                         tt::tt_metal::WriterDataMovementConfig(worker_receive_writer_ct_args, worker_defines));
 
                     worker_writer_receiver_kernels.push_back(worker_receive_writer_kernel_id);
+                    receive_writer_kernel_core_list.push_back({worker_receive_writer_kernel_id, receiver_worker_cores.at(b)});
+
                     std::cout << "Set RTAs for core: " << receiver_worker_cores.at(b).str() << " KId: " << worker_receive_writer_kernel_id << " IDX: "  << b << " " << worker_writer_receiver_kernels.size() - 1 << std::endl;
                     tt::tt_metal::SetRuntimeArgs(
                         program,
@@ -1263,7 +1273,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         receiver_device_id,
         sender_device_id);
 
-    auto override_runtime_arguments_callback = [num_links, total_worker_core_pairs_used, worker_reader_sender_kernels, worker_writer_sender_kernels, worker_reader_receiver_kernels, worker_writer_receiver_kernels, all_worker_sender_cores, all_worker_receiver_cores] (
+    auto override_runtime_arguments_callback = [num_links, receive_reader_kernel_core_list, receive_writer_kernel_core_list, send_reader_kernel_core_list, send_writer_kernel_core_list] (
         const void* operation,
         Program& program,
         const std::vector<Tensor>& input_tensors,
@@ -1274,42 +1284,50 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         const auto& input = input_tensors[0];
         const auto& output = output_tensors[0];
         std::cout << "calling override runtime args" << std::endl;
-        for (uint32_t i = 0; i < total_worker_core_pairs_used; ++i) {
+
+
+
+        for (auto const& [kernel_id, core] : receive_writer_kernel_core_list) {
             if (is_sharded) {
-                auto &worker_reader_sender_runtime_args = GetRuntimeArgs(program, worker_reader_sender_kernels.at(i), all_worker_sender_cores.at(i));
-                worker_reader_sender_runtime_args[7] = input.buffer()->address();
+                auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                worker_writer_receiver_runtime_args.at(10) = output.buffer()->address();
+                log_trace(tt::LogOp, "override worker_writer_receiver_runtime_args:");
+                for (uint32_t j = 0; j < worker_writer_receiver_runtime_args.size(); ++j) {
+                    log_trace(tt::LogOp, "\tworker_writer_receiver_runtime_args[{}]: {}", j, worker_writer_receiver_runtime_args.at(j));
+                }
+            } else {
+                auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                std::cout << "Done getting RTA: " << core.str() << " " << "KId: " << kernel_id << std::endl;
+                worker_writer_receiver_runtime_args.at(0) = output.buffer()->address();
+            }
+        }
+        for (auto const& [kernel_id, core] : send_reader_kernel_core_list) {
+            if (is_sharded) {
+                auto &worker_reader_sender_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                worker_reader_sender_runtime_args.at(7) = input.buffer()->address();
                 uint32_t num_dest_cores = worker_reader_sender_runtime_args.at(12);
-                worker_reader_sender_runtime_args[12 + num_dest_cores + 4] = output.buffer()->address();
+                worker_reader_sender_runtime_args.at(12 + num_dest_cores + 4) = output.buffer()->address();
                 log_trace(tt::LogOp, "override worker_reader_sender_runtime_args:");
                 for (uint32_t j = 0; j < worker_reader_sender_runtime_args.size(); ++j) {
                     log_trace(tt::LogOp, "\tworker_reader_sender_runtime_args[{}]: {}", j, worker_reader_sender_runtime_args.at(j));
                 }
-
-                auto &worker_writer_sender_runtime_args = GetRuntimeArgs(program, worker_writer_sender_kernels.at(i), all_worker_sender_cores.at(i));
-                worker_writer_sender_runtime_args[12] = output.buffer()->address();
+            } else {
+                auto &worker_reader_sender_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                worker_reader_sender_runtime_args.at(0) = input.buffer()->address();
+                worker_reader_sender_runtime_args.at(1) = output.buffer()->address();
+            }
+        }
+        for (auto const& [kernel_id, core] : send_writer_kernel_core_list) {
+            if (is_sharded) {
+                auto &worker_writer_sender_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                worker_writer_sender_runtime_args.at(12) = output.buffer()->address();
                 log_trace(tt::LogOp, "override worker_writer_sender_runtime_args:");
                 for (uint32_t j = 0; j < worker_writer_sender_runtime_args.size(); ++j) {
-                    log_trace(tt::LogOp, "\tworker_writer_sender_runtime_args[{}]: {}", j, worker_reader_sender_runtime_args.at(j));
-                }
-
-                auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, worker_writer_receiver_kernels.at(i), all_worker_receiver_cores.at(i));
-                worker_writer_receiver_runtime_args[10] = output.buffer()->address();
-                log_trace(tt::LogOp, "override worker_writer_receiver_runtime_args:");
-                for (uint32_t j = 0; j < worker_writer_receiver_runtime_args.size(); ++j) {
-                    log_trace(tt::LogOp, "\tworker_writer_receiver_runtime_args[{}]: {}", j, worker_reader_sender_runtime_args.at(j));
+                    log_trace(tt::LogOp, "\tworker_writer_sender_runtime_args[{}]: {}", j, worker_writer_sender_runtime_args.at(j));
                 }
             } else {
-                auto &worker_reader_sender_runtime_args = GetRuntimeArgs(program, worker_reader_sender_kernels.at(i), all_worker_sender_cores.at(i));
-                worker_reader_sender_runtime_args[0] = input.buffer()->address();
-                worker_reader_sender_runtime_args[1] = output.buffer()->address();
-                auto &worker_writer_sender_runtime_args = GetRuntimeArgs(program, worker_writer_sender_kernels.at(i), all_worker_sender_cores.at(i));
-                worker_writer_sender_runtime_args[0] = output.buffer()->address();
-
-                auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, worker_writer_receiver_kernels.at(i), all_worker_receiver_cores.at(i));
-                // if (worker_writer_receiver_runtime_args.size()) {
-                std::cout << "Done getting RTA: " << all_worker_receiver_cores.at(i).str() << " " << "KId: " << worker_writer_receiver_kernels.at(i) << std::endl;
-                worker_writer_receiver_runtime_args[0] = output.buffer()->address();
-                // }
+                auto &worker_writer_sender_runtime_args = GetRuntimeArgs(program, kernel_id, core);
+                worker_writer_sender_runtime_args.at(0) = output.buffer()->address();
             }
         }
     };
