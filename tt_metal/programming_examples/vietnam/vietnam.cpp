@@ -45,7 +45,7 @@ int main() {
         host_buffer0_ptr[1024 + i] = round_to_nearest_even(0);
     }
     for (int i = 0; i < 1024; ++i) {
-        host_buffer0_ptr[2048 + i] = round_to_nearest_even(i % 32);
+        host_buffer0_ptr[2048 + i] = round_to_nearest_even(i % 31);
     }
 
     auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
@@ -77,7 +77,7 @@ int main() {
     std::cout << "device_buffer1 page size : " << device_buffer1->page_size() << std::endl;
 
     /////////////////////////////////////////////////////////////////////////////////
-    // TODO: copy host buffer0 to device buffer0
+    // Copy host buffer0 to device buffer0
     /////////////////////////////////////////////////////////////////////////////////
 
     EnqueueWriteBuffer(cq, device_buffer0 /*TODO*/, host_buffer0.get(), true /*blocking*/);
@@ -90,7 +90,7 @@ int main() {
     auto core = CoreCoord{0, 0};
 
     /////////////////////////////////////////////////////////////////////////////////
-    // TODO: allocate circular buffer 0 and 1.
+    // Allocate circular buffer 0 and 1.
     /////////////////////////////////////////////////////////////////////////////////
 
     auto cb_num_tiles = 2;
@@ -112,7 +112,7 @@ int main() {
     std::cout << "cb1 total size : " << cb1_config.total_size() << std::endl;
 
     /////////////////////////////////////////////////////////////////////////////////
-    // TODO: Create reader, compute and writer kernel on the program
+    // Create kernels
     /////////////////////////////////////////////////////////////////////////////////
     KernelHandle compute_kernel_id = CreateKernel(
         program,
@@ -139,9 +139,7 @@ int main() {
         WriterDataMovementConfig({device_buffer1_is_dram} /*compile args. TODO*/, {} /*defined*/));
 
     /////////////////////////////////////////////////////////////////////////////////
-    // Reader args : device_buffer0_addr, cb0_id, num_tiles
-    // Compute args : cb0_id, cb1_id, num_tiles
-    // Writer args : device_buffer1_addr, cb1_id, num_tiles
+    // Set runtime args
     /////////////////////////////////////////////////////////////////////////////////
 
     const std::vector<uint32_t> reader_runtime_args = {
@@ -157,8 +155,7 @@ int main() {
     SetRuntimeArgs(program, writer_kernel_id, core, writer_runtime_args);
 
     //////////////////////////////////////////////////////////////////////////////////
-    // EnqueueProgram
-    // Copy device buffer1 to host buffer1
+    // EnqueueProgram and Copy device buffer1 to host buffer1
     //////////////////////////////////////////////////////////////////////////////////
     EnqueueProgram(cq, program, true /*blocking*/);
 
