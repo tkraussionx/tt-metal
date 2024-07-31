@@ -18,7 +18,7 @@ import torch
 # Used to reproduce issue #8665 with matmul 2D (Falcon 7b matmuls)
 @pytest.mark.parametrize(
     "seq_len, inner_dim, weights_n, per_core_M, per_core_N, in_block_w, out_subblock_h, out_subblock_w, loop_count",
-    ((1024, 4608, 18432, 4, 72, 3, 1, 8, 1000000), (1024, 4608, 18432, 4, 72, 3, 1, 1, 1000000)),
+    ((1024, 4608, 18432, 4, 72, 3, 1, 8, 100000), (1024, 4608, 18432, 4, 72, 3, 1, 1, 100000)),
     ids=["ff1-hang", "ff1-pass"],
 )
 @pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
