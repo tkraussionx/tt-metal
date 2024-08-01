@@ -355,16 +355,16 @@ void ScaledDotProductAttentionGQADecode::validate(const std::vector<Tensor>& inp
         }, this->compute_kernel_config);
 }
 
-std::vector<Shape> ScaledDotProductAttentionDecode::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+std::vector<Shape> ScaledDotProductAttentionGQADecode::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
     auto shape = input_tensors.at(0).get_legacy_shape();
-    return {1, 1, 32, shape[-1]*shape[1]};
+    return {(Shape) {1, 1, 32, shape[-1]*shape[1]}};
 }
 
 std::vector<Tensor> ScaledDotProductAttentionDecode::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     return operation::generic_create_output_tensors(
         *this, input_tensors, input_tensors.at(0).get_dtype(), Layout::TILE, this->output_mem_config);
 }
-std::vector<Shape> ScaledDotProductAttentionGQADecode::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+std::vector<Shape> ScaledDotProductAttentionDecode::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
     return {input_tensors.at(0).get_legacy_shape()};
 }
 
