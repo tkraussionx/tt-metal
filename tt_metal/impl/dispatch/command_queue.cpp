@@ -2682,6 +2682,11 @@ void EnqueueProgram(
 
 void EnqueueProgramImpl(
     CommandQueue& cq, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program, bool blocking) {
+
+    if (cq.device()->id() != 11) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
     ZoneScoped;
     std::visit(
         [&cq, blocking](auto&& program) {

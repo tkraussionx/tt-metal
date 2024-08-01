@@ -145,6 +145,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     std::unique_ptr<ccl::CclOpTensorConfig> output_tensor_config = ttnn::ccl::CclOpTensorConfig::build_all_gather_tensor_config(output_tensor);
 
     tt::tt_metal::Program program{};
+    program.capture_multi_device_dependencies();
     const auto& device = input_tensor.device();
     auto const& all_gather_config = AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology);
     auto const& topology_config = ttnn::ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
@@ -1236,8 +1237,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
                     worker_writer_receiver_kernels.push_back(worker_receive_writer_kernel_id);
                     receive_writer_kernel_core_list.push_back({worker_receive_writer_kernel_id, receiver_worker_cores.at(b)});
-
-                    std::cout << "Set RTAs for core: " << receiver_worker_cores.at(b).str() << " KId: " << worker_receive_writer_kernel_id << " IDX: "  << b << " " << worker_writer_receiver_kernels.size() - 1 << std::endl;
                     tt::tt_metal::SetRuntimeArgs(
                         program,
                         worker_receive_writer_kernel_id,
@@ -1283,7 +1282,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         bool is_sharded = input_tensors[0].is_sharded();
         const auto& input = input_tensors[0];
         const auto& output = output_tensors[0];
-        std::cout << "calling override runtime args" << std::endl;
 
 
 
@@ -1297,7 +1295,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 }
             } else {
                 auto &worker_writer_receiver_runtime_args = GetRuntimeArgs(program, kernel_id, core);
-                std::cout << "Done getting RTA: " << core.str() << " " << "KId: " << kernel_id << std::endl;
                 worker_writer_receiver_runtime_args.at(0) = output.buffer()->address();
             }
         }

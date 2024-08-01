@@ -385,7 +385,7 @@ def run_line_all_gather(
         pytest.skip("Not T3000!")
 
     for device in all_devices:
-        device.enable_async(False)
+        device.enable_async(enable_async)
 
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
@@ -396,28 +396,32 @@ def run_line_all_gather(
     if is_known_failure:
         pytest.skip(f"Skipping unsupported case {message}.")
 
-    devices = get_devices_for_t3000(all_devices, num_devices)
-    # for device in devices:
-    #    device.disable_and_clear_program_cache()
+    devices = [0, 0, 0, 0]
+    for device in all_devices:
+        print(device.id())
+        if device.id() == 11:
+            devices[0] = device
+        elif device.id() == 10:
+            devices[1] = device
+        elif device.id() == 9:
+            devices[2] = device
+        elif device.id() == 12:
+            devices[3] = device
 
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-    for loop in range(num_iters):
+    for loop in range(1000):
         input_tensor = torch.rand(input_shape).bfloat16()
-        print("Calling torch chunk")
         input_tensors = torch.chunk(input_tensor, num_devices, dim)
         tt_input_tensors = []
-        print("Creating device tensors")
         for i, t in enumerate(input_tensors):
             tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(layout).to(devices[i], mem_config))
-        print("aggregate")
         input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
-        print("Run all gather")
         tt_out_tensor = ttnn.line_all_gather(input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config)
-
+        ttl.tensor.Tensor(input_tensors[0]).to(devices[0])
+        ttl.tensor.Tensor(input_tensors[0]).to(devices[0])
         for i, t in enumerate(ttnn.get_device_tensors(tt_out_tensor)):
-            print("Call CPU on device: " + str(i))
             tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
             if input_dtype == ttl.tensor.DataType.BFLOAT16:
                 eq, output = comp_equal(tt_output_tensor, input_tensor)
