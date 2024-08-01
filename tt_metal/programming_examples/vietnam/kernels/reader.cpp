@@ -7,6 +7,7 @@ void kernel_main() {
     const auto device_buffer0_addr = get_arg_val<uint32_t>(arg++);
     const auto cb0_id = get_arg_val<uint32_t>(arg++);
     const auto num_tiles = get_arg_val<uint32_t>(arg++);
+    const auto tile_offset = get_arg_val<uint32_t>(arg++);
 
     constexpr bool device_buffer0_is_dram = get_compile_time_arg_val(0) == 1;
 
@@ -15,7 +16,7 @@ void kernel_main() {
     const InterleavedAddrGenFast<device_buffer0_is_dram> input_addrg = {
         .bank_base_address = device_buffer0_addr, .page_size = cb0_page_size, .data_format = cb0_data_format};
 
-    for (uint32_t tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
+    for (uint32_t tile_idx = tile_offset; tile_idx < tile_offset + num_tiles; ++tile_idx) {
         // TODO: read tiles.
         cb_reserve_back(cb0_id, 1);
         const auto cb0_l1_addr = get_write_ptr(cb0_id);
