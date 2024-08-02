@@ -1122,6 +1122,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.producer_semaphore_id = 1;
                 tunnel_core_allocations[PREFETCH].push_back(std::make_tuple(prefetch_location, settings));
                 settings.semaphores.clear();
+                std::cout << "Prefetch_h "<< cq_id << " on: " << prefetch_location.str() << std::endl;
             }
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -1145,6 +1146,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 tunnel_core_allocations[DISPATCH].push_back(std::make_tuple(dispatch_location, settings));
                 settings.semaphores.clear();
                 log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
+                std::cout << "Dispatch_h "<< cq_id << " on: " << dispatch_location.str() << std::endl;
             }
             uint32_t cq_id = 0;  // 1 mux, demux, local tunneler and remote tunneler per chip. Set cq_id to 0.
             if (tunnel_stop == 1) {
@@ -1233,7 +1235,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
                 settings.cb_log_page_size = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
                 tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
-
+                std::cout << "Prefetch_d "<< cq_id << " on: " << prefetch_d_location.str() << std::endl;
                 settings.semaphores.clear();
             }
 
@@ -1251,6 +1253,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
                 settings.semaphores.clear();
+                std::cout << "Dispatch_d "<< cq_id << " on: " << dispatch_d_location.str()  << " " << settings.worker_physical_core.str() << std::endl;
             }
         }
         tunnel_dispatch_core_allocations.insert(std::make_pair(tunnel_id, tunnel_core_allocations));
@@ -1406,7 +1409,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Prefetch_hd "<< cq_id << " on: " << prefetch_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
 
@@ -1447,7 +1450,8 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Dispatch_hd "<< cq_id << " on: " << dispatch_core.str() << std::endl;
+            std::cout << "Worker Sem Addr: " << DISPATCH_MESSAGE_ADDR << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);

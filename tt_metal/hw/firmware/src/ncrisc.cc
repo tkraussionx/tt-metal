@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
 
     // Cleanup profiler buffer incase we never get the go message
     while (1) {
-        DEBUG_STATUS("W");
+        // DEBUG_STATUS("W");
         notify_brisc_and_wait();
         DeviceZoneScopedMainN("NCRISC-FW");
 
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
         crta_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
             mailboxes->launch.kernel_config.mem_map[DISPATCH_CLASS_TENSIX_DM1].crta_offset);
 
-        DEBUG_STATUS("R");
+        // DEBUG_STATUS("R");
         kernel_init();
         DEBUG_STATUS("D");
 

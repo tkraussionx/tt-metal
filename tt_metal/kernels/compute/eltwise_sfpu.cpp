@@ -7,6 +7,13 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "dprint.h"
+
+
+inline void RISC_POST_STATUS(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
 
 namespace NAMESPACE {
 void MAIN {
@@ -14,7 +21,9 @@ void MAIN {
     uint32_t per_core_block_dim = get_compile_time_arg_val(1);
 
     init_sfpu(tt::CB::c_in0);
+    RISC_POST_STATUS(per_core_block_cnt);
     for (uint32_t block_index = 0; block_index < per_core_block_cnt; block_index++) {
+        // DPRINT << per_core_block_cnt << ENDL();
         cb_reserve_back(tt::CB::c_out0, per_core_block_dim);
         for(uint32_t tile_index = 0; tile_index < per_core_block_dim; ++tile_index) {
             acquire_dst(tt::DstMode::Half);
