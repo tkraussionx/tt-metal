@@ -36,6 +36,8 @@
 #include "ttnn/operations/eltwise/complex_binary_backward/complex_binary_backward_pybind.hpp"
 #include "ttnn/operations/experimental/experimental_pybind.hpp"
 
+#include "ttnn/operations/moreh_eltwise/moreh_eltwise_pybind.hpp"
+
 namespace py = pybind11;
 
 namespace ttnn {
@@ -114,6 +116,9 @@ void py_module(py::module& module) {
 
     auto m_experimental = module.def_submodule("experimental", "experimental operations");
     experimental::py_module(m_experimental);
+
+    auto m_moreh_relu = module.def_submodule("moreh_relu", "moreh_relu operations");
+    moreh_eltwise::py_module(m_moreh_relu);
 }
 
 }  // namespace operations
