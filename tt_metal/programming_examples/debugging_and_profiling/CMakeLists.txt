@@ -1,0 +1,8 @@
+
+set(DEBUGGING_AND_PROFILING_EXAMPLES_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/dprint_exercise1.cpp
+)
+
+CREATE_PGM_EXAMPLES_EXE("${DEBUGGING_AND_PROFILING_EXAMPLES_SRCS}" "debugging_and_profiling")
+
+add_custom_target(debugging_and_profiling DEPENDS ${PROGRAMMING_EXAMPLES_TEST_TARGETS})

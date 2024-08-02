@@ -35,7 +35,7 @@ int main() {
     //////////////////////////////////////////////////////////////////////////////////
     tt::DataFormat buffer_format = tt::DataFormat::Float16_b;
     uint32_t tile_size = tt::tt_metal::detail::TileSize(buffer_format);
-    uint32_t num_tiles = 1;
+    uint32_t num_tiles = 12;
     uint32_t host_buffer_size = num_tiles * tile_size;
     auto host_buffer0 = std::shared_ptr<void>(malloc(host_buffer_size), free);
 
@@ -81,7 +81,7 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     auto data_movement_kernel = tt::tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/noc_examples/kernels/reader_unicast_example1.cpp", /*reader kernel path. */
+        "tt_metal/programming_examples/noc_practice/kernels/reader_unicast_exercise1.cpp", /*reader kernel path. */
         core,
         tt::tt_metal::DataMovementConfig{
             .processor = tt::tt_metal::DataMovementProcessor::RISCV_0, .noc = tt::tt_metal::NOC::RISCV_0_default});
