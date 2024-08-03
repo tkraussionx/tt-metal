@@ -56,6 +56,7 @@ public:
     tt::ARCH arch() const;
 
     void close_devices();
+    DeviceMeshView* get_view();
 
    private:
     bool is_galaxy_;

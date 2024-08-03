@@ -174,6 +174,13 @@ void DeviceMesh::close_devices() {
     managed_devices.clear();
 }
 
+DeviceMeshView* DeviceMesh::get_view() {
+    if (not is_galaxy_) {
+        TT_THROW("#10419: Current device mesh does not support indexing by row or col indices.");
+    }
+    return this->view.get();
+}
+
 bool validate_worker_modes(const std::vector<Device*>& workers) {
     bool worker_modes_match = true;
     auto first_worker_mode = workers.at(0)->get_worker_mode();
