@@ -65,27 +65,56 @@ MorehReluDeviceOperation::MultiCore::create(
 
   auto reader_kernel_id = CreateKernel(
       program,
-      "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/kernels/reader.cpp",
+      "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/kernels/"
+      "reader.cpp",
       target_cores, ReaderDataMovementConfig({device_buffer0_is_dram}, {}));
 
   auto writer_kernel_id = CreateKernel(
       program,
-      "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/kernels/writer.cpp",
+      "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/kernels/"
+      "writer.cpp",
       target_cores, WriterDataMovementConfig({device_buffer1_is_dram}, {}));
 
-  auto compute_kernel_id = CreateKernel(
-      program,
-      "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/kernels/compute.cpp",
-      target_cores,
-      ComputeConfig{
-          .compile_args = {},
-          .defines = {},
-      });
+  std::map<string, string> compute_defines;
+
+  switch (operation_attributes.which_relu) {
+  case 0:
+    compute_defines["RELU_INIT()"] = "relu_tile_init()";
+    compute_defines["RELU(idst, place_holder)"] = "relu_tile(idst)";
+    compute_defines["TEST"] = "DPRINT << \"relu\" << ENDL();";
+    break;
+  case 1:
+    compute_defines["RELU_INIT()"] = "relu_max_tile_init()";
+    compute_defines["RELU(idst, bound)"] = "relu_max_tile(idst, bound)";
+    compute_defines["TEST"] = "DPRINT << \"relu_max\" << ENDL();";
+    break;
+  case 2:
+    compute_defines["RELU_INIT()"] = "relu_min_tile_init()";
+    compute_defines["RELU(idst, bound)"] = "relu_min_tile(idst, bound)";
+    compute_defines["TEST"] = "DPRINT << \"relu_min\" << ENDL();";
+    break;
+  default:
+    TT_FATAL(false, "which_relu must be one of 0, 1 and 2");
+  }
+
+  auto compute_kernel_id =
+      CreateKernel(program,
+                   "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/"
+                   "kernels/compute.cpp",
+                   target_cores,
+                   ComputeConfig{
+                       .compile_args = {},
+                       .defines = compute_defines,
+                   });
   /////////////////////////////////////////////////////////////////////////////////
   // Set runtime args
   /////////////////////////////////////////////////////////////////////////////////
   {
     uint32_t tile_offset = 0;
+    union {
+      float value;
+      uint32_t bits;
+    } bound = {.value = operation_attributes.bound};
     for (uint32_t x = 0; x < grid.x; ++x) {
       for (uint32_t y = 0; y < grid.y; ++y) {
         auto core = CoreCoord{x, y};
@@ -117,7 +146,7 @@ MorehReluDeviceOperation::MultiCore::create(
         // compute kernel does not need to know tile offset.
         const std::vector<uint32_t> compute_runtime_args = {
             static_cast<uint32_t>(cb0_id), static_cast<uint32_t>(cb1_id),
-            num_tiles_per_core};
+            num_tiles_per_core, bound.bits};
 
         SetRuntimeArgs(program, compute_kernel_id, core, compute_runtime_args);
 

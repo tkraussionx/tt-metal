@@ -26,13 +26,12 @@ void bind_moreh_relu(py::module &module) {
       ttnn::pybind_overload_t{
           [](const decltype(ttnn::moreh_relu) &self,
              const ttnn::Tensor &input_tensor,
-             const ttnn::Tensor &output_tensor, const bool do_max_relu,
-             const uint32_t max, const uint8_t &queue_id) -> ttnn::Tensor {
-            return self(queue_id, input_tensor, output_tensor, do_max_relu, max);
+             const ttnn::Tensor &output_tensor, const uint8_t which_relu,
+             const float bound, const uint8_t &queue_id) -> ttnn::Tensor {
+            return self(queue_id, input_tensor, output_tensor, which_relu, bound);
           },
-          py::arg("input_tensor"), py::arg("output_tensor"),
-          py::arg("do_max_relu"), py::arg("max"), py::kw_only(),
-          py::arg("queue_id") = 0});
+          py::arg("input_tensor"), py::arg("output_tensor"), py::kw_only(),
+          py::arg("which_relu"), py::arg("bound"), py::arg("queue_id") = 0});
 }
 
 } // namespace ttnn::operations::moreh_eltwise

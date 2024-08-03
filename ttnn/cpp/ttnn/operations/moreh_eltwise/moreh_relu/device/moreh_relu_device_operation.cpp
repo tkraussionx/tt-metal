@@ -4,18 +4,40 @@
 
 #include "moreh_relu_device_operation.hpp"
 #include "tt_metal/common/assert.hpp"
+#include <iostream>
 namespace ttnn::operations::moreh_eltwise {
 
-MorehReluDeviceOperation::program_factory_t
-MorehReluDeviceOperation::select_program_factory(
-    const operation_attributes_t &operation_attributes,
+tt::stl::hash::hash_t MorehReluDeviceOperation::compute_program_hash(
+    const operation_attributes_t &attributes,
     const tensor_args_t &tensor_args) {
-  return MultiCore{};
+
+  reflect::for_each(
+      [&attributes](auto I) {
+        const auto &attribute_name = reflect::member_name<I>(attributes);
+        const auto &attribute = reflect::get<I>(attributes);
+        std::cout << "moreh_relu reflection" << std::endl;
+        std::cout << attribute_name << " " << attribute << std::endl;
+      },
+      attributes);
+
+  // return tt::stl::hash::hash_objects_with_default_seed(
+  //     tt::stl::hash::type_hash<MorehReluDeviceOperation>,
+  //     attributes.max, tensor_args.input_tensor,
+  //     tensor_args.output_tensor);
+
+  return tt::stl::hash::hash_objects_with_default_seed(
+      tt::stl::hash::type_hash<MorehReluDeviceOperation>, attributes,
+      tensor_args);
 }
 
 void MorehReluDeviceOperation::validate_on_program_cache_miss(
     const operation_attributes_t &attributes,
     const tensor_args_t &tensor_args) {
+
+  TT_FATAL(0 <= attributes.which_relu && attributes.which_relu <= 2,
+           "which_relu must be 0, 1 or 2");
+  TT_FATAL(attributes.bound >= 0, "Upper bound must be not negative.");
+
   const auto &input_tensor = tensor_args.input_tensor;
   TT_FATAL(input_tensor.get_dtype() == DataType::BFLOAT16,
            "input tensor data format must be bfloat16");
@@ -55,6 +77,13 @@ MorehReluDeviceOperation::create_output_tensors(
         output_shape, input_tensor.tensor_attributes->dtype,
         input_tensor.tensor_attributes->layout, input_tensor.device());
   }
+}
+
+MorehReluDeviceOperation::program_factory_t
+MorehReluDeviceOperation::select_program_factory(
+    const operation_attributes_t &operation_attributes,
+    const tensor_args_t &tensor_args) {
+  return MultiCore{};
 }
 
 } // namespace ttnn::operations::moreh_eltwise
