@@ -1,6 +1,7 @@
 #include <cstring>
 #include <string>
 #include "tt_metal/host_api.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 uint16_t round_to_nearest_even(float val) {
     uint _val = reinterpret_cast<uint &>(val);
@@ -58,7 +59,7 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     // Copy host buffer to dram buffer
     /////////////////////////////////////////////////////////////////////////////////
-    // Clear dram buffers first
+    // Clear dram buffers
     std::memset(host_buffer0.get(), 0, host_buffer_size);
     tt::tt_metal::EnqueueWriteBuffer(cq, input_dram_buffer, host_buffer0.get(), true /*blocking*/);
     tt::tt_metal::EnqueueWriteBuffer(cq, output_dram_buffer, host_buffer0.get(), true /*blocking*/);
@@ -81,7 +82,7 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     auto data_movement_kernel = tt::tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/noc_practice/kernels/reader_unicast_exercise1.cpp", /*reader kernel path. */
+        "tt_metal/programming_examples/noc_practice/kernels/reader_and_writer_unicast_exercise1.cpp", /*reader kernel path. */
         core,
         tt::tt_metal::DataMovementConfig{
             .processor = tt::tt_metal::DataMovementProcessor::RISCV_0, .noc = tt::tt_metal::NOC::RISCV_0_default});
@@ -103,9 +104,14 @@ int main() {
         dram_buffer_size};
     tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, reader_runtime_args);
 
+
     //////////////////////////////////////////////////////////////////////////////////
     // EnqueueProgram and Copy output_dram_buffer to host buffer1
     //////////////////////////////////////////////////////////////////////////////////
+    // Clear L1 buffer
+    std::vector<uint32_t> zero (dram_buffer_size / sizeof(uint32_t));
+    tt::tt_metal::detail::WriteToDeviceL1(device, core, l1_buffer_addr, zero);
+
     EnqueueProgram(cq, program, true /*blocking*/);
 
     auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
