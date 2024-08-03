@@ -1,7 +1,7 @@
 #include <cstring>
 #include <string>
+#include <random>
 #include "tt_metal/host_api.hpp"
-#include "tt_metal/detail/tt_metal.hpp"
 
 uint16_t round_to_nearest_even(float val) {
     uint _val = reinterpret_cast<uint &>(val);
@@ -59,15 +59,19 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     // Copy host buffer to dram buffer
     /////////////////////////////////////////////////////////////////////////////////
-    // Clear dram buffers
+    // Clear dram buffers first
     std::memset(host_buffer0.get(), 0, host_buffer_size);
     tt::tt_metal::EnqueueWriteBuffer(cq, input_dram_buffer, host_buffer0.get(), true /*blocking*/);
     tt::tt_metal::EnqueueWriteBuffer(cq, output_dram_buffer, host_buffer0.get(), true /*blocking*/);
 
-    // Fill host buffer0.
+    // Fill random values to host buffer0.
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> dis(0.0f, 1.0f);
     auto host_buffer0_ptr = reinterpret_cast<uint16_t *>(host_buffer0.get());
     for (int i = 0; i < num_tiles * tt::constants::TILE_HW; ++i) {
-        host_buffer0_ptr[i] = round_to_nearest_even(i);
+        float random_value = dis(gen);
+        host_buffer0_ptr[i] = round_to_nearest_even(random_value);
     }
     tt::tt_metal::EnqueueWriteBuffer(cq, input_dram_buffer, host_buffer0.get(), true /*blocking*/);
 
@@ -78,44 +82,80 @@ int main() {
     CoreCoord core = CoreCoord{0, 0};
 
     /////////////////////////////////////////////////////////////////////////////////
+    // Allocate circular buffer 0 and 1.
+    /////////////////////////////////////////////////////////////////////////////////
+    uint32_t cb_num_tiles = 2;
+    uint32_t cb0_id = tt::CB::c_in0;
+    tt::DataFormat cb0_data_format = tt::DataFormat::Float16_b;
+    tt::tt_metal::CircularBufferConfig cb0_config =
+        tt::tt_metal::CircularBufferConfig(
+            cb_num_tiles * tile_size, {{cb0_id, cb0_data_format}})
+            .set_page_size(cb0_id, tile_size);
+    tt::tt_metal::CreateCircularBuffer(program, core, cb0_config);
+
+    uint32_t cb1_id = tt::CB::c_out0;
+    tt::DataFormat cb1_data_format = tt::DataFormat::Float16_b;
+    tt::tt_metal::CircularBufferConfig cb1_config = tt::tt_metal::CircularBufferConfig(
+            cb_num_tiles * tile_size, {{cb1_id, cb1_data_format}})
+            .set_page_size(cb1_id, tile_size);
+    tt::tt_metal::CreateCircularBuffer(program, core, cb1_config);
+
+    /////////////////////////////////////////////////////////////////////////////////
     // Create kernels
     /////////////////////////////////////////////////////////////////////////////////
-    auto data_movement_kernel = tt::tt_metal::CreateKernel(
+    tt::tt_metal::KernelHandle reader_kernel = tt::tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/noc_practice/kernels/reader_and_writer_unicast_exercise1.cpp", /* reader and writer kernel path. */
+        "tt_metal/programming_examples/noc_practice/kernels/reader_unicast_exercise2.cpp", /* reader kernel path. */
         core,
         tt::tt_metal::DataMovementConfig{
             .processor = tt::tt_metal::DataMovementProcessor::RISCV_0, .noc = tt::tt_metal::NOC::RISCV_0_default});
+
+    tt::tt_metal::KernelHandle writer_kernel = tt::tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/noc_practice/kernels/writer_unicast_exercise2.cpp", /* writer kernel path. */
+        core,
+        tt::tt_metal::DataMovementConfig{
+            .processor = tt::tt_metal::DataMovementProcessor::RISCV_1, .noc = tt::tt_metal::NOC::RISCV_1_default});
+
+    tt::tt_metal::KernelHandle compute_kernel_id = CreateKernel(
+        program,
+        "tt_metal/programming_examples/noc_practice/kernels/compute_unicast_exercise2.cpp", /* compute kernel path. */
+        core,
+        ComputeConfig{
+            .compile_args = {},
+            .defines = {},
+        });
 
     /////////////////////////////////////////////////////////////////////////////////
     // Set runtime args
     /////////////////////////////////////////////////////////////////////////////////
     CoreCoord input_dram_noc_xy = input_dram_buffer->noc_coordinates();
     CoreCoord output_dram_noc_xy = output_dram_buffer->noc_coordinates();
-    uint32_t l1_buffer_addr = 400 * 1024;
     const std::vector<uint32_t> reader_runtime_args = {
-        l1_buffer_addr,
         input_dram_buffer->address(),
         static_cast<uint32_t>(input_dram_noc_xy.x),
         static_cast<uint32_t>(input_dram_noc_xy.y),
+        num_tiles,
+        tile_size};
+    tt::tt_metal::SetRuntimeArgs(program, reader_kernel, core, reader_runtime_args);
+
+    const std::vector<uint32_t> writer_runtime_args = {
         output_dram_buffer->address(),
         static_cast<uint32_t>(output_dram_noc_xy.x),
         static_cast<uint32_t>(output_dram_noc_xy.y),
-        dram_buffer_size};
-    tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, reader_runtime_args);
+        num_tiles,
+        tile_size};
+    tt::tt_metal::SetRuntimeArgs(program, writer_kernel, core, writer_runtime_args);
 
-
+    const std::vector<uint32_t> compute_runtime_args = { num_tiles };
+    tt::tt_metal::SetRuntimeArgs(program, compute_kernel_id, core, compute_runtime_args);
     //////////////////////////////////////////////////////////////////////////////////
     // EnqueueProgram and Copy output_dram_buffer to host buffer1
     //////////////////////////////////////////////////////////////////////////////////
-    // Clear L1 buffer
-    std::vector<uint32_t> zero (dram_buffer_size / sizeof(uint32_t));
-    tt::tt_metal::detail::WriteToDeviceL1(device, core, l1_buffer_addr, zero);
-
-    EnqueueProgram(cq, program, true /*blocking*/);
+    tt::tt_metal::EnqueueProgram(cq, program, true /*blocking*/);
 
     auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
-    EnqueueReadBuffer(cq, output_dram_buffer, host_buffer1.get(), true /*blocking*/);
+    tt::tt_metal::EnqueueReadBuffer(cq, output_dram_buffer, host_buffer1.get(), true /*blocking*/);
     auto host_buffer1_ptr = reinterpret_cast<uint16_t *>(host_buffer1.get());
 
     bool pass = true;

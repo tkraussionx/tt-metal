@@ -1,6 +1,7 @@
 
 set(NOC_EXAMPLES_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/unicast_exercise1.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/unicast_exercise2.cpp
 )
 
 CREATE_PGM_EXAMPLES_EXE("${NOC_EXAMPLES_SRCS}" "noc_practice")
