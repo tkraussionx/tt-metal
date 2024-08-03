@@ -59,7 +59,7 @@ jobs:
         with:
           name:  TTMetal_build_${{ inputs.arch }}${{ (inputs.tracy && '_profiler') || '' }}
       - name: Extract files
-        run: tar -xvf ttm_${{ inputs.arch }}.tar
+        run: tar -xvf ttm_${{ inputs.arch }}${{ (inputs.tracy && '_profiler') || '' }}.tar
       - uses: ./.github/actions/install-python-deps
       - name: Run pre/post regression tests in a loop
         run: |
