@@ -82,7 +82,7 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     auto data_movement_kernel = tt::tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/noc_practice/kernels/reader_and_writer_unicast_exercise1.cpp", /* reader and writer kernel path. */
+        "tt_metal/programming_examples/noc_practice/kernels/unicast_exercise1.cpp", /* reader and writer kernel path. */
         core,
         tt::tt_metal::DataMovementConfig{
             .processor = tt::tt_metal::DataMovementProcessor::RISCV_0, .noc = tt::tt_metal::NOC::RISCV_0_default});
@@ -93,7 +93,7 @@ int main() {
     CoreCoord input_dram_noc_xy = input_dram_buffer->noc_coordinates();
     CoreCoord output_dram_noc_xy = output_dram_buffer->noc_coordinates();
     uint32_t l1_buffer_addr = 400 * 1024;
-    const std::vector<uint32_t> reader_runtime_args = {
+    const std::vector<uint32_t> runtime_args = {
         l1_buffer_addr,
         input_dram_buffer->address(),
         static_cast<uint32_t>(input_dram_noc_xy.x),
@@ -102,7 +102,7 @@ int main() {
         static_cast<uint32_t>(output_dram_noc_xy.x),
         static_cast<uint32_t>(output_dram_noc_xy.y),
         dram_buffer_size};
-    tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, reader_runtime_args);
+    tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, runtime_args);
 
 
     //////////////////////////////////////////////////////////////////////////////////

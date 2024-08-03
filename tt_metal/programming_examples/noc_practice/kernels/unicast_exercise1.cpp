@@ -8,7 +8,7 @@
 void kernel_main() {
     std::uint32_t l1_buffer_addr        = get_arg_val<uint32_t>(0);
 
-    std::uint32_t dram_buffer_input_addr  = get_arg_val<uint32_t>(1);
+    std::uint32_t dram_input_buffer_addr  = get_arg_val<uint32_t>(1);
     std::uint32_t dram_input_noc_x        = get_arg_val<uint32_t>(2);
     std::uint32_t dram_input_noc_y        = get_arg_val<uint32_t>(3);
 
@@ -19,8 +19,8 @@ void kernel_main() {
     std::uint32_t dram_buffer_size      = get_arg_val<uint32_t>(7);
 
     // DRAM NOC input address
-    std::uint64_t dram_buffer_input_noc_addr = get_noc_addr(dram_input_noc_x, dram_input_noc_y, dram_buffer_input_addr);
-    noc_async_read(dram_buffer_input_noc_addr, l1_buffer_addr, dram_buffer_size);
+    std::uint64_t dram_input_buffer_noc_addr = get_noc_addr(dram_input_noc_x, dram_input_noc_y, dram_input_buffer_addr);
+    noc_async_read(dram_input_buffer_noc_addr, l1_buffer_addr, dram_buffer_size);
     noc_async_read_barrier();
 
     // DRAM NOC output address

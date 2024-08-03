@@ -53,11 +53,9 @@ int main() {
         .page_size = dram_buffer_size,
         .buffer_type = tt::tt_metal::BufferType::DRAM};
     std::shared_ptr<tt::tt_metal::Buffer> input_dram_buffer = tt::tt_metal::CreateBuffer(dram_config);
-    std::shared_ptr<tt::tt_metal::Buffer> output_dram_buffer = tt::tt_metal::CreateBuffer(dram_config);
 
     // Get Device Buffer 0 Info
     print_buffer_info(input_dram_buffer, "input_dram_buffer");
-    print_buffer_info(output_dram_buffer, "output_dram_buffer");
 
     /////////////////////////////////////////////////////////////////////////////////
     // Copy host buffer to dram buffer
@@ -65,7 +63,6 @@ int main() {
     // Clear dram buffers
     std::memset(host_buffer0.get(), 0, host_buffer_size);
     tt::tt_metal::EnqueueWriteBuffer(cq, input_dram_buffer, host_buffer0.get(), true /*blocking*/);
-    tt::tt_metal::EnqueueWriteBuffer(cq, output_dram_buffer, host_buffer0.get(), true /*blocking*/);
 
     // Fill random values to host buffer0.
     std::random_device rd;
@@ -99,7 +96,6 @@ int main() {
     // Set runtime args
     /////////////////////////////////////////////////////////////////////////////////
     CoreCoord input_dram_noc_xy = input_dram_buffer->noc_coordinates();
-    CoreCoord output_dram_noc_xy = output_dram_buffer->noc_coordinates();
     uint32_t l1_buffer_addr = 400 * 1024;
     CoreCoord grid_size = device->logical_grid_size();
     CoreCoord core_start = core;
@@ -128,7 +124,7 @@ int main() {
     tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, runtime_args);
 
     //////////////////////////////////////////////////////////////////////////////////
-    // EnqueueProgram and Copy output_dram_buffer to host buffer1
+    // EnqueueProgram and read output from L1 of destination cores
     //////////////////////////////////////////////////////////////////////////////////
     // Clear L1 buffer
     std::vector<uint32_t> zero(dram_buffer_size / sizeof(uint32_t));
@@ -136,6 +132,7 @@ int main() {
 
     EnqueueProgram(cq, program, true /*blocking*/);
 
+    // Verify data fro all cores
     bool pass = true;
     for (int i = 0; i < grid_size.y; i++) {
         for (int j = 0; j < grid_size.x; j++) {
