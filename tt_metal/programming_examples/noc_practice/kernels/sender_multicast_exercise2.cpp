@@ -5,6 +5,14 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+// This section is reserved for watcher tool practice session.
+#if 0
+#include "debug/assert.h"
+#include "debug/status.h"
+#include "debug/pause.h"
+#include "debug/ring_buffer.h"
+#endif
+
 void kernel_main() {
     uint32_t l1_buffer_src_addr = get_arg_val<uint32_t>(0);
     uint32_t dram_input_buffer_addr = get_arg_val<uint32_t>(1);
@@ -28,6 +36,24 @@ void kernel_main() {
     uint64_t dram_buffer_input_noc_addr = get_noc_addr(dram_input_noc_x, dram_input_noc_y, dram_input_buffer_addr);
     noc_async_read(dram_buffer_input_noc_addr, l1_buffer_src_addr, dram_buffer_size);
     noc_async_read_barrier();
+
+    // This section is reserved for watcher tool practice session.
+    #if 0
+    for (uint32_t idx = 0; idx < 40; idx++) {
+        WATCHER_RING_BUFFER_PUSH(idx + 1);
+    }
+    #endif
+
+    // This section is reserved for watcher tool practice session.
+    #if 0
+    PAUSE();
+    #endif
+
+    // This section is reserved for watcher tool practice session.
+    #if 0
+    DEBUG_STATUS("AST1");
+    ASSERT(false);
+    #endif
 
     noc_semaphore_wait(mcast_sender_semaphore_addr_ptr, num_dests);
     noc_semaphore_set(mcast_sender_semaphore_addr_ptr, 0);
