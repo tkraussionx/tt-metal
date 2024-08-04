@@ -158,7 +158,8 @@ MorehReluDeviceOperation::MultiCore::create(
   return {std::move(program),
           {.reader_kernel_id = reader_kernel_id,
            .writer_kernel_id = writer_kernel_id,
-           .compute_kernel_id = compute_kernel_id}};
+           .compute_kernel_id = compute_kernel_id,
+           .grid = grid}};
 }
 
 void MorehReluDeviceOperation::MultiCore::override_runtime_arguments(
@@ -166,35 +167,39 @@ void MorehReluDeviceOperation::MultiCore::override_runtime_arguments(
     const operation_attributes_t &operation_attributes,
     const tensor_args_t &tensor_args,
     tensor_return_value_t &tensor_return_value) {
-  // auto& program = cached_program.program;
-  // auto& unary_reader_kernel_id =
-  // cached_program.shared_variables.unary_reader_kernel_id; auto&
-  // unary_writer_kernel_id =
-  // cached_program.shared_variables.unary_writer_kernel_id; auto& num_cores =
-  // cached_program.shared_variables.num_cores; auto& num_cores_y =
-  // cached_program.shared_variables.num_cores_y;
+  auto &program = cached_program.program;
+  auto &reader_kernel_id = cached_program.shared_variables.reader_kernel_id;
+  auto &writer_kernel_id = cached_program.shared_variables.writer_kernel_id;
+  auto &compute_kernel_id = cached_program.shared_variables.compute_kernel_id;
+  auto grid = cached_program.shared_variables.grid;
 
-  // const auto& input_tensor = tensor_args.input_tensor;
-  // auto& output_tensor = tensor_return_value;
+  const auto &input_tensor = tensor_args.input_tensor;
+  auto &output_tensor = tensor_return_value;
 
-  // auto src_buffer = input_tensor.buffer();
-  // auto dst_buffer = output_tensor.buffer();
+  auto src_buffer = input_tensor.buffer();
+  auto dst_buffer = output_tensor.buffer();
 
-  // for (uint32_t i = 0, num_tiles_written = 0; i < num_cores; i++) {
-  //     CoreCoord core = {i / num_cores_y, i % num_cores_y};
+  for (uint32_t x = 0; x < grid.x; ++x) {
+    for (uint32_t y = 0; y < grid.y; ++y) {
+      CoreCoord core = {x, y};
 
-  //     {
-  //         auto& runtime_args = GetRuntimeArgs(program,
-  //         unary_reader_kernel_id, core); runtime_args[0] =
-  //         src_buffer->address();
-  //     }
+      auto &reader_runtime_args =
+          GetRuntimeArgs(program, reader_kernel_id, core);
+      reader_runtime_args[0] = src_buffer->address();
 
-  //     {
-  //         auto& runtime_args = GetRuntimeArgs(program,
-  //         unary_writer_kernel_id, core); runtime_args[0] =
-  //         dst_buffer->address();
-  //     }
-  // }
+      auto &writer_runtime_args =
+          GetRuntimeArgs(program, writer_kernel_id, core);
+      writer_runtime_args[0] = dst_buffer->address();
+
+      auto &compute_runtime_args =
+          GetRuntimeArgs(program, compute_kernel_id, core);
+      union {
+        float value;
+        uint32_t bits;
+      } bound = {.value = operation_attributes.bound};
+      compute_runtime_args[3] = bound.bits;
+    }
+  }
 }
 
 } // namespace ttnn::operations::moreh_eltwise

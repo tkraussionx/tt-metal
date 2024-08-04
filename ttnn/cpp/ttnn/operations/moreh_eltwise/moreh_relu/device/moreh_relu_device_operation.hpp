@@ -45,6 +45,7 @@ struct MorehReluDeviceOperation {
       KernelHandle reader_kernel_id;
       KernelHandle writer_kernel_id;
       KernelHandle compute_kernel_id;
+      CoreCoord grid;
     };
     using cached_program_t =
         ttnn::device_operation::CachedProgram<shared_variables_t>;

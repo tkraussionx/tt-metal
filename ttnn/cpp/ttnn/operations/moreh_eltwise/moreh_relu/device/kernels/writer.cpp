@@ -16,9 +16,7 @@ void kernel_main() {
     const InterleavedAddrGenFast<device_buffer1_is_dram> dram_buffer1_addrg = {
         .bank_base_address = device_buffer1_addr, .page_size = cb1_page_size, .data_format = cb1_data_format};
 
-    // for (uint32_t tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
     for (uint32_t tile_idx = tile_offset; tile_idx < tile_offset + num_tiles; ++tile_idx) {
-        // TODO: write tiles.
         cb_wait_front(cb1_id, 1);
         const auto cb1_l1_addr = get_read_ptr(cb1_id);
         noc_async_write_tile(tile_idx, dram_buffer1_addrg, cb1_l1_addr);

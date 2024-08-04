@@ -10,6 +10,10 @@
 
 namespace ttnn::operations::moreh_eltwise {
 
-void py_module(py::module& module) { bind_moreh_relu(module); }
+void py_module(py::module& module) {
+    bind_moreh_relu(module);
+    // bind_moreh_sin(module);
+    // bind_moreh_cos(module);
+}
 
 }  // namespace ttnn::operations::examples

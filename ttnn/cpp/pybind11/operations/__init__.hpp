@@ -117,8 +117,8 @@ void py_module(py::module& module) {
     auto m_experimental = module.def_submodule("experimental", "experimental operations");
     experimental::py_module(m_experimental);
 
-    auto m_moreh_relu = module.def_submodule("moreh_relu", "moreh_relu operations");
-    moreh_eltwise::py_module(m_moreh_relu);
+    auto m_moreh_eltwise = module.def_submodule("moreh_eltwise", "moreh eltwise operations");
+    moreh_eltwise::py_module(m_moreh_eltwise);
 }
 
 }  // namespace operations

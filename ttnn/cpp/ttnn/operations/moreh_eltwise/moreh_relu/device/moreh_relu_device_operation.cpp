@@ -11,23 +11,23 @@ tt::stl::hash::hash_t MorehReluDeviceOperation::compute_program_hash(
     const operation_attributes_t &attributes,
     const tensor_args_t &tensor_args) {
 
-  reflect::for_each(
-      [&attributes](auto I) {
-        const auto &attribute_name = reflect::member_name<I>(attributes);
-        const auto &attribute = reflect::get<I>(attributes);
-        std::cout << "moreh_relu reflection" << std::endl;
-        std::cout << attribute_name << " " << attribute << std::endl;
-      },
-      attributes);
-
-  // return tt::stl::hash::hash_objects_with_default_seed(
-  //     tt::stl::hash::type_hash<MorehReluDeviceOperation>,
-  //     attributes.max, tensor_args.input_tensor,
-  //     tensor_args.output_tensor);
+  // reflect::for_each(
+  //     [&attributes](auto I) {
+  //       const auto &attribute_name = reflect::member_name<I>(attributes);
+  //       const auto &attribute = reflect::get<I>(attributes);
+  //       std::cout << "moreh_relu reflection" << std::endl;
+  //       std::cout << attribute_name << " " << attribute << std::endl;
+  //     },
+  //     attributes);
 
   return tt::stl::hash::hash_objects_with_default_seed(
-      tt::stl::hash::type_hash<MorehReluDeviceOperation>, attributes,
-      tensor_args);
+      tt::stl::hash::type_hash<MorehReluDeviceOperation>,
+      attributes.which_relu, tensor_args.input_tensor,
+      tensor_args.output_tensor);
+
+  // return tt::stl::hash::hash_objects_with_default_seed(
+  //     tt::stl::hash::type_hash<MorehReluDeviceOperation>, attributes,
+  //     tensor_args);
 }
 
 void MorehReluDeviceOperation::validate_on_program_cache_miss(
@@ -55,7 +55,11 @@ void MorehReluDeviceOperation::validate_on_program_cache_miss(
 
 void MorehReluDeviceOperation::validate_on_program_cache_hit(
     const operation_attributes_t &attributes,
-    const tensor_args_t &tensor_args) {}
+    const tensor_args_t &tensor_args) {
+  TT_FATAL(attributes.bound >= 0, "Upper bound must be not negative.");
+  // Cache hit means that the other values used in
+  // create_program are same.
+}
 
 MorehReluDeviceOperation::shape_return_value_t
 MorehReluDeviceOperation::compute_output_shapes(
