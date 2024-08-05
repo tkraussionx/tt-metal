@@ -4281,7 +4281,7 @@ def frac(
     return [ttnn_tensor_to_torch(t3[0]), ttnn_tensor_to_torch(t3[1])]
 =======
 
-    t1 = ttnn.frac(t0, memory_config=output_mem_config)[0]
+    t1 = ttnn.frac(t0, memory_config=output_mem_config)
 
     return ttnn_tensor_to_torch(t1)
 >>>>>>> #10147: Add frac sweeps to ttnn
@@ -4304,6 +4304,23 @@ def cos_bw(
     t2 = ttnn.cos_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
+
+
+def trunc(
+    x,  # grad_tensor
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+
+    t1 = ttnn.trunc(t0, memory_config=output_mem_config)
+
+    return ttnn_tensor_to_torch(t1)
 
 
 def normalize_global(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):

@@ -2432,3 +2432,7 @@ def frac(x, *args, **kwargs):
     return torch.frac(x)
 
 
+def trunc(x, *args, **kwargs):
+    return torch.trunc(x)
+
+
