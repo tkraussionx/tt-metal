@@ -7,21 +7,21 @@
 #include "debug/dprint.h"
 
 void kernel_main() {
-    std::uint32_t dram_buffer_input_addr = get_arg_val<uint32_t>(0);
-    std::uint32_t dram_input_noc_x = get_arg_val<uint32_t>(1);
-    std::uint32_t dram_input_noc_y = get_arg_val<uint32_t>(2);
+    std::uint32_t input_dram_buffer_addr = get_arg_val<uint32_t>(0);
+    std::uint32_t input_dram_noc_x = get_arg_val<uint32_t>(1);
+    std::uint32_t input_dram_noc_y = get_arg_val<uint32_t>(2);
     std::uint32_t num_tiles = get_arg_val<uint32_t>(3);
     std::uint32_t tile_size = get_arg_val<uint32_t>(4);
 
     constexpr uint32_t cb0_id = 0;
 
-    std::uint32_t input_addr = dram_buffer_input_addr;
+    std::uint32_t input_addr = input_dram_buffer_addr;
     for (std::uint32_t i = 0; i < num_tiles; ++i) {
         cb_reserve_back(cb0_id, 1);
         const auto cb0_l1_addr = get_write_ptr(cb0_id);
 
-        std::uint64_t dram_buffer_input_noc_addr = get_noc_addr(dram_input_noc_x, dram_input_noc_y, input_addr);
-        noc_async_read(dram_buffer_input_noc_addr, cb0_l1_addr, tile_size);
+        std::uint64_t input_dram_buffer_noc_addr = get_noc_addr(input_dram_noc_x, input_dram_noc_y, input_addr);
+        noc_async_read(input_dram_buffer_noc_addr, cb0_l1_addr, tile_size);
 
         noc_async_read_barrier();
 
