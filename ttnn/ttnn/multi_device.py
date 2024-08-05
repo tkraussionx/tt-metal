@@ -197,7 +197,7 @@ class ShardTensor2dMesh(TensorToMesh):
     def map(self, tensor):
         import torch
 
-        Y, X = self.shard_dimensions
+        Y, X = 0, 1
         # Returns list of tensors to map to row-major ordering of chips in shard grid
         if self.shard_dimensions[Y] is None:
             row_tensors = [tensor.clone() for _ in range(self.shard_grid[Y])]
@@ -216,6 +216,9 @@ class ShardTensor2dMesh(TensorToMesh):
         return {
             "strategy": "shard",
             "shard_dim": f"{self.shard_dimensions[0] if self.shard_dimensions[0] else self.shard_dimensions[1]}",
+            # "strategy": "shard_2d",
+            # "shard_grid_y": f"{self.shard_grid[0]}",
+            # "shard_grid_x": f"{self.shard_grid[1]}",
         }
 
 
