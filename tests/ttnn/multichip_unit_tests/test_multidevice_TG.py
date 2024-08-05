@@ -1336,7 +1336,8 @@ def test_device_line_all_gather_8x4_data(device_mesh, cluster_axis: int, dim: in
 @pytest.mark.parametrize("device_mesh", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
 @pytest.mark.parametrize("cluster_axis", (1,))
 @pytest.mark.parametrize("dim", (0,))
-def test_device_line_all_gather_8x4_data_async_issue(device_mesh, cluster_axis: int, dim: int):
+@pytest.mark.parametrize("async_mode", (False, True))
+def test_device_line_all_gather_8x4_data_async_issue(device_mesh, cluster_axis: int, dim: int, async_mode: bool):
     """
     Test the line-all-gather operation on a 8x4 mesh.
 
@@ -1354,9 +1355,10 @@ def test_device_line_all_gather_8x4_data_async_issue(device_mesh, cluster_axis: 
     - Every device along the column contains the whole column tensor
     - output: [[1],[2],[3],[4],[5],[6],[7],[8]], shape: [1, 1, TILE_SIZE * DEVICE_MESH_ROWS, 32]
     """
-    for i in device_mesh.get_device_ids():
-        device = device_mesh.get_device(i)
-        device.enable_async(True)
+    if async_mode:
+        for i in device_mesh.get_device_ids():
+            device = device_mesh.get_device(i)
+            device.enable_async(True)
 
     (rows, cols), tile_size = device_mesh.shape, 32
     full_tensor = torch.zeros((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
