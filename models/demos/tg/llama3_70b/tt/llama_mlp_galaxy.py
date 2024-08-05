@@ -58,7 +58,7 @@ class TtLlamaMLP_galaxy:
                     )
                 }
             )
-            M, K, N = 32, self.model_config["HIDDEN_SIZE"], self.model_config["FFN_EXPANDED_HIDDEN_SIZE"]
+            M, K, N = 32, self.model_config["HIDDEN_SIZE"], (self.model_config["FFN_EXPANDED_HIDDEN_SIZE"] + 0)
 
             K = K // self.cluster_shape[0]
             N = N // self.cluster_shape[1]
@@ -138,7 +138,7 @@ class TtLlamaMLP_galaxy:
                 use_height_and_width_as_shard_shape=True,
             )
 
-    def load_weights(self):
+    def load_weights(self, pad=False):
         assert not hasattr(self, "w1_list"), "w1_list is already an attribute of this object"
         assert not hasattr(self, "w3_list"), "w3_list is already an attribute of this object"
         assert not hasattr(self, "w2_list"), "w2_list is already an attribute of this object"
@@ -147,13 +147,18 @@ class TtLlamaMLP_galaxy:
         w2_str = f"{self.layer_name}.feed_forward.w2.weight"
         w3_str = f"{self.layer_name}.feed_forward.w3.weight"
 
-        # TODO: Reenable when DRAM-SHARDED PCC issues resolves
-        # w1_cache_str = f"{self.layer_name}.feed_forward.w1_galaxy_dram_shard_unpadded.weight"
-        # w2_cache_str = f"{self.layer_name}.feed_forward.w2_galaxy_dram_shard_unpadded.weight"
-        # w3_cache_str = f"{self.layer_name}.feed_forward.w3_galaxy_dram_shard_unpadded.weight"
-        w1_cache_str = f"{self.layer_name}.feed_forward.w1_galaxy_unpadded.weight"
-        w2_cache_str = f"{self.layer_name}.feed_forward.w2_galaxy_unpadded.weight"
-        w3_cache_str = f"{self.layer_name}.feed_forward.w3_galaxy_unpadded.weight"
+        if pad:
+            w1_cache_str = f"{self.layer_name}.feed_forward.w1_galaxy_padded.weight"
+            w2_cache_str = f"{self.layer_name}.feed_forward.w2_galaxy_padded.weight"
+            w3_cache_str = f"{self.layer_name}.feed_forward.w3_galaxy_padded.weight"
+        else:
+            # TODO: Reenable when DRAM-SHARDED PCC issues resolves
+            # w1_cache_str = f"{self.layer_name}.feed_forward.w1_galaxy_dram_shard_unpadded.weight"
+            # w2_cache_str = f"{self.layer_name}.feed_forward.w2_galaxy_dram_shard_unpadded.weight"
+            # w3_cache_str = f"{self.layer_name}.feed_forward.w3_galaxy_dram_shard_unpadded.weight"
+            w1_cache_str = f"{self.layer_name}.feed_forward.w1_galaxy_unpadded.weight"
+            w2_cache_str = f"{self.layer_name}.feed_forward.w2_galaxy_unpadded.weight"
+            w3_cache_str = f"{self.layer_name}.feed_forward.w3_galaxy_unpadded.weight"
 
         w1_dtype = ttnn.bfloat4_b
         w2_dtype = ttnn.bfloat8_b
@@ -163,9 +168,24 @@ class TtLlamaMLP_galaxy:
         w2 = None
         w3 = None
         if not self.read_cache:
-            w1 = self.state_dict[w1_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
-            w2 = self.state_dict[w2_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
-            w3 = self.state_dict[w3_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
+            if pad:
+                w1 = self.state_dict[w1_str].transpose(-2, -1)  # (8192, 28672)
+                w2 = self.state_dict[w2_str].transpose(-2, -1)  # (28672, 8192)
+                w3 = self.state_dict[w3_str].transpose(-2, -1)  # (8192, 28672)
+
+                # Pad w1 and w3 along width (second dimension)
+                w1 = torch.nn.functional.pad(w1, (0, 4096), "constant", 0).unsqueeze(0).unsqueeze(0)  # (8192, 32768)
+                w3 = torch.nn.functional.pad(w3, (0, 4096), "constant", 0).unsqueeze(0).unsqueeze(0)  # (8192, 32768)
+
+                # Pad w2 along height (first dimension)
+                w2 = (
+                    torch.nn.functional.pad(w2, (0, 0, 0, 4096), "constant", 0).unsqueeze(0).unsqueeze(0)
+                )  # (32768, 8192)
+
+            else:
+                w1 = self.state_dict[w1_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
+                w2 = self.state_dict[w2_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
+                w3 = self.state_dict[w3_str].transpose(-2, -1).unsqueeze(0).unsqueeze(0)
 
         self.w1 = ttnn.as_tensor(
             w1,
@@ -241,8 +261,8 @@ class TtLlamaMLP_galaxy:
 
         w1_out = ttnn.to_memory_config(w1_out, self.FF2_ACT_MEMCFG)
         w3_out = ttnn.to_memory_config(w3_out, self.FF2_ACT_MEMCFG)
-
-        hidden_states = ttnn.mul(
+        breakpoint()
+        hidden_states = ttnn.multiply(
             w1_out,
             w3_out,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
@@ -255,7 +275,7 @@ class TtLlamaMLP_galaxy:
             hidden_states,
             self.w2,
             # program_config=self.FF2_DRAM_SHARDED_PROGCFG,  # TODO: Reenable when DRAM-SHARDED PCC issues resolves
-            core_grid=ttnn.CoreGrid(y=1, x=8),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
             compute_kernel_config=self.COMPUTE_KERNEL_LOFI,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,

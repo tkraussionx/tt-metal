@@ -46,7 +46,7 @@ def tt_llama_mlp_prepare_inputs(llama_mlp_model, x):
 
         core_grid = ttnn.CoreGrid(y=1, x=8)
         act_mem_config = ttnn.create_sharded_memory_config(
-            shape=(M // core_grid.y, K // core_grid.x),
+            shape=(M, K // (core_grid.x * core_grid.y)),
             core_grid=core_grid,
             strategy=ttnn.ShardStrategy.WIDTH,
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
