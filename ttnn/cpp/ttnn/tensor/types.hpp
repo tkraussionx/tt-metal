@@ -72,8 +72,15 @@ struct ShardTensor {
 };
 bool operator==(const ShardTensor& lhs, const ShardTensor& rhs);
 
+using ShardGrid = std::pair<std::size_t, std::size_t>; // (y,x)
+struct ShardTensor2D {
+    ShardGrid shard_grid; // logic 2D grid that defines the mapping of shards to devices
+    ShardTensor2D(ShardGrid grid) : shard_grid(std::move(grid)) {}
+};
+bool operator==(const ShardTensor2D& lhs, const ShardTensor2D& rhs);
+
 // DistributedTensorConfig is a variant of different ways in which a tensor can be distributed across devices.
-using DistributedTensorConfig = std::variant<ReplicateTensor, ShardTensor, AllGatherTensor>;
+using DistributedTensorConfig = std::variant<ReplicateTensor, ShardTensor, ShardTensor2D, AllGatherTensor>;
 DistributedTensorConfig get_distributed_tensor_config(const std::unordered_map<std::string, std::string>& metadata);
 
 
