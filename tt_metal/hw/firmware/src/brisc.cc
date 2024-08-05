@@ -331,6 +331,11 @@ inline void wait_ncrisc_trisc() {
     DEBUG_STATUS("NTD");
 }
 
+inline void RISC_POST_STATUS_4(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 int main() {
     DEBUG_STATUS("I");
 
@@ -361,7 +366,9 @@ int main() {
         reset_ncrisc_with_iram();
 
         DEBUG_STATUS("GW");
+        RISC_POST_STATUS_4(0xaaaaa);
         while (mailboxes->launch.go.run != RUN_MSG_GO);
+        RISC_POST_STATUS_4(0xbbbb);
         DEBUG_STATUS("GD");
 
         {
@@ -376,7 +383,7 @@ int main() {
 
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch.kernel_config.enables;
             run_triscs(enables);
-
+            RISC_POST_STATUS_4(0xcccc);
             noc_index = mailboxes->launch.kernel_config.brisc_noc_id;
 
             setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
@@ -417,6 +424,7 @@ int main() {
                     1,
                     31 /*wrap*/,
                     false /*linked*/);
+                RISC_POST_STATUS_4(0xffff);
             }
         }
     }

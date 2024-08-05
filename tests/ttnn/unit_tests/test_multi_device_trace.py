@@ -13,7 +13,7 @@ import os
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
 
-NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 500))
+NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 1000))
 
 
 def create_event(device):
@@ -51,7 +51,7 @@ def record_event(device, cq_id, event):
 @pytest.mark.parametrize(
     "device_mesh",
     [
-        2,
+        8,
     ],
     indirect=True,
 )
@@ -64,7 +64,8 @@ def test_multi_device_single_trace(device_mesh, shape, use_all_gather, enable_as
     for device_id in device_mesh.get_device_ids():
         device_mesh.get_device(device_id).enable_async(enable_async)
         device_mesh.get_device(device_id).enable_program_cache()
-    device = device_mesh.get_device(1)
+    device = device_mesh.get_device(4)
+    print("Running on " + str(device.id()))
     # Preallocate activation tensors. These will be used when capturing and executing the trace
     input_0_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
     input_1_dev = ttnn.allocate_tensor_on_device(ttnn.Shape(shape), ttnn.bfloat16, ttnn.TILE_LAYOUT, device)

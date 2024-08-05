@@ -76,7 +76,7 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
         num_tiles_per_core_group_1,  // per_core_block_cnt
         1                            // per_core_block_size
     };
-
+    std::cout << "num_tiles_per_core_group_1 "  << num_tiles_per_core_group_1 << std::endl;
     bool math_approx_mode = std::all_of(
         op_chain.begin(), op_chain.end(), [](const auto &u) { return utils::get_op_approx_mode(u.op_type); });
     std::map<string, string> unary_defines = utils::get_block_defines(op_chain);
@@ -97,7 +97,7 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
             num_tiles_per_core_group_2,  // per_core_block_cnt
             1                            // per_core_block_size
         };
-
+        std::cout << "num_tiles_per_core_group_2 "  << num_tiles_per_core_group_1 << std::endl;
         auto eltwise_unary_kernel_group_2_id = tt::tt_metal::CreateKernel(
             program,
             "tt_metal/kernels/compute/eltwise_sfpu.cpp",

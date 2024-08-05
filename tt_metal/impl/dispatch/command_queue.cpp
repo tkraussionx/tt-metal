@@ -887,6 +887,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                         uint32_t base_address = this->program.kg_buffers[buffer_idx]->address();
                         uint32_t page_offset = kg_transfer_info.page_offsets[kernel_idx];
                         uint32_t dst_addr = kg_transfer_info.dst_base_addrs[kernel_idx];
+                        std::cout << "Dst addr for kernel: " << dst_addr << std::endl;
                         uint32_t aligned_length = align(kg_transfer_info.lengths[kernel_idx], DRAM_ALIGNMENT);
                         uint32_t padding = aligned_length - kg_transfer_info.lengths[kernel_idx];
                         while (aligned_length != 0) {
@@ -1084,6 +1085,7 @@ void EnqueueProgramCommand::assemble_device_commands(
         for (uint32_t i = 0; i < kernel_bins_dispatch_subcmds.size(); ++i) {
             program_command_sequence.add_dispatch_write_packed_large(
                 DRAM_ALIGNMENT, kernel_bins_dispatch_subcmds[i].size(), kernel_bins_dispatch_subcmds[i]);
+            std::cout << "Kernel Size: " << kernel_bins_write_packed_large_data_aligned_sizeB[i] << std::endl;
             program_command_sequence.add_prefetch_relay_paged_packed(
                 kernel_bins_write_packed_large_data_aligned_sizeB[i],
                 kernel_bins_prefetch_subcmds[i],
@@ -1389,7 +1391,7 @@ void EnqueueRecordEventCommand::process() {
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
 
     command_sequence.add_dispatch_wait(
-        true, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
+        false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
 
     CoreType core_type = dispatch_core_manager::instance().get_dispatch_core_type(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
@@ -2054,6 +2056,7 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
         program.program_transfer_info.num_active_cores,
         this->manager.get_bypass_mode(),
         expected_workers_completed);
+    // this->device->programs.push_back(std::move(program));
 }
 
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool clear_count) {
@@ -2678,7 +2681,7 @@ void EnqueueProgramImpl(
                 cq.hw_command_queue().enqueue_program(program, blocking);
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.
-                program.get().release_buffers();
+                // program.get().release_buffers();
             } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
                 detail::CompileProgram(device, *program);
                 program->allocate_circular_buffers();
@@ -2686,7 +2689,7 @@ void EnqueueProgramImpl(
                 cq.hw_command_queue().enqueue_program(*program, blocking);
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.
-                program->release_buffers();
+                // program->release_buffers();
             }
         },
         program);

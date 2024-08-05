@@ -10,11 +10,16 @@
 
 #define PRE_SCALE defined SFPU_OP_INIT_PRE_IN0_0 || defined SFPU_OP_INIT_PRE_IN1_0
 
+inline void RISC_POST_STATUS_2(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 namespace NAMESPACE {
 void MAIN {
     uint32_t per_core_block_cnt = get_arg_val<uint32_t>(0);
     uint32_t per_core_block_size = get_arg_val<uint32_t>(1);
-
+    // RISC_POST_STATUS_2(0x4444);
     constexpr auto cb_in0 = tt::CB::c_in0;
     constexpr auto cb_in1 = tt::CB::c_in1;
 
@@ -145,6 +150,6 @@ void MAIN {
         cb_pop_front(cb_inp1, per_core_block_size);
         cb_push_back(cb_out0, per_core_block_size);
     }
-
+    // RISC_POST_STATUS_2(0x5555);
 }
 }

@@ -22,6 +22,11 @@ uint32_t math_sync_tile_dst_index = 0;
 uint32_t gl_alu_format_spec_reg = 0;
 uint32_t op_info_offset = 0;
 
+inline void RISC_POST_STATUS_3(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 namespace ckernel
 {
 volatile tt_reg_ptr uint * regfile = reinterpret_cast<volatile uint *>(REGFILE_BASE);
@@ -41,9 +46,11 @@ void kernel_launch()
     ckernel::wait(KERNEL_RUN_TIME);
 #endif
 #else
+    RISC_POST_STATUS_3(0xdddd);
     tt_l1_ptr uint *local_l1_start_addr = (tt_l1_ptr uint *)PREPROCESSOR_EXPAND(MEM_TRISC, COMPILE_FOR_TRISC, _INIT_LOCAL_L1_BASE);
     firmware_kernel_common_init(local_l1_start_addr);
 
     run_kernel();
+    RISC_POST_STATUS_3(0xeeee);
 #endif
 }

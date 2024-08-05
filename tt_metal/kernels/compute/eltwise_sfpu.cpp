@@ -21,7 +21,8 @@ void MAIN {
     uint32_t per_core_block_dim = get_compile_time_arg_val(1);
 
     init_sfpu(tt::CB::c_in0);
-    RISC_POST_STATUS(per_core_block_cnt);
+    uint32_t ct = 0;
+    RISC_POST_STATUS((0xa << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
     for (uint32_t block_index = 0; block_index < per_core_block_cnt; block_index++) {
         // DPRINT << per_core_block_cnt << ENDL();
         cb_reserve_back(tt::CB::c_out0, per_core_block_dim);
@@ -30,21 +31,23 @@ void MAIN {
 
             // Pop tile after tile, copy to DST and pack
             cb_wait_front(tt::CB::c_in0, 1);
-
+            RISC_POST_STATUS((0xb << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
             copy_tile(tt::CB::c_in0, 0, 0);
-
+            RISC_POST_STATUS((0xc << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
             #ifdef SFPU_OP_CHAIN_0
             SFPU_OP_CHAIN_0
             #endif
-
+            RISC_POST_STATUS((0xd << 12) | (tt::CB::c_out0 << 8) | (tt::CB::c_out0 << 4) | ct);
             pack_tile(0, tt::CB::c_out0);
 
+            RISC_POST_STATUS((0xe << 12) | (tt::CB::c_out0 << 8) | (tt::CB::c_out0 << 4) | ct);
             cb_pop_front(tt::CB::c_in0, 1);
 
             release_dst(tt::DstMode::Half);
+            ct++;
         }
         cb_push_back(tt::CB::c_out0, per_core_block_dim);
     }
-
+    RISC_POST_STATUS((0xf << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
 }
 }
