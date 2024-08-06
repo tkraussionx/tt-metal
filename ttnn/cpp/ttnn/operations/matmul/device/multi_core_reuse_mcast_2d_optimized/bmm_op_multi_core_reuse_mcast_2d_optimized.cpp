@@ -24,6 +24,7 @@ using namespace tt;
 using namespace tt_metal;
 
 operation::ProgramWithCallbacks create_program_mcast_in0_in1(
+    tt_metal::Program& program,
     tt_metal::Device* device,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
@@ -51,7 +52,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt::DataFormat output_data_format,
     bool untilize_out) {
     TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
-    tt_metal::Program program{};
+    // tt_metal::Program program{};
 
     uint32_t num_blocks = K / in0_block_w;
 
@@ -1196,6 +1197,7 @@ namespace tt {
 namespace tt_metal {
 
 operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
+    tt::tt_metal::Program& program,
     const Tensor& a,
     const Tensor& b,
     const std::optional<const Tensor> bias,
@@ -1331,6 +1333,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
     return reuse_mcast_optimized_helpers::create_program_mcast_in0_in1(
+        program,
         device,
         math_fidelity,
         fp32_dest_acc_en,
@@ -1376,7 +1379,49 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
     bool untilize_out) {
+
+    tt_metal::Program program{}; /* Create a program */
+
     return matmul_multi_core_reuse_mcast_2d_optimized_(
+        program,
+        a,
+        b,
+        bias,
+        output_tensor,
+        broadcast_batch,
+        compute_with_storage_grid_size,
+        compute_kernel_config,
+        in0_block_w,
+        out_subblock_h,
+        out_subblock_w,
+        per_core_M,
+        per_core_N,
+        fuse_batch,
+        transpose_mcast,
+        fused_activation,
+        untilize_out);
+}
+
+operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helper(
+    tt_metal::Program& program, /* Take programa as input by reference */
+    const Tensor& a,
+    const Tensor& b,
+    const std::optional<const Tensor> bias,
+    Tensor& output_tensor,
+    bool broadcast_batch,
+    CoreCoord compute_with_storage_grid_size,
+    DeviceComputeKernelConfig compute_kernel_config,
+    uint32_t in0_block_w,
+    uint32_t out_subblock_h,
+    uint32_t out_subblock_w,
+    uint32_t per_core_M,
+    uint32_t per_core_N,
+    bool fuse_batch,
+    bool transpose_mcast,
+    std::optional<UnaryWithParam> fused_activation,
+    bool untilize_out) {
+    return matmul_multi_core_reuse_mcast_2d_optimized_(
+        program,
         a,
         b,
         bias,

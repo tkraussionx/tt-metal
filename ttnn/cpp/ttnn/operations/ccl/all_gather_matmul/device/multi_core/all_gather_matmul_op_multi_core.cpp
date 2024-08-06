@@ -21,6 +21,7 @@
 #include <type_traits>
 
 #include "ttnn/cpp/ttnn/operations/ccl/all_gather_matmul/device/all_gather_matmul_op.hpp"
+#include "ttnn/operations/matmul/device/matmul_op.hpp"
 
 
 using namespace tt::constants;
@@ -151,17 +152,88 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
 //   (in other words, disable the "bidirectional" send flag)
-operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(const Tensor& input_tensor, Tensor& all_gather_output_tensor, Tensor& datacopy_output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology, const CoreCoord core_grid_offset) {
+operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
+    const Tensor& input_tensor,
+    Tensor& all_gather_output_tensor,
+    Tensor& datacopy_output_tensor,
+    const Tensor& weight_tensor,
+    Tensor& matmul_output_tensor,
+
+    /* All Gather Params */
+    const uint32_t dim,
+    const uint32_t num_links,
+    const uint32_t ring_size,
+    const uint32_t ring_index,
+    const std::optional<chip_id_t> receiver_device_id,
+    const std::optional<chip_id_t> sender_device_id,
+    all_gather_op::Topology topology,
+    const CoreCoord core_grid_offset,
+
+
+    /* Matmul Params */
+    const std::optional<const Tensor> bias,
+    bool bcast_batch,
+    CoreCoord compute_with_storage_grid_size,
+    DeviceComputeKernelConfig compute_kernel_config,
+    uint32_t in0_block_w,
+    uint32_t out_subblock_h,
+    uint32_t out_subblock_w,
+    uint32_t per_core_M,
+    uint32_t per_core_N,
+    bool fuse_batch,
+    bool transpose_mcast,
+    std::optional<UnaryWithParam> fused_activation,
+    bool untilize_out
+
+) {
 
     tt::tt_metal::Program program{};
 
-    auto datacopy_params = setup_datacopy(program, input_tensor, all_gather_output_tensor, datacopy_output_tensor, dim, num_links, ring_size, ring_index, topology, {0, 0});
+    auto datacopy_params = setup_datacopy(program, input_tensor, all_gather_output_tensor, datacopy_output_tensor, dim, num_links, ring_size, ring_index, topology, {0, 5});
 
     const std::vector<CoreCoord>& datacopy_cores = std::get<0>(datacopy_params);
     const std::vector<uint32_t> datacopy_signal_semaphore_addr = std::get<1>(datacopy_params);
 
     // Pass in the datacopy cores and sempahore address (Using optional arguments)
-    return all_gather_multi_core_with_workers_helper(program, input_tensor, all_gather_output_tensor, dim, num_links, ring_size, ring_index, receiver_device_id, sender_device_id, topology, datacopy_cores, datacopy_signal_semaphore_addr, core_grid_offset);
+    auto all_gather_program_with_callbacks = all_gather_multi_core_with_workers_helper(
+        program,
+        input_tensor,
+        all_gather_output_tensor,
+        dim,
+        num_links,
+        ring_size,
+        ring_index,
+        receiver_device_id,
+        sender_device_id,
+        topology,
+        datacopy_cores,
+        datacopy_signal_semaphore_addr,
+        core_grid_offset);
+
+    auto matmul_program_with_callbacks = matmul_multi_core_reuse_mcast_2d_optimized_helper(
+        all_gather_program_with_callbacks.program,
+        datacopy_output_tensor,
+        weight_tensor,
+        bias,
+        matmul_output_tensor,
+        bcast_batch,
+        compute_with_storage_grid_size,
+        compute_kernel_config,
+        in0_block_w,
+        out_subblock_h,
+        out_subblock_w,
+        per_core_M,
+        per_core_N,
+        fuse_batch,
+        transpose_mcast,
+        fused_activation,
+        untilize_out
+    );
+
+
+    // TODO: combine the program with callbacks from all-gather and matmul and return it as one single ProgramWithCallbacks
+
+    return matmul_program_with_callbacks;
 }
 
 }  // namespace ttnn
