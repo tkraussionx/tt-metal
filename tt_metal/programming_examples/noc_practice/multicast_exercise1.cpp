@@ -110,17 +110,22 @@ int main() {
     log_info(tt::LogTest, "start = {}", core_start_physical);
     log_info(tt::LogTest, "end = {}", core_end_physical);
     const std::vector<uint32_t> runtime_args = {
-        l1_buffer_addr,  // src l1 addr
-        input_dram_buffer->address(),
-        static_cast<uint32_t>(input_dram_noc_xy.x),
-        static_cast<uint32_t>(input_dram_noc_xy.y),
-        dram_buffer_size,
-        l1_buffer_addr,  // dest l1 addr
-        static_cast<uint32_t>(core_end_physical.x),
-        static_cast<uint32_t>(core_end_physical.y),
-        static_cast<uint32_t>(core_start_physical.x),
-        static_cast<uint32_t>(core_start_physical.y),
-        static_cast<uint32_t>(grid_size.x * grid_size.y - 1)};
+        l1_buffer_addr,                              // src l1 addr: Source L1 address from where data is read
+        input_dram_buffer->address(),                // Address of the input DRAM buffer
+        static_cast<uint32_t>(input_dram_noc_xy.x),  // X coordinate of the input DRAM in NOC
+        static_cast<uint32_t>(input_dram_noc_xy.y),  // Y coordinate of the input DRAM in NOC
+        dram_buffer_size,                            // Size of the DRAM buffer
+        l1_buffer_addr,  // dest l1 addr: Destination L1 address to where data is to be written
+
+        // Grid info for destination cores
+        static_cast<uint32_t>(core_end_physical.x),    // X coordinate of the end core in the physical grid
+        static_cast<uint32_t>(core_end_physical.y),    // Y coordinate of the end core in the physical grid
+        static_cast<uint32_t>(core_start_physical.x),  // X coordinate of the start core in the physical grid
+        static_cast<uint32_t>(core_start_physical.y),  // Y coordinate of the start core in the physical grid
+
+        static_cast<uint32_t>(
+            grid_size.x * grid_size.y - 1)  // num_dests: Number of destination cores, excluding core {0, 0}
+    };
     tt::tt_metal::SetRuntimeArgs(program, data_movement_kernel, core, runtime_args);
 
     //////////////////////////////////////////////////////////////////////////////////
