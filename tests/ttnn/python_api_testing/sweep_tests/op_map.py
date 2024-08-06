@@ -873,4 +873,8 @@ op_map = {
         "tt_op": ttnn_ops.normalize_hw,
         "pytorch_op": pytorch_ops.normalize_hw,
     },
+    "concat-bw": {
+        "tt_op": ttnn_ops.concat_bw,
+        "pytorch_op": pytorch_ops.concat_bw,
+    },
 }
