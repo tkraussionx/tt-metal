@@ -1010,4 +1010,8 @@ op_map = {
         "tt_op": ttnn_ops.trunc,
         "pytorch_op": pytorch_ops.trunc,
     },
+    "ceil": {
+        "tt_op": ttnn_ops.ceil,
+        "pytorch_op": pytorch_ops.ceil,
+    },
 }

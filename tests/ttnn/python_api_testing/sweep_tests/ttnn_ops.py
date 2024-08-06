@@ -4342,7 +4342,7 @@ def normalize_hw(x, *args, device, dtype, layout, input_mem_config, output_mem_c
 def erf_bw(
     x,  # grad_tensor
     y,  # input_tensor
-    *args,
+   *args,
     device,
     dtype,
     layout,
@@ -4356,6 +4356,23 @@ def erf_bw(
     t2 = ttnn.erf_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
+
+
+def ceil(
+    x,  # grad_tensor
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    
+    t1 = ttnn.ceil(t0, memory_config=output_mem_config)
+
+    return ttnn_tensor_to_torch(t1)
 
 
 def erfc_bw(
@@ -4413,6 +4430,7 @@ def expm1_bw(
     t2 = ttnn.expm1_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 
@@ -4795,4 +4813,10 @@ def eltwise_bias_gelu_unary(x, *args, bias, device, dtype, layout, input_mem_con
 =======
 =======
 >>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
+<<<<<<< HEAD
 >>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
+=======
+=======
+
+>>>>>>> #10147: Add ceil sweeps to ttnn
+>>>>>>> #10147: Add ceil sweeps to ttnn
