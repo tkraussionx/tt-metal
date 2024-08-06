@@ -50,7 +50,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt::DataFormat in1_data_format,
     tt::DataFormat bias_data_format,
     tt::DataFormat output_data_format,
-    bool untilize_out) {
+    bool untilize_out,
+    std::optional<uint32_t*> all_gather_signal_semaphore_addr_ptr = {}) {
     TensorMemoryLayout in0_memory_layout = in0_buffer->buffer_layout();
     // tt_metal::Program program{};
 
@@ -525,6 +526,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     .defines = mm_kernel_in0_sender_sharded_defines});
         }
     } else {
+
+        if (all_gather_signal_semaphore_addr_ptr.has_value()) {
+            *(all_gather_signal_semaphore_addr_ptr.value()) = CreateSemaphore(program, in0_sender_interleaved, 0);
+
+            // Push back the all gather signal semaphore
+            in0_sender_compile_time_args.push_back((std::uint32_t)(*all_gather_signal_semaphore_addr_ptr.value()));
+        }
         mm_kernel_in0_sender_id = tt_metal::CreateKernel(
             program,
             "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
@@ -1213,7 +1221,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     bool fuse_batch,
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
-    bool untilize_out) {
+    bool untilize_out,
+    std::optional<uint32_t*> all_gather_signal_semaphore_addr_ptr = {}) {
     const auto &ashape = a.get_legacy_shape(), bshape = b.get_legacy_shape();
 
     // CB dataformats
@@ -1359,7 +1368,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
         in1_data_format,
         bias_data_format,
         output_data_format,
-        untilize_out);
+        untilize_out,
+        all_gather_signal_semaphore_addr_ptr);
 }
 
 operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
@@ -1419,7 +1429,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helpe
     bool fuse_batch,
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
-    bool untilize_out) {
+    bool untilize_out,
+    uint32_t* all_gather_signal_semaphore_addr_ptr) {
     return matmul_multi_core_reuse_mcast_2d_optimized_(
         program,
         a,
@@ -1437,7 +1448,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helpe
         fuse_batch,
         transpose_mcast,
         fused_activation,
-        untilize_out);
+        untilize_out,
+        all_gather_signal_semaphore_addr_ptr);
 }
 
 }  // namespace tt_metal

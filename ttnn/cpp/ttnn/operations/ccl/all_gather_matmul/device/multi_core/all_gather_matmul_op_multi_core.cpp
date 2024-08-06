@@ -42,7 +42,8 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
     const uint32_t ring_index,
     all_gather_op::Topology topology,
 
-    CoreCoord datacopy_core_coord
+    CoreCoord datacopy_core_coord,
+    uint32_t* all_gather_signal_semaphore_addr_ptr
 ) {
 
     auto const& all_gather_config = AllGatherConfig(input_tensor, all_gather_output_tensor, dim, ring_size, num_links, topology);
@@ -90,6 +91,8 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
 
     uint32_t num_rows = input_tensor.get_legacy_shape()[2] / tile_size ;
 
+    // Core locations for the matmul [TODO]
+
 
     // Compile time args
     std::vector<uint32_t> datacopy_ct_args = {
@@ -108,6 +111,7 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
         static_cast<uint32_t>(true ? 1 : 0), // TODO
         static_cast<uint32_t>(datacopy_signal_semaphore_addr_dir0),
         static_cast<uint32_t>(datacopy_signal_semaphore_addr_dir1),
+        static_cast<uint32_t>(*all_gather_signal_semaphore_addr_ptr),
     };
 
     uint32_t cb_id_in0 = tt::CB::c_in0;
@@ -188,30 +192,10 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
 ) {
 
     tt::tt_metal::Program program{};
-
-    auto datacopy_params = setup_datacopy(program, input_tensor, all_gather_output_tensor, datacopy_output_tensor, dim, num_links, ring_size, ring_index, topology, {0, 5});
-
-    const std::vector<CoreCoord>& datacopy_cores = std::get<0>(datacopy_params);
-    const std::vector<uint32_t> datacopy_signal_semaphore_addr = std::get<1>(datacopy_params);
-
-    // Pass in the datacopy cores and sempahore address (Using optional arguments)
-    auto all_gather_program_with_callbacks = all_gather_multi_core_with_workers_helper(
-        program,
-        input_tensor,
-        all_gather_output_tensor,
-        dim,
-        num_links,
-        ring_size,
-        ring_index,
-        receiver_device_id,
-        sender_device_id,
-        topology,
-        datacopy_cores,
-        datacopy_signal_semaphore_addr,
-        core_grid_offset);
+    uint32_t* all_gather_signal_semaphore_addr_ptr = nullptr;
 
     auto matmul_program_with_callbacks = matmul_multi_core_reuse_mcast_2d_optimized_helper(
-        all_gather_program_with_callbacks.program,
+        program,
         datacopy_output_tensor,
         weight_tensor,
         bias,
@@ -227,13 +211,46 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
         fuse_batch,
         transpose_mcast,
         fused_activation,
-        untilize_out
-    );
+        untilize_out,
+        all_gather_signal_semaphore_addr_ptr);
+
+    auto datacopy_params = setup_datacopy(matmul_program_with_callbacks.program,
+        input_tensor,
+        all_gather_output_tensor,
+        datacopy_output_tensor,
+        dim,
+        num_links,
+        ring_size,
+        ring_index,
+        topology,
+        {0, 5},
+        all_gather_signal_semaphore_addr_ptr);
+
+    const std::vector<CoreCoord>& datacopy_cores = std::get<0>(datacopy_params);
+    const std::vector<uint32_t> datacopy_signal_semaphore_addr = std::get<1>(datacopy_params);
+
+    // Pass in the datacopy cores and sempahore address (Using optional arguments)
+    auto all_gather_program_with_callbacks = all_gather_multi_core_with_workers_helper(
+        matmul_program_with_callbacks.program,
+        input_tensor,
+        all_gather_output_tensor,
+        dim,
+        num_links,
+        ring_size,
+        ring_index,
+        receiver_device_id,
+        sender_device_id,
+        topology,
+        datacopy_cores,
+        datacopy_signal_semaphore_addr,
+        core_grid_offset);
+
+
 
 
     // TODO: combine the program with callbacks from all-gather and matmul and return it as one single ProgramWithCallbacks
 
-    return matmul_program_with_callbacks;
+    return all_gather_program_with_callbacks;
 }
 
 }  // namespace ttnn

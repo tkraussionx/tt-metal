@@ -93,7 +93,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helpe
     bool fuse_batch,
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
-    bool untilize_out);
+    bool untilize_out,
+    uint32_t* all_gather_signal_semaphore_addr_ptr);
 operation::ProgramWithCallbacks bmm_multi_core_reuse_optimized(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
