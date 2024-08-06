@@ -4413,6 +4413,7 @@ def expm1_bw(
     t2 = ttnn.expm1_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
+<<<<<<< HEAD
 
 
 def eltwise_bitwise_and(
@@ -4584,6 +4585,7 @@ def eltwise_unary_div_no_nan(
 
     return ttnn_tensor_to_torch(t1)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 def complex_conj(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
@@ -4790,3 +4792,7 @@ def eltwise_bias_gelu_unary(x, *args, bias, device, dtype, layout, input_mem_con
     return ttnn_tensor_to_torch(t1)
 =======
 >>>>>>> #10147: Add frac sweeps to ttnn
+=======
+=======
+>>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
+>>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
