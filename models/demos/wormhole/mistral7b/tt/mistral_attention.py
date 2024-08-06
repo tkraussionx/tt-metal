@@ -248,6 +248,7 @@ class TtMistralAttention(nn.Module):
         xs: List[ttnn.Tensor],
         current_pos: int,
         attn_masks: Optional[List[ttnn.Tensor]] = None,
+        rotary_mat=None,
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -313,7 +314,8 @@ class TtMistralAttention(nn.Module):
             ttnn.deallocate(xqkv_fused)
 
             # Update rotary matrix on device
-            rotary_mat = self.rot_mat[current_pos]
+            if self.rot_mat is not None:
+                rotary_mat = self.rot_mat[current_pos]
 
             q_heads = ttnn.linear(
                 q_heads_pre_rot,
@@ -656,4 +658,4 @@ class TtMistralAttention(nn.Module):
         if mode == "prefill":
             return self.forward_prefill(xs[0], attn_masks[0], rot_mats, transformation_mats, user_id)
         else:
-            return self.forward_decode(xs, current_pos, attn_masks)
+            return self.forward_decode(xs, current_pos, attn_masks, rot_mats)
