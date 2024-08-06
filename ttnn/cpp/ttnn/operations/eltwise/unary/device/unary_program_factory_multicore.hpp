@@ -12,6 +12,8 @@
 #include "tt_metal/host_api.hpp"
 #include "unary_op.hpp"
 
+#include <iostream>
+
 namespace ttnn::operations::unary::detail {
 
 using namespace tt::constants;
@@ -34,6 +36,20 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
         split_work_to_cores(compute_with_storage_grid_size, num_tiles);
+
+    std::cout << "compute_with_storage_grid_size" << compute_with_storage_grid_size.str() << std::endl;
+    std::cout << "num_tiles: " << num_tiles << std::endl;
+    std::cout << "num_cores: " << num_cores << std::endl;
+    std::cout << "all_cores: " << all_cores.str() << std::endl;
+    std::cout << "core_group_1: " << core_group_1.str() << std::endl;
+
+    for (const auto& core_range : core_group_1.ranges()) {
+        std::cout << "core_range: " << core_range.str() << std::endl;
+    }
+
+    std::cout << "core_group_2: " << core_group_2.str() << std::endl;
+    std::cout << "num_tiles_per_core_group_1: " << num_tiles_per_core_group_1 << std::endl;
+    std::cout << "num_tiles_per_core_group_2: " << num_tiles_per_core_group_2 << std::endl;
 
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
@@ -91,7 +107,32 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
             .compile_args = compute_kernel_args_group_1,
             .defines = unary_defines});
 
+    std::cout << "math_fidelity: " << MathFidelity::HiFi4 << std::endl;
+    std::cout << "fp32_dest_acc_en: " << fp32_dest_acc_en << std::endl;
+    std::cout << "preserve_fp32_precision: " << preserve_fp32_precision << std::endl;
+    std::cout << "math_approx_mode: " << math_approx_mode << std::endl;
+    {
+        std::cout << "compile_args: "; //<< compute_kernel_args_group_1 << std::endl;
+        bool isFirst = true;
+        for (auto const& value : compute_kernel_args_group_1) {
+            std::cout << (isFirst ? "" : ", ") << value;
+            isFirst = false;
+        }
+        std::cout << std::endl;
+    }
+
+    {
+        bool isFirst = true;
+        for (const auto& [key, value] :  unary_defines) {
+            std::cout << (isFirst ? "" : ", ") << "[" << key << "] = " << value;
+            isFirst = false;
+        }
+        std::cout << std::endl;
+    }
+
     if (!core_group_2.ranges().empty()) {
+        std::cout << "core_group_2 is not empty" << std::endl;
+
         vector<uint32_t> compute_kernel_args_group_2 = {
             num_tiles_per_core_group_2,  // per_core_block_cnt
             1                            // per_core_block_size

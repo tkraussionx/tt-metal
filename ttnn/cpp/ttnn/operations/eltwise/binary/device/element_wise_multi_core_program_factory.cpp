@@ -229,6 +229,31 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
     }
 
     if constexpr (initialize_args) {
+
+        // for (size_t i = 0; i < cores.size(); i++)
+        // {
+        //     std::cout << cores[i].str() << std::endl;
+        //     std::cout << " b[";
+        //     for (const auto& val : binary_reader_args[i])
+        //     {
+        //         std::cout << val << " ";
+        //     }
+        //     std::cout << "]" << std::endl;
+        //     std::cout << " e[";
+        //     for (const auto& val : eltwise_binary_args[i])
+        //     {
+        //         std::cout << val << " ";
+        //     }
+        //     std::cout << "]" << std::endl;
+        //     std::cout << " u[";
+        //     for (const auto& val : unary_writer_args[i])
+        //     {
+        //         std::cout << val << " ";
+        //     }
+        //     std::cout << "]" << std::endl;
+        //     std::cout << "===============" << std::endl;
+        // }
+
         SetRuntimeArgs(program, binary_reader_kernel_id, cores, binary_reader_args);
         SetRuntimeArgs(program, eltwise_binary_kernel_id, cores, eltwise_binary_args);
         SetRuntimeArgs(program, unary_writer_kernel_id, cores, unary_writer_args);
@@ -397,6 +422,18 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",
         all_device_cores,
         tt_metal::ComputeConfig{.fp32_dest_acc_en = fp32_dest_acc_en, .defines = eltwise_defines});
+
+    std::cout << "math_fidelity: " << MathFidelity::HiFi4 << std::endl;
+    std::cout << "fp32_dest_acc_en: " << fp32_dest_acc_en << std::endl;
+    {
+        bool isFirst = true;
+        for (const auto& [key, value] :  eltwise_defines) {
+            std::cout << (isFirst ? "" : ", ") << "[" << key << "] = " << value;
+            isFirst = false;
+        }
+
+        std::cout << std::endl;
+    }
 
     set_eltwise_binary_runtime_args<true>(
         program,

@@ -421,6 +421,37 @@ std::ostream& operator<<(std::ostream& os, const std::set<T>& set) {
     return os;
 }
 
+// template <typename K, typename V>
+template <typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator>
+std::ostream& operator<<(std::ostream& os, const std::unordered_map<Key, T, Hash, KeyEqual, Allocator>& umap) {
+// std::ostream& operator<<(std::ostream& os, const std::map<K, V>& key_value) {
+// Specialization for std::unordered_map
+
+    bool isFirst = true;
+    os << "{";
+    for (const auto& [key, value] : umap) {
+        os << (isFirst ? "" : ","), "[" << key << "] = " << value;
+        isFirst = false;
+    }
+    os << "}";
+    return os;
+}
+
+template <typename Key, typename T, typename KeyEqual, typename Allocator>
+std::ostream& operator<<(std::ostream& os, const std::map<Key, T, KeyEqual, Allocator>& map) {
+// std::ostream& operator<<(std::ostream& os, const std::map<K, V>& key_value) {
+// Specialization for std::unordered_map
+
+    bool isFirst = true;
+    os << "{";
+    for (const auto& [key, value] : map) {
+        os << (isFirst ? "" : ","), "[" << key << "] = " << value;
+        isFirst = false;
+    }
+    os << "}";
+    return os;
+}
+
 template <typename T>
     requires(tt::stl::concepts::Reflectable<T> and not(std::integral<T> or std::is_array<T>::value))
 std::ostream& operator<<(std::ostream& os, const T& object) {
@@ -728,6 +759,44 @@ inline hash_t hash_object(const std::reference_wrapper<Ts...>& reference) noexce
     }
     return hash_object(reference.get());
 }
+
+// Specialization for std::unordered_map
+template <typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator>
+inline hash_t hash_object(const std::unordered_map<Key, T, Hash, KeyEqual, Allocator>& umap) {
+    std::size_t hash = 0;
+    for (const auto& pair : umap) {
+        hash ^= hash_object(pair.first) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        hash ^= hash_object(pair.second) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    }
+    return hash;
+}
+
+// Specialization for std::map
+template <typename Key, typename T, typename KeyEqual, typename Allocator>
+inline hash_t hash_object(const std::map<Key, T, KeyEqual, Allocator>& umap) {
+    std::size_t hash = 0;
+    for (const auto& pair : umap) {
+        hash ^= hash_object(pair.first) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        hash ^= hash_object(pair.second) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    }
+    return hash;
+}
+
+
+// // Specialization for std::tuple - todo: generalize
+// // template <typename... Types>
+// template <typename ...Types>
+// inline hash_t hash_object(const std::tuple<Types...>& tuple) {
+//     std::size_t hash = 0;
+//     // hash ^= hash_object<0>(std::get<0>(tuple)) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+//     // hash ^= hash_object<0>(std::get<1>(tuple)) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+//     // hash ^= hash_object<0>(std::get<2>(tuple)) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+
+//     std::apply([&hash](auto... x) {((hash ^= hash_object(x, hash)), ...);}, tuple);
+
+//     return hash;
+// }
+
 
 template <typename T>
 inline hash_t hash_object(const T& object) noexcept {

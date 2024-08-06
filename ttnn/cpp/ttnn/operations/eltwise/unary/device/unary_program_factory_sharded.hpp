@@ -69,6 +69,7 @@ operation::ProgramWithCallbacks unary_sharded(const Tensor &input, Tensor &outpu
                                             {{in_cb_id, act_df}})
                                           .set_page_size(in_cb_id, in_cb_pagesize)
                                           .set_globally_allocated_address(*input.buffer());
+
     auto cb_src0 = tt::tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
 
     // output sharded CB
@@ -136,6 +137,7 @@ operation::ProgramWithCallbacks unary_sharded(const Tensor &input, Tensor &outpu
                                               const std::vector<Tensor> &input_tensors,
                                               const std::vector<std::optional<const Tensor>> &,
                                               const std::vector<Tensor> &output_tensors) {
+        std::cout << "override_runtime_args_callback" << std::endl;
         auto src_buffer = input_tensors.at(0).buffer();
         auto dst_buffer = output_tensors.at(0).buffer();
         tt::tt_metal::UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);

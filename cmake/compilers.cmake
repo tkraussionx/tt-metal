@@ -6,6 +6,9 @@ function(FIND_AND_SET_CLANG17)
         message(FATAL_ERROR "Clang-17 not found. Make sure you have clang-17 and clang++-17 installed and in your PATH")
     endif()
 
+    message(STATUS "Found Clang-17: ${CLANGPP_17}")
+    message(STATUS "Found Clang-17: ${CLANG_17}")
+
     set(CMAKE_CXX_COMPILER "${CLANGPP_17}" PARENT_SCOPE)
     set(CMAKE_C_COMPILER "${CLANG_17}" PARENT_SCOPE)
 endfunction()

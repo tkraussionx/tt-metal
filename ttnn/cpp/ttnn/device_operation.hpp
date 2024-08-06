@@ -273,7 +273,8 @@ typename device_operation_t::tensor_return_value_t run(
     auto program_hash = compute_program_hash<device_operation_t>(operation_attributes, tensor_args);
     auto program_cache_hit = program_cache.contains(program_hash);
 
-    log_operation<device_operation_t>(operation_attributes, tensor_args, program_hash, program_cache_hit);
+    // temporary disabled
+    // log_operation<device_operation_t>(operation_attributes, tensor_args, program_hash, program_cache_hit);
 
     if (program_cache_hit) {
         ZoneScopedN("Validate on Program Cache Hit");
