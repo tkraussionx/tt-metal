@@ -58,7 +58,7 @@ class TtLlamaMLP_galaxy:
                     )
                 }
             )
-            M, K, N = 32, self.model_config["HIDDEN_SIZE"], (self.model_config["FFN_EXPANDED_HIDDEN_SIZE"] + 0)
+            M, K, N = 32, self.model_config["HIDDEN_SIZE"], (self.model_config["FFN_EXPANDED_HIDDEN_SIZE"] + 4096)
 
             K = K // self.cluster_shape[0]
             N = N // self.cluster_shape[1]
@@ -123,22 +123,22 @@ class TtLlamaMLP_galaxy:
             )
 
             self.FF2_ACT_MEMCFG = ttnn.create_sharded_memory_config(
-                shape=(M, N // 8),
-                core_grid=ttnn.CoreGrid(y=1, x=8),
+                shape=(M, N // 32),
+                core_grid=ttnn.CoreGrid(y=4, x=8),
                 strategy=ttnn.ShardStrategy.WIDTH,
                 orientation=ttnn.ShardOrientation.ROW_MAJOR,
                 use_height_and_width_as_shard_shape=True,
             )
 
             self.FF1_ACT_MEMCFG = ttnn.create_sharded_memory_config(
-                shape=(32, 2048 // 8),
-                core_grid=ttnn.CoreGrid(y=1, x=8),
+                shape=(32, 2048 // 32),
+                core_grid=ttnn.CoreGrid(y=4, x=8),
                 strategy=ttnn.ShardStrategy.WIDTH,
                 orientation=ttnn.ShardOrientation.ROW_MAJOR,
                 use_height_and_width_as_shard_shape=True,
             )
 
-    def load_weights(self, pad=False):
+    def load_weights(self, pad=True):
         assert not hasattr(self, "w1_list"), "w1_list is already an attribute of this object"
         assert not hasattr(self, "w3_list"), "w3_list is already an attribute of this object"
         assert not hasattr(self, "w2_list"), "w2_list is already an attribute of this object"
@@ -232,7 +232,7 @@ class TtLlamaMLP_galaxy:
             x,
             self.w1,
             # program_config=self.FF1_DRAM_SHARDED_PROGCFG,
-            core_grid=ttnn.CoreGrid(y=1, x=8),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
             compute_kernel_config=self.COMPUTE_KERNEL_LOFI,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
@@ -242,7 +242,7 @@ class TtLlamaMLP_galaxy:
             x,
             self.w3,
             # program_config=self.FF1_DRAM_SHARDED_PROGCFG,  # TODO: Reenable when DRAM-SHARDED PCC issues resolves
-            core_grid=ttnn.CoreGrid(y=1, x=8),
+            core_grid=ttnn.CoreGrid(y=4, x=8),
             compute_kernel_config=self.COMPUTE_KERNEL_LOFI,
             dtype=ttnn.bfloat16,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
@@ -261,8 +261,7 @@ class TtLlamaMLP_galaxy:
 
         w1_out = ttnn.to_memory_config(w1_out, self.FF2_ACT_MEMCFG)
         w3_out = ttnn.to_memory_config(w3_out, self.FF2_ACT_MEMCFG)
-        breakpoint()
-        hidden_states = ttnn.multiply(
+        hidden_states = ttnn.mul(
             w1_out,
             w3_out,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,

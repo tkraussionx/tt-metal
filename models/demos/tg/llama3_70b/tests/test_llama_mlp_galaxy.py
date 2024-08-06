@@ -44,7 +44,7 @@ def tt_llama_mlp_prepare_inputs(llama_mlp_model, x):
         num_users = 32
         M, K = num_users, llama_mlp_model.model_config["HIDDEN_SIZE"] // llama_mlp_model.cluster_shape[0]
 
-        core_grid = ttnn.CoreGrid(y=1, x=8)
+        core_grid = ttnn.CoreGrid(y=4, x=8)
         act_mem_config = ttnn.create_sharded_memory_config(
             shape=(M, K // (core_grid.x * core_grid.y)),
             core_grid=core_grid,
