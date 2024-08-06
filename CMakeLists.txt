@@ -120,12 +120,6 @@ endif()
 #   in order to propogate to the rest of tt_metal, tt_eager, etc.
 ############################################################################################################################
 add_library(stdlib INTERFACE)
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_link_libraries(stdlib INTERFACE c++ c++abi)
-    target_compile_options(stdlib INTERFACE -stdlib=libc++)
-else()
-    target_link_libraries(stdlib INTERFACE stdc++)
-endif()
 
 add_library(metal_common_libs INTERFACE)
 target_link_libraries(metal_common_libs INTERFACE
