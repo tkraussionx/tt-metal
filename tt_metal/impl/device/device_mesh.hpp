@@ -14,7 +14,6 @@
 
 namespace tt::tt_metal {
 
-using DeviceGrid = std::pair<int, int>;
 using DeviceIds = std::vector<int>;
 
 class DeviceMesh

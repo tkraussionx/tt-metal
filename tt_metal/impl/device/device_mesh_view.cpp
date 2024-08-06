@@ -80,6 +80,26 @@ const std::vector<DeviceMeshView::device_pointer>& DeviceMeshView::get_devices()
     return devices_;
 }
 
+DeviceMeshView::DeviceView DeviceMeshView::get_devices(const Coordinate& start, const Coordinate& end) {
+    if (start.row > end.row || start.col > end.col) {
+        log_fatal("Invalid coordinates: start {} must be less than or equal to end {}", start, end);
+    }
+
+    DeviceView devices_in_region;
+    for (int row = start.row; row <= end.row; ++row) {
+        for (int col = start.col; col <= end.col; ++col) {
+            if (auto device = get_device(row, col)) {
+                devices_in_region.push_back(device);
+            }
+        }
+    }
+    return devices_in_region;
+}
+
+DeviceMeshView::DeviceView DeviceMeshView::get_devices(const DeviceGrid& shape) {
+    return get_devices({0, 0}, {shape.first - 1, shape.second - 1});
+}
+
 std::vector<DeviceMeshView::device_pointer> DeviceMeshView::get_devices_on_row(int row) const {
     std::vector<device_pointer> row_devices;
     for (const auto& device : devices_) {

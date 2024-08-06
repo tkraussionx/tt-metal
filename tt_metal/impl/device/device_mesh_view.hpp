@@ -16,6 +16,7 @@ namespace tt::tt_metal {
 
 // Forward declaration of DeviceMesh
 class DeviceMesh;
+using DeviceGrid = std::pair<int, int>;
 
 struct Coordinate {
     int row;
@@ -56,6 +57,12 @@ public:
     [[nodiscard]] const_device_pointer get_device(int row, int col) const;
 
     [[nodiscard]] const std::vector<device_pointer>& get_devices() const;
+
+    // Get devices spanning the rectangular region defined by the top-left and bottom-right coordinates
+    // devices are returned in row-major order with start/end coordinates inclusive
+    [[nodiscard]] DeviceView get_devices(const Coordinate& start, const Coordinate& end);
+    [[nodiscard]] DeviceView get_devices(const DeviceGrid& shape);
+
     [[nodiscard]] DeviceView get_devices_on_row(int row) const;
     [[nodiscard]] DeviceView get_devices_on_column(int col) const;
 
