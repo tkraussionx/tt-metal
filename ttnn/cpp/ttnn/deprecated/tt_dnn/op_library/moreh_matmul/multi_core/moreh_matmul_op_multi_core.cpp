@@ -284,8 +284,10 @@ operation::ProgramWithCallbacks moreh_matmul_multi_core(
         compute_args_group_1.push_back(static_cast<uint32_t>(is_scalar_bias));
     }
 
+    bool preserve_fp32_precision = false;
     if (fp32_dest_acc_en) {
         compute_defines["FP32_DEST_ACC_EN"] = "1";
+        preserve_fp32_precision = true;
     }
 
     const auto compute_kernel_1_id = CreateComputeKernel(
@@ -295,7 +297,8 @@ operation::ProgramWithCallbacks moreh_matmul_multi_core(
         compute_defines,
         math_fidelity,
         fp32_dest_acc_en,
-        math_approx_mode);
+        math_approx_mode,
+        preserve_fp32_precision);
 
     std::optional<KernelHandle> compute_kernel_2_id = std::nullopt;
     if (!core_group_2.ranges().empty()) {
@@ -323,7 +326,8 @@ operation::ProgramWithCallbacks moreh_matmul_multi_core(
             compute_defines,
             math_fidelity,
             fp32_dest_acc_en,
-            math_approx_mode);
+            math_approx_mode,
+            preserve_fp32_precision);
     }
     log_debug(LogOp, "{}:{} Compute ", __func__, __LINE__, static_cast<uint32_t>(transpose_input), static_cast<uint32_t>(transpose_other));
 
