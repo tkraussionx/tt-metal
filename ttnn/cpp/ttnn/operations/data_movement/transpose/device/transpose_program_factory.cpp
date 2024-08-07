@@ -696,7 +696,7 @@ operation::ProgramWithCallbacks transpose_hc_multi_core_sharded(const Tensor &a,
             uint32_t H_offset = curr_H;
             uint32_t read_stick_index = N_offset + C_offset + H_offset;
 
-            tt::log_debug("read_stick_core: {}", read_stick_core);
+            // tt::log_debug("read_stick_core: {}", read_stick_core);
 
             auto physical_read_stick_core = device->worker_core_from_logical_core(read_stick_core);
             read_cores_indices.push_back(curr_core);
