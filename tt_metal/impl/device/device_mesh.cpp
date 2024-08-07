@@ -158,22 +158,18 @@ DeviceGrid DeviceMesh::shape() const
     return this->device_grid;
 }
 
-std::optional<Coordinate> DeviceMesh::find_device(int device_id) const {
-    auto it = std::find_if(mesh_devices.begin(), mesh_devices.end(),
-                           [device_id](const auto& pair) { return pair.first == device_id; });
-    if (it != mesh_devices.end()) {
-        int index = std::distance(mesh_devices.begin(), it);
-        return Coordinate{static_cast<int>(index / num_cols()), static_cast<int>(index % num_cols())};
-    }
-    return std::nullopt;
-}
-
 void DeviceMesh::close_devices() {
     tt::tt_metal::detail::CloseDevices(managed_devices);
     mesh_devices.clear();
     managed_devices.clear();
 }
 
+const DeviceMeshView* DeviceMesh::get_view() const {
+    if (not is_galaxy_) {
+        TT_THROW("#10419: Current device mesh does not support indexing by row or col indices.");
+    }
+    return this->view.get();
+}
 DeviceMeshView* DeviceMesh::get_view() {
     if (not is_galaxy_) {
         TT_THROW("#10419: Current device mesh does not support indexing by row or col indices.");

@@ -1336,3 +1336,64 @@ def test_device_line_all_gather_8x4_data(device_mesh, cluster_axis: int, dim: in
 @pytest.mark.parametrize("device_mesh", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
 def test_visualize_device_mesh(device_mesh):
     ttnn.visualize_device_mesh(device_mesh)
+
+
+@pytest.mark.parametrize("device_mesh", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
+def test_visualize_device_mesh_with_tensor_row_major(device_mesh):
+    rows, cols, tile_size = 4, 4, 32
+    full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
+
+    ttnn_tensor = ttnn.from_torch(
+        full_tensor, mesh_mapper=ShardTensor2dMesh(device_mesh, shard_grid=(rows, cols), shard_dimensions=(-2, -1))
+    )
+    ttnn_tensor = ttnn.to_device(ttnn_tensor, device_mesh)
+    ttnn.visualize_device_mesh(device_mesh, tensor=ttnn_tensor)
+
+
+@pytest.mark.parametrize("device_mesh", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
+def test_visualize_device_mesh_with_tensor_col_major(device_mesh):
+    rows, cols, tile_size = 8, 2, 32
+    full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
+
+    ttnn_tensor = ttnn.from_torch(
+        full_tensor, mesh_mapper=ShardTensor2dMesh(device_mesh, shard_grid=(rows, cols), shard_dimensions=(-2, -1))
+    )
+    ttnn_tensor = ttnn.to_device(ttnn_tensor, device_mesh)
+    ttnn.visualize_device_mesh(device_mesh, tensor=ttnn_tensor)
+
+
+@pytest.mark.parametrize("device_mesh", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
+@pytest.mark.parametrize("cluster_axis", (1,))
+@pytest.mark.parametrize("dim", (0,))
+@pytest.mark.parametrize("async_mode", (False, True))
+def test_device_line_all_gather_8x4_data_async_issue(device_mesh, cluster_axis: int, dim: int, async_mode: bool):
+    """
+    Test the line-all-gather operation on a 8x4 mesh.
+    Data Pattern for initial sharding [TILE_SIZE*DEVICE_MESH_ROWS, TILE_SIZE*DEVICE_MESH_COLS]:
+    [1, 1, 1, 1, 1, 1, 1, 1]
+    [2, 2, 2, 2, 2, 2, 2, 2]
+    [3, 3, 3, 3, 3, 3, 3, 3]
+    [...]
+    [8, 8, 8, 8, 8, 8, 8, 8]
+    Data-pattern per-device before line-all-gather:
+    - Each device receives a shard of the tensor with shape: [1, 1, 32, 32]
+    Expected data-pattern per-device after line-all-gather:
+    - Every device along the column contains the whole column tensor
+    - output: [[1],[2],[3],[4],[5],[6],[7],[8]], shape: [1, 1, TILE_SIZE * DEVICE_MESH_ROWS, 32]
+    """
+    if async_mode:
+        for i in device_mesh.get_device_ids():
+            device = device_mesh.get_device(i)
+            device.enable_async(True)
+
+    (rows, cols), tile_size = device_mesh.shape, 32
+    full_tensor = torch.zeros((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
+    for i in range(rows):
+        full_tensor[0, 0, i * tile_size : (i + 1) * tile_size, :] = torch.full((tile_size, tile_size * cols), i + 1.0)
+    ttnn_tensor = ttnn.from_torch(
+        full_tensor, mesh_mapper=ShardTensor2dMesh(device_mesh, shard_grid=(rows, cols), shard_dimensions=(-2, -1))
+    )
+    ttnn_tensor = ttnn.to_device(ttnn_tensor, device_mesh)
+    ttnn_tensor = ttnn.line_all_gather(
+        ttnn_tensor, dim=dim, cluster_axis=cluster_axis, device_mesh=device_mesh, num_links=1
+    )

@@ -15,6 +15,7 @@
 namespace tt::tt_metal {
 
 using DeviceIds = std::vector<int>;
+class DeviceMeshView;
 
 class DeviceMesh
 {
@@ -39,8 +40,6 @@ public:
     std::vector<Device *> get_devices_on_row(int row_idx) const;
     std::vector<Device *> get_devices_on_column(int col_idx) const;
 
-    std::optional<Coordinate> find_device(int device_id) const;
-
     const DeviceIds get_device_ids() const;
 
     int num_devices() const;
@@ -55,6 +54,7 @@ public:
     tt::ARCH arch() const;
 
     void close_devices();
+    const DeviceMeshView* get_view() const;
     DeviceMeshView* get_view();
 
    private:

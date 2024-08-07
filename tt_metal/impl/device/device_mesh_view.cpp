@@ -36,27 +36,6 @@ DeviceMeshView::DeviceMeshView(const DeviceMesh& mesh, Coordinate top_left, Coor
     validate_coordinates();
 }
 
-DeviceMeshView::DeviceMeshView(const DeviceMesh& global_mesh, const std::vector<device_pointer>& devices)
-    : devices_(devices) {
-    int min_row = std::numeric_limits<int>::max(), min_col = std::numeric_limits<int>::max();
-    int max_row = std::numeric_limits<int>::min(), max_col = std::numeric_limits<int>::min();
-
-    for (const auto& device : devices) {
-        if (auto coord = global_mesh.find_device(device->id())) {
-            device_coordinates_[device->id()] = *coord;
-            min_row = std::min(min_row, coord->row);
-            min_col = std::min(min_col, coord->col);
-            max_row = std::max(max_row, coord->row);
-            max_col = std::max(max_col, coord->col);
-        } else {
-            throw std::runtime_error("Device not found in global mesh");
-        }
-    }
-
-    top_left_ = {min_row, min_col};
-    bottom_right_ = {max_row, max_col};
-}
-
 DeviceMeshView::DeviceMeshView(std::vector<device_pointer> devices, CoordinateMapper mapper)
     : devices_(std::move(devices)) {
     initialize_from_devices(devices_, std::move(mapper));
@@ -179,17 +158,23 @@ bool DeviceMeshView::operator==(const DeviceMeshView& other) const {
            bottom_right_ == other.bottom_right_;
 }
 
-std::optional<Coordinate> DeviceMeshView::find_device(int device_id) const {
+Coordinate DeviceMeshView::find_device(chip_id_t device_id) const {
     auto it = device_coordinates_.find(device_id);
     if (it != device_coordinates_.end()) {
         return it->second;
     }
-    return std::nullopt;
+    TT_FATAL(false, fmt::format("Device not found in mesh: {}", device_id));
+}
+
+chip_id_t DeviceMeshView::find_device_id(const Coordinate& coord) const {
+    TT_FATAL(coord.row >= 0 and coord.row < num_rows() and coord.col >= 0 and coord.col < num_cols(),
+        fmt::format("Invalid coordinate: "));
+    return this->devices_.at(coord.row * num_cols() + coord.col)->id();
 }
 
 void DeviceMeshView::initialize_from_devices(const std::vector<device_pointer>& devices, CoordinateMapper mapper) {
-    int min_row = std::numeric_limits<int>::max(), min_col = std::numeric_limits<int>::max();
-    int max_row = std::numeric_limits<int>::min(), max_col = std::numeric_limits<int>::min();
+    std::size_t min_row = std::numeric_limits<std::size_t>::max(), min_col = std::numeric_limits<std::size_t>::max();
+    std::size_t max_row = std::numeric_limits<std::size_t>::min(), max_col = std::numeric_limits<std::size_t>::min();
 
     for (const auto& device : devices) {
         auto coord = mapper(device->id());
