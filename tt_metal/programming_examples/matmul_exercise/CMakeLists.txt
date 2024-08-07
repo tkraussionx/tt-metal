@@ -1,0 +1,8 @@
+
+set(MATMUL_EXERCISE_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/matmul_single_core
+)
+
+CREATE_PGM_EXAMPLES_EXE("${MATMUL_EXERCISE_SRCS}" "matmul_exercise")
+
+add_custom_target(matmul_exercise DEPENDS ${PROGRAMMING_EXAMPLES_TEST_TARGETS})
