@@ -580,7 +580,7 @@ static void dump_stack_usage(FILE *f, Device *device, CoreCoord core, const mail
             fprintf(f, " kernel using most stack: %s", kernel_name.c_str());
             if (stack_usage >= stack_size) {
                 fprintf(f, " (OVERFLOW)");
-                log_fatal(
+                TT_THROW(
                     "Watcher detected stack overflow on Device {} Core {}: {}! Kernel {} uses {}/{} of the stack.",
                     device->id(),
                     core.str(),
