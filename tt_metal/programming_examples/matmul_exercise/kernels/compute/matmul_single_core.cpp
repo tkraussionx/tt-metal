@@ -13,9 +13,6 @@ void MAIN {
 
     constexpr int onetile = 1;
 
-    int dst_tile_index = 0;
-    int in0_block_tile_index = 0;
-
     uint32_t Mt = get_compile_time_arg_val(0);
     uint32_t Kt = get_compile_time_arg_val(1);
     uint32_t Nt = get_compile_time_arg_val(2);
@@ -33,6 +30,7 @@ void MAIN {
     {
         tile_regs_acquire();
         for (uint32_t kt = 0; kt < Kt; kt++) {
+            // TODO: call matmul_tiles API
             cb_wait_front(cb_in0, onetile);
             cb_wait_front(cb_in1, onetile);
 
@@ -43,6 +41,7 @@ void MAIN {
         }
         tile_regs_commit();
 
+        // TODO: pack output tile
         tile_regs_wait();
         cb_reserve_back(cb_out0, onetile);
         pack_tile(0, cb_out0);
