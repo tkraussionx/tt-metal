@@ -305,7 +305,6 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
                 std::ofstream log_file;
                 std::vector<uint32_t> fw_buffer;
                 fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
-                log_info(tt::LogMetal," BEFORE TRISC_BASE {}", MEM_TRISC0_BASE);
                 log_file.open("./before.log");
                 for (auto &b: fw_buffer)
                 {
@@ -319,7 +318,6 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
                 std::ofstream log_file;
                 std::vector<uint32_t> fw_buffer;
                 fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
-                log_info(tt::LogMetal," AFTER TRISC_BASE {}", MEM_TRISC0_BASE);
                 log_file.open("./after.log");
                 for (auto &b: fw_buffer)
                 {
@@ -2038,7 +2036,6 @@ bool Device::close() {
         std::ofstream log_file;
         std::vector<uint32_t> fw_buffer;
         fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
-        log_info(tt::LogMetal," AFTER TRISC_BASE {}", MEM_TRISC0_BASE);
         log_file.open("./close.log");
         for (auto &b: fw_buffer)
         {

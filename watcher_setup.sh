@@ -45,7 +45,7 @@ unset TT_METAL_DPRINT_CORES
 export TT_METAL_DPRINT_CORES=4,7
 
 unset TT_METAL_DPRINT_FILE
-#export TT_METAL_DPRINT_FILE=dprint_1.log
+export TT_METAL_DPRINT_FILE=dprint_1.log
 pytest test.py
 mv ./before.log ./before_1.log
 mv ./after.log ./after_1.log
@@ -58,5 +58,5 @@ mv ./close.log ./close_1.log
 #mv ./after.log ./after_2.log
 #mv ./close.log ./close_2.log
 
-diff ./after_1.log ./close_1.log
 cat ./dprint_1.log
+diff ./after_1.log ./close_1.log

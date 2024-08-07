@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "noc_parameters.h"
+#include "debug/dprint.h"
 
 ////
 
@@ -265,7 +266,9 @@ inline __attribute__((always_inline)) void noc_fast_write_dw_inline(uint32_t noc
   }
 }
 
+constexpr uint32_t corruptIndex = 1199 - 1;
 inline __attribute__((always_inline)) void noc_fast_atomic_increment(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t vc, uint32_t incr, uint32_t wrap, bool linked, bool posted = false) {
+volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
   while (!noc_cmd_buf_ready(noc, cmd_buf));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)(addr & 0xFFFFFFFF));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_COORDINATE, (uint32_t)(addr >> NOC_ADDR_COORD_SHIFT));
@@ -276,7 +279,25 @@ inline __attribute__((always_inline)) void noc_fast_atomic_increment(uint32_t no
                         NOC_CMD_AT);
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, NOC_AT_INS(NOC_AT_INS_INCR_GET) | NOC_AT_WRAP(wrap) | NOC_AT_IND_32((addr>>2) & 0x3) | NOC_AT_IND_32_SRC(0));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_DATA, incr);
+  static bool onetime = true;
+  if (onetime)
+  {
+      //for (int i=0; i < 100000; i++)
+      {
+          DPRINT << "S" << briscBuffer[corruptIndex] << ENDL();
+      }
+  }
+
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, 0x1);
+DPRINT <<  noc << "," << cmd_buf << "," << (uint32_t)NOC_CMD_CTRL << ENDL();
+  if (onetime)
+  {
+      //for (int i=0; i < 100000; i++)
+      {
+          DPRINT << "T" << briscBuffer[corruptIndex] << ENDL();
+      }
+  }
+  //onetime = false;
   if (!posted) {
     noc_nonposted_atomics_acked[noc] += 1;
   }

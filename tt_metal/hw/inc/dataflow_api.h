@@ -1648,10 +1648,13 @@ void noc_semaphore_inc(uint64_t addr, uint32_t incr) {
     [REFER TO grayskull/noc/noc.h for the documentation of noc_atomic_increment()]
     Generic increment with 32-bit wrap.
   */
+    volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
     DEBUG_STATUS("NSIW");
     DEBUG_SANITIZE_NOC_ADDR(addr, 4);
     DEBUG_INSERT_DELAY(TransactionAtomic);
+    DPRINT << "K" << briscBuffer[corruptIndex] << ENDL();
     noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/, false /*posted*/);
+    DPRINT << "L" << briscBuffer[corruptIndex] << ENDL();
     DEBUG_STATUS("NSID");
 }
 
