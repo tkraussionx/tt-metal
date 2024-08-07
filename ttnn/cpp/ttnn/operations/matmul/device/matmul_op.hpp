@@ -14,6 +14,21 @@
 
 namespace tt {
 
+namespace operations {
+
+namespace primary {
+
+using namespace tt_metal;
+
+// Used to propagate semaphore information from matmul to all_gather in all_gather_matmul op
+struct MatmulSignalInfo {
+    uint32_t num_matmul_cores_to_signal;
+    std::vector<uint32_t> matmul_signal_sem_addrs;
+    std::vector<CoreCoord> matmul_cores_noc_coords;
+};
+}
+}
+
 namespace tt_metal {
 
 using ttnn::operations::unary::UnaryWithParam;
@@ -94,7 +109,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helpe
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
     bool untilize_out,
-    uint32_t* all_gather_signal_semaphore_addr_ptr);
+    std::optional<operations::primary::MatmulSignalInfo> &matmul_signal_info);
 operation::ProgramWithCallbacks bmm_multi_core_reuse_optimized(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,

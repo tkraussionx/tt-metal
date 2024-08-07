@@ -43,7 +43,7 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
     all_gather_op::Topology topology,
 
     CoreCoord datacopy_core_coord,
-    uint32_t all_gather_signal_semaphore_addr
+    tt::operations::primary::MatmulSignalInfo matmul_signal_info
 ) {
 
     const auto& device = input_tensor.device();
@@ -92,17 +92,6 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
 
     uint32_t num_rows = input_tensor.get_legacy_shape()[2] / tile_size ;
 
-    // Core locations for the matmul [TODO]
-    std::vector<CoreCoord> matmul_cores = {};
-    for (int i = 0; i < 4; i++) {
-        matmul_cores.push_back({0, i});
-    }
-    std::vector<CoreCoord> matmul_cores_noc_coords = {};
-    for (auto core : matmul_cores) {
-        matmul_cores_noc_coords.push_back(device->worker_core_from_logical_core(core));
-    }
-
-
     // Compile time args
     std::vector<uint32_t> datacopy_ct_args = {
         static_cast<uint32_t>(all_gather_output_is_dram),
@@ -120,8 +109,8 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
         static_cast<uint32_t>(true ? 1 : 0), // TODO
         static_cast<uint32_t>(datacopy_signal_semaphore_addr_dir0),
         static_cast<uint32_t>(datacopy_signal_semaphore_addr_dir1),
-        static_cast<uint32_t>(matmul_cores.size()),
-        static_cast<uint32_t>(all_gather_signal_semaphore_addr)
+        static_cast<uint32_t>(matmul_signal_info.num_matmul_cores_to_signal),
+        static_cast<uint32_t>(matmul_signal_info.matmul_signal_sem_addrs[0])
     };
 
     uint32_t cb_id_in0 = tt::CB::c_in0;
@@ -138,7 +127,7 @@ std::tuple<std::vector<CoreCoord>, std::vector<uint32_t>> setup_datacopy(
     };
 
     // Push the matmul core NOC coordinates
-    for (auto coord : matmul_cores_noc_coords) {
+    for (auto coord : matmul_signal_info.matmul_cores_noc_coords) {
         datacopy_rt_args.push_back(coord.x);
         datacopy_rt_args.push_back(coord.y);
     }
@@ -208,7 +197,10 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
 ) {
 
     tt::tt_metal::Program program{};
-    uint32_t all_gather_signal_semaphore_addr = 0;
+
+    // Create a matmul signal info object that gets populated by the matmul kernel
+    std::optional<tt::operations::primary::MatmulSignalInfo> matmul_signal_info;
+    matmul_signal_info = tt::operations::primary::MatmulSignalInfo();
 
     auto matmul_program_with_callbacks = matmul_multi_core_reuse_mcast_2d_optimized_helper(
         program,
@@ -228,7 +220,7 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
         transpose_mcast,
         fused_activation,
         untilize_out,
-        &all_gather_signal_semaphore_addr);
+        matmul_signal_info);
 
     auto datacopy_params = setup_datacopy(matmul_program_with_callbacks.program,
         input_tensor,
@@ -240,7 +232,7 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
         ring_index,
         topology,
         {0, 5},
-        all_gather_signal_semaphore_addr);
+        matmul_signal_info.value());
 
     const std::vector<CoreCoord>& datacopy_cores = std::get<0>(datacopy_params);
     const std::vector<uint32_t> datacopy_signal_semaphore_addr = std::get<1>(datacopy_params);

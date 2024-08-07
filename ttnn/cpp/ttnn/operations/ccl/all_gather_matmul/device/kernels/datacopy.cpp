@@ -47,10 +47,10 @@ void kernel_main() {
     const uint32_t dram_buffer_dst_addr  = get_arg_val<uint32_t>(1);
 
     // Matmul core NOC coordinates
-    uint32_t matmul_core_noc_coords[num_matmul_cores_to_signal * 2]; // Matmul core NOC coordinates [x1, y1, x2, y2...]
+    uint32_t matmul_cores_noc_coords[num_matmul_cores_to_signal * 2]; // Matmul core NOC coordinates [x1, y1, x2, y2...]
     for (uint32_t i = 0; i < num_matmul_cores_to_signal * 2; i+=2) {
-        matmul_core_noc_coords[i] = get_arg_val<uint32_t>(2+ i);
-        matmul_core_noc_coords[i + 1] = get_arg_val<uint32_t>(3 + i);
+        matmul_cores_noc_coords[i] = get_arg_val<uint32_t>(2 + i);
+        matmul_cores_noc_coords[i + 1] = get_arg_val<uint32_t>(3 + i);
     }
 
 
@@ -79,12 +79,12 @@ void kernel_main() {
 
 
     // External semaphores used to signal matmul to begin
-    uint64_t matmul_signal_sem_addr_ptr[num_matmul_cores_to_signal];
+    uint64_t matmul_signal_sem_addr_ptrs[num_matmul_cores_to_signal];
     for (uint32_t i = 0; i < num_matmul_cores_to_signal; i++) {
-        auto& matmul_core_noc_x = matmul_core_noc_coords[i * 2];
-        auto& matmul_core_noc_y = matmul_core_noc_coords[i * 2 + 1];
+        auto& matmul_core_noc_x = matmul_cores_noc_coords[i * 2];
+        auto& matmul_core_noc_y = matmul_cores_noc_coords[i * 2 + 1];
 
-        matmul_signal_sem_addr_ptr[i] = get_noc_addr(matmul_core_noc_x, matmul_core_noc_y, matmul_signal_sem_addr);
+        matmul_signal_sem_addr_ptrs[i] = get_noc_addr(matmul_core_noc_x, matmul_core_noc_y, matmul_signal_sem_addr);
     }
 
 
@@ -185,7 +185,7 @@ void kernel_main() {
 
     // After datacopy, signal matmul to start
     for (uint32_t i = 0; i < num_matmul_cores_to_signal; i++) {
-        noc_semaphore_inc(matmul_signal_sem_addr_ptr[i], 1);
+        noc_semaphore_inc(matmul_signal_sem_addr_ptrs[i], 1);
     }
 
 }
