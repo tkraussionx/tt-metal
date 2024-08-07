@@ -31,6 +31,7 @@ struct kernel_bins_transfer_info {
     vector<pair<transfer_info_cores, uint32_t>> dst_noc_info;  // noc_encoding, num_mcast_dests
     bool linked;
     vector<std::uint32_t> data;                     // all binaries' data for kernel group
+    std::string kernel_name = {};
 };
 
 enum class PageTransferType { MULTICAST, UNICAST };

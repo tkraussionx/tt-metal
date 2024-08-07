@@ -120,7 +120,7 @@ protected:
             }
         }
         this->arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
-        const int device_id = 0;
+        const int device_id = 4;
         this->device_ = tt::tt_metal::CreateDevice(device_id, num_hw_cqs, 0, buffer_size);;
     }
 

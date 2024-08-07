@@ -33,6 +33,8 @@ Device::Device(
     id_(device_id), worker_thread_core(worker_core), work_executor(worker_core, device_id) {
     ZoneScoped;
     tunnel_device_dispatch_workers_ = {};
+    std::cout << "Print Base: " << PRINT_BUFFER_START << std::endl;
+    std::cout << "CB Config Base: " << CIRCULAR_BUFFER_CONFIG_BASE << std::endl;
     this->initialize(num_hw_cqs, l1_small_size, trace_region_size, l1_bank_remap, minimal);
 }
 

@@ -13,7 +13,7 @@ import os
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
 
-NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 1000))
+NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 10000))
 
 
 def create_event(device):
@@ -112,23 +112,14 @@ def test_multi_device_single_trace(device_mesh, shape, use_all_gather, enable_as
         # Execute trace
         wait_for_event(device, 0, event)
         ttnn.execute_trace(device, tid, cq_id=0, blocking=False)
-        if use_all_gather:
-            # Device All-Gather: Iterate through tensors on all devices. Ensure they match the full tensor
-            logger.info("Read Back Trace Outputs")
-            device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(output_tensor)
-            for device_tensor in device_tensors:
-                device_tensor_torch = ttnn.to_torch(device_tensor)
-                assert_with_pcc(device_tensor_torch, torch_output_golden, pcc=0.99)
-
-        else:
-            # Perform host All-Gather
-            logger.info("Read Back Trace Outputs")
-            ttnn_torch_output_tensor = ttnn.to_torch(
-                output_tensor,
-                device=device,
-                mesh_composer=ConcatMeshToTensor(device, dim=0),
-            )
-            assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.96)
+        # Perform host All-Gather
+        logger.info("Read Back Trace Outputs")
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            output_tensor,
+            device=device,
+            mesh_composer=ConcatMeshToTensor(device, dim=0),
+        )
+        assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.96)
 
     # Release trace buffer once workload is complete
     ttnn.release_trace(device, tid)

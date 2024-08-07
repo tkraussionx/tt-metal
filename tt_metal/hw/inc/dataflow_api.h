@@ -329,6 +329,11 @@ inline void wait_for_sync_register_value(uint32_t addr, int32_t val) {
  * | cb_id     | The index of the circular buffer (CB) | uint32_t | 0 to 31     | True     |
  * | num_tiles | The number of free tiles to wait for  | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
+ inline void RISC_POST_STATUS_10(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 FORCE_INLINE
 void cb_reserve_back(int32_t operand, int32_t num_pages) {
     uint32_t pages_acked_ptr = (uint32_t) get_cb_tiles_acked_ptr(operand);
@@ -352,8 +357,10 @@ void cb_reserve_back(int32_t operand, int32_t num_pages) {
         uint16_t free_space_pages_wrap =
             cb_interface[operand].fifo_num_pages - (pages_received - pages_acked);
         free_space_pages = (int32_t)free_space_pages_wrap;
+        // RISC_POST_STATUS_10((free_space_pages << 8) | num_pages);
     } while (free_space_pages < num_pages);
     DEBUG_STATUS("CRBD");
+    // RISC_POST_STATUS_10(0xa00 | cb_interface[operand].fifo_num_pages);
 }
 
 /**

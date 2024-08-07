@@ -362,4 +362,95 @@ TEST_F(SingleDeviceTraceFixture, EnqueueMultiProgramTraceBenchmark) {
     ReleaseTrace(this->device_, tid);
 }
 
+TEST_F(SingleDeviceTraceFixture, ValidateBins) {
+    std::string ref_bin_dir = "./dbg_l1_kernel_bins/";
+    tt_cxy_pair dram_core = {4, 0, 0};
+    std::vector<uint32_t> address_offsets = {0, 1073741824};
+    bool pass = true;
+    std::vector<uint32_t> x_coords = {1, 2, 3, 4, 6, 7, 8, 9};
+    std::vector<uint32_t> y_coords = {1, 2, 3, 4, 5, 8, 9, 10};
+    for (const auto& file : std::filesystem::directory_iterator(ref_bin_dir)) {
+        std::vector<std::uint32_t> ref_data;
+        std::string file_name = file.path();
+        std::string base_filename = file_name.substr(file_name.find_last_of("/\\") + 1);
+        // std::cout << base_filename << std::endl;
+        if (base_filename.find("reader_unary_interleaved_start_id") == std::string::npos
+            and base_filename.find("writer_unary_interleaved_start_id") == std::string::npos
+            and base_filename.find("eltwise_sfpu") == std::string::npos) continue;
+        std::stringstream ss(base_filename);
+        std::vector<std::string> tokens;
+        std::string token;
+        while (std::getline(ss, token, '_')) {
+            tokens.push_back(token);
+        }
+        uint32_t x = std::stoul(tokens[tokens.size() - 4]);
+        uint32_t y = std::stoul(tokens[tokens.size() - 3]);
+        uint32_t l1_addr = std::stoul(tokens[tokens.size() - 2]);
+        uint32_t size_bytes = std::stoul(tokens[tokens.size() - 1]);
+        if (std::find(x_coords.begin(), x_coords.end(), x) == x_coords.end()) continue;
+        if (std::find(y_coords.begin(), y_coords.end(), y) == y_coords.end()) continue;
+        uint32_t file_size = size_bytes / 4;
+        std::ifstream input_file(file_name);
+        ref_data.resize(file_size);
+        // std::cout << "Read kernel: " << base_filename << " x " << x << " y " << y << " addr " << l1_addr << std::endl;
+        std::string line;
+        uint32_t count = 0;
+        while (std::getline(input_file, line)) {
+            ref_data.at(count) = static_cast<std::uint32_t>(std::stoul(line));
+            count++;
+            if (count == ref_data.size()) break;
+        }
+        std::vector<uint32_t> core_data = {};
+        tt::Cluster::instance().read_core(core_data, size_bytes, tt_cxy_pair(4, x, y), l1_addr);
+        for (uint32_t i = 0; i < file_size; i++) {
+            if (core_data[i] != ref_data[i]) {
+                pass = false;
+                std::cout << "Kernel: " << base_filename << " x " << x << " y " << y << " addr: " << l1_addr << " idx: " << i << " Expected: " << ref_data[i] << " Got: " << core_data[i] <<  std::endl;;
+            }
+        }
+    }
+    std::cout << "Passed: " << pass << std::endl;
+    // for (const auto& file : std::filesystem::directory_iterator(ref_bin_dir)) {
+    //     std::vector<std::uint32_t> ref_data;
+    //     std::string file_name = file.path();
+    //     std::string base_filename = file_name.substr(file_name.find_last_of("/\\") + 1);
+
+    //     std::stringstream ss(base_filename);
+    //     std::vector<std::string> tokens;
+    //     std::string token;
+    //     while (std::getline(ss, token, '_')) {
+    //         tokens.push_back(token);
+    //     }
+    //     std::uint32_t dram_addr = std::stoul(tokens[tokens.size() - 3]);
+    //     std::uint32_t file_size = std::stoul(tokens[tokens.size() - 2]);
+    //     std::uint32_t num_dram_chans = std::stoul(tokens[tokens.size() - 1]);
+    //     std::uint32_t page_size = file_size / num_dram_chans;
+    //     std::ifstream input_file(file_name);
+    //     ref_data.resize(file_size);
+
+    //     // Read the data into the vector
+    //     std::string line;
+    //     uint32_t count = 0;
+    //     while (std::getline(input_file, line)) {
+    //         ref_data.at(count) = static_cast<std::uint32_t>(std::stoul(line, nullptr, 16));
+    //         count++;
+    //         if (count == ref_data.size()) break;
+    //     }
+
+    //     input_file.close();
+    //     std::vector<uint32_t> dram_bin = {};
+    //     for (uint32_t page_idx = 0; page_idx < num_dram_chans; page_idx++) {
+    //         std::vector<uint32_t> core_data = {};
+    //         tt::Cluster::instance().read_core(core_data, page_size * sizeof(uint32_t), dram_core, address_offsets.at(page_idx) + dram_addr);
+    //         dram_bin.insert(dram_bin.end(), core_data.begin(), core_data.end());
+    //     }
+    //     for (uint32_t i = 0; i < file_size; i++) {
+    //         if (ref_data[i] != dram_bin[i]) {
+    //             pass = false;
+    //         }
+    //     }
+    // }
+    // EXPECT_EQ(pass, true);
+    // std::cout << "passed: " << pass << std::endl;
+}
 } // end namespace basic_tests

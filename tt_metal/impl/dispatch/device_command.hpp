@@ -81,7 +81,7 @@ class DeviceCommand {
     vector_memcpy_aligned<uint32_t> cmd_vector() const { return this->cmd_region_vector; }
 
     void add_dispatch_wait(
-        uint8_t barrier, uint32_t address, uint32_t count, uint8_t clear_count = 0, bool notify_prefetch = false, bool do_wait = true) {
+        uint8_t barrier, uint32_t address, uint32_t count, uint8_t clear_count = 0, bool notify_prefetch = false, bool do_wait = true, bool tag = false) {
         auto initialize_wait_cmds = [&](CQPrefetchCmd *relay_wait, CQDispatchCmd *wait_cmd) {
             relay_wait->base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
             relay_wait->relay_inline.length = sizeof(CQDispatchCmd);
@@ -94,6 +94,11 @@ class DeviceCommand {
             wait_cmd->wait.addr = address;
             wait_cmd->wait.count = count;
             wait_cmd->wait.clear_count = clear_count;
+            if (tag) {
+                wait_cmd->wait.pad1 = 1;
+            } else {
+                wait_cmd->wait.pad1 = false;
+            }
         };
         CQPrefetchCmd *relay_wait_dst = this->reserve_space<CQPrefetchCmd *>(sizeof(CQPrefetchCmd));
         CQDispatchCmd *wait_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));

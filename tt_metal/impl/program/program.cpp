@@ -684,7 +684,8 @@ void Program::populate_dispatch_data(Device *device) {
                     .lengths = lengths,
                     .dst_noc_info = dst_noc_multicast_info,
                     .linked = false,
-                    .data = binaries_data};
+                    .data = binaries_data,
+                    .kernel_name = kernel->name()};
                 this->program_transfer_info.kernel_bins.push_back(kernel_bins_transfer_info);
 
                 this->kg_buffers.push_back(std::make_unique<Buffer>(
@@ -692,7 +693,7 @@ void Program::populate_dispatch_data(Device *device) {
                     binaries_data.size() * sizeof(uint32_t),
                     HostMemDeviceCommand::PROGRAM_PAGE_SIZE,
                     BufferType::DRAM));
-                std::cout << "Kernel DRAM Addr: " << kg_buffers.back()->address() << std::endl;
+                // std::cout << "Kernel DRAM Addr: " << kg_buffers.back()->address() << std::endl;
                 sub_kernel_index++;
             }
         }
@@ -747,7 +748,8 @@ void Program::populate_dispatch_data(Device *device) {
                     .lengths = lengths,
                     .dst_noc_info = dst_noc_unicast_info,
                     .linked = false,
-                    .data = binaries_data};
+                    .data = binaries_data,
+                    .kernel_name = kernel->name()};
                 this->program_transfer_info.kernel_bins.push_back(kernel_bins_transfer_info);
 
                 this->kg_buffers.push_back(std::make_unique<Buffer>(
@@ -926,7 +928,7 @@ void Program::compile(Device *device) {
                     auto kernel_hash = KernelCompileHash(kernel, build_options, device->build_key());
                     std::string kernel_path_suffix = kernel->name() + "/" + std::to_string(kernel_hash) + "/";
                     kernel->set_full_name(kernel_path_suffix);
-                    std::cout << "Kernel: " << kernel_path_suffix << std::endl;
+                    // std::cout << "Kernel: " << kernel_path_suffix << std::endl;
                     build_options.set_name(kernel_path_suffix);
                     bool cache_hit = true;
                     bool path_exists = std::filesystem::exists(build_options.path);

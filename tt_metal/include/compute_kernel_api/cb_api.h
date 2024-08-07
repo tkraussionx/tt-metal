@@ -120,8 +120,16 @@ ALWI void cb_reserve_back(uint32_t cbid, uint32_t ntiles)
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | ntiles    | The number of tiles to be pushed     | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
+
+
+inline void RISC_POST_STATUS_TST(uint32_t status, uint32_t addr = 0xFFB2010C) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(addr);
+    ptr[0] = status;
+}
+
 ALWI void cb_push_back(uint32_t cbid, uint32_t ntiles)
 {
+    PACK()
     PACK(( llk_push_tiles<false,false>(cbid, ntiles)  ));
 }
 

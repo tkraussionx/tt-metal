@@ -143,7 +143,7 @@ class Program {
 
     bool is_finalized() const { return this->finalized_; }
     void finalize();
-
+    std::unordered_map<std::string, std::vector<std::vector<uint32_t>>> dbg_info = {};
    private:
     void populate_dispatch_data(Device *device);
 

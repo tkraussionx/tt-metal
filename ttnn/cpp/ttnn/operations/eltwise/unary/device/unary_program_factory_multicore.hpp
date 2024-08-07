@@ -121,10 +121,12 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
         } else {
             TT_ASSERT(false, "Core not in specified core ranges");
         }
-
+        std::cout << "Core: " << device->physical_core_from_logical_core(core, CoreType::WORKER).str() << std::endl;
+        std::cout << "Set Reader ARGs to: " << src_buffer->address() << " " << " " << num_tiles_per_core << " " << num_tiles_written << std::endl;
         tt::tt_metal::SetRuntimeArgs(
             program, unary_reader_kernel_id, core, {src_buffer->address(), num_tiles_per_core, num_tiles_written});
 
+        std::cout << "Set Writer ARGs to: " << dst_buffer->address() << " " << " " << num_tiles_per_core << " " << num_tiles_written << std::endl;
         tt::tt_metal::SetRuntimeArgs(
             program, unary_writer_kernel_id, core, {dst_buffer->address(), num_tiles_per_core, num_tiles_written});
         num_tiles_written += num_tiles_per_core;

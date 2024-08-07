@@ -10,10 +10,14 @@
 #include "dprint.h"
 
 
-inline void RISC_POST_STATUS(uint32_t status) {
-    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+inline void RISC_POST_STATUS(uint32_t status, uint32_t addr = 0xFFB2010C) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(addr);
     ptr[0] = status;
 }
+
+UNPACK(uint32_t addr = PRINT_BUFFER_START + 12;)
+MATH(uint32_t addr = PRINT_BUFFER_START + 16;)
+PACK(uint32_t addr = PRINT_BUFFER_START + 20;)
 
 namespace NAMESPACE {
 void MAIN {
@@ -22,32 +26,36 @@ void MAIN {
 
     init_sfpu(tt::CB::c_in0);
     uint32_t ct = 0;
-    RISC_POST_STATUS((0xa << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
     for (uint32_t block_index = 0; block_index < per_core_block_cnt; block_index++) {
-        // DPRINT << per_core_block_cnt << ENDL();
+        // RISC_POST_STATUS((0xff << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, PRINT_BUFFER_START);
         cb_reserve_back(tt::CB::c_out0, per_core_block_dim);
         for(uint32_t tile_index = 0; tile_index < per_core_block_dim; ++tile_index) {
+            ct++;
+            RISC_POST_STATUS((0xee << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             acquire_dst(tt::DstMode::Half);
-
+            RISC_POST_STATUS((0xff << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
+            if (ct > 4) break;
             // Pop tile after tile, copy to DST and pack
             cb_wait_front(tt::CB::c_in0, 1);
-            RISC_POST_STATUS((0xb << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
+            RISC_POST_STATUS((0x10 << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             copy_tile(tt::CB::c_in0, 0, 0);
-            RISC_POST_STATUS((0xc << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
             #ifdef SFPU_OP_CHAIN_0
             SFPU_OP_CHAIN_0
             #endif
-            RISC_POST_STATUS((0xd << 12) | (tt::CB::c_out0 << 8) | (tt::CB::c_out0 << 4) | ct);
+            RISC_POST_STATUS((0xa << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             pack_tile(0, tt::CB::c_out0);
-
-            RISC_POST_STATUS((0xe << 12) | (tt::CB::c_out0 << 8) | (tt::CB::c_out0 << 4) | ct);
+            RISC_POST_STATUS((0xb << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             cb_pop_front(tt::CB::c_in0, 1);
+            RISC_POST_STATUS((0x11 << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
 
             release_dst(tt::DstMode::Half);
-            ct++;
+            RISC_POST_STATUS((0x12 << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
         }
+        PACK(RISC_POST_STATUS((0xc << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr));
         cb_push_back(tt::CB::c_out0, per_core_block_dim);
+        RISC_POST_STATUS((0xd << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
+        if (ct > 4) break;
     }
-    RISC_POST_STATUS((0xf << 12) | (per_core_block_dim << 8) | (per_core_block_cnt << 4) | ct);
+    RISC_POST_STATUS(0xdddd, addr);
 }
 }

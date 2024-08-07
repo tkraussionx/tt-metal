@@ -46,11 +46,11 @@ void kernel_launch()
     ckernel::wait(KERNEL_RUN_TIME);
 #endif
 #else
-    RISC_POST_STATUS_3(0xdddd);
+    // RISC_POST_STATUS_3(0xdddd);
     tt_l1_ptr uint *local_l1_start_addr = (tt_l1_ptr uint *)PREPROCESSOR_EXPAND(MEM_TRISC, COMPILE_FOR_TRISC, _INIT_LOCAL_L1_BASE);
     firmware_kernel_common_init(local_l1_start_addr);
 
     run_kernel();
-    RISC_POST_STATUS_3(0xeeee);
+    // RISC_POST_STATUS_3(0xeeee);
 #endif
 }

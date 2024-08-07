@@ -498,14 +498,13 @@ class HWCommandQueue {
 
     void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
-
+    SystemMemoryManager& manager;
    private:
     uint32_t id;
     uint32_t size_B;
     std::optional<uint32_t> tid;
     std::shared_ptr<detail::TraceDescriptor> trace_ctx;
     std::thread completion_queue_thread;
-    SystemMemoryManager& manager;
     // Expected value of DISPATCH_MESSAGE_ADDR in dispatch core L1
     //  Value in L1 incremented by worker to signal completion to dispatch. Value on host is set on each enqueue program
     //  call

@@ -28,6 +28,7 @@
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/impl/dispatch/dispatch_core_manager.hpp"
 #include "tt_metal/third_party/umd/device/tt_xy_pair.h"
+#include <fstream>
 
 using std::map;
 using std::pair;
@@ -356,7 +357,8 @@ void EnqueueProgramCommand::assemble_stall_commands(
         this->cached_program_command_sequences[program.id].stall_command_sequence =
             HostMemDeviceCommand(cached_cmd_sequence_sizeB);
         this->cached_program_command_sequences[program.id].stall_command_sequence.add_dispatch_wait(
-            false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed);
+            false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, 0, false, true, true);
+
     }
 }
 
@@ -556,6 +558,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
                             }
 
                             CoreCoord physical_core = device->physical_core_from_logical_core(core_coord, core_type);
+                            // std::cout << "Unique RTA Core: " << physical_core << std::endl;
                             unique_sub_cmds.emplace_back(CQDispatchWritePackedUnicastSubCmd{
                                 .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
                         }
@@ -782,6 +785,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                 const auto& circular_buffers_on_corerange = program.circular_buffers_on_corerange(core_range);
                 cached_program_command_sequence.circular_buffers_on_core_ranges[i].reserve(
                     circular_buffers_on_corerange.size());
+                std::cout << "CB Core Range: " << core_range.str() <<  std::endl;
                 for (const shared_ptr<CircularBuffer>& cb : circular_buffers_on_corerange) {
                     cached_program_command_sequence.circular_buffers_on_core_ranges[i].emplace_back(cb);
                     const uint32_t cb_address = cb->address() >> 4;
@@ -791,12 +795,16 @@ void EnqueueProgramCommand::assemble_device_commands(
 
                         // cb config payload
                         const uint32_t base_index = UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * (uint32_t)buffer_index;
+
                         cb_config_payload[base_index] = cb_address;
                         cb_config_payload[base_index + 1] = cb_size;
                         cb_config_payload[base_index + 2] = cb->num_pages(buffer_index);
                         cb_config_payload[base_index + 3] = cb->page_size(buffer_index) >> 4;
                         max_base_index = max(max_base_index, base_index);
                     }
+                }
+                for (int it = 0; it < max_base_index + UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; it++) {
+                    std::cout << cb_config_payload[it] << std::endl;
                 }
                 multicast_cb_config_sub_cmds.emplace_back(CQDispatchWritePackedMulticastSubCmd{
                     .noc_xy_addr = this->device->get_noc_multicast_encoding(
@@ -834,12 +842,20 @@ void EnqueueProgramCommand::assemble_device_commands(
                 for (const pair<transfer_info_cores, uint32_t>& dst_noc_info : kg_transfer_info.dst_noc_info) {
                     bool write_linear;
                     uint32_t noc_encoding;
+                    uint32_t start_x = 0;
+                    uint32_t start_y = 0;
+                    uint32_t end_x = 0;
+                    uint32_t end_y = 0;
                     std::visit(
                         [&](auto&& cores) {
                             using T = std::decay_t<decltype(cores)>;
                             if constexpr (std::is_same_v<T, CoreRange>) {
                                 noc_encoding = this->device->get_noc_multicast_encoding(this->noc_index, cores);
                                 write_linear = false;
+                                // start_x = cores.start_coord.x;
+                                // start_y = cores.start_coord.y;
+                                // end_x = cores.end_coord.x;
+                                // end_y = cores.end_coord.y;
                             } else {
                                 noc_encoding = this->device->get_noc_unicast_encoding(this->noc_index, cores);
                                 write_linear = true;
@@ -884,12 +900,24 @@ void EnqueueProgramCommand::assemble_device_commands(
                             relayed_bytes / this->program.kg_buffers[buffer_idx]->page_size(),
                             length_adjust);
                     } else {
+                        // std::cout << "L1 Addrs for Binary: " << kg_transfer_info.kernel_name << std::endl;
                         uint32_t base_address = this->program.kg_buffers[buffer_idx]->address();
                         uint32_t page_offset = kg_transfer_info.page_offsets[kernel_idx];
                         uint32_t dst_addr = kg_transfer_info.dst_base_addrs[kernel_idx];
-                        std::cout << "Dst addr for kernel: " << dst_addr << std::endl;
                         uint32_t aligned_length = align(kg_transfer_info.lengths[kernel_idx], DRAM_ALIGNMENT);
                         uint32_t padding = aligned_length - kg_transfer_info.lengths[kernel_idx];
+                        if (program.dbg_info.find(kg_transfer_info.kernel_name) == program.dbg_info.end()) {
+                            program.dbg_info.insert({kg_transfer_info.kernel_name, {{start_x, end_x, start_y, end_y, dst_addr, kg_transfer_info.lengths[kernel_idx]}}});
+                        } else {
+                            program.dbg_info.at(kg_transfer_info.kernel_name).push_back({start_x, end_x, start_y, end_y, dst_addr, kg_transfer_info.lengths[kernel_idx]});
+                        }
+
+                        // for (uint32_t x = start_x; x < end_x; x++) {
+                        //     for (uint32_t y = start_y; y < end_y; y++) {
+                        //         auto core = tt_xy_pair(x, y);
+                        //         std::cout << core.str() << " Base: " << dst_addr << " Size bytes: " << kg_transfer_info.lengths[kernel_idx] << std::endl;
+                        //     }
+                        // }
                         while (aligned_length != 0) {
                             if (kernel_bins_dispatch_subcmds.empty() ||
                                 kernel_bins_dispatch_subcmds.back().size() ==
@@ -957,6 +985,7 @@ void EnqueueProgramCommand::assemble_device_commands(
             kernel_group.launch_msg.kernel_config.dispatch_core_y = this->dispatch_core.y;
             kernel_group.launch_msg.kernel_config.kernel_config_base = tensix_l1_kernel_config_base;
             const void* launch_message_data = (const void*)(&kernel_group.launch_msg);
+            std::cout << "Launch Msgs: " << std::endl;
             for (const CoreRange& core_range : kernel_group.core_ranges.ranges()) {
                 CoreCoord physical_start =
                     device->physical_core_from_logical_core(core_range.start_coord, kernel_group.get_core_type());
@@ -969,6 +998,10 @@ void EnqueueProgramCommand::assemble_device_commands(
                     .num_mcast_dests = (uint32_t)core_range.size()});
 
                 multicast_go_signal_data.emplace_back(launch_message_data, go_signal_sizeB);
+                std::cout << core_range.str() << " " << GET_MAILBOX_ADDRESS_HOST(launch) <<  std::endl;
+                for (int i = 0; i < go_signal_sizeB / 4; i++) {
+                    std::cout << *(reinterpret_cast<const uint32_t*>(launch_message_data) + i) << " ";
+                }
             }
         }
         if (multicast_go_signal_sub_cmds.size() > 0) {
@@ -1085,7 +1118,6 @@ void EnqueueProgramCommand::assemble_device_commands(
         for (uint32_t i = 0; i < kernel_bins_dispatch_subcmds.size(); ++i) {
             program_command_sequence.add_dispatch_write_packed_large(
                 DRAM_ALIGNMENT, kernel_bins_dispatch_subcmds[i].size(), kernel_bins_dispatch_subcmds[i]);
-            std::cout << "Kernel Size: " << kernel_bins_write_packed_large_data_aligned_sizeB[i] << std::endl;
             program_command_sequence.add_prefetch_relay_paged_packed(
                 kernel_bins_write_packed_large_data_aligned_sizeB[i],
                 kernel_bins_prefetch_subcmds[i],
@@ -2003,6 +2035,17 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
                 false);
         }
     }
+    for (int buffer_idx = 0; buffer_idx < program.program_transfer_info.kernel_bins.size(); buffer_idx++) {
+        const auto& buffer = program.kg_buffers[buffer_idx];
+        std::string out_file_path = "./dbg_kernel_bins/" + program.program_transfer_info.kernel_bins[buffer_idx].kernel_name + "_" + std::to_string(buffer->address()) + "_" + std::to_string((buffer->page_size() * buffer->num_pages()) / sizeof(uint32_t)) + "_" + std::to_string(buffer->num_pages()) + ".log";
+        if (not std::filesystem::exists(out_file_path)) {
+            std::cout << "Storing Reference Kernel Bins for: " << program.program_transfer_info.kernel_bins[buffer_idx].kernel_name << std::endl;
+            std::ofstream output_file("./dbg_kernel_bins/" + program.program_transfer_info.kernel_bins[buffer_idx].kernel_name + "_" + std::to_string(buffer->address()) + "_" + std::to_string((buffer->page_size() * buffer->num_pages()) / sizeof(uint32_t)) + "_" + std::to_string(buffer->num_pages()) + ".log");
+            std::ostream_iterator<std::uint32_t> output_iterator(output_file, "\n");
+            output_file << std::hex;
+            std::copy(program.program_transfer_info.kernel_bins[buffer_idx].data.begin(), program.program_transfer_info.kernel_bins[buffer_idx].data.end(), output_iterator);
+        }
+    }
 #ifdef DEBUG
     if (tt::llrt::OptionsG.get_validate_kernel_binaries()) {
         TT_FATAL(!this->manager.get_bypass_mode(), "Tracing cannot be used while validating program binaries");
@@ -2056,7 +2099,7 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
         program.program_transfer_info.num_active_cores,
         this->manager.get_bypass_mode(),
         expected_workers_completed);
-    // this->device->programs.push_back(std::move(program));
+
 }
 
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event, bool clear_count) {
@@ -2669,6 +2712,9 @@ void EnqueueProgram(
 void EnqueueProgramImpl(
     CommandQueue& cq, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program, bool blocking) {
     ZoneScoped;
+    if (not cq.hw_command_queue().manager.get_bypass_mode()) {
+        blocking = true;
+    }
     std::visit(
         [&cq, blocking](auto&& program) {
             ZoneScoped;
@@ -2682,6 +2728,29 @@ void EnqueueProgramImpl(
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.
                 // program.get().release_buffers();
+                if (not cq.hw_command_queue().manager.get_bypass_mode()) {
+                    std::vector<uint32_t> x_coords = {1, 2, 3, 4, 6, 7, 8, 9};
+                    std::vector<uint32_t> y_coords = {1, 2, 3, 4, 5, 8, 9, 10};
+                    for (auto& kernel : program.get().dbg_info) {
+                        for (auto info : kernel.second) {
+                            for (uint32_t x : x_coords) {
+                                for (uint32_t y : y_coords) {
+                                    std::vector<uint32_t> core_data = {};
+                                    // std::cout << "Read from addr: " << info[4] << " core: " << tt_cxy_pair(4, x, y).str() << " len: " << info[5] << std::endl;
+                                    tt::Cluster::instance().read_core(core_data, info[5], tt_cxy_pair(4, x, y), info[4]);
+                                    // kernel_name_x_y_addr_lenbytes
+                                    std::string out_file_path = "./dbg_l1_kernel_bins/" + kernel.first + "_" + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(info[4]) + "_" + std::to_string(info[5]) + ".log";
+                                    if (not std::filesystem::exists(out_file_path)) {
+                                        std::ofstream output_file(out_file_path);
+                                        std::ostream_iterator<std::uint32_t> output_iterator(output_file, "\n");
+                                        std::copy(core_data.begin(), core_data.end(), output_iterator);
+                                        output_file.close();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
                 detail::CompileProgram(device, *program);
                 program->allocate_circular_buffers();
@@ -2690,6 +2759,29 @@ void EnqueueProgramImpl(
                 // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem
                 // leaks on device.
                 // program->release_buffers();
+                if (not cq.hw_command_queue().manager.get_bypass_mode()) {
+                    std::vector<uint32_t> x_coords = {1, 2, 3, 4, 6, 7, 8, 9};
+                    std::vector<uint32_t> y_coords = {1, 2, 3, 4, 5, 8, 9, 10};
+                    for (auto& kernel : program->dbg_info) {
+                        for (auto info : kernel.second) {
+                            for (uint32_t x : x_coords) {
+                                for (uint32_t y : y_coords) {
+                                    std::vector<uint32_t> core_data = {};
+                                    // std::cout << "Read from addr: " << info[4] << " core: " << tt_cxy_pair(4, x, y).str() << " len: " << info[5] << std::endl;
+                                    tt::Cluster::instance().read_core(core_data, info[5], tt_cxy_pair(4, x, y), info[4]);
+                                    // kernel_name_x_y_addr_lenbytes
+                                    std::string out_file_path = "./dbg_l1_kernel_bins/" + kernel.first + "_" + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(info[4]) + "_" + std::to_string(info[5]) + ".log";
+                                    if (not std::filesystem::exists(out_file_path)) {
+                                        std::ofstream output_file(out_file_path);
+                                        std::ostream_iterator<std::uint32_t> output_iterator(output_file, "\n");
+                                        std::copy(core_data.begin(), core_data.end(), output_iterator);
+                                        output_file.close();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         program);
