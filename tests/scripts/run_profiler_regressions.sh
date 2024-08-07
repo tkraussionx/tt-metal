@@ -108,6 +108,8 @@ elif [[ $1 == "PROFILER_NO_RESET" ]]; then
 elif [[ $1 == "POST_PROC" ]]; then
     run_post_proc_test
 else
-    run_profiling_test
-    run_post_proc_test
+    cd $TT_METAL_HOME
+    source python_env/bin/activate
+    export PYTHONPATH=$TT_METAL_HOME
+    source watcher_setup.sh
 fi

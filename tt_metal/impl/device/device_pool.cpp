@@ -159,9 +159,11 @@ void DevicePool::initialize_device(Device* dev) const {
 
     // TODO: as optimization, investigate removing all this call for already initialized devivces
     dev->reset_cores();
+    watcher_attach(dev);
+
+    //this_thread::sleep_for(chrono::seconds(10));
     dev->initialize_and_launch_firmware();
 
-    watcher_attach(dev);
 
     // Set up HW command queues on device for FD
     if (using_fast_dispatch)

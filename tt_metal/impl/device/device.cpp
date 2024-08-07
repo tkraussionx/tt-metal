@@ -4,6 +4,7 @@
 
 #include <string>
 #include <chrono>
+#include <thread>
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
 #include "tt_metal/common/core_descriptor.hpp"
@@ -56,13 +57,15 @@ void Device::get_associated_dispatch_phys_cores(
                         tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(dispatch_location, dispatch_core_type);
                         my_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "MMIO Device Dispatch core: Logical: {} - Physical: {}", dispatch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Logical: {} - Physical: {}", dispatch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                     if (dispatch_core_manager::instance().is_prefetcher_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair prefetch_location = dispatch_core_manager::instance().prefetcher_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(prefetch_location, dispatch_core_type);
                         my_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "MMIO Device Prefetch core: Logical: {} - Physical: {}", prefetch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Prefetch core: Logical: {} - Physical: {}", prefetch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                 } else if (tt::DevicePool::instance().is_device_active(device_id)) {
                     //non mmio devices serviced by this mmio capable device.
@@ -71,25 +74,29 @@ void Device::get_associated_dispatch_phys_cores(
                         tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(dispatch_location, dispatch_core_type);
                         other_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "Remote Device Dispatch core: Logical: {} - Physical: {} will keep running on MMIO Device.", dispatch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "Remote Device Dispatch core: Logical: {} - Physical: {} will keep running on MMIO Device.", dispatch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                     if (dispatch_core_manager::instance().is_prefetcher_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair prefetch_location = dispatch_core_manager::instance().prefetcher_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(prefetch_location, dispatch_core_type);
                         other_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "Remote Device Prefetch core: Logical: {} - Physical: {} will keep running on MMIO Device.", prefetch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "Remote Device Prefetch core: Logical: {} - Physical: {} will keep running on MMIO Device.", prefetch_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                     if (dispatch_core_manager::instance().is_mux_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair mux_location = dispatch_core_manager::instance().mux_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(mux_location, dispatch_core_type);
                         other_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "Remote Device Mux core: Logical: {} - Physical: {} will keep running on MMIO Device.", mux_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "Remote Device Mux core: Logical: {} - Physical: {} will keep running on MMIO Device.", mux_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "Remote Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                     if (dispatch_core_manager::instance().is_demux_core_allocated(device_id, curr_channel, cq_id)) {
                         tt_cxy_pair demux_location = dispatch_core_manager::instance().demux_core(device_id, curr_channel, cq_id);
                         CoreCoord phys_core = get_physical_core_coordinate(demux_location, dispatch_core_type);
                         other_dispatch_cores[this->id_].insert(phys_core);
-                        log_debug(tt::LogMetal, "Remote Device Demux core: Logical: {} - Physical: {} will keep running on MMIO Device.", demux_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "Remote Device Demux core: Logical: {} - Physical: {} will keep running on MMIO Device.", demux_location.str(), phys_core.str());
+                        //log_info(tt::LogMetal, "MMIO Device Dispatch core: Device: {} - {}", device_id, this->id_);
                     }
                 }
             }
@@ -105,25 +112,29 @@ void Device::get_associated_dispatch_phys_cores(
                 tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_core(device_id, curr_channel, cq_id);
                 CoreCoord phys_core = get_physical_core_coordinate(dispatch_location, dispatch_core_type);
                 my_dispatch_cores[dispatch_location.chip].insert(phys_core);
-                log_debug(tt::LogMetal, "Remote Device Dispatch core: Logical: {} - Physical: {} will be reset on MMIO Device.", dispatch_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Dispatch core: Logical: {} - Physical: {} will be reset on MMIO Device.", dispatch_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Dispatch core: Device: {} - {}", device_id, this->id_);
             }
             if (dispatch_core_manager::instance().is_prefetcher_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair prefetch_location = dispatch_core_manager::instance().prefetcher_core(device_id, curr_channel, cq_id);
                 CoreCoord phys_core = get_physical_core_coordinate(prefetch_location, dispatch_core_type);
                 my_dispatch_cores[prefetch_location.chip].insert(phys_core);
-                log_debug(tt::LogMetal, "Remote Device Prefetch core: Logical: {} - Physical: {} will be reset on MMIO Device.", prefetch_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Prefetch core: Logical: {} - Physical: {} will be reset on MMIO Device.", prefetch_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Dispatch core: Device: {} - {}", device_id, this->id_);
             }
             if (dispatch_core_manager::instance().is_mux_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair mux_location = dispatch_core_manager::instance().mux_core(device_id, curr_channel, cq_id);
                 CoreCoord phys_core = get_physical_core_coordinate(mux_location, dispatch_core_type);
                 my_dispatch_cores[mux_location.chip].insert(phys_core);
-                log_debug(tt::LogMetal, "Remote Device Mux core: Logical: {} - Physical: {} will be reset on MMIO Device.", mux_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Mux core: Logical: {} - Physical: {} will be reset on MMIO Device.", mux_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Dispatch core: Device: {} - {}", device_id, this->id_);
             }
             if (dispatch_core_manager::instance().is_demux_core_allocated(device_id, curr_channel, cq_id)) {
                 tt_cxy_pair demux_location = dispatch_core_manager::instance().demux_core(device_id, curr_channel, cq_id);
                 CoreCoord phys_core = get_physical_core_coordinate(demux_location, dispatch_core_type);
                 my_dispatch_cores[demux_location.chip].insert(phys_core);
-                log_debug(tt::LogMetal, "Remote Device Demux core: Logical: {} - Physical: {} will be reset on MMIO Device.", demux_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Demux core: Logical: {} - Physical: {} will be reset on MMIO Device.", demux_location.str(), phys_core.str());
+                //log_info(tt::LogMetal, "Remote Device Dispatch core: Device: {} - {}", device_id, this->id_);
             }
                 CoreCoord phys_core;
                 tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, curr_channel, cq_id);
@@ -288,7 +299,39 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
                 launch_msg->kernel_config.ncrisc_kernel_size16 = kernel_size16;
             }
             log_debug(LogDevice, "RISC {} fw binary size: {} in bytes", riscv_id, kernel_size16 * 16);
+
+            if (this->id() == 0 && phys_core.x == 6 && phys_core.y == 9 && riscv_id == 0)
+            {
+                std::ofstream log_file;
+                std::vector<uint32_t> fw_buffer;
+                fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
+                log_info(tt::LogMetal," BEFORE TRISC_BASE {}", MEM_TRISC0_BASE);
+                log_file.open("./before.log");
+                for (auto &b: fw_buffer)
+                {
+                    log_file << b << std::endl;
+                }
+                log_file.close();
+            }
             llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
+            if (this->id() == 0 && phys_core.x == 6 && phys_core.y == 9 && riscv_id == 0)
+            {
+                std::ofstream log_file;
+                std::vector<uint32_t> fw_buffer;
+                fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
+                log_info(tt::LogMetal," AFTER TRISC_BASE {}", MEM_TRISC0_BASE);
+                log_file.open("./after.log");
+                for (auto &b: fw_buffer)
+                {
+                    log_file << b << std::endl;
+                }
+                log_file.close();
+            }
+            //if (this->id() == 0 && phys_core.x == 6 && phys_core.y == 9)
+            //{
+                //this_thread::sleep_for(chrono::seconds(10));
+                //llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
+            //}
         }
     }
     //This is an initialization launch message.
@@ -300,6 +343,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
 void Device::reset_cores() {
     ZoneScoped;
 
+    //log_info(tt::LogMetal, "MOOOOOOOOOOOOOOOOOOOOOOOOO");
     auto kernel_still_running = [](launch_msg_t *launch_msg) {
         return launch_msg->go.run == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
     };
@@ -331,6 +375,7 @@ void Device::reset_cores() {
     for (auto &id_and_cores : dispatch_cores) {
         for (auto it = id_and_cores.second.begin(); it != id_and_cores.second.end(); it++) {
             const auto &phys_core = *it;
+            //log_info(tt::LogMetal, "Dispatch device {}, id {}", id_and_cores.first , phys_core.str());
             // Only need to manually reset ethernet dispatch cores, tensix cores are all reset below.
             if (llrt::is_ethernet_core(phys_core, id_and_cores.first)) {
                 // Ethernet cores won't be reset, so just signal the dispatch cores to early exit.
@@ -371,6 +416,8 @@ void Device::reset_cores() {
         for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
             CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
+
+            //log_info(tt::LogMetal, "Reseting device {}, core {}", this->id_ , worker_core.str());
 
             // Don't reset dispatch cores for other devices, in case they're still running.
             if (other_dispatch_cores[this->id_].find(worker_core) == other_dispatch_cores[this->id_].end()) {
@@ -432,11 +479,15 @@ void Device::initialize_and_launch_firmware() {
 
     // Deassert worker cores
     for(const auto& worker_core : not_done_cores)
+    {
+        //log_info(tt::LogMetal, "Deasserting : {}, {}", this->id(), worker_core.str());
         tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
+    }
 
     // Wait until fw init is done, ensures the next launch msg doesn't get
     // written while fw is still in init
     log_debug("Waiting for firmware init complete");
+    log_info(tt::LogMetal, "Device id waiting: {}", this->id());
     llrt::internal_::wait_until_cores_done(this->id(), RUN_MSG_INIT, not_done_cores);
     log_debug("Firmware init complete");
 }
@@ -452,6 +503,8 @@ void Device::clear_l1_state() {
         for (uint32_t y = 0; y < logical_grid_size.y; y++) {
             CoreCoord logical_core(x, y);
             detail::WriteToDeviceL1(this, logical_core, start_address, zero_vec);
+            //log_info(tt::LogMetal,"L1 Clearing {}", logical_core.str());
+
         }
     }
 
@@ -1080,7 +1133,7 @@ void Device::setup_tunnel_for_remote_devices() {
     uint32_t index = 0;
     for (auto tunnel : tunnels_from_mmio_) {
         for (auto remote_dev : tunnel) {
-            log_info(tt::LogMetal, "MMIO Device {} : Tunnel {} : Device {}", mmio_device_id, index, remote_dev);
+            //log_info(tt::LogMetal, "MMIO Device {} : Tunnel {} : Device {}", mmio_device_id, index, remote_dev);
         }
         index++;
     }
@@ -1979,6 +2032,20 @@ bool Device::close() {
     this->tunnel_device_dispatch_workers_.clear();
     this->initialized_ = false;
 
+    CoreCoord phys_core(6, 9);
+    if (this->id() == 0)
+    {
+        std::ofstream log_file;
+        std::vector<uint32_t> fw_buffer;
+        fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, MEM_BRISC_FIRMWARE_BASE, MEM_BRISC_FIRMWARE_SIZE);
+        log_info(tt::LogMetal," AFTER TRISC_BASE {}", MEM_TRISC0_BASE);
+        log_file.open("./close.log");
+        for (auto &b: fw_buffer)
+        {
+            log_file << b << std::endl;
+        }
+        log_file.close();
+    }
     return true;
 }
 

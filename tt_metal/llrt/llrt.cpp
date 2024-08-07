@@ -316,6 +316,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     bool is_eth_core = is_ethernet_core(core, chip_id);
     bool is_active_eth_core = false;
     bool is_inactive_eth_core = false;
+    static int counter = 0;
 
         // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
     if (is_eth_core) {
@@ -336,6 +337,16 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
         // read a single uint32_t even though launch.run is smaller than that
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
         uint8_t run = run_mailbox_read_val[0] >> (8 * (offsetof(launch_msg_t, go.run) & 3));
+
+        if ((counter % 1000000) == 0)
+        {
+            fprintf(
+                stdout,
+                "run msg: %x, expected: %x",
+                run,
+                RUN_MSG_DONE);
+        }
+        counter ++;
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
                 stderr,
@@ -372,12 +383,20 @@ void wait_until_cores_done(
         }
 
         // Print not-done cores
-        if (loop_count % 1000 == 0) {
+        if (loop_count % 1000000 == 0) {
             string not_done_cores_str = "Not done phys cores: ";
             for (const auto &core : not_done_phys_cores) {
                 not_done_cores_str += (core.str() + " ");
+                if (loop_count % 2000000 == 0)
+                {
+                    tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(device_id, core));
+                }
+                else
+                {
+                    tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(device_id, core));
+                }
             }
-            log_debug(tt::LogMetal, not_done_cores_str.c_str());
+            log_info(tt::LogMetal,"{}, {}", device_id, not_done_cores_str.c_str());
         }
 
         for (auto it = not_done_phys_cores.begin(); it != not_done_phys_cores.end(); ) {
