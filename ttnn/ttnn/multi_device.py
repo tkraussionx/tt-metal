@@ -4,7 +4,7 @@
 
 import contextlib
 
-from typing import List, Dict
+from typing import List, Dict, Optional, Callable
 
 import ttnn
 
@@ -18,10 +18,11 @@ DeviceMesh = ttnn._ttnn.multi_device.DeviceMesh
 DeviceMesh.core_grid = property(get_device_mesh_core_grid)
 
 
-def visualize_device_mesh(device_mesh):
+def _get_rich_table(
+    device_mesh: "ttnn.DeviceMesh", style_cell: Optional[Callable] = None, annotate_cell: Optional[Callable] = None
+):
     from rich import box, padding
     from rich.align import Align
-    from rich.console import Console
     from rich.table import Table
 
     # Setup rich table
@@ -45,10 +46,37 @@ def visualize_device_mesh(device_mesh):
         for col_idx in range(cols):
             device = device_mesh.get_device(row_idx, col_idx)
             cell_content = f"Dev. ID: {device.id()}\n ({row_idx}, {col_idx})" if device else "Empty"
+            cell_content += f"\n{annotate_cell(device)}" if annotate_cell and device else ""
+            cell_style = style_cell(device) if style_cell and device else None
             cell = padding.Padding(Align(cell_content, "center", vertical="middle"), (0, 0))
+            if cell_style:
+                cell.style = cell_style
             row_cells.append(cell)
         mesh_table.add_row(*row_cells)
+    return mesh_table
 
+
+def visualize_device_mesh(device_mesh: "ttnn.DeviceMesh", tensor: "ttnn.Tensor" = None):
+    """
+    Visualize the device mesh and the given tensor (if specified).
+    """
+    from rich.console import Console
+    from rich.style import Style
+
+    style_cell, annotate_cell = None, None
+    if tensor is not None:
+        mapped_devices = set(device.id() for device in tensor.devices())
+
+        def color_mapped_devices(device):
+            return Style(bgcolor="dark_green") if device.id() in mapped_devices else None
+
+        def annotate_with_tensor_shape(device):
+            return f"{tensor.shape}"
+
+        style_cell = color_mapped_devices
+        annotate_cell = annotate_with_tensor_shape
+
+    mesh_table = _get_rich_table(device_mesh, style_cell=style_cell, annotate_cell=annotate_cell)
     Console().print(mesh_table)
 
 
@@ -192,10 +220,15 @@ class ShardTensor2dMesh(TensorToMesh):
     def __init__(self, device_mesh, shard_grid, shard_dimensions):
         super().__init__(device_mesh)
         self.shard_grid = shard_grid  # defines shape of 2D grid of shards
-        self.shard_dimensions = shard_dimensions  # defines which dimensions to shard
+        self.shard_dimensions = (
+            shard_dimensions  # defines which dimensions to shard and in which order exclusively to tensor
+        )
 
     def map(self, tensor):
         import torch
+
+        if len(self.shard_dimensions) != 2:
+            raise ValueError("ShardTensor2dMesh only supports 2D shard dimensions")
 
         Y, X = 0, 1
         # Returns list of tensors to map to row-major ordering of chips in shard grid
@@ -213,13 +246,44 @@ class ShardTensor2dMesh(TensorToMesh):
         return tensor_2d_shards
 
     def config(self):
+        # order of dimensions tells us whether to go row-major or col-major
+        def map_devices_to_row_major(shard_dimensions):
+            if None in shard_dimensions:
+                return True
+            elif shard_dimensions[-2] < shard_dimensions[-1]:
+                return True
+            else:
+                return False
+
+        is_row_major = map_devices_to_row_major(self.shard_dimensions)
+        mesh_shape = self.shard_grid
+
         return {
-            "strategy": "shard",
-            "shard_dim": f"{self.shard_dimensions[0] if self.shard_dimensions[0] else self.shard_dimensions[1]}",
-            # "strategy": "shard_2d",
-            # "shard_grid_y": f"{self.shard_grid[0]}",
-            # "shard_grid_x": f"{self.shard_grid[1]}",
+            "strategy": "shard_2d",
+            "shard_dim_y": str(mesh_shape[0]),  # TODO fix shard_dim_y
+            "shard_dim_x": str(mesh_shape[1]),
         }
+
+
+class ConcatMesh2DToTensor(MeshToTensor):
+    def __init__(self, device_mesh, shard_grid, concat_dimensions):
+        self.shard_grid = shard_grid  # defines shape of 2D grid of shards
+        self.concat_dimensions = concat_dimensions  # defines which dimensions to concat and in which order
+        self.device_mesh = device_mesh
+
+    def compose(self, tensor: ttnn.Tensor) -> "torch.Tensor":
+        import torch
+
+        tt_shards = [ttnn.to_torch(tt_input_tensor) for tt_input_tensor in ttnn.get_device_tensors(tensor)]
+
+        X, Y = 0, 1
+        row_concat = []
+        for cluster_row in range(self.shard_grid[Y]):
+            start = cluster_row * self.shard_grid[X]
+            end = start + self.shard_grid[X]
+            row_concat.append(torch.cat(tt_shards[start:end], dim=self.dims[X]))
+        all_concat = torch.cat(row_concat, dim=self.dims[Y])
+        return all_concat
 
 
 class ReplicateTensorToMesh(TensorToMesh):
