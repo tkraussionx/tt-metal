@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import random
+import math
 import os
 import torch
 from itertools import product
@@ -716,6 +717,20 @@ def shapes_and_datagen(
 
             for shapes, datagen_funcs, test_args in _gen_shapes_and_args(
                 start_shape, end_shape, interval, _gen_concat_bw_shapes
+
+        elif method == "topk":
+
+            def _gen_topk_shapes(shape):
+                last_dim = shape[3]
+                if not (last_dim & (last_dim - 1) == 0) and last_dim != 0:
+                    last_dim = 2 ** math.ceil(math.log2(last_dim))
+
+                shape[3] = last_dim
+
+                return [shape]
+
+            for shapes, datagen_funcs, test_args in _gen_shapes_and_args(
+                start_shape, end_shape, interval, _gen_topk_shapes
             ):
                 yield shapes, datagen_funcs, test_args
 

@@ -2352,6 +2352,7 @@ def logaddexp2_bw(x, y, z, *args, **kwargs):
     return [in_data.grad, other_data.grad]
 
 
+<<<<<<< HEAD
 def erf_bw(x, y, *args, **kwargs):
     grad_data = x
     in_data = y
@@ -2436,3 +2437,8 @@ def trunc(x, *args, **kwargs):
     return torch.trunc(x)
 
 
+=======
+def topk(x, k, *args, **kwargs):
+    values, indices = torch.topk(x, k, dim=-1, largest=True, sorted=True)
+    return [values, indices]
+>>>>>>> #10147: Add topk sweeps to ttnn
