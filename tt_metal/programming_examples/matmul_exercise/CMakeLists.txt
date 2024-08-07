@@ -2,6 +2,7 @@
 set(MATMUL_EXERCISE_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_single_core
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multi_core
+    ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multicore_reuse
 )
 
 CREATE_PGM_EXAMPLES_EXE("${MATMUL_EXERCISE_SRCS}" "matmul_exercise")
