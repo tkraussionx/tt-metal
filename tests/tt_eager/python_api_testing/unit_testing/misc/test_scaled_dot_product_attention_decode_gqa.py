@@ -338,7 +338,7 @@ def run_test_sdpa_decode_single_iter(
     tt_K = ttnn.as_tensor(K, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT, memory_config=dram_memcfg)
     tt_V = ttnn.as_tensor(V, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT, memory_config=dram_memcfg)
 
-    start_indices = [s // 2 for _ in range(b)] if start_indices is None else start_indices
+    start_indices = [s // 2 for _ in range(b * nkv)] if start_indices is None else start_indices
     max_start_idx = max(start_indices)
     scale = d**-0.5
 
@@ -357,8 +357,8 @@ def run_test_sdpa_decode_single_iter(
     logger.debug(f"Using padded layer length: {padded_layer_len}")
     logger.debug(f"Using padded num heads: {padded_num_heads}")
 
-    attn_mask = torch.zeros((1, b, padded_num_heads, padded_layer_len))
-    for i in range(b):
+    attn_mask = torch.zeros((1, b * nkv, padded_num_heads, padded_layer_len))
+    for i in range(b * nkv):
         start_idx = start_indices[i]
         attn_mask[:, i, :, start_idx + 1 :] = torch.finfo(torch.float32).min
 
@@ -371,6 +371,10 @@ def run_test_sdpa_decode_single_iter(
         layout=ttnn.TILE_LAYOUT,
         memory_config=height_sharded_memcfg if sharded_in else dram_memcfg,
     )
+    q_heads = ttnn.to_layout(tt_Q, ttnn.ROW_MAJOR_LAYOUT)
+    q_heads = ttnn.permute(q_heads, (0, 2, 1, 3))
+    q_heads = ttnn.reshape(q_heads, ttnn.Shape([1, 64, 4, 128]))
+    tt_Q = ttnn.to_layout(q_heads, ttnn.TILE_LAYOUT)
 
     tt_back = tt_lib.operations.primary.transformers.scaled_dot_product_attention_decode_gqa(
         tt_Q,
@@ -384,20 +388,24 @@ def run_test_sdpa_decode_single_iter(
     )
 
     tt_back = ttnn.to_torch(tt_back)
-    # tt_back = tt_back[:, :, :nh, :]
+    # print(tt_back[:, :, 4:, :])
+    tt_back = tt_back[:, :, :4, :].reshape(1, 8, 32, 128)
+    print(tt_back)
 
-    # Q_slice = Q[:, :, :nh, :].permute(1, 2, 0, 3)  # b, nh, 1, d
-    # K_slice = K[:, :, :padded_layer_len, :].repeat(1, nh//nkv, 1, 1)#.permute(1, 0, 2, 3)  # nh, b, S, d
-    # V_slice = V[:, :, :padded_layer_len, :].repeat(1, nh//nkv, 1, 1)#.permute(1, 0, 2, 3)  # nh, b, S, d
-    # attn_mask_slice = attn_mask[:, :, :nh, :].permute(1, 2, 0, 3)  # b, nh, 1, S
-    # expect = torch.nn.functional.scaled_dot_product_attention(
-    #     Q_slice, K_slice, V_slice, attn_mask_slice, scale=scale, is_causal=False
-    # )  # b, nh, 1, d
-    # expect = expect.squeeze().unsqueeze(0)
+    Q_slice = Q.permute(2, 1, 0, 3)  # b, nh, 1, d
+    K_slice = K[:, :, :padded_layer_len, :].repeat(1, nh // nkv, 1, 1)  # .permute(1, 0, 2, 3)  # nh, b, S, d
+    V_slice = V[:, :, :padded_layer_len, :].repeat(1, nh // nkv, 1, 1)  # .permute(1, 0, 2, 3)  # nh, b, S, d
+    attn_mask_slice = attn_mask[:, :b, :, :].permute(1, 2, 0, 3)  # b, nh, 1, S
+    expect = torch.nn.functional.scaled_dot_product_attention(
+        Q_slice, K_slice, V_slice, attn_mask_slice, scale=scale, is_causal=False
+    )  # b, nh, 1, d
+    expect = expect.squeeze().unsqueeze(0)
 
-    # out_pass, out_pcc = comp_pcc(expect, tt_back, min_pcc)
+    print(expect)
 
-    # logger.debug(f"python vs pytorch: {out_pcc}")
+    out_pass, out_pcc = comp_pcc(expect, tt_back, min_pcc)
+
+    logger.debug(f"python vs pytorch: {out_pcc}")
     assert True
 
 

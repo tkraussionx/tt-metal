@@ -17,11 +17,20 @@
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
-
+#include "ttnn/tensor/tensor_utils.hpp"
+#include "ttnn/operations/core/core.hpp"
+#include "ttnn/operations/data_movement/permute/permute.hpp"
 using uint32_t = std::uint32_t;
 using namespace tt::constants;
 using namespace tt::tt_metal;
-
+inline bool has_tile_padding(const Tensor& t) {
+    if (t.get_shape().rank() > 1) {
+        auto the_shape = t.get_shape();
+        auto the_shape_with_padding = t.get_shape().with_tile_padding();
+        return the_shape[-1] != the_shape_with_padding[-1] or the_shape[-2] != the_shape_with_padding[-2];
+    }
+    return false;
+}
 namespace tt {
 namespace operations {
 namespace primary {
@@ -356,8 +365,9 @@ void ScaledDotProductAttentionGQADecode::validate(const std::vector<Tensor>& inp
 }
 
 std::vector<Shape> ScaledDotProductAttentionGQADecode::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
-    auto shape = input_tensors.at(0).get_legacy_shape();
-    return {(Shape) {1, 1, 32, shape[-1]*shape[1]}};
+    //auto shape = input_tensors.at(0).get_legacy_shape();
+    return {(Shape) {1,64, 32, 128}};
+    //return {ttnn::Shape({1,64, 4, 128}, {1,64, 32, 128})};
 }
 
 std::vector<Tensor> ScaledDotProductAttentionDecode::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
@@ -445,7 +455,7 @@ operation::ProgramWithCallbacks ScaledDotProductAttentionGQADecode::create_progr
         },
         this->program_config);
 
-    return sdpa_decode_gqa_multi_core(
+    return sdpa_decode_multi_core(
         input_tensor_q,
         input_tensor_k,
         input_tensor_v,
@@ -579,11 +589,44 @@ Tensor scaled_dot_product_attention_decode_gqa(
             std::vector<Tensor> input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
-            const auto& input_tensor_q = input_tensors.at(0);
-            const auto& input_tensor_k = input_tensors.at(1);
-            const auto& input_tensor_v = input_tensors.at(2);
+            auto& input_tensor_q = input_tensors.at(0);
+            auto& input_tensor_k = input_tensors.at(1);
+            auto& input_tensor_v = input_tensors.at(2);
             auto arch = input_tensor_q.storage_type() == StorageType::DEVICE ? input_tensor_q.device()->arch()
                                                                              : AutoFormat::GetDefaultDevice()->arch();
+
+            //formatting input tensors
+            auto q_shape = input_tensor_q.get_legacy_shape();
+            auto k_shape = input_tensor_k.get_legacy_shape();
+            uint32_t B = k_shape[0];
+            uint32_t NQH = q_shape[1];
+            uint32_t NKH = k_shape[1];
+            uint32_t D = k_shape[3];
+            uint32_t NG = NQH/NKH;
+            // log_info("start input_shape: {}", input_tensor_q.get_shape());
+            // log_info("start input layout: {}", input_tensor_q.get_layout());
+            // //if (has_tile_padding(input_tensor_q)) {
+            // input_tensor_q = ttnn::to_layout(input_tensor_q, ttnn::ROW_MAJOR_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
+            // //}
+            // log_info("rm input_shape: {}", input_tensor_q.get_shape());
+            // log_info("rm input layout: {}", input_tensor_q.get_layout());
+            // std::vector<int64_t> dims = {0, 2, 1, 3};
+            // input_tensor_q = ttnn::permute(input_tensor_q, dims);
+            // input_tensor_q = ttnn::to_layout(input_tensor_q, ttnn::ROW_MAJOR_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
+
+            // log_info("input_shape: {}", input_tensor_q.get_shape());
+            // log_info("input layout: {}", input_tensor_q.get_layout());
+            // input_tensor_q = ttnn::reshape(input_tensor_q, ttnn::Shape({1,B*NKH, NG, D}, {1, B*NKH, 4, D}));
+            // log_info("reshaped input_shape: {}", input_tensor_q.get_shape());
+            // log_info("reshaped input layout: {}", input_tensor_q.get_layout());
+            // if (input_tensor_q.get_layout() != ttnn::TILE_LAYOUT) {
+            //     input_tensor_q = ttnn::to_layout(input_tensor_q, ttnn::TILE_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
+            // }
+
+            // input_tensor_k = ttnn::reshape(input_tensor_k, ttnn::Shape({1, B*NKH, k_shape[2], D}, {1, B*NKH, k_shape[2], D}));
+            // input_tensor_v = ttnn::reshape(input_tensor_v, ttnn::Shape({1, B*NKH, k_shape[2], D}, {1, B*NKH, k_shape[2], D}));
+
+
             uint32_t max_cur_pos = *std::max_element(cur_pos.begin(), cur_pos.end());
             uint32_t k_chunk_size = get_chunk_size(max_cur_pos+1);
             // get chunk size and then pass to sdpa decode as an attribute for prgm cache
@@ -603,9 +646,22 @@ Tensor scaled_dot_product_attention_decode_gqa(
         {input_tensor_q, input_tensor_k, input_tensor_v},
         output_tensors
         );
-    return output_tensors.at(0);
-}
 
+    // formatting output tensor
+    auto output_tensor = output_tensors.at(0);
+    auto output_shape = output_tensor.get_legacy_shape();
+    //if (has_tile_padding(output_tensor)) {
+    // output_tensor = ttnn::to_layout(output_tensor, ttnn::ROW_MAJOR_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
+    // //}
+    log_info("output_shape: {}", output_shape);
+    log_info("output_shape: {}", output_tensor.get_shape());
+    // output_tensor = ttnn::reshape(output_tensor, ttnn::Shape({1, 8, 32, 128}, {1, 8, 32, 128}));
+    // if (output_tensor.get_layout() != ttnn::TILE_LAYOUT) {
+    //     output_tensor = ttnn::to_layout(output_tensor, ttnn::TILE_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
+    // }
+    // log_info("output_shape: {}", output_tensor.get_shape());
+    return output_tensor;
+}
 }  // namespace transformers
 }  // namespace primary
 }  // namespace operations

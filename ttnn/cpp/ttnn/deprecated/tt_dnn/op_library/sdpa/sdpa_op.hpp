@@ -116,17 +116,17 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     const uint32_t k_chunk_size
 );
 
-operation::ProgramWithCallbacks sdpa_decode_gqa_multi_core(
-    const Tensor &input_tensor_q,
-    const Tensor &input_tensor_k,
-    const Tensor &input_tensor_v,
-    const Tensor &output_tensor,
-    const std::vector<uint32_t> cur_pos,
-    std::optional<float> scale,
-    DeviceComputeKernelConfig compute_kernel_config,
-    tt::operations::primary::transformers::SDPAProgramConfig program_config,
-    const uint32_t k_chunk_size
-);
+// operation::ProgramWithCallbacks sdpa_decode_gqa_multi_core(
+//     const Tensor &input_tensor_q,
+//     const Tensor &input_tensor_k,
+//     const Tensor &input_tensor_v,
+//     const Tensor &output_tensor,
+//     const std::vector<uint32_t> cur_pos,
+//     std::optional<float> scale,
+//     DeviceComputeKernelConfig compute_kernel_config,
+//     tt::operations::primary::transformers::SDPAProgramConfig program_config,
+//     const uint32_t k_chunk_size
+// );
 
 namespace transformers {
 
