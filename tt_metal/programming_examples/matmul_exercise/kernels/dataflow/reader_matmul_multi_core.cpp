@@ -70,11 +70,7 @@ void kernel_main() {
             }
 
             itileA += 1;
-            // itileB += Nt;
             itileB += (transpose_b) ? (1) : (Nt);
-
-            DPRINT << "+_+  iteilA " << itileB << ENDL();
-            DPRINT << "+_+  iteilB " << itileB << ENDL();
         } // Kt loop
         itileB_batch += 1;
 
@@ -85,7 +81,6 @@ void kernel_main() {
 
         if (itileB_batch == Nt) {
             itileB_batch = 0;
-            // itileB -= Nt;
             itileB = 0;
         } else {
             itileA -= Kt;
