@@ -73,18 +73,20 @@ def run_test_FalconMLP_inference(
         tt_cache_path,
     )
 
-    tt_mlp_input = ttnn.from_torch(
-        mlp_input,
-        dtype=model_config["DEFAULT_DTYPE"],
-        device=device_mesh,
-        layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
-    )
+    from tqdm import tqdm
 
-    tt_out = tt_FalconMLP_model(tt_mlp_input)
-    tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
-        pytorch_out.dtype
-    )
+    for i in tqdm(range(10000)):
+        tt_mlp_input = ttnn.from_torch(
+            mlp_input,
+            dtype=model_config["DEFAULT_DTYPE"],
+            device=device_mesh,
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
+        )
+        tt_out = tt_FalconMLP_model(tt_mlp_input)
+        tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(device_mesh, dim=0), device=device_mesh).to(
+            pytorch_out.dtype
+        )
 
     # check outputs ----------------------------------------------------------------------
     logger.info(comp_allclose(pytorch_out, tt_out))

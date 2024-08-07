@@ -119,16 +119,44 @@ def run_test_FalconAttention_inference(
         tt_cache_path,
     )
 
-    tt_out, tt_layer_present = tt_FalconAttention_model(
-        tt_attention_input,
-        alibi=None,
-        attention_mask=tt_attention_mask,
-        llm_mode=llm_mode,
-        user_id=user_id,
-        layer_past=tt_layer_past,
-        layer_past_len=kv_cache_len,
-        use_cache=use_cache,
-    )
+    from tqdm import tqdm
+
+    for i in tqdm(range(1000)):
+        (
+            attention_input,
+            attention_mask_bool,
+            layer_past,
+            tt_attention_input,
+            tt_attention_mask,
+            tt_layer_past,
+            kv_len,
+        ) = get_rand_falcon_inputs(
+            llm_mode,
+            seq_len,
+            batch,
+            kv_cache_len,
+            device_mesh,
+            global_batch,
+            head_dim,
+            max_position_embeddings,
+            configuration,
+            model_config,
+        )
+        if layer_past is not None:
+            layer_past = layer_past[0]
+            layer_past = (layer_past[0].squeeze(1), layer_past[1].squeeze(1))
+        tt_layer_past = tt_layer_past[0]
+
+        tt_out, tt_layer_present = tt_FalconAttention_model(
+            tt_attention_input,
+            alibi=None,
+            attention_mask=tt_attention_mask,
+            llm_mode=llm_mode,
+            user_id=user_id,
+            layer_past=tt_layer_past,
+            layer_past_len=kv_cache_len,
+            use_cache=use_cache,
+        )
     tt_out, tt_layer_present = concat_device_outputs(device_mesh, tt_out, llm_mode, tt_layer_present, kv_len)
 
     # check outputs ----------------------------------------------------------------------
