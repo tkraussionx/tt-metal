@@ -92,6 +92,16 @@ void record_stack_usage() {
                 stack_usage_msg->max_usage[debug_get_which_riscv()] = stack_size - stack_offset * sizeof(uint32_t);
                 stack_usage_msg->watcher_kernel_id[debug_get_which_riscv()] =
                     launch_msg->kernel_config.watcher_kernel_ids[get_dispatch_class()];
+
+                // If we detected a stack overflow, hang immediately.
+                if (stack_usage_msg->max_usage[debug_get_which_riscv()] >= stack_size) {
+                    // Hang, or in the case of erisc, early exit.
+#if defined(COMPILE_FOR_ERISC)
+                    internal_::disable_erisc_app();
+                    erisc_early_exit(eth_l1_mem::address_map::ERISC_MEM_MAILBOX_STACK_SAVE);
+#endif
+                    while (1) {;}
+                }
             }
             return;
         }
