@@ -19,7 +19,6 @@ fi
 # you can move to where you'd like.
 
 export TT_METAL_WATCHER=10
-export TT_METAL_WATCHER_DISABLE_STACK_USAGE=1
 if [ "$ARCH_NAME" != "wormhole_b0" ]; then
     # Tests for tensors in L1
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/test_bert_large*matmul* -k in0_L1-in1_L1-bias_L1-out_L1
@@ -60,4 +59,3 @@ if [ "$ARCH_NAME" != "wormhole_b0" ]; then
     SLOW_MATMULS=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest $TT_METAL_HOME/tests/ttnn/integration_tests/stable_diffusion/test_unet_2d_condition_model.py -k 512 --timeout=420
 fi
 unset TT_METAL_WATCHER
-unset TT_METAL_WATCHER_DISABLE_STACK_USAGE
