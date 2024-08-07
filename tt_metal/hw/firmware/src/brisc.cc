@@ -419,6 +419,21 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
             }
+            //volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(0);
+            //briscBuffer[MEM_NCRISC_IRAM_BASE + 16] =  456;
+            //briscBuffer[MEM_NCRISC_IRAM_BASE + 25] =  briscBuffer[MEM_NCRISC_IRAM_BASE + 16] + 34;
+            //briscBuffer[2048 * 1024] =  451;
+            //briscBuffer[2048 * 1024] =  452;
+            //briscBuffer[2048 * 1024] =  453;
+            //briscBuffer[2048 * 1024] =  454;
+            //briscBuffer[2048 * 1024] =  455;
+            //briscBuffer[2048 * 1024] =  454;
+            //briscBuffer[2048 * 1024] =  455;
+            //briscBuffer[2048 * 1024] =  453;
+            //briscBuffer[2048 * 1024] =  452;
+            //briscBuffer[2048 * 1024] =  451;
+            //briscBuffer[2048 * 1024] =  454;
+            //briscBuffer[2048 * 1024] =  453;
         }
     }
 

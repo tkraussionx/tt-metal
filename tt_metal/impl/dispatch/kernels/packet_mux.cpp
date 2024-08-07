@@ -140,6 +140,8 @@ constexpr uint32_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
 
 void kernel_main() {
 
+    volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
+    DPRINT << "A" << briscBuffer[corruptIndex] << ENDL();
     noc_init();
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
@@ -177,7 +179,10 @@ void kernel_main() {
     uint64_t start_timestamp = get_timestamp();
     uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
     uint32_t heartbeat = 0;
+    int i =0;
     while (!dest_finished && !timeout) {
+    DPRINT << "B" << i << ENDL();
+    i++;
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         iter++;
         if (timeout_cycles > 0) {
@@ -188,6 +193,7 @@ void kernel_main() {
             }
         }
         if (input_queues[curr_input].get_curr_packet_valid()) {
+    //DPRINT << "F" << briscBuffer[corruptIndex] << ENDL();
             bool full_packet_sent;
             uint32_t words_sent = output_queue.forward_data_from_input(curr_input, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
@@ -195,6 +201,7 @@ void kernel_main() {
                 progress_timestamp = get_timestamp_32b();
             }
             curr_input_partial_packet_sent = !full_packet_sent;
+    //DPRINT << "G" << briscBuffer[corruptIndex] << ENDL();
         }
         if (!curr_input_partial_packet_sent) {
             curr_input++;
@@ -202,7 +209,9 @@ void kernel_main() {
                 curr_input = 0;
             }
         }
+    //DPRINT << "C" << briscBuffer[corruptIndex] << ENDL();
         output_queue.prev_words_in_flight_check_flush();
+    //DPRINT << "D" << briscBuffer[corruptIndex] << ENDL();
         dest_finished = output_queue.is_remote_finished();
     }
 
@@ -234,4 +243,5 @@ void kernel_main() {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
     }
+
 }

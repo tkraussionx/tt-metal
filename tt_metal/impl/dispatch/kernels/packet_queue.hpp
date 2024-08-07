@@ -14,6 +14,7 @@
 
 constexpr uint32_t NUM_WR_CMD_BUFS = 4;
 
+constexpr uint32_t corruptIndex = 686 - 1;
 constexpr uint32_t DEFAULT_MAX_NOC_SEND_WORDS = (NUM_WR_CMD_BUFS-1)*(NOC_MAX_BURST_WORDS*NOC_WORD_BYTES)/PACKET_WORD_SIZE_BYTES;
 constexpr uint32_t DEFAULT_MAX_ETH_SEND_WORDS = 2*1024;
 
@@ -356,19 +357,32 @@ public:
     }
 
     inline void cb_mode_inc_local_sem_val(uint32_t val) {
+    volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
         if (this->cb_mode) {
             uint32_t sem_l1_addr = get_semaphore(this->cb_mode_local_sem_id);
             uint64_t sem_noc_addr = get_noc_addr(sem_l1_addr);
+            DPRINT << "F" << briscBuffer[corruptIndex] << ENDL();
+            DPRINT << val << "L, " <<sem_l1_addr << "," << sem_noc_addr << "," << (uint16_t)this->cb_mode_local_sem_id<< ENDL();
+            uint32_t tmp = briscBuffer[corruptIndex];
             noc_semaphore_inc(sem_noc_addr, val);
             noc_async_atomic_barrier();
+            DPRINT << "G" << briscBuffer[corruptIndex] << ENDL();
+            briscBuffer[corruptIndex] = tmp;
         }
     }
 
     inline void cb_mode_inc_remote_sem_val(uint32_t val) {
+    volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
         uint32_t sem_l1_addr = get_semaphore(this->cb_mode_remote_sem_id);
         uint64_t sem_noc_addr = get_noc_addr(remote_x, remote_y, sem_l1_addr);
+        DPRINT << val << "R, " <<sem_l1_addr << "," << sem_noc_addr << "," << (uint16_t)this->cb_mode_remote_sem_id<< ENDL();
+        DPRINT << "H" << briscBuffer[corruptIndex] << ENDL();
         if (this->cb_mode && (val > 0)) {
+            uint32_t tmp = briscBuffer[corruptIndex];
             noc_semaphore_inc(sem_noc_addr, val);
+            noc_async_atomic_barrier();
+            DPRINT << "U" << briscBuffer[corruptIndex] << ENDL();
+            briscBuffer[corruptIndex] = tmp;
         }
     }
 
@@ -708,10 +722,13 @@ protected:
 
         inline uint32_t prev_words_in_flight_flush() {
 
+    volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
+            //DPRINT << "F" << briscBuffer[corruptIndex] << ENDL();
             uint32_t words_flushed = this->prev_output_total_words_in_flight;
             if (words_flushed > 0) {
                 for (uint32_t i = 0; i < num_input_queues; i++) {
                     this->input_queue_array[i].input_queue_advance_words_cleared(this->prev_input_queue_words_in_flight[i]);
+            //DPRINT << "G" << briscBuffer[corruptIndex] << ENDL();
                     this->prev_input_queue_words_in_flight[i] = 0;
                 }
             }
