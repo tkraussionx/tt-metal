@@ -1,4 +1,6 @@
-tt-smi-metal -r 0,1,2,3
+rm -rf *.log
+
+#tt-smi-metal -r 0,1,2,3
 
 unset TT_METAL_WATCHER
 
