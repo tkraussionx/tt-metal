@@ -6,14 +6,14 @@
 
 #include <pybind11/pybind11.h>
 
+#include "ttnn/operations/moreh_eltwise/moreh_binary/moreh_binary_pybind.hpp"
 #include "ttnn/operations/moreh_eltwise/moreh_relu/moreh_relu_pybind.hpp"
 
 namespace ttnn::operations::moreh_eltwise {
 
-void py_module(py::module& module) {
-    bind_moreh_relu(module);
-    // bind_moreh_sin(module);
-    // bind_moreh_cos(module);
+void py_module(py::module &module) {
+  bind_moreh_relu(module);
+  bind_moreh_binary(module);
 }
 
-}  // namespace ttnn::operations::examples
+} // namespace ttnn::operations::moreh_eltwise
