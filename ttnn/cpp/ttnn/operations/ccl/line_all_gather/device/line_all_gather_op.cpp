@@ -141,7 +141,7 @@ Tensor line_all_gather(
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
 
     operation::launch_op(
-        [&dim, &num_links, &memory_config, &device_views](
+        [dim, num_links, memory_config, device_views = std::move(device_views)](
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
