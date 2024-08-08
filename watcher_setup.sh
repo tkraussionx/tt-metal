@@ -59,4 +59,6 @@ mv ./close.log ./close_1.log
 #mv ./close.log ./close_2.log
 
 cat ./dprint_1.log
+cat ./after_1.log
+cat ./close_1.log
 diff ./after_1.log ./close_1.log
