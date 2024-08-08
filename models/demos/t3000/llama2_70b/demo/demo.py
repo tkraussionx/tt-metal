@@ -243,7 +243,6 @@ def run_decode(
     # some profiling and logging
     latencies = []
     full_logits = []
-
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
         input_tokens = tokens[:, prev_pos:cur_pos]
@@ -257,7 +256,7 @@ def run_decode(
         )
         latencies.append(time() - start)
 
-        if all(eos_reached):
+        if all(eos_reached) or True:
             break
 
         # Decode the entire sequence generated so far and log it

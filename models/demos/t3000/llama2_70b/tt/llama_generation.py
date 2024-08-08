@@ -60,22 +60,80 @@ class TtLlamaModelForGeneration:
             return self.prefill_forward(tokens, start_pos)
 
     def decode_forward(self, tokens: torch.Tensor, start_pos: int):
+        TRACE = True
+        if TRACE:
+            start_pos = 127
+
         self._update_model_config("decode", tokens.shape[0], 1)
         batch = tokens.shape[0]
         tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(tokens, start_pos)
 
-        tt_logits = self.tt_model(
-            tt_inp_emb,
-            rot_mat,
-            start_pos,
-            attn_mask,
-        )
+        if TRACE:
+            import time
+            import tqdm
 
-        del tt_inp_emb
-        del rot_mat
-        del attn_mask
+            logger.info(f"Trace with input shape: {tt_inp_emb.shape=}")
+            logger.info("Compiling Model")
 
-        logits = self._process_logits(tt_logits)
+            # Compile the model
+            c1 = time.time()
+            tt_logits = self.tt_model(
+                tt_inp_emb,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
+            logits = self._process_logits(tt_logits)
+            c2 = time.time()
+            logger.info(f"Compiling Model took: {c2 - c1} seconds.")
+
+            # Capture the trace
+            logger.info("Capturing Trace")
+            t1 = time.time()
+            trace_id = ttnn.begin_trace_capture(self.device_mesh, cq_id=0)
+            tt_logits = self.tt_model(
+                tt_inp_emb,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
+            # logits = self._process_logits(tt_logits)
+            ttnn.end_trace_capture(self.device_mesh, trace_id, cq_id=0)
+            t2 = time.time()
+            logger.info(f"Capturing Trace took: {t2 - t1} seconds.")
+
+            # Run for x iters
+            logger.info("Starting Trace perf test...")
+
+            times = []
+            num_iters = 50
+            for i in tqdm.tqdm(range(num_iters)):
+                x1 = time.time()
+
+                ttnn.execute_trace(self.device_mesh, trace_id, blocking=False)
+                logits = self._process_logits(tt_logits)
+
+                x2 = time.time()
+                times.append(x2 - x1)
+
+            logger.info(
+                f"Ran Trace for {num_iters} iterations. Avg Trace execution time: {sum(times[1:]) / len(times[1:])} seconds."
+            )
+            print(times)
+            ttnn.release_trace(self.device_mesh, trace_id)
+        else:
+            tt_logits = self.tt_model(
+                tt_inp_emb,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
+
+            del tt_inp_emb
+            del rot_mat
+            del attn_mask
+
+            logits = self._process_logits(tt_logits)
 
         logits = logits.permute(2, 1, 0, 3).squeeze().unsqueeze(1)  # [batch, 1, vocab_size]
         logits = logits[:batch]  # Remove padded users

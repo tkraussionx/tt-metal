@@ -28,7 +28,11 @@ from models.demos.t3000.llama2_70b.demo.demo import main, construct_arg
     ids=("chat_completion", "text_completion"),
 )
 @pytest.mark.parametrize("decode_only", (True, False), ids=("decode_only", "prefill_decode"))
-@pytest.mark.parametrize("num_layers", (1, 2, 10, 80), ids=("1L", "2L", "10L", "80L"))
+@pytest.mark.parametrize(
+    "num_layers",
+    (1, 2, 10, 20, 30, 40, 50, 60, 70, 80),
+    ids=("1L", "2L", "10L", "20L", "30L", "40L", "50L", "60L", "70L", "80L"),
+)
 @pytest.mark.parametrize(
     "implementation, skip_model_load, n_devices",
     (
@@ -66,6 +70,9 @@ from models.demos.t3000.llama2_70b.demo.demo import main, construct_arg
     ),
     ids=("short_context", "long_context"),
 )
+@pytest.mark.parametrize(
+    "device_params", [{"trace_region_size": 17068032}], indirect=True
+)  # TODO: Update once trace fails
 def test_LlamaModel_demo(
     # model args
     implementation,
