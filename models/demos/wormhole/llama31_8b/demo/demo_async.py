@@ -246,6 +246,19 @@ class Demo:
         if os.getenv("CI") == "true":
             self.CI_checks()
 
+    def run_batched_demo(self, num_batches, input_prompts):
+        batch_prompts = []
+        for i in range(num_batches):
+            batch_prompts.append([input_prompts[(j + i) % len(input_prompts)] for j in range(len(input_prompts))])
+
+        for i in range(num_batches):
+            asyncio.run(self.run_demo(user_input=batch_prompts[i]))
+            for layer in self.tt_model.layers:
+                k_cache, v_cache = layer.attention.layer_past_list[0]
+                k_cache = k_cache * 0
+                v_cache = v_cache * 0
+                layer.attention.layer_past_list[0] = [k_cache, v_cache]
+
     def CI_checks(self):
         pass
 
@@ -306,7 +319,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
 
 
 @pytest.mark.parametrize(
-    "input_prompts, instruct_weights",
+    "input_prompts, instruct_weights, num_batches",
     [
         ("models/demos/wormhole/llama31_8b/demo/input_data.json", False),
         ("models/demos/wormhole/llama31_8b/demo/input_data_questions.json", True),
@@ -315,10 +328,10 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
     # ids=["general_weights", "instruct_weights", "instruct_weights_prefill"],
     ids=["general_weights", "instruct_weights"],
 )
-def test_llama_demo(device, use_program_cache, input_prompts, instruct_weights, is_ci_env):
+def test_llama_demo(device, use_program_cache, input_prompts, instruct_weights, is_ci_env, num_batches=1):
     if is_ci_env and instruct_weights == False:
         pytest.skip("CI demo test only runs instruct weights to reduce CI pipeline load (both are supported)")
     start_time = time()
     llama_demo = Demo(device, instruct_weights, is_ci_env)
-    asyncio.run(llama_demo.run_demo(user_input=input_prompts))
+    llama_demo.run_batched_demo(input_prompts, num_batches)
     print(f"Total time: {time()-start_time}")
