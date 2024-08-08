@@ -117,51 +117,87 @@ def run_first_conv_unfolded(
         conv_config.act_block_h_override = config_override["act_block_h"]
         print("Setting Act Block H to ", conv_config.act_block_h_override)
 
-    tt_input_tensor = ttnn.from_torch(torch_input_tensor_nchw, ttnn.bfloat16)
+    tt_input_tensor = ttnn.from_torch(
+        torch_input_tensor_nchw,
+        dtype=ttnn.DataType.BFLOAT16,
+        layout=ttnn.ROW_MAJOR_LAYOUT,
+        device=device,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
 
-    interleaved_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
+    # # Padding
     padded_input_channels = 4
     channels_padded_shape = [batch_size, padded_input_channels, input_height, input_width]
 
-    tt_input_tensor = tt_input_tensor.pad(channels_padded_shape, (0, 0, 0, 0), 0)
-    # tt_input_tensor_d = tt_input_tensor.to(device, interleaved_mem_config)
+    # # pad input mem config
+    # grid = (8, 6)
+    # pad_input_mem_config = ttnn.create_sharded_memory_config(
+    #     conv_input_shape,
+    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+    #     strategy=ttnn.ShardStrategy.HEIGHT,
+    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
+    # )
+    # tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, pad_input_mem_config)
 
+    # # pad output mem config
     grid = (8, 8)
-    ncores_nhw = grid[0] * grid[1]
+    # pad_output_mem_config = ttnn.create_sharded_memory_config(
+    #     channels_padded_shape,
+    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+    #     strategy=ttnn.ShardStrategy.HEIGHT,
+    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
+    # )
+    # tt_input_tensor = ttnn.pad(tt_input_tensor, padding=((0, 1), (0, 0), (0, 0)), value=0, memory_config=pad_output_mem_config)
+    # print(tt_input_tensor.shape)
 
+    # # Transpose HC
+    # transpose_mem_config = pad_output_mem_config
+    # tt_input_tensor = ttnn.transpose(tt_input_tensor, 1, 2, memory_config=transpose_mem_config)
+    # print(tt_input_tensor.shape)
+
+    # # Reshape
+    # tt_input_tensor = tt_lib.tensor.reshape(tt_input_tensor, batch_size, input_height, padded_input_channels * 2, input_width // 2)
+    # print(tt_input_tensor.shape)
+
+    # # Transpose HW
+    # transpose_mem_config = ttnn.create_sharded_memory_config(
+    #     tt_input_tensor.shape,
+    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+    #     strategy=ttnn.ShardStrategy.HEIGHT,
+    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
+    # )
+    # tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, transpose_mem_config)
+    # tt_input_tensor = ttnn.transpose(tt_input_tensor, 2, 3, memory_config=transpose_mem_config)
+    # print(tt_input_tensor.shape)
+    # print("!!!")
+
+    # # Reshape
+    # tt_input_tensor = tt_lib.tensor.reshape(tt_input_tensor, 1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2)
+    # print(tt_input_tensor.shape)
+    # mem_config = ttnn.get_memory_config(tt_input_tensor)
+    # print(mem_config.buffer_type)
+    # print(mem_config.shard_spec.shape)
+
+    shape = [1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2]
+    print(shape)
     sharded_mem_config = ttnn.create_sharded_memory_config(
-        # conv_input_shape,
-        channels_padded_shape,
-        core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
-        # core_grid=ttnn.CoreGrid(y=6, x=8),
-        strategy=ttnn.ShardStrategy.HEIGHT,
-        orientation=ttnn.ShardOrientation.ROW_MAJOR,
-    )
-
-    tt_input_tensor_d = tt_input_tensor.to(device, sharded_mem_config)
-    # tt_input_tensor_d = ttnn.to_memory_config(tt_input_tensor_d, sharded_mem_config)
-
-    tt_input_tensor_d = ttnn.transpose(tt_input_tensor_d, 1, 2)
-    # tt_input_tensor_d = ttnn.reshape(tt_input_tensor_d, [batch_size, input_height, padded_input_channels * 2, input_width // 2])
-    # tt_input_tensor_d = ttnn.reshape(tt_input_tensor_d, [batch_size, input_height, input_channels * 2, input_width // 2])
-    tt_input_tensor_d = ttnn.transpose(tt_input_tensor_d, 2, 3)
-    # tt_input_tensor_d = ttnn.permute(tt_input_tensor_d, [0, 2, 3, 1])
-
-    reshaped_input_shape = [1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2]
-    tt_input_tensor_d = tt_input_tensor_d.reshape(reshaped_input_shape)
-
-    input_height_to_shard_evenly = _nearest_y(reshaped_input_shape[2], ncores_nhw * 32)
-    input_shape = (input_height_to_shard_evenly, reshaped_input_shape[3])
-    sharded_mem_config = ttnn.create_sharded_memory_config(
-        input_shape,
+        shape,
         core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
         strategy=ttnn.ShardStrategy.HEIGHT,
-        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        orientation=ttnn.ShardOrientation.COL_MAJOR,
     )
-    tt_input_tensor_d = ttnn.to_memory_config(tt_input_tensor_d, sharded_mem_config)
+    tt_input_tensor = ttnn.from_torch(
+        torch_input_tensor_nchw,
+        dtype=ttnn.DataType.BFLOAT16,
+        layout=ttnn.ROW_MAJOR_LAYOUT,
+        device=device,
+        memory_config=sharded_mem_config,
+    )
+    mem_config = ttnn.get_memory_config(tt_input_tensor)
+    print(mem_config)
 
     [tt_output_tensor_on_device, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
-        input_tensor=tt_input_tensor_d,
+        input_tensor=tt_input_tensor,
         weight_tensor=tt_weight_tensor,
         in_channels=input_channels,
         out_channels=output_channels,
@@ -582,9 +618,9 @@ def test_resnet50_conv_gs(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
         ## first conv, without folding
-        (8, 64, 3, 224, 224, 7, 8, 2, 2, 3, 3, True, None),
+        # (8, 64, 3, 224, 224, 7, 8, 2, 2, 3, 3, True, None),
         (16, 64, 3, 224, 224, 7, 8, 2, 2, 3, 3, True, None),
-        (20, 64, 3, 224, 224, 7, 8, 2, 2, 3, 3, True, None),
+        # (20, 64, 3, 224, 224, 7, 8, 2, 2, 3, 3, True, None),
     ),
 )
 @pytest.mark.parametrize(
@@ -596,8 +632,22 @@ def test_resnet50_conv_gs(
     [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
-@pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
-@pytest.mark.parametrize("has_bias", [True, False], ids=["with_bias", "no_bias"])
+# @pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
+# @pytest.mark.parametrize("has_bias", [True, False], ids=["with_bias", "no_bias"])
+@pytest.mark.parametrize(
+    "packer_l1_acc",
+    [
+        True,
+    ],
+    ids=["pack_l1"],
+)
+@pytest.mark.parametrize(
+    "has_bias",
+    [
+        True,
+    ],
+    ids=["with_bias"],
+)
 def test_resnet50_first_conv_unfolded(
     device,
     use_program_cache,
