@@ -4252,18 +4252,12 @@ def cosh_bw(
     return ttnn_tensor_to_torch(t2)
 
 
-<<<<<<< HEAD
 def concat_bw(
     x,  # grad_tensor
     y,  # input_tensor
     z,  # other_tensor
     *args,
     dim,
-=======
-def frac(
-    x,  # grad_tensor
-    *args,
->>>>>>> #10147: Add frac sweeps to ttnn
     device,
     dtype,
     layout,
@@ -4272,19 +4266,28 @@ def frac(
     **kwargs,
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-<<<<<<< HEAD
     t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
     t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[1], dtype[2])
 
     t3 = ttnn.concat_bw(t0, t1, t2, dim=dim, memory_config=output_mem_config)
 
     return [ttnn_tensor_to_torch(t3[0]), ttnn_tensor_to_torch(t3[1])]
-=======
 
-    t1 = ttnn.frac(t0, memory_config=output_mem_config)
+
+def frac(
+    x,  # grad_tensor
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.frac(t0, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t1)
->>>>>>> #10147: Add frac sweeps to ttnn
 
 
 def cos_bw(
@@ -4306,23 +4309,6 @@ def cos_bw(
     return ttnn_tensor_to_torch(t2)
 
 
-def trunc(
-    x,  # grad_tensor
-    *args,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
-    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-
-    t1 = ttnn.trunc(t0, memory_config=output_mem_config)
-
-    return ttnn_tensor_to_torch(t1)
-
-
 def normalize_global(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
 
@@ -4342,7 +4328,7 @@ def normalize_hw(x, *args, device, dtype, layout, input_mem_config, output_mem_c
 def erf_bw(
     x,  # grad_tensor
     y,  # input_tensor
-   *args,
+    *args,
     device,
     dtype,
     layout,
@@ -4356,23 +4342,6 @@ def erf_bw(
     t2 = ttnn.erf_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
-
-
-def ceil(
-    x,  # grad_tensor
-    *args,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
-    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    
-    t1 = ttnn.ceil(t0, memory_config=output_mem_config)
-
-    return ttnn_tensor_to_torch(t1)
 
 
 def erfc_bw(
@@ -4392,27 +4361,6 @@ def erfc_bw(
     t2 = ttnn.erfc_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
-
-
-def topk(
-    x,
-    *args,
-    k,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
-    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1_values, t1_indices = ttnn.topk(t0, k, dim=-1, largest=True, sorted=True)
-    t1_values = ttnn_tensor_to_torch(t1_values)
-    t1_indices = ttnn_tensor_to_torch(t1_indices).to(torch.int64)
-
-    t1_indices_gather = torch.gather(x, -1, t1_indices)
-
-    return [t1_values, t1_indices_gather]
 
 
 def erfinv_bw(
@@ -4451,8 +4399,6 @@ def expm1_bw(
     t2 = ttnn.expm1_bw(t0, t1, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t2)
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 
 def eltwise_bitwise_and(
@@ -4624,8 +4570,6 @@ def eltwise_unary_div_no_nan(
 
     return ttnn_tensor_to_torch(t1)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 def complex_conj(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     t0 = ttnn.complex_tensor(
@@ -4829,15 +4773,4 @@ def eltwise_bias_gelu_unary(x, *args, bias, device, dtype, layout, input_mem_con
     t1 = ttnn.bias_gelu(t0, bias, memory_config=output_mem_config)
 
     return ttnn_tensor_to_torch(t1)
-=======
->>>>>>> #10147: Add frac sweeps to ttnn
-=======
-=======
->>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
-<<<<<<< HEAD
->>>>>>> #10147: Removed YAML files for Grayskull and rebased on main
-=======
-=======
 
->>>>>>> #10147: Add ceil sweeps to ttnn
->>>>>>> #10147: Add ceil sweeps to ttnn
