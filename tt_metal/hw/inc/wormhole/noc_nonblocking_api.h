@@ -266,7 +266,7 @@ inline __attribute__((always_inline)) void noc_fast_write_dw_inline(uint32_t noc
   }
 }
 
-constexpr uint32_t corruptIndex = 1199 - 1;
+constexpr uint32_t corruptIndex = 1198 - 1;
 inline __attribute__((always_inline)) void noc_fast_atomic_increment(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t vc, uint32_t incr, uint32_t wrap, bool linked, bool posted = false) {
 volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
   while (!noc_cmd_buf_ready(noc, cmd_buf));
