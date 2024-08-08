@@ -14,7 +14,7 @@
 
 constexpr uint32_t NUM_WR_CMD_BUFS = 4;
 
-constexpr uint32_t corruptIndex = 686 - 1;
+constexpr uint32_t corruptIndex = 958 - 1;
 constexpr uint32_t DEFAULT_MAX_NOC_SEND_WORDS = (NUM_WR_CMD_BUFS-1)*(NOC_MAX_BURST_WORDS*NOC_WORD_BYTES)/PACKET_WORD_SIZE_BYTES;
 constexpr uint32_t DEFAULT_MAX_ETH_SEND_WORDS = 2*1024;
 
@@ -367,7 +367,7 @@ public:
             noc_semaphore_inc(sem_noc_addr, val);
             noc_async_atomic_barrier();
             DPRINT << "G" << briscBuffer[corruptIndex] << ENDL();
-            briscBuffer[corruptIndex] = tmp;
+            //briscBuffer[corruptIndex] = tmp;
         }
     }
 
@@ -382,7 +382,7 @@ public:
             noc_semaphore_inc(sem_noc_addr, val);
             noc_async_atomic_barrier();
             DPRINT << "U" << briscBuffer[corruptIndex] << ENDL();
-            briscBuffer[corruptIndex] = tmp;
+            //briscBuffer[corruptIndex] = tmp;
         }
     }
 
