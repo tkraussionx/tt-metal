@@ -1114,6 +1114,7 @@ void Device::setup_tunnel_for_remote_devices() {
 
                 tt_cxy_pair prefetch_location = dispatch_core_manager::instance().prefetcher_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(prefetch_location.chip, get_physical_core_coordinate(prefetch_location, dispatch_core_type));
+                std::cout << "Prefetch_h " << cq_id << " on: " << prefetch_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp";
                 //prefetch needs three semaphores.
                 settings.semaphores.push_back(0);
@@ -1127,6 +1128,7 @@ void Device::setup_tunnel_for_remote_devices() {
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(dispatch_location.chip, get_physical_core_coordinate(dispatch_location, dispatch_core_type));
+                std::cout << "Dispatch_h " << cq_id << " on: " << dispatch_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 //dispatch needs one semaphore.
                 settings.semaphores.push_back(0);
@@ -1157,6 +1159,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.consumer_semaphore_id = 0;
                 tt_cxy_pair mux_location = dispatch_core_manager::instance().mux_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(mux_location.chip, get_physical_core_coordinate(mux_location, dispatch_core_type));
+                std::cout << "Mux Local " << cq_id << " on: " << mux_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_mux.cpp";
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                 settings.cb_size_bytes = dispatch_constants::get(dispatch_core_type).mux_buffer_size(num_hw_cqs);
@@ -1168,6 +1171,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_start_address = L1_UNRESERVED_BASE;
                 settings.cb_size_bytes = 0x10000;
                 tunnel_core_allocations[DEMUX].push_back(std::make_tuple(demux_location, settings));
+                std::cout << "DeMux Local "<< cq_id << " on: " << demux_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
             }
 
             settings.tunnel_stop = tunnel_stop - 1;
@@ -1202,6 +1206,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tt_cxy_pair mux_d_location = dispatch_core_manager::instance().mux_d_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(mux_d_location.chip, get_physical_core_coordinate(mux_d_location, dispatch_core_type));
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_mux.cpp";
+            std::cout << "Mux Remote " << cq_id << " on: " << mux_d_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
             settings.semaphores = std::vector<uint32_t>(num_hw_cqs);
             settings.consumer_semaphore_id = 0;
             settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -1212,6 +1217,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tt_cxy_pair demux_d_location = dispatch_core_manager::instance().demux_d_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(demux_d_location.chip, get_physical_core_coordinate(demux_d_location, dispatch_core_type));
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_demux.cpp";
+            std::cout << "DeMux Remote " << cq_id << " on: " << mux_d_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
             settings.producer_semaphore_id = 0;
             settings.cb_start_address = L1_UNRESERVED_BASE;
             settings.cb_size_bytes = 0x10000;
@@ -1228,6 +1234,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 tt_cxy_pair prefetch_d_location = dispatch_core_manager::instance().prefetcher_d_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(prefetch_d_location.chip, get_physical_core_coordinate(prefetch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp";
+                std::cout << "Prefetch_d "<< cq_id << " on: " << prefetch_d_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                 settings.cb_size_bytes = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_size();
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
@@ -1248,6 +1255,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
                 tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
+                std::cout << "Dispatch_d "<< cq_id << " on: " << dispatch_d_location.str() << " Phys: " << settings.worker_physical_core.str() << std::endl;
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
                 settings.semaphores.clear();
@@ -1406,7 +1414,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Prefetch_hd "<< cq_id << " on: " << prefetch_core.str() << " Phys: " << prefetch_physical_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
 
@@ -1447,7 +1455,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Dispatch_hd "<< cq_id << " on: " << dispatch_core.str() << " Phys: " << dispatch_physical_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
