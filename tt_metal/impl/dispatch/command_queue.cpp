@@ -1208,6 +1208,7 @@ void EnqueueProgramCommand::assemble_device_commands(
             go_signal->kernel_config.dispatch_core_x = this->dispatch_core.x;
             go_signal->kernel_config.dispatch_core_y = this->dispatch_core.y;
             if (go_signal_count < program.tensix_go_signal_count_) {
+                std::cout << "Base update to: " << tensix_l1_kernel_config_base << std::endl;
                 go_signal->kernel_config.kernel_config_base = tensix_l1_kernel_config_base;
             } else {
                 go_signal->kernel_config.kernel_config_base = eth_l1_kernel_config_base;

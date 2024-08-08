@@ -363,36 +363,30 @@ TEST_F(SingleDeviceTraceFixture, EnqueueMultiProgramTraceBenchmark) {
 }
 
 TEST_F(SingleDeviceTraceFixture, ValidateBins) {
-    std::string ref_bin_dir = "./dbg_l1_kernel_bins/";
+    std::string ref_bin_dir = "./dbg_trace/";
     tt_cxy_pair dram_core = {4, 0, 0};
     std::vector<uint32_t> address_offsets = {0, 1073741824};
     bool pass = true;
-    std::vector<uint32_t> x_coords = {1, 2, 3, 4, 6, 7, 8, 9};
-    std::vector<uint32_t> y_coords = {1, 2, 3, 4, 5, 8, 9, 10};
     for (const auto& file : std::filesystem::directory_iterator(ref_bin_dir)) {
         std::vector<std::uint32_t> ref_data;
         std::string file_name = file.path();
         std::string base_filename = file_name.substr(file_name.find_last_of("/\\") + 1);
-        // std::cout << base_filename << std::endl;
-        if (base_filename.find("reader_unary_interleaved_start_id") == std::string::npos
-            and base_filename.find("writer_unary_interleaved_start_id") == std::string::npos
-            and base_filename.find("eltwise_sfpu") == std::string::npos) continue;
-        std::stringstream ss(base_filename);
+
         std::vector<std::string> tokens;
         std::string token;
+        std::stringstream ss(base_filename);
         while (std::getline(ss, token, '_')) {
             tokens.push_back(token);
         }
-        uint32_t x = std::stoul(tokens[tokens.size() - 4]);
-        uint32_t y = std::stoul(tokens[tokens.size() - 3]);
-        uint32_t l1_addr = std::stoul(tokens[tokens.size() - 2]);
-        uint32_t size_bytes = std::stoul(tokens[tokens.size() - 1]);
-        if (std::find(x_coords.begin(), x_coords.end(), x) == x_coords.end()) continue;
-        if (std::find(y_coords.begin(), y_coords.end(), y) == y_coords.end()) continue;
+        uint32_t x = std::stoul(tokens[0]);
+        uint32_t y = std::stoul(tokens[1]);
+        uint32_t dram_addr = std::stoul(tokens[2]);
+        uint32_t size_bytes = std::stoul(tokens[3]);
+
         uint32_t file_size = size_bytes / 4;
         std::ifstream input_file(file_name);
         ref_data.resize(file_size);
-        // std::cout << "Read kernel: " << base_filename << " x " << x << " y " << y << " addr " << l1_addr << std::endl;
+        std::cout << "Read file: " << base_filename << " x " << x << " y " << y << " addr " << dram_addr << " size " << file_size <<  std::endl;
         std::string line;
         uint32_t count = 0;
         while (std::getline(input_file, line)) {
@@ -401,15 +395,60 @@ TEST_F(SingleDeviceTraceFixture, ValidateBins) {
             if (count == ref_data.size()) break;
         }
         std::vector<uint32_t> core_data = {};
-        tt::Cluster::instance().read_core(core_data, size_bytes, tt_cxy_pair(4, x, y), l1_addr);
+        tt::Cluster::instance().read_core(core_data, size_bytes, tt_cxy_pair(4, x, y), dram_addr);
         for (uint32_t i = 0; i < file_size; i++) {
             if (core_data[i] != ref_data[i]) {
                 pass = false;
-                std::cout << "Kernel: " << base_filename << " x " << x << " y " << y << " addr: " << l1_addr << " idx: " << i << " Expected: " << ref_data[i] << " Got: " << core_data[i] <<  std::endl;;
+                std::cout << "File: " << base_filename << " x " << x << " y " << y << " addr: " << dram_addr << " idx: " << i << " Expected: " << ref_data[i] << " Got: " << core_data[i] <<  std::endl;;
             }
         }
     }
     std::cout << "Passed: " << pass << std::endl;
+    // std::vector<uint32_t> x_coords = {1, 2, 3, 4, 6, 7, 8, 9};
+    // std::vector<uint32_t> y_coords = {1, 2, 3, 4, 5, 8, 9, 10};
+    // for (const auto& file : std::filesystem::directory_iterator(ref_bin_dir)) {
+    //     std::vector<std::uint32_t> ref_data;
+    //     std::string file_name = file.path();
+    //     std::string base_filename = file_name.substr(file_name.find_last_of("/\\") + 1);
+    //     // std::cout << base_filename << std::endl;
+    //     if (base_filename.find("reader_unary_interleaved_start_id") == std::string::npos
+    //         and base_filename.find("writer_unary_interleaved_start_id") == std::string::npos
+    //         and base_filename.find("eltwise_sfpu") == std::string::npos) continue;
+    //     std::stringstream ss(base_filename);
+    //     std::vector<std::string> tokens;
+    //     std::string token;
+    //     while (std::getline(ss, token, '_')) {
+    //         tokens.push_back(token);
+    //     }
+    //     uint32_t x = std::stoul(tokens[tokens.size() - 4]);
+    //     uint32_t y = std::stoul(tokens[tokens.size() - 3]);
+    //     uint32_t l1_addr = std::stoul(tokens[tokens.size() - 2]);
+    //     uint32_t size_bytes = std::stoul(tokens[tokens.size() - 1]);
+    //     if (std::find(x_coords.begin(), x_coords.end(), x) == x_coords.end()) continue;
+    //     if (std::find(y_coords.begin(), y_coords.end(), y) == y_coords.end()) continue;
+    //     uint32_t file_size = size_bytes / 4;
+    //     std::ifstream input_file(file_name);
+    //     ref_data.resize(file_size);
+    //     // std::cout << "Read kernel: " << base_filename << " x " << x << " y " << y << " addr " << l1_addr << std::endl;
+    //     std::string line;
+    //     uint32_t count = 0;
+    //     while (std::getline(input_file, line)) {
+    //         ref_data.at(count) = static_cast<std::uint32_t>(std::stoul(line));
+    //         count++;
+    //         if (count == ref_data.size()) break;
+    //     }
+    //     std::vector<uint32_t> core_data = {};
+    //     tt::Cluster::instance().read_core(core_data, size_bytes, tt_cxy_pair(4, x, y), l1_addr);
+    //     for (uint32_t i = 0; i < file_size; i++) {
+    //         if (core_data[i] != ref_data[i]) {
+    //             pass = false;
+    //             std::cout << "Kernel: " << base_filename << " x " << x << " y " << y << " addr: " << l1_addr << " idx: " << i << " Expected: " << ref_data[i] << " Got: " << core_data[i] <<  std::endl;;
+    //         }
+    //     }
+    // }
+    // std::cout << "Passed: " << pass << std::endl;
+
+
     // for (const auto& file : std::filesystem::directory_iterator(ref_bin_dir)) {
     //     std::vector<std::uint32_t> ref_data;
     //     std::string file_name = file.path();

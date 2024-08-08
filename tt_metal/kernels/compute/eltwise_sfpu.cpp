@@ -34,10 +34,14 @@ void MAIN {
             RISC_POST_STATUS((0xee << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             acquire_dst(tt::DstMode::Half);
             RISC_POST_STATUS((0xff << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
-            if (ct > 4) break;
+            if (ct > 4) {
+                RISC_POST_STATUS(ct, addr);
+                break;
+            }
             // Pop tile after tile, copy to DST and pack
             cb_wait_front(tt::CB::c_in0, 1);
             RISC_POST_STATUS((0x10 << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
+            RISC_POST_STATUS((0x13 << 24) | (per_core_block_dim << 16) | (per_core_block_cnt << 8) | ct, addr);
             copy_tile(tt::CB::c_in0, 0, 0);
             #ifdef SFPU_OP_CHAIN_0
             SFPU_OP_CHAIN_0

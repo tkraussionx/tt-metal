@@ -98,7 +98,8 @@ void Trace::initialize_buffer(CommandQueue& cq, std::shared_ptr<TraceBuffer> tra
 // there is a cost to validation, please use it judiciously
 void Trace::validate_instance(const TraceBuffer& trace_buffer) {
     vector<uint32_t> backdoor_data;
-    detail::ReadFromBuffer(trace_buffer.buffer, backdoor_data);
+    std::cout << "Validate trace" << std::endl;
+    detail::ReadFromBuffer(trace_buffer.buffer, backdoor_data, false, true);
     if (backdoor_data != trace_buffer.desc->data) {
         log_info(LogMetalTrace, "Trace buffer expected: {}", trace_buffer.desc->data);
         log_info(LogMetalTrace, "Trace buffer observed: {}", backdoor_data);

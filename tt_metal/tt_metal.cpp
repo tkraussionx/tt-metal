@@ -359,7 +359,7 @@ void WriteToBuffer(const Buffer &buffer, const std::vector<uint32_t> &host_buffe
     }
 }
 
-void ReadFromDeviceInterleavedContiguous(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
+void ReadFromDeviceInterleavedContiguous(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool print) {
     host_buffer.clear();  // overwrite the data
     uint32_t page_size = buffer.page_size();
     TT_FATAL(buffer.size() % page_size == 0);
@@ -372,17 +372,27 @@ void ReadFromDeviceInterleavedContiguous(const Buffer &buffer, std::vector<uint3
     for (int page_index = 0; page_index < num_pages; page_index++) {
         auto absolute_address = buffer.page_address(bank_index, page_index);
         std::vector<uint32_t> page;
+        auto noc_coordinates = buffer.noc_coordinates(bank_index);
         switch (buffer.buffer_type()) {
             case BufferType::DRAM:
             case BufferType::TRACE:
             case BufferType::L1:
             case BufferType::L1_SMALL: {
-                auto noc_coordinates = buffer.noc_coordinates(bank_index);
                 page = llrt::read_hex_vec_from_core(device->id(), noc_coordinates, absolute_address, page_size);
             } break;
             default: TT_FATAL(false && "Unsupported buffer type to read from device!");
         }
+        if (print) {
+            std::string filename = "./dbg_trace/" + std::to_string(noc_coordinates.x) +  "_" + std::to_string(noc_coordinates.y) + "_" + std::to_string(absolute_address) + "_" + std::to_string(buffer.page_size()) + ".log";
 
+            if (not std::filesystem::exists(filename)) {
+                std::ofstream output_file(filename);
+                std::cout << "Writing buf to: " << filename << std::endl;
+                std::ostream_iterator<std::uint32_t> output_iterator(output_file, "\n");
+                std::copy(page.begin(), page.end(), output_iterator);
+                output_file.close();
+            }
+        }
         // Copy page into host buffer
         for (uint32_t entry : page) {
             host_buffer.push_back(entry);
@@ -439,12 +449,13 @@ void ReadFromDeviceSharded(const Buffer &buffer, std::vector<uint32_t> &host_buf
     }
 }
 
-void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool shard_order) {
+void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool shard_order, bool print) {
     ZoneScoped;
     host_buffer.clear();  // overwrite the data
     if (buffer.buffer_layout() == TensorMemoryLayout::INTERLEAVED ||
         buffer.buffer_layout() == TensorMemoryLayout::SINGLE_BANK) {
-        ReadFromDeviceInterleavedContiguous(buffer, host_buffer);
+        if (print) std::cout << "Printing buffer" << std::endl;
+        ReadFromDeviceInterleavedContiguous(buffer, host_buffer, print);
     } else if (is_sharded(buffer.buffer_layout())) {
         ReadFromDeviceSharded(buffer, host_buffer, shard_order);
     } else {
@@ -452,11 +463,11 @@ void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bo
     }
 }
 
-void ReadFromBuffer(std::shared_ptr<const Buffer> buffer, std::vector<uint32_t> &host_buffer, bool shard_order) {
-    ReadFromBuffer(*buffer, host_buffer, shard_order);
+void ReadFromBuffer(std::shared_ptr<const Buffer> buffer, std::vector<uint32_t> &host_buffer, bool shard_order, bool print) {
+    ReadFromBuffer(*buffer, host_buffer, shard_order, print);
 }
 
-void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool shard_order) {
+void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool shard_order, bool print) {
     Device *device = buffer.device();
     switch (buffer.buffer_type()) {
         case BufferType::DRAM:
@@ -468,7 +479,7 @@ void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bo
             } else {
                 tt::Cluster::instance().l1_barrier(device->id());
             }
-            ReadFromDevice(buffer, host_buffer, shard_order);
+            ReadFromDevice(buffer, host_buffer, shard_order, print);
         } break;
         case BufferType::SYSTEM_MEMORY: {
             TT_FATAL(false && "Reading from host memory is unsupported!");

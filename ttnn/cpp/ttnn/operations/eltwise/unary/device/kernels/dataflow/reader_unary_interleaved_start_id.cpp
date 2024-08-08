@@ -49,9 +49,9 @@ void kernel_main() {
         uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
         noc_async_read_tile(i, s, l1_write_addr);
         noc_async_read_barrier();
-        // RISC_POST_STATUS((0xc << 16) | ((end_id - start_id) << 8) |count);
+        RISC_POST_STATUS_1((0xc << 16) | ((end_id - start_id) << 8) |count, PRINT_BUFFER_START + 4);
         cb_push_back(cb_id_in0, onetile);
-        // RISC_POST_STATUS((0xe << 16) | ((end_id - start_id) << 8) |count);
+        RISC_POST_STATUS_1((0xe << 16) | ((end_id - start_id) << 8) |count, PRINT_BUFFER_START + 4);
     }
     RISC_POST_STATUS_1(0xdddd, PRINT_BUFFER_START + 4);
 }
