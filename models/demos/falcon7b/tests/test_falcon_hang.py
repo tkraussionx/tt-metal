@@ -1,5 +1,6 @@
 import pytest
 from loguru import logger
+import ttnn
 
 import tt_lib as ttl
 from models.utility_functions import (
@@ -11,15 +12,23 @@ import torch
 
 
 @pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
-def test_reproduce_lm_head_nd_32(
-    all_devices,
-    num_devices,
-):
+def test_reproduce_lm_head_nd_32(all_devices, num_devices, use_program_cache):
     devices = []
     if num_devices == 8:
         devices = get_devices_for_t3000(all_devices, num_devices)
     else:
         devices = all_devices
+
+    if num_devices == 8:
+        logical_chip_id_to_coordinates = [None] * num_devices
+        logical_chip_id_to_coordinates[0] = (1, 0)
+        logical_chip_id_to_coordinates[1] = (0, 0)
+        logical_chip_id_to_coordinates[2] = (0, 1)
+        logical_chip_id_to_coordinates[3] = (1, 1)
+        logical_chip_id_to_coordinates[4] = (2, 1)
+        logical_chip_id_to_coordinates[5] = (3, 1)
+        logical_chip_id_to_coordinates[6] = (3, 0)
+        logical_chip_id_to_coordinates[7] = (2, 0)
 
     print("Running on: ", num_devices, " devices.")
     in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
@@ -48,42 +57,78 @@ def test_reproduce_lm_head_nd_32(
 
     bias_t = None
 
+    mm_prog_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=(8, 8),
+        in0_block_w=2,
+        per_core_M=1,
+        per_core_N=32,
+        out_subblock_h=1,
+        out_subblock_w=8,
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+
+    wh_compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
     out = []
     for device_idx in range(num_devices):
         out.append(
-            ttl.tensor.falcon_lm_head_matmul(
-                a_t[device_idx], b_t[device_idx], bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype
+            ttnn.matmul(
+                a_t[device_idx],
+                b_t[device_idx],
+                program_config=mm_prog_config,
+                memory_config=out_mem_config,
+                dtype=out_dtype,
+                compute_kernel_config=wh_compute_kernel_config,
             )
         )
 
-    nd_output_count = 0
-
-    for i in range(10000):
+    for i in range(100000):
         for device_idx in range(num_devices):
             out[device_idx].deallocate(True)
-            out[device_idx] = ttl.tensor.falcon_lm_head_matmul(
-                a_t[device_idx], b_t[device_idx], bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype
+            out[device_idx] = ttnn.matmul(
+                a_t[device_idx],
+                b_t[device_idx],
+                program_config=mm_prog_config,
+                memory_config=out_mem_config,
+                dtype=out_dtype,
+                compute_kernel_config=wh_compute_kernel_config,
             )
-            _, output_pcc = 1, 1
-
-            if output_pcc != 1:
-                nd_output_count += 1
 
         for device_idx in range(num_devices):
             if num_devices != 1:
-                print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "Start sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
-                print("Start single device sync")
+                print("Start single device sync:")
             ttl.device.Synchronize(devices[device_idx])
             if num_devices != 1:
-                print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "End sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
                 print("End single device sync")
 
-        logger.debug(f"Iteration = {i}, Output pcc={output_pcc}")
-
-    print(f"Iterations with nd output: {nd_output_count}")
-    assert nd_output_count == 0
+        logger.debug(f"Iteration = {i}")
 
 
 @pytest.mark.parametrize(
@@ -100,7 +145,7 @@ def test_reproduce_lm_head_nd_32(
         "logical_chip7",
     ],
 )
-def test_specific_chip_lm_head_nd_32_t3000(all_devices, logical_chip_index):
+def test_specific_chip_lm_head_nd_32_t3000(all_devices, logical_chip_index, use_program_cache):
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
         pytest.skip("Test is only valid for t3000 machines")
@@ -119,9 +164,9 @@ def test_specific_chip_lm_head_nd_32_t3000(all_devices, logical_chip_index):
     print(
         "Selecting logical device id: ",
         logical_chip_index,
-        " coordinates: ",
+        " eth coordinates: ",
         logical_chip_id_to_coordinates[logical_chip_index],
     )
     target_device = devices[logical_chip_index]
     devices = [target_device]
-    test_reproduce_lm_head_nd_32(devices, 1)
+    test_reproduce_lm_head_nd_32(devices, 1, use_program_cache)

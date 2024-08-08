@@ -44,6 +44,17 @@ def test_reproduce_matmul_2d_hang(
     print("Running on ", num_devices, " devices")
     torch.manual_seed(1234)
 
+    if num_devices == 8:
+        logical_chip_id_to_coordinates = [None] * num_devices
+        logical_chip_id_to_coordinates[0] = (1, 0)
+        logical_chip_id_to_coordinates[1] = (0, 0)
+        logical_chip_id_to_coordinates[2] = (0, 1)
+        logical_chip_id_to_coordinates[3] = (1, 1)
+        logical_chip_id_to_coordinates[4] = (2, 1)
+        logical_chip_id_to_coordinates[5] = (3, 1)
+        logical_chip_id_to_coordinates[6] = (3, 0)
+        logical_chip_id_to_coordinates[7] = (2, 0)
+
     in0_mem_config = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
         ttl.tensor.BufferType.L1,
@@ -122,9 +133,6 @@ def test_reproduce_matmul_2d_hang(
     for device_idx in range(num_devices):
         ref_out.append(tt2torch_tensor(out[device_idx]))
 
-    # if commented out, segfault happens on some of the latter runs
-    # out.cpu()
-
     for device_idx in range(num_devices):
         ttl.device.Synchronize(devices[device_idx])
 
@@ -144,12 +152,28 @@ def test_reproduce_matmul_2d_hang(
             )
         for device_idx in range(num_devices):
             if num_devices != 1:
-                print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "Start sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
-                print("Start single device sync")
+                print("Start single device sync:")
             ttl.device.Synchronize(devices[device_idx])
             if num_devices != 1:
-                print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "End sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
                 print("End single device sync")
         logger.debug(f"Iteration = {i}, done")
@@ -188,7 +212,7 @@ def test_specific_chip_reproduce_matmul_2d_hang_t3000(all_devices, logical_chip_
     print(
         "Selecting logical device id: ",
         logical_chip_index,
-        " coordinates: ",
+        " eth coordinates: ",
         logical_chip_id_to_coordinates[logical_chip_index],
     )
     target_device = devices[logical_chip_index]
