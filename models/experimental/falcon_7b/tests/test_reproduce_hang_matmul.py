@@ -46,6 +46,17 @@ def test_reproduce_matmul_2d_hang(
 
     print("Running on ", num_devices, " devices")
 
+    if num_devices == 8:
+        logical_chip_id_to_coordinates = [None] * num_devices
+        logical_chip_id_to_coordinates[0] = (1, 0)
+        logical_chip_id_to_coordinates[1] = (0, 0)
+        logical_chip_id_to_coordinates[2] = (0, 1)
+        logical_chip_id_to_coordinates[3] = (1, 1)
+        logical_chip_id_to_coordinates[4] = (2, 1)
+        logical_chip_id_to_coordinates[5] = (3, 1)
+        logical_chip_id_to_coordinates[6] = (3, 0)
+        logical_chip_id_to_coordinates[7] = (2, 0)
+
     in0_mem_config = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
         ttl.tensor.BufferType.L1,
@@ -137,16 +148,34 @@ def test_reproduce_matmul_2d_hang(
                 output_dtype=out_dtype,
                 compute_kernel_config=compute_config,
             )
+
         for device_idx in range(num_devices):
             if num_devices != 1:
-                print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("Start sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "Start sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
-                print("Start single device sync")
+                print("Start single device sync:")
             ttl.device.Synchronize(devices[device_idx])
             if num_devices != 1:
-                print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 2:
+                    print("End sync logicalDeviceID: ", device_idx)
+                if num_devices == 8:
+                    print(
+                        "End sync logicalDeviceID: ",
+                        device_idx,
+                        " eth coordinates: ",
+                        logical_chip_id_to_coordinates[device_idx],
+                    )
             else:
                 print("End single device sync")
+
         logger.debug(f"Iteration = {i}, done")
 
     for device_idx in range(num_devices):
