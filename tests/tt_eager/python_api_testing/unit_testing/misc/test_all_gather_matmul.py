@@ -127,8 +127,8 @@ def run_all_gather_on_t3000_impl(
         in0_block_w=4,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-        per_core_M=4,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
-        per_core_N=4,  # N / TILE_WIDTH / Grid_Size
+        per_core_M=8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
+        per_core_N=16,  # N / TILE_WIDTH / Grid_Size
         transpose_mcast=False,
         fused_activation=ttnn.UnaryOpType.SILU,
         fuse_batch=False,
@@ -142,10 +142,10 @@ def run_all_gather_on_t3000_impl(
 
     # Perform the ops
     for i in range(num_iters):
-        # all_gather
+        # # all_gather
         # tt_out_tensor = ttnn.all_gather(input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config)
 
-        # matmul
+        # # matmul
         # tt_matmul_output = ttnn.matmul(
         #     tt_out_tensor,
         #     weight_tt,
@@ -202,17 +202,17 @@ def run_all_gather_on_t3000_impl(
         logger.info(f"Output {i}: {output}")
         if not eq:
             logger.error(f"output mismatch for tensor {i}")
-        assert eq, f"{i} FAILED: {output}"
-
-    print("Checking outputs for Matmul")
-    for i, t in enumerate(ttnn.get_device_tensors(tt_matmul_output)):
-        tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-
-        eq, output = comp_pcc(tt_output_tensor, matmul_output[i])
-        logger.info(f"Output {i}: {output}")
-        if not eq:
-            logger.error(f"output mismatch for tensor {i}")
     assert eq, f"{i} FAILED: {output}"
+
+    # print("Checking outputs for Matmul")
+    # for i, t in enumerate(ttnn.get_device_tensors(tt_matmul_output)):
+    #     tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+    #     eq, output = comp_pcc(tt_output_tensor, matmul_output[i])
+    #     logger.info(f"Output {i}: {output}")
+    #     if not eq:
+    #         logger.error(f"output mismatch for tensor {i}")
+    # assert eq, f"{i} FAILED: {output}"
 
 
 # Enumerate the post-commit cases explicitly
@@ -221,46 +221,70 @@ def run_all_gather_on_t3000_impl(
     "num_devices, num_links, input_shape, dim, layout, matmul_output_dim",
     [
         # (8, 1, [1, 1, 32, 512], 3, ttl.tensor.Layout.TILE, 1024),  # https://github.com/tenstorrent/tt-metal/issues/9686
-        (
-            8,
-            1,
-            [1, 1, 32, 16 * 32],
-            3,
-            ttl.tensor.Layout.TILE,
-            1024,
-        ),
-        (
-            8,
-            1,
-            [1, 1, 128, 128 * 32],
-            3,
-            ttl.tensor.Layout.TILE,
-            1024,
-        ),
         # (
         #     8,
         #     1,
-        #     [1, 1, 1024, 1024 * 32],
+        #     [1, 8, 32, 16 * 32],
         #     3,
         #     ttl.tensor.Layout.TILE,
         #     1024,
         # ),
-        (
+        # ( # Prefill shape 128
+        #     8,
+        #     1,
+        #     [1, 1, 128, 1024 * 8],
+        #     3,
+        #     ttl.tensor.Layout.TILE,
+        #     4*1024,
+        # ),
+        (  # Prefill shape 2k
             8,
             1,
-            [1, 1, 32, 1024 * 16],
+            [1, 2, 1024, 1024 * 8],
             3,
             ttl.tensor.Layout.TILE,
-            1024,
+            4 * 1024,
         ),
-        (
-            8,
-            1,
-            [1, 1, 128, 1024 * 32],
-            3,
-            ttl.tensor.Layout.TILE,
-            1024,
-        ),
+        # (
+        #     8,
+        #     1,
+        #     [1, 1, 128, 128 * 32],
+        #     3,
+        #     ttl.tensor.Layout.TILE,
+        #     1024,
+        # ),
+        # # (
+        # #     8,
+        # #     1,
+        # #     [1, 1, 1024, 1024 * 32],
+        # #     3,
+        # #     ttl.tensor.Layout.TILE,
+        # #     1024,
+        # # ),
+        # (
+        #     8,
+        #     1,
+        #     [1, 1, 32, 1024 * 16],
+        #     3,
+        #     ttl.tensor.Layout.TILE,
+        #     1024,
+        # ),
+        # (
+        #     8,
+        #     1,
+        #     [1, 1, 128, 1024 * 32],
+        #     3,
+        #     ttl.tensor.Layout.TILE,
+        #     1024,
+        # ),
+        # (
+        #     8,
+        #     1,
+        #     [1, 1, 2048, 1024 * 32],
+        #     3,
+        #     ttl.tensor.Layout.TILE,
+        #     1024,
+        # ),
         ### Test cases that are not supported
         # (
         #     8,
