@@ -96,33 +96,6 @@ void kernel_main() {
             .data_format = in0_df
         };
 
-
-        /* Args for overlapped all gather */
-
-        // Compile time args
-        constexpr uint32_t overlap_op = get_compile_time_arg_val(24) ? 1 : 0;
-        constexpr uint32_t global_num_workers = get_compile_time_arg_val(25);
-        constexpr uint32_t curr_worker_index = get_compile_time_arg_val(26);
-        constexpr uint32_t worker_sync_sem_addr = get_compile_time_arg_val(27);
-
-        // Runtime args
-        uint32_t worker_noc_coords[global_num_workers * 2]; // Worker NOC coordinates [x1, y1, x2, y2...]
-        uint32_t op_worker_noc_x;
-        uint32_t op_worker_noc_y;
-        uint32_t signal_op_sem_addr;
-
-        if (overlap_op) {
-            for (uint32_t i = 0; i < global_num_workers * 2; i+=2) {
-                worker_noc_coords[i] = get_arg_val<uint32_t>(arg_idx++);
-                worker_noc_coords[i + 1] = get_arg_val<uint32_t>(arg_idx++);
-            }
-
-            op_worker_noc_x = get_arg_val<uint32_t>(arg_idx++);
-            op_worker_noc_y = get_arg_val<uint32_t>(arg_idx++);
-            signal_op_sem_addr = get_arg_val<uint32_t>(arg_idx++);
-        }
-
-
         #elif defined SHARDED_MEM_LAYOUT
             auto d =
                 tt::tt_metal::address_generators::build_sharded_addr_gen<output_tensor_memory_layout>(
@@ -152,6 +125,31 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
 
+#ifdef OVERLAP_OP
+    /* Args for overlapped all gather */
+
+    // Compile time args
+    constexpr uint32_t overlap_op = get_compile_time_arg_val(24) ? 1 : 0;
+    constexpr uint32_t global_num_workers = get_compile_time_arg_val(25);
+    constexpr uint32_t curr_worker_index = get_compile_time_arg_val(26);
+    constexpr uint32_t worker_sync_sem_addr = get_compile_time_arg_val(27);
+
+    // Runtime args
+    uint32_t worker_noc_coords[global_num_workers * 2]; // Worker NOC coordinates [x1, y1, x2, y2...]
+    uint32_t op_worker_noc_x;
+    uint32_t op_worker_noc_y;
+    uint32_t signal_op_sem_addr;
+
+    if (overlap_op) {
+        for (uint32_t i = 0; i < global_num_workers * 2; i+=2) {
+            worker_noc_coords[i] = get_arg_val<uint32_t>(arg_idx++);
+            worker_noc_coords[i + 1] = get_arg_val<uint32_t>(arg_idx++);
+        }
+
+        op_worker_noc_x = get_arg_val<uint32_t>(arg_idx++);
+        op_worker_noc_y = get_arg_val<uint32_t>(arg_idx++);
+        signal_op_sem_addr = get_arg_val<uint32_t>(arg_idx++);
+    }
 
 
     /* Setup for overlapped all_gather */
@@ -188,6 +186,7 @@ void kernel_main() {
 
         signal_op_sem_noc_addr = get_noc_addr(op_worker_noc_x, op_worker_noc_y, signal_op_sem_addr);
     }
+#endif
 
     for (uint32_t i = 0; i < num_transfers; ++i) {
         if constexpr (num_full_chunks > 0) {
@@ -249,7 +248,7 @@ void kernel_main() {
             }
 
         }
-
+#ifdef OVERLAP_OP
         // Synchronize if all gather fusion is enabled
         if (overlap_op) {
             // DPRINT << "curr_worker_is_master: " << curr_worker_is_master << ENDL();
@@ -259,7 +258,7 @@ void kernel_main() {
                 slave_sync_master(curr_worker_l1_semaphore_addr_ptr, worker_sem_noc_addrs[0]);
             }
         }
-
+#endif
         output_page_idx = output_base_page_idx;
         col_idx = col_start_idx;
         row_idx = row_start_idx;

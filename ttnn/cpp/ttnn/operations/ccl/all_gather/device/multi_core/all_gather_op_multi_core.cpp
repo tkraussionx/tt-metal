@@ -191,7 +191,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
     const std::optional<std::vector<uint32_t>> datacopy_signal_semaphore_addr,
     const CoreCoord core_grid_offset) {
     std::cout <<  "RING INDEX:::::::: " << ring_index << std::endl;
-    bool overlap_op = core_grid_offset.x != 0 || core_grid_offset.y != 0;
+    bool overlap_op = datacopy_cores.has_value();
 
 
     TT_FATAL(!(receiver_device_id == std::nullopt && sender_device_id == std::nullopt), "At least one of receiver_device_id or sender_device_id must be specified");
@@ -248,6 +248,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
         worker_defines["SHARDED_MEM_LAYOUT"] = "1";
     } else {
         worker_defines["INTERLEAVED_MEM_LAYOUT"] = "1";
+    }
+    if (overlap_op) {
+        worker_defines["OVERLAP_OP"] = "1";
     }
 
     bool full_send_both_directions =
