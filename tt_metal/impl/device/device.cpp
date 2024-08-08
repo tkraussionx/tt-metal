@@ -1901,18 +1901,22 @@ bool Device::close() {
         TT_THROW("Cannot close device {} that has not been initialized!", this->id_);
     }
 
+    log_info(tt::LogMetal, "terminating command queues");
     for (const std::unique_ptr<HWCommandQueue> &hw_command_queue : hw_command_queues_) {
         if (hw_command_queue->manager.get_bypass_mode()) {
             hw_command_queue->record_end();
         }
         hw_command_queue->terminate();
     }
+    log_info(tt::LogMetal, "terminating work executor");
     this->work_executor.reset();
+    log_info(tt::LogMetal, "dumping profile results");
     tt_metal::detail::DumpDeviceProfileResults(this, true);
 
     this->trace_buffer_pool_.clear();
+    log_info(tt::LogMetal, "enabling allocs");
     detail::EnableAllocs(this);
-
+    log_info(tt::LogMetal, "deallocating buffers");
     this->deallocate_buffers();
 
     std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> not_done_dispatch_cores;
@@ -1921,14 +1925,17 @@ bool Device::close() {
 
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     std::unordered_set<CoreCoord> wait_for_cores = not_done_dispatch_cores[mmio_device_id];
-
+    log_info(tt::LogMetal, "waiting for cores to finish");
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
 
+    log_info(tt::LogMetal, "detaching dprint server");
     DprintServerDetach(this);
+    log_info(tt::LogMetal, "detaching watcher");
     watcher_detach(this);
 
     // Assert worker cores
     CoreCoord grid_size = this->logical_grid_size();
+    log_info(tt::LogMetal, "asserting worker cores");
     for (uint32_t y = 0; y < grid_size.y; y++) {
         for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
@@ -1944,6 +1951,7 @@ bool Device::close() {
         }
     }
 
+    log_info(tt::LogMetal, "resetting ethernet cores");
     if (this->id_ != mmio_device_id) {
         for (auto it = not_done_dispatch_cores[mmio_device_id].begin(); it != not_done_dispatch_cores[mmio_device_id].end(); it++) {
             const auto &phys_core = *it;
@@ -1955,10 +1963,12 @@ bool Device::close() {
             }
         }
     }
-
+    log_info(tt::LogMetal, "setting internal routing info for ethernet cores");
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
+    log_info(tt::LogMetal, "barrier for device {}", this->id_);
     tt::Cluster::instance().l1_barrier(id_);
+    log_info(tt::LogMetal, "clearing allocator");
     allocator::clear(*this->allocator_);
     // After device close, no buffers on this device should be used
     for (const auto &[buf_attr, buf] : detail::BUFFER_MAP.value()) {

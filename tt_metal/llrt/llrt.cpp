@@ -377,7 +377,7 @@ void wait_until_cores_done(
             for (const auto &core : not_done_phys_cores) {
                 not_done_cores_str += (core.str() + " ");
             }
-            log_debug(tt::LogMetal, not_done_cores_str.c_str());
+            log_info(tt::LogMetal, not_done_cores_str.c_str());
         }
 
         for (auto it = not_done_phys_cores.begin(); it != not_done_phys_cores.end(); ) {
