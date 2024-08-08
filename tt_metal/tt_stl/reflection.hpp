@@ -112,7 +112,7 @@ using AttributeName = std::string;
 
 struct Attribute final {
     static constexpr std::size_t ALIGNMENT = 32;
-    using storage_t = std::array<std::byte, 256>;
+    using storage_t = std::array<std::byte, 512>;
 
     const std::string to_string() const { return this->implementations.to_string_impl_(this->type_erased_storage); }
     const std::size_t to_hash() const { return this->implementations.to_hash_impl_(this->type_erased_storage); }
