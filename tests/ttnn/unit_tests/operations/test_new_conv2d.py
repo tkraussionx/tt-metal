@@ -77,6 +77,7 @@ def run_first_conv_unfolded(
 
     torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
     # torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
+    print(torch_weight_tensor.shape)
 
     torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
 
@@ -129,72 +130,72 @@ def run_first_conv_unfolded(
     padded_input_channels = 4
     channels_padded_shape = [batch_size, padded_input_channels, input_height, input_width]
 
-    # # pad input mem config
-    # grid = (8, 6)
-    # pad_input_mem_config = ttnn.create_sharded_memory_config(
-    #     conv_input_shape,
-    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
-    #     strategy=ttnn.ShardStrategy.HEIGHT,
-    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
-    # )
-    # tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, pad_input_mem_config)
-
-    # # pad output mem config
-    grid = (8, 8)
-    # pad_output_mem_config = ttnn.create_sharded_memory_config(
-    #     channels_padded_shape,
-    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
-    #     strategy=ttnn.ShardStrategy.HEIGHT,
-    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
-    # )
-    # tt_input_tensor = ttnn.pad(tt_input_tensor, padding=((0, 1), (0, 0), (0, 0)), value=0, memory_config=pad_output_mem_config)
-    # print(tt_input_tensor.shape)
-
-    # # Transpose HC
-    # transpose_mem_config = pad_output_mem_config
-    # tt_input_tensor = ttnn.transpose(tt_input_tensor, 1, 2, memory_config=transpose_mem_config)
-    # print(tt_input_tensor.shape)
-
-    # # Reshape
-    # tt_input_tensor = tt_lib.tensor.reshape(tt_input_tensor, batch_size, input_height, padded_input_channels * 2, input_width // 2)
-    # print(tt_input_tensor.shape)
-
-    # # Transpose HW
-    # transpose_mem_config = ttnn.create_sharded_memory_config(
-    #     tt_input_tensor.shape,
-    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
-    #     strategy=ttnn.ShardStrategy.HEIGHT,
-    #     orientation=ttnn.ShardOrientation.COL_MAJOR,
-    # )
-    # tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, transpose_mem_config)
-    # tt_input_tensor = ttnn.transpose(tt_input_tensor, 2, 3, memory_config=transpose_mem_config)
-    # print(tt_input_tensor.shape)
-    # print("!!!")
-
-    # # Reshape
-    # tt_input_tensor = tt_lib.tensor.reshape(tt_input_tensor, 1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2)
-    # print(tt_input_tensor.shape)
-    # mem_config = ttnn.get_memory_config(tt_input_tensor)
-    # print(mem_config.buffer_type)
-    # print(mem_config.shard_spec.shape)
-
-    shape = [1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2]
-    print(shape)
-    sharded_mem_config = ttnn.create_sharded_memory_config(
-        shape,
+    # pad input mem config
+    grid = (8, 6)
+    pad_input_mem_config = ttnn.create_sharded_memory_config(
+        conv_input_shape,
         core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
         strategy=ttnn.ShardStrategy.HEIGHT,
-        orientation=ttnn.ShardOrientation.COL_MAJOR,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
     )
-    tt_input_tensor = ttnn.from_torch(
-        torch_input_tensor_nchw,
-        dtype=ttnn.DataType.BFLOAT16,
-        layout=ttnn.ROW_MAJOR_LAYOUT,
-        device=device,
-        memory_config=sharded_mem_config,
+    tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, pad_input_mem_config)
+
+    # pad output mem config
+    grid = (8, 8)
+    pad_output_mem_config = ttnn.create_sharded_memory_config(
+        channels_padded_shape,
+        core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
     )
+    tt_input_tensor = ttnn.pad(
+        tt_input_tensor, padding=((0, 1), (0, 0), (0, 0)), value=0, memory_config=pad_output_mem_config
+    )
+
+    # Transpose HC
+    transpose_mem_config = pad_output_mem_config
+    tt_input_tensor = ttnn.transpose(tt_input_tensor, 1, 2, memory_config=transpose_mem_config)
+
+    # Reshape
+    tt_input_tensor = tt_lib.tensor.reshape(
+        tt_input_tensor, batch_size, input_height, padded_input_channels * 2, input_width // 2
+    )
+
+    # Transpose HW
+    transpose_mem_config = ttnn.create_sharded_memory_config(
+        tt_input_tensor.shape,
+        core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+    )
+    tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, transpose_mem_config)
+    tt_input_tensor = ttnn.transpose(tt_input_tensor, 2, 3, memory_config=transpose_mem_config)
+
+    # Reshape
+    tt_input_tensor = tt_lib.tensor.reshape(
+        tt_input_tensor, 1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2
+    )
+    print(tt_input_tensor.shape)
     mem_config = ttnn.get_memory_config(tt_input_tensor)
-    print(mem_config)
+    print(mem_config.shard_spec.shape)
+
+    # shape = [1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2]
+    # print(shape)
+    # sharded_mem_config = ttnn.create_sharded_memory_config(
+    #     shape,
+    #     core_grid=ttnn.CoreGrid(y=grid[0], x=grid[1]),
+    #     strategy=ttnn.ShardStrategy.HEIGHT,
+    #     orientation=ttnn.ShardOrientation.ROW_MAJOR,
+    # )
+    # tt_input_tensor = ttnn.from_torch(
+    #     torch_input_tensor_nchw,
+    #     dtype=ttnn.DataType.BFLOAT16,
+    #     layout=ttnn.ROW_MAJOR_LAYOUT,
+    #     device=device,
+    #     memory_config=sharded_mem_config,
+    # )
+    # mem_config = ttnn.get_memory_config(tt_input_tensor)
+    # print(mem_config)
 
     [tt_output_tensor_on_device, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
         input_tensor=tt_input_tensor,

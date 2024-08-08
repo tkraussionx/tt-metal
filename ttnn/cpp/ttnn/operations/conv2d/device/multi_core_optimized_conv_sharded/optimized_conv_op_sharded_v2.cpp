@@ -435,6 +435,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_ASSERT(b.get_layout() == Layout::TILE, "Conv weights should be in tiled layout");
     TT_ASSERT(b.get_legacy_shape()[0] == 1, "Conv weight matrix shape is invalid");
     TT_ASSERT(b.get_legacy_shape()[1] == 1, "Conv weight matrix shape is invalid");
+    tt::log_info("b shape {}",b.get_legacy_shape() );
     uint32_t weight_matrix_height = b.get_legacy_shape()[2];
     uint32_t weight_matrix_width = b.get_legacy_shape()[3];
     uint32_t weight_matrix_height_ntiles = weight_matrix_height / TILE_HEIGHT;
@@ -475,7 +476,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_FATAL(input_channels_padded >= ashape[3], "Incorrect padding of input channels!");
     // check is for 16-byte alignment
     TT_FATAL(
-        input_channels_padded % 16 == 0,
+        input_channels_padded % 8 == 0,
         "Expected input channels to be padded for 16 byte alignment in L1");  // TODO: For bfp16, check if its divisible
                                                                               // by 8 not 16.
     // Always use split reader for first conv in resnet which has input channels = 16
@@ -533,6 +534,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         TT_ASSERT(bias_shape_without_padding[0] == 1, "Bias should have batch == 1");
     }
 
+    tt::log_info("act_matrix_width {}", act_matrix_width);
+    tt::log_info("weight_matrix_height {}", weight_matrix_height);
+
     // matrix multiplication shape check valid for all convs except depthwise conv1d
     if (!is_conv1d and !is_depthwise_conv){
         TT_ASSERT(act_matrix_width == weight_matrix_height, "The width of tensor a needs to match the height of tensor b");
@@ -558,6 +562,17 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     // Convert tensor dims to tile dims
     uint32_t act_matrix_height_ntiles = act_matrix_height / TILE_HEIGHT;
     uint32_t act_matrix_width_ntiles = act_matrix_width / TILE_WIDTH;
+
+
+    tt::log_info("act_matrix_width_ntiles {}", act_matrix_width_ntiles);
+    tt::log_info("act_block_w_ntiles {}", act_block_w_ntiles);
+
+    // TODO: remove
+    if (act_matrix_width_ntiles % act_block_w_ntiles != 0) {
+        if (act_block_w_ntiles % 2 == 0) {
+            act_block_w_ntiles = act_block_w_ntiles / 2;
+        }
+    }
 
     assert(act_matrix_height_ntiles % act_block_h_ntiles == 0);
     assert(act_matrix_width_ntiles % act_block_w_ntiles == 0);

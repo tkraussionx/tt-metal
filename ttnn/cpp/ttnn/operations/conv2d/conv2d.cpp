@@ -239,7 +239,7 @@ tt::tt_metal::OptimizedConvBlockConfig determine_per_core_conv_block_config(
         TT_ASSERT(parallel_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED);
         // TODO: do a proper fix and remove this temporary hack for shallow conv
         TT_ASSERT(act_block_h_ntiles % 2 == 0, "act_block_h_ntiles {} must be even for shallow conv", act_block_h_ntiles);
-        out_subblock_h_ntiles = act_block_h_ntiles / 2;
+        // out_subblock_h_ntiles = act_block_h_ntiles / 2;
         TT_ASSERT((out_subblock_h_ntiles * out_subblock_w_ntiles) <= 8, "out_subblock_h_ntiles {} * out_subblock_w_ntiles {} must be <= 8", out_subblock_h_ntiles, out_subblock_w_ntiles);
     }
     return {
