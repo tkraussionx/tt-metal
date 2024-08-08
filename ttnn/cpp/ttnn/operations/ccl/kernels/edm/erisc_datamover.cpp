@@ -125,6 +125,9 @@ void kernel_main() {
     constexpr ttnn::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
         static_cast<ttnn::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
 
+    static constexpr bool use_compile_time_designated_handshake_sender = get_compile_time_arg_val(6) != 0;
+    static constexpr bool is_handshake_sender = get_compile_time_arg_val(7) != 0;
+
     using EDM_CONFIG_T = erisc::datamover::EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal>;
     using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
 
@@ -136,6 +139,10 @@ void kernel_main() {
     // SENDER ARGS
     uint32_t args_offset = 0;
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
+
+    if constexpr (use_compile_time_designated_handshake_sender) {
+        erisc::datamover::eth_setup_handshake_first_half(handshake_addr, is_handshake_sender);
+    }
 
     uint8_t const sender_channels_start = get_arg_val<uint32_t>(args_offset++);
     uint32_t const sender_num_channels = num_senders;//get_arg_val<uint32_t>(args_offset++);
@@ -206,9 +213,14 @@ void kernel_main() {
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
     // will always be "receiver" (only for handshake purposes)
-    bool act_as_sender_in_handshake =
-        (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
-    erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+
+    if constexpr (use_compile_time_designated_handshake_sender) {
+        erisc::datamover::eth_setup_handshake_second_half(handshake_addr, is_handshake_sender);
+    } else {
+        bool act_as_sender_in_handshake =
+            (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
+        erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    }
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
     uint32_t eth_transaction_complete_addr = handshake_addr + 32;
 

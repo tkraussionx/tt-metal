@@ -280,6 +280,94 @@ class QueueIndexPointer {
     uint8_t wrap_around;
 };
 
+FORCE_INLINE void eth_setup_handshake_first_half(std::uint32_t handshake_register_address, bool is_sender) {
+    reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[4] = 1;
+    reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[5] = 1;
+    reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[6] = 0x1c0ffee1;
+    reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[7] = 0x1c0ffee2;
+
+    erisc_info->channels[0].receiver_ack = 0;
+    for (uint32_t i = 1; i < eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS; i++) {
+        erisc_info->channels[i].bytes_sent = 0;
+        erisc_info->channels[i].receiver_ack = 0;
+    }
+    *(volatile tt_l1_ptr uint32_t *)handshake_register_address = 0;
+    if (is_sender) {
+        uint32_t count = 0;
+        uint32_t max = 2000000000;
+        // eth_wait_receiver_done();
+        while (eth_bytes_are_available_on_channel(0)) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        count = 0;
+        eth_send_bytes(handshake_register_address, handshake_register_address, 16);
+    } else {
+
+    }
+}
+
+
+FORCE_INLINE void eth_setup_handshake_second_half(std::uint32_t handshake_register_address, bool is_sender) {
+
+    if (is_sender) {
+        uint32_t count = 0;
+        uint32_t max = 2000000000;
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        eth_send_done();
+        count = 0;
+        // eth_wait_for_receiver_done();
+        while (eth_bytes_are_available_on_channel(0)) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+    } else {
+        uint32_t count = 0;
+        uint32_t max = 2000000000;
+        // eth_wait_for_bytes(16);
+        while (erisc_info->channels[0].bytes_sent != 16) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        eth_receiver_channel_done(0);
+
+    }
+
+}
+
 FORCE_INLINE void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[4] = 1;
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(handshake_register_address)[5] = 1;
@@ -293,11 +381,65 @@ FORCE_INLINE void eth_setup_handshake(std::uint32_t handshake_register_address, 
     }
     *(volatile tt_l1_ptr uint32_t *)handshake_register_address = 0;
     if (is_sender) {
-        eth_wait_receiver_done();
+        uint32_t count = 0;
+        uint32_t max = 2000000000;
+        // eth_wait_receiver_done();
+        while (eth_bytes_are_available_on_channel(0)) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        count = 0;
         eth_send_bytes(handshake_register_address, handshake_register_address, 16);
-        eth_wait_for_receiver_done();
+
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+        eth_send_done();
+        count = 0;
+        // eth_wait_for_receiver_done();
+        while (eth_bytes_are_available_on_channel(0)) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
     } else {
-        eth_wait_for_bytes(16);
+        uint32_t count = 0;
+        uint32_t max = 2000000000;
+        // eth_wait_for_bytes(16);
+        while (erisc_info->channels[0].bytes_sent != 16) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
+
+        count = 0;
+        while (eth_txq_is_busy()) {
+            count ++;
+            if (count > max) {
+                run_routing();
+            }
+            asm volatile("nop");
+        }
         eth_receiver_channel_done(0);
     }
 }
