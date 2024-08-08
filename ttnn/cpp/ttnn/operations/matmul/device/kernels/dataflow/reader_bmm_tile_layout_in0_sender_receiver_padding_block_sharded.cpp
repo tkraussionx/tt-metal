@@ -7,6 +7,18 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+
+#ifdef MM_RAMP
+FORCE_INLINE bool is_last_core(const uint32_t id, const uint32_t group_size, const uint32_t initial_group_size) {
+    uint32_t last_group_size = initial_group_size % group_size;
+    bool last_core = (id + 1) % group_size == 0;
+    if (id >= initial_group_size - last_group_size) {
+        last_core = (id % group_size + 1) % last_group_size == 0;
+    }
+    return last_core;
+}
+#endif
+
 void kernel_main() {
     constexpr bool core_has_output_block_work = (bool)get_compile_time_arg_val(0);
     constexpr bool core_in_in0_receiver_mcast_grid = (bool)get_compile_time_arg_val(1);
@@ -29,13 +41,32 @@ void kernel_main() {
 
     constexpr uint32_t batch = get_compile_time_arg_val(15);
 
-    const uint32_t sender_id = get_arg_val<uint32_t>(0);
-    const uint32_t in0_mcast_dest_noc_start_x = get_arg_val<uint32_t>(1);
-    const uint32_t in0_mcast_dest_noc_start_y = get_arg_val<uint32_t>(2);
-    const uint32_t in0_mcast_dest_noc_end_x = get_arg_val<uint32_t>(3);
-    const uint32_t in0_mcast_dest_noc_end_y = get_arg_val<uint32_t>(4);
-    tt_l1_ptr uint32_t* in0_mcast_noc_x = (tt_l1_ptr uint32_t*)(get_arg_addr(5));
-    tt_l1_ptr uint32_t* in0_mcast_noc_y = (tt_l1_ptr uint32_t*)(get_arg_addr(5 + num_x));
+#ifdef MM_RAMP
+    constexpr uint32_t ramp_group_sync_semaphore_addr = get_compile_time_arg_val(16);
+    constexpr uint32_t mm_ramp_group_size = get_compile_time_arg_val(17);
+    constexpr uint32_t mm_ramp_multiple = get_compile_time_arg_val(18);
+    constexpr uint32_t mm_ramp_all_active_start = get_compile_time_arg_val(19);
+    constexpr uint32_t mm_ramp_all_active_end = get_compile_time_arg_val(20);
+#endif
+
+    uint32_t i = 0;
+    const uint32_t sender_id = get_arg_val<uint32_t>(i++);
+    const uint32_t in0_mcast_dest_noc_start_x = get_arg_val<uint32_t>(i++);
+    const uint32_t in0_mcast_dest_noc_start_y = get_arg_val<uint32_t>(i++);
+    const uint32_t in0_mcast_dest_noc_end_x = get_arg_val<uint32_t>(i++);
+    const uint32_t in0_mcast_dest_noc_end_y = get_arg_val<uint32_t>(i++);
+    tt_l1_ptr uint32_t* in0_mcast_noc_x = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
+    tt_l1_ptr uint32_t* in0_mcast_noc_y = (tt_l1_ptr uint32_t*)(get_arg_addr(i + num_x));
+
+#ifdef MM_RAMP
+    // DIDT args
+    i += num_x + num_y;
+    const uint32_t mm_ramp_group_id = get_arg_val<uint32_t>(i++);
+    const uint32_t mm_ramp_group_initial_state = get_arg_val<uint32_t>(i++);
+    tt_l1_ptr uint32_t* mm_ramp_mcast_noc_x = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
+    tt_l1_ptr uint32_t* mm_ramp_mcast_noc_y = (tt_l1_ptr uint32_t*)(get_arg_addr(i + mm_ramp_group_size));
+#endif
+
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in2 = 2;  // Sharded cb
@@ -100,6 +131,21 @@ void kernel_main() {
 
     noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, VALID);
 
+#ifdef MM_RAMP
+    constexpr uint32_t cb_ramp_group_sync = tt::CB::c_intermed7;
+    volatile tt_l1_ptr uint32_t* ramp_group_sync_semaphore_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(ramp_group_sync_semaphore_addr);
+    uint64_t remote_ramp_group_noc_addrs[mm_ramp_group_size];
+    uint32_t x = 0, y = 0;
+    DPRINT << "ramp_group_cores: " << ENDL();
+    for (uint32_t i = 0; i < mm_ramp_group_size; ++i) {
+        DPRINT << mm_ramp_mcast_noc_x[i] << ", " << mm_ramp_mcast_noc_y[i] << ENDL();
+        remote_ramp_group_noc_addrs[i] =
+            get_noc_addr(mm_ramp_mcast_noc_x[i], mm_ramp_mcast_noc_y[i], ramp_group_sync_semaphore_addr);
+    }
+    noc_semaphore_set(ramp_group_sync_semaphore_addr_ptr, mm_ramp_group_initial_state);
+#endif
+
     cb_reserve_back(cb_id_in2, batch * in0_block_num_tiles);
 
     uint32_t local_read_addr = 0;
@@ -111,6 +157,10 @@ void kernel_main() {
     }
 
     for (uint32_t b = 0; b < batch; ++b) {
+#ifdef MM_RAMP
+        uint32_t group_size = mm_ramp_group_size;
+#endif
+
         for (uint32_t block = 0; block < num_blocks; ++block) {
             const uint32_t block_id = block / num_blocks_per_shard;
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
@@ -238,6 +288,16 @@ void kernel_main() {
                 noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             }
 
+#ifdef MM_RAMP
+            DPRINT << "#### LOOP: " << block << " ####" << ENDL();
+            const bool not_all_cores_active = block < mm_ramp_all_active_start or block >= mm_ramp_all_active_end;
+            // DIDT: Wait for core to become worker
+            if (not_all_cores_active) {
+                noc_semaphore_wait(ramp_group_sync_semaphore_addr_ptr, VALID);
+                noc_semaphore_set(ramp_group_sync_semaphore_addr_ptr, INVALID);
+            }
+#endif
+
             cb_push_back(cb_id_in0, in0_block_num_tiles);
 
             // If core does not produce output block work, free cb_id_in0 immediately.
@@ -247,6 +307,65 @@ void kernel_main() {
             if constexpr (!core_has_output_block_work) {
                 cb_pop_front(cb_id_in0, in0_block_num_tiles);
             }
+
+#ifdef MM_RAMP
+            // DIDT: Wait for compute to be done
+            if (not_all_cores_active) {
+                cb_wait_front(cb_ramp_group_sync, 1);
+                cb_pop_front(cb_ramp_group_sync, 1);
+
+                if (block < mm_ramp_all_active_start) {
+                    const bool last_core = is_last_core(mm_ramp_group_id, group_size, mm_ramp_group_size);
+
+                    if (last_core) {
+                        const uint32_t offset = mm_ramp_group_id / group_size * group_size; // mm_ramp_group_id / group_size rounds down
+
+                        // New group size calculations
+                        const uint32_t new_group_size = (group_size - 1) / mm_ramp_multiple + 1; // Div up
+
+                        if (block < mm_ramp_all_active_start - 1) {
+                            DPRINT << "send to: ";
+                            for (uint32_t j = 0; j < mm_ramp_multiple; j++) {
+                                DPRINT << j *  new_group_size + offset << ", ";
+                                noc_inline_dw_write(remote_ramp_group_noc_addrs[j *  new_group_size + offset], VALID);
+
+                            }
+                            DPRINT << ENDL();
+                        } else {
+                            DPRINT << "send to: " <<  offset << ENDL();
+                            noc_inline_dw_write(remote_ramp_group_noc_addrs[offset], VALID);
+                        }
+                    } else {
+                        DPRINT << "send to: " << mm_ramp_group_id + 1 << ENDL();
+                        noc_inline_dw_write(remote_ramp_group_noc_addrs[mm_ramp_group_id + 1], VALID);
+                    }
+
+                    group_size = (group_size - 1) / mm_ramp_multiple + 1; // Div up
+
+                } else if (block >= mm_ramp_all_active_end) {
+                    group_size *= mm_ramp_multiple;
+                    const bool last_core = is_last_core(mm_ramp_group_id, group_size, mm_ramp_group_size);
+
+                    if (last_core) {
+                        // New group size calculations
+                        uint32_t new_group_size = group_size * mm_ramp_multiple;
+
+                        const bool last_core_in_new_group = is_last_core(mm_ramp_group_id, new_group_size, mm_ramp_group_size);
+
+                        if (last_core_in_new_group) {
+                            const uint32_t offset = mm_ramp_group_id / new_group_size * new_group_size; // mm_ramp_group_id / group_size rounds down
+                            DPRINT << "send to: " << offset << ENDL();
+                            noc_inline_dw_write(remote_ramp_group_noc_addrs[offset], VALID);
+                        } else {
+                            DPRINT << "not last core in new group skip" << ENDL();
+                        }
+                    } else {
+                        DPRINT << "send to: " << mm_ramp_group_id + 1 << ENDL();
+                        noc_inline_dw_write(remote_ramp_group_noc_addrs[mm_ramp_group_id + 1], VALID);
+                    }
+                }
+            }
+#endif
         }
     }
 }

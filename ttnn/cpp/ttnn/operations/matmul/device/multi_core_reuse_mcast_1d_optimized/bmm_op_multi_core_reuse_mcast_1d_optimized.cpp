@@ -189,6 +189,22 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         }
     }
 
+    // DIDT args
+    bool mm_enable_ramp;
+    uint32_t mm_ramp_group_size;
+    uint32_t mm_ramp_multiple;
+    uint32_t mm_ramp_all_active_start;
+    uint32_t mm_ramp_all_active_end;
+    std::tie(mm_enable_ramp, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end) = bmm_op_utils::get_mm_ramp_parameters(num_cores_with_work, num_blocks);
+    // TODO: Only sharded in0 is supported now
+    mm_enable_ramp &= in0_is_sharded;
+
+    uint32_t ramp_group_sync_semaphore;
+    if (mm_enable_ramp) {
+        ramp_group_sync_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    }
+
+
     // Mcast args
     auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
@@ -208,6 +224,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
+
 
     std::vector<uint32_t> in0_sender_compile_time_args;
     if (in0_is_sharded) {
@@ -234,6 +251,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             // batch args
             (std::uint32_t)B  // batch
         };
+        // DIDT args
+        if (mm_enable_ramp) {
+            in0_sender_compile_time_args.push_back(ramp_group_sync_semaphore);
+            in0_sender_compile_time_args.push_back(mm_ramp_group_size);
+            in0_sender_compile_time_args.push_back(mm_ramp_multiple);
+            in0_sender_compile_time_args.push_back(mm_ramp_all_active_start);
+            in0_sender_compile_time_args.push_back(mm_ramp_all_active_end);
+        }
     } else {
         in0_sender_compile_time_args = {
             // interleaved accessor args
@@ -318,7 +343,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     };
 
     std::map<string, string> mm_kernel_defines;
-    std::map<string, string> mm_kernel_in0_sender_writer_defines;
+    std::map<string, string> mm_kernel_in0_sender_defines;
+    std::map<string, string> mm_kernel_in0_receiver_defines;
     std::map<string, string> mm_kernel_in1_sender_writer_defines;
     if (bias_buffer != nullptr) {
         mm_kernel_defines["FUSE_BIAS"] = "1";
@@ -342,6 +368,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     bmm_op_utils::add_stagger_defines_if_needed(device->arch(), num_cores, mm_kernel_defines);
 
+    // DIDT args
+    if (mm_enable_ramp) {
+        mm_kernel_defines["MM_RAMP"] = "1";
+        mm_kernel_in0_sender_defines["MM_RAMP"] = "1";
+    }
+
     if (output_is_sharded) {
         mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
     }
@@ -349,7 +381,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // TODO: SKIP_MCAST flag isn't used for the sharded reader kernel because internal mcast logic already works without
     // skipping We can use this flag to turn off unnecessary mcast overhead if necessary
     if (in0_mcast_receiver_num_cores == 1) {
-        mm_kernel_in0_sender_writer_defines["SKIP_MCAST"] = "1";
+        mm_kernel_in0_sender_defines["SKIP_MCAST"] = "1";
     }
 
     mm_kernel_in1_sender_writer_defines["SKIP_MCAST"] = "1";
@@ -369,7 +401,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = in0_noc,
             .compile_args = in0_sender_compile_time_args,
-            .defines = mm_kernel_in0_sender_writer_defines});
+            .defines = mm_kernel_in0_sender_defines});
 
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_in_receiver_grid_id = 0;
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_not_in_receiver_grid_id = 0;
@@ -386,7 +418,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                     .processor = tt_metal::DataMovementProcessor::RISCV_1,
                     .noc = in0_noc,
                     .compile_args = in0_sender_compile_time_args,
-                    .defines = mm_kernel_in0_sender_writer_defines});
+                    .defines = mm_kernel_in0_sender_defines});
         }
         if (in0_mcast_cores_without_work_and_not_in_receiver_grid.num_cores() > 0) {
             in0_sender_compile_time_args[0] = 0;  // core_has_output_block_work
@@ -400,7 +432,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                     .processor = tt_metal::DataMovementProcessor::RISCV_1,
                     .noc = in0_noc,
                     .compile_args = in0_sender_compile_time_args,
-                    .defines = mm_kernel_in0_sender_writer_defines});
+                    .defines = mm_kernel_in0_sender_defines});
         }
     }
 
@@ -413,7 +445,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_1,
                 .noc = in0_noc,
-                .compile_args = in0_receiver_compile_time_args});
+                .compile_args = in0_receiver_compile_time_args,
+                .defines = mm_kernel_in0_receiver_defines});
     }
 
     auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
@@ -456,6 +489,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
         untilize_out  // untilize_out
     };
+    // DIDT args
+    if (mm_enable_ramp) {
+        compute_kernel_args.push_back(mm_ramp_all_active_start);
+        compute_kernel_args.push_back(mm_ramp_all_active_end);
+    }
 
     // Create compute kernel
     // bool fp32_dest_acc_en = false;
@@ -587,6 +625,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             in3_CB_size);
     }
 
+    // DIDT args
+    if (mm_enable_ramp) {
+        uint32_t cb_ramp_group_sync_index = 31; // Last intermed CB
+        // 16 bytes is the minimum page size for CB synchronization
+        CircularBufferConfig cb_ramp_group_sync_config =
+            CircularBufferConfig(16, {{cb_ramp_group_sync_index, tt::DataFormat::UInt32}}).set_page_size(cb_ramp_group_sync_index, 16);
+        auto cb_ramp_group_sync = tt_metal::CreateCircularBuffer(program, all_cores, cb_ramp_group_sync_config);
+    }
+
+
     // Parameters for last row, col, or block
     uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
     uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
@@ -610,6 +658,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     }
 
     const auto& cores = corerange_to_cores(all_cores, std::nullopt, row_major);
+
+    // DIDT args
+    std::vector<uint32_t> mm_ramp_cores_noc_x;
+    std::vector<uint32_t> mm_ramp_cores_noc_y;
+    if (mm_enable_ramp) {
+        for (const auto& core : cores) {
+            auto core_physical = device->worker_core_from_logical_core(core);
+            mm_ramp_cores_noc_x.push_back(core_physical.x);
+            mm_ramp_cores_noc_y.push_back(core_physical.y);
+        }
+    }
+
     for (uint32_t i = 0; i < num_cores; ++i) {
         const auto& core = cores[i];
         uint32_t output_idx_x = i % num_blocks_x;
@@ -618,6 +678,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         if (in0_is_sharded) {
             std::vector<uint32_t> mm_in0_sender_args;
             mm_in0_sender_args.reserve(5 + in0_mcast_noc_x.size() + in0_mcast_noc_y.size());
+
             mm_in0_sender_args.push_back(i);
             mm_in0_sender_args.push_back(start_core_noc.x);
             mm_in0_sender_args.push_back(start_core_noc.y);
@@ -625,6 +686,21 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             mm_in0_sender_args.push_back(end_core_noc.y);
             mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
             mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
+
+            // DIDT args
+            if (mm_enable_ramp) {
+                uint32_t mm_ramp_group_initial_state = INVALID;
+                if (i % mm_ramp_group_size == 0) {
+                    mm_ramp_group_initial_state = VALID;
+                }
+
+                const uint32_t mm_ramp_cores_vec_offset = (i / mm_ramp_group_size) * mm_ramp_group_size; // rounds down by casting to uint
+                mm_in0_sender_args.reserve(2 + 2 * mm_ramp_group_size);
+                mm_in0_sender_args.push_back(i % mm_ramp_group_size);
+                mm_in0_sender_args.push_back(mm_ramp_group_initial_state);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
+            }
 
             if (i < num_cores_with_work) {
                 tt_metal::SetRuntimeArgs(
@@ -1291,6 +1367,7 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
     }
 
     const auto& cores = corerange_to_cores(all_cores, std::nullopt, row_major);
+
     for (uint32_t i = 0; i < num_cores; ++i) {
         const auto& core = cores[i];
         uint32_t output_idx_x = i / num_blocks_y;

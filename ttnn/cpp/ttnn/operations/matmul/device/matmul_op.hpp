@@ -362,4 +362,6 @@ tt::operations::primary::MatmulProgramConfig get_matmul_program_config(
 
 void add_stagger_defines_if_needed(const tt::ARCH arch, const int num_cores, std::map<string, string>& mm_kernel_defines);
 
+std::tuple<bool, uint32_t, uint32_t, uint32_t, uint32_t> get_mm_ramp_parameters(const uint32_t num_cores, const uint32_t num_blocks);
+
 }  // namespace bmm_op_utils

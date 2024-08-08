@@ -246,7 +246,6 @@ def test_tutorial_matmul_with_inputs_and_output_in_l1_memory_and_user_specified_
     assert_with_pcc(torch_output_tensor, output, pcc=0.999)
 
 
-@skip_for_wormhole_b0()
 @pytest.mark.parametrize(
     "batch_size_0, batch_size_1, m_size, k_size, n_size, bcast_batch, input_a_sharded_memory_config_args, input_b_sharded_memory_config_args",
     [
@@ -288,11 +287,11 @@ def test_tutorial_matmul_with_inputs_and_output_in_l1_memory_and_user_specified_
             2,
             3,
             64,
-            32 * 7,
-            1024,
+            32 * 56,
+            32 * 56,
             True,
             dict(
-                core_grid=ttnn.CoreGrid(y=1, x=7),
+                core_grid=ttnn.CoreGrid(y=7, x=8),
                 strategy=ttnn.ShardStrategy.WIDTH,
             ),
             None,
@@ -375,6 +374,7 @@ def test_sharded_matmul(
         input_tensor_b = ttnn.to_memory_config(input_tensor_b, input_b_sharded_memory_config)
 
     output = ttnn.matmul(input_tensor_a, input_tensor_b, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+
     output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
     output = ttnn.from_device(output)
     output = ttnn.to_torch(output)
