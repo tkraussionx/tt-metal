@@ -99,6 +99,18 @@ namespace tt::tt_metal {
             log_debug(LogOp, "output_nhw: {} output_nhw_padded: {} num_cores_nhw: {}", output_nhw, output_nhw_padded, num_cores_nhw_);
             return (output_nhw_padded / num_cores_nhw_);
         }
+
+        /**
+         * Calculate output tensor shard height
+         */
+        uint32_t get_output_shard_unpadded_y(bool snap_to_tile = false) const {
+            TT_ASSERT(has_parallel_config_, "Parallel config is not set in SlidingWindowConfig");
+            Shape output_shape = get_output_shape();
+            uint32_t output_nhw = output_shape[0] * output_shape[1] * output_shape[2];
+            uint32_t output_nhw_padded = round_up(output_nhw, num_cores_nhw_ * (1));
+            log_debug(LogOp, "output_nhw: {} output_nhw_padded: {} num_cores_nhw: {}", output_nhw, output_nhw_padded, num_cores_nhw_);
+            return (output_nhw / num_cores_nhw_);
+        }
     }; // struct SlidingWindowConfig
 
     namespace sliding_window {

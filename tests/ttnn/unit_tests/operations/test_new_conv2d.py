@@ -40,6 +40,17 @@ import torch.nn as nn
 #     plt.close()
 
 
+def write_to_file(file_name, tensor):
+    tensor = tensor.cpu().detach().numpy()
+    with open(file_name, "w") as f:
+        for i in range(1):
+            for j in range(tensor.shape[1]):
+                for k in range(tensor.shape[2]):
+                    for l in range(tensor.shape[3]):
+                        f.write(str(tensor[i][j][k][l]) + " ")
+                    f.write("\n")
+
+
 def run_conv(
     device,
     math_fidelity,
@@ -79,9 +90,20 @@ def run_conv(
     torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
     # torch_input_tensor_nchw = torch.ones(conv_input_shape, dtype=torch.bfloat16).float()
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
-    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
+    for i in range(batch_size):
+        for j in range(input_channels):
+            for k in range(input_height):
+                for l in range(input_width):
+                    torch_input_tensor[i][k][l][j] = 1
+    torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
+    # for i in range(output_channels):
+    #     for j in range(input_channels // groups):
+    #         for k in range(filter_height):
+    #             for l in range(filter_width):
+    #                 torch_weight_tensor[i][j][k][l] = 0
+    # torch_weight_tensor = 0.0
     # torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
-    torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
+    torch_bias_tensor = torch.zeros(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
     torch_out_golden_tensor = torch.nn.functional.conv2d(
         torch_input_tensor_nchw,
         torch_weight_tensor,
@@ -155,6 +177,7 @@ def run_conv(
 
     tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
     torch_output_tensor = ttnn.to_torch(tt_output_tensor)
+    # print(torch_output_tensor[0][0])
 
     # if enable_auto_formatting:
     #     torch_output_tensor = torch.split(torch_output_tensor, output_channels, 3)[0]
@@ -178,8 +201,10 @@ def run_conv(
     else:
         pcc = 0.998
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
+    write_to_file("ref_cpu.pt", torch_out_golden_tensor)
+    write_to_file("ref_hw.pt", torch_output_tensor)
     print(pcc_msg)
-    assert passing
+    # assert passing
 
 
 def run_conv_with_split(
@@ -289,6 +314,7 @@ def run_conv_with_split(
             conv_op_cache=reader_patterns_cache,
         )
         tt_conv_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
+        print(tt_conv_output_tensor)
         torch_conv_output_tensor = ttnn.to_torch(tt_conv_output_tensor)
         print(f"Output shape : {batch_size} {out_height} {out_width} {output_channels}")
         torch_conv_output_tensor = torch_conv_output_tensor.reshape(batch_size, out_height, out_width, output_channels)

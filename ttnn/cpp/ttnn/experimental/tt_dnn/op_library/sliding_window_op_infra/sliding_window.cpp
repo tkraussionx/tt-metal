@@ -46,7 +46,7 @@ namespace tt::tt_metal::sliding_window {
     std::vector<std::pair<uint32_pair_t, uint32_pair_t>> generate_shard_boundaries(const SlidingWindowConfig& config, const std::vector<uint32_t>& op_trace_metadata) {
         std::vector<std::pair<uint32_pair_t, uint32_pair_t>> shard_boundaries;
         uint32_t num_cores = config.num_cores_nhw_;
-        uint32_t output_shard_h = config.get_output_shard_y(config.snap_to_tile_);
+        uint32_t output_shard_h = config.get_output_shard_unpadded_y(config.snap_to_tile_);
         uint32_t padded_input_w = config.input_hw_.second + 2 * config.pad_hw_.second;
         uint32_t max_index = op_trace_metadata.size();
         uint32_t halo_with_pad_len = (config.window_hw_.first - 1) * padded_input_w + config.window_hw_.second - 1;
@@ -74,7 +74,7 @@ namespace tt::tt_metal::sliding_window {
     std::vector<std::pair<bool, uint32_pair_t>> generate_tensor_metadata(const std::vector<bool>& pad_metadata, const SlidingWindowConfig& config, uint32_t reshard_num_cores_nhw) {
         Shape input_shape = config.get_input_shape();
         uint32_t input_nhw = input_shape[0] * input_shape[1] * input_shape[2];
-        uint32_t input_nhw_padded = round_up(input_nhw, config.num_cores_nhw_ * constants::TILE_HEIGHT);
+        uint32_t input_nhw_padded = round_up(input_nhw, config.num_cores_nhw_ );
         uint32_t input_shard_height = input_nhw_padded / config.num_cores_nhw_;
         uint32_t input_reshard_height = reshard_num_cores_nhw == 0 ? input_shard_height : round_up(input_nhw, reshard_num_cores_nhw * constants::TILE_HEIGHT) / reshard_num_cores_nhw;
 

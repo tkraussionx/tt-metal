@@ -672,6 +672,11 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
         // call conv micro op
         std::vector<int> conv_params = {
             (int)kernel_size[0], (int)kernel_size[1], (int)stride[0], (int)stride[1], (int)padding[0], (int)padding[1]};
+
+        halo_output.print();
+        std::cout << "exiting now from conv2d" << std::endl;
+        //std::exit(1);
+
         auto conv_output = tt::tt_metal::optimized_conv_new(
             halo_output,
             weight_tensor_on_device,

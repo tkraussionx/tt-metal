@@ -145,6 +145,7 @@ Tensor halo_op(const Tensor& input_tensor,
         }
 
         uint32_t max_out_nsticks_per_core = Halo::sliding_window_max_out_nsticks_per_core.at(sliding_window_hash);
+        //max_out_nsticks_per_core = 140;
         ParallelConfig p_config;
         p_config.grid = input_tensor.shard_spec().value().grid;
         p_config.shard_scheme = input_tensor.memory_config().memory_layout;

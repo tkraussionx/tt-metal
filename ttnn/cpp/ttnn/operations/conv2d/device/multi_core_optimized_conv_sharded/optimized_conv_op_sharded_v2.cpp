@@ -966,7 +966,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
                     "writer_tiled_out_1d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
             }
         }
-
+        std::cout << "compute kernel " << compute_kernel << std::endl;
+        std::cout << "writer_mcast_sender_kernel: " << writer_mcast_sender_kernel << std::endl;
+        std::cout << "writer_mcast_receiver_kernel: " << writer_mcast_receiver_kernel << std::endl;
+        std::cout << "reader_kernel: " << reader_kernel << std::endl;
         // Local L1 to store array for reader indices
         // All convs use packed uint16 indices, so each entry can be 2B (not 4)
         CircularBufferConfig cb_for_reader_indices_config =

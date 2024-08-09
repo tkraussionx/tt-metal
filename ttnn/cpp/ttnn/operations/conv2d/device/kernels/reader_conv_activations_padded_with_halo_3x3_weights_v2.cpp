@@ -5,7 +5,38 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "firmware_common.h"
+#define ENABLE_DEBUG 1
 
+
+#if ENABLE_DEBUG
+#include "debug/dprint.h"
+
+inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uint32_t start = 0) {
+    volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr) + start * pagelen;
+    for (uint32_t page = 0; page < npages; ++ page) {
+        DPRINT << start + page << ": ";
+        for (uint32_t j = 0; j < pagelen; ++ j, ++ ptr) {
+            DPRINT << BF16(*ptr) << " ";
+        }
+        DPRINT << ENDL();
+    }
+}
+#endif
+
+// FORCE_INLINE
+// void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr, const uint32_t reader_channel_idx,
+//         const uint32_t conv_act_c_read_bytes, const uint32_t coalesced_read_bytes, const uint32_t stride_h_bytes) {
+
+//     constexpr uint32_t unroll_factor = WINDOW_INNER;
+//     uint32_t act_l1_read_addr_plus_offset = act_l1_read_addr + (reader_channel_idx * conv_act_c_read_bytes);
+//     #pragma GCC unroll unroll_factor
+//     for (uint32_t inner = 0; inner < WINDOW_INNER; inner++) {
+//         noc_async_read_one_packet_with_state<true>(act_l1_read_addr_plus_offset, l1_write_addr_act);
+//         l1_write_addr_act += coalesced_read_bytes;
+//         // +2 is hard-coded, TODO: generalize
+//         act_l1_read_addr_plus_offset += stride_h_bytes;
+//     }
+// }
 
 void kernel_main() {
     constexpr uint32_t LOCAL_PACKED_READER_INDICES_MAX_SIZE = 128;
@@ -29,6 +60,9 @@ void kernel_main() {
     constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(14);
     constexpr uint32_t act_block_h_datums_last_block = get_compile_time_arg_val(23);
 
+    DPRINT << "conv_act_size_w " << conv_act_size_w_ << " act_block_h_datums " << act_block_h_datums << " act_block_num_tiles "
+     << act_block_num_tiles << " act_num_blocks_h " << act_num_blocks_h << " act_block_h_datums_last_block " << act_block_h_datums_last_block << ENDL();
+    DPRINT << "windoes_OUTER" << window_outer << " window_inner " << window_inner << " weight_size_w " << weight_size_w << " weight_size_h " << weight_size_h << ENDL();
     uint32_t act_block_h_datums_read_last_block;
     if (act_block_h_datums_last_block > act_block_h_datums) {
         act_block_h_datums_read_last_block = act_block_h_datums / 2;
@@ -118,8 +152,13 @@ void kernel_main() {
             cb_reserve_back(cb_id_act, act_block_num_tiles_read);
             uint32_t l1_write_addr_act = get_write_ptr(cb_id_act);
             uint32_t reader_offset = act_l1_read_addr + (reader_offsets[reader_offset_idx] * conv_act_c_read_bytes);
+            if(outer == 0) {
+                //print_pages(reader_offset, 64, 128, 0);
+            }
+            //print_pages(reader_offset, 64, 49, 0);
             // #pragma GCC unroll 4 // unroll didn't help, but act_block_h_datums (loop bound) being const does help
             uint32_t act_block_h_datums_read_curr = bh == act_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
+            DPRINT << " act_block_h_datums_read_curr " << act_block_h_datums_read_curr << " act_block_num_tiles_read " << act_block_num_tiles_read << ENDL();
             for (uint32_t bhd = 0; bhd < act_block_h_datums_read_curr; bhd++) {
                 // local read from reader_index + reader_offset;
                 #ifdef SPLIT_READER
@@ -137,6 +176,7 @@ void kernel_main() {
                 act_l1_offset = reader_offset + (reader_idx_2 * conv_act_c_read_bytes);
                 noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
                 l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
+                //print_pages(reader_offset, 64, 1, 0);
 
                 reader_idx++;
             }
