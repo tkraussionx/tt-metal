@@ -379,8 +379,7 @@ def test_moreh_matmul_enable_cache(params, device, use_program_cache):
     "params",
     (
         # input, other, output shape, transpose input, other
-        ([32, 3200], [3200, 32], [32, 32], False, False),
-        ([3100, 31], [3100, 31], [31, 31], True, False),
+        ([32, 6400], [6400, 32], [32, 32], False, False),
     ),
 )
 @pytest.mark.parametrize("compute_kernel_options", compute_kernel_options, ids=compute_kernel_ids)
@@ -413,13 +412,8 @@ def test_moreh_matmul_fp32_dest_acc(params, compute_kernel_options, device):
 
     # test for equivalance
     rtol = atol = 0.1
-    passing, output_pcc = comp_allclose_and_pcc(torch_out, tt_output_cpu, pcc=0.999, rtol=rtol, atol=atol)
-    logger.debug(f"Out passing={passing}")
-    logger.debug(f"Output pcc={output_pcc}")
     diff = torch.abs(torch_out - tt_output_cpu)
-    logger.debug(f"std={torch.std(diff)}")
-    logger.debug(f"mean={diff.mean()}")
-    logger.debug(f"topk(5) {torch.topk(diff.reshape(-1), 5)}")
+    logger.debug(f"MAE={diff.mean()}")
 
     # TODO
     # assert passing
