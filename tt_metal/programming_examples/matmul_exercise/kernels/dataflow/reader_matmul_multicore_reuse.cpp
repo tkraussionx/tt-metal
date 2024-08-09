@@ -35,10 +35,6 @@ void kernel_main() {
     // in0/in1 common args
     uint32_t num_blocks                         = get_arg_val<uint32_t>(16);
 
-    // batch args
-    uint32_t MtKt                               = get_arg_val<uint32_t>(17); // if 0
-    uint32_t KtNt                               = get_arg_val<uint32_t>(18);
-
     constexpr bool in0_is_dram                  = get_compile_time_arg_val(0) == 1;
     constexpr bool in1_is_dram                  = get_compile_time_arg_val(1) == 1;
 
@@ -107,6 +103,4 @@ void kernel_main() {
         cb_push_back(cb_id_in1, in1_block_num_tiles);
 
     }
-    in1_tensor_start_tile_id += KtNt;
-    in0_tensor_start_tile_id += MtKt;
 }
