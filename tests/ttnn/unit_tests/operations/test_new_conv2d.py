@@ -106,8 +106,9 @@ def run_first_conv_unfolded(
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
         height_sharding=use_1d_systolic_array,
-        input_channels_alignment=16,
-        deallocate_activation=deallocate_activation,
+        input_channels_alignment=8,
+        deallocate_activation=True,  ##deallocate_activation,
+        reallocate_halo_output=True,
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,
         enable_act_double_buffer=False,
@@ -117,6 +118,10 @@ def run_first_conv_unfolded(
     if config_override and "act_block_h" in config_override:
         conv_config.act_block_h_override = config_override["act_block_h"]
         print("Setting Act Block H to ", conv_config.act_block_h_override)
+
+    torch_input_tensor_nchw = torch.nn.functional.pad(torch_input_tensor_nchw, (3, 3 + 26))
+    input_width_padded = input_width + 6 + 26
+    conv_input_shape[-1] = input_width_padded
 
     tt_input_tensor = ttnn.from_torch(
         torch_input_tensor_nchw,
@@ -128,7 +133,7 @@ def run_first_conv_unfolded(
 
     # # Padding
     padded_input_channels = 4
-    channels_padded_shape = [batch_size, padded_input_channels, input_height, input_width]
+    channels_padded_shape = [batch_size, padded_input_channels, input_height, input_width_padded]
 
     # pad input mem config
     grid = (8, 6)
@@ -158,7 +163,7 @@ def run_first_conv_unfolded(
 
     # Reshape
     tt_input_tensor = tt_lib.tensor.reshape(
-        tt_input_tensor, batch_size, input_height, padded_input_channels * 2, input_width // 2
+        tt_input_tensor, batch_size, input_height, padded_input_channels * 2, input_width_padded // 2
     )
 
     # Transpose HW
@@ -171,9 +176,13 @@ def run_first_conv_unfolded(
     tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, transpose_mem_config)
     tt_input_tensor = ttnn.transpose(tt_input_tensor, 2, 3, memory_config=transpose_mem_config)
 
+    tt_input_tensor = ttnn.slice(
+        tt_input_tensor, [0, 0, 0, 0], [batch_size - 1, input_height - 1, 115 - 1, 2 * padded_input_channels - 1]
+    )
+
     # Reshape
     tt_input_tensor = tt_lib.tensor.reshape(
-        tt_input_tensor, 1, 1, batch_size * input_height * input_width // 2, padded_input_channels * 2
+        tt_input_tensor, 1, 1, batch_size * input_height * 115, padded_input_channels * 2
     )
     print(tt_input_tensor.shape)
     mem_config = ttnn.get_memory_config(tt_input_tensor)
@@ -197,19 +206,37 @@ def run_first_conv_unfolded(
     # mem_config = ttnn.get_memory_config(tt_input_tensor)
     # print(mem_config)
 
+    # breakpoint()
+
+    # conv_weight_shape = [output_channels, input_channels // groups, filter_height, filter_width]
+    # reshaped_conv_weight_shape = [output_channels, 2 * input_channels // groups, filter_height, filter_width // 2]
+
+    breakpoint()
+
+    tt_weight_tensor = ttnn.pad(tt_weight_tensor, padding=((0, 0), (0, 1), (0, 0), (0, 0)), value=0)
+    reshaped_conv_weight_shape = [
+        output_channels,
+        2 * padded_input_channels // groups,
+        filter_height,
+        filter_width // 2,
+    ]
+    tt_weight_tensor = ttnn.reshape(tt_weight_tensor, reshaped_conv_weight_shape)
+
     [tt_output_tensor_on_device, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
         input_tensor=tt_input_tensor,
         weight_tensor=tt_weight_tensor,
-        in_channels=input_channels,
+        in_channels=8,
+        # in_channels=input_channels,
         out_channels=output_channels,
         device=device,
         bias_tensor=tt_bias_tensor,
-        kernel_size=(filter_height, filter_width),
-        stride=(stride_h, stride_w),
-        padding=(pad_h, pad_w),
+        kernel_size=(filter_height, filter_width // 2),
+        stride=(stride_h, stride_w // 2),
+        # padding=(pad_h, pad_w),
+        padding=(pad_h, 0),
         batch_size=batch_size,
         input_height=input_height,
-        input_width=input_width,
+        input_width=115,
         conv_config=conv_config,
         conv_op_cache=reader_patterns_cache,
         debug=debug,

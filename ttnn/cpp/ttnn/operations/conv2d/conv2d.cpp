@@ -621,7 +621,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
         conv_config.act_block_h_override,
         kernel_size[1],
         conv_config.fp32_dest_acc_enabled,
-        conv_config.input_channels_alignment == 16);
+        conv_config.input_channels_alignment <= 16);
     bool weight_is_on_device = ttnn::is_tensor_on_device_or_multidevice(weight_tensor);
     ttnn::Tensor weight_tensor_on_device = weight_tensor;
     std::optional<ttnn::Tensor> bias_tensor_on_device = bias_tensor;
