@@ -19,6 +19,7 @@
 #include "dev_msgs.h"
 #include "noc/noc_parameters.h"
 #include "tt_metal/impl/device/device_pool.hpp"
+#include "tt_metal/detail/persistent_kernel_cache.hpp"
 
 namespace tt {
 
@@ -261,19 +262,23 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
         auto active_eth_cores = this->get_active_ethernet_cores();
 
         if (active_eth_cores.find(logical_core_from_ethernet_core(phys_core)) != active_eth_cores.end()) {
-            int eriscv_id = build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 0;
-            ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[eriscv_id]->get_target_out_path(""));
-            uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, eriscv_id);
-            log_debug(LogDevice, "ERISC fw binary size: {} in bytes", kernel_size16 * 16);
-            llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
+            if (not getenv("TT_METAL_GALAXY_SKIP_LOADING_FW")) {
+                int eriscv_id = build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 0;
+                ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[eriscv_id]->get_target_out_path(""));
+                uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, eriscv_id);
+                log_debug(LogDevice, "ERISC fw binary size: {} in bytes", kernel_size16 * 16);
+                llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
+            }
             llrt::launch_erisc_app_fw_on_core(this->id(), phys_core);
         } else {
             tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), phys_core));
-            int eriscv_id = build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 1;
-            ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[eriscv_id]->get_target_out_path(""));
-            uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, eriscv_id);
-            log_debug(LogDevice, "ERISC fw binary size: {} in bytes", kernel_size16 * 16);
-            llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
+            if (not getenv("TT_METAL_GALAXY_SKIP_LOADING_FW")) {
+                int eriscv_id = build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 1;
+                ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[eriscv_id]->get_target_out_path(""));
+                uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, eriscv_id);
+                log_debug(LogDevice, "ERISC fw binary size: {} in bytes", kernel_size16 * 16);
+                llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
+            }
             llrt::program_risc_startup_addr(this->id(), phys_core);
         }
     } else {
@@ -286,7 +291,9 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
                 launch_msg->kernel_config.ncrisc_kernel_size16 = kernel_size16;
             }
             log_debug(LogDevice, "RISC {} fw binary size: {} in bytes", riscv_id, kernel_size16 * 16);
-            llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
+            if (not getenv("TT_METAL_GALAXY_SKIP_LOADING_FW")) {
+                llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
+            }
         }
     }
     //This is an initialization launch message.
@@ -1824,7 +1831,10 @@ void Device::init_command_queue_host() {
 
 void Device::init_command_queue_device() {
 
+    detail::EnablePersistentKernelCache();
     this->compile_command_queue_programs();
+    detail::DisablePersistentKernelCache();
+
     if (this->is_mmio_capable()) {
         TT_ASSERT(this->command_queue_programs.size() == 1);
     } else {
