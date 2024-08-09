@@ -2043,6 +2043,18 @@ bool Device::close() {
         }
         log_file.close();
     }
+    if (this->id() == 0)
+    {
+        std::ofstream log_file;
+        std::vector<uint32_t> fw_buffer;
+        fw_buffer = llrt::read_hex_vec_from_core(this->id(), phys_core, PROFILER_L1_BUFFER_BR, 20*4);
+        log_file.open("./NOC_DUMP.log");
+        for (auto &b: fw_buffer)
+        {
+            log_file << b << std::endl;
+        }
+        log_file.close();
+    }
     return true;
 }
 

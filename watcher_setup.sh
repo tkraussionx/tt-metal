@@ -1,6 +1,6 @@
 rm -rf *.log
 
-#tt-smi-metal -r 0,1,2,3
+tt-smi-metal -r 0,1,2,3
 
 unset TT_METAL_WATCHER
 
@@ -60,7 +60,7 @@ mv ./close.log ./close_1.log
 #mv ./after.log ./after_2.log
 #mv ./close.log ./close_2.log
 
-cat -n ./dprint_1.log
-cat -n ./after_1.log
-cat -n ./close_1.log
+#cat -n ./dprint_1.log
+#cat -n ./after_1.log
+#cat -n ./close_1.log
 diff ./after_1.log ./close_1.log

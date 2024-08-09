@@ -266,12 +266,15 @@ inline __attribute__((always_inline)) void noc_fast_write_dw_inline(uint32_t noc
   }
 }
 
-constexpr uint32_t corruptIndex = 1199 - 1;
+constexpr uint32_t corruptIndex = 1259 - 1;
 inline __attribute__((always_inline)) void noc_fast_atomic_increment(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t vc, uint32_t incr, uint32_t wrap, bool linked, bool posted = false) {
 volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
+volatile tt_l1_ptr uint32_t *test = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_BR);
   while (!noc_cmd_buf_ready(noc, cmd_buf));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)(addr & 0xFFFFFFFF));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_COORDINATE, (uint32_t)(addr >> NOC_ADDR_COORD_SHIFT));
+  NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)(NOC_XY_ADDR(my_x[noc], my_y[noc],(PROFILER_L1_BUFFER_BR + 52)) & 0xFFFFFFFF));
+  NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, (uint32_t)(NOC_XY_ADDR(my_x[noc], my_y[noc],(PROFILER_L1_BUFFER_BR + 52)) >> 32));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL,
                         NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc) |
                         (linked ? NOC_CMD_VC_LINKED : 0x0) |
@@ -279,6 +282,39 @@ volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr u
                         NOC_CMD_AT);
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, NOC_AT_INS(NOC_AT_INS_INCR_GET) | NOC_AT_WRAP(wrap) | NOC_AT_IND_32((addr>>2) & 0x3) | NOC_AT_IND_32_SRC(0));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_DATA, incr);
+
+  uint32_t tmp = 0;
+  static bool one_time = true;
+  if (one_time)
+  {
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_TARG_ADDR_LO);
+      test[0] = tmp;
+      test[1] = (uint32_t)(addr & 0xFFFFFFFF);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_TARG_ADDR_COORDINATE);
+      test[2] = tmp;
+      test[3] = (uint32_t)(addr >> NOC_ADDR_COORD_SHIFT);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_CTRL);
+      test[4] = tmp;
+      test[5] = NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc) |
+                            (linked ? NOC_CMD_VC_LINKED : 0x0) |
+                            (posted ? 0 : NOC_CMD_RESP_MARKED) |
+                            NOC_CMD_AT;
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_AT_LEN_BE);
+      test[6] = tmp;
+      test[7] = (NOC_AT_INS(NOC_AT_INS_INCR_GET) | NOC_AT_WRAP(wrap) | NOC_AT_IND_32((addr>>2) & 0x3) | NOC_AT_IND_32_SRC(0));
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_AT_DATA);
+      test[8] = tmp;
+      test[9] = incr;
+      one_time = false;
+  }
+  else
+  {
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_TARG_ADDR_LO);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_TARG_ADDR_COORDINATE);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_CTRL);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_AT_LEN_BE);
+      tmp = NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_AT_DATA);
+  }
   static bool onetime = true;
   if (onetime)
   {
@@ -289,12 +325,11 @@ volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr u
   }
 
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, 0x1);
-DPRINT <<  noc << "," << cmd_buf << "," << (uint32_t)NOC_CMD_CTRL << ENDL();
   if (onetime)
   {
       //for (int i=0; i < 100000; i++)
       {
-          DPRINT << "T" << briscBuffer[corruptIndex] << ENDL();
+          DPRINT << "V" << briscBuffer[corruptIndex] << ENDL();
       }
   }
   //onetime = false;

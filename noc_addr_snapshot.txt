@@ -1,0 +1,11 @@
+noc_fast_atomic_increment
+TARG_ADDR_LO: 107232
+TARG_ADDR_COORDINATE: 9312
+CTRL: 8337
+AT_LEN_BE: 4220
+NOC_AT_DATA: 0
+
+noc_semaphore_inc
+noc_index: 0
+addr: 107232
+incr: 0

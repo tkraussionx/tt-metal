@@ -359,12 +359,19 @@ public:
     volatile tt_l1_ptr uint32_t *briscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(MEM_BRISC_FIRMWARE_BASE);
         if (this->cb_mode) {
             uint32_t sem_l1_addr = get_semaphore(this->cb_mode_local_sem_id);
+            volatile tt_l1_ptr uint32_t *sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sem_l1_addr);
             uint64_t sem_noc_addr = get_noc_addr(sem_l1_addr);
             uint32_t tmp = briscBuffer[corruptIndex];
             DPRINT << "F" << briscBuffer[corruptIndex] << ENDL();
-            DPRINT << val << "L, " <<sem_l1_addr << "," << sem_noc_addr << "," << (uint16_t)this->cb_mode_local_sem_id<< ENDL();
-            noc_semaphore_inc(sem_noc_addr, val);
+            DPRINT << "VAL: "<< val  << "," <<sem_l1_addr << "," << sem_noc_addr << "," << MEM_BRISC_FIRMWARE_BASE<< ENDL();
+            DPRINT << "SEMA_b: " << sem[0] << ENDL();
+            noc_semaphore_inc(sem_noc_addr, 17);
             DPRINT << "G" << briscBuffer[corruptIndex] << ENDL();
+            noc_async_atomic_barrier();
+            DPRINT << "SEMA_a: " << sem[0] << ENDL();
+            noc_semaphore_inc(sem_noc_addr, -17);
+            noc_async_atomic_barrier();
+            noc_semaphore_inc(sem_noc_addr, val);
             noc_async_atomic_barrier();
             //briscBuffer[corruptIndex] = tmp;
         }
