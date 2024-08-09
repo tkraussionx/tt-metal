@@ -37,7 +37,6 @@ operation::ProgramWithCallbacks matmul_multi_core(const Tensor &a, const Tensor 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    std::cout << num_cores_x << " " << num_cores_y << std::endl;
     uint32_t c_batch_size = get_batch_size(cshape);
     auto num_output_tiles_total = c_batch_size * cshape[-2] * cshape[-1] / TILE_HW;
     auto
@@ -121,7 +120,6 @@ operation::ProgramWithCallbacks matmul_multi_core(const Tensor &a, const Tensor 
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_args_group_1});
 
     if (!core_group_2.ranges().empty()) {
-        std::cout << "core group 2 not empty" << std::endl;
         vector<uint32_t> compute_args_group_2 = {
             1,                                 // B
             1,                                 // Mt
