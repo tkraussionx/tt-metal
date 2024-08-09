@@ -58,7 +58,6 @@ void matmul_multicore_reuse(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfl
     tt::DataFormat cb_data_format = tt::DataFormat::Float16_b;
     MathFidelity math_fidelity = MathFidelity::HiFi4;
     uint32_t single_tile_size = detail::TileSize(cb_data_format);
-    //uint32_t single_tile_size = 2 * 1024;
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
@@ -321,10 +320,13 @@ int main(int argc, char **argv) {
     uint32_t M = 3584;
     uint32_t N = 4096;
     uint32_t K = 128;
+    bool skip_pcc = false;
     try {
         std::tie(M, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-m", 3584);
         std::tie(N, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-n", 4096);
         std::tie(K, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-k", 128);
+        std::tie(skip_pcc, input_args) =
+           test_args::has_command_option_and_remaining_args(input_args, "--skip-pcc");
 
         test_args::validate_remaining_args(input_args);
     } catch (const std::exception& e) {
@@ -353,7 +355,9 @@ int main(int argc, char **argv) {
 
         /* Golden Matmul running on CPU (Float)*/
         vector<bfloat16> golden_vec(M * N, 0);
-        golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K);
+        if (!skip_pcc) {
+            golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K);
+        }
 
         /* Input vector tilizing */
         tilize(src0_vec, M, K);
@@ -366,9 +370,13 @@ int main(int argc, char **argv) {
 
         log_info(tt::LogVerif, "Output vector of size {}", result_vec.size());
 
-        float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
-        log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
-        TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
+        if (!skip_pcc) {
+            float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
+            log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
+            TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
+        } else {
+            log_info(tt::LogVerif, "Skip PCC");
+        }
 
         pass &= CloseDevice(device);
 

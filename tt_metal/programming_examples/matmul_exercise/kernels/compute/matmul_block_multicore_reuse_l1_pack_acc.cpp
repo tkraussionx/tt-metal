@@ -21,6 +21,7 @@ void MAIN {
     uint32_t out_subblock_h = get_compile_time_arg_val(8); // inner row block size in tiles
     uint32_t out_subblock_w = get_compile_time_arg_val(9); // inner column block size in tiles
     uint32_t out_subblock_num_tiles = get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
+    uint32_t out_block_num_tiles = get_compile_time_arg_val(11); // per_core_Mt * per_core_Nt
 
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
@@ -114,7 +115,11 @@ void MAIN {
             in0_index_subblock_offset += in0_subblock_num_tiles;
         }
 
-        // if (spill) enable_reload = true;
+        // Last iteration does spill and reload to output buffer
+        if (block < num_blocks - 2) {
+            cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
+            cb_pop_front(mm_partials_cb_id, out_block_num_tiles);
+        }
         if (block == num_blocks - 2) {
             enable_reload = true;
         }  // reload when last iteration

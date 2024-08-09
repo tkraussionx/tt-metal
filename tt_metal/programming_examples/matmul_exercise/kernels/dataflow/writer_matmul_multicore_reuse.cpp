@@ -37,7 +37,6 @@ void kernel_main() {
     };
 
 
-    bool one_time_profile = true;
     uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
     for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
         uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;

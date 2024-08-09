@@ -59,7 +59,6 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     tt::DataFormat cb_data_format = tt::DataFormat::Float16_b;
     MathFidelity math_fidelity = MathFidelity::HiFi4;
     uint32_t single_tile_size = detail::TileSize(cb_data_format);
-    //uint32_t single_tile_size = 2 * 1024;
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
@@ -68,7 +67,6 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     /*
     * EXtracting Matrix dimensions from input/output vectors
     */
-    // C = A*B
     // MN = MK*KN
     uint32_t Mt = M / TILE_HEIGHT;
     uint32_t Kt = K / TILE_WIDTH;
@@ -77,47 +75,41 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     uint32_t MtKt = Mt * Kt;
     uint32_t MtNt = Mt * Nt;
 
-    // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
-    // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
     uint32_t in0_block_w = 2;
-    //uint32_t out_subblock_h = 4;
-    //uint32_t out_subblock_w = 2;
-    //uint32_t per_core_M = 16;
-    //uint32_t per_core_N = 16;
 
     // Get large matmul params
     auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
-    uint32_t per_core_M = std::get<0>(matmul_params);
-    uint32_t per_core_N = std::get<1>(matmul_params);
+    uint32_t per_core_Mt = std::get<0>(matmul_params);
+    uint32_t per_core_Nt = std::get<1>(matmul_params);
     uint32_t out_subblock_h = std::get<2>(matmul_params);
     uint32_t out_subblock_w = std::get<3>(matmul_params);
 
     log_info(tt::LogVerif, " -- Metalium Core Sizing --");
     log_info(tt::LogVerif, " -- num_cores_x= {} nm_cores_y= {}", num_cores_x, num_cores_y);
-    log_info(tt::LogVerif, " -- per_core_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --", per_core_M, per_core_N, out_subblock_h, out_subblock_w);
+    log_info(tt::LogVerif, " -- per_core_Mt= {} -- per_core_Nt= {} -- out_subblock_h= {} -- out_subblock_w= {} --", per_core_Mt, per_core_Nt, out_subblock_h, out_subblock_w);
 
-    TT_ASSERT(Mt % per_core_M == 0);
-    TT_ASSERT(Nt % per_core_N == 0);
+    TT_ASSERT(Mt % per_core_Mt == 0);
+    TT_ASSERT(Nt % per_core_Nt == 0);
     TT_ASSERT(Kt % in0_block_w == 0);
 
-    uint32_t in0_block_tiles = per_core_M * in0_block_w;
+    uint32_t in0_block_tiles = per_core_Mt * in0_block_w;
     uint32_t in0_CB_tiles = in0_block_tiles * 2; // double buffer
     uint32_t in0_CB_size = in0_CB_tiles * single_tile_size;
-    uint32_t in1_block_tiles = per_core_N * in0_block_w;
+    uint32_t in1_block_tiles = per_core_Nt * in0_block_w;
     uint32_t in1_CB_tiles = in1_block_tiles * 2; // double buffer
     uint32_t in1_CB_size = in1_CB_tiles * single_tile_size;
-    uint32_t out_block_tiles = per_core_M * per_core_N;
+    uint32_t out_block_tiles = per_core_Mt * per_core_Nt;
     uint32_t out_CB_tiles = out_block_tiles; // No double buffer
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
 
     // Compute kernel compile time args
     uint32_t num_blocks = (Kt/in0_block_w);
 
-    uint32_t in0_num_subblocks = (per_core_M/out_subblock_h);
+    uint32_t in0_num_subblocks = (per_core_Mt/out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h*in0_block_w*in0_num_subblocks;
     uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
 
-    uint32_t in1_num_subblocks = (per_core_N/out_subblock_w);
+    uint32_t in1_num_subblocks = (per_core_Nt/out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w*in0_block_w*in1_num_subblocks;
     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
@@ -138,14 +130,15 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
         out_subblock_h, // out_subblock_h
         out_subblock_w, // out_subblock_w
         out_subblock_num_tiles, // out_subblock_num_tiles
+        out_block_tiles, // out_block_num_tiles
     };
 
 
     /*
     * Multi-Core prep
     */
-    uint32_t num_blocks_y = Mt / per_core_M;
-    uint32_t num_blocks_x = Nt / per_core_N;
+    uint32_t num_blocks_y = Mt / per_core_Mt;
+    uint32_t num_blocks_x = Nt / per_core_Nt;
     uint32_t num_blocks_total =  num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
     CoreCoord start_core = {0, 0};
@@ -337,24 +330,24 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
 
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)  src0_dram_buffer->address(), // in0_buffer_addr
-                (std::uint32_t)  Kt * per_core_M * core_idx_y, // in0_buffer_start_tile_id
+                (std::uint32_t)  Kt * per_core_Mt * core_idx_y, // in0_buffer_start_tile_id
                 (std::uint32_t)  1, // in0_buffer_stride_w
                 (std::uint32_t)  Kt, // in0_buffer_stride_h
                 (std::uint32_t)  in0_block_w, // in0_buffer_next_block_stride
 
                 (std::uint32_t)  in0_block_w, // in0_block_w
-                (std::uint32_t)  per_core_M, // in0_block_h
-                (std::uint32_t)  in0_block_w * per_core_M, // in0_block_num_tiles
+                (std::uint32_t)  per_core_Mt, // in0_block_h
+                (std::uint32_t)  in0_block_w * per_core_Mt, // in0_block_num_tiles
 
                 (std::uint32_t)  src1_dram_buffer->address(), // in1_buffer_addr
-                (std::uint32_t)  per_core_N * core_idx_x, //in1_buffer_start_tile_id
+                (std::uint32_t)  per_core_Nt * core_idx_x, //in1_buffer_start_tile_id
                 (std::uint32_t)  1, // in1_buffer_stride_w
                 (std::uint32_t)  Nt, // in1_buffer_stride_h
                 (std::uint32_t)  in0_block_w * Nt, //in1_buffer_next_block_stride
 
-                (std::uint32_t)  per_core_N, // in1_block_w
+                (std::uint32_t)  per_core_Nt, // in1_block_w
                 (std::uint32_t)  in0_block_w, //in1_block_h
-                (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
+                (std::uint32_t)  per_core_Nt * in0_block_w, // in1_block_num_tiles
 
                 (std::uint32_t)  Kt / in0_block_w, // num_blocks
 
@@ -381,7 +374,7 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
 
             std::vector<uint32_t> writer_args = {
                 (std::uint32_t) dst_dram_buffer->address(), // out_buffer_addr
-                (std::uint32_t) core_idx_x * per_core_N + core_idx_y * per_core_M * Nt, // out_buffer_start_tile_id
+                (std::uint32_t) core_idx_x * per_core_Nt + core_idx_y * per_core_Mt * Nt, // out_buffer_start_tile_id
                 (std::uint32_t) 1, // out_buffer_stride_w
                 (std::uint32_t) Nt,  // out_buffer_stride_h
                 (std::uint32_t) out_subblock_w, // out_buffer_next_subblock_stride_w
@@ -390,8 +383,8 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
                 (std::uint32_t) out_subblock_w, // out_subblock_w
                 (std::uint32_t) out_subblock_h, // out_subblock_h
                 (std::uint32_t) (out_subblock_w * out_subblock_h), // out_subblocks_w * out_subblocks_h
-                (std::uint32_t) (per_core_N / out_subblock_w), // out_num_subblocks_w
-                (std::uint32_t) (per_core_M / out_subblock_h), // out_num_subblocks_h
+                (std::uint32_t) (per_core_Nt / out_subblock_w), // out_num_subblocks_w
+                (std::uint32_t) (per_core_Mt / out_subblock_h), // out_num_subblocks_h
             };
 
             if(core_idx_x == 0 and core_idx_y == 0) {
@@ -440,13 +433,16 @@ int main(int argc, char **argv) {
     }
 
     std::vector<std::string> input_args(argv, argv + argc);
-    uint32_t M = 2240;
-    uint32_t N = 2560;
+    uint32_t M = 3584;
+    uint32_t N = 4096;
     uint32_t K = 128;
+    bool skip_pcc = false;
     try {
-        std::tie(M, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-m", 2240);
-        std::tie(N, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-n", 2560);
+        std::tie(M, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-m", 3584);
+        std::tie(N, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-n", 4096);
         std::tie(K, input_args) = test_args::get_command_option_uint32_and_remaining_args(input_args, "-k", 128);
+        std::tie(skip_pcc, input_args) =
+           test_args::has_command_option_and_remaining_args(input_args, "--skip-pcc");
 
         test_args::validate_remaining_args(input_args);
     } catch (const std::exception& e) {
@@ -458,12 +454,6 @@ int main(int argc, char **argv) {
         /* Silicon accelerator setup */
         constexpr int device_id = 0;
         Device *device = CreateDevice(device_id);
-
-        ////////////////////////////////////////////////////////////////////////////
-        //                      Matmul Parameters Setup
-        ////////////////////////////////////////////////////////////////////////////
-        // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
-        // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
 
         /* Create source data */
         uint32_t Mt = M / TILE_HEIGHT;
@@ -481,7 +471,9 @@ int main(int argc, char **argv) {
 
         /* Golden Matmul running on CPU (Float)*/
         vector<bfloat16> golden_vec(M * N, 0);
-        golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K);
+        if (!skip_pcc) {
+            golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K);
+        }
 
         /* Input vector tilizing */
         tilize(src0_vec, M, K);
@@ -494,9 +486,13 @@ int main(int argc, char **argv) {
 
         log_info(tt::LogVerif, "Output vector of size {}", result_vec.size());
 
-        float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
-        log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
-        TT_FATAL(pearson > 0.98, "PCC not high enough. Result PCC: {}, Expected PCC: 0.98", pearson);
+        if (!skip_pcc) {
+            float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
+            log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
+            TT_FATAL(pearson > 0.98, "PCC not high enough. Result PCC: {}, Expected PCC: 0.98", pearson);
+        } else {
+            log_info(tt::LogVerif, "Skip PCC");
+        }
 
         pass &= CloseDevice(device);
 
