@@ -50,7 +50,7 @@ inline void llk_unpack_AB_mop_config(const bool transpose_of_faces = false, cons
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB_init(
+ALWI void llk_unpack_AB_init(
     const std::uint32_t operandA,
     const std::uint32_t operandB,
     const std::uint32_t transpose = 0,
