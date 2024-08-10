@@ -32,7 +32,8 @@ void kernel_main() {
             noc_async_write_tile(itileC, s, l1_read_addr);
             noc_async_write_barrier();
             cb_pop_front(cb_id_out0, onetile);
-            itileC++;
+
+            // TODO: update itileC
         }
     }
 }

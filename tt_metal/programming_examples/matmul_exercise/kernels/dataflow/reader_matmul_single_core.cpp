@@ -63,19 +63,20 @@ void kernel_main() {
                 }
 
                 // TODO: Implement the indexing logic for itileA and itileB
-                itileA += 1;
-                itileB += (transpose_b) ? (1) : (Nt);
+                /*
+
+                */
             }  // Kt loop
 
             // TODO: Implement the indexing logic for itileA and itileB
-            if (!transpose_b) {
-                itileB -= KtNt;
-                itileB += 1;
-            }
-            itileA -= Kt;
+                /*
+
+                */
         }  // Nt loop
 
         // TODO: Implement the indexing logic for itileA and itileB
-        itileA += Kt;
+                /*
+
+                */
     }  // Mt loop
 }

@@ -32,10 +32,12 @@ void kernel_main() {
     const uint32_t in1_tile_bytes = get_tile_size(cb_id_in1);
     const DataFormat in1_data_format = get_dataformat(cb_id_in1);
 
-    // TODO:
-    uint32_t itileA = output_tile_start_id / Nt * Kt;
+    // TODO: assign values to the variables
+    /*
+    uint32_t itileA = ;
+    uint32_t itileB = ;
+    */
     uint32_t itileB_batch = output_tile_start_id % Nt;
-    uint32_t itileB = (transpose_b) ? (itileB_batch * Nt) : (itileB_batch);
 
     const InterleavedAddrGenFast<src0_is_dram> s0 = {
         .bank_base_address = src0_addr,
@@ -54,36 +56,22 @@ void kernel_main() {
         for (uint32_t kt = 0; kt < Kt; kt++) {
             // TODO:
             { // Read A's tile at (mt, kt)
-                cb_reserve_back(cb_id_in0, onetile);
-                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                noc_async_read_tile(itileA, s0, l1_write_addr_in0);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, onetile);
             }
 
+            // TODO:
             { // Read B's tile at (kt, nt)
-                cb_reserve_back(cb_id_in1, onetile);
-                uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                noc_async_read_tile(itileB, s1, l1_write_addr_in1);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in1, onetile);
             }
 
-            itileA += 1;
-            itileB += (transpose_b) ? (1) : (Nt);
+            // TODO: Implement the indexing logic for itileA and itileB
+            /*
+
+            */
         } // Kt loop
+
         itileB_batch += 1;
+        // TODO: Implement the indexing logic for itileA and itileB
+        /*
 
-        if (!transpose_b) {
-        itileB -= KtNt;
-        itileB += 1;
-        }
-
-        if (itileB_batch == Nt) {
-            itileB_batch = 0;
-            itileB = 0;
-        } else {
-            itileA -= Kt;
-        }
+        */
     }
 }
