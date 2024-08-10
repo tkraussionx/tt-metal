@@ -55,16 +55,15 @@ void kernel_main() {
     ASSERT(false);
     #endif
 
-    /* TODO: fill in the parameters
-    noc_semaphore_wait();
+    noc_semaphore_wait(mcast_sender_semaphore_addr_ptr, num_dests);
 
     // multicast local L1 buffer to all destination cores
     uint64_t dest_noc_multicast_addr =
-        get_noc_multicast_addr();
-    noc_async_write_multicast();
+        get_noc_multicast_addr(dest_noc_x_start, dest_noc_y_start, dest_noc_x_end, dest_noc_y_end, l1_buffer_dest_addr);
+    noc_async_write_multicast(l1_buffer_src_addr, dest_noc_multicast_addr, dram_buffer_size, num_dests);
     noc_async_write_barrier();
 
-    uint64_t mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr();
-    noc_semaphore_set_multicast();
-    */
+    uint64_t mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+        dest_noc_x_start, dest_noc_y_start, dest_noc_x_end, dest_noc_y_end, mcast_receiver_semaphore_addr);
+    noc_semaphore_set_multicast(mcast_receiver_semaphore_addr, mcast_receiver_semaphore_noc_addr, num_dests);
 }
