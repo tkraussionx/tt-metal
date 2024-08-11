@@ -142,3 +142,43 @@ def test_moreh_relu_program_cache(device):
 
     passed = torch.equal(tt_output, torch_output)
     assert passed
+
+
+@pytest.mark.parametrize(
+    "which_relu, slope",
+    [
+        [3, 0.1],  # relu_min
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [32, 32],  # single tile
+        [1024, 32, 32],  # multiple tiles
+    ],
+)
+def test_moreh_leaky_ans(which_relu, slope, shape, device):
+    ttnn.enable_program_cache(device)
+    torch_dtype = torch.bfloat16
+    tt_dtype = ttnn.bfloat16
+    layout = ttnn.TILE_LAYOUT
+
+    torch_input = torch.randint(-100, 100, shape, dtype=torch_dtype)
+    torch_output = torch.nn.functional.leaky_relu(torch_input, slope)
+
+    tt_input = ttnn.from_torch(torch_input, dtype=tt_dtype, layout=layout)
+    tt_input = ttnn.to_device(tt_input, device)
+
+    tt_output = ttnn.from_torch(torch_input, dtype=tt_dtype, layout=layout)
+    tt_output = ttnn.to_device(tt_output, device)
+
+    print(f"tt_input\n{tt_input}")
+    ttnn.moreh_relu(tt_input, tt_output, which_relu=which_relu, bound=slope)
+    print(f"tt_output\n{tt_output}")
+
+    tt_output = ttnn.from_device(tt_output)
+    tt_output = ttnn.to_torch(tt_output)
+
+    assert_with_pcc(torch_output, tt_output)
+    passed = torch.allclose(tt_output, torch_output, atol=0.1, rtol=0.1)
+    assert passed

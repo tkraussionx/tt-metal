@@ -34,7 +34,7 @@ void MorehReluDeviceOperation::validate_on_program_cache_miss(
     const operation_attributes_t &attributes,
     const tensor_args_t &tensor_args) {
 
-  TT_FATAL(0 <= attributes.which_relu && attributes.which_relu <= 2,
+  TT_FATAL(0 <= attributes.which_relu && attributes.which_relu <= 3,
            "which_relu must be 0, 1 or 2");
   TT_FATAL(attributes.bound >= 0, "Upper bound must be not negative.");
 

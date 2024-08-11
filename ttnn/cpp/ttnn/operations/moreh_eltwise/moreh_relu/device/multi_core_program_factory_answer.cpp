@@ -94,7 +94,9 @@ MorehReluDeviceOperation::MultiCore::create(
     compute_defines["TEST"] = "DPRINT << \"relu_min\" << ENDL();";
     break;
   case 3:
-    /* TODO */
+    compute_defines["RELU_INIT()"] = "leaky_relu_tile_init()()";
+    compute_defines["RELU(idst, slope)"] = "leaky_relu_tile(idst, slope)";
+    compute_defines["TEST"] = "DPRINT << \"leaky_relu\" << ENDL();";
     break;
   default:
     TT_FATAL(false, "which_relu must be one of 0, 1 and 2");

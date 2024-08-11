@@ -13,7 +13,7 @@ tt::stl::hash::hash_t MorehBinaryDeviceOperation::compute_program_hash(
 
   return tt::stl::hash::hash_objects_with_default_seed(
       tt::stl::hash::type_hash<MorehBinaryDeviceOperation>,
-      attributes.program_selector, tensor_args);
+      attributes, tensor_args);
 }
 
 void MorehBinaryDeviceOperation::validate_on_program_cache_miss(
