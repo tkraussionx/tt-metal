@@ -27,30 +27,32 @@ void MAIN {
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
 
-    mm_init();
+    // TODO: Initialize mm using the `mm_init` API
+    // mm_init();
 
     bool spill = num_blocks > 1;
     bool enable_reload = false;
     uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
 
-    for(uint32_t block = 0; block < num_blocks; block++)
+    ///////////////////////////////////////////////
+    // TODO: Fill the /* */ with appropriate code
+    ///////////////////////////////////////////////
+    for(uint32_t block = 0; block < /* */; block++)
     {
         bool last_out = block == (num_blocks-1);
 
-        cb_wait_front(in0_cb_id, in0_block_num_tiles);
-        cb_wait_front(in1_cb_id, in1_block_num_tiles);
+        cb_wait_front(in0_cb_id, /* */);
+        cb_wait_front(in1_cb_id, /* */);
         int in0_index_subblock_offset = 0;
-        for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
+        for (uint32_t in0_subblock = 0; in0_subblock < /* */; in0_subblock++) {
             int in1_index_subblock_offset = 0;
-            for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
+            for (uint32_t in1_subblock = 0; in1_subblock < /* */; in1_subblock++) {
 
                 tile_regs_acquire();
                 if (enable_reload) {
                     copy_tile_to_dst_init_short();
                     cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
-                    for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                        copy_tile(mm_partials_cb_id, i, i);
-                    }
+                    // TODO: Copy tiles using `copy_tile` with a loop
                     cb_pop_front(mm_partials_cb_id, out_subblock_num_tiles);
                     mm_init_short();
                 }
@@ -58,18 +60,19 @@ void MAIN {
                 // Compute output sub-block from in0_subblock x in1_subblock
                 int dst_index = 0;
                 int in0_index_h_offset = 0;
-                for (uint32_t h = 0; h < out_subblock_h; h++) {
-                    for (uint32_t w = 0; w < out_subblock_w; w++) {
+                for (uint32_t h = 0; h < /* */; h++) {
+                    for (uint32_t w = 0; w < /* */; w++) {
                         int in1_index_inner_dim_offset = 0;
-                        for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
-                            int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
-                            int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
-                            matmul_tiles(in0_cb_id, in1_cb_id, in0_index, in1_index, dst_index, false /* transpose */);
-                            in1_index_inner_dim_offset += in1_per_core_w;
+                        for (uint32_t inner_dim = 0; inner_dim < /* */; inner_dim++) {
+                            // TODO: Update `in0_index` and `in1_index`
+                            int in0_index = /* */ + /* */ + /* */;
+                            int in1_index = /* */ + /* */ + /* */;
+                            matmul_tiles(/* */, /* */, /* */, /* */, /* */, false /* transpose */);
+                            in1_index_inner_dim_offset += /* */;
                         }
-                        dst_index++;
+                        /* */++;
                     }
-                    in0_index_h_offset += in0_block_w;
+                    in0_index_h_offset += /* */;
                 }
 
                 tile_regs_commit();
@@ -78,9 +81,7 @@ void MAIN {
                 if (last_out) {
                     // Pack out to output buffer
                     cb_reserve_back(out_cb_id, out_subblock_num_tiles);
-                    for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                        pack_tile(i, out_cb_id);
-                    }
+                    // TODO: Pack tiles using `pack_tile` with a loop
                     cb_push_back(out_cb_id, out_subblock_num_tiles);
                 } else {
                     // Wait for tiles in output buffer to be written out since interm and output share memory
@@ -90,16 +91,14 @@ void MAIN {
                     }
                     // Move partial result to interm buffer
                     cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
-                    for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                        pack_tile(i, mm_partials_cb_id);
-                    }
+                    // TODO: Pack tiles using `pack_tile` with a loop
                     cb_push_back(mm_partials_cb_id, out_subblock_num_tiles);
                 }
 
                 tile_regs_release();
-                in1_index_subblock_offset += out_subblock_w;
+                in1_index_subblock_offset += /* */;
             }
-            in0_index_subblock_offset += in0_subblock_num_tiles;
+            in0_index_subblock_offset += /* */;
         }
 
         if (spill) enable_reload = true;
