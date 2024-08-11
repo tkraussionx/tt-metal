@@ -50,7 +50,7 @@ void kernel_main() {
     uint32_t l1_write_addr_in1;
 
 
-    // TODO: Fill this section
+    // TODO: Fill the /* */ with appropriate code
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
         .bank_base_address = /* */,
         .page_size = /* */,
