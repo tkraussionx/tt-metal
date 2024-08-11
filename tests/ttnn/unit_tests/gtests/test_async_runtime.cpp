@@ -83,7 +83,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestAsyncPreallocatedOutputs) {
     // Deallocate tensors (tensor gives up buffer). Done asynchronously, so sync on queue after.
     input_tensor.deallocate();
     output_tensor.deallocate();
-    ttnn::queue_synchronize(device->command_queue(io_cq));
+    ttnn::queue_synchronize(device->command_queue(0));
     // Buffer only has 2 owners in main thread.
     EXPECT_EQ(input_buffer.use_count(), 2);
     EXPECT_EQ(output_buffer.use_count(), 2);
@@ -170,7 +170,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestAsyncRuntimeBufferDestructor) {
     for (int loop = 0; loop < 100000; loop++) {
         {
             auto input_buffer_dummy = ttnn::allocate_buffer_on_device(buf_size_datums * datum_size_bytes, device, shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
-            device->synchronize();
+            device->synchronize_worker_queue(0);
         }
     }
 }

@@ -121,8 +121,7 @@ void Tensor::deallocate(bool force) {
                                 : this->tensor_attributes->main_thread_ref_count;
                         if ((force or ref_count_to_use == 1) and not this->tensor_attributes->deallocated) {
                             this->tensor_attributes->deallocated = true;
-                            this->workers.at(0)->push_work(std::make_shared<std::function<void()>>(
-                                [force, attr = this->tensor_attributes]() mutable {
+                            tt::Work work = {0, [force, attr = this->tensor_attributes]() mutable {
                                     // Cross worker synchronization: If the tensor being deallocated is shared across
                                     // workers (ex: all_gather op), wait until all workers are done with this tensor
                                     // before deallocating.
@@ -157,7 +156,8 @@ void Tensor::deallocate(bool force) {
                                             }
                                         },
                                         attr->storage);
-                                }));
+                                }};
+                            this->workers.at(0)->push_work(work);
                         }
                     } else {
                         TT_FATAL(

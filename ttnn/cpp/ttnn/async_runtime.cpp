@@ -103,7 +103,7 @@ void read_buffer(
     }
     if (blocking) {
         for (auto worker : src.get_workers()) {
-            worker->synchronize();
+            worker->synchronize_worker_queue(cq_id);
         }
     }
     src.tensor_attributes->update_main_thread_ref_count(src.workers.at(0), src_ref_count);
@@ -118,10 +118,11 @@ void queue_synchronize(CommandQueue& cq) {
 }
 
 void event_synchronize(Device* device, std::shared_ptr<Event> event) {
-    device->push_work([event] () {
+    tt::Work work = {0, [event] () {
         EventSynchronize(event);
-    });
-    device->synchronize();
+    }};
+    device->push_work(work);
+    device->synchronize_worker_queue(0);
 }
 
 bool event_query(std::shared_ptr<Event> event) { return EventQuery(event); }

@@ -12,7 +12,7 @@
 #include <condition_variable>
 #include <functional>
 #include <thread>
-
+#include <iostream>
 #include "common/env_lib.hpp"
 #include "lock_free_queue.hpp"
 #include "tt_metal/third_party/tracy/public/common/TracySystem.hpp"
@@ -215,6 +215,12 @@ class WorkExecutor {
     inline void synchronize_worker_queue(uint8_t cq_id = 0) {
         if (this->work_executor_mode == WorkExecutorMode::ASYNCHRONOUS and
             not(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.worker_thread_id.load())) {
+            this->tagged_worker_queue.push({cq_id, []() {}});  // Send flush command (i.e. empty function)
+            this->num_tasks_per_cq.at(cq_id)++;
+            {
+                std::lock_guard lock(this->cv_mutex);
+                cv.notify_one();
+            }
             // Wait for queue empty, i.e. flush command picked up
             while (this->num_tasks_per_cq.at(cq_id) > 0) {
                 std::this_thread::sleep_for(std::chrono::microseconds(10));

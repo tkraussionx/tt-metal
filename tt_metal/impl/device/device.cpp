@@ -1453,7 +1453,7 @@ void Device::compile_command_queue_programs() {
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
         this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
-        this->setup_tunnel_for_remote_devices();
+        //this->setup_tunnel_for_remote_devices();
     } else {
         chip_id_t device_id = this->id();
         chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
