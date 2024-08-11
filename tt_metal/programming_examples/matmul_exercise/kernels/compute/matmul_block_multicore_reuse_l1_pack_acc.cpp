@@ -86,7 +86,8 @@ void MAIN {
                 tile_regs_wait();
                 if (last_out) {
                     // Pack out to output buffer
-                    PACK((llk_pack_reconfig_l1_acc(0)));
+                    // TODO: Call llk_pack_reconfig_l1_acc LLK API
+                    /* */
                     cb_reserve_back(out_cb_id, out_subblock_num_tiles);
                     uint32_t start_dst_index = 0;
                     matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
@@ -99,9 +100,11 @@ void MAIN {
                     }
                     // Move partial result to interm buffer
                     if (block == 0) {  // no accumulation for first iteration
-                        PACK((llk_pack_reconfig_l1_acc(0)));
+                        // TODO: Call llk_pack_reconfig_l1_acc LLK API
+                        /* */
                     } else if (block == 1) {
-                        PACK((llk_pack_reconfig_l1_acc(1)));
+                        // TODO: Call llk_pack_reconfig_l1_acc LLK API
+                        /* */
                     }
                     cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
                     uint32_t start_dst_index = 0;
@@ -116,11 +119,13 @@ void MAIN {
         }
 
         // Last iteration does spill and reload to output buffer
-        if (block < num_blocks - 2) {
+        // TODO: Fill the /* */ with appropriate code
+        if (block < /* */) {
             cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
             cb_pop_front(mm_partials_cb_id, out_block_num_tiles);
         }
-        if (block == num_blocks - 2) {
+        // TODO: Fill the /* */ with appropriate code
+        if (block == /* */) {
             enable_reload = true;
         }  // reload when last iteration
 
