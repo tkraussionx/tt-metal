@@ -1,6 +1,6 @@
 #include "compute_kernel_api.h"
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
-#include "compute_kernel_api/moreh_fusion.h"
+#include "compute_kernel_api/moreh_fusion_answer.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "debug/dprint.h"
 
@@ -32,7 +32,8 @@ void MAIN {
         copy_tile_to_dst_init_short(input1_cb);
         copy_tile(input1_cb, first, dst1);
 
-        moreh_fusion(dst0, slope0, slope1);
+        // moreh_fusion_answer_init();
+        // moreh_fusion_answer(dst0, slope0, slope1);
 
         cb_pop_front(input0_cb, onetile);
         cb_pop_front(input1_cb, onetile);

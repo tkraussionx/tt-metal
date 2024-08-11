@@ -10,12 +10,12 @@ namespace ckernel {
 namespace sfpu {
 
 template <bool APPROXIMATION_MODE>
-inline void moreh_fusion_init() {
+inline void moreh_fusion_answer_init() {
     // nothing to do.
 }
 
 template <bool APPROXIMATION_MODE>
-inline void moreh_fusion(uint slope0_bits, uint slope1_bits) {
+inline void moreh_fusion_answer(uint slope0_bits, uint slope1_bits) {
     vFloat slope0 = Converter::to_float(slope0_bits);
     vFloat slope1 = Converter::to_float(slope1_bits);
 
