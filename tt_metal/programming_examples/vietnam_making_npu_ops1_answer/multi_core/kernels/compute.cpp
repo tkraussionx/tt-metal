@@ -21,14 +21,18 @@ void MAIN {
 
     for (uint32_t i = 0; i < num_tiles; i++) {
         tile_regs_acquire();
-        // TODO 1. Copy one tile in cb0 to dst0 register with cb_wait_front and cb_pop_front.
-
-        // TODO 2. Do relu operation on dst0.
-
+        cb_wait_front(cb0_id, onetile);
+        copy_tile_init();
+        copy_tile(cb0_id, first, dst0);
+        cb_pop_front(cb0_id, onetile);
+        relu_tile_init();
+        relu_tile(dst0);
         tile_regs_commit();
 
         tile_regs_wait();
-        // TODO 3. Copy dst0 register to cb1 with cb_reserve_back and cb_push_back.
+        cb_reserve_back(cb1_id, onetile);
+        pack_tile(dst0, cb1_id, first);
+        cb_push_back(cb1_id, onetile);
 
         tile_regs_release();
     }

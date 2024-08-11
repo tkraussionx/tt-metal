@@ -10,10 +10,11 @@ namespace ttnn::operations::moreh_eltwise {
 tt::stl::hash::hash_t MorehBinaryDeviceOperation::compute_program_hash(
     const operation_attributes_t &attributes,
     const tensor_args_t &tensor_args) {
-
+  /* TODO */
+  // TODO. Use all tensors and program_selector of scalars in hash
+  // Do not use scalar0 and scalar1 in attributes
   return tt::stl::hash::hash_objects_with_default_seed(
-      tt::stl::hash::type_hash<MorehBinaryDeviceOperation>,
-      attributes.program_selector, tensor_args);
+      tt::stl::hash::type_hash<MorehBinaryDeviceOperation>);
 }
 
 void MorehBinaryDeviceOperation::validate_on_program_cache_miss(
@@ -69,11 +70,11 @@ MorehBinaryDeviceOperation::program_factory_t
 MorehBinaryDeviceOperation::select_program_factory(
     const operation_attributes_t &operation_attributes,
     const tensor_args_t &tensor_args) {
-  if (operation_attributes.program_selector == 0) {
-    return Add{};
-  } else {
-    return Fusion{};
-  }
+
+  // TODO. Return Add if program_selector is 0 . Return Funsion if
+  // prograam_selector is 1.
+
+  return Fusion{};
 }
 
 } // namespace ttnn::operations::moreh_eltwise

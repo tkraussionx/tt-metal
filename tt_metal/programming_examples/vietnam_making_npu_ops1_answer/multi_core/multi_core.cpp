@@ -99,15 +99,14 @@ int main() {
   /////////////////////////////////////////////////////////////////////////////////
 
   Program program = CreateProgram();
+
   // Multi core part
   auto grid = device->compute_with_storage_grid_size();
+  const auto [num_cores_unused, all_cores_unused, core_group_1, core_group_2,
+              num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
+      split_work_to_cores(grid, num_tiles);
   auto all_cores_in_grid = CoreRange({0, 0}, {grid.x - 1, grid.y - 1});
   auto target_cores = all_cores_in_grid;
-
-  // const auto [num_cores, all_cores, core_group_1, core_group_2,
-  //             num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
-  //     split_work_to_cores(/* TODO */);
-
 
   /////////////////////////////////////////////////////////////////////////////////
   // Allocate circular buffer 0 and 1.
@@ -174,20 +173,28 @@ int main() {
 
       // TODO. set num_tiles_per_core properly according to which group the
       // core belongs to.(group1? group2? or neither?)
+      if (core_group_1.core_coord_in_core_ranges(core)) {
+        num_tiles_per_core = num_tiles_per_core_group_1;
+      } else if (core_group_2.core_coord_in_core_ranges(core)) {
+        num_tiles_per_core = num_tiles_per_core_group_2;
+      } else {
+        num_tiles_per_core = 0;
+      }
 
-
-      /* TODO. give tile_offset as runtime argument to reader adn writer*/
+      /* TODO. set runtime args with tile_offset.*/
       const std::vector<uint32_t> reader_runtime_args{
           device_buffer0->address(), static_cast<uint32_t>(cb0_id),
-          num_tiles_per_core, /* TODO */};
+          num_tiles_per_core, tile_offset};
       SetRuntimeArgs(program, reader_kernel_id, core, reader_runtime_args);
 
       const std::vector<uint32_t> writer_runtime_args{
           device_buffer1->address(), static_cast<uint32_t>(cb1_id),
-          num_tiles_per_core, /* TODO */};
+          num_tiles_per_core, tile_offset};
 
       SetRuntimeArgs(program, writer_kernel_id, core, writer_runtime_args);
 
+      // TODO. set runtime args of compute kernel.
+      // compute kernel does not need to know tile offset.
       const std::vector<uint32_t> compute_runtime_args = {
           static_cast<uint32_t>(cb0_id), static_cast<uint32_t>(cb1_id),
           num_tiles_per_core};
