@@ -75,10 +75,11 @@ void write_buffer(
     uint32_t dst_ref_count = dst.tensor_attributes->record_main_thread_ref_count();
     for (const auto worker : dst.get_workers()) {
         auto src_for_device = (src.size() == 1) ? src.at(0) : src.at(worker->id());
-        worker->push_work([worker, src_for_device, dst, cq_id, transfer_size]() {
+        tt::Work work = {cq_id, [worker, src_for_device, dst, cq_id, transfer_size]() {
             auto shard = tt::tt_metal::get_shard_for_device(dst, worker);
             tt::tt_metal::memcpy(worker->command_queue(cq_id), shard, src_for_device.get(), transfer_size);
-        });
+        }};
+        worker->push_work(work);
     }
     dst.tensor_attributes->update_main_thread_ref_count(dst.workers.at(0), dst_ref_count);
 }
@@ -94,10 +95,11 @@ void read_buffer(
     uint32_t src_ref_count = src.tensor_attributes->record_main_thread_ref_count();
     for (const auto worker : src.get_workers()) {
         auto dst_for_device = (dst.size() == 1) ? dst.at(0) : dst.at(worker->id());
-        worker->push_work([worker, dst_for_device, src, cq_id, transfer_size, src_offset, blocking]() {
+        tt::Work work = {cq_id, [worker, dst_for_device, src, cq_id, transfer_size, src_offset, blocking]() {
             const auto& shard = tt::tt_metal::get_shard_for_device(src, worker);
             tt::tt_metal::memcpy(worker->command_queue(cq_id), dst_for_device.get(), shard, transfer_size, blocking);
-        });
+        }};
+        worker->push_work(work);
     }
     if (blocking) {
         for (auto worker : src.get_workers()) {
@@ -110,7 +112,7 @@ void read_buffer(
 void queue_synchronize(CommandQueue& cq) {
     // Ensure that all work pushed to async engine has been passed
     // off to device CQ
-    cq.device()->synchronize();
+    cq.device()->synchronize_worker_queue(cq.id());
     // Wait for device CQ to finish
     Finish(cq);
 }
@@ -127,13 +129,15 @@ bool event_query(std::shared_ptr<Event> event) { return EventQuery(event); }
 void wait_for_event(CommandQueue& cq, std::shared_ptr<Event> event) {
     auto cq_id = cq.id();
     auto cq_worker = cq.device();
-    cq_worker->push_work([cq_worker, cq_id, event]() { EnqueueWaitForEvent(cq_worker->command_queue(cq_id), event); });
+    tt::Work work = {cq_id, [cq_worker, cq_id, event]() { EnqueueWaitForEvent(cq_worker->command_queue(cq_id), event); }};
+    cq_worker->push_work(work);
 }
 
 void record_event(CommandQueue& cq, std::shared_ptr<Event> event) {
     auto cq_id = cq.id();
     auto cq_worker = cq.device();
-    cq_worker->push_work([cq_worker, cq_id, event]() { EnqueueRecordEvent(cq_worker->command_queue(cq_id), event); });
+    tt::Work work = {cq_id, [cq_worker, cq_id, event]() { EnqueueRecordEvent(cq_worker->command_queue(cq_id), event); }};
+    cq_worker->push_work(work);
 }
 
 }  // namespace ttnn

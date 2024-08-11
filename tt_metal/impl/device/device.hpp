@@ -241,7 +241,9 @@ class Device {
     // APIs to access this device's work executor
     void push_work(std::function<void()>&& work, bool blocking = false);
     void push_work(std::shared_ptr<std::function<void()>> work, bool blocking = false);
+    void push_work(const tt::Work& work, bool blocking = false);
     void synchronize();
+    void synchronize_worker_queue(uint8_t cq_id);
     void set_worker_mode(const WorkExecutorMode& mode);
     void enable_async(bool enable);
     WorkExecutorMode get_worker_mode() { return work_executor.get_worker_mode(); }

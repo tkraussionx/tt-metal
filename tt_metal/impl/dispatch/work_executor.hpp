@@ -71,6 +71,12 @@ inline void set_process_priority(int requested_priority) {
     }
 }
 
+class Work {
+    public:
+    uint8_t cq_id;
+    std::function<void()> work_function;
+};
+
 class WorkExecutor {
     // In asynchronous mode, each device has a worker thread that processes all host <--> cluster commands for this
     // device. Commands are pushed to the worker queue and picked up + executed asyncrhonously. Higher level functions
@@ -78,8 +84,9 @@ class WorkExecutor {
     // bypass the queue and tasks are executed immediately after being pushed.
    public:
     LockFreeQueue<std::function<void()>> worker_queue;
+    LockFreeQueue<Work> tagged_worker_queue;
 
-    WorkExecutor(int cpu_core, int device_id) : cpu_core_for_worker(cpu_core), managed_device_id(device_id) {}
+    WorkExecutor(int cpu_core, int device_id) : cpu_core_for_worker(cpu_core), managed_device_id(device_id), num_tasks_per_cq(2) {}
 
     WorkExecutor(WorkExecutor&& other) {
         worker_state = std::move(other.worker_state);
@@ -109,6 +116,9 @@ class WorkExecutor {
             this->set_worker_queue_mode(this->worker_queue_mode);
             this->start_worker();
         }
+        for (auto& num : this->num_tasks_per_cq) {
+            num.store(0);
+        }
     }
 
     inline void reset() {
@@ -125,18 +135,40 @@ class WorkExecutor {
                 // Worker stalls until queue is non-empty or terminate signal is set
                 std::unique_lock<std::mutex> lock(this->cv_mutex);
                 this->cv.wait(lock, [this] {
-                    return (not this->worker_queue.empty()) or this->worker_state == WorkerState::TERMINATE;
+                    return (not this->tagged_worker_queue.empty()) or this->worker_state == WorkerState::TERMINATE;
                 });
             }
             if (this->worker_state == WorkerState::TERMINATE) {
                 // Terminate signal set, and queue is empty - worker exits
-                if (this->worker_queue.empty())
+                if (this->tagged_worker_queue.empty())
                     break;
             }
             ZoneScopedN("PopWork");
             // Queue non-empty: run command
-            auto func = this->worker_queue.pop();
-            (*func)();
+            auto work_executor = this->tagged_worker_queue.pop();
+            (work_executor->work_function)();
+            this->num_tasks_per_cq.at(work_executor->cq_id)--;
+        }
+    }
+
+    inline void push_work(const Work& work_executor, bool blocking = false) {
+        ZoneScopedN("PushWork");
+        if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == this->worker_queue.worker_thread_id.load() or
+            not(this->worker_state == WorkerState::RUNNING)) {
+            // Worker is pushing to itself (nested work) or worker thread is not running. Execute work in current
+            // thread.
+            work_executor.work_function();
+        } else {
+            // Push to worker queue.
+            this->num_tasks_per_cq.at(work_executor.cq_id)++;
+            this->tagged_worker_queue.push(work_executor);
+            {
+                std::lock_guard lock(this->cv_mutex);
+                cv.notify_one();
+            }
+            if (blocking) {
+                this->synchronize_worker_queue(work_executor.cq_id);
+            }
         }
     }
 
@@ -180,6 +212,15 @@ class WorkExecutor {
             }
         }
     }
+    inline void synchronize_worker_queue(uint8_t cq_id = 0) {
+        if (this->work_executor_mode == WorkExecutorMode::ASYNCHRONOUS and
+            not(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.worker_thread_id.load())) {
+            // Wait for queue empty, i.e. flush command picked up
+            while (this->num_tasks_per_cq.at(cq_id) > 0) {
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            };
+        }
+    }
 
     inline void synchronize() {
         if (this->work_executor_mode == WorkExecutorMode::ASYNCHRONOUS and
@@ -206,7 +247,7 @@ class WorkExecutor {
         if (this->work_executor_mode == WorkExecutorMode::ASYNCHRONOUS) {
             this->start_worker();
         } else if (this->work_executor_mode == WorkExecutorMode::SYNCHRONOUS) {
-            this->synchronize();
+            // this->synchronize();
             this->stop_worker();
         }
     }
@@ -233,7 +274,7 @@ class WorkExecutor {
     int managed_device_id;
     std::condition_variable cv;
     std::mutex cv_mutex;
-
+    std::vector<std::atomic<uint32_t>> num_tasks_per_cq;
     inline void start_worker() {
         this->worker_queue.parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         this->worker_state = WorkerState::RUNNING;

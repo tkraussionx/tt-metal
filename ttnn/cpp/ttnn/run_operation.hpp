@@ -259,7 +259,8 @@ void launch_op(
     OutputType& output_tensors,
     const OptionalConstTensors optional_input_tensors = {},
     const OptionalTensors optional_output_tensors = {},
-    bool enable_autoformat_device = true
+    bool enable_autoformat_device = true,
+    uint8_t cq_id = 0
 );
 
 void launch_with_autoformat(

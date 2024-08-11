@@ -73,7 +73,8 @@ void launch_op(
     OutputType& output_tensors,
     const OptionalConstTensors optional_input_tensors,
     const OptionalTensors optional_output_tensors,
-    bool enable_autoformat_device) {
+    bool enable_autoformat_device,
+    uint8_t cq_id) {
     // Send host side op compile and run to the worker queue
     // Assert to ensure that worker threads are specified.
     ZoneScopedN("LaunchOp");
@@ -240,8 +241,8 @@ void launch_op(
             });
 
         for (auto target_device : workers) {
-            target_device->push_work(std::make_shared<std::function<void()>>(
-                [target_device, work_lambda]() mutable { (*work_lambda)(target_device); }));
+            tt::Work work = {cq_id, [target_device, work_lambda]() mutable { (*work_lambda)(target_device); }};
+            target_device->push_work(work);
         }
     }
 

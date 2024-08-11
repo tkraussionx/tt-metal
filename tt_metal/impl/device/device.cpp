@@ -2257,6 +2257,14 @@ void Device::push_work(std::shared_ptr<std::function<void()>> work, bool blockin
     this->work_executor.push_work(work, blocking);
 }
 
+void Device::push_work(const tt::Work& work, bool blocking) {
+    this->work_executor.push_work(work, blocking);
+}
+
+void Device::synchronize_worker_queue(uint8_t cq_id) {
+    this->work_executor.synchronize_worker_queue(cq_id);
+}
+
 void Device::synchronize() {
     this->work_executor.synchronize();
 }
