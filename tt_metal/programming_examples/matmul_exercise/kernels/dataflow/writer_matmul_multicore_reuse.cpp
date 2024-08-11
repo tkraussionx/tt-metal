@@ -29,38 +29,39 @@ void kernel_main() {
     // single-tile
     const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
     const DataFormat data_format = get_dataformat(cb_id_out0);
-
+    // TODO: Fill the /* */ with appropriate code
     const InterleavedAddrGenFast<out_is_dram> s = {
-        .bank_base_address = out_tensor_addr,
-        .page_size = single_tile_size_bytes,
-        .data_format = data_format
+        .bank_base_address = /* */,
+        .page_size = /* */,
+        .data_format = /* */
     };
 
 
+    // TODO: Fill the /* */ with appropriate code
     uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
-    for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+    for(uint32_t sbh = 0; sbh < /* */; sbh++) {
         uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-        for(uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+        for(uint32_t sbw = 0; sbw < /* */; sbw++) {
             uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
             cb_wait_front(cb_id_out0, out_subblock_tile_count);
             uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
-            for(uint32_t h = 0; h < out_subblock_h; h++) {
+            for(uint32_t h = 0; h < /* */; h++) {
                 uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
-                for(uint32_t w = 0; w < out_subblock_w; w++) {
-                    noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
-                    l1_read_addr+=single_tile_size_bytes;
+                for(uint32_t w = 0; w < /* */; w++) {
+                    noc_async_write_tile(/* */, /* */, /* */);
+                    l1_read_addr+=/* */;
 
-                    out_tensor_tile_id += out_tensor_stride_w;
+                    out_tensor_tile_id += /* */;
                 }
-                out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
+                out_tensor_sb_row_start_tile_id += /* */;
             }
 
             noc_async_write_barrier();
             cb_pop_front(cb_id_out0, out_subblock_tile_count);
-            out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+            out_tensor_sbw_start_tile_id += /* */;
         }
-        out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+        out_tensor_sbh_start_tile_id += /* */;
     }
 }
