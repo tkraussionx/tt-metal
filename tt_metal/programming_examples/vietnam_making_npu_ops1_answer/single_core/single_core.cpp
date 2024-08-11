@@ -35,25 +35,15 @@ int main() {
   // Allocate host buffer0.
   // Fill host buffer0 with neg, zero, pos for each tile.
   //////////////////////////////////////////////////////////////////////////////////
-  auto host_num_tiles = 500;
+  auto host_num_tiles = 3;
   auto host_buffer_size = host_num_tiles * 1024 * 2;
 
   auto host_buffer0 = std::shared_ptr<void>(malloc(host_buffer_size), free);
   auto host_buffer0_ptr = reinterpret_cast<uint16_t *>(host_buffer0.get());
-  for (int tile = 0; tile < host_num_tiles; ++tile) {
-    if (tile % 3 == 0) {
-      for (int i = 0; i < 1024; ++i) {
-        host_buffer0_ptr[tile * 1024 + i] = round_to_nearest_even(-i % 32);
-      }
-    } else if (tile % 3 == 1) {
-      for (int i = 0; i < 1024; ++i) {
-        host_buffer0_ptr[tile * 1024 + i] = round_to_nearest_even(0);
-      }
-    } else {
-      for (int i = 0; i < 1024; ++i) {
-        host_buffer0_ptr[tile * 1024 + i] = round_to_nearest_even(i % 32);
-      }
-    }
+  for (int i = 0; i < 1024; ++i) {
+    host_buffer0_ptr[i] = round_to_nearest_even(-i % 32);
+    host_buffer0_ptr[1024 + i] = round_to_nearest_even(0);
+    host_buffer0_ptr[2048 + i] = round_to_nearest_even(i % 32);
   }
 
   auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
@@ -61,21 +51,21 @@ int main() {
   /////////////////////////////////////////////////////////////////////////////////
   // TODO: Allocate Device Buffer 0,1
   /////////////////////////////////////////////////////////////////////////////////
-  uint32_t num_tiles = 500;
-  auto page_size = 1024 * sizeof(uint16_t);
-  auto device_buffer_size = num_tiles * page_size;
+  uint32_t num_tiles = 3 /*TODO*/;
+  auto page_size = 1024 * sizeof(uint16_t) /*TODO*/;
+  auto device_buffer_size = num_tiles * page_size /*TODO*/;
 
   auto device_buffer0_config =
       InterleavedBufferConfig{.device = device,
-                              .size = device_buffer_size,
-                              .page_size = page_size,
+                              .size = device_buffer_size /*TODO*/,
+                              .page_size = page_size /*TODO*/,
                               .buffer_type = BufferType::DRAM};
   auto device_buffer0 = CreateBuffer(device_buffer0_config);
 
   auto device_buffer1_config =
       InterleavedBufferConfig{.device = device,
-                              .size = device_buffer_size,
-                              .page_size = page_size,
+                              .size = device_buffer_size /*TODO*/,
+                              .page_size = page_size /*TODO*/,
                               .buffer_type = BufferType::DRAM};
   auto device_buffer1 = CreateBuffer(device_buffer1_config);
 
@@ -92,23 +82,15 @@ int main() {
   // Copy host buffer0 to device buffer0
   /////////////////////////////////////////////////////////////////////////////////
 
-  EnqueueWriteBuffer(cq, device_buffer0, host_buffer0.get(), true);
+  EnqueueWriteBuffer(cq, device_buffer0 /*TODO*/, host_buffer0.get(),
+                     true /*blocking*/);
 
   /////////////////////////////////////////////////////////////////////////////////
   // Create program instance.
   /////////////////////////////////////////////////////////////////////////////////
 
   Program program = CreateProgram();
-
-  // Multi core part
-  auto grid = device->compute_with_storage_grid_size();
-  auto all_cores_in_grid = CoreRange({0, 0}, {grid.x - 1, grid.y - 1});
-  auto target_cores = all_cores_in_grid;
-
-  // const auto [num_cores_unused, all_cores_unused, core_group_1, core_group_2,
-              // num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
-      // split_work_to_cores(/* TODO */);
-
+  auto target_cores = CoreCoord{0, 0};
   /////////////////////////////////////////////////////////////////////////////////
   // Allocate circular buffer 0 and 1.
   /////////////////////////////////////////////////////////////////////////////////
@@ -116,16 +98,18 @@ int main() {
   auto cb_num_tiles = 2;
   auto cb0_id = CB::c_in0;
   auto cb0_data_format = tt::DataFormat::Float16_b;
-  auto cb0_config = CircularBufferConfig(cb_num_tiles * page_size,
-                                         {{cb0_id, cb0_data_format}})
-                        .set_page_size(cb0_id, page_size);
+  auto cb0_config =
+      CircularBufferConfig(
+          cb_num_tiles * page_size /*size. TODO*/,
+          {{cb0_id /*cb_id. TODO*/, cb0_data_format /*data format. TODO*/}})
+          .set_page_size(cb0_id /*cb_id. TODO*/, page_size /*page size. TODO*/);
   CreateCircularBuffer(program, target_cores, cb0_config);
 
   auto cb1_id = CB::c_out0;
   auto cb1_data_format = tt::DataFormat::Float16_b;
   auto cb1_config = CircularBufferConfig(cb_num_tiles * page_size,
-                                         {{cb1_id, cb1_data_format}})
-                        .set_page_size(cb1_id, page_size);
+                                         {{cb1_id, cb1_data_format}} /*TODO*/)
+                        .set_page_size(cb1_id, page_size /*TODO*/);
   CreateCircularBuffer(program, target_cores, cb1_config);
 
   std::cout << "cb0 total size : " << cb0_config.total_size() << std::endl;
@@ -137,7 +121,7 @@ int main() {
   KernelHandle compute_kernel_id =
       CreateKernel(program,
                    "tt_metal/programming_examples/vietnam_making_npu_ops1/"
-                   "multi_core/kernels/compute.cpp",
+                   "single_core/kernels/compute.cpp",
                    target_cores,
                    ComputeConfig{
                        .compile_args = {},
@@ -151,58 +135,45 @@ int main() {
 
   KernelHandle reader_kernel_id = CreateKernel(
       program,
-      "tt_metal/programming_examples/vietnam_making_npu_ops1/multi_core/"
+      "tt_metal/programming_examples/vietnam_making_npu_ops1/single_core/"
       "kernels/"
-      "reader.cpp",
-      target_cores, ReaderDataMovementConfig({device_buffer0_is_dram}, {}));
+      "reader.cpp" /*reader kernel path. TODO*/,
+      target_cores,
+      ReaderDataMovementConfig({device_buffer0_is_dram} /*compile args. TODO*/,
+                               {} /*defined*/));
 
   KernelHandle writer_kernel_id = CreateKernel(
       program,
-      "tt_metal/programming_examples/vietnam_making_npu_ops1/multi_core/"
+      "tt_metal/programming_examples/vietnam_making_npu_ops1/single_core/"
       "kernels/"
-      "writer.cpp",
-      target_cores, WriterDataMovementConfig({device_buffer1_is_dram}, {}));
+      "writer.cpp" /*writer kernel path. TODO*/,
+      target_cores,
+      WriterDataMovementConfig({device_buffer1_is_dram} /*compile args. TODO*/,
+                               {} /*defined*/));
 
   /////////////////////////////////////////////////////////////////////////////////
   // Set runtime args
   /////////////////////////////////////////////////////////////////////////////////
-  uint32_t tile_offset = 0;
-  for (uint32_t x = 0; x < grid.x; ++x) {
-    for (uint32_t y = 0; y < grid.y; ++y) {
-      auto core = CoreCoord{x, y};
-      uint32_t num_tiles_per_core = 0;
 
-      // TODO. set num_tiles_per_core properly according to which group the
-      // core belongs to.(group1? group2? or neither?)
-      // if (/* TODO check if the core belongs to group2*/) {
-        // /* TODO set num_tiles_per_core */
-      // } else if (/* TODO check if the core belongs to group2*/) {
-        // /* TODO set num_tiles_per_core */
-      // } else {
-        // num_tiles_per_core = 0;
-      // }
+  const std::vector<uint32_t> reader_runtime_args = {
+      device_buffer0->address(), static_cast<uint32_t>(cb0_id),
+      num_tiles /*TODO*/};
 
-      /* TODO. set runtime args with tile_offset.*/
-      const std::vector<uint32_t> reader_runtime_args{
-          device_buffer0->address(), static_cast<uint32_t>(cb0_id),
-          num_tiles_per_core /* TODO */};
-      SetRuntimeArgs(program, reader_kernel_id, core, reader_runtime_args);
+  SetRuntimeArgs(program, reader_kernel_id, target_cores, reader_runtime_args);
 
-      const std::vector<uint32_t> writer_runtime_args{
-          device_buffer1->address(), static_cast<uint32_t>(cb1_id),
-          num_tiles_per_core /* TODO */};
+  const std::vector<uint32_t> writer_runtime_args = {
+      device_buffer1->address(), static_cast<uint32_t>(cb1_id),
+      num_tiles /*TODO*/};
 
-      SetRuntimeArgs(program, writer_kernel_id, core, writer_runtime_args);
+  SetRuntimeArgs(program, writer_kernel_id, target_cores, writer_runtime_args);
 
-      const std::vector<uint32_t> compute_runtime_args = {
-          static_cast<uint32_t>(cb0_id), static_cast<uint32_t>(cb1_id),
-          num_tiles_per_core};
+  const std::vector<uint32_t> compute_runtime_args = {
+      static_cast<uint32_t>(cb0_id), static_cast<uint32_t>(cb1_id),
+      num_tiles /*TODO*/};
 
-      SetRuntimeArgs(program, compute_kernel_id, core, compute_runtime_args);
+  SetRuntimeArgs(program, compute_kernel_id, target_cores,
+                 compute_runtime_args);
 
-      tile_offset += num_tiles_per_core;
-    }
-  }
   //////////////////////////////////////////////////////////////////////////////////
   // EnqueueProgram and Copy device buffer1 to host buffer1
   //////////////////////////////////////////////////////////////////////////////////

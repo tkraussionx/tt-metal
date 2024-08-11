@@ -8,7 +8,8 @@ void kernel_main() {
     const auto cb0_id = get_arg_val<uint32_t>(arg++);
     const auto num_tiles = get_arg_val<uint32_t>(arg++);
 
-    const auto tile_offset = /* TODO */;
+    // TODO: Get tile_offset runtime argument
+    const auto tile_offset = get_arg_val<uint32_t>(arg++);
 
     constexpr bool device_buffer0_is_dram = get_compile_time_arg_val(0) == 1;
 
@@ -18,7 +19,7 @@ void kernel_main() {
         .bank_base_address = device_buffer0_addr, .page_size = cb0_page_size, .data_format = cb0_data_format};
 
     // TODO: Read tiles from tile_offset ~ tile_offset + num_tiles
-    for (/*T ODO */) {
+    for (uint32_t tile_idx = tile_offset; tile_idx < tile_offset + num_tiles; ++tile_idx) {
         cb_reserve_back(cb0_id, 1);
         const auto cb0_l1_addr = get_write_ptr(cb0_id);
         noc_async_read_tile(tile_idx, input_addrg, cb0_l1_addr, 0 /*offset*/);

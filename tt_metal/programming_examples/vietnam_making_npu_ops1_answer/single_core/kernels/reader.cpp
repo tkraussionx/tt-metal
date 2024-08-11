@@ -19,11 +19,11 @@ void kernel_main() {
 
   for (uint32_t tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
     // TODO: read a single tile within a for loop
-    cb_reserve_back(/* TODO */);
-    const auto cb0_l1_addr = get_write_ptr(/* TODO */);
-    noc_async_read_tile(/* TODO */);
+    cb_reserve_back(cb0_id, 1);
+    const auto cb0_l1_addr = get_write_ptr(cb0_id);
+    noc_async_read_tile(tile_idx, input_addrg, cb0_l1_addr, 0 /*offset*/);
     noc_async_read_barrier();
-    cb_push_back(/* TODO */);
+    cb_push_back(cb0_id, 1);
   }
 
   DPRINT << "READER END" << ENDL();
