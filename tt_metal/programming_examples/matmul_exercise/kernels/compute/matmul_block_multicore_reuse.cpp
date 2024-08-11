@@ -27,7 +27,8 @@ void MAIN {
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
 
-    mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
+    // TODO: Initialize mm using the `mm_block_init` API
+    // mm_block_init(...);
 
     bool spill = num_blocks > 1;
     bool enable_reload = false;
@@ -48,12 +49,13 @@ void MAIN {
                 if (enable_reload) {
                     copy_tile_to_dst_init_short();
                     cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
-                    uint32_t start_dst_index = 0;
-                    uint32_t start_tile_index = 0;
-                    copy_block_matmul_partials(
-                        mm_partials_cb_id, start_tile_index, start_dst_index, out_subblock_num_tiles);
+                    // TODO: Use `copy_block_matmul_partials` instead of `copy_tile`
+                    // copy_block_matmul_partials(...);
+
                     cb_pop_front(mm_partials_cb_id, out_subblock_num_tiles);
-                    mm_block_init_short(in0_cb_id, in1_cb_id, 0, out_subblock_w, out_subblock_h, in0_block_w);
+
+                    // TODO: Initialize mm using `mm_block_init_short`
+                    // mm_block_init_short(...);
                 }
 
                 // Compute output sub-block from in0_subblock x in1_subblock
@@ -65,19 +67,15 @@ void MAIN {
                     // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                     // accumulation is done by iterating matmul_block across inner dim
                     // in0_block_w is passed as innder dim (kt) to matmul_block, interally used to stride in0
-                    matmul_block(
-                        in0_cb_id,
-                        in1_cb_id,
-                        in0_index,
-                        in1_index,
-                        dst_index,
-                        false,
-                        out_subblock_w,
-                        out_subblock_h,
-                        in0_block_w);
-                    in0_index++;                  // stride right by 1
-                    in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
-                                                  // called in1_block_w)
+                    // TODO: Use `matmul_block`
+                    // matmul_block(...);
+
+                    // TODO: Update in0_index and in1_index
+                    // stride right by 1
+
+                    // TODO: Update in1_index
+                    // to stride down by 1 need to stride by in_per_core_w (should be
+                    // called in1_block_w)
                 }
 
                 tile_regs_commit();
@@ -86,8 +84,9 @@ void MAIN {
                 if (last_out) {
                     // Pack out to output buffer
                     cb_reserve_back(out_cb_id, out_subblock_num_tiles);
-                    uint32_t start_dst_index = 0;
-                    matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
+
+                    // TODO: Use `matmul_pack_tile` instead of `pack_tile`
+                    // matmul_pack_tile(...);
                     cb_push_back(out_cb_id, out_subblock_num_tiles);
                 } else {
                     // Wait for tiles in output buffer to be written out since interm and output share memory
@@ -97,8 +96,8 @@ void MAIN {
                     }
                     // Move partial result to interm buffer
                     cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
-                    uint32_t start_dst_index = 0;
-                    matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
+                    // TODO: Use `matmul_pack_tile` instead of `pack_tile`
+                    // matmul_pack_tile(...);
                     cb_push_back(mm_partials_cb_id, out_subblock_num_tiles);
                 }
 
