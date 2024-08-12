@@ -585,6 +585,7 @@ class SystemMemoryManager {
         }
 
         // All data needs to be 32B aligned
+        // std::cout << "Push back: " << cq_id << " Addr: " <<
         uint32_t push_size_16B = align(push_size_B, dispatch_constants::ISSUE_Q_ALIGNMENT) >> 4;
 
         SystemMemoryCQInterface &cq_interface = this->cq_interfaces[cq_id];
@@ -723,6 +724,7 @@ class SystemMemoryManager {
         if (stall_prefetcher) {
             command_size_16B |= (1 << ((sizeof(dispatch_constants::prefetch_q_entry_type) * 8) - 1));
         }
+        // std::cout << "Writing to: " << std::hex << this->prefetch_q_dev_ptrs[cq_id] << std::endl;
         this->prefetch_q_writers[cq_id].write(this->prefetch_q_dev_ptrs[cq_id], command_size_16B);
         this->prefetch_q_dev_ptrs[cq_id] += sizeof(dispatch_constants::prefetch_q_entry_type);
     }

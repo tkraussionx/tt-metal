@@ -448,6 +448,7 @@ void process_write_linear(uint32_t num_mcast_dests) {
     }
 
     cmd_ptr = data_ptr;
+    // noc_async_write_barrier();
 }
 
 void process_write() {

@@ -526,13 +526,7 @@ inline uint32_t process_prefetch_h_wait_cmd(uint32_t cmd_ptr) {
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)(cmd_ptr + sizeof(CQPrefetchHToPrefetchDHeader));
     volatile tt_l1_ptr uint32_t* event_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->event_wait.sync_event_addr);
-    volatile int j = 0;
-    // for (volatile int i = 0; i < 300; i++) {
-    //     // DPRINT << "Waiting: " << i << ENDL();
-    // };
-    DPRINT << "waiting for: " << cmd->event_wait.sync_event << " curr: " << *event_addr << ENDL();
     while (*event_addr < cmd->event_wait.sync_event);
-    DPRINT << "done waiting for: " << cmd->event_wait.sync_event << " curr: " << *event_addr << ENDL();
     return CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(CQPrefetchHToPrefetchDHeader);
 }
 
@@ -1142,9 +1136,6 @@ bool process_cmd(uint32_t& cmd_ptr,
         if (is_h_variant) {
             ASSERT(stall_state == STALLED); // ExecBuf must be preceded by a prefetcher stall
         }
-        // for (volatile int i = 0; i < 300; i++) {
-        //     DPRINT << "Waiting on exec buf for: " << i << ENDL();
-        // }
         stride = process_exec_buf_cmd(cmd_ptr, downstream_data_ptr);
         stall_state = NOT_STALLED; // Stall is no longer required after ExecBuf finished.
         break;
@@ -1176,6 +1167,8 @@ bool process_cmd(uint32_t& cmd_ptr,
         done = true;
         break;
 
+    case CQ_PREFETCH_CMD_WAIT_FOR_EVENT:
+        stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
     default:
         //DPRINT << "prefetch invalid command:" << (uint32_t)cmd->base.cmd_id << " " << cmd_ptr << " " << cmddat_q_base << ENDL();
         DPRINT << HEX() << *(uint32_t*)cmd_ptr << ENDL();
@@ -1310,16 +1303,10 @@ void kernel_main_h() {
             // prefetch_h will stop execution until it recieves an event update from the
             // dispatch_d core assigned to the other CQ
             uint32_t stride = process_prefetch_h_wait_cmd(cmd_ptr);
-            cmd_ptr += stride;
         }
-        else {
-            // Infer that an exec_buf command is to be executed based on the stall state.
-            bool is_exec_buf = (stall_state == STALLED);
-            // if (is_exec_buf) {
-            //     DPRINT << "Sending exec buf" << ENDL();
-            // }
-            cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
-        }
+        // Infer that an exec_buf command is to be executed based on the stall state.
+        bool is_exec_buf = (stall_state == STALLED);
+        cmd_ptr = process_relay_inline_all(cmd_ptr, fence, is_exec_buf);
 
         // Note: one fetch_q entry can contain multiple commands
         // The code below assumes these commands arrive individually, packing them would require parsing all cmds

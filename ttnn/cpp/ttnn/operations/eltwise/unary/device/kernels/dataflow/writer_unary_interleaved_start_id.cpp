@@ -34,7 +34,7 @@ void kernel_main() {
         .page_size = tile_bytes,
         .data_format = data_format
     };
-
+    int ct = 0;
     #ifdef BACKWARDS
     uint32_t end_id = start_id - num_tiles;
     for (uint32_t i = start_id; i != end_id; -- i) {
@@ -42,6 +42,7 @@ void kernel_main() {
     uint32_t end_id = start_id + num_tiles;
     for (uint32_t i = start_id; i < end_id; ++ i) {
     #endif
+        ct++;
         RISC_POST_STATUS_2((0xc << 16) | (end_id - start_id) << 8 | (onetile), PRINT_BUFFER_START + 8);
         cb_wait_front(cb_id_out, onetile);
         RISC_POST_STATUS_2((0xd << 16) | (end_id - start_id) << 8 | (onetile), PRINT_BUFFER_START + 8);
@@ -52,5 +53,5 @@ void kernel_main() {
         cb_pop_front(cb_id_out, onetile);
     }
     #endif
-    RISC_POST_STATUS_2(0xdddd, PRINT_BUFFER_START + 8);
+    RISC_POST_STATUS_2(0xdddd0000 | ct , PRINT_BUFFER_START + 8);
 }

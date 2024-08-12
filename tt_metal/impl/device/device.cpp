@@ -568,6 +568,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[5]  = settings.issue_queue_start_addr;
                     compile_args[6]  = settings.issue_queue_size;
                     compile_args[7]  = dispatch_constants::PREFETCH_Q_BASE;
+                    std::cout << "Prefetch Q base: " << std::hex << dispatch_constants::PREFETCH_Q_BASE << std::endl;;
                     compile_args[8]  = dispatch_constants::get(dispatch_core_type).prefetch_q_size();
                     compile_args[9]  = CQ_PREFETCH_Q_RD_PTR;
                     compile_args[10] = CQ_PREFETCH_Q_PCIE_RD_PTR;
@@ -1124,7 +1125,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.producer_semaphore_id = 1;
                 tunnel_core_allocations[PREFETCH].push_back(std::make_tuple(prefetch_location, settings));
                 settings.semaphores.clear();
-                std::cout << "Prefetch_h "<< cq_id << " on: " << prefetch_location.str() << std::endl;
+                std::cout << "Prefetch_h "<< cq_id << " on: " << prefetch_location.str() << " " << settings.worker_physical_core.str() <<  std::endl;
             }
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
@@ -1164,7 +1165,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_mux.cpp";
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                 settings.cb_size_bytes = dispatch_constants::get(dispatch_core_type).mux_buffer_size(num_hw_cqs);
-
+                std::cout << "MUX Physical Location: " << settings.worker_physical_core.str() << std::endl;
                 tunnel_core_allocations[MUX].push_back(std::make_tuple(mux_location, settings));
                 tt_cxy_pair demux_location = dispatch_core_manager::instance().demux_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(demux_location.chip, get_physical_core_coordinate(demux_location, dispatch_core_type));
@@ -1172,6 +1173,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_start_address = L1_UNRESERVED_BASE;
                 settings.cb_size_bytes = 0x10000;
                 tunnel_core_allocations[DEMUX].push_back(std::make_tuple(demux_location, settings));
+                std::cout << "DEMUX Physical location: " << settings.worker_physical_core.str() << std::endl;
             }
 
             settings.tunnel_stop = tunnel_stop - 1;
@@ -1237,7 +1239,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
                 settings.cb_log_page_size = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
                 tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
-                std::cout << "Prefetch_d "<< cq_id << " on: " << prefetch_d_location.str() << std::endl;
+                std::cout << "Prefetch_d "<< cq_id << " on: " << prefetch_d_location.str() <<  " " << settings.worker_physical_core.str() << std::endl;
                 settings.semaphores.clear();
             }
 

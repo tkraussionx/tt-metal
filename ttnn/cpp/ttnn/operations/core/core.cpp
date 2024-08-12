@@ -161,22 +161,10 @@ void end_trace_capture(Device* device, const uint32_t tid, const uint8_t cq_id) 
     device->push_work([device, cq_id, tid]() mutable { device->end_trace(cq_id, tid); });
 }
 
-// void validate_kernel_binaries(Program& program) {
-//     for (int buffer_idx = 0; buffer_idx < program.program_transfer_info.kernel_bins.size(); buffer_idx++) {
-//         const auto& buffer = program.kg_buffers[buffer_idx];
-//         std::vector<uint32_t> read_data(buffer->page_size() * buffer->num_pages() / sizeof(uint32_t));
-//         this->enqueue_read_buffer(*buffer, read_data.data(), true);
-//         TT_FATAL(
-//             program.program_transfer_info.kernel_bins[buffer_idx].data == read_data,
-//             "Binary for program to be executed is corrupted. Another program likely corrupted this binary");
-//     }
-// }
+
 void execute_trace(Device* device, const uint32_t tid, const uint8_t cq_id, bool blocking) {
     // If blocking, ensure that worker thread blocks until trace is completed
     device->push_work([device, cq_id, tid, blocking]() mutable {
-        // for (auto prog_entry : device->programs) {
-        //     program.validate_kernel_binaries();
-        // }
         device->replay_trace(cq_id, tid, blocking);
     });
     // If blocking, wait until worker threads have completed

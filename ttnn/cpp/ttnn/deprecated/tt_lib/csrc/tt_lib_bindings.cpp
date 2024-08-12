@@ -189,6 +189,10 @@ void DeviceModule(py::module &m_device) {
         | prefix           | Dumped report filename prefix    | str                   |             | No       |
         +------------------+----------------------------------+-----------------------+-------------+----------+
     )doc");
+    m_device.def("Flush",
+        [] (Device* device) {
+            device->synchronize();
+        });
 
     m_device.def("Synchronize",
         [] (Device* device) {
@@ -283,12 +287,20 @@ void DeviceModule(py::module &m_device) {
     m_device.def("WaitForEvent",
         [] (Device* device, const uint8_t cq_id, std::shared_ptr<Event> event) {
             device->push_work([device, cq_id, event] {
+                // std::cout << "Wait for event on: " << +cq_id << " Device: " << device->id() << " Event: " << event->event_id << std::endl;
+                // std::cout << "Wait ID: " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << std::endl;
                 EnqueueWaitForEvent(device->command_queue(cq_id), event);
             });
         }, R"doc(
         Wait for an event
     )doc");
-
+    m_device.def("EventSynchronize",
+        [] (Device* device, std::shared_ptr<Event> event) {
+            device->push_work([device, event] {
+                EventSynchronize(event);
+            });
+            device->synchronize();
+        });
     m_device.attr("DEFAULT_L1_SMALL_SIZE") = py::int_(DEFAULT_L1_SMALL_SIZE);
     m_device.attr("DEFAULT_TRACE_REGION_SIZE") = py::int_(DEFAULT_TRACE_REGION_SIZE);
 }

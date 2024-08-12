@@ -35,7 +35,6 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
         split_work_to_cores(compute_with_storage_grid_size, num_tiles);
-
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
     tt::tt_metal::CircularBufferConfig cb_src0_config =
@@ -76,7 +75,6 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
         num_tiles_per_core_group_1,  // per_core_block_cnt
         1                            // per_core_block_size
     };
-    std::cout << "num_tiles_per_core_group_1 "  << num_tiles_per_core_group_1 << std::endl;
     bool math_approx_mode = std::all_of(
         op_chain.begin(), op_chain.end(), [](const auto &u) { return utils::get_op_approx_mode(u.op_type); });
     std::map<string, string> unary_defines = utils::get_block_defines(op_chain);
@@ -97,7 +95,6 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
             num_tiles_per_core_group_2,  // per_core_block_cnt
             1                            // per_core_block_size
         };
-        std::cout << "num_tiles_per_core_group_2 "  << num_tiles_per_core_group_1 << std::endl;
         auto eltwise_unary_kernel_group_2_id = tt::tt_metal::CreateKernel(
             program,
             "tt_metal/kernels/compute/eltwise_sfpu.cpp",
@@ -121,12 +118,9 @@ operation::ProgramWithCallbacks unary_multi_core(const Tensor &a, Tensor &output
         } else {
             TT_ASSERT(false, "Core not in specified core ranges");
         }
-        std::cout << "Core: " << device->physical_core_from_logical_core(core, CoreType::WORKER).str() << std::endl;
-        std::cout << "Set Reader ARGs to: " << src_buffer->address() << " " << " " << num_tiles_per_core << " " << num_tiles_written << std::endl;
         tt::tt_metal::SetRuntimeArgs(
             program, unary_reader_kernel_id, core, {src_buffer->address(), num_tiles_per_core, num_tiles_written});
 
-        std::cout << "Set Writer ARGs to: " << dst_buffer->address() << " " << " " << num_tiles_per_core << " " << num_tiles_written << std::endl;
         tt::tt_metal::SetRuntimeArgs(
             program, unary_writer_kernel_id, core, {dst_buffer->address(), num_tiles_per_core, num_tiles_written});
         num_tiles_written += num_tiles_per_core;
