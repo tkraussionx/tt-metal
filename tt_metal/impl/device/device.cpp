@@ -1925,6 +1925,7 @@ bool Device::close() {
     llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
 
     DprintServerDetach(this);
+    if (this->id() == 7 || this->id() == 3)
     watcher_detach(this);
 
     // Assert worker cores

@@ -138,7 +138,7 @@ def all_devices(request, device_params):
     # Get only physical devices
     devices = ttl.device.CreateDevices(device_ids, **device_params)
 
-    yield [devices[i] for i in range(num_devices)]
+    yield [devices[i] for i in device_ids]
 
     for device in devices.values():
         ttl.device.DumpDeviceProfiler(device)

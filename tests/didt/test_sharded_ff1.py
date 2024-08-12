@@ -35,11 +35,9 @@ def test_reproduce_matmul_2d_hang(
     loop_count,
     use_program_cache,
 ):
+    num_devices = len(all_devices)
     devices = []
-    if num_devices == 8:
-        devices = get_devices_for_t3000(all_devices, num_devices)
-    else:
-        devices = all_devices
+    devices = all_devices
 
     print("Running on ", num_devices, " devices")
     torch.manual_seed(1234)
@@ -90,6 +88,7 @@ def test_reproduce_matmul_2d_hang(
 
     A = torch.randn(a_shape)
     B = torch.randn(b_shape)
+    O = A @ B
 
     a_t = []
     b_t = []
@@ -132,6 +131,7 @@ def test_reproduce_matmul_2d_hang(
     ref_out = []
     for device_idx in range(num_devices):
         ref_out.append(tt2torch_tensor(out[device_idx]))
+        print(ref_out[-1].numel())
 
     for device_idx in range(num_devices):
         ttl.device.Synchronize(devices[device_idx])
@@ -153,24 +153,29 @@ def test_reproduce_matmul_2d_hang(
         for device_idx in range(num_devices):
             if num_devices != 1:
                 if num_devices == 2:
-                    print("Start sync logicalDeviceID: ", device_idx)
+                    print("Start sync logicalDeviceID: ", devices[device_idx].id())
                 if num_devices == 8:
                     print(
                         "Start sync logicalDeviceID: ",
-                        device_idx,
+                        devices[device_idx].id(),
                         " eth coordinates: ",
                         logical_chip_id_to_coordinates[device_idx],
                     )
             else:
                 print("Start single device sync:")
             ttl.device.Synchronize(devices[device_idx])
+            out_h = tt2torch_tensor(out[device_idx])
+            num_mismatch = ref_out[device_idx].numel() - torch.count_nonzero(torch.eq(ref_out[device_idx], out_h))
+            print(f"Max Diff: {torch.amax(torch.abs(ref_out[device_idx] - out_h))}")
+            print(f"Num Mismatch: {num_mismatch}")
+            # assert(num_mismatch == 0)
             if num_devices != 1:
                 if num_devices == 2:
-                    print("End sync logicalDeviceID: ", device_idx)
+                    print("End sync logicalDeviceID: ", devices[device_idx].id())
                 if num_devices == 8:
                     print(
                         "End sync logicalDeviceID: ",
-                        device_idx,
+                        devices[device_idx].id(),
                         " eth coordinates: ",
                         logical_chip_id_to_coordinates[device_idx],
                     )
@@ -197,7 +202,7 @@ def test_specific_chip_reproduce_matmul_2d_hang_t3000(all_devices, logical_chip_
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
         pytest.skip("Test is only valid for t3000 machines")
-    devices = get_devices_for_t3000(all_devices, num_devices_t3000)
+    devices = all_devices  # get_devices_for_t3000(all_devices, num_devices_t3000)
 
     logical_chip_id_to_coordinates = [None] * num_devices_t3000
     logical_chip_id_to_coordinates[0] = (1, 0)

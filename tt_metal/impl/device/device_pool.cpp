@@ -155,12 +155,13 @@ void DevicePool::initialize_device(Device* dev) const {
     }
 
     DprintServerAttach(dev);
+    if (dev->id() == 7 || dev->id() == 3)
     watcher_init(dev);
 
     // TODO: as optimization, investigate removing all this call for already initialized devivces
     dev->reset_cores();
     dev->initialize_and_launch_firmware();
-
+    if (dev->id() == 7 || dev->id() == 3)
     watcher_attach(dev);
 
     // Set up HW command queues on device for FD
