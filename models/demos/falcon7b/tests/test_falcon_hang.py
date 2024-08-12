@@ -24,7 +24,13 @@ CHIP_ID_TO_COORDINATES_T3K[7] = (3, 0)
 
 @pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
 def test_reproduce_lm_head_nd_32(
-    all_devices, num_devices, use_program_cache, determinism_check_enabled=False, determinism_check_iterations=1
+    all_devices,
+    num_devices,
+    use_program_cache,
+    grid_size_x=8,
+    grid_size_y=8,
+    determinism_check_enabled=False,
+    determinism_check_iterations=1,
 ):
     devices = []
     if num_devices == 8:
@@ -48,9 +54,26 @@ def test_reproduce_lm_head_nd_32(
 
     torch.manual_seed(1234)
 
-    seq_len = 32
-    a_shape = [1, 1, seq_len, 4544]
-    b_shape = [1, 1, 4544, 65024]
+    seq_len = 32 * 1
+    inner_dim = 32 * 142
+    weights_n = 32 * 2032
+    per_core_M = 1
+    per_core_N = 32
+    in_block_w = 2
+    out_subblock_h = 1
+    out_subblock_w = 8
+
+    # for matmul 1D regardless of whether we remove column or row, we
+    # need to reduce the weights width
+    if grid_size_x != 8 or grid_size_y != 8:
+        one_column_or_row = per_core_N * 8 * 32
+        if grid_size_x != 8:
+            weights_n -= one_column_or_row * (8 - grid_size_x)
+        else:
+            weights_n -= one_column_or_row * (8 - grid_size_y)
+
+    a_shape = [1, 1, seq_len, inner_dim]
+    b_shape = [1, 1, inner_dim, weights_n]
 
     num_activation_tensors = 1
     if determinism_check_enabled:
@@ -77,12 +100,12 @@ def test_reproduce_lm_head_nd_32(
     bias_t = None
 
     mm_prog_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 8),
-        in0_block_w=2,
-        per_core_M=1,
-        per_core_N=32,
-        out_subblock_h=1,
-        out_subblock_w=8,
+        compute_with_storage_grid_size=(grid_size_x, grid_size_y),
+        in0_block_w=in_block_w,
+        per_core_M=per_core_M,
+        per_core_N=per_core_N,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=True,
@@ -227,6 +250,8 @@ def test_determinism(all_devices, num_devices, use_program_cache, determinism_ch
         num_devices,
         use_program_cache,
         determinism_check_enabled=True,
+        grid_size_x=8,
+        grid_size_y=8,
         determinism_check_iterations=determinism_check_iterations,
     )
 
@@ -263,3 +288,35 @@ def test_determinism_specific_chip(all_devices, logical_chip_index, use_program_
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
     )
+
+
+@pytest.mark.parametrize(
+    "grid_size_x, grid_size_y",
+    (
+        (1, 8),
+        (2, 8),
+        (3, 8),
+        (4, 8),
+        (5, 8),
+        (6, 8),
+        (7, 8),
+        (8, 8),
+        (8, 7),
+        (8, 6),
+        (8, 5),
+        (8, 4),
+        (8, 3),
+        (8, 2),
+        (8, 1),
+    ),
+    ids=["1x8", "2x8", "3x8", "4x8", "5x8", "6x8", "7x8", "8x8", "8x7", "8x6", "8x5", "8x4", "8x3", "8x2", "8x1"],
+)
+@pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
+def test_grid_size(
+    all_devices,
+    grid_size_x,
+    grid_size_y,
+    num_devices,
+    use_program_cache,
+):
+    test_reproduce_lm_head_nd_32(all_devices, num_devices, use_program_cache, grid_size_x, grid_size_y)

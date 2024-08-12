@@ -43,6 +43,8 @@ def test_reproduce_matmul_2d_hang(
     out_subblock_w,
     loop_count,
     use_program_cache,
+    grid_size_x=8,
+    grid_size_y=8,
     determinism_check_enabled=False,
     determinism_check_iterations=1,
 ):
@@ -87,6 +89,11 @@ def test_reproduce_matmul_2d_hang(
     in1_dtype = ttl.tensor.DataType.BFLOAT8_B
     out_dtype = ttl.tensor.DataType.BFLOAT16
 
+    if grid_size_x < 8:
+        weights_n -= 32 * per_core_N * (8 - grid_size_x)
+    elif grid_size_y < 8:
+        seq_len -= 32 * per_core_M * (8 - grid_size_y)
+
     a_shape = [1, 1, seq_len, inner_dim]
     b_shape = [1, 1, inner_dim, weights_n]
 
@@ -113,7 +120,7 @@ def test_reproduce_matmul_2d_hang(
         b_t.append(torch2tt_tensor(B, devices[device_idx], ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype))
 
     program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
-        compute_with_storage_grid_size=(8, 8),
+        compute_with_storage_grid_size=(grid_size_x, grid_size_y),
         in0_block_w=in_block_w,
         out_subblock_h=out_subblock_h,
         out_subblock_w=out_subblock_w,
@@ -359,4 +366,67 @@ def test_determinism_specific_chip(
         use_program_cache,
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
+    )
+
+
+@pytest.mark.parametrize(
+    "seq_len, inner_dim, weights_n, per_core_M, per_core_N, in_block_w, out_subblock_h, out_subblock_w, loop_count",
+    (FF1_HANG_PARAMETRIZATION,),
+    ids=[
+        "ff1-hang-grid-size",
+    ],
+)
+@pytest.mark.parametrize(
+    "grid_x, grid_y",
+    (
+        (1, 8),
+        (2, 8),
+        (3, 8),
+        (4, 8),
+        (5, 8),
+        (6, 8),
+        (7, 8),
+        (8, 8),
+        (8, 7),
+        (8, 6),
+        (8, 5),
+        (8, 4),
+        (8, 3),
+        (8, 2),
+        (8, 1),
+    ),
+    ids=["1x8", "2x8", "3x8", "4x8", "5x8", "6x8", "7x8", "8x8", "8x7", "8x6", "8x5", "8x4", "8x3", "8x2", "8x1"],
+)
+@pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
+def test_grid_size(
+    all_devices,
+    seq_len,
+    inner_dim,
+    weights_n,
+    per_core_M,
+    per_core_N,
+    in_block_w,
+    out_subblock_h,
+    out_subblock_w,
+    loop_count,
+    grid_x,
+    grid_y,
+    num_devices,
+    use_program_cache,
+):
+    test_reproduce_matmul_2d_hang(
+        num_devices,
+        all_devices,
+        seq_len,
+        inner_dim,
+        weights_n,
+        per_core_M,
+        per_core_N,
+        in_block_w,
+        out_subblock_h,
+        out_subblock_w,
+        loop_count,
+        use_program_cache,
+        grid_x,
+        grid_y,
     )
