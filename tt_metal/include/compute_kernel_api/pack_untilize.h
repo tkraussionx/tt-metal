@@ -12,6 +12,7 @@
 #ifdef TRISC_UNPACK
 #include "llk_unpack_A_api.h"
 #endif
+#include "tools/profiler/kernel_profiler.hpp"
 
 namespace ckernel {
 
@@ -40,17 +41,27 @@ ALWI void pack_untilize_init(uint32_t icb, uint32_t ocb)
 */
 template <uint32_t block_ct_dim = 8>
 ALWI void pack_untilize_block(uint32_t icb, uint32_t block_rt_dim, uint32_t ocb) {
+    DeviceZoneScopedN("FULL UNTILIZE");
     for (uint32_t r = 0; r < block_rt_dim; ++r) {
-        MATH(( llk_math_wait_for_dest_available() ));
+        // MATH(( llk_math_wait_for_dest_available() ));
         for (uint32_t c = 0; c < block_ct_dim; ++c) {
+            {
+            UNPACK(DeviceZoneScopedN("UNPACK UNTILIZE");)
             UNPACK(( llk_unpack_A<BroadcastType::NONE, false, EltwiseBinaryReuseDestType::NONE, UnpackToDestEn>(icb, c) ));
+            }
+            {
+            MATH(DeviceZoneScopedN("MATH UNTILIZE");)
             MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, DST_ACCUM_MODE, UnpackToDestEn>(c) ));
+            }
         }
-        MATH(( llk_math_dest_section_done<DST_ACCUM_MODE>() ));
+        // MATH(( llk_math_dest_section_done<DST_ACCUM_MODE>() ));
 
-        PACK(( llk_packer_wait_for_math_done() ));
+        // PACK(( llk_packer_wait_for_math_done() ));
+        {
+        PACK(DeviceZoneScopedN("PACK UNTILIZE");)
         PACK(( llk_pack_untilize<block_ct_dim>(1 /*num_blocks*/, ocb) ));
-        PACK(( llk_pack_dest_section_done<DST_ACCUM_MODE>() ));
+        }
+        // PACK(( llk_pack_dest_section_done<DST_ACCUM_MODE>() ));
     }
 }
 

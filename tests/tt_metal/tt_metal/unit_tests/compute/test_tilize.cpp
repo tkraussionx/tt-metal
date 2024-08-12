@@ -147,7 +147,7 @@ TEST_F(DeviceFixture, ComputeUnpackTilize) {
     unit_tests::compute::tilize::TilizeConfig test_config = {
         .single_tile_size = 2 * 1024,
         .num_tiles_r = 1,
-        .num_tiles_c = 4,
+        .num_tiles_c = 8,
         .golden_function = unit_tests::compute::gold_standard_tilize
     };
     unit_tests::compute::tilize::run_single_core_tilize_program(this->devices_.at(0), test_config);
