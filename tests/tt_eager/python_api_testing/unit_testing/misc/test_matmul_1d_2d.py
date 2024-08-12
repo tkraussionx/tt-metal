@@ -36,7 +36,7 @@ def find_max_subblock(out_block_h, out_block_w):
 from models.utility_functions import is_wormhole_b0, is_grayskull, skip_for_wormhole_b0
 
 
-@skip_for_wormhole_b0()
+# @skip_for_wormhole_b0()
 @pytest.mark.skipif(is_grayskull(), reason="no llama2 test on GS")
 @pytest.mark.parametrize(
     "packer_l1_acc",
@@ -48,7 +48,7 @@ from models.utility_functions import is_wormhole_b0, is_grayskull, skip_for_worm
 @pytest.mark.parametrize(
     "fp32_acc_mode",
     [
-        False,
+        True,
     ],
     ids=["no_fp32"],
 )
@@ -69,14 +69,16 @@ from models.utility_functions import is_wormhole_b0, is_grayskull, skip_for_worm
 @pytest.mark.parametrize(
     "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation, grid_size",
     [
-        (False, True, True, 32, 8192, 1280, None, (8, 1)),
-        (False, True, True, 32, 8192, 4096, None, (8, 4)),
-        (False, True, True, 32, 8192, 1024, None, (8, 4)),
-        (False, True, True, 32, 32768, 1024, None, (8, 4)),
+        # (False, True, True, 32, 8192, 1280, None, (8, 1)),
+        # (False, True, True, 32, 8192, 4096, None, (8, 4)),
+        # (False, True, True, 32, 8192, 1024, None, (8, 4)),
+        # (False, True, True, 32, 32768, 1024, None, (8, 4)),
+        (False, False, False, 512, 16 * 1024 // 8, 52 * 1024 // 4, None, (4, 8))
     ],
 )
 def test_llama2_matmul(
-    device,
+    # device,
+    t3k_device_mesh,
     in0_sharded,
     out_sharded,
     in1_in_dram,
@@ -90,8 +92,10 @@ def test_llama2_matmul(
     fp32_acc_mode,
     grid_size,
     function_level_defaults,
+    use_program_cache,
 ):
-    in0_shape = [1, 1, M, K]
+    n_devices = t3k_device_mesh.get_num_devices()
+    in0_shape = [1, n_devices, M, K]
     in1_shape = [1, 1, K, N]
     bias_shape = [1, 1, N]
     num_cores = grid_size[0] * grid_size[1]
@@ -123,9 +127,28 @@ def test_llama2_matmul(
 
     output_mem_config = sharded_mem_config
 
-    in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT16)
-    in1_t = torch2tt_tensor(
-        in1, device, tt_memory_config=interleaved_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+    # in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT16)
+    # in1_t = torch2tt_tensor(
+    #     in1, device, tt_memory_config=interleaved_mem_config, tt_dtype=ttl.tensor.DataType.BFLOAT8_B
+    # )
+    from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor
+
+    in0_t = ttnn.as_tensor(
+        in0,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=t3k_device_mesh,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ShardTensorToMesh(t3k_device_mesh, dim=1),
+    )
+
+    in1_t = ttnn.as_tensor(
+        in1,
+        dtype=ttnn.bfloat8_b,
+        layout=ttnn.TILE_LAYOUT,
+        device=t3k_device_mesh,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
     )
 
     if in0_sharded:
@@ -156,23 +179,26 @@ def test_llama2_matmul(
         packer_l1_acc=packer_l1_acc,
     )
 
-    output_t = ttnn.matmul(
-        in0_t,
-        in1_t,
-        program_config=program_config,
-        memory_config=output_mem_config,
-        dtype=ttl.tensor.DataType.BFLOAT8_B,
-        compute_kernel_config=compute_kernel_config,
-    )
-    if out_sharded:
-        output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
-    pt_out = in0 @ in1 + bias
+    for i in range(1000):
+        output_t = ttnn.matmul(
+            in0_t,
+            in1_t,
+            core_grid=ttnn.CoreGrid(y=grid_size[1], x=grid_size[0]),
+            # program_config=program_config,
+            # memory_config=output_mem_config,
+            dtype=ttl.tensor.DataType.BFLOAT16,
+            compute_kernel_config=compute_kernel_config,
+        )
+        if out_sharded:
+            output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
+        pt_out = in0 @ in1 + bias
 
-    tt_out = tt2torch_tensor(output_t)
+        # tt_out = tt2torch_tensor(output_t)
+        tt_out = ttnn.to_torch(output_t, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=1))
 
-    passing, output = comp_pcc(pt_out, tt_out)
-    logger.info(output)
-    assert passing
+        passing, output = comp_pcc(pt_out, tt_out)
+        logger.info(output)
+        assert passing
 
 
 @skip_for_wormhole_b0()
