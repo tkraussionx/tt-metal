@@ -34,61 +34,64 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestAsyncPreallocatedOutputs) {
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[input_buf_size_datums]);
     auto readback_data = std::shared_ptr<bfloat16 []>(new bfloat16[output_buf_size_datums]);
 
-
-    for (int i = 0; i < input_buf_size_datums; i++) {
-        host_data[i] = bfloat16(static_cast<float>(1));
-    }
-    // Create golden data using tt_eager APIs
-    Tensor np_tensor = tt::numpy::full<float>(input_shape.value, static_cast<float>(1), DataType::BFLOAT16)
-                           .to(Layout::TILE)
-                           .to(device);
-    std::vector<int64_t> reduce_dims = {3};
-    Tensor np_out = tt::operations::primary::moreh_sum(np_tensor, reduce_dims);
-    Tensor np_out_host = np_out.cpu();
-    const bfloat16* golden_output = std::get<owned_buffer::Buffer<bfloat16>>(std::get<OwnedStorage>(np_out_host.get_storage()).buffer).begin();
-    // Enable Asynchronous Execution and test ttnn runtime APIs
-    device->set_worker_mode(WorkExecutorMode::ASYNCHRONOUS);
-    // Events for host - device synchronization
-    auto write_event = std::make_shared<Event>();
-    auto workload_event = std::make_shared<Event>();
-    // Running sum-reduce with preallocated output
-    auto op = tt::operations::primary::MorehSum{.dim = 3};
-    // Preallocate Input and Output Tensors on Device
-    auto input_buffer = ttnn::allocate_buffer_on_device(input_buf_size_datums * datum_size_bytes, device, input_shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
-    auto output_buffer = ttnn::allocate_buffer_on_device(output_buf_size_datums * datum_size_bytes, device, np_out.get_shape(), DataType::BFLOAT16, Layout::TILE, mem_cfg);
-    auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
-    auto output_storage = tt::tt_metal::DeviceStorage{output_buffer};
-    Tensor input_tensor = Tensor(input_storage, input_shape, DataType::BFLOAT16, Layout::TILE);
-    Tensor output_tensor = Tensor(output_storage, np_out.get_shape(), DataType::BFLOAT16, Layout::TILE);
-    // Populate input_tensor with data
-    ttnn::write_buffer(io_cq, input_tensor, {host_data});
-    // Record the completion of the write event
-    ttnn::record_event(device->command_queue(io_cq), write_event);
-    // Host stalls until write is completed, before sending workload
-    ttnn::event_synchronize(device, write_event);
-    // Dispatch workload. Preallocated output_tensor is populated by op/
-    ttnn::run_operation(workload_dispatch_cq, op, {input_tensor}, {}, {output_tensor}).at(0);
-    // Record completion of workload
-    ttnn::record_event(device->command_queue(workload_dispatch_cq), workload_event);
-    ttnn::event_synchronize(device, workload_event);
-    // Read output back, once workload is complete
-    ttnn::read_buffer(io_cq, output_tensor, {readback_data});
-    // Ensure that reference count book keeping is done correctly
-    // Tensors only have one reference in the main thread. Ensure this is true.
-    EXPECT_EQ(input_tensor.tensor_attributes->main_thread_ref_count, 1);
-    EXPECT_EQ(output_tensor.tensor_attributes->main_thread_ref_count, 1);
-    // Buffers are currently jointly owned by the original buffer object, the storage object and the tensor (3).
-    EXPECT_EQ(input_buffer.use_count(), 3);
-    EXPECT_EQ(output_buffer.use_count(), 3);
-    // Deallocate tensors (tensor gives up buffer). Done asynchronously, so sync on queue after.
-    input_tensor.deallocate();
-    output_tensor.deallocate();
-    ttnn::queue_synchronize(device->command_queue(0));
-    // Buffer only has 2 owners in main thread.
-    EXPECT_EQ(input_buffer.use_count(), 2);
-    EXPECT_EQ(output_buffer.use_count(), 2);
-    for (int i = 0; i  < output_buf_size_datums; i++) {
-        EXPECT_EQ(readback_data[i], golden_output[i]);
+    for (int loop = 0; loop < 5000; loop++) {
+        if (loop % 100 == 0) std::cout << "Running loop: " << loop << std::endl;
+        for (int i = 0; i < input_buf_size_datums; i++) {
+            host_data[i] = bfloat16(static_cast<float>(loop % 5));
+        }
+        // Create golden data using tt_eager APIs
+        Tensor np_tensor = tt::numpy::full<float>(input_shape.value, static_cast<float>(loop % 5), DataType::BFLOAT16)
+                            .to(Layout::TILE)
+                            .to(device);
+        std::vector<int64_t> reduce_dims = {3};
+        Tensor np_out = tt::operations::primary::moreh_sum(np_tensor, reduce_dims);
+        Tensor np_out_host = np_out.cpu();
+        const bfloat16* golden_output = std::get<owned_buffer::Buffer<bfloat16>>(std::get<OwnedStorage>(np_out_host.get_storage()).buffer).begin();
+        // Enable Asynchronous Execution and test ttnn runtime APIs
+        device->set_worker_mode(WorkExecutorMode::ASYNCHRONOUS);
+        // Events for host - device synchronization
+        auto write_event = std::make_shared<Event>();
+        auto workload_event = std::make_shared<Event>();
+        // Running sum-reduce with preallocated output
+        auto op = tt::operations::primary::MorehSum{.dim = 3};
+        // Preallocate Input and Output Tensors on Device
+        auto input_buffer = ttnn::allocate_buffer_on_device(input_buf_size_datums * datum_size_bytes, device, input_shape, DataType::BFLOAT16, Layout::TILE, mem_cfg);
+        auto output_buffer = ttnn::allocate_buffer_on_device(output_buf_size_datums * datum_size_bytes, device, np_out.get_shape(), DataType::BFLOAT16, Layout::TILE, mem_cfg);
+        auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
+        auto output_storage = tt::tt_metal::DeviceStorage{output_buffer};
+        Tensor input_tensor = Tensor(input_storage, input_shape, DataType::BFLOAT16, Layout::TILE);
+        Tensor output_tensor = Tensor(output_storage, np_out.get_shape(), DataType::BFLOAT16, Layout::TILE);
+        // Populate input_tensor with data
+        ttnn::write_buffer(io_cq, input_tensor, {host_data});
+        // Record the completion of the write event
+        ttnn::record_event(device->command_queue(io_cq), write_event);
+        // Host stalls until write is completed, before sending workload
+        ttnn::event_synchronize(device, write_event);
+        // Dispatch workload. Preallocated output_tensor is populated by op/
+        ttnn::run_operation(workload_dispatch_cq, op, {input_tensor}, {}, {output_tensor}).at(0);
+        // Record completion of workload
+        ttnn::record_event(device->command_queue(workload_dispatch_cq), workload_event);
+        ttnn::event_synchronize(device, workload_event);
+        // Read output back, once workload is complete
+        ttnn::read_buffer(io_cq, output_tensor, {readback_data});
+        // Ensure that reference count book keeping is done correctly
+        // Tensors only have one reference in the main thread. Ensure this is true.
+        EXPECT_EQ(input_tensor.tensor_attributes->main_thread_ref_count, 1);
+        EXPECT_EQ(output_tensor.tensor_attributes->main_thread_ref_count, 1);
+        // Buffers are currently jointly owned by the original buffer object, the storage object and the tensor (3).
+        EXPECT_EQ(input_buffer.use_count(), 3);
+        EXPECT_EQ(output_buffer.use_count(), 3);
+        // Deallocate tensors (tensor gives up buffer). Done asynchronously, so sync on queue after.
+        input_tensor.deallocate();
+        output_tensor.deallocate();
+        ttnn::queue_synchronize(device->command_queue(0));
+        // Buffer only has 2 owners in main thread.
+        EXPECT_EQ(input_buffer.use_count(), 2);
+        EXPECT_EQ(output_buffer.use_count(), 2);
+        for (int i = 0; i  < output_buf_size_datums; i++) {
+            EXPECT_EQ(readback_data[i], golden_output[i]);
+        }
+        device->set_worker_mode(tt::WorkExecutorMode::SYNCHRONOUS);
     }
 }
 

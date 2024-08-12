@@ -215,8 +215,8 @@ class WorkExecutor {
     inline void synchronize_worker_queue(uint8_t cq_id = 0) {
         if (this->work_executor_mode == WorkExecutorMode::ASYNCHRONOUS and
             not(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.worker_thread_id.load())) {
-            this->tagged_worker_queue.push({cq_id, []() {}});  // Send flush command (i.e. empty function)
             this->num_tasks_per_cq.at(cq_id)++;
+            this->tagged_worker_queue.push({cq_id, []() {}});  // Send flush command (i.e. empty function)
             {
                 std::lock_guard lock(this->cv_mutex);
                 cv.notify_one();
@@ -262,9 +262,9 @@ class WorkExecutor {
 
     inline void set_worker_queue_mode(const WorkerQueueMode& mode) {
         if (mode == WorkerQueueMode::LOCKFREE) {
-            this->worker_queue.set_lock_free();
+            this->tagged_worker_queue.set_lock_free();
         } else {
-            this->worker_queue.set_lock_based();
+            this->tagged_worker_queue.set_lock_based();
         }
         this->worker_queue_mode = mode;
     }
