@@ -23,7 +23,7 @@ def is_watcher_enabled():
 def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
     torch.manual_seed(1234)
 
-    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+    program_config = ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
         q_chunk_size=q_chunk_size,
         k_chunk_size=k_chunk_size,
@@ -52,7 +52,7 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
     tt_K = tt_lib.tensor.Tensor(K, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
     tt_V = tt_lib.tensor.Tensor(V, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
     tt_attn_mask = tt_lib.tensor.Tensor(attn_mask, dtype).to(tt_lib.tensor.Layout.TILE).to(device)
-    tt_back = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+    tt_back = ttnn.transformer.scaled_dot_product_attention(
         tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
     )
     tt_back = tt_back.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
@@ -190,7 +190,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
         scale = d**-0.5
 
         k_chunk_size = get_chunk_size(start_idx)
-        program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+        program_config = ttnn.SDPAProgramConfig(
             compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
             q_chunk_size=padded_num_heads,
             k_chunk_size=k_chunk_size,
@@ -218,7 +218,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
             attn_mask, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT, memory_config=dram_memcfg
         )
 
-        tt_back = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+        tt_back = ttnn.transformer.scaled_dot_product_attention(
             tt_Q,
             tt_K,
             tt_V,
@@ -228,7 +228,7 @@ def run_test_sdpa_decode(device, b, nh, nkv, s, d, dtype):
             program_config=program_config,
             valid_seq_len=padded_layer_len,
             compute_kernel_config=compute_kernel_config,
-            output_mem_config=height_sharded_memcfg,
+            memory_config=height_sharded_memcfg,
         )
 
         tt_back = ttnn.to_torch(tt_back)
@@ -300,7 +300,7 @@ def run_test_sdpa_decode_single_iter(device, b, nh, nkv, s, d, dtype):
     scale = d**-0.5
 
     k_chunk_size = get_chunk_size(start_idx)
-    program_config = tt_lib.operations.primary.transformers.SDPAMultiCoreProgramConfig(
+    program_config = ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
         q_chunk_size=padded_num_heads,
         k_chunk_size=k_chunk_size,
@@ -326,7 +326,7 @@ def run_test_sdpa_decode_single_iter(device, b, nh, nkv, s, d, dtype):
         attn_mask, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT, memory_config=dram_memcfg
     )
 
-    tt_back = tt_lib.operations.primary.transformers.scaled_dot_product_attention(
+    tt_back = ttnn.transformer.scaled_dot_product_attention(
         tt_Q,
         tt_K,
         tt_V,
@@ -336,7 +336,7 @@ def run_test_sdpa_decode_single_iter(device, b, nh, nkv, s, d, dtype):
         program_config=program_config,
         valid_seq_len=padded_layer_len,
         compute_kernel_config=compute_kernel_config,
-        output_mem_config=height_sharded_memcfg,
+        memory_config=height_sharded_memcfg,
     )
 
     tt_back = ttnn.to_torch(tt_back)

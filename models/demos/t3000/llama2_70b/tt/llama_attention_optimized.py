@@ -271,7 +271,7 @@ class TtLlamaAttention_optimized:
         ttnn.experimental.tensor.update_cache(values, value_layer, start_pos, batch_offset=batch_offset)
         value_layer.deallocate(True)
 
-        attn_output = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention_decode(
+        attn_output = ttnn.transformer.scaled_dot_product_attention_decode(
             query_layer,
             keys,
             values,
@@ -279,7 +279,7 @@ class TtLlamaAttention_optimized:
             scale=self.scale,
             program_config=self.model_config["SDPA_DECODE_PROGRAM_CONFIG"],
             compute_kernel_config=self.model_config["SDPA_COMPUTE_KERNEL_CONFIG"],
-            output_mem_config=self.model_config["SDPA_OUTPUT_MEMCFG"],
+            memory_config=self.model_config["SDPA_OUTPUT_MEMCFG"],
         )
         return attn_output
 
@@ -404,8 +404,8 @@ class TtLlamaAttention_optimized:
             values_reshaped, ttnn.experimental.tensor.typecast(value_layer, ttnn.bfloat8_b), user_id
         )
 
-        # SPDA
-        attn_output = ttnn.experimental.operations.primary.transformers.scaled_dot_product_attention(
+        # SDPA
+        attn_output = ttnn.transformer.scaled_dot_product_attention(
             query_layer,
             key_layer,
             value_layer,
