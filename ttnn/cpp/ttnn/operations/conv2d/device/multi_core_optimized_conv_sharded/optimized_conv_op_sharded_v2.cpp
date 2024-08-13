@@ -475,7 +475,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_FATAL(input_channels_padded >= ashape[3], "Incorrect padding of input channels!");
     // check is for 16-byte alignment
     TT_FATAL(
-        input_channels_padded % 16 == 0,
+        input_channels_padded % 8 == 0,
         "Expected input channels to be padded for 16 byte alignment in L1");  // TODO: For bfp16, check if its divisible
                                                                               // by 8 not 16.
     // Always use split reader for first conv in resnet which has input channels = 16
@@ -558,6 +558,13 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     // Convert tensor dims to tile dims
     uint32_t act_matrix_height_ntiles = act_matrix_height / TILE_HEIGHT;
     uint32_t act_matrix_width_ntiles = act_matrix_width / TILE_WIDTH;
+
+    // TODO: remove
+    if (act_matrix_width_ntiles % act_block_w_ntiles != 0) {
+        if (act_block_w_ntiles % 2 == 0) {
+            act_block_w_ntiles = act_block_w_ntiles / 2;
+        }
+    }
 
     assert(act_matrix_height_ntiles % act_block_h_ntiles == 0);
     assert(act_matrix_width_ntiles % act_block_w_ntiles == 0);

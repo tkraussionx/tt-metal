@@ -573,6 +573,12 @@ operation::ProgramWithCallbacks Reshape::create_program(const std::vector<Tensor
 Tensor reshape (const Tensor &input_tensor_a, int N, int C, int H, int W, const MemoryConfig& output_mem_config) {
     // No-op (Will do a tensor copy)
     auto output_shape = infer_dims_for_reshape(N, C, H, W, input_tensor_a.volume());
+    if (input_tensor_a.is_sharded() and input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
+        auto shard_spec = input_tensor_a.shard_spec().value();
+        if (shard_spec.shape[0] % H == 0 or H % shard_spec.shape[0] == 0) {
+            return input_tensor_a.reshape(N, C, H, W);
+        }
+    }
     if (
         ((input_tensor_a.get_layout() == Layout::TILE or input_tensor_a.get_layout() == Layout::ROW_MAJOR) && output_shape[3] == input_tensor_a.get_legacy_shape()[3])
     ) {
