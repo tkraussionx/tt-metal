@@ -1,0 +1,42 @@
+// Falcon LM head hang
+// Run on all chips
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests/test_falcon_hang.py -k "test_reproduce_lm_head_nd_32 and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests/test_falcon_hang.py -k "test_specific_chip_lm_head_nd_32_t3000 and logical_chip3"
+
+// Falcon LM head 2D hang
+// Run on all chips
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests/test_falcon_hang_2d.py -k "test_reproduce_lm_head_2d_nd_32 and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests/test_falcon_hang_2d.py -k "test_specific_chip_lm_head_2d_nd_32_t3000 and logical_chip3"
+
+
+// FF1 - hang
+// Run on all chips
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/falcon_7b/tests/test_reproduce_hang_matmul.py -k "test_reproduce_matmul_2d_hang and ff1-hang and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/falcon_7b/tests/test_reproduce_hang_matmul.py -k "test_specific_chip_reproduce_matmul_2d_hang_t3000 and logical_chip5"
+
+// FF1 - hang 1D
+// Run on all chips
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/falcon_7b/tests/test_reproduce_hang_matmul_1d.py -k "test_reproduce_matmul_1d_hang and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/falcon_7b/tests/test_reproduce_hang_matmul_1d.py -k "test_specific_chip_reproduce_matmul_1d_hang_t3000 and logical_chip5"
+
+// Sharded ff1
+// Run on all chips
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_sharded_ff1.py -k "test_reproduce_matmul_2d_hang and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_sharded_ff1.py -k "test_specific_chip_reproduce_matmul_2d_hang_t3000 and logical_chip2"
+
+// Sharded ff1 1d
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_sharded_ff1_1d.py -k "test_reproduce_matmul_1d_hang and 8chips"
+// Run on single chip
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_sharded_ff1_1d.py -k "test_specific_chip_reproduce_matmul_1d_hang_t3000 and logical_chip5"
+
+
+// 2d LM Head
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml python -m tracy -r -m "pytest models/demos/falcon7b/tests/test_falcon_hang_2d.py -k \"test_specific_chip_lm_head_2d_nd_32_t3000 and logical_chip3\""
+
+// 1d LM Head
+TT_ENABLE_MATMUL_STAGGER=1 WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml python -m tracy -r -m "pytest models/demos/falcon7b/tests/test_falcon_hang.py -k \"test_specific_chip_lm_head_nd_32_t3000 and logical_chip3\""
