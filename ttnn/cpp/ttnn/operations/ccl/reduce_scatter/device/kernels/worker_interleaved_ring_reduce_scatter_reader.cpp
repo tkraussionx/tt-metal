@@ -319,6 +319,7 @@ void kernel_main() {
                 uint32_t n_pages = std::min(args.full_chunk_num_pages, worker_slice_n_pages - p);
                 ASSERT(n_pages > 0);
                 // Fetch from input tensor
+
                 read_wrapped_chunk_from_output_tensor(
                     curr_tile_id,
                     offset_into_worker_slice,

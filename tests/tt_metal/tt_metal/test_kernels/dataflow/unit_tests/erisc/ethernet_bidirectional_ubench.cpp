@@ -119,16 +119,11 @@ void kernel_main() {
                 eth_send_bytes_over_channel_payload_only(
                     channel_addrs[sender_channel],
                     channel_addrs[sender_channel],
-                    message_size_payload,
-                    sender_channel,
-                    message_size_payload,
-                    message_size_payload_eth_words + 1);
-                ready_to_send_payload &= ~(1 << s_i);
-                if constexpr (MERGE_MSG) {
-                    wait_ack |= (1 << s_i);
-                } else {
-                    ready_to_send_payload_available |= (1 << s_i);
-                }
+                    message_size,
+                    message_size,
+                    message_size_eth_words);
+                ready_to_send_payload &= ~(1 << i);
+                ready_to_send_payload_available |= (1 << i);
                 idle_count = 0;
             }
 

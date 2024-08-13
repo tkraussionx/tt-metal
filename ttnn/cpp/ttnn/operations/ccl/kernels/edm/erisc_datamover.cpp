@@ -6,7 +6,6 @@
 #include <cstdint>
 
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 #include "eth_l1_address_map.h"
 
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
@@ -30,115 +29,112 @@
 // ...
 // Repeat from step 2 for receiver side
 
-// Intended only for (performance) test use cases
-FORCE_INLINE void eth_setup_handshake2(std::uint32_t handshake_register_address, bool is_sender) {
-    if (is_sender) {
-        DPRINT << "eth_send_bytes\n";
-        eth_send_bytes(handshake_register_address, handshake_register_address, 16);
-        DPRINT << "eth_wait_for_receiver_done\n";
-        eth_wait_for_receiver_done();
+using ttnn::ccl::WorkerXY;
+
+// COMPILE TIME ARGS
+// If true, will enable this erisc's sender functionality
+constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
+
+// If true, will enable this erisc's receiver functionality
+constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
+
+constexpr uint32_t num_senders = get_compile_time_arg_val(2);
+constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
+
+static constexpr ttnn::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
+    static_cast<ttnn::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
+
+static constexpr ttnn::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
+    static_cast<ttnn::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
+
+static constexpr bool use_compile_time_designated_handshake_sender = false;//get_compile_time_arg_val(6) != 0;
+static constexpr bool is_handshake_sender = get_compile_time_arg_val(7) != 0;
+
+static constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(8);
+static constexpr uint32_t chip_id = get_compile_time_arg_val(9);
+
+static_assert(num_buffers_per_channel > 0, "compile time argument [9]: num_buffers_per_channel must be > 0");
+
+using EDM_CONFIG_T = erisc::datamover::
+    EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal, num_buffers_per_channel>;
+using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
+
+FORCE_INLINE void execute_edm_channel_state(ChannelBufferT &edm_channel,
+                                            uint32_t &num_senders_complete,
+                                            uint32_t &num_receivers_complete,
+                                            uint32_t sender_num_channels,
+                                            uint32_t receiver_num_channels,
+                                            bool &senders_in_progress,
+                                            bool &receivers_in_progress,
+                                            uint32_t eth_transaction_ack_word_addr) {
+    DeviceZoneScopedN("EXEC");
+    switch (edm_channel.get_state()) {
+        case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_ETH:
+            erisc::datamover::receiver_eth_accept_payload_sequence(
+                edm_channel, num_receivers_complete, eth_transaction_ack_word_addr);
+            receivers_in_progress =
+                receivers_in_progress && num_receivers_complete != receiver_num_channels;
+            break;
+
+        case ChannelBufferT::STATE::RECEIVER_WAITING_FOR_WORKER:
+            erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
+                edm_channel, num_receivers_complete);
+            receivers_in_progress =
+                receivers_in_progress && num_receivers_complete != receiver_num_channels;
+            break;
+
+        //////////////
+        case ChannelBufferT::STATE::SENDER_WAITING_FOR_WORKER:
+            erisc::datamover::sender_noc_receive_payload_ack_check_sequence(
+                edm_channel, num_senders_complete);
+            senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
+            break;
+
+        case ChannelBufferT::STATE::SENDER_READY_FOR_ETH_TRANSFER:
+            erisc::datamover::sender_eth_send_data_sequence(edm_channel);
+            break;
+
+        case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:  // Can remove due to short circuit
+            erisc::datamover::sender_eth_check_receiver_ack_sequence(
+                edm_channel, num_senders_complete);
+            senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
+            break;
+            /////////////////////////
+
+        default:
+            ASSERT(false);
+            break;
+    };
+}
+
+static constexpr bool SAVE_CODESPACE = true;
+
+template <uint8_t max>
+uint8_t wrap_increment(uint8_t &val) {
+    static constexpr bool max_is_pow2 = ((max - 1) & max) == 0;
+    static constexpr bool max_is_2 = (max == 2);
+    if constexpr (max_is_2) {
+        return 1 - val;
+    } else if constexpr (max_is_pow2) {
+        static constexpr bool max_pow2_incr_mask = (max - 1);
+        uint8_t next_val = val + 1;
+        return next_val & max_pow2_incr_mask;
     } else {
-        DPRINT << "eth_wait_for_bytes\n";
-        eth_wait_for_bytes(16);
-        DPRINT << "wait eth_receiver_done\n";
-        eth_receiver_channel_done(0);
+        static constexpr uint8_t last_index = max - 1;
+        return val == last_index ? 0 : val + 1;  // goto next
     }
 }
 
-using ttnn::ccl::WorkerXY;
-
-template<uint8_t num_senders, uint8_t num_receivers>
-struct sender_receiver_index_t {
-    static constexpr bool ZERO_SENDERS = num_senders == 0;
-    static constexpr bool ZERO_RECEIVERS = num_receivers == 0;
-    static constexpr bool NUM_SENDERS_IS_POW_2 = !ZERO_SENDERS && (((num_senders - 1) & num_senders) == 0);
-    static constexpr bool NUM_RECEIVERS_IS_POW_2 = !ZERO_RECEIVERS && (((num_receivers - 1) & num_receivers) == 0);
-    static constexpr uint16_t SENDER_INCR_MASK = !ZERO_SENDERS ? num_senders - 1 : 0;
-    static constexpr uint16_t RECEIVER_INCR_MASK = !ZERO_RECEIVERS ? num_receivers - 1 : 0;
-    static constexpr uint16_t COMBINED_INCR_MASK = SENDER_INCR_MASK << 8 | RECEIVER_INCR_MASK;
-    static constexpr uint16_t COMBINED_INCR = (1 << 8) | 1;
-    union {
-        struct {
-            uint8_t sender;
-            uint8_t receiver;
-        };
-        uint16_t combined;
-    } index;
-    union {
-        struct {
-            uint8_t sender;
-            uint8_t receiver;
-        };
-        uint16_t combined;
-    } real_index;
-    union {
-        struct {
-            uint8_t sender;
-            uint8_t receiver;
-        };
-        uint16_t combined;
-    } start;
-
-    sender_receiver_index_t(uint8_t send_start, uint8_t receive_start, uint8_t num_send, uint8_t num_receive) {
-        start.sender = send_start;
-        start.receiver = receive_start;
-        index.sender = 0;
-        index.receiver = 0;
-        real_index.sender = send_start;
-        real_index.receiver = receive_start;
-    }
-
-    FORCE_INLINE void increment() {
-        if constexpr (NUM_SENDERS_IS_POW_2 and NUM_RECEIVERS_IS_POW_2) {
-            index.combined = (index.combined + COMBINED_INCR) & COMBINED_INCR_MASK;
-            real_index.combined = start.combined + index.combined;
-        } else if constexpr (ZERO_RECEIVERS and NUM_SENDERS_IS_POW_2) {
-            index.sender = (index.sender + 1) & SENDER_INCR_MASK;
-            real_index.sender = start.sender + index.sender;
-        } else if constexpr (ZERO_SENDERS and NUM_RECEIVERS_IS_POW_2) {
-            index.receiver = (index.receiver + 1) & RECEIVER_INCR_MASK;
-            real_index.receiver = start.receiver + index.receiver;
-        } else {
-            index.combined += COMBINED_INCR;
-            index.sender = index.sender >= num_senders ? 0 : index.sender;
-            index.receiver = index.receiver >= num_receivers ? 0 : index.receiver;
-            real_index.combined = start.combined + index.combined;
-        }
-    }
-};
-
-
 void kernel_main() {
-    // COMPILE TIME ARGS
-    // If true, will enable this erisc's sender functionality
-    constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
-
-    // If true, will enable this erisc's receiver functionality
-    constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
-
-    constexpr uint32_t num_senders = get_compile_time_arg_val(2);
-    constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
-
-    constexpr ttnn::ccl::EriscDataMoverBufferSharingMode edm_buffer_sharing_mode =
-        static_cast<ttnn::ccl::EriscDataMoverBufferSharingMode>(get_compile_time_arg_val(4));
-
-    constexpr ttnn::ccl::EriscDataMoverTerminationMode terminate_on_worker_signal =
-        static_cast<ttnn::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(5));
-
-    using EDM_CONFIG_T = erisc::datamover::EriscDatamoverConfig<edm_buffer_sharing_mode, terminate_on_worker_signal>;
-    using ChannelBufferT = erisc::datamover::ChannelBuffer<EDM_CONFIG_T>;
-
-    std::array<ChannelBufferT, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> buffer_channels;
-
-    //
-    std::array<uint32_t, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> printed_receiver_done;
+    DEBUG_STATUS("STRT");
+    std::array<ChannelBufferT, num_senders + num_receivers> buffer_channels;
 
     // SENDER ARGS
     uint32_t args_offset = 0;
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
 
     uint8_t const sender_channels_start = get_arg_val<uint32_t>(args_offset++);
-    uint32_t const sender_num_channels = num_senders;//get_arg_val<uint32_t>(args_offset++);
+    uint32_t const sender_num_channels = num_senders;
     uint8_t num_senders_with_no_work = 0;
     for (uint32_t channel = 0; channel < sender_num_channels; channel++) {
         uint32_t const sender_buffer_address = get_arg_val<uint32_t>(args_offset++);
@@ -172,7 +168,7 @@ void kernel_main() {
 
     // Receiver args
     uint8_t const receiver_channels_start = get_arg_val<uint32_t>(args_offset++);
-    uint32_t const receiver_num_channels = num_receivers;//get_arg_val<uint32_t>(args_offset++);
+    uint32_t const receiver_num_channels = num_receivers;
     uint8_t num_receivers_with_no_work = 0;
     for (uint32_t channel = 0; channel < receiver_num_channels; channel++) {
         uint32_t const receiver_buffers_base_address = get_arg_val<uint32_t>(args_offset++);
@@ -206,122 +202,170 @@ void kernel_main() {
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
     // will always be "receiver" (only for handshake purposes)
+    DEBUG_STATUS("HSW");
     bool act_as_sender_in_handshake =
         (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
+    DEBUG_STATUS("HSD");
     uint32_t eth_transaction_ack_word_addr = handshake_addr + 16;
-    uint32_t eth_transaction_complete_addr = handshake_addr + 32;
 
-    constexpr uint32_t SWITCH_INTERVAL = 4000000;
-    uint32_t did_nothing_count = 0;
+    constexpr uint32_t SWITCH_INTERVAL = 2000000000;
 
     uint32_t num_senders_complete = !enable_sender_side ? sender_num_channels : num_senders_with_no_work;
     uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : num_receivers_with_no_work;
     bool senders_in_progress = num_senders_complete != sender_num_channels;
     bool receivers_in_progress = num_receivers_complete != receiver_num_channels;
 
-    auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
-
-    while (senders_in_progress || receivers_in_progress) {
-        bool did_something_sender = false;
-        bool did_something_receiver = false;
-
-        uint32_t num_receivers_complete_old = num_receivers_complete;
-        uint32_t num_senders_complete_old = num_senders_complete;
-        //////////////////////////////////////
-        // SENDER
-        if constexpr (enable_sender_side) {
-            ChannelBufferT &current_sender = buffer_channels[send_recv_index.real_index.sender];
-            switch (current_sender.get_state()) {
-                case ChannelBufferT::STATE::WAITING_FOR_WORKER:
-                did_something_sender =
-                    erisc::datamover::sender_noc_receive_payload_ack_check_sequence(current_sender, num_senders_complete);
-                senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-                break;
-
-                case ChannelBufferT::STATE::READY_FOR_ETH_TRANSFER:
-                did_something_sender = erisc::datamover::sender_eth_send_data_sequence(current_sender);
-                    break;
-
-                case ChannelBufferT::STATE::SIGNALING_WORKER:
-                did_something_sender = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
-                                    current_sender, num_senders_complete);
-                senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-                break;
-
-                case ChannelBufferT::STATE::WAITING_FOR_ETH:
-                did_something_sender =
-                    erisc::datamover::sender_eth_check_receiver_ack_sequence(current_sender, num_senders_complete);
-                senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
-                break;
-
-                default:
-                break;
-            };
+    {
+        uint32_t idle_count = 0;
+        static constexpr uint8_t advanceable_oob_idx = num_receivers + num_senders;
+        static constexpr uint8_t advanceable_oob_idx_is_pow2 = ((advanceable_oob_idx - 1) & advanceable_oob_idx) == 0;
+        static constexpr bool advanceable_oob_incr_mask = (advanceable_oob_idx - 1);
+        bool any_channels_advanceable = false;
+        std::array<uint32_t, advanceable_oob_idx> advanceable_channels;
+        uint8_t advanceable_index = 0;
+        for (uint32_t i = 0; i < advanceable_oob_idx; i++) {
+            advanceable_channels[i] = advanceable_oob_idx;
         }
 
-        //////////////////////////////////////
-        // RECEIVER
-        if constexpr (enable_receiver_side) {
-            ChannelBufferT &current_receiver = buffer_channels[send_recv_index.real_index.receiver];
+        uint8_t i = 0;
+        static constexpr ChannelBufferT::STATE receiver_advanceable_without_eth_state = erisc::datamover::get_receiver_state_that_can_advance_without_eth<EDM_CONFIG_T>();
+        while (senders_in_progress || receivers_in_progress) {
+            {  // No more channels are advanceable so start checking through all of them to see if any are advanceable
 
-            switch (current_receiver.get_state()) {
-                case ChannelBufferT::STATE::WAITING_FOR_ETH:
-                did_something_receiver = erisc::datamover::receiver_eth_accept_payload_sequence(current_receiver, num_receivers_complete, eth_transaction_ack_word_addr);
-                receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;
-                break;
+                uint8_t index = advanceable_index;
+                for (uint8_t ch = 0; ch < advanceable_oob_idx; ch++) {
+                    ChannelBufferT &edm_channel = buffer_channels[ch];
+                    if (edm_channel.is_done()) {
+                        continue;
+                    }
+                    bool advanceable = channel_can_make_progress(edm_channel);
+                    if (advanceable) {
+                        switch (edm_channel.get_state()) {
+                            case ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH:
+                                // Since we don't depend on tx q space being available, we can just complete this state
+                                // quickly right now If this ends up causing enough bubbles over eth, we can add them to
+                                // a separate list that we check after eth tx q is full or no other channels are
+                                // advanceable
+                                erisc::datamover::sender_eth_check_receiver_ack_sequence(
+                                    edm_channel, num_senders_complete);
+                                // Technically only need to do this for message count termination mode
+                                senders_in_progress =
+                                    senders_in_progress && num_senders_complete != sender_num_channels;
+                            break;
 
-                case ChannelBufferT::STATE::SIGNALING_WORKER:
-                did_something_receiver =
-                    erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(current_receiver);
-                break;
+                            case receiver_advanceable_without_eth_state:
+                                erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(edm_channel);
+                            break;
 
-                case ChannelBufferT::STATE::WAITING_FOR_WORKER:
-                did_something_receiver = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
-                                    current_receiver, num_receivers_complete, eth_transaction_complete_addr);
-                receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;
-                break;
+                            default:
+                                // if constexpr (!SAVE_CODESPACE && !eth_txq_is_busy()) {
+                                if (!eth_txq_is_busy()) {
+                                    execute_edm_channel_state(edm_channel,
+                                                num_senders_complete,
+                                                num_receivers_complete,
+                                                sender_num_channels,
+                                                receiver_num_channels,
+                                                senders_in_progress,
+                                                receivers_in_progress,
+                                                eth_transaction_ack_word_addr);
+                                    index = wrap_increment<advanceable_oob_idx>(index);
+                                } else {
+                                    any_channels_advanceable = true;
+                                    advanceable_channels[index] = ch;
+                                    index = wrap_increment<advanceable_oob_idx>(index);
+                                }
+                            break;
+                        };
+                    }
+                }
+            }
 
-                default:
-                break;
-            };
-        }
-        send_recv_index.increment();
-        //////////////////////////////////////
+            while (any_channels_advanceable) {
 
-        // Enabling this block as is (with all the "did_something"s, seems to cause a loss of about
-        // 0.5 GBps in throughput)
-        if (did_something_sender || did_something_receiver) {
-            did_nothing_count = 0;
-        } else {
-            if (did_nothing_count++ > SWITCH_INTERVAL) {
-                did_nothing_count = 0;
+                idle_count = 0;
+                if (!eth_txq_is_busy()) {
+                    uint8_t channel = advanceable_channels[advanceable_index];
+                    ChannelBufferT &edm_channel = buffer_channels[channel];
+
+                    execute_edm_channel_state(edm_channel,
+                                            num_senders_complete,
+                                            num_receivers_complete,
+                                            sender_num_channels,
+                                            receiver_num_channels,
+                                            senders_in_progress,
+                                            receivers_in_progress,
+                                            eth_transaction_ack_word_addr);
+                    advanceable_channels[advanceable_index] = advanceable_oob_idx;
+                    advanceable_index = wrap_increment<advanceable_oob_idx>(advanceable_index);
+                    any_channels_advanceable = advanceable_channels[advanceable_index] < advanceable_oob_idx;
+                } else {
+                    // if constexpr (!SAVE_CODESPACE) {
+                    //     ChannelBufferT &edm_channel = buffer_channels[i];
+                    //     if (erisc::datamover::state_has_no_dependence_on_eth(edm_channel) && channel_can_make_progress(edm_channel)) {
+                    //         if (edm_channel.get_state() == ChannelBufferT::STATE::SENDER_WAITING_FOR_ETH) {
+                    //             // Since we don't depend on tx q space being available, we can just complete this state
+                    //             // quickly right now If this ends up causing enough bubbles over eth, we can add them to
+                    //             // a separate list that we check after eth tx q is full or no other channels are
+                    //             // advanceable
+                    //             erisc::datamover::sender_eth_check_receiver_ack_sequence(
+                    //                 edm_channel, num_senders_complete);
+                    //             // Technically only need to do this for message count termination mode
+                    //             senders_in_progress =
+                    //                 senders_in_progress && num_senders_complete != sender_num_channels;
+                    //         } else if (edm_channel.get_state() == receiver_advanceable_without_eth_state) {
+                    //             erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(edm_channel);
+                    //         }
+                    //     }
+                    //     i = wrap_increment<advanceable_oob_idx>(i);
+                    // }
+
+                }
+            }
+
+            idle_count++;
+
+            if (idle_count > SWITCH_INTERVAL) {
+                idle_count = 0;
                 run_routing();
             }
         }
     }
 
-    for (uint32_t s = 0; s < num_senders + num_receivers; s++ ) {
-        auto const& channel = buffer_channels[s];
-        // We need to explicitly check for channel send done because we may
-        // advance sender channel state as soon as we receive an ack. Since we
-        // may be the last active channel, and advance to done state just from ack
-        // from the receiver ("I got a payload"), then we need to wait for done
-        // at the very end here. Otherise if we invoke another erisc op back-to-back,
-        // we may mess up transaction state because it's possible for receiver of this
-        // op to send the completion done after that one has already started.
-        uint32_t wait_count = 0;
-        uint32_t wait_max = 50000;
-        while(!channel.eth_is_receiver_channel_send_done()) {
-            wait_count++;
-            if (wait_count > wait_max) {
-
-                DEBUG_STATUS("STK");
-                run_routing();
+    {
+        for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
+            auto &channel = buffer_channels[s];
+            // We need to explicitly check for channel send done because we may
+            // advance sender channel state as soon as we receive an ack. Since we
+            // may be the last active channel, and advance to done state just from ack
+            // from the receiver ("I got a payload"), then we need to wait for done
+            // at the very end here. Otherise if we invoke another erisc op back-to-back,
+            // we may mess up transaction state because it's possible for receiver of this
+            // op to send the completion done after that one has already started.
+            uint32_t wait_count = 0;
+            uint32_t wait_max = 5000000;
+            for (uint8_t buffer_index = 0; buffer_index < num_buffers_per_channel; buffer_index++) {
                 wait_count = 0;
+                channel.buffer_index = buffer_index;
+                if (!channel.is_sender_side) {
+                    if (!channel.eth_is_receiver_channel_send_done()) {
+                        channel.eth_receiver_channel_done();
+                    }
+                }
+            }
+            for (uint8_t buffer_index = 0; buffer_index < num_buffers_per_channel; buffer_index++) {
+                if (channel.is_sender_side) {
+                    while (!channel.eth_is_receiver_channel_send_done()) {
+                        wait_count++;
+                        if (wait_count > wait_max) {
+                            DEBUG_STATUS("STK");
+                            run_routing();
+                            wait_count = 0;
+                        }
+                    }
+                }
             }
         }
     }
-
     DEBUG_STATUS("DONE");
 }
