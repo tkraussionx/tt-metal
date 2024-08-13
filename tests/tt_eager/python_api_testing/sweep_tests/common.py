@@ -717,6 +717,8 @@ def shapes_and_datagen(
 
             for shapes, datagen_funcs, test_args in _gen_shapes_and_args(
                 start_shape, end_shape, interval, _gen_concat_bw_shapes
+            ):
+                yield shapes, datagen_funcs, test_args
 
         elif method == "topk":
 
@@ -724,8 +726,6 @@ def shapes_and_datagen(
                 last_dim = shape[3]
                 if not (last_dim & (last_dim - 1) == 0) and last_dim != 0:
                     last_dim = 2 ** math.ceil(math.log2(last_dim))
-                    if last_dim % 64 != 0:
-                        last_dim = last_dim // 64 * 64
 
                 shape[3] = last_dim
 
