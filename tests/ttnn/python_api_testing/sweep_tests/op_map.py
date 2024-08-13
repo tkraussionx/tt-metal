@@ -914,7 +914,6 @@ op_map = {
         "tt_op": ttnn_ops.expm1_bw,
         "pytorch_op": pytorch_ops.expm1_bw,
     },
-<<<<<<< HEAD
     "bitwise-and": {
         "tt_op": ttnn_ops.eltwise_bitwise_and,
         "pytorch_op": pytorch_ops.bitwise_and,
@@ -1003,10 +1002,7 @@ op_map = {
         "tt_op": ttnn_ops.eltwise_bias_gelu_unary,
         "pytorch_op": pytorch_ops.bias_gelu_unary,
     },
-    "frac": {
-=======
     "eltwise-frac": {
->>>>>>> #10147: Add largest argument for topk sweeps in generation_funcs.py
         "tt_op": ttnn_ops.frac,
         "pytorch_op": pytorch_ops.frac,
     },

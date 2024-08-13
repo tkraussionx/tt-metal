@@ -4285,6 +4285,23 @@ def frac(
     **kwargs,
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+
+    t1 = ttnn.frac(t0, memory_config=output_mem_config)
+
+    return ttnn_tensor_to_torch(t1)
+
+
+def frac(
+    x,  # grad_tensor
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = ttnn.frac(t0, memory_config=output_mem_config)[0]
 
     return ttnn_tensor_to_torch(t1)
@@ -4773,4 +4790,5 @@ def eltwise_bias_gelu_unary(x, *args, bias, device, dtype, layout, input_mem_con
     t1 = ttnn.bias_gelu(t0, bias, memory_config=output_mem_config)
 
     return ttnn_tensor_to_torch(t1)
+
 
