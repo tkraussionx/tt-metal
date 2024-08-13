@@ -153,7 +153,43 @@ Tensor BinaryOperation<binary_op_type, in_place>::operator()(
 }
 
 template <BinaryOpType binary_op_type, bool in_place>
+Tensor BinaryOperationOverload<binary_op_type, in_place>::operator()(
+    uint8_t queue_id,
+    const Tensor &input_tensor_a_arg,
+    const Tensor &input_tensor_b_arg,
+    const std::optional<const DataType> &output_dtype,
+    const std::optional<MemoryConfig> &memory_config,
+    std::optional<Tensor> optional_output_tensor,
+    std::optional<unary::FusedActivations> activations,
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+
+    return input_tensor_a_arg;
+}
+
+
+
+template <BinaryOpType binary_op_type, bool in_place>
 Tensor BinaryOperation<binary_op_type, in_place>::operator()(
+    const Tensor &input_tensor_a_arg,
+    const Tensor &input_tensor_b_arg,
+    const std::optional<const DataType> &output_dtype,
+    const std::optional<MemoryConfig> &memory_config,
+    std::optional<Tensor> optional_output_tensor,
+    std::optional<unary::FusedActivations> activations,
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    return operator()(
+        DefaultQueueId,
+        input_tensor_a_arg,
+        input_tensor_b_arg,
+        output_dtype,
+        memory_config,
+        optional_output_tensor,
+        activations,
+        input_tensor_a_activation);
+}
+
+template <BinaryOpType binary_op_type, bool in_place>
+Tensor BinaryOperationOverload<binary_op_type, in_place>::operator()(
     const Tensor &input_tensor_a_arg,
     const Tensor &input_tensor_b_arg,
     const std::optional<const DataType> &output_dtype,
@@ -195,6 +231,26 @@ Tensor BinaryOperation<binary_op_type, in_place>::operator()(
 }
 
 template <BinaryOpType binary_op_type, bool in_place>
+Tensor BinaryOperationOverload<binary_op_type, in_place>::operator()(
+    const ttnn::Tensor &input_tensor_a,
+    const float scalar,
+    const std::optional<const DataType> &dtype,
+    const std::optional<ttnn::MemoryConfig> &memory_config,
+    const std::optional<Tensor> &optional_output_tensor,
+    std::optional<unary::FusedActivations> activations,
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    return operator()(
+        DefaultQueueId,
+        input_tensor_a,
+        scalar,
+        dtype,
+        memory_config,
+        optional_output_tensor,
+        activations,
+        input_tensor_a_activation);
+}
+
+template <BinaryOpType binary_op_type, bool in_place>
 Tensor BinaryOperation<binary_op_type, in_place>::operator()(
     uint8_t queue_id,
     const ttnn::Tensor &input_tensor_a,
@@ -215,6 +271,36 @@ Tensor BinaryOperation<binary_op_type, in_place>::operator()(
     Tensor scalar_tensor_device = scalar_tensor_host.to(input_tensor_a.device());
     // TODO(arakhmati): #7637 pass in memory_config instead of operation::DEFAULT_OUTPUT_MEMORY_CONFIG
     return BinaryOperation::operator()(
+        input_tensor_a,
+        scalar_tensor_device,
+        dtype,
+        memory_config,
+        optional_output_tensor,
+        activations,
+        input_tensor_a_activation);
+}
+
+template <BinaryOpType binary_op_type, bool in_place>
+Tensor BinaryOperationOverload<binary_op_type, in_place>::operator()(
+    uint8_t queue_id,
+    const ttnn::Tensor &input_tensor_a,
+    const float scalar,
+    const std::optional<const DataType> &dtype,
+    const std::optional<ttnn::MemoryConfig> &memory_config,
+    const std::optional<Tensor> &optional_output_tensor,
+    std::optional<unary::FusedActivations> activations,
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    // Cast Float Scalar to a device tensor
+    auto host_buffer = owned_buffer::create<::bfloat16>(static_cast<std::size_t>(TILE_HEIGHT * TILE_WIDTH));
+    host_buffer[0] = scalar;
+    Tensor scalar_tensor_host = Tensor(
+        OwnedStorage{host_buffer},
+        ttnn::Shape(std::array<std::uint32_t, 2>{1, 1}, std::array<std::uint32_t, 2>{TILE_HEIGHT, TILE_WIDTH}),
+        DataType::BFLOAT16,
+        Layout::TILE);
+    Tensor scalar_tensor_device = scalar_tensor_host.to(input_tensor_a.device());
+    // TODO(arakhmati): #7637 pass in memory_config instead of operation::DEFAULT_OUTPUT_MEMORY_CONFIG
+    return operator()(
         input_tensor_a,
         scalar_tensor_device,
         dtype,
