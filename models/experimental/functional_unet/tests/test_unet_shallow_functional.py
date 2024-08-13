@@ -24,9 +24,7 @@ from models.experimental.functional_unet.tt import unet_shallow_ttnn
 from models.experimental.functional_unet.unet_utils import create_custom_preprocessor
 
 import time
-import tt_lib as ttl
 import os
-from tt_lib import profiler
 
 import ttnn
 from models.perf.perf_utils import prep_perf_report
@@ -62,7 +60,7 @@ def test_unet_pcc(device, perf_mode, batch, groups):
         output_tensor = output_tensor.to(torch_input_tensor.dtype)
 
         # Disable pcc checking due to hang
-        # if device.arch() == ttl.device.Arch.WORMHOLE_B0:
+        # if device.arch() == ttnn.device.Arch.WORMHOLE_B0:
         #    assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.99)
         # else:
         #    assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.97)

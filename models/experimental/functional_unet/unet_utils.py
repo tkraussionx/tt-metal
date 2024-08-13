@@ -5,10 +5,6 @@
 import torch
 import ttnn
 
-import tt_lib as ttl
-import tt_lib.fallback_ops
-from tt_lib import profiler
-
 from loguru import logger
 from ttnn.model_preprocessing import preprocess_model, preprocess_conv2d, fold_batch_norm2d_into_conv2d
 
@@ -54,7 +50,7 @@ def create_unet_input_tensors(device, batch, groups):
         ttnn_input_tensor.shape[1] * ttnn_input_tensor.shape[2],
         ttnn_input_tensor.shape[3],
     )
-    pad = 32 if device.arch() == ttl.device.Arch.WORMHOLE_B0 else 16
+    pad = 32 if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else 16
     hpad = 0  # 96*32*64
     if ttnn_input_tensor.shape[-1] < pad or ttnn_input_tensor.shape[-2] < hpad:
         ttnn_input_tensor = torch.nn.functional.pad(
@@ -86,13 +82,13 @@ def create_custom_preprocessor(device, groups=1):
             ttnn_module_args.p4["deallocate_activation"] = False
 
             ttnn_module_args.c1["math_fidelity"] = ttnn.MathFidelity.LoFi
-            ttnn_module_args.c1["padded_input_channels"] = None if device.arch() == ttl.device.Arch.WORMHOLE_B0 else 16
+            ttnn_module_args.c1["padded_input_channels"] = None if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else 16
             ttnn_module_args.c1["use_shallow_conv_variant"] = (
-                False if device.arch() == ttl.device.Arch.WORMHOLE_B0 else True
+                False if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else True
             )
             ttnn_module_args.c1_2["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c1_2["use_shallow_conv_variant"] = (
-                False if device.arch() == ttl.device.Arch.WORMHOLE_B0 else True
+                False if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else True
             )
             ttnn_module_args.c1["dtype"] = ttnn.bfloat8_b
             ttnn_module_args.c1_2["dtype"] = ttnn.bfloat8_b
@@ -105,12 +101,12 @@ def create_custom_preprocessor(device, groups=1):
             ttnn_module_args.c1["conv_blocking_and_parallelization_config_override"] = (
                 {"act_block_h": 32}
                 if groups > 1
-                else ({"act_block_h": 5 * 32} if device.arch() == ttl.device.Arch.WORMHOLE_B0 else {"act_block_h": 64})
+                else ({"act_block_h": 5 * 32} if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else {"act_block_h": 64})
             )
             ttnn_module_args.c1_2["conv_blocking_and_parallelization_config_override"] = (
                 {"act_block_h": 32}
                 if groups > 1
-                else ({"act_block_h": 5 * 32} if device.arch() == ttl.device.Arch.WORMHOLE_B0 else {"act_block_h": 64})
+                else ({"act_block_h": 5 * 32} if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else {"act_block_h": 64})
             )
 
             ttnn_module_args.c2["math_fidelity"] = ttnn.MathFidelity.LoFi
@@ -200,11 +196,11 @@ def create_custom_preprocessor(device, groups=1):
 
             ttnn_module_args.c6["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c6["use_shallow_conv_variant"] = (
-                False if device.arch() == ttl.device.Arch.WORMHOLE_B0 else True
+                False if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else True
             )
             ttnn_module_args.c6_2["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c6_2["use_shallow_conv_variant"] = (
-                False if device.arch() == ttl.device.Arch.WORMHOLE_B0 else True
+                False if device.arch() == ttnn.device.Arch.WORMHOLE_B0 else True
             )
             ttnn_module_args.c6_3["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c6["dtype"] = ttnn.bfloat8_b

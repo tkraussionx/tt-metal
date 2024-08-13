@@ -22,9 +22,7 @@ from models.utility_functions import (
 from models.experimental.functional_unet.unet_utils import create_unet_models, create_unet_input_tensors
 
 import time
-import tt_lib as ttl
 import os
-from tt_lib import profiler
 
 import ttnn
 from models.perf.perf_utils import prep_perf_report
