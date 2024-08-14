@@ -42,11 +42,11 @@ class PytorchLlamaMLPModel(torch.nn.Module):
 def tt_llama_mlp_prepare_inputs(llama_mlp_model, x):
     if llama_mlp_model.model_config["LLM_MODE"] == "decode":
         num_users = 32
-        M, K = num_users, llama_mlp_model.model_config["HIDDEN_SIZE"] // llama_mlp_model.cluster_shape[0]
+        M, K = num_users, llama_mlp_model.hidden_dim // llama_mlp_model.cluster_shape[0]
 
         core_grid = ttnn.CoreGrid(y=1, x=8)
         act_mem_config = ttnn.create_sharded_memory_config(
-            shape=(M // core_grid.y, K // core_grid.x),
+            shape=(M, K // (core_grid.x * core_grid.y)),
             core_grid=core_grid,
             strategy=ttnn.ShardStrategy.WIDTH,
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
@@ -119,7 +119,7 @@ def run_test_LlamaMLP_inference(
         state_dict,
         BASE_URL,
         UNIT_TEST_LAYER_NUM,
-        configuration.dim,
+        configuration,
         model_config,
         cache_path=cache_path,
     )

@@ -302,6 +302,19 @@ def precompute_freqs(dim: int, end: int, theta: float = 10000.0, use_scaled: boo
     return torch.cos(freqs), torch.sin(freqs)
 
 
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, use_scaled: bool = False):
+    """
+    For use in reference models
+    """
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device, dtype=torch.float32)
+    if use_scaled:
+        freqs = apply_scaling(freqs)
+    freqs = torch.outer(t, freqs)
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
+
 def freqs_to_rotation_matrix(cos_freqs, sin_freqs):
     """
     Transform cos/sin frequencies to a rotation matrix.

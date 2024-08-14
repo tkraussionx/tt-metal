@@ -73,7 +73,7 @@ class TtLlamaDecoder_galaxy:
             state_dict,
             base_url,
             layer_num,
-            self.hidden_size,
+            configuration,
             model_config,
             cache_path=cache_path,
             read_cache=read_cache,

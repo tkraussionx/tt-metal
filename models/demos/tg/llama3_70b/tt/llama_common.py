@@ -26,3 +26,16 @@ def tt_all_gather(input_tensor, device_mesh, cluster_axis, dim, num_links=2, mem
     return ttnn.line_all_gather(
         input_tensor, dim, num_links=num_links, cluster_axis=cluster_axis, device_mesh=device_mesh
     )
+
+
+def get_expand_dim(configuration):
+    multiple_of = configuration.multiple_of
+    ffn_dim_multiplier = configuration.ffn_dim_multiplier
+
+    hidden_dim = 4 * configuration.dim
+    hidden_dim = int(2 * hidden_dim / 3)
+
+    if ffn_dim_multiplier is not None:
+        hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+    hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+    return hidden_dim

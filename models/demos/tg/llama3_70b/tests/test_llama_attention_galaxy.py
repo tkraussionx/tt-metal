@@ -49,6 +49,7 @@ class PytorchLlamaAttentionModel(torch.nn.Module):
         self.attention.eval()
 
         configuration = hf_reference_model.params
+        self.use_scaled_rope = configuration.use_scaled_rope
         self.n_heads = configuration.n_heads
         hidden_dim = configuration.dim
         self.head_dim = hidden_dim // self.n_heads
