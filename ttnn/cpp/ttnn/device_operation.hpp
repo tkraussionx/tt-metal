@@ -265,7 +265,7 @@ typename device_operation_t::tensor_return_value_t run(
     const typename device_operation_t::operation_attributes_t& operation_attributes,
     const typename device_operation_t::tensor_args_t& tensor_args) {
     ZoneScopedN("TT_DNN_DEVICE_OP");
-    auto operation_id = assign_operation_id();
+    // auto operation_id = assign_operation_id();
 
     tt::stl::reflection::visit_object_of_type<Tensor>(check_tensor_types, tensor_args);
 
