@@ -117,11 +117,11 @@ void kernel_main() {
 
     // TODO: need to make the read coalescing optimization cleaner
     // currently works for the case of num_coalesced_reads == weight_size_w since these reads are contiguous on both src/dst side
-    DPRINT << "weight_size_w = " << weight_size_w << ENDL();
-    DPRINT << "conv_act_c_read_bytes = " << conv_act_c_read_bytes << ENDL();
-    DPRINT << "conv_act_size_w = " << conv_act_size_w << ENDL();
+    /*DPRINT << "weight_size_w = " << weight_size_w << ENDL();*/
+    /*DPRINT << "conv_act_c_read_bytes = " << conv_act_c_read_bytes << ENDL();*/
+    /*DPRINT << "conv_act_size_w = " << conv_act_size_w << ENDL();*/
     constexpr uint32_t coalesced_read_bytes = weight_size_w * conv_act_c_read_bytes;
-    DPRINT << "coalesced_read_bytes = " << coalesced_read_bytes << ENDL();
+    /*DPRINT << "coalesced_read_bytes = " << coalesced_read_bytes << ENDL();*/
 
 
     // Fully create act matrix and tilize it before mcast
@@ -131,8 +131,8 @@ void kernel_main() {
 
     // Reset reader_idx to finish act_block_h_datums
     uint32_t reader_idx = 0;
-    DPRINT << "act_num_blocks_h = " << act_num_blocks_h << ENDL();
-    DPRINT << "act_w_num_outer = " << act_w_num_outer << ENDL();
+    /*DPRINT << "act_num_blocks_h = " << act_num_blocks_h << ENDL();*/
+    /*DPRINT << "act_w_num_outer = " << act_w_num_outer << ENDL();*/
     for (uint32_t nbh = 0; nbh < act_num_blocks_h; nbh++) {
         cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
         uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);

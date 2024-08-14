@@ -2545,6 +2545,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
                     writer_rt_args.push_back(num_cores_x - 1);  // weights_mcast_num_cores
                     writer_rt_args.push_back(weights_mcast_sender_semaphore);
                     writer_rt_args.push_back(weights_mcast_receiver_semaphore);
+                    writer_rt_args.push_back(output.buffer()->aligned_page_size());
 
                     SetRuntimeArgs(program, writer_mcast_sender_id, core, writer_rt_args);
                 } else {
@@ -2553,6 +2554,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
                     writer_rt_args.push_back(right_core_physical.y);     // weights_mcast_sender_noc_y
                     writer_rt_args.push_back(weights_mcast_sender_semaphore);
                     writer_rt_args.push_back(weights_mcast_receiver_semaphore);
+                    writer_rt_args.push_back(output.buffer()->aligned_page_size());
 
                     SetRuntimeArgs(program, writer_mcast_receiver_id, core, writer_rt_args);
                 }
