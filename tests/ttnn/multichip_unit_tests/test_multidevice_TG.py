@@ -76,23 +76,23 @@ def test_galaxy_matmul_1d_fracture(device_mesh):
     "M, K, N, weights_dtype",
     [
         # llama3_1-70B
-        pytest.param(32, 8192, 28 * 1024, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),  # same shapes for FF1 and FF3
-        pytest.param(32, 28 * 1024, 8192, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
-        pytest.param(512, 8192, 28 * 1024, ttnn.bfloat4_b, id="Llama3-70B_prefill_seq512_FF1"),
-        pytest.param(512, 28 * 1024, 8192, ttnn.bfloat8_b, id="Llama3-70B_prefill_seq512_FF2"),
-        # llama3_1-405B
-        pytest.param(
-            32, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_decode_FF1"
-        ),  # same shapes for FF1 and FF3
-        pytest.param(32, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_decode_FF2"),
-        pytest.param(128, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq128_FF1"),
-        pytest.param(128, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq128_FF2"),
-        pytest.param(256, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq256_FF1"),
-        pytest.param(256, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq256_FF2"),
+        # pytest.param(32, 8192, 28 * 1024, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),  # same shapes for FF1 and FF3
+        # pytest.param(32, 28 * 1024, 8192, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
+        # pytest.param(512, 8192, 28 * 1024, ttnn.bfloat4_b, id="Llama3-70B_prefill_seq512_FF1"),
+        # pytest.param(512, 28 * 1024, 8192, ttnn.bfloat8_b, id="Llama3-70B_prefill_seq512_FF2"),
+        # # llama3_1-405B
         # pytest.param(
-        #     512, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq512_FF1"
-        # ),  # PCC check failed, PCC: -0.00014127559109112134, see issue 10936
-        pytest.param(512, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq512_FF2"),
+        #     32, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_decode_FF1"
+        # ),  # same shapes for FF1 and FF3
+        # pytest.param(32, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_decode_FF2"),
+        # pytest.param(128, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq128_FF1"),
+        # pytest.param(128, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq128_FF2"),
+        # pytest.param(256, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq256_FF1"),
+        # pytest.param(256, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq256_FF2"),
+        pytest.param(
+            512, 16 * 1024, 52 * 1024, ttnn.bfloat4_b, id="Llama3-405B_prefill_seq512_FF1"
+        ),  # PCC check failed, PCC: -0.00014127559109112134, see issue 10936
+        # pytest.param(512, 52 * 1024, 16 * 1024, ttnn.bfloat8_b, id="Llama3-405B_prefill_seq512_FF2"),
     ],
 )
 # Llama FF1, FF2, FF3 in MLP with dram interleaved weights
@@ -141,32 +141,58 @@ def test_galaxy_matmul_2d_fracture(M, K, N, weights_dtype, mesh_shape, device_me
         fp32_dest_acc_en=True,
         packer_l1_acc=True,
     )
-
-    out = ttnn.matmul(
-        act,
-        weights,
-        dtype=ttnn.bfloat16,
-        compute_kernel_config=compute_kernel_lofi,
-        memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if M == 32 else ttnn.DRAM_MEMORY_CONFIG,
+    core_grid = ttnn.CoreGrid(y=4, x=8)
+    program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=(core_grid.x, core_grid.y),
+        in0_block_w=1,
+        out_subblock_h=1,
+        out_subblock_w=1,
+        per_core_M=M // core_grid.y // 32,
+        per_core_N=N // core_grid.x // 32,
+        transpose_mcast=False,
+        fused_activation=None,
     )
 
-    out = ttnn.to_torch(out, mesh_composer=ConcatMesh2dToTensor(device_mesh, mesh_shape=mesh_shape, dims=concat_dim))
-    out = torch.sum(out, dim=1, keepdim=True)
+    for i in range(1000):
+        out = ttnn.matmul(
+            act,
+            weights,
+            core_grid=ttnn.CoreGrid(y=8, x=8),
+            # program_config=program_config,
+            dtype=ttnn.bfloat16,
+            compute_kernel_config=compute_kernel_lofi,
+            memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if M == 32 else ttnn.DRAM_MEMORY_CONFIG,
+        )
 
-    out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
-    logger.info(f"PCC value: {out_pcc}")
-    assert out_pass
+        out = ttnn.to_torch(
+            out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=concat_dim, cluster_shape=cluster_shape)
+        )
+        out = torch.sum(out, dim=1, keepdim=True)
+
+        out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
+        logger.info(f"PCC value: {out_pcc}")
+        assert out_pass
 
 
-@pytest.mark.skip("See GH #10673: DRAM-SHARDED Matmuls gives ND PCC on TG")
+# @pytest.mark.skip("See GH #10673: DRAM-SHARDED Matmuls gives ND PCC on TG")
+## BEGIN: Set your mesh here
+mesh = (8, 4)
+## END
+
+STD_MESH = (8, 4)
+c_shape = tuple(reversed(mesh))
+hidden_div = STD_MESH[1] // mesh[1]
+expand_div = STD_MESH[0] // mesh[0]
+
+
 @pytest.mark.parametrize(
-    "mesh_shape, device_mesh", [pytest.param((8, 4), (8, 4), id="8x4_grid")], indirect=["device_mesh"]
+    "mesh_shape, device_mesh", [pytest.param(c_shape, mesh, id="8x4_grid")], indirect=["device_mesh"]
 )
 @pytest.mark.parametrize(
     "M, K, N, weights_dtype",
     [
-        pytest.param(32, 8192, 32768, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),
-        pytest.param(32, 32768, 8192, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
+        # pytest.param(32, 8192//hidden_div, 32768//expand_div, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),
+        pytest.param(32, 32768 // expand_div, 8192 // hidden_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
     ],
 )
 # Llama FF1, FF2, FF3 in MLP with dram sharded weights
@@ -236,21 +262,46 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_sha
         fused_activation=None,
     )
 
-    out = ttnn.matmul(
-        act,
-        weights,
-        program_config=DRAM_SHARDED_PROGCFG,
-        compute_kernel_config=compute_kernel_lofi,
-        dtype=ttnn.bfloat16,
-        memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+    MATMUL_2D_PROGCFG = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=(8, 1),
+        in0_block_w=K // 8 // 32,  # how much inner dim you take each time
+        # in0_block_w=1, # ND CHECK
+        out_subblock_h=1,  # Must be divisible by per_core_M
+        out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+        per_core_M=M // 32,  # M / TILE_HEIGHT / Grid_Size
+        per_core_N=N // 32 // 8,  # N / TILE_WIDTH / Grid_Size
+        transpose_mcast=False,
+        fused_activation=None,
+        fuse_batch=False,
     )
 
-    out = ttnn.to_torch(out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=concat_dim, mesh_shape=mesh_shape))
-    out = torch.sum(out, dim=1, keepdim=True)
+    num_passed = 0
+    num_iters = 1000
 
-    out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
-    logger.info(f"PCC value: {out_pcc}")
-    assert out_pass
+    for i in range(num_iters):
+        logger.info(f"Running iteration {i}")
+        out = ttnn.matmul(
+            act,
+            weights,
+            # program_config=DRAM_SHARDED_PROGCFG,
+            program_config=MATMUL_2D_PROGCFG,
+            compute_kernel_config=compute_kernel_lofi,
+            dtype=ttnn.bfloat16,
+            # memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        )
+
+        out = ttnn.to_torch(out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=concat_dim, mesh_shape=mesh_shape))
+        out = torch.sum(out, dim=1, keepdim=True)
+
+        out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
+        logger.info(f"PCC value: {out_pcc}")
+        assert out_pass
+        if i == 0:
+            expect_pcc = out_pcc
+        if i == 0 or (i != 0 and out_pcc == expect_pcc):
+            num_passed += 1
+    logger.info(f"Number of passes: {num_passed}/{num_iters}")
+    assert num_passed == num_iters
 
 
 @pytest.mark.parametrize(
