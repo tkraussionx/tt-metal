@@ -29,8 +29,14 @@ void ::detail::ProgramDeleter::operator()(Program *p) {
 }
 
 Device::Device(
-    chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, size_t trace_region_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal, uint32_t worker_core) :
-    id_(device_id), worker_thread_core(worker_core), work_executor(worker_core, device_id) {
+    chip_id_t device_id,
+    const uint8_t num_hw_cqs,
+    size_t l1_small_size,
+    size_t trace_region_size,
+    const std::vector<uint32_t> &l1_bank_remap,
+    bool minimal,
+    uint32_t worker_core) :
+    id_(device_id), worker_thread_core(worker_core), work_executor(worker_core, device_id), work_executor_v2{worker_core, device_id} {
     ZoneScoped;
     tunnel_device_dispatch_workers_ = {};
     this->initialize(num_hw_cqs, l1_small_size, trace_region_size, l1_bank_remap, minimal);
@@ -1894,6 +1900,7 @@ bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, size_t t
 
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
     this->work_executor.initialize();
+    this->work_executor_v2.start();
     this->initialized_ = true;
 
     return true;
@@ -1912,6 +1919,7 @@ bool Device::close() {
         hw_command_queue->terminate();
     }
     this->work_executor.reset();
+    this->work_executor_v2.stop();
     tt_metal::detail::DumpDeviceProfileResults(this, true);
 
     this->trace_buffer_pool_.clear();
@@ -2259,6 +2267,7 @@ void Device::push_work(std::shared_ptr<std::function<void()>> work, bool blockin
 
 void Device::synchronize() {
     this->work_executor.synchronize();
+    this->work_executor_v2.synchronize();
 }
 
 void Device::set_worker_mode(const WorkExecutorMode& mode) {

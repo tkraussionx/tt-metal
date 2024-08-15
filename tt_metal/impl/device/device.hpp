@@ -9,6 +9,7 @@
 
 #include "hostdevcommon/common_values.hpp"
 #include "impl/dispatch/work_executor.hpp"
+#include "impl/dispatch/work_executor_v2.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
 #include "tt_metal/impl/kernels/data_types.hpp"
@@ -274,6 +275,7 @@ class Device {
     // Work Executor for this device - can asynchronously process host side work for
     // all tasks scheduled on this device
     WorkExecutor work_executor;
+    WorkExecutorV2 work_executor_v2;
     uint32_t worker_thread_core;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
     uint8_t num_hw_cqs_;
