@@ -11,7 +11,7 @@
 namespace ttnn::operations::data_movement {
 
 enum class TransposeOpDim {
-    WH, HC, CN, NH, NW, CW
+    WH, HC, CN, NH, NW, CW, TMP
 };
 
 enum class TransposeOpParallelizationStrategy {

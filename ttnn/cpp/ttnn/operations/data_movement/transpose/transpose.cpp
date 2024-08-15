@@ -14,6 +14,11 @@
 namespace ttnn::operations::data_movement {
 
 namespace detail {
+
+inline Tensor transpose2_(const Tensor &a, TransposeOpDim tdim, const MemoryConfig& output_mem_config) {
+    return operation::run(Transpose{tdim, output_mem_config}, {a}).at(0);
+}
+
 inline Tensor transpose_(const Tensor &a, TransposeOpDim transpose_dim, const MemoryConfig& output_mem_config) {
     bool pad_c = false;
     bool pad_n = false;
@@ -59,6 +64,12 @@ ttnn::Tensor ExecuteTranspose::operator()(
         [dim1, dim2, memory_config_arg] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& a = input_tensors.at(0);
             auto memory_config = memory_config_arg.value_or(a.memory_config());
+
+            if (dim1 == -1 || dim2 == -1) {
+                // a custom TM for pre-processing conv input for resnet -- temporary for POC
+                return {detail::transpose2_(a, TransposeOpDim::TMP, memory_config)};
+            }
+
             uint32_t normalized_dim1 = a.get_legacy_shape().get_normalized_index(dim1);
             uint32_t normalized_dim2 = a.get_legacy_shape().get_normalized_index(dim2);
 

@@ -81,6 +81,13 @@ std::vector<tt::tt_metal::Shape> Transpose::compute_output_shapes(const std::vec
     auto out_shape = input_tensor.get_legacy_shape();
     auto padding = out_shape.padding();
     switch (this->dim){
+        case TransposeOpDim::TMP:
+            TT_FATAL(out_shape[1] == 4 && out_shape[2] == 224 && out_shape[3] == 256);
+            out_shape[1] = out_shape[2];
+            out_shape[2] = out_shape[3] / 2;
+            out_shape[3] = out_shape[1] * 2;
+            return {tt::tt_metal::Shape(out_shape)};
+
         case TransposeOpDim::CN:
             std::swap(out_shape[0], out_shape[1]);
             std::swap(padding[0], padding[1]);
@@ -114,7 +121,20 @@ std::vector<Tensor> Transpose::create_output_tensors(const std::vector<Tensor> &
     const auto& input_tensor = input_tensors.at(0);
     // This is only for WH
     if (this->output_mem_config.is_sharded()) {
-        if (this->dim == TransposeOpDim::WH) {
+        if (dim == TransposeOpDim::TMP) {
+            auto output_shape = this->compute_output_shapes(input_tensors)[0];
+            ShardSpec shard_spec = input_tensor.shard_spec().value();
+            shard_spec.shape[0] = output_shape[0] * output_shape[1] * output_shape[2] / 64;
+            shard_spec.shape[1] = 8;
+            auto mem_config = this->output_mem_config;
+            mem_config.shard_spec = shard_spec;
+            return {create_device_tensor(
+                output_shape,
+                input_tensor.get_dtype(),
+                input_tensor.get_layout(),
+                input_tensor.device(),
+                mem_config)};
+        } else if (this->dim == TransposeOpDim::WH) {
             ShardSpec shard_spec = input_tensor.shard_spec().value();
             shard_spec.shape[0] = shard_spec.shape[0] / input_tensor.get_legacy_shape()[-2] * input_tensor.get_legacy_shape()[-1];
             shard_spec.shape[1] = input_tensor.get_legacy_shape()[-2];
@@ -147,6 +167,10 @@ std::vector<Tensor> Transpose::create_output_tensors(const std::vector<Tensor> &
 operation::ProgramWithCallbacks Transpose::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
+
+    if (dim == TransposeOpDim::TMP) {
+        return detail::transpose_tmp(input_tensor, output_tensor);
+    }
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
 
