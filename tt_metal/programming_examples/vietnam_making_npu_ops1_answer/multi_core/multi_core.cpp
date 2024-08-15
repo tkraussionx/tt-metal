@@ -101,7 +101,7 @@ int main() {
   Program program = CreateProgram();
 
   // Multi core part
-  auto grid = device->compute_with_storage_grid_size();
+  auto grid = device->compute_with_storage_grid_size();// 8,7
   const auto [num_cores_unused, all_cores_unused, core_group_1, core_group_2,
               num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
       split_work_to_cores(grid, num_tiles);

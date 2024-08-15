@@ -3,6 +3,14 @@
 #include "debug/dprint.h"
 
 void kernel_main() {
+
+   DPRINT << "Hello, World! I'm reader kernel" << ENDL();
+   DPRINT << "Reader noc_idx is " << uint32_t(noc_index) << ENDL();
+
+   DPRINT << "noc coords 0 : " << (uint)my_x[0] << "," << (uint)my_y[0]
+          << "\tnoc coords 1 : " << (uint)my_x[1] << "," << (uint)my_y[1]
+          << ENDL();
+
   uint32_t arg = 0;
   const auto device_buffer0_addr = get_arg_val<uint32_t>(arg++);
   const auto cb0_id = get_arg_val<uint32_t>(arg++);
@@ -19,11 +27,11 @@ void kernel_main() {
 
   for (uint32_t tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
     // TODO: read a single tile within a for loop
-    cb_reserve_back(/* TODO */);
-    const auto cb0_l1_addr = get_write_ptr(/* TODO */);
-    noc_async_read_tile(/* TODO */);
+    cb_reserve_back(cb0_id, 1);
+    const auto cb0_l1_addr = get_write_ptr(cb0_id);
+    noc_async_read_tile(tile_idx, input_addrg, cb0_l1_addr, 0);
     noc_async_read_barrier();
-    cb_push_back(/* TODO */);
+    cb_push_back(cb0_id, 1);
   }
 
   DPRINT << "READER END" << ENDL();

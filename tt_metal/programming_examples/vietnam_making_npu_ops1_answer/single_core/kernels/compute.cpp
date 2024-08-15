@@ -28,7 +28,7 @@ void MAIN {
         cb_pop_front(cb0_id, onetile);
         // TODO 2. Do relu operation on dst0.
         relu_tile_init();
-        relu_tile(dst0);
+        relu_tile(dst0)
         tile_regs_commit();
 
         tile_regs_wait();

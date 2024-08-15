@@ -80,15 +80,16 @@ MorehBinaryDeviceOperation::Fusion::create(
       "writer.cpp",
       target_cores, WriterDataMovementConfig({output_is_dram}, {}));
 
+  auto compute_config = tt::tt_metal::ComputeConfig{};
+  compute_config.fp32_dest_acc_en = true;
+  compute_config.preserve_fp32_precision = true;
+
   auto compute_kernel_id =
       CreateKernel(program,
                    "ttnn/cpp/ttnn/operations/moreh_eltwise/moreh_binary/device/"
                    "kernels/fusion.cpp",
                    target_cores,
-                   ComputeConfig{
-                       .compile_args = {},
-                       .defines = {},
-                   });
+                   compute_config);
   /////////////////////////////////////////////////////////////////////////////////
   // Set runtime args
   /////////////////////////////////////////////////////////////////////////////////
