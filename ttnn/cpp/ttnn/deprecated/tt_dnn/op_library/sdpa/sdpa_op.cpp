@@ -229,15 +229,15 @@ operation::ProgramWithCallbacks ScaledDotProductAttention::create_program(
 void ScaledDotProductAttentionDecode::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL(input_tensors.size() == 4, "Must have 3 input tensors and mask");
 
-    for (auto& input_tensor : input_tensors) {
-        TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to SDPA need to be on device!");
-        TT_FATAL(input_tensor.buffer() != nullptr, "Operands to SDPA need to be allocated in buffers on device!");
-        TT_FATAL((input_tensor.get_layout() == Layout::TILE), "Inputs to SDPA must be tilized");
-        TT_FATAL(
-            input_tensor.get_dtype() == DataType::BFLOAT16 ||
-            input_tensor.get_dtype() == DataType::BFLOAT8_B || input_tensor.get_dtype() == DataType::BFLOAT4_B);
+    // for (auto& input_tensor : input_tensors) {
+    //     TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to SDPA need to be on device!");
+    //     TT_FATAL(input_tensor.buffer() != nullptr, "Operands to SDPA need to be allocated in buffers on device!");
+    //     TT_FATAL((input_tensor.get_layout() == Layout::TILE), "Inputs to SDPA must be tilized");
+    //     TT_FATAL(
+    //         input_tensor.get_dtype() == DataType::BFLOAT16 ||
+    //         input_tensor.get_dtype() == DataType::BFLOAT8_B || input_tensor.get_dtype() == DataType::BFLOAT4_B);
 
-    }
+    // }
 
     const auto q_shape = input_tensors.at(0).get_legacy_shape();
     const auto k_shape = input_tensors.at(1).get_legacy_shape();

@@ -324,7 +324,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
     auto c_in7_id = CreateCircularBuffer(program, core_grid, c_in7_config);
 
     //cb pos
-    auto c_in8_config = CircularBufferConfig(pos_tensor_tile_size, {{CB::c_in8, pos_df}}).set_page_size(CB::c_in8, pos_tensor_tile_size);
+    auto c_in8_config = CircularBufferConfig(pos_tensor_tile_size, {{CB::dataflow0, pos_df}}).set_page_size(CB::dataflow0, pos_tensor_tile_size);
     auto cb_in8_id = CreateCircularBuffer(program, core_grid, c_in8_config);
 
     // cb_qk_im
@@ -453,7 +453,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
         St, DHt, PNHt, Sk_chunk_t,
         qk_in0_block_w, qk_out_subblock_w, qk_out_subblock_h, qk_in0_num_subblocks, qk_in1_num_subblocks, qk_num_blocks,
         out_in0_block_w, out_out_subblock_w, out_out_subblock_h, out_in0_num_subblocks, out_in1_num_subblocks, out_num_blocks,
-        num_cores_per_batch
+        num_cores_per_batch, k_chunk_size
     };
 
     std::map<string, string> defines;
@@ -518,7 +518,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
         reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
         // writer runtime args
-        std::vector<uint32_t> writer_rt_args = { out_addr, cur_batch, worker_id, !do_reduce, core_num};
+        std::vector<uint32_t> writer_rt_args = { out_addr, cur_batch, worker_id, !do_reduce, core_num, cur_batch};
         writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
         writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
@@ -538,7 +538,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
 
             SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
             SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
-            SetRuntimeArgs(program, compute_kernels_id, core, { 0, 0});
+            SetRuntimeArgs(program, compute_kernels_id, core, { 0, 0, 0});
         }
     }
 
@@ -607,6 +607,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
             // compute runtime args
             compute_args[0] = do_reduce;
             compute_args[1] = core_num;
+            compute_args[2] = cur_batch;
         }
 
         if (is_output_sharded) {

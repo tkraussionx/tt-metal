@@ -17,7 +17,7 @@
 #include "compute_kernel_api/reduce.h"
 
 #include "debug/dprint.h"  // required in all kernels using DPRINT
-#include "../rt_args_common.h"
+#include "../../rt_args_common.hpp"
 
 namespace NAMESPACE {
 void max_block_inplace(uint32_t in0, uint32_t in1, uint32_t num_tiles) {
@@ -446,6 +446,7 @@ void MAIN {
     constexpr uint32_t out_in1_num_subblocks = get_compile_time_arg_val(14);
     constexpr uint32_t out_num_blocks = get_compile_time_arg_val(15);
     constexpr uint32_t num_cores_per_batch = get_compile_time_arg_val(16);
+    constexpr uint32_t k_chunk_size = get_compile_time_arg_val(17);
 
     constexpr uint32_t q_chunk_tiles = Sq_chunk_t * DHt;
     constexpr uint32_t k_chunk_tiles = Sk_chunk_t * DHt;
@@ -479,11 +480,12 @@ void MAIN {
     constexpr uint32_t cb_out_final = tt::CB::c_out4;
 
     const bool do_reduce = get_arg_val<uint32_t>(0) == 1;
-    const uint32_t cur_batch = get_arg_val<uint32_t>(1);
+    const uint32_t core_num = get_arg_val<uint32_t>(1);
+    const uint32_t cur_batch = get_arg_val<uint32_t>(2);
     // const uin32_t idle_core = get_arg_val<uint32_t>(4);
 
     // Get cur_pos
-    constexpr uint32_t cb_index_id = tt::CB::c_in8;
+    constexpr uint32_t cb_index_id = tt::CB::dataflow0;
     cb_wait_front(cb_index_id, 1);
     uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);

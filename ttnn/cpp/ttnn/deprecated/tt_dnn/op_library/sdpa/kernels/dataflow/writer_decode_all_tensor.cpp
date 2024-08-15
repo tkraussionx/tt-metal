@@ -7,7 +7,7 @@
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 
 #include "debug/dprint.h"
-#include "../rt_args_common.h"
+#include "../../rt_args_common.hpp"
 template<uint32_t tile_bytes, uint32_t num_readers>
 constexpr uint32_t get_barrier_read_threshold() {
     return ((512 / num_readers) * (1024 + 128)) / tile_bytes;
@@ -254,16 +254,13 @@ void kernel_main() {
     const uint32_t core_num = get_arg_val<uint32_t>(4);
 
     // Get cur_pos
-    constexpr uint32_t cb_index_id = tt::CB::c_in8;
+    constexpr uint32_t cb_index_id = tt::CB::dataflow0;
     cb_wait_front(cb_index_id, 1);
     uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
     const uint32_t cur_pos = index_ptr[cur_batch];
     // Sequence length assignment
-    auto [PSt, k_num_chunks, all_chunk_assignments] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
-    const uint32_t k_chunk_start = all_chunk_assignments[0];
-    const uint32_t k_chunk_end = all_chunk_assignments[1];
-
+    auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
 
     tt_l1_ptr uint32_t * all_reducer_noc_x          = (tt_l1_ptr uint32_t*)(get_arg_addr(9));
     tt_l1_ptr uint32_t * all_reducer_noc_y          = (tt_l1_ptr uint32_t*)(get_arg_addr(9 + B));

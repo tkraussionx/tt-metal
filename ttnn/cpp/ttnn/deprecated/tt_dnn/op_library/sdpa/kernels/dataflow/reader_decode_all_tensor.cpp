@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "debug/dprint.h"
-#include "../rt_args_common.h"
+#include "../../rt_args_common.hpp"
 
 template<uint32_t tile_bytes, uint32_t num_readers>
 constexpr uint32_t get_barrier_read_threshold() {
@@ -40,7 +40,7 @@ void kernel_main() {
     const uint32_t core_num = get_arg_val<uint32_t>(6);
 
     // Get cur_pos
-    constexpr uint32_t cb_index_id = tt::CB::c_in8;
+    constexpr uint32_t cb_index_id = tt::CB::dataflow0;
     const InterleavedPow2AddrGen<true> addrg = {
             .bank_base_address = pos_addr,
             .log_base_2_of_page_size = log_base_2_of_page_size
