@@ -122,11 +122,11 @@ struct ExecuteTernaryBackwardLerp {
 }  // operations::ternary_backward
 
 //type 1
-constexpr auto addcmul_bw = ttnn::register_operation_with_auto_launch_op<
+constexpr auto addcmul_bw = ttnn::register_operation<
     "ttnn::addcmul_bw",
     operations::ternary_backward::ExecuteTernaryBackwardFloat<
         operations::ternary_backward::TernaryBackwardOpType::ADDCMUL_BW>>();
-constexpr auto addcdiv_bw = ttnn::register_operation_with_auto_launch_op<
+constexpr auto addcdiv_bw = ttnn::register_operation<
     "ttnn::addcdiv_bw",
     operations::ternary_backward::ExecuteTernaryBackwardFloat<
         operations::ternary_backward::TernaryBackwardOpType::ADDCDIV_BW>>();
