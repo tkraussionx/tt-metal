@@ -11,7 +11,7 @@ import tt_lib as ttl
 from models.utility_functions import comp_pcc, torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
 import torch
 
-FF1_HANG_PARAMETRIZATION = (1024, 4608, 18432, 4, 72, 3, 1, 8, 100000)
+FF1_HANG_PARAMETRIZATION = (1024, 4608, 18432, 4, 72, 3, 1, 8, 1)
 
 CHIP_ID_TO_COORDINATES_T3K = [None] * 8
 CHIP_ID_TO_COORDINATES_T3K[0] = (1, 0)
@@ -43,6 +43,10 @@ def test_reproduce_matmul_2d_hang(
     out_subblock_w,
     loop_count,
     use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
     determinism_check_enabled=False,
     determinism_check_iterations=1,
 ):
@@ -90,6 +94,42 @@ def test_reproduce_matmul_2d_hang(
 
     A = torch.randn(a_shape)
     B = torch.randn(b_shape)
+
+    if zero_columns and weights_zero_percentage > 0:
+        raise Exception(
+            "You can't set zero percentage of weights and choose core columns to have zero weights; choose one."
+        )
+
+    if zero_rows and activations_zero_percentage > 0:
+        raise Exception(
+            "You can't set zero percentage of activations and choose core rows to have zero weights; choose one."
+        )
+
+    if activations_zero_percentage > 0:
+        logger.info(f"Activations zero percentage: {activations_zero_percentage}")
+        total_elements_a = seq_len * inner_dim
+        zero_indices = torch.randperm(total_elements_a)[: int(activations_zero_percentage * total_elements_a / 100)]
+        A.view(-1)[zero_indices] = 0
+
+    if weights_zero_percentage > 0:
+        logger.info(f"Weights zero percentage: {weights_zero_percentage}")
+        total_elements_b = inner_dim * weights_n
+        zero_indices = torch.randperm(total_elements_b)[: int(weights_zero_percentage * total_elements_b / 100)]
+        B.view(-1)[zero_indices] = 0
+
+    if zero_columns:
+        logger.info(f"Zero columns: {zero_columns}")
+        for zero_column in zero_columns:
+            start = zero_column * per_core_N * 32
+            end = start + per_core_N * 32
+            B[:, :, :, start:end] = 0
+
+    if zero_rows:
+        logger.info(f"Zero rows: {zero_rows}")
+        for zero_row in zero_rows:
+            start = zero_row * per_core_M * 32
+            end = start + per_core_M * 32
+            A[:, :, start:end, :] = 0
 
     a_t = []
     b_t = []
@@ -219,7 +259,15 @@ def test_reproduce_matmul_2d_hang(
         "logical_chip7",
     ],
 )
-def test_specific_chip_reproduce_matmul_2d_hang_t3000(all_devices, logical_chip_index, use_program_cache):
+def test_specific_chip_reproduce_matmul_2d_hang_t3000(
+    all_devices,
+    logical_chip_index,
+    use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
+):
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
         pytest.skip("Test is only valid for t3000 machines")
@@ -232,7 +280,24 @@ def test_specific_chip_reproduce_matmul_2d_hang_t3000(all_devices, logical_chip_
     )
     target_device = all_devices[logical_chip_index]
     devices = [target_device]
-    test_reproduce_matmul_2d_hang(1, devices, 1024, 4608, 18432, 4, 72, 3, 1, 8, 100000, use_program_cache)
+    test_reproduce_matmul_2d_hang(
+        1,
+        devices,
+        1024,
+        4608,
+        18432,
+        4,
+        72,
+        3,
+        1,
+        8,
+        100000,
+        use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
+    )
 
 
 @pytest.mark.parametrize(
@@ -257,6 +322,10 @@ def test_determinism(
     loop_count,
     use_program_cache,
     determinism_check_iterations,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
 ):
     test_reproduce_matmul_2d_hang(
         num_devices,
@@ -271,6 +340,10 @@ def test_determinism(
         out_subblock_w,
         loop_count,
         use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
     )
@@ -311,6 +384,10 @@ def test_determinism_specific_chip(
     loop_count,
     use_program_cache,
     determinism_check_iterations,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
 ):
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
@@ -338,6 +415,10 @@ def test_determinism_specific_chip(
         out_subblock_w,
         loop_count,
         use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
     )

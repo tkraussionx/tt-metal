@@ -380,6 +380,30 @@ def pytest_addoption(parser):
         default=None,
         help="Check determinism every nth iteration",
     )
+    parser.addoption(
+        "--activations-zero-percentage",
+        action="store",
+        default=None,
+        help="Percentage of zero datums in activations",
+    )
+    parser.addoption(
+        "--weights-zero-percentage",
+        action="store",
+        default=None,
+        help="Percentage of zero datums in weights",
+    )
+    parser.addoption(
+        "--zero-columns",
+        action="store",
+        default=None,
+        help="Percentage of zero datums in weights",
+    )
+    parser.addoption(
+        "--zero-rows",
+        action="store",
+        default=None,
+        help="Percentage of zero datums in weights",
+    )
 
 
 @pytest.fixture
@@ -392,6 +416,68 @@ def determinism_check_iterations(request):
         except ValueError:
             return 1
     return 1
+
+
+@pytest.fixture
+def activations_zero_percentage(request):
+    iterations = request.config.getoption("--activations-zero-percentage")
+    # we return 0 in case the option is not passed or the passed value is not valid
+    if iterations is not None:
+        try:
+            value = int(iterations)
+            return value if value <= 100 and value >= 0 else 0
+        except ValueError:
+            return 0
+    return 0
+
+
+@pytest.fixture
+def weights_zero_percentage(request):
+    iterations = request.config.getoption("--weights-zero-percentage")
+    # we return 0 in case the option is not passed or the passed value is not valid
+    if iterations is not None:
+        try:
+            value = int(iterations)
+            return value if value <= 100 and value >= 0 else 0
+        except ValueError:
+            return 0
+    return 0
+
+
+@pytest.fixture
+def zero_columns(request):
+    iterations = request.config.getoption("--zero-columns")
+    # we return None in case the option is not passed or the passed value is not valid
+    if iterations is not None:
+        try:
+            column_list = [int(x) for x in iterations.split(",")]
+        except ValueError:
+            raise ValueError("Please provide a valid list of integers between 0-7 for zero-columns")
+
+        if not all([x in range(8) for x in column_list]):
+            raise ValueError("Please provide a valid list of integers between 0-7 for zero-columns")
+
+        return column_list
+
+    return None
+
+
+@pytest.fixture
+def zero_rows(request):
+    iterations = request.config.getoption("--zero-rows")
+    # we return None in case the option is not passed or the passed value is not valid
+    if iterations is not None:
+        try:
+            row_list = [int(x) for x in iterations.split(",")]
+        except ValueError:
+            raise ValueError("Please provide a valid list of integers between 0-7 for zero-rows")
+
+        if not all([x in range(8) for x in row_list]):
+            raise ValueError("Please provide a valid list of integers between 0-7 for zero-rows")
+
+        return row_list
+
+    return None
 
 
 @pytest.fixture

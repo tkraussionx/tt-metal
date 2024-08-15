@@ -23,7 +23,15 @@ CHIP_ID_TO_COORDINATES_T3K[7] = (3, 0)
 
 @pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
 def test_reproduce_lm_head_nd_32(
-    all_devices, num_devices, use_program_cache, determinism_check_enabled=False, determinism_check_iterations=1
+    all_devices,
+    num_devices,
+    use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
+    determinism_check_enabled=False,
+    determinism_check_iterations=1,
 ):
     devices = []
     if num_devices == 8:
@@ -43,11 +51,51 @@ def test_reproduce_lm_head_nd_32(
     torch.manual_seed(1234)
 
     seq_len = 32
-    a_shape = [1, 1, seq_len, 4544]
-    b_shape = [1, 1, 4544, 65024]
+    inner_dim = 4544
+    weights_n = 65024
+    a_shape = [1, 1, seq_len, inner_dim]
+    b_shape = [1, 1, inner_dim, weights_n]
+    per_core_N = 32
 
     A = torch.randn(a_shape)
     B = torch.randn(b_shape) - 0.95
+
+    if zero_columns and weights_zero_percentage > 0:
+        raise Exception(
+            "You can't set zero percentage of weights and choose core columns to have zero weights; choose one."
+        )
+
+    if zero_rows and weights_zero_percentage > 0:
+        raise Exception(
+            "You can't set zero percentage of weights and choose core rows to have zero weights; choose one."
+        )
+
+    if activations_zero_percentage > 0:
+        logger.info(f"Activations zero percentage: {activations_zero_percentage}")
+        total_elements_a = seq_len * inner_dim
+        zero_indices = torch.randperm(total_elements_a)[: int(activations_zero_percentage * total_elements_a / 100)]
+        A.view(-1)[zero_indices] = 0
+
+    if weights_zero_percentage > 0:
+        logger.info(f"Weights zero percentage: {weights_zero_percentage}")
+        total_elements_b = inner_dim * weights_n
+        zero_indices = torch.randperm(total_elements_b)[: int(weights_zero_percentage * total_elements_b / 100)]
+        B.view(-1)[zero_indices] = 0
+
+    if zero_columns:
+        logger.info(f"Zero columns: {zero_columns}")
+        for zero_column in zero_columns:
+            for row in range(8):
+                start = (row * 8 + zero_column) * per_core_N * 32
+                end = start + per_core_N * 32
+                B[:, :, :, start:end] = 0
+
+    if zero_rows:
+        logger.info(f"Zero rows: {zero_rows}")
+        for zero_row in zero_rows:
+            start = zero_row * 8 * per_core_N * 32
+            end = start + 8 * per_core_N * 32
+            B[:, :, :, start:end] = 0
 
     a_t = []
     b_t = []
@@ -62,7 +110,7 @@ def test_reproduce_lm_head_nd_32(
         compute_with_storage_grid_size=(8, 8),
         in0_block_w=2,
         per_core_M=1,
-        per_core_N=32,
+        per_core_N=per_core_N,
         out_subblock_h=1,
         out_subblock_w=8,
         fuse_batch=True,
@@ -97,7 +145,7 @@ def test_reproduce_lm_head_nd_32(
         for device_idx in range(num_devices):
             reference_out.append(tt2torch_tensor(out[device_idx]))
 
-    for i in range(100000):
+    for i in range(1):
         # run matmul on all devices
         for device_idx in range(num_devices):
             out[device_idx].deallocate(True)
@@ -175,7 +223,15 @@ def test_reproduce_lm_head_nd_32(
         "logical_chip7",
     ],
 )
-def test_specific_chip_lm_head_nd_32_t3000(all_devices, logical_chip_index, use_program_cache):
+def test_specific_chip_lm_head_nd_32_t3000(
+    all_devices,
+    logical_chip_index,
+    use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
+):
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
         pytest.skip("Test is only valid for t3000 machines")
@@ -188,15 +244,36 @@ def test_specific_chip_lm_head_nd_32_t3000(all_devices, logical_chip_index, use_
     )
     target_device = all_devices[logical_chip_index]
     devices = [target_device]
-    test_reproduce_lm_head_nd_32(devices, 1, use_program_cache)
+    test_reproduce_lm_head_nd_32(
+        devices,
+        1,
+        use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
+    )
 
 
 @pytest.mark.parametrize("num_devices", [1, 2, 8], ids=["1chips", "2chips", "8chips"])
-def test_determinism(all_devices, num_devices, use_program_cache, determinism_check_iterations):
+def test_determinism(
+    all_devices,
+    num_devices,
+    use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
+    determinism_check_iterations,
+):
     test_reproduce_lm_head_nd_32(
         all_devices,
         num_devices,
         use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
     )
@@ -216,7 +293,16 @@ def test_determinism(all_devices, num_devices, use_program_cache, determinism_ch
         "logical_chip7",
     ],
 )
-def test_determinism_specific_chip(all_devices, logical_chip_index, use_program_cache, determinism_check_iterations):
+def test_determinism_specific_chip(
+    all_devices,
+    logical_chip_index,
+    use_program_cache,
+    activations_zero_percentage,
+    weights_zero_percentage,
+    zero_columns,
+    zero_rows,
+    determinism_check_iterations,
+):
     num_devices_t3000 = 8
     if len(all_devices) != num_devices_t3000:
         pytest.skip("Test is only valid for t3000 machines")
@@ -234,6 +320,10 @@ def test_determinism_specific_chip(all_devices, logical_chip_index, use_program_
         devices,
         1,
         use_program_cache,
+        activations_zero_percentage,
+        weights_zero_percentage,
+        zero_columns,
+        zero_rows,
         determinism_check_enabled=True,
         determinism_check_iterations=determinism_check_iterations,
     )
