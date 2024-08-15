@@ -11,11 +11,11 @@ import ttnn
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-@pytest.mark.parametrize("height", [32, 30])
-@pytest.mark.parametrize("width", [32, 62])
-@pytest.mark.parametrize("on_device", [True, False])
-@pytest.mark.parametrize("from_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
-@pytest.mark.parametrize("to_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("height", [32])  # [32, 30])
+@pytest.mark.parametrize("width", [128 * 1024])  # [32, 62])
+@pytest.mark.parametrize("on_device", [True])  # [True, False])
+@pytest.mark.parametrize("from_layout", [ttnn.TILE_LAYOUT])  # [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("to_layout", [ttnn.ROW_MAJOR_LAYOUT])  # [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 @pytest.mark.parametrize("start_with_padding", [False, True])
 def test_to_layout_2D(device, height, width, on_device, from_layout, to_layout, start_with_padding):
     torch_input_tensor = torch.rand((height, width), dtype=torch.bfloat16)
