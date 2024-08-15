@@ -37,6 +37,7 @@ void kernel_main() {
     const uint32_t pos_addr  = get_arg_val<uint32_t>(3);
     const uint32_t cur_batch =  get_arg_val<uint32_t>(4);
     const bool is_worker = get_arg_val<uint32_t>(5) == 1;
+    const uint32_t core_num = get_arg_val<uint32_t>(6);
 
     // Get cur_pos
     constexpr uint32_t cb_index_id = tt::CB::c_in8;
@@ -53,13 +54,10 @@ void kernel_main() {
     noc_async_read_barrier();
     cb_push_back(cb_index_id, 1);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_wr_ptr);
-    const uint32_t cur_pos = index_ptr[cur_batch/num_cores_per_batch];
+    const uint32_t cur_pos = index_ptr[cur_batch];
 
     // Sequence length assignment
-    auto [PSt, k_num_chunks, all_chunk_assignments] = get_runtime_args(cur_pos, num_cores_per_batch, k_chunk_size);
-    const uint32_t k_chunk_start = all_chunk_assignments[0];
-    const uint32_t k_chunk_end = all_chunk_assignments[1];
-
+    auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
     tt_l1_ptr uint32_t * all_reducer_noc_x          = (tt_l1_ptr uint32_t*)(get_arg_addr(9));
     tt_l1_ptr uint32_t * all_reducer_noc_y          = (tt_l1_ptr uint32_t*)(get_arg_addr(9 + B));
 

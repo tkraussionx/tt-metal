@@ -24,11 +24,11 @@ namespace operations {
 namespace primary {
 
 // implementation of softmax with optional scale (see the header for input_tensor more detailed description)
-operation::ProgramWithCallbacks sdpa_decode_multi_core(
+operation::ProgramWithCallbacks sdpa_decode_multi_core_tensor(
     const Tensor &input_tensor_q,
     const Tensor &input_tensor_k,
     const Tensor &input_tensor_v,
-    const Tensor &pos_tensor,
+    const Tensor &input_tensor_pos,
     const Tensor &output_tensor,
     std::optional<float> scale,
     DeviceComputeKernelConfig compute_kernel_config,
@@ -98,7 +98,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     auto q_buffer = input_tensor_q.buffer();
     auto k_buffer = input_tensor_k.buffer();
     auto v_buffer = input_tensor_v.buffer();
-    auto pos_buffer = pos_tensor.buffer();
+    auto pos_buffer = input_tensor_pos.buffer();
 
     auto out0_buffer = output_tensor.buffer();
 
@@ -256,7 +256,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     tt::DataFormat q_df = tt_metal::datatype_to_dataformat_converter(input_tensor_q.get_dtype());
     tt::DataFormat k_df = tt_metal::datatype_to_dataformat_converter(input_tensor_k.get_dtype());
     tt::DataFormat v_df = tt_metal::datatype_to_dataformat_converter(input_tensor_v.get_dtype());
-    tt::DataFormat pos_df = tt_metal::datatype_to_dataformat_converter(pos_tensor.get_dtype());
+    tt::DataFormat pos_df = tt_metal::datatype_to_dataformat_converter(input_tensor_pos.get_dtype());
     tt::DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output_tensor.get_dtype());
     tt::DataFormat scalar_df = tt::DataFormat::Float16_b;
     tt::DataFormat im_df = tt::DataFormat::Float16_b;
@@ -277,7 +277,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     uint32_t index_stick_size = 0;
 
     pos_tensor_tile_size = tt_metal::detail::TileSize(pos_df);
-    index_stick_size = pos_tensor.value().buffer()->aligned_page_size();
+    index_stick_size = pos_buffer->aligned_page_size();
     log2_page_size = std::log2(index_stick_size);
     TT_FATAL(1 << log2_page_size == index_stick_size);
 
@@ -469,7 +469,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
     // Compute
     auto compute_kernels_id = CreateKernel(
         program,
-        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/sdpa/kernels/compute/sdpa_flash_decode.cpp",
+        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/sdpa/kernels/compute/sdpa_flash_decode_tensor.cpp",
         core_grid,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode,
@@ -511,33 +511,34 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         bool do_reduce = (worker_id == -1);
 
         uint32_t cur_batch = i / num_cores_per_batch;
+        uint32_t core_num = i % num_cores_per_batch;
         // reader runtime args
-        std::vector<uint32_t> reader_rt_args = { q_addr, k_addr, v_addr, pos_addr, cur_batch, !do_reduce};
+        std::vector<uint32_t> reader_rt_args = { q_addr, k_addr, v_addr, pos_addr, cur_batch, !do_reduce, core_num};
         reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
         reader_rt_args.insert(reader_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
         // writer runtime args
-        std::vector<uint32_t> writer_rt_args = { out_addr, cur_batch, worker_id, !do_reduce};
+        std::vector<uint32_t> writer_rt_args = { out_addr, cur_batch, worker_id, !do_reduce, core_num};
         writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_xs.begin(), reduce_core_physical_xs.end());
         writer_rt_args.insert(writer_rt_args.end(), reduce_core_physical_ys.begin(), reduce_core_physical_ys.end());
 
         SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
         SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
-        SetRuntimeArgs(program, compute_kernels_id, core, {do_reduce});
+        SetRuntimeArgs(program, compute_kernels_id, core, {do_reduce, core_num});
     }
     if (num_active_cores < num_cores_available) {
         // Set the rest of the cores to idle
         for (uint32_t i = 0; i < core_group_idle.size(); ++i) {
             CoreCoord core = core_group_idle[i];
             // reader runtime args
-            std::vector<uint32_t> reader_rt_args = { 0, 0, 0, 0, 0, 0};
+            std::vector<uint32_t> reader_rt_args = { 0, 0, 0, 0, 0, 0, 0};
 
             // writer runtime args
-            std::vector<uint32_t> writer_rt_args = { 0, 0, 0, 0};
+            std::vector<uint32_t> writer_rt_args = { 0, 0, 0, 0, 0};
 
             SetRuntimeArgs(program, reader_kernels_id, core, reader_rt_args);
             SetRuntimeArgs(program, writer_kernels_id, core, writer_rt_args);
-            SetRuntimeArgs(program, compute_kernels_id, core, { 0});
+            SetRuntimeArgs(program, compute_kernels_id, core, { 0, 0});
         }
     }
 
@@ -550,7 +551,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         num_cores_per_batch,
         is_output_sharded,
         cb_out4_id,
-        B,
+        B
         ]
     (
         const void* operation,
@@ -571,8 +572,6 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         uint32_t pos_addr = pos_buffer->address();
         uint32_t out_addr = out0_buffer->address();
 
-        int batch_id = -1;
-
         auto& reader_args_by_core = GetRuntimeArgs(program, reader_kernels_id);
         auto& writer_args_by_core = GetRuntimeArgs(program, writer_kernels_id);
         auto& compute_args_by_core = GetRuntimeArgs(program, compute_kernels_id);
@@ -580,9 +579,10 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         // Set rt args
         for (uint32_t i = 0; i < num_active_cores; ++i) {
             CoreCoord core = core_group[i];
-            uint32_t cur_pos_i = cur_pos[i/num_cores_per_batch];
             uint32_t worker_id = i % num_cores_per_batch - 1;
             bool do_reduce = (worker_id == -1);
+            uint32_t core_num = i % num_cores_per_batch;
+            uint32_t cur_batch = i / num_cores_per_batch;
 
             auto& reader_args = reader_args_by_core[core.x][core.y];
             auto& writer_args = writer_args_by_core[core.x][core.y];
@@ -595,15 +595,18 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
             reader_args[3] = pos_addr;
             reader_args[4] = cur_batch;
             reader_args[5] = !do_reduce;
+            reader_args[6] = core_num;
 
             // writer runtime args
             writer_args[0] = out_addr;
             writer_args[1] = cur_batch;
             writer_args[2] = worker_id;
             writer_args[3] = !do_reduce;
+            writer_args[4] = core_num;
 
             // compute runtime args
             compute_args[0] = do_reduce;
+            compute_args[1] = core_num;
         }
 
         if (is_output_sharded) {

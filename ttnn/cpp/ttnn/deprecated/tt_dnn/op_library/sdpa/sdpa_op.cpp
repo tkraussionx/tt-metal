@@ -227,7 +227,7 @@ operation::ProgramWithCallbacks ScaledDotProductAttention::create_program(
 }
 
 void ScaledDotProductAttentionDecode::validate(const std::vector<Tensor>& input_tensors) const {
-    TT_FATAL(input_tensors.size() == 3, "Must have 3 input tensors and mask");
+    TT_FATAL(input_tensors.size() == 4, "Must have 3 input tensors and mask");
 
     for (auto& input_tensor : input_tensors) {
         TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to SDPA need to be on device!");
@@ -285,9 +285,9 @@ void ScaledDotProductAttentionDecode::validate(const std::vector<Tensor>& input_
     TT_FATAL(v_shape[-1] == D);
 
     // Check valid seqlen
-    for (int i = 0; i < this->cur_pos.size(); i++) {
-        TT_FATAL(this->cur_pos[i] < k_shape[-2], "cur_pos must be <= K sequence dim");
-    }
+    // for (int i = 0; i < this->cur_pos.size(); i++) {
+    //     TT_FATAL(this->cur_pos[i] < k_shape[-2], "cur_pos must be <= K sequence dim");
+    // }
 
     // Check compute kernel config
     std::visit([&](auto&& compute_kernel_config) {
@@ -313,6 +313,7 @@ operation::ProgramWithCallbacks ScaledDotProductAttentionDecode::create_program(
     auto& input_tensor_q = input_tensors.at(0);
     auto& input_tensor_k = input_tensors.at(1);
     auto& input_tensor_v = input_tensors.at(2);
+    auto& input_tensor_pos = input_tensors.at(3);
     auto& output_tensor = output_tensors.at(0);
 
     auto scale = this->scale;
@@ -338,12 +339,12 @@ operation::ProgramWithCallbacks ScaledDotProductAttentionDecode::create_program(
         },
         this->program_config);
 
-    return sdpa_decode_multi_core(
+    return sdpa_decode_multi_core_tensor(
         input_tensor_q,
         input_tensor_k,
         input_tensor_v,
+        input_tensor_pos,
         output_tensor,
-        this->cur_pos,
         scale,
         this->compute_kernel_config,
         this->program_config,
@@ -526,40 +527,40 @@ Tensor scaled_dot_product_attention_decode(
     Tensor& input_tensor_q,
     Tensor& input_tensor_k,
     Tensor& input_tensor_v,
-    std::vector<uint32_t> cur_pos,
+    Tensor& input_tensor_pos,
     std::optional<float> scale,
     const MemoryConfig& output_mem_config,
     const SDPAProgramConfig& program_config,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     std::vector<Tensor> output_tensors = {
-        Tensor(operation::get_workers_for_op_output({input_tensor_q, input_tensor_k, input_tensor_v}))};
+        Tensor(operation::get_workers_for_op_output({input_tensor_q, input_tensor_k, input_tensor_v, input_tensor_pos}))};
     operation::launch_op(
-        [cur_pos, scale, output_mem_config, program_config, compute_kernel_config](
+        [scale, output_mem_config, program_config, compute_kernel_config](
             std::vector<Tensor> input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             const auto& input_tensor_q = input_tensors.at(0);
             const auto& input_tensor_k = input_tensors.at(1);
             const auto& input_tensor_v = input_tensors.at(2);
+            const auto& input_tensor_pos = input_tensors.at(3);
             auto arch = input_tensor_q.storage_type() == StorageType::DEVICE ? input_tensor_q.device()->arch()
                                                                              : AutoFormat::GetDefaultDevice()->arch();
-            uint32_t max_cur_pos = *std::max_element(cur_pos.begin(), cur_pos.end());
+            uint32_t max_cur_pos = 1024; //*std::max_element(cur_pos.begin(), cur_pos.end());
             uint32_t k_chunk_size = get_chunk_size(max_cur_pos+1);
             // get chunk size and then pass to sdpa decode as an attribute for prgm cache
             auto kernel_config_val = init_device_compute_kernel_config(
                 input_tensor_q.device()->arch(), compute_kernel_config, MathFidelity::HiFi2, true, false, false);
             return operation::run(
                 ScaledDotProductAttentionDecode{
-                    .cur_pos=cur_pos,
                     .scale = scale,
                     .output_mem_config = output_mem_config,
                     .program_config = program_config,
                     .compute_kernel_config = kernel_config_val,
                     .k_chunk_size = k_chunk_size},
-                {input_tensor_q, input_tensor_k, input_tensor_v}
+                {input_tensor_q, input_tensor_k, input_tensor_v, input_tensor_pos}
             );
         },
-        {input_tensor_q, input_tensor_k, input_tensor_v},
+        {input_tensor_q, input_tensor_k, input_tensor_v, input_tensor_pos},
         output_tensors
         );
     return output_tensors.at(0);

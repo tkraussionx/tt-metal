@@ -605,7 +605,7 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         const std::vector<Tensor>& output_tensors
     ) {
-        const auto cur_pos = static_cast<const ScaledDotProductAttentionDecode*>(operation)->cur_pos;
+        const auto cur_pos = static_cast<const ScaledDotProductAttentionGQADecode*>(operation)->cur_pos;
 
         auto q_buffer = input_tensors.at(0).buffer();
         auto k_buffer = input_tensors.at(1).buffer();

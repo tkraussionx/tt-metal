@@ -251,15 +251,16 @@ void kernel_main() {
     const uint32_t cur_batch = get_arg_val<uint32_t>(1);
     const uint32_t worker_id = get_arg_val<uint32_t>(2);
     const bool is_worker = get_arg_val<uint32_t>(3) == 1;
+    const uint32_t core_num = get_arg_val<uint32_t>(4);
 
     // Get cur_pos
     constexpr uint32_t cb_index_id = tt::CB::c_in8;
     cb_wait_front(cb_index_id, 1);
     uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
-    const uint32_t cur_pos = index_ptr[cur_batch/num_cores_per_batch];
+    const uint32_t cur_pos = index_ptr[cur_batch];
     // Sequence length assignment
-    auto [PSt, k_num_chunks, all_chunk_assignments] = get_runtime_args(cur_pos, num_cores_per_batch, k_chunk_size);
+    auto [PSt, k_num_chunks, all_chunk_assignments] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
     const uint32_t k_chunk_start = all_chunk_assignments[0];
     const uint32_t k_chunk_end = all_chunk_assignments[1];
 
