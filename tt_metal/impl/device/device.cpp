@@ -1189,6 +1189,12 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_size_bytes = 0x10000;
                 tunnel_core_allocations[DEMUX].push_back(std::make_tuple(demux_location, settings));
             }
+            std::vector<tt_cxy_pair> prefetch_d_logical_cores = std::vector<tt_cxy_pair>(num_hw_cqs);
+            std::vector<tt_cxy_pair> dispatch_d_logical_cores = std::vector<tt_cxy_pair>(num_hw_cqs);
+            for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
+                prefetch_d_logical_cores.at(cq_id) = dispatch_core_manager::instance().prefetcher_d_core(device_id, channel, cq_id);
+                dispatch_d_logical_cores.at(cq_id) = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
+            }
 
             settings.tunnel_stop = tunnel_stop - 1;
             settings.semaphores.clear();
@@ -1245,7 +1251,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.consumer_semaphore_id = 1;
                 settings.producer_semaphore_id = 2;
 
-                tt_cxy_pair prefetch_d_location = dispatch_core_manager::instance().prefetcher_d_core(device_id, channel, cq_id);
+                tt_cxy_pair prefetch_d_location = prefetch_d_logical_cores.at(cq_id);
                 settings.worker_physical_core = tt_cxy_pair(prefetch_d_location.chip, get_physical_core_coordinate(prefetch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp";
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
@@ -1253,6 +1259,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_pages();
                 settings.cb_log_page_size = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
                 tunnel_core_allocations[PREFETCH_D].push_back(std::make_tuple(prefetch_d_location, settings));
+                std::cout << "Prefetch_d on: " << settings.worker_physical_core.str() << std::endl;
 
                 settings.semaphores.clear();
             }
@@ -1266,10 +1273,12 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_log_page_size = dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE;
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
-                tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
+                tt_cxy_pair dispatch_d_location = dispatch_d_logical_cores.at(cq_id);
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
+                std::cout << "Dispatch_d on: " << settings.worker_physical_core.str() << std::endl;
+
                 settings.semaphores.clear();
             }
         }
@@ -1383,6 +1392,9 @@ void Device::compile_command_queue_programs() {
 
             CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_core, dispatch_core_type);
             CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
+            std::cout << "Prefetch_hd on: " << prefetch_physical_core.str() << std::endl;
+            std::cout << "Dispatch_hd on: " << dispatch_physical_core.str() << std::endl;
+            NOC noc_index = this->hw_command_queues_[cq_id]->noc_index;
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
             log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
