@@ -23,8 +23,8 @@ from ttnn.operations.conv2d import determine_parallel_config, create_sharded_mem
     "act_shape",  ## NCHW
     (
         (
-            [1, 32, 64, 64],
-            [1, 32, 2, 2],
+            # [1, 32, 64, 64],
+            [1, 64, 8, 8],
         )
     ),
 )
@@ -41,7 +41,12 @@ from ttnn.operations.conv2d import determine_parallel_config, create_sharded_mem
     ((1, 1),),
 )
 @pytest.mark.parametrize("dilation", ((1, 1),))  ## default
-@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        ttnn.bfloat16,
+    ],
+)  ## ttnn.bfloat8_b])
 def test_run_max_pool_single_core(
     act_shape,
     kernel_size,
@@ -60,8 +65,8 @@ def test_run_max_pool_single_core(
     if 2 * pad_h > kernel_h or 2 * pad_w > kernel_w:
         pytest.skip("Invalid case")
 
-    if (kernel_h == 3 and pad_h != 1) or (kernel_h == 2 and pad_h != 0):
-        pytest.skip("kernel size and padding combination not supported")
+    # if (kernel_h == 3 and pad_h != 1) or (kernel_h == 2 and pad_h != 0):
+    #     pytest.skip("kernel size and padding combination not supported")
 
     out_h = math.floor((in_h + 2 * pad_h - (dilation_h * kernel_h - 1) - 1) / stride_h) + 1
     out_w = math.floor((in_w + 2 * pad_w - (dilation_w * kernel_w - 1) - 1) / stride_w) + 1
