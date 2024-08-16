@@ -535,7 +535,7 @@ Tensor InplaceRelationalBinary<binary_op_type>::invoke(
     return RelationalBinary<binary_op_type>::invoke(input_tensor_a, scalar, std::nullopt, std::nullopt, input_tensor_a, std::nullopt, std::nullopt);
 }
 
-template struct BinaryOperationOverload<BinaryOpType::ADD, false>;
+template struct BinaryOperation<BinaryOpType::ADD, false>;
 template struct BinaryOperation<BinaryOpType::ADD, true>;
 template struct BinaryOperationOverload<BinaryOpType::SUB, false>;
 template struct BinaryOperation<BinaryOpType::SUB, true>;

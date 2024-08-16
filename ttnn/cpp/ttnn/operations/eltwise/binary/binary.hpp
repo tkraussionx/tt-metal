@@ -174,9 +174,9 @@ struct InplaceRelationalBinary {
 }  // binary
 }  // operations
 
-constexpr auto add = ttnn::register_operation<
+constexpr auto add = ttnn::register_operation_with_auto_launch_op<
     "ttnn::add",
-    operations::binary::BinaryOperationOverload<operations::binary::BinaryOpType::ADD, false>>();
+    operations::binary::BinaryOperation<operations::binary::BinaryOpType::ADD, false>>();
 constexpr auto add_ = ttnn::register_operation_with_auto_launch_op<
     "ttnn::add_",
     operations::binary::BinaryOperation<operations::binary::BinaryOpType::ADD, true>>();
