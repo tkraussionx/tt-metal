@@ -74,6 +74,14 @@ void kernel_main() {
     constexpr uint32_t MtNt = get_compile_time_arg_val(23);  // if 0
     // Don't need batch; same as batch from READER args
 
+    uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(0, NOC_ID_LOGICAL);
+    uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
+    uint32_t my_logical_y = (noc_id_logical_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    my_logical_x -= 18;
+    my_logical_y -= 18;
+
+    // DPRINT << my_logical_x << "," << my_logical_y << ENDL();
+
 #ifdef FUSE_BIAS
     // in3 mcast args
     const uint32_t in3_tensor_addr = get_arg_val<uint32_t>(16);
@@ -262,6 +270,11 @@ void kernel_main() {
 #endif
 
 #ifndef IN1_SHARDED
+
+            if (my_logical_y & 0x1 == 1) {
+                uint32_t cb_write_ptr = get_write_ptr(cb_id_in1);
+                generate_zeros_cb(cb_write_ptr, in1_block_num_tiles);
+            }
             cb_push_back(cb_id_in1, in1_block_num_tiles);
 #endif
         }

@@ -175,6 +175,10 @@ void kernel_main() {
 #endif
 
 #ifndef IN0_SHARDED
+            // in mcast0 case, this kernel goes only on one core
+            // uint32_t cb_write_ptr = get_write_ptr(cb_id_in0);
+            // generate_zeros_cb(cb_write_ptr, in0_block_num_tiles);
+
             cb_push_back(cb_id_in0, in0_block_num_tiles);
 #else
             if constexpr (extract_shard_sub_blocks) {

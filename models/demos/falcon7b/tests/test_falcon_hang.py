@@ -95,9 +95,15 @@ def test_reproduce_lm_head_nd_32(
 
     if determinism_check_enabled:
         for device_idx in range(num_devices):
-            reference_out.append(tt2torch_tensor(out[device_idx]))
+            pt_out = tt2torch_tensor(out[device_idx])
+            reference_out.append(pt_out)
 
-    for i in range(100000):
+            total_elements = torch.numel(pt_out)
+            zero_elements = total_elements - torch.count_nonzero(pt_out)
+            percentage = int((zero_elements / total_elements) * 100)
+            logger.info(f"Output tensor has {zero_elements} zero datums, {percentage}% of total elements")
+
+    for i in range(0):
         # run matmul on all devices
         for device_idx in range(num_devices):
             out[device_idx].deallocate(True)

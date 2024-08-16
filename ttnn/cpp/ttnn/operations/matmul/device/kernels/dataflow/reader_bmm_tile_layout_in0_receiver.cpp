@@ -6,6 +6,7 @@
 
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // in0 mcast args
@@ -31,6 +32,12 @@ void kernel_main() {
     const uint64_t in0_mcast_sender_semaphore_noc_addr =
         get_noc_addr(in0_mcast_sender_noc_x, in0_mcast_sender_noc_y, in0_mcast_sender_semaphore_addr);
 
+    uint32_t noc_id_logical_reg = NOC_CFG_READ_REG(0, NOC_ID_LOGICAL);
+    uint32_t my_logical_x = noc_id_logical_reg & NOC_NODE_ID_MASK;
+    uint32_t my_logical_y = (noc_id_logical_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    my_logical_x -= 18;
+    my_logical_y -= 18;
+
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
             // Operand 0
@@ -44,6 +51,11 @@ void kernel_main() {
 
             // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+
+            if (my_logical_y & 0x1 == 1) {
+                uint32_t cb_write_ptr = get_write_ptr(cb_id_in0);
+                generate_zeros_cb(cb_write_ptr, in0_block_num_tiles);
+            }
 
             cb_push_back(cb_id_in0, in0_block_num_tiles);
         }

@@ -1932,3 +1932,14 @@ void noc_async_read_barrier_with_trid(uint32_t trid) {
     #endif
     DEBUG_STATUS("NBTD");
 }
+
+
+// WORKS ONLY FOR BFP8!
+FORCE_INLINE
+void generate_zeros_cb(uint32_t input_l1_addr, uint32_t block_num) {
+    auto input_l1_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(input_l1_addr);
+    // if using bfp16, need to change to 512
+    for (uint32_t i = 0; i < 272*block_num; ++i) {
+        input_l1_ptr[i] = 0;
+    }
+}
