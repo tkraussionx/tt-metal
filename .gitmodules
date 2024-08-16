@@ -1,3 +1,6 @@
+[submodule "tt_metal/third_part/sfpi"]
+	path = tt_metal/third_party/sfpi
+	url = https://github.com/tenstorrent-metal/sfpi-rel.git
 [submodule "third_party/pybind11"]
 	path = tt_metal/third_party/pybind11
 	url = https://github.com/pybind/pybind11.git
@@ -25,6 +28,3 @@
 [submodule "tt_metal/third_party/tt_llk_blackhole"]
 	path = tt_metal/third_party/tt_llk_blackhole
 	url = https://github.com/tenstorrent/tt-llk-bh.git
-[submodule "tt_metal/third_party/sfpi"]
-	path = tt_metal/third_party/sfpi
-	url = git@github.com:tenstorrent-metal/sfpi-rel.git
