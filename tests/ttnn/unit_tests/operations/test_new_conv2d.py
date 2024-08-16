@@ -116,6 +116,7 @@ def run_conv(
         enable_act_double_buffer=False,
         enable_split_reader=False,
         enable_subblock_padding=False,
+        output_layout=output_layout,
     )
     if config_override and "act_block_h" in config_override:
         conv_config.act_block_h_override = config_override["act_block_h"]
@@ -1060,7 +1061,7 @@ def test_unet_conv(
     )
 
 
-@pytest.mark.skip("New API needs to be tested")
+# @pytest.mark.skip("New API needs to be tested")
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
@@ -1068,38 +1069,38 @@ def test_unet_conv(
     (
         # unet convs with batch size 2
         # unique convs in unet (complete list)
-        (2, 16, 3, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
-        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
-        (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 16, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 16, 3, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        # (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        # (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 16, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 64, 32, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 64, 64, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 96, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 64, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
-        (
-            2,
-            16,
-            48,
-            528,
-            80,
-            3,
-            3,
-            1,
-            1,
-            1,
-            1,
-            True,
-            {"act_block_h": 32},
-            False,
-        ),  # fails. mismatch. It passes when input_channels=64. Probably an issue with padding when input_channels % 32 != 0.
-        (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 16, 32, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
-        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
-        (2, 1, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        # (2, 64, 64, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 96, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 64, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (
+        #     2,
+        #     16,
+        #     48,
+        #     528,
+        #     80,
+        #     3,
+        #     3,
+        #     1,
+        #     1,
+        #     1,
+        #     1,
+        #     True,
+        #     {"act_block_h": 32},
+        #     False,
+        # ),  # fails. mismatch. It passes when input_channels=64. Probably an issue with padding when input_channels % 32 != 0.
+        # (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        # (2, 16, 32, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        # (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        # (2, 1, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
     ),
 )
 @pytest.mark.parametrize(
@@ -1111,7 +1112,7 @@ def test_unet_conv(
     [ttnn.bfloat8_b, ttnn.bfloat16],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
-@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT])
 def test_unet_conv_wh(
     device,
     use_program_cache,

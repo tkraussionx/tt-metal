@@ -237,6 +237,8 @@ OptimizedConvBlockConfig determine_per_core_conv_block_config(
     uint32_t weight_block_w_ntiles = conv_op_parallel_config.per_core_out_matrix_width_ntiles;
     auto [out_subblock_h_ntiles, out_subblock_w_ntiles] =
         determine_largest_subblock_size(act_block_h_ntiles, weight_block_w_ntiles, fp32_accum);
+    out_subblock_h_ntiles = 1;
+    out_subblock_w_ntiles = 1;
     if (use_shallow_conv_variant && ((act_block_h_ntiles / out_subblock_h_ntiles) % 2 != 0)) {
         TT_ASSERT(parallel_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED);
         // TODO: do a proper fix and remove this temporary hack for shallow conv
