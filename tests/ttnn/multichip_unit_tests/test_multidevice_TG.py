@@ -185,18 +185,27 @@ hidden_div = STD_MESH[1] // mesh[1]
 expand_div = STD_MESH[0] // mesh[0]
 
 
-@pytest.mark.parametrize(
-    "mesh_shape, device_mesh", [pytest.param(c_shape, mesh, id="8x4_grid")], indirect=["device_mesh"]
-)
+@pytest.mark.parametrize("mesh_shape, device_mesh", [pytest.param(mesh, mesh, id="8x4_grid")], indirect=["device_mesh"])
 @pytest.mark.parametrize(
     "M, K, N, weights_dtype",
     [
-        # pytest.param(32, 8192//hidden_div, 32768//expand_div, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),
+        pytest.param(32, 8192 // hidden_div, 32768 // expand_div, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),
         pytest.param(32, 32768 // expand_div, 8192 // hidden_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
     ],
 )
+@pytest.mark.parametrize("activation_sharded", [True, False], ids=["activation_sharded", "activation_interleaved"])
+@pytest.mark.parametrize("weight_sharded", [True, False], ids=["weight_sharded", "weight_interleaved"])
 # Llama FF1, FF2, FF3 in MLP with dram sharded weights
-def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_shape, device_mesh):
+def test_galaxy_matmul_2d_fracture_dram_sharded(
+    M, K, N, weights_dtype, mesh_shape, device_mesh, activation_sharded, weight_sharded
+):
+    """
+    activation_sharded and dram_sharded: MM 1D dram sharded
+    activation_sharded and not dram_sharded: MM 1D dram interleaved
+    not activation_sharded and dram_sharded: MM 2D dram sharded
+    not activation_sharded and not dram_sharded: MM 2D dram interleaved
+    """
+
     act_pt = torch.randn(1, 1, M, K)
     weights_pt = torch.randn(1, 1, K, N)
 
@@ -206,8 +215,8 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_sha
     weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
     concat_dim = (1, 3) if K == 8192 else (3, 1)
 
-    K = K // mesh_shape[1] if K == 8192 else K // mesh_shape[0]
-    N = N // mesh_shape[0] if N == 32768 else N // mesh_shape[1]
+    K = K // mesh_shape[0] if K == 8192 else K // mesh_shape[1]
+    N = N // mesh_shape[1] if N == 32768 else N // mesh_shape[0]
 
     act_mem_config = ttnn.create_sharded_memory_config(
         shape=(M, K // 8),
@@ -221,7 +230,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_sha
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         device=device_mesh,
-        memory_config=act_mem_config,
+        memory_config=act_mem_config if activation_sharded else ttnn.DRAM_MEMORY_CONFIG,
         mesh_mapper=ShardTensor2dMesh(device_mesh, dims=act_shard_dim, mesh_shape=mesh_shape),
     )
 
@@ -251,7 +260,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_sha
         dtype=weights_dtype,
         layout=ttnn.TILE_LAYOUT,
         device=device_mesh,
-        memory_config=weight_mem_config,
+        memory_config=weight_mem_config if weight_sharded else ttnn.DRAM_MEMORY_CONFIG,
         mesh_mapper=ShardTensor2dMesh(device_mesh, dims=weight_shard_dim, mesh_shape=mesh_shape),
     )
 
@@ -275,22 +284,49 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(M, K, N, weights_dtype, mesh_sha
         fuse_batch=False,
     )
 
+    MATMUL_1D_PROGCFG = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=(8, 1),
+        in0_block_w=K // 8 // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+        out_subblock_h=1,  # Must be divisible by per_core_M
+        out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+        per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
+        per_core_N=N
+        // 32
+        // 8,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
+        fuse_batch=False,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+
+    mm_prog_config = (
+        DRAM_SHARDED_PROGCFG
+        if weight_sharded and activation_sharded
+        else MATMUL_1D_PROGCFG
+        if not weight_sharded and activation_sharded
+        else MATMUL_2D_PROGCFG
+    )
+    mm_output_memory_config = ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if activation_sharded else ttnn.DRAM_MEMORY_CONFIG
+    logger.info(f"mm_prog_config: {mm_prog_config}")
+    logger.info(f"act_mem_config: {act.memory_config()}")
+    logger.info(f"weight_mem_config: {weights.memory_config()}")
+
     num_passed = 0
-    num_iters = 1000
+    num_iters = 2000
 
     for i in range(num_iters):
         logger.info(f"Running iteration {i}")
         out = ttnn.matmul(
             act,
             weights,
-            # program_config=DRAM_SHARDED_PROGCFG,
-            program_config=MATMUL_2D_PROGCFG,
+            program_config=mm_prog_config,
             compute_kernel_config=compute_kernel_lofi,
             dtype=ttnn.bfloat16,
-            # memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            memory_config=mm_output_memory_config,
         )
 
-        out = ttnn.to_torch(out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=concat_dim, mesh_shape=mesh_shape))
+        out = ttnn.to_torch(
+            out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=concat_dim, mesh_shape=mesh_shape)
+        )
         out = torch.sum(out, dim=1, keepdim=True)
 
         out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
