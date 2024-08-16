@@ -62,6 +62,8 @@ class TtLlamaModelForGeneration:
         batch = tokens.shape[0]
         tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(tokens, start_pos)
 
+        logger.info("Compiling model")
+
         tt_logits = self.tt_model(
             tt_inp_emb,
             rot_mat,
@@ -69,11 +71,49 @@ class TtLlamaModelForGeneration:
             attn_mask,
         )
 
-        del tt_inp_emb
-        del rot_mat
-        del attn_mask
+        tt_logits = ttnn.line_all_gather(tt_logits, dim=3, cluster_axis=1, num_links=2, device_mesh=self.device_mesh)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits = ttnn.to_torch(tt_logits_tensors[0])
 
-        logits = self._process_logits(tt_logits)
+        logger.info("Capturing trace")
+        trace_id = ttnn.begin_trace_capture(self.device_mesh, cq_id=0)
+        tt_logits = self.tt_model(
+            tt_inp_emb,
+            rot_mat,
+            start_pos,
+            attn_mask,
+        )
+
+        tt_logits = ttnn.line_all_gather(tt_logits, dim=3, cluster_axis=1, num_links=2, device_mesh=self.device_mesh)
+        ttnn.end_trace_capture(self.device_mesh, trace_id, cq_id=0)
+
+        import time
+
+        num_iters = 1
+        times = []
+        for i in range(num_iters):
+            logger.info(f"Running iteration {i}")
+            x1 = time.time()
+            ttnn.execute_trace(self.device_mesh, trace_id, blocking=False)
+            # logits = ttnn.to_torch(
+            # tt_logits, device=device_mesh, mesh_composer=ConcatMeshToTensor(device_mesh, dim=3)
+            # )
+            logits = ttnn.to_torch(tt_logits_tensors[0])
+
+            x2 = time.time()
+
+            times.append(x2 - x1)
+        logger.info(
+            f"Ran Trace for {num_iters} iterations. Avg Trace execution time: {sum(times[1:]) / len(times[1:])} seconds."
+        )
+
+        breakpoint()
+
+        # del tt_inp_emb
+        # del rot_mat
+        # del attn_mask
+
+        # logits = self._process_logits(tt_logits)
 
         logits = logits.permute(2, 1, 0, 3).squeeze().unsqueeze(1)  # [batch, 1, vocab_size]
         logits = logits[:batch]  # Remove padded users
@@ -82,11 +122,16 @@ class TtLlamaModelForGeneration:
         return logits
 
     def _process_logits(self, tt_logits):
-        logits = ttnn.to_torch(
-            tt_logits,
-            mesh_composer=ConcatMesh2DToTensor(self.device_mesh, dims=(1, 3), cluster_shape=self.cluster_shape),
-        )
-        return logits[:, 0:1, :, : self.params.vocab_size].float()
+        # Gather on device rather than concat on host
+        tt_logits = ttnn.line_all_gather(tt_logits, dim=3, cluster_axis=1, num_links=2, device_mesh=self.device_mesh)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits = ttnn.to_torch(tt_logits_tensors[0])
+        # logits = ttnn.to_torch(
+        # tt_logits,
+        # mesh_composer=ConcatMesh2DToTensor(self.device_mesh, dims=(1, 3), cluster_shape=self.cluster_shape),
+        # )
+        # return logits[:, 0:1, :, : self.params.vocab_size].float()
+        return logits[:, :, :, : self.params.vocab_size].float()
 
     def _update_model_config(self, mode, batch, seq_len):
         if self.tt_model.model_config["LLM_MODE"] != mode:

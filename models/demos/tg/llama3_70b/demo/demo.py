@@ -403,6 +403,7 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
     ),
     ids=("short_context", "long_context"),
 )
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 17068032}], indirect=True)
 def test_LlamaModel_demo(
     # model args
     implementation,
