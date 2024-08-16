@@ -6,7 +6,7 @@
 
 #include <climits>
 
-#if defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
 #include "risc_common.h"
 #include "dataflow_api.h"
 #else
@@ -25,7 +25,7 @@
 #define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
 #define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
 
-#if  defined(PROFILE_KERNEL) && ( !defined(DISPATCH_KERNEL) || (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES)))
+#if  defined(PROFILE_KERNEL) && ( !defined(DISPATCH_KERNEL) || (defined(DISPATCH_KERNEL) && (defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_ERISC)) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES)))
 namespace kernel_profiler{
 
     extern uint32_t wIndex;
@@ -34,7 +34,7 @@ namespace kernel_profiler{
     extern uint32_t sums[SUM_COUNT];
     extern uint32_t sumIDs[SUM_COUNT];
 
-#if (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
+#if (defined(DISPATCH_KERNEL) && (defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_ERISC)) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
     extern uint32_t nocWriteSize;
     extern uint32_t *nocWriteBuffer;
     extern uint32_t *nocWriteIndex;
@@ -49,7 +49,7 @@ namespace kernel_profiler{
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_BR;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
     extern uint16_t core_flat_id;
-#elif defined(COMPILE_FOR_ERISC)
+#elif defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
     constexpr uint32_t profilerBuffer = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
     constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_ER;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL);
@@ -83,6 +83,18 @@ namespace kernel_profiler{
         return ((res & 0xFFFF) ^ ((res & 0xFFFF0000) >> 16)) & 0xFFFF;
     }
 
+    enum class DoingDispatch
+    {
+        DISPATCH,
+        NOT_DISPATCH
+    };
+
+    enum class DoingExternalNocBuffer
+    {
+        SET_EXTERNAL_NOC_BUFFER,
+        NOT_SET_EXTERNAL_NOC_BUFFER
+    };
+
 #define SrcLocNameToHash( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME( name ));
 
     __attribute__((noinline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
@@ -96,15 +108,15 @@ namespace kernel_profiler{
             sums[i] = 0;
         }
 
-#if (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
+#if (defined(DISPATCH_KERNEL) && (defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_ERISC)) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
     nocWriteSize = 0;
 #endif
 
-#if defined(COMPILE_FOR_ERISC) ||  defined(COMPILE_FOR_BRISC)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)  ||  defined(COMPILE_FOR_BRISC)
         uint32_t runCounter = profiler_control_buffer[RUN_COUNTER];
         profiler_control_buffer[PROFILER_DONE] = 0;
 
-#if defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
         volatile tt_l1_ptr uint32_t *eriscBuffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER);
 
         if (runCounter == 0)
@@ -269,7 +281,7 @@ namespace kernel_profiler{
     __attribute__((noinline)) void finish_profiler()
     {
         risc_finished_profiling();
-#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_BRISC)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_BRISC)
         if (profiler_control_buffer[PROFILER_DONE] == 1){
             return;
         }
@@ -279,16 +291,13 @@ namespace kernel_profiler{
         while (!profiler_control_buffer[DRAM_PROFILER_ADDRESS]);
         uint32_t dram_profiler_address = profiler_control_buffer[DRAM_PROFILER_ADDRESS];
 
-#if defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
         int hostIndex = HOST_BUFFER_END_INDEX_ER;
         int deviceIndex = DEVICE_BUFFER_END_INDEX_ER;
         uint32_t currEndIndex =
             profiler_control_buffer[deviceIndex] +
             profiler_control_buffer[hostIndex];
 
-        uint32_t dram_offset =
-            (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-            profiler_control_buffer[hostIndex] * sizeof(uint32_t);
 
         const InterleavedAddrGen<true> s = {
             .bank_base_address = dram_profiler_address,
@@ -297,6 +306,11 @@ namespace kernel_profiler{
 
         if ( currEndIndex < PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
         {
+
+            uint32_t dram_offset =
+                (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+                profiler_control_buffer[hostIndex] * sizeof(uint32_t);
+
             uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
 
             noc_async_write(
@@ -305,6 +319,21 @@ namespace kernel_profiler{
                     profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
 
             profiler_control_buffer[hostIndex] = currEndIndex;
+        }
+        else if (profiler_control_buffer[RUN_COUNTER] < 1)
+        {
+            uint32_t dram_offset =
+                (core_flat_id % profiler_core_count_per_dram) *
+                PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC;
+
+            uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
+
+            noc_async_write(
+                    eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER,
+                    dram_bank_dst_noc_addr,
+                    CUSTOM_MARKERS * sizeof(uint32_t));
+
+            mark_dropped_timestamps(hostIndex);
         }
         else
         {
@@ -378,18 +407,31 @@ namespace kernel_profiler{
 #endif
     }
 
-    inline __attribute__((always_inline)) void quick_push ()
+    template<DoingExternalNocBuffer setExternalBuffer = DoingExternalNocBuffer::SET_EXTERNAL_NOC_BUFFER>
+    __attribute__((noinline)) void quick_push ()
     {
-#if defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES)
+#if defined(DISPATCH_KERNEL) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
+        uint32_t dram_offset =
+            (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+            profiler_control_buffer[HOST_BUFFER_END_INDEX_ER] * sizeof(uint32_t);
+        uint32_t riscIndex = HOST_BUFFER_END_INDEX_ER;
+        uint32_t riscL1Address = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
+#endif
+#if  defined(COMPILE_FOR_NCRISC)
+        uint32_t dram_offset =
+            (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+            HOST_BUFFER_END_INDEX_NC * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+            profiler_control_buffer[HOST_BUFFER_END_INDEX_NC] * sizeof(uint32_t);
+        uint32_t riscIndex = HOST_BUFFER_END_INDEX_NC;
+        uint32_t riscL1Address = PROFILER_L1_BUFFER_NC;
+#endif
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_NCRISC)
         SrcLocNameToHash("PROFILER-NOC-QUICK-SEND");
         mark_time_at_index_inlined(wIndex, hash);
         wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
         core_flat_id = noc_xy_to_profiler_flat_id[my_x[0]][my_y[0]];
 
-        uint32_t dram_offset =
-            (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-            HOST_BUFFER_END_INDEX_NC * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-            profiler_control_buffer[HOST_BUFFER_END_INDEX_NC] * sizeof(uint32_t);
 
         while (!profiler_control_buffer[DRAM_PROFILER_ADDRESS]);
         const InterleavedAddrGen<true> s = {
@@ -402,41 +444,49 @@ namespace kernel_profiler{
         mark_time_at_index_inlined(wIndex, get_end_timer_id(hash));
         wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
 
-        uint32_t currEndIndex = profiler_control_buffer[HOST_BUFFER_END_INDEX_NC] + wIndex;
+        uint32_t currEndIndex = profiler_control_buffer[riscIndex] + wIndex;
 
         if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
         {
             noc_async_write(
-                    PROFILER_L1_BUFFER_NC,
+                    riscL1Address,
                     dram_bank_dst_noc_addr,
                     wIndex * sizeof(uint32_t));
 
-            nocWriteSize += (wIndex * sizeof(uint32_t));
+            profiler_control_buffer[riscIndex] = currEndIndex;
 
-            profiler_control_buffer[HOST_BUFFER_END_INDEX_NC] = currEndIndex;
-
+            if constexpr (setExternalBuffer == DoingExternalNocBuffer::SET_EXTERNAL_NOC_BUFFER)
+            {
+                nocWriteSize += (wIndex * sizeof(uint32_t));
+            }
         }
         else
         {
-            mark_dropped_timestamps(HOST_BUFFER_END_INDEX_NC);
+            mark_dropped_timestamps(riscIndex);
         }
 
         wIndex = CUSTOM_MARKERS;
 
-        nocWriteBuffer[(*nocWriteIndex)] = nocWriteBuffer[(*nocWriteIndex)] + (( nocWriteSize + NOC_MAX_BURST_SIZE -1 )/NOC_MAX_BURST_SIZE);
-        nocWriteSize = 0;
+        if constexpr (setExternalBuffer == DoingExternalNocBuffer::SET_EXTERNAL_NOC_BUFFER)
+        {
+            nocWriteBuffer[(*nocWriteIndex)] = nocWriteBuffer[(*nocWriteIndex)] + (( nocWriteSize + NOC_MAX_BURST_SIZE -1 )/NOC_MAX_BURST_SIZE);
+            nocWriteSize = 0;
+        }
+#endif
 #endif
     }
 
 
-    template<uint32_t timer_id, bool dispatch = false>
+    template<uint32_t timer_id,
+        DoingDispatch dispatch = DoingDispatch::NOT_DISPATCH,
+        DoingExternalNocBuffer setExternalBuffer = DoingExternalNocBuffer::SET_EXTERNAL_NOC_BUFFER>
     struct profileScope
     {
         bool start_marked = false;
         inline __attribute__((always_inline)) profileScope ()
         {
             bool bufferHasRoom = false;
-            if constexpr (dispatch)
+            if constexpr (dispatch == DoingDispatch::DISPATCH)
             {
                 bufferHasRoom = wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize - (QUICK_PUSH_MARKER_COUNT * PROFILER_L1_MARKER_UINT32_SIZE));
             }
@@ -464,11 +514,11 @@ namespace kernel_profiler{
                 stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
             }
 
-            if constexpr (dispatch)
+            if constexpr (dispatch == DoingDispatch::DISPATCH)
             {
                 if (wIndex >= (PROFILER_L1_VECTOR_SIZE - (QUICK_PUSH_MARKER_COUNT * PROFILER_L1_MARKER_UINT32_SIZE)))
                 {
-                    quick_push();
+                    quick_push<setExternalBuffer>();
                 }
             }
         }
@@ -523,13 +573,17 @@ namespace kernel_profiler{
 
 #define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash> zone = kernel_profiler::profileScope<hash>();
 
-#if (defined(DISPATCH_KERNEL) && defined(COMPILE_FOR_NCRISC) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
+#if (defined(DISPATCH_KERNEL) && (defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_ERISC)) && (PROFILE_KERNEL == PROFILER_OPT_DO_DISPATCH_CORES))
 
-#define DeviceZoneScopedND( name , nocBuffer, nocIndex ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash,true> zone = kernel_profiler::profileScope<hash,true>(); kernel_profiler::nocWriteBuffer = nocBuffer; kernel_profiler::nocWriteIndex = &nocIndex;
+#define DeviceZoneScopedNDN( name , nocBuffer, nocIndex ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash, kernel_profiler::DoingDispatch::DISPATCH> zone = kernel_profiler::profileScope<hash, kernel_profiler::DoingDispatch::DISPATCH>(); kernel_profiler::nocWriteBuffer = nocBuffer; kernel_profiler::nocWriteIndex = &nocIndex;
+
+#define DeviceZoneScopedND( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash, kernel_profiler::DoingDispatch::DISPATCH, kernel_profiler::DoingExternalNocBuffer::NOT_SET_EXTERNAL_NOC_BUFFER> zone = kernel_profiler::profileScope<hash, kernel_profiler::DoingDispatch::DISPATCH, kernel_profiler::DoingExternalNocBuffer::NOT_SET_EXTERNAL_NOC_BUFFER>();
 
 #else
 
-#define DeviceZoneScopedND( name , nocBuffer, nocIndex )
+#define DeviceZoneScopedNDN( name , nocBuffer, nocIndex )
+
+#define DeviceZoneScopedND( name )
 
 #endif
 
@@ -555,7 +609,9 @@ namespace kernel_profiler{
 
 #define DeviceZoneScopedSumN2( name )
 
-#define DeviceZoneScopedND( name , nocBuffer, nocIndex )
+#define DeviceZoneScopedNDN( name , nocBuffer, nocIndex )
+
+#define DeviceZoneScopedND( name )
 
 #define DeviceZoneSetCounter( counter )
 

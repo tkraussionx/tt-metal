@@ -28,10 +28,12 @@ uint8_t noc_index = NOC_INDEX;
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 
 void __attribute__((section("erisc_l1_code"))) kernel_launch() {
-    DeviceZoneScopedMainChildN("ERISC-KERNEL");
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
-    kernel_main();
+    {
+        DeviceZoneScopedMainChildN("ERISC-KERNEL");
+        kernel_main();
+    }
     mailboxes->launch.go.run = RUN_MSG_DONE;
     if (routing_info->routing_enabled and mailboxes->launch.kernel_config.mode == DISPATCH_MODE_DEV) {
         uint64_t dispatch_addr =

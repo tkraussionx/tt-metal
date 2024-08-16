@@ -59,6 +59,9 @@ namespace kernel_profiler {
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
     uint16_t core_flat_id __attribute__((used));
+    uint32_t nocWriteSize __attribute__((used));
+    uint32_t *nocWriteBuffer __attribute__((used));
+    uint32_t *nocWriteIndex __attribute__((used));
 }
 #endif
 
@@ -122,7 +125,7 @@ int main() {
         DEBUG_STATUS("GD");
 
         {
-            DeviceZoneScopedMainN("ERISC-IDLE-FW");
+            DeviceZoneScopedMainN("IDLE-ERISC-FW");
             DeviceZoneSetCounter(mailboxes->launch.kernel_config.host_assigned_id);
 
             noc_index = mailboxes->launch.kernel_config.brisc_noc_id;
@@ -162,9 +165,9 @@ int main() {
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
             }
 
-            while (1) {
-                RISC_POST_HEARTBEAT(heartbeat);
-            }
+        }
+        while (1) {
+            RISC_POST_HEARTBEAT(heartbeat);
         }
     }
 

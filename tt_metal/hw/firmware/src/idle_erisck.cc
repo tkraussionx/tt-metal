@@ -28,10 +28,12 @@ uint8_t noc_index = NOC_INDEX;
 //  ptr[0] = status;
 //}
 void kernel_launch() {
-    DeviceZoneScopedMainChildN("ERISC-KERNEL");
     firmware_kernel_common_init((void tt_l1_ptr *)MEM_IERISC_INIT_LOCAL_L1_BASE);
 
     noc_local_state_init(noc_index);
 
-    kernel_main();
+    {
+        DeviceZoneScopedMainChildN("IDLE-ERISC-KERNEL");
+        kernel_main();
+    }
 }
