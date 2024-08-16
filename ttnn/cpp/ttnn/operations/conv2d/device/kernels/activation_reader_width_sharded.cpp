@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
+#include <cstdint>
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #define ENABLE_DEBUG 0
@@ -43,33 +44,100 @@ FORCE_INLINE void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_
     }
 }
 
+constexpr bool act_in_dram = get_compile_time_arg_val(0) == 1;
+constexpr uint32_t stride_h = get_compile_time_arg_val(1);
+constexpr uint32_t stride_2 = get_compile_time_arg_val(2);
+constexpr uint32_t conv_act_size_w = get_compile_time_arg_val(3);
+constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(5);
+constexpr uint32_t weight_size_h = get_compile_time_arg_val(6);
+constexpr uint32_t weight_size_w = get_compile_time_arg_val(7);
+constexpr uint32_t act_block_h_datums = get_compile_time_arg_val(8);
+constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(9);
+constexpr uint32_t act_w_num_outer = get_compile_time_arg_val(10);
+constexpr uint32_t act_num_blocks_w = get_compile_time_arg_val(11);
+const uint32_t act_mcast_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(12));
+const uint32_t act_mcast_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(13));
+constexpr uint32_t act_mcast_dest_noc_start_x = get_compile_time_arg_val(14);
+constexpr uint32_t act_mcast_dest_noc_start_y = get_compile_time_arg_val(15);
+constexpr uint32_t act_mcast_dest_noc_end_x   = get_compile_time_arg_val(16);
+constexpr uint32_t act_mcast_dest_noc_end_y   = get_compile_time_arg_val(17);
+constexpr uint32_t act_mcast_sender_size_bytes = get_compile_time_arg_val(18);
+constexpr uint32_t act_mcast_num_cores = get_compile_time_arg_val(19);
+
+constexpr uint32_t cb_id_act = tt::CB::c_in0;
+constexpr uint32_t cb_id_weight = tt::CB::c_in1;
+
+constexpr uint32_t tilized_in0_cb_id = tt::CB::c_intermed1;
+constexpr uint32_t cb_id_sharded_act = tt::CB::c_in3;
+constexpr uint32_t cb_id_act_row_major_bfloat16 = tt::CB::c_in6;
+
+constexpr uint32_t cb_reader_indices = tt::CB::c_in4;
+
+volatile tt_l1_ptr uint32_t* act_mcast_receiver_semaphore_addr_ptr;
+volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_valid_addr_ptr;
+volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_addr_ptr;
+
+uint64_t act_multicast_noc_addr;
+uint64_t act_mcast_receiver_semaphore_noc_addr;
+
+uint32_t num_cores_x;
+uint32_t act_mcast_sender_semaphore_valid_addr;
+
+
+tt_l1_ptr uint32_t *act_mcast_x_lookup;
+tt_l1_ptr uint32_t *act_mcast_y_lookup;
+
+void mcast_handler(uint32_t act_w_outer_i, uint32_t act_mcast_sender_id)
+{
+    if (act_w_outer_i == act_mcast_sender_id) {
+        // MCAST SENDER: send entire tilized input to other cores in column
+        // wait until all act mcast destinations have atomically incremented the act semaphore_addr (i.e. its value should be act_mcast_num_dests), then reset
+        // the semaphore_addr value back to zero for the next block
+
+        noc_semaphore_wait_min(act_mcast_sender_semaphore_addr_ptr, act_mcast_num_cores-1);
+        noc_semaphore_set(act_mcast_sender_semaphore_addr_ptr, 0);
+
+        noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, INVALID);
+
+        // // compute tilizes and pops cb_id_act and pushes to tilized_in0_cb_id
+
+        // // Now we have the block in the CB address, we can mcast to dests!
+        uint32_t tilized_act_start_address = get_read_ptr(tilized_in0_cb_id);
+
+        uint64_t act_multicast_data_addr = act_multicast_noc_addr | get_write_ptr(cb_id_act);
+        // // num_dests will source, since we are copying to a different local CB as well
+        noc_async_write_multicast_loopback_src(tilized_act_start_address, act_multicast_data_addr, act_mcast_sender_size_bytes, 16 , false, false);
+
+
+        // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
+        // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+
+        // // We should also multicast VALID flag to destinations for receiver semaphore
+        noc_semaphore_set_multicast_loopback_src(act_mcast_sender_semaphore_valid_addr, act_mcast_receiver_semaphore_noc_addr, 16 , false, false);
+
+
+        noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
+
+    } else {
+
+        // MCAST RECEIVER: receive entire tilized input from sender core
+        // Set act semaphore value to INVALID
+        noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, INVALID);
+
+        uint32_t sender_x = act_mcast_x_lookup[act_w_outer_i%num_cores_x];
+        uint32_t sender_y = act_mcast_y_lookup[act_w_outer_i/num_cores_x];
+
+        // Atomic increment source core counter
+        uint64_t act_mcast_sender_semaphore_noc_addr = get_noc_addr(sender_x, sender_y, act_mcast_sender_semaphore_addr);
+        noc_semaphore_inc(act_mcast_sender_semaphore_noc_addr, 1);
+
+        // wait on act semaphore value to become VALID (set by mcast sender after it multicasts data)
+
+        noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
+    }
+    cb_push_back(cb_id_act, act_block_num_tiles);
+}
 void kernel_main() {
-
-    constexpr bool act_in_dram = get_compile_time_arg_val(0) == 1;
-    constexpr uint32_t stride_h = get_compile_time_arg_val(1);
-    constexpr uint32_t stride_2 = get_compile_time_arg_val(2);
-    constexpr uint32_t conv_act_size_w = get_compile_time_arg_val(3);
-    constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(5);
-    constexpr uint32_t weight_size_h = get_compile_time_arg_val(6);
-    constexpr uint32_t weight_size_w = get_compile_time_arg_val(7);
-    constexpr uint32_t act_block_h_datums = get_compile_time_arg_val(8);
-    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(9);
-    constexpr uint32_t act_w_num_outer = get_compile_time_arg_val(10);
-    constexpr uint32_t act_num_blocks_w = get_compile_time_arg_val(11);
-    const uint32_t act_mcast_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(12));
-    const uint32_t act_mcast_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(13));
-    constexpr uint32_t act_mcast_dest_noc_start_x = get_compile_time_arg_val(14);
-    constexpr uint32_t act_mcast_dest_noc_start_y = get_compile_time_arg_val(15);
-    constexpr uint32_t act_mcast_dest_noc_end_x   = get_compile_time_arg_val(16);
-    constexpr uint32_t act_mcast_dest_noc_end_y   = get_compile_time_arg_val(17);
-    constexpr uint32_t act_mcast_sender_size_bytes = get_compile_time_arg_val(18);
-    constexpr uint32_t act_mcast_num_cores = get_compile_time_arg_val(19);
-
-    // constexpr uint32_t act_mcast_num_dests = get_compile_time_arg_val(17);
-    // constexpr uint32_t act_mcast_num_cores = get_compile_time_arg_val(18);
-    // constexpr uint32_t act_mcast_sender_semaphore_addr = get_compile_time_arg_val(19);
-    // constexpr uint32_t act_mcast_receiver_semaphore_addr = get_compile_time_arg_val(20);
-    // constexpr uint32_t act_mcast_sender_size_bytes = get_compile_time_arg_val(21);
 
     constexpr uint32_t act_num_blocks_h = 1 ; //get_compile_time_arg_val(14);
 
@@ -80,13 +148,13 @@ void kernel_main() {
     uint32_t this_core_y = get_arg_val<uint32_t>(i); i+=1;
 
     //Num of cols of compute cores. (Total Cores, not active cores.)
-    uint32_t num_cores_x = get_arg_val<uint32_t>(i); i+=1;
+    num_cores_x = get_arg_val<uint32_t>(i); i+=1;
     //X and Y lookup are independant.
     //X Lookup table for translating logical to physical cores.
-    tt_l1_ptr uint32_t *act_mcast_x_lookup  = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
+    act_mcast_x_lookup  = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
     i+=num_cores_x;
     //Y lookup.
-    tt_l1_ptr uint32_t *act_mcast_y_lookup  = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
+    act_mcast_y_lookup  = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
 
 
     // DPRINT<<"Act Params L1 :  "<<conv_act_size_w<<"  "<<conv_act_c_read_bytes<<"  "<<weight_size_h<<"  "<<weight_size_w<<"  "<<act_block_h_datums<<"  "<<act_block_num_tiles<<ENDL()<<
@@ -96,14 +164,7 @@ void kernel_main() {
     //Equivalent to Core Index.
     uint32_t act_mcast_sender_id = this_core_x+(num_cores_x*this_core_y) ;
 
-    constexpr uint32_t cb_id_act = tt::CB::c_in0;
-    constexpr uint32_t cb_id_weight = tt::CB::c_in1;
 
-    constexpr uint32_t tilized_in0_cb_id = tt::CB::c_intermed1;
-    constexpr uint32_t cb_id_sharded_act = tt::CB::c_in3;
-    constexpr uint32_t cb_id_act_row_major_bfloat16 = tt::CB::c_in6;
-
-    constexpr uint32_t cb_reader_indices = tt::CB::c_in4;
     volatile tt_l1_ptr uint32_t* packed_reader_indices_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_write_ptr(cb_reader_indices));
 
     // L1 array
@@ -111,19 +172,19 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* l1_array = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_write_ptr(cb_l1_array));
 
     // Set up local VALID value, to be mcasted to destinations flag address after the data has been mcasted
-    volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_valid_addr_ptr = &l1_array[0];
+    act_mcast_sender_semaphore_valid_addr_ptr = &l1_array[0];
     act_mcast_sender_semaphore_valid_addr_ptr[0] = 1; // Load const 1 to be used as semaphore valid value sent from sender to receivers
-    uint32_t act_mcast_sender_semaphore_valid_addr = reinterpret_cast<uint32_t>(&l1_array[0]);
+    act_mcast_sender_semaphore_valid_addr = reinterpret_cast<uint32_t>(&l1_array[0]);
 
     // Set up remote VALID value
-    volatile tt_l1_ptr uint32_t* act_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(act_mcast_receiver_semaphore_addr);
+    act_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(act_mcast_receiver_semaphore_addr);
     noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, VALID);
 
     // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
     // to receive the mcast
-    volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(act_mcast_sender_semaphore_addr);
+    act_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(act_mcast_sender_semaphore_addr);
 
-    uint64_t act_multicast_noc_addr = get_noc_multicast_addr(
+    act_multicast_noc_addr = get_noc_multicast_addr(
         act_mcast_dest_noc_start_x,
         act_mcast_dest_noc_start_y,
         act_mcast_dest_noc_end_x,
@@ -131,7 +192,7 @@ void kernel_main() {
         0
     );
 
-    uint64_t act_mcast_receiver_semaphore_noc_addr = act_multicast_noc_addr | act_mcast_receiver_semaphore_addr;
+    act_mcast_receiver_semaphore_noc_addr = act_multicast_noc_addr | act_mcast_receiver_semaphore_addr;
 
     //Compute is divided along the width to reduce the size of CBs.
     //Only a part of the width on each core is used in one block.
@@ -147,7 +208,7 @@ void kernel_main() {
 
     static_assert(act_block_h_datums % 2 == 0); // need to be even to read 2 in the body, due to packing of 2 indices in 1 uint32_t word
     // Reset reader_idx to finish act_block_h_datums
-
+    bool first_block_completed = false;
     for(uint32_t block_w_index = 0; block_w_index < act_num_blocks_w; block_w_index++)
     {
         uint32_t reader_idx = 0;
@@ -160,9 +221,12 @@ void kernel_main() {
             uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
             read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices & 0xffff, conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
             read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices >> 16   , conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
-
             reader_idx++;
+            if(first_block_completed) {
+
+            }
         }
+        first_block_completed = true;
 
         //After reading one block, increment the starting read pointer by the width of the block.
         //Next read uses the next set of channels.
@@ -171,6 +235,7 @@ void kernel_main() {
         noc_async_read_barrier();
         cb_push_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
 
+        cb_wait_front(tilized_in0_cb_id, act_block_num_tiles);
 
         // Round robin self-mcast and receive tilized act matrix in cb_id_act
         // Compute should function like regular mm
@@ -178,54 +243,7 @@ void kernel_main() {
         uint32_t act_w_outer_i = 0;
         for (uint32_t act_w_outer_i = 0; act_w_outer_i < act_w_num_outer; act_w_outer_i++) {
             cb_reserve_back(cb_id_act, act_block_num_tiles);
-            if (act_w_outer_i == act_mcast_sender_id) {
-                // MCAST SENDER: send entire tilized input to other cores in column
-                // wait until all act mcast destinations have atomically incremented the act semaphore_addr (i.e. its value should be act_mcast_num_dests), then reset
-                // the semaphore_addr value back to zero for the next block
-
-                noc_semaphore_wait_min(act_mcast_sender_semaphore_addr_ptr, act_mcast_num_cores-1);
-                noc_semaphore_set(act_mcast_sender_semaphore_addr_ptr, 0);
-
-                noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, INVALID);
-
-                // // compute tilizes and pops cb_id_act and pushes to tilized_in0_cb_id
-                cb_wait_front(tilized_in0_cb_id, act_block_num_tiles);
-
-                // // Now we have the block in the CB address, we can mcast to dests!
-                uint32_t tilized_act_start_address = get_read_ptr(tilized_in0_cb_id);
-
-                uint64_t act_multicast_data_addr = act_multicast_noc_addr | get_write_ptr(cb_id_act);
-                // // num_dests will source, since we are copying to a different local CB as well
-                noc_async_write_multicast_loopback_src(tilized_act_start_address, act_multicast_data_addr, act_mcast_sender_size_bytes, 16 , false, false);
-
-
-                // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-                // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
-
-                // // We should also multicast VALID flag to destinations for receiver semaphore
-                noc_semaphore_set_multicast_loopback_src(act_mcast_sender_semaphore_valid_addr, act_mcast_receiver_semaphore_noc_addr, 16 , false, false);
-
-
-                noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
-
-            } else {
-
-                // MCAST RECEIVER: receive entire tilized input from sender core
-                // Set act semaphore value to INVALID
-                noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, INVALID);
-
-                uint32_t sender_x = act_mcast_x_lookup[act_w_outer_i%num_cores_x];
-                uint32_t sender_y = act_mcast_y_lookup[act_w_outer_i/num_cores_x];
-
-                // Atomic increment source core counter
-                uint64_t act_mcast_sender_semaphore_noc_addr = get_noc_addr(sender_x, sender_y, act_mcast_sender_semaphore_addr);
-                noc_semaphore_inc(act_mcast_sender_semaphore_noc_addr, 1);
-
-                // wait on act semaphore value to become VALID (set by mcast sender after it multicasts data)
-
-                noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
-            }
-            cb_push_back(cb_id_act, act_block_num_tiles);
+            mcast_handler(act_w_outer_i, act_mcast_sender_id);
         } // act_w_num_outer
         cb_pop_front(tilized_in0_cb_id, act_block_num_tiles);
     }
