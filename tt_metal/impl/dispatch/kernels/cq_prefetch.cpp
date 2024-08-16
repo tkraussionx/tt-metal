@@ -588,19 +588,19 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     // First step - read into DB0
     uint32_t read_length = pages * page_size;
     uint32_t scratch_read_addr = scratch_db_top[0];
-    uint32_t trid = 0; // Initialize read transaction id to 0
+    // uint32_t trid = 0; // Initialize read transaction id to 0
     uint32_t amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
     uint32_t amt_read = 0;
-    cq_noc_set_read_txn_id(trid);
+    cq_noc_set_read_txn_id(0);
     while (amt_to_read >= page_size) {
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-        cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, trid);
+        cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, 0);
         scratch_read_addr += page_size;
         page_id++;
         amt_to_read -= page_size;
         amt_read += page_size;
     }
-    cq_noc_async_read_barrier_with_trid(trid);
+    cq_noc_async_read_barrier_with_trid(0);
 
     // Second step - read into DB[x], write from DB[x], toggle x, iterate
     // Writes are fast, reads are slow
@@ -614,8 +614,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
 
         db_toggle ^= 1;
         // Toggle and update trid
-        trid ^= 1;
-        cq_noc_set_read_txn_id(trid);
+        cq_noc_set_read_txn_id(db_toggle);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -624,7 +623,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         amt_read = 0;
         while (amt_to_read >= page_size) {
             uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, trid);
+            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, db_toggle);
             scratch_read_addr += page_size;
             page_id++;
             amt_to_read -= page_size;
@@ -639,7 +638,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         read_length -= amt_read;
 
         // TODO(pgk); we can do better on WH w/ tagging
-        cq_noc_async_read_barrier_with_trid(trid);
+        cq_noc_async_read_barrier_with_trid(db_toggle);
     }
 
     // Third step - write from DB

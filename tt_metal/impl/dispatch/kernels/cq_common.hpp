@@ -436,6 +436,7 @@ void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, ui
 
 #ifndef ARCH_GRAYSKULL
 // Grayskull does not support tagged txns
+FORCE_INLINE
 void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
     // Ensure that the total number of outstanding txns for this trid doesn't exceed max limit
@@ -449,6 +450,7 @@ void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local
 }
 #endif
 
+FORCE_INLINE
 void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
 #ifdef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
@@ -464,6 +466,7 @@ void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t d
 #endif
 }
 
+FORCE_INLINE
 void cq_noc_async_read_barrier_with_trid(uint32_t trid) {
 #ifdef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
@@ -473,6 +476,7 @@ void cq_noc_async_read_barrier_with_trid(uint32_t trid) {
 #endif
 }
 
+FORCE_INLINE
 void cq_noc_set_read_txn_id(uint32_t trid) {
 #ifndef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
