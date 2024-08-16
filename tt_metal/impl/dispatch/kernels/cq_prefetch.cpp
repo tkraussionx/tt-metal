@@ -454,7 +454,10 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
         amt_read = scratch_db_half_size;
         read_length = write_length - amt_read;
     }
-    noc_async_read(noc_addr, scratch_read_addr, amt_read);
+
+    uint32_t trid = 0; // Initialize read transaction id to 0
+    cq_noc_set_read_txn_id(trid);
+    cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, amt_read, trid);
     uint32_t page_length = page_size - amt_read;
     uint32_t page_offset = amt_read;
 
@@ -463,20 +466,23 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
     uint32_t db_toggle = 0;
     uint32_t scratch_write_addr;
 
-    noc_async_read_barrier();
+    cq_noc_async_read_barrier_with_trid(trid);
     while (read_length != 0) {
         // This ensures that writes from prior iteration are done
         // TODO(pgk); we can do better on WH w/ tagging
         noc_async_writes_flushed();
 
         db_toggle ^= 1;
+        // Toggle and update trid
+        trid ^= 1;
+        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
         uint32_t amt_to_write = amt_read;
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id, page_offset);
         if (page_length <= scratch_db_half_size) {
-            noc_async_read(noc_addr, scratch_read_addr, page_length);
+            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_length, trid);
             page_id++;
             page_offset = 0;
             amt_read = page_length;
@@ -486,13 +492,13 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
                 read_length > amt_read) {
                 noc_addr = addr_gen.get_noc_addr(page_id, 0);
                 uint32_t amt_to_read = scratch_db_half_size - amt_read;
-                noc_async_read(noc_addr, scratch_read_addr + amt_read, amt_to_read);
+                cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr + amt_read, amt_to_read, trid);
                 page_length -= amt_to_read;
                 amt_read = scratch_db_half_size;
                 page_offset = amt_to_read;
             }
         } else {
-            noc_async_read(noc_addr, scratch_read_addr, scratch_db_half_size);
+            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, scratch_db_half_size, trid);
             page_length -= scratch_db_half_size;
             page_offset += scratch_db_half_size;
             amt_read = scratch_db_half_size;
@@ -512,7 +518,7 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
         cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
 
         // TODO(pgk); we can do better on WH w/ tagging
-        noc_async_read_barrier();
+        cq_noc_async_read_barrier_with_trid(trid);
     }
 
     // Third step - write from DB
@@ -582,17 +588,19 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     // First step - read into DB0
     uint32_t read_length = pages * page_size;
     uint32_t scratch_read_addr = scratch_db_top[0];
+    uint32_t trid = 0; // Initialize read transaction id to 0
     uint32_t amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
     uint32_t amt_read = 0;
+    cq_noc_set_read_txn_id(trid);
     while (amt_to_read >= page_size) {
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-        noc_async_read(noc_addr, scratch_read_addr, page_size);
+        cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, trid);
         scratch_read_addr += page_size;
         page_id++;
         amt_to_read -= page_size;
         amt_read += page_size;
     }
-    noc_async_read_barrier();
+    cq_noc_async_read_barrier_with_trid(trid);
 
     // Second step - read into DB[x], write from DB[x], toggle x, iterate
     // Writes are fast, reads are slow
@@ -605,6 +613,9 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         noc_async_writes_flushed();
 
         db_toggle ^= 1;
+        // Toggle and update trid
+        trid ^= 1;
+        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -613,7 +624,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         amt_read = 0;
         while (amt_to_read >= page_size) {
             uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-            noc_async_read(noc_addr, scratch_read_addr, page_size);
+            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, trid);
             scratch_read_addr += page_size;
             page_id++;
             amt_to_read -= page_size;
@@ -628,7 +639,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         read_length -= amt_read;
 
         // TODO(pgk); we can do better on WH w/ tagging
-        noc_async_read_barrier();
+        cq_noc_async_read_barrier_with_trid(trid);
     }
 
     // Third step - write from DB
@@ -662,7 +673,8 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
     uint32_t amt_to_read = (scratch_db_half_size > total_length) ? total_length : scratch_db_half_size;
     uint32_t amt_read = 0;
     uint32_t scratch_read_addr = scratch_db_top[0];
-
+    uint32_t trid = 0; // Initialize read transaction id to 0
+    cq_noc_set_read_txn_id(trid);
     while (read_length <= amt_to_read) {
         uint32_t page_id = sub_cmd->start_page;
         uint32_t log_page_size = sub_cmd->log_page_size;
@@ -677,7 +689,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         while (amt_read2 < amt_to_read2) {
             uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
             uint32_t read_size = (amt_to_read2 - amt_read2 >= page_size) ? page_size : amt_to_read2 - amt_read2;
-            noc_async_read(noc_addr, scratch_read_addr, read_size);
+            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, read_size, trid);
             scratch_read_addr += read_size;
             page_id++;
             amt_read2 += read_size;
@@ -691,7 +703,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         read_length = sub_cmd->length;
         ASSERT(read_length <= scratch_db_half_size || total_length == amt_read);
     }
-    noc_async_read_barrier();
+    cq_noc_async_read_barrier_with_trid(trid);
 
     // Second step - read into DB[x], write from DB[x], toggle x, iterate
     // Writes are fast, reads are slow
@@ -704,6 +716,9 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         noc_async_writes_flushed();
 
         db_toggle ^= 1;
+        // Toggle and update trid
+        trid ^= 1;
+        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -724,7 +739,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
             while (amt_read2 < amt_to_read2) {
                 uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
                 uint32_t read_size = (amt_to_read2 - amt_read2 >= page_size) ? page_size : amt_to_read2 - amt_read2;
-                noc_async_read(noc_addr, scratch_read_addr, read_size);
+                cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, read_size, trid);
                 scratch_read_addr += read_size;
                 page_id++;
                 amt_read2 += read_size;
@@ -747,7 +762,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         total_length -= amt_read;
 
         // TODO(pgk); we can do better on WH w/ tagging
-        noc_async_read_barrier();
+        cq_noc_async_read_barrier_with_trid(trid);
     }
 
     // Third step - write from DB
@@ -812,11 +827,13 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
 
     // First step - read into DB0
     uint32_t scratch_read_addr = scratch_db_top[0];
+    uint32_t trid = 0; // Initialize read transaction id to 0
     uint32_t amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
     uint64_t noc_addr = get_noc_addr_helper(noc_xy_addr, read_addr);
-    noc_async_read(noc_addr, scratch_read_addr, amt_to_read);
+    cq_noc_set_read_txn_id(trid);
+    cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, amt_to_read, trid);
     read_addr += amt_to_read;
-    noc_async_read_barrier();
+    cq_noc_async_read_barrier_with_trid(trid);
 
     // Second step - read into DB[x], write from DB[x], toggle x, iterate
     // Writes are fast, reads are slow
@@ -829,13 +846,16 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
         noc_async_writes_flushed();
 
         db_toggle ^= 1;
+        // Toggle and update trid
+        trid ^= 1;
+        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
         uint32_t amt_to_write = amt_to_read;
         amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
         noc_addr = get_noc_addr_helper(noc_xy_addr, read_addr);
-        noc_async_read(noc_addr, scratch_read_addr, amt_to_read);
+        cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, amt_to_read, trid);
         read_addr += amt_to_read;
 
         // Third step - write from DB
@@ -846,7 +866,7 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
         read_length -= amt_to_read;
 
         // TODO(pgk); we can do better on WH w/ tagging
-        noc_async_read_barrier();
+        cq_noc_async_read_barrier_with_trid(trid);
     }
 
     // Third step - write from DB

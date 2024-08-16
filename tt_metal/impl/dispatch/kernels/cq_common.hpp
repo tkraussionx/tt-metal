@@ -164,6 +164,7 @@ uint32_t cq_noc_async_write_with_state_any_len(uint32_t src_addr, uint64_t dst_a
     }
 }
 
+
 template<enum CQNocFlags flags, bool mcast = false, bool linked = false>
 FORCE_INLINE
 void cq_noc_async_write_init_state(uint32_t src_addr, uint64_t dst_addr, uint32_t size = 0) {
@@ -431,4 +432,50 @@ void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, ui
         l1_cache[n + 5] = v5;
         n += 6;
     }
+}
+
+#ifndef ARCH_GRAYSKULL
+// Grayskull does not support tagged txns
+void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+    // Ensure that the total number of outstanding txns for this trid doesn't exceed max limit
+    while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) == NOC_MAX_TRANSACTION_ID_COUNT);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_COORDINATE, src_addr >> NOC_ADDR_COORD_SHIFT);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_reads_num_issued[noc_index] += 1;
+}
+#endif
+
+void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
+#ifdef ARCH_GRAYSKULL
+    // Grayskull does not support tagged txns
+    noc_async_read(src_addr, dst_local_l1_addr, size);
+#else
+    while (size > NOC_MAX_BURST_SIZE) {
+        cq_noc_async_read_with_trid(src_addr, dst_local_l1_addr, NOC_MAX_BURST_SIZE, trid);
+        src_addr += NOC_MAX_BURST_SIZE;
+        dst_local_l1_addr += NOC_MAX_BURST_SIZE;
+        size -= NOC_MAX_BURST_SIZE;
+    }
+    cq_noc_async_read_with_trid(src_addr, dst_local_l1_addr, size, trid);
+#endif
+}
+
+void cq_noc_async_read_barrier_with_trid(uint32_t trid) {
+#ifdef ARCH_GRAYSKULL
+    // Grayskull does not support tagged txns
+    noc_async_read_barrier();
+#else
+    noc_async_read_barrier_with_trid(trid);
+#endif
+}
+
+void cq_noc_set_read_txn_id(uint32_t trid) {
+#ifndef ARCH_GRAYSKULL
+    // Grayskull does not support tagged txns
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
+#endif
 }
