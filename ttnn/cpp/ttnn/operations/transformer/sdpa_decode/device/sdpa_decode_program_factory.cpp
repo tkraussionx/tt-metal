@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "sdpa_decode_program_factory.hpp"
+#include "sdpa_decode_op.hpp"
 
 #include <optional>
 
@@ -639,14 +640,14 @@ operation::ProgramWithCallbacks sdpa_decode_multi_core(
          is_output_sharded,
          cb_out4_id,
          B,
-         k_chunk_size,
-         cur_pos](
+         k_chunk_size](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
 
+            const auto cur_pos = static_cast<const ttnn::operations::transformer::ScaledDotProductAttentionDecode*>(operation)->cur_pos;
             auto q_buffer = input_tensors.at(0).buffer();
             auto k_buffer = input_tensors.at(1).buffer();
             auto v_buffer = input_tensors.at(2).buffer();
