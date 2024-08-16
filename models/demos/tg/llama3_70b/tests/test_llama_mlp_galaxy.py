@@ -124,24 +124,36 @@ def run_test_LlamaMLP_inference(
         cache_path=cache_path,
     )
 
-    tt_mlp_input = tt_llama_mlp_prepare_inputs(tt_LlamaMLP_model, tt_inp)
+    import time
 
-    tt_out = tt_LlamaMLP_model(tt_mlp_input)
+    n_pauses = 0
+    for i in range(10000):
+        print(f"Iteration {i}")
+        start = time.time()
 
-    tt_out = ttnn.to_torch(
-        tt_out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(3, 1), cluster_shape=cluster_shape)
-    )
-    tt_out = tt_out[:, 0:1, :, :]
+        tt_mlp_input = tt_llama_mlp_prepare_inputs(tt_LlamaMLP_model, tt_inp)
+        tt_out = tt_LlamaMLP_model(tt_mlp_input)
 
-    does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
-    logger.info(f"PCC value: {output_pcc}")
+        tt_out = ttnn.to_torch(
+            tt_out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(3, 1), cluster_shape=cluster_shape)
+        )
+        end = time.time()
+        if (end - start) > 1:
+            n_pauses += 1
+            print(f"Paused for {end - start} seconds")
+        tt_out = tt_out[:, 0:1, :, :]
 
-    if does_pass:
-        logger.info(f"{llama_version} TG MLP output Passed!")
-    else:
-        logger.warning(f"{llama_version} TG MLP output Failed!")
-        gc.collect()
-        assert does_pass, f"PCC value is lower than {pcc}"
+        does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
+        logger.info(f"PCC value: {output_pcc}")
+
+        if does_pass:
+            logger.info(f"{llama_version} TG MLP output Passed!")
+        else:
+            logger.warning(f"{llama_version} TG MLP output Failed!")
+            gc.collect()
+            assert does_pass, f"PCC value is lower than {pcc}"
+
+    print(f"Number of pauses: {n_pauses}")
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
@@ -168,6 +180,7 @@ def run_test_LlamaMLP_inference(
         # "long_context",
     ),
 )
+@pytest.mark.parametrize("enable_async_mode", [True], indirect=True)
 def test_LlamaMLP_inference(
     batch,
     seq_len,
@@ -178,6 +191,7 @@ def test_LlamaMLP_inference(
     llama_version,
     cluster_shape,
     use_program_cache,
+    enable_async_mode,
 ):
     if batch > max_batch_size:
         pytest.skip(f"Decode with {batch} users is not supported with large context")
