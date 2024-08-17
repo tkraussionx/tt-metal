@@ -380,12 +380,12 @@ inline bool DeviceData::validate_one_core(Device *device,
             if (!fail_count) {
                 log_fatal(tt::LogTest, "Data mismatch - First 20 failures for logical_core: {} (physical: {})", logical_core.str(), phys_core.str());
             }
-            log_fatal(tt::LogTest, "[{:02d}] (Fail) Expected: 0x{:08x} Observed: 0x{:08x}", i, (unsigned int)dev_data[index], (unsigned int)results[i]);
+            log_fatal(tt::LogTest, "[0x{:08x}] (Fail) Expected: 0x{:08x} Observed: 0x{:08x}", (unsigned int)(result_addr + i * sizeof(uint32_t)), (unsigned int)dev_data[index], (unsigned int)results[i]);
             if (fail_count++ > 20) {
                 break;
             }
         } else {
-            log_debug(tt::LogTest, "[{:02d}] (Pass) Expected: 0x{:08x} Observed: 0x{:08x}", i, (unsigned int)dev_data[index], (unsigned int)results[i]);
+            log_debug(tt::LogTest, "[0x{:08x}] (Pass) Expected: 0x{:08x} Observed: 0x{:08x}", (unsigned int)(result_addr + i * sizeof(uint32_t)), (unsigned int)dev_data[index], (unsigned int)results[i]);
         }
     }
 
@@ -810,6 +810,7 @@ inline void gen_bare_dispatcher_unicast_write_cmd(Device *device,
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
     cmd.write_linear.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
     cmd.write_linear.addr = device_data.get_result_data_addr(worker_core, bank_id);
+    // std::cout << " Worker addr: " << std::hex << cmd.write_linear.addr << std::dec <<  std::endl;
     cmd.write_linear.length = length;
     cmd.write_linear.num_mcast_dests = 0;
 

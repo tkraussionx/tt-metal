@@ -18,7 +18,7 @@
 
 
 constexpr uint32_t DEFAULT_TEST_TYPE = 0;
-constexpr uint32_t DEVICE_DATA_SIZE = 768 * 1024;
+constexpr uint32_t DEVICE_DATA_SIZE = 512 * 1024;
 constexpr uint32_t MAX_PAGE_SIZE = 256 * 1024; // bigger than scratch_db_page_size
 constexpr uint32_t DRAM_PAGE_SIZE_DEFAULT = 1024;
 constexpr uint32_t DRAM_PAGES_TO_READ_DEFAULT = 16;
@@ -433,6 +433,8 @@ void add_paged_dram_data_to_device_data(Device *device,
     uint32_t length_adjust_words = length_adjust / sizeof(uint32_t);
 
     // Get data from DRAM map, add to all workers, but only set valid for cores included in workers range.
+
+
     TT_ASSERT(start_page < num_dram_banks_g);
     uint32_t last_page = start_page + pages;
     for (uint32_t page_idx = start_page; page_idx < last_page; page_idx++) {
@@ -818,7 +820,8 @@ void gen_rnd_dram_paged_cmd(Device *device,
     uint32_t length_adjust = std::rand() % page_size;
     length_adjust = (length_adjust >> 5) << 5;
     if (length_adjust > 64 * 1024) length_adjust = 63 * 1024;
-
+    // std::cout << "Page size: " << page_size << " Pages: " << pages << " Start Page: " << start_page <<  " Base Addr: " << base_addr << std::endl;
+    // std::cout << " Length Adjust: " << length_adjust << std::endl;
     if (device_data.size() * sizeof(uint32_t) + page_size * pages - length_adjust + l1_buf_base_g >=
         device->l1_size_per_core()) {
         // try try again
@@ -913,7 +916,7 @@ void gen_rnd_test(Device *device,
 
     while (device_data.size() * sizeof(uint32_t) < DEVICE_DATA_SIZE) {
         // Assumes terminate is the last command...
-        uint32_t cmd = std::rand() % CQ_PREFETCH_CMD_TERMINATE;
+        uint32_t cmd = CQ_PREFETCH_CMD_RELAY_PAGED; //std::rand() % CQ_PREFETCH_CMD_TERMINATE;
         uint32_t x = rand() % (all_workers_g.end_coord.x - first_worker_g.x);
         uint32_t y = rand() % (all_workers_g.end_coord.y - first_worker_g.y);
 
@@ -926,7 +929,9 @@ void gen_rnd_test(Device *device,
             //gen_rnd_linear_cmd(device, prefetch_cmds, cmd_sizes, device_data, worker_core);
             break;
         case CQ_PREFETCH_CMD_RELAY_PAGED:
+            // std::cout << "Running paged_read_test" << std::endl;
             gen_rnd_dram_paged_cmd(device, prefetch_cmds, cmd_sizes, device_data, worker_core);
+            // std::cout << device_data.size() << std::endl;
             break;
         case CQ_PREFETCH_CMD_RELAY_INLINE:
             gen_rnd_inline_cmd(device, prefetch_cmds, cmd_sizes, device_data, worker_core);
@@ -2957,6 +2962,7 @@ int main(int argc, char **argv) {
                 device_data.reset();
                 gen_prefetcher_cmds(device_r, cmds, cmd_sizes, device_data, l1_buf_base_g);
                 run_test(1, device, program, device_r, program_r, cmd_sizes, terminate_sizes, cmds, terminate_cmds, host_hugepage_base, dev_hugepage_base_g, prefetch_q_base, prefetch_q_rd_ptr_addr, phys_prefetch_core_g, prefetch_q_writer);
+                // std::cout << "Validating" << std::endl;
                 pass &= device_data.validate(device_r);
                 if (!pass) {
                     break;

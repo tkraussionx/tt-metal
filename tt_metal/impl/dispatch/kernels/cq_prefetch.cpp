@@ -70,6 +70,13 @@ constexpr uint32_t prefetch_q_log_minsize = 4;
 
 const uint32_t scratch_db_top[2] = {scratch_db_base0, scratch_db_base1};
 
+// uint32_t ring_db_slot_size = scratch_db_size / 4;
+// constexpr uint32_t ring_db_base0 = scratch_db_base;
+// constexpr uint32_t ring_db_base1 = scratch_db_base + ring_db_slot_size;
+// constexpr uint32_t ring_db_base2 = scratch_db_base + 2 * ring_db_slot_size;
+// constexpr uint32_t ring_db_base3 = scratch_db_base + 3 * ring_db_slot_size;
+// const uint32_t ring_db_addrs[4] = {ring_db_base0, ring_db_base1, ring_db_base2, ring_db_base3};
+
 constexpr uint32_t cmddat_q_pages_per_block = cmddat_q_pages / cmddat_q_blocks;
 
 static uint32_t block_next_start_addr[cmddat_q_blocks];
@@ -368,7 +375,6 @@ static uint32_t process_relay_inline_noflush_cmd(uint32_t cmd_ptr,
 
     uint32_t length = cmd->relay_inline.length;
     uint32_t data_ptr = cmd_ptr + sizeof(CQPrefetchCmd);
-
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(1);
     if (dispatch_data_ptr == downstream_cb_end) {
         dispatch_data_ptr = downstream_cb_base;
@@ -394,8 +400,8 @@ static uint32_t process_relay_inline_noflush_cmd(uint32_t cmd_ptr,
 template<int32_t round,
          bool test_for_nonzero>
 static uint32_t write_pages_to_dispatcher(uint32_t& downstream_data_ptr,
-                                          uint32_t& scratch_write_addr,
-                                          uint32_t& amt_to_write) {
+                                          uint32_t scratch_write_addr,
+                                          uint32_t amt_to_write) {
 
     uint32_t page_residual_space = downstream_cb_page_size - (downstream_data_ptr & (downstream_cb_page_size - 1));
     uint32_t npages = (amt_to_write - page_residual_space + downstream_cb_page_size - round) / downstream_cb_page_size;
@@ -585,75 +591,69 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
 
     InterleavedAddrGen<is_dram> addr_gen{.bank_base_address = base_addr, .page_size = page_size};
 
-    // First step - read into DB0
+    uint32_t ring_db_slot_size = 2 * page_size;
+    uint32_t num_slots = scratch_db_size / ring_db_slot_size;
+    num_slots = (num_slots > 32) ? 32 : num_slots;
+    uint32_t ring_db_size = num_slots * ring_db_slot_size;
+
     uint32_t read_length = pages * page_size;
-    uint32_t scratch_read_addr = scratch_db_top[0];
-    // uint32_t trid = 0; // Initialize read transaction id to 0
-    uint32_t amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
+    uint32_t ring_db_read_addr = scratch_db_base0;
+    uint32_t amt_to_read = (ring_db_size > read_length) ? read_length : ring_db_size;
     uint32_t amt_read = 0;
-    cq_noc_set_read_txn_id(0);
+
     while (amt_to_read >= page_size) {
+        uint32_t trid = (ring_db_read_addr - scratch_db_base0) / ring_db_slot_size;
+        cq_noc_set_read_txn_id(trid);
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-        cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, 0);
-        scratch_read_addr += page_size;
+        cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, trid);
+        ring_db_read_addr += page_size;
         page_id++;
         amt_to_read -= page_size;
         amt_read += page_size;
     }
-    cq_noc_async_read_barrier_with_trid(0);
-
-    // Second step - read into DB[x], write from DB[x], toggle x, iterate
-    // Writes are fast, reads are slow
-    uint32_t db_toggle = 0;
-    uint32_t scratch_write_addr;
     read_length -= amt_read;
-    while (read_length != 0) {
-        // This ensures that writes from prior iteration are done
-        // TODO(pgk); we can do better on WH w/ tagging
-        noc_async_writes_flushed();
+    uint32_t amt_to_write = amt_read;
 
-        db_toggle ^= 1;
-        // Toggle and update trid
-        cq_noc_set_read_txn_id(db_toggle);
-        scratch_read_addr = scratch_db_top[db_toggle];
-        scratch_write_addr = scratch_db_top[db_toggle ^ 1];
-
-        uint32_t amt_to_write = amt_read;
-        amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
-        amt_read = 0;
-        while (amt_to_read >= page_size) {
-            uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-            cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, page_size, db_toggle);
-            scratch_read_addr += page_size;
-            page_id++;
-            amt_to_read -= page_size;
-            amt_read += page_size;
+    while (amt_to_write > 0) {
+        uint32_t ring_db_write_addr = scratch_db_base0;
+        for (uint32_t slot = 0; slot < num_slots; slot++) {
+            if (!amt_to_write) break;
+            cq_noc_async_read_barrier_with_trid(slot);
+            uint32_t amt_to_write_for_slot = amt_to_write > ring_db_slot_size ? ring_db_slot_size : amt_to_write;
+            if (amt_to_write <= ring_db_slot_size) {
+                amt_to_write_for_slot -= cmd->relay_paged.length_adjust;
+                amt_to_write -= cmd->relay_paged.length_adjust;
+            }
+            uint32_t npages = write_pages_to_dispatcher<0, false>
+                (downstream_data_ptr, ring_db_write_addr, amt_to_write_for_slot);
+            cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
+            ring_db_write_addr += amt_to_write_for_slot;
+            amt_to_write -= amt_to_write_for_slot;
+            noc_async_writes_flushed();
+            // Ensure that writes from this slot have been flushed before reading in more data
+            if (read_length != 0) {
+                // Read more data into this slot
+                cq_noc_set_read_txn_id(slot);
+                amt_to_read = (ring_db_slot_size > read_length) ? read_length : ring_db_slot_size;
+                ring_db_read_addr = scratch_db_base0 + slot * ring_db_slot_size;
+                amt_read = 0;
+                while (amt_to_read >= page_size) {
+                    uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
+                    cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, slot);
+                    ring_db_read_addr += page_size;
+                    page_id++;
+                    amt_to_read -= page_size;
+                    amt_read += page_size;
+                }
+                read_length -= amt_read;
+                amt_to_write += amt_read;
+            }
         }
-
-        // Third step - write from DB
-        uint32_t npages = write_pages_to_dispatcher<0, false>
-            (downstream_data_ptr, scratch_write_addr, amt_to_write);
-        cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
-
-        read_length -= amt_read;
-
-        // TODO(pgk); we can do better on WH w/ tagging
-        cq_noc_async_read_barrier_with_trid(db_toggle);
     }
-
-    // Third step - write from DB
-    // Note that we may write less than full pages despite reading full pages based on length_adjust
-    // Expectation is that the gain from reading less is small to 0, revisit as needed
-    ASSERT(cmd->relay_paged.length_adjust < page_size);
-    scratch_write_addr = scratch_db_top[db_toggle];
-    uint32_t amt_to_write = amt_read - cmd->relay_paged.length_adjust;
-    uint32_t npages = write_pages_to_dispatcher<1, true>
-        (downstream_data_ptr, scratch_write_addr, amt_to_write);
-
     downstream_data_ptr = round_up_pow2(downstream_data_ptr, downstream_cb_page_size);
 
     // One page was acquired w/ the cmd in CMD_RELAY_INLINE_NOFLUSH with 16 bytes written
-    cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages + 1);
+    cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(1);
 
     return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 }
