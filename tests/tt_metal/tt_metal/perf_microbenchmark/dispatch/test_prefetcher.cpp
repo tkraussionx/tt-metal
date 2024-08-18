@@ -18,7 +18,7 @@
 
 
 constexpr uint32_t DEFAULT_TEST_TYPE = 0;
-constexpr uint32_t DEVICE_DATA_SIZE = 512 * 1024;
+constexpr uint32_t DEVICE_DATA_SIZE = 768 * 1024;
 constexpr uint32_t MAX_PAGE_SIZE = 256 * 1024; // bigger than scratch_db_page_size
 constexpr uint32_t DRAM_PAGE_SIZE_DEFAULT = 1024;
 constexpr uint32_t DRAM_PAGES_TO_READ_DEFAULT = 16;
@@ -916,7 +916,7 @@ void gen_rnd_test(Device *device,
 
     while (device_data.size() * sizeof(uint32_t) < DEVICE_DATA_SIZE) {
         // Assumes terminate is the last command...
-        uint32_t cmd = CQ_PREFETCH_CMD_RELAY_PAGED; //std::rand() % CQ_PREFETCH_CMD_TERMINATE;
+        uint32_t cmd = std::rand() % CQ_PREFETCH_CMD_TERMINATE;
         uint32_t x = rand() % (all_workers_g.end_coord.x - first_worker_g.x);
         uint32_t y = rand() % (all_workers_g.end_coord.y - first_worker_g.y);
 

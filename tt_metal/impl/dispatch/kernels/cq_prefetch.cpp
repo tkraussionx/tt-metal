@@ -620,12 +620,20 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
             if (!amt_to_write) break;
             cq_noc_async_read_barrier_with_trid(slot);
             uint32_t amt_to_write_for_slot = amt_to_write > ring_db_slot_size ? ring_db_slot_size : amt_to_write;
-            if (amt_to_write <= ring_db_slot_size) {
+            bool l_a = false;
+            if (read_length == 0 and amt_to_write <= ring_db_slot_size) {
                 amt_to_write_for_slot -= cmd->relay_paged.length_adjust;
                 amt_to_write -= cmd->relay_paged.length_adjust;
+                l_a = true;
             }
-            uint32_t npages = write_pages_to_dispatcher<0, false>
-                (downstream_data_ptr, ring_db_write_addr, amt_to_write_for_slot);
+            uint32_t npages;
+            if (l_a) {
+                npages = write_pages_to_dispatcher<1, true>
+                    (downstream_data_ptr, ring_db_write_addr, amt_to_write_for_slot);
+            } else {
+                npages = write_pages_to_dispatcher<0, false>
+                    (downstream_data_ptr, ring_db_write_addr, amt_to_write_for_slot);
+            }
             cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
             ring_db_write_addr += amt_to_write_for_slot;
             amt_to_write -= amt_to_write_for_slot;

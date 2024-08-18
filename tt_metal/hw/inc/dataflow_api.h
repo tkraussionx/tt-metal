@@ -502,7 +502,8 @@ std::uint64_t get_noc_addr(std::uint32_t addr) {
  * | dst_local_l1_addr | Address in local L1 memory                         | uint32_t  | 0..1MB                                   | Yes      |
  * | size              | Size of data transfer in bytes                     | uint32_t  | 0..1MB                                   | Yes      |
  */
-FORCE_INLINE
+// FORCE_INLINE
+inline
 void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
     /*
         Read requests - use static VC
