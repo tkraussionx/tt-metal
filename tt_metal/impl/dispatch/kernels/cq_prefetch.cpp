@@ -76,8 +76,6 @@ static uint32_t block_next_start_addr[cmddat_q_blocks];
 static uint32_t block_noc_writes_to_clear[cmddat_q_blocks];
 static uint32_t rd_block_idx;
 
-static uint32_t upstream_total_acquired_page_count;
-
 // Currently capping the same as dispatch
 constexpr uint32_t max_read_packed_cmd =
     CQ_PREFETCH_CMD_RELAY_PAGED_PACKED_MAX_SUB_CMDS *
@@ -406,19 +404,18 @@ static uint32_t write_pages_to_dispatcher(uint32_t& downstream_data_ptr,
         cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
     }
 
-    if (downstream_data_ptr + amt_to_write >= downstream_cb_end) {  // wrap
-        if (downstream_data_ptr == downstream_cb_end) {
-            downstream_data_ptr = downstream_cb_base;
-        } else {
-            uint32_t last_chunk_size = downstream_cb_end - downstream_data_ptr;
-            uint64_t noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
-            noc_async_write(scratch_write_addr, noc_addr, last_chunk_size);
-            downstream_data_ptr = downstream_cb_base;
-            scratch_write_addr += last_chunk_size;
-            amt_to_write -= last_chunk_size;
-        }
+    uint64_t noc_addr;
+    if (downstream_data_ptr == downstream_cb_end) {
+        downstream_data_ptr = downstream_cb_base;
+    } else if (downstream_data_ptr + amt_to_write > downstream_cb_end) {  // wrap
+        uint32_t last_chunk_size = downstream_cb_end - downstream_data_ptr;
+        noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
+        noc_async_write(scratch_write_addr, noc_addr, last_chunk_size);
+        downstream_data_ptr = downstream_cb_base;
+        scratch_write_addr += last_chunk_size;
+        amt_to_write -= last_chunk_size;
     }
-    uint64_t noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
+    noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
     noc_async_write(scratch_write_addr, noc_addr, amt_to_write);
     downstream_data_ptr += amt_to_write;
 
@@ -1265,8 +1262,7 @@ inline uint32_t relay_cb_get_cmds(uint32_t& fence, uint32_t& data_ptr) {
                                    fence,
                                    block_noc_writes_to_clear,
                                    block_next_start_addr,
-                                   rd_block_idx,
-                                   upstream_total_acquired_page_count);
+                                   rd_block_idx);
     }
 
     volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *cmd_ptr =
@@ -1292,8 +1288,7 @@ inline uint32_t relay_cb_get_cmds(uint32_t& fence, uint32_t& data_ptr) {
                                    fence,
                                    block_noc_writes_to_clear,
                                    block_next_start_addr,
-                                   rd_block_idx,
-                                   upstream_total_acquired_page_count);
+                                   rd_block_idx);
         IDLE_ERISC_RETURN(length - sizeof(CQPrefetchHToPrefetchDHeader));
     }
 
@@ -1415,7 +1410,6 @@ void kernel_main_hd() {
 
 void kernel_main() {
     DPRINT << "prefetcher_" << is_h_variant << is_d_variant << ": start" << ENDL();
-    upstream_total_acquired_page_count = 0;
 
     volatile tt_l1_ptr uint32_t* sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_downstream_cb_sem_id));
