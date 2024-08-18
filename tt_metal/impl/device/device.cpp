@@ -495,22 +495,19 @@ void Device::configure_kernel_variant(
     CoreCoord upstream_physical_core,
     CoreCoord downstream_physical_core,
     std::map<string, string> defines_in,
-    NOC my_noc_index,
-    NOC upstream_noc_index,
-    NOC downstream_noc_index,
+    NOC noc_index,
     bool is_active_eth_core) {
 
-    const auto& grid_size = this->grid_size();
+    const auto& grid_size = tt::Cluster::instance().get_soc_desc(this->id()).grid_size;
 
     std::map<string, string> defines = {
         {"DISPATCH_KERNEL", "1"},
-        {"MY_NOC_X", std::to_string(NOC_0_X(my_noc_index, grid_size.x, kernel_physical_core.x))},
-        {"MY_NOC_Y", std::to_string(NOC_0_Y(my_noc_index, grid_size.y, kernel_physical_core.y))},
-        {"UPSTREAM_NOC_INDEX", std::to_string(upstream_noc_index)},
-        {"UPSTREAM_NOC_X", std::to_string(NOC_0_X(upstream_noc_index, grid_size.x, upstream_physical_core.x))},
-        {"UPSTREAM_NOC_Y", std::to_string(NOC_0_Y(upstream_noc_index, grid_size.y, upstream_physical_core.y))},
-        {"DOWNSTREAM_NOC_X", std::to_string(NOC_0_X(downstream_noc_index, grid_size.x, downstream_physical_core.x))},
-        {"DOWNSTREAM_NOC_Y", std::to_string(NOC_0_Y(downstream_noc_index, grid_size.y, downstream_physical_core.y))},
+        {"MY_NOC_X", std::to_string(NOC_0_X(noc_index, grid_size.x, kernel_physical_core.x))},
+        {"MY_NOC_Y", std::to_string(NOC_0_Y(noc_index, grid_size.y, kernel_physical_core.y))},
+        {"UPSTREAM_NOC_X", std::to_string(NOC_0_X(noc_index, grid_size.x, upstream_physical_core.x))},
+        {"UPSTREAM_NOC_Y", std::to_string(NOC_0_Y(noc_index, grid_size.y, upstream_physical_core.y))},
+        {"DOWNSTREAM_NOC_X", std::to_string(NOC_0_X(noc_index, grid_size.x, downstream_physical_core.x))},
+        {"DOWNSTREAM_NOC_Y", std::to_string(NOC_0_Y(noc_index, grid_size.y, downstream_physical_core.y))},
     };
     defines.insert(defines_in.begin(), defines_in.end());
 
@@ -521,7 +518,7 @@ void Device::configure_kernel_variant(
             kernel_core,
             tt::tt_metal::DataMovementConfig {
                 .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
-                .noc = my_noc_index,
+                .noc = noc_index,
                 .compile_args = compile_args,
                 .defines = defines
             }
@@ -533,7 +530,7 @@ void Device::configure_kernel_variant(
             kernel_core,
             tt::tt_metal::EthernetConfig{
                 .eth_mode = is_active_eth_core ? Eth::SENDER : Eth::IDLE,
-                .noc = my_noc_index,
+                .noc = noc_index,
                 .compile_args = compile_args,
                 .defines = defines
             }
@@ -1347,14 +1344,6 @@ void Device::compile_command_queue_programs() {
     constexpr uint32_t prefetch_d_downstream_cb_sem = 2;
     constexpr uint32_t dispatch_downstream_cb_sem = 1;
 
-    // TODO: this->hw_command_queues_[cq_id]->noc_index is also hardcoded to NOC_0 elsewhere, should have one definition and remove assertion
-    constexpr NOC my_noc_index = NOC::NOC_0;
-    constexpr NOC dispatch_upstream_noc_index = NOC::NOC_1;
-    static_assert(my_noc_index != dispatch_upstream_noc_index, "Dispatch NOC used to communicate with upstream must be different from NOC used for other transactions");
-    for (uint8_t cq_id = 0; cq_id < this->num_hw_cqs(); cq_id++) {
-        TT_ASSERT(this->hw_command_queues_[cq_id]->noc_index == my_noc_index, "Command Queue NOC index must match");
-    }
-
     if (this->is_mmio_capable()) {
         auto device_id = this->id();
         uint32_t num_compute_cores = this->compute_with_storage_grid_size().x * this->compute_with_storage_grid_size().y;
@@ -1369,6 +1358,8 @@ void Device::compile_command_queue_programs() {
 
             CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_core, dispatch_core_type);
             CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
+
+            NOC noc_index = this->hw_command_queues_[cq_id]->noc_index;
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
             log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
@@ -1416,9 +1407,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 dispatch_physical_core,
                 std::map<string, string> {},
-                my_noc_index,
-                my_noc_index,
-                my_noc_index
+                noc_index
             );
 
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
@@ -1459,9 +1448,7 @@ void Device::compile_command_queue_programs() {
                 prefetch_physical_core,
                 CoreCoord{0, 0},
                 std::map<string, string> {},
-                my_noc_index,
-                dispatch_upstream_noc_index,
-                my_noc_index
+                noc_index
             );
 
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
@@ -1509,6 +1496,7 @@ void Device::compile_command_queue_programs() {
             /////////////////Following section is for mmio device serving Remote Device
             uint32_t cq_id = 0;
             for (auto [prefetch_core, prefetch_settings] : mmio_device_worker_variants[DispatchWorkerType::PREFETCH]) {
+                NOC noc_index = this->hw_command_queues_[cq_id]->noc_index;
                 for (auto sem : prefetch_settings.semaphores) {
                     //size of semaphores vector is number of needed semaphores on the core.
                     //Value of each vector entry is the initialization value for the semaphore.
@@ -1524,9 +1512,7 @@ void Device::compile_command_queue_programs() {
                     prefetch_settings.upstream_cores[0],
                     prefetch_settings.downstream_cores[0],
                     std::map<string, string> {},
-                    my_noc_index,
-                    my_noc_index,
-                    my_noc_index
+                    this->hw_command_queues_[cq_id]->noc_index
                 );
                 cq_id = (cq_id + 1) % num_hw_cqs;
             }
@@ -1547,9 +1533,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-                my_noc_index, // Only one Mux - use NOC for CQ 0
-                my_noc_index,
-                my_noc_index
+                this->hw_command_queues_[0]->noc_index // Only one Mux - use NOC for CQ 0
             );
 
             auto [tunneler_core, tunneler_settings] = mmio_device_worker_variants[DispatchWorkerType::US_TUNNELER_REMOTE][0];
@@ -1563,9 +1547,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-                my_noc_index, // Only one Remote Tunneler - use NOC for CQ 0
-                my_noc_index,
-                my_noc_index,
+                this->hw_command_queues_[0]->noc_index, // Only one Remote Tunneler - use NOC for CQ 0
                 true
             );
 
@@ -1585,9 +1567,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-                my_noc_index, // Only one Demux - use NOC for CQ 0
-                my_noc_index,
-                my_noc_index
+                this->hw_command_queues_[0]->noc_index // Only one Demux - use NOC for CQ 0
             );
             cq_id = 0;
             for (auto [dispatch_core, dispatch_settings] : mmio_device_worker_variants[DispatchWorkerType::DISPATCH]) {
@@ -1606,9 +1586,7 @@ void Device::compile_command_queue_programs() {
                     dispatch_settings.upstream_cores[0],
                     CoreCoord{0xffffffff, 0xffffffff},
                     std::map<string, string> {},
-                    my_noc_index,
-                    dispatch_upstream_noc_index,
-                    my_noc_index
+                    this->hw_command_queues_[cq_id]->noc_index
                 );
                 cq_id = (cq_id + 1) % num_hw_cqs;
             }
@@ -1627,9 +1605,7 @@ void Device::compile_command_queue_programs() {
             CoreCoord{0, 0},
             CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-            my_noc_index, // Only one Local Tunneler - use NOC for CQ 0
-            my_noc_index,
-            my_noc_index,
+            this->hw_command_queues_[0]->noc_index, // Only one Local Tunneler - use NOC for CQ 0
             true
         );
 
@@ -1646,9 +1622,7 @@ void Device::compile_command_queue_programs() {
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-                my_noc_index, // Only one Remote Tunneler - use NOC for CQ 0
-                my_noc_index,
-                my_noc_index,
+                this->hw_command_queues_[0]->noc_index, // Only one Remote Tunneler - use NOC for CQ 0
                 true
             );
         }
@@ -1669,9 +1643,7 @@ void Device::compile_command_queue_programs() {
             CoreCoord{0, 0},
             CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-            my_noc_index, // Only one Demux - use NOC for CQ 0
-            my_noc_index,
-            my_noc_index
+            this->hw_command_queues_[0]->noc_index // Only one Demux - use NOC for CQ 0
         );
         uint32_t cq_id = 0;
         for (auto [prefetch_d_core, prefetch_d_settings] : device_worker_variants[DispatchWorkerType::PREFETCH_D]) {
@@ -1690,9 +1662,7 @@ void Device::compile_command_queue_programs() {
                 prefetch_d_settings.upstream_cores[0],
                 prefetch_d_settings.downstream_cores[0],
                 std::map<string, string> {},
-                my_noc_index,
-                my_noc_index,
-                my_noc_index
+                this->hw_command_queues_[cq_id]->noc_index
             );
             cq_id = (cq_id + 1) % num_hw_cqs;
         }
@@ -1713,9 +1683,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_d_settings.upstream_cores[0],
                 dispatch_d_settings.downstream_cores[0],
                 std::map<string, string> {},
-                my_noc_index,
-                dispatch_upstream_noc_index,
-                my_noc_index
+                this->hw_command_queues_[cq_id]->noc_index
             );
             cq_id = (cq_id + 1) % num_hw_cqs;
         }
@@ -1737,9 +1705,7 @@ void Device::compile_command_queue_programs() {
             CoreCoord{0, 0},
             CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
-            my_noc_index, // Only one Mux - use NOC for CQ 0
-            my_noc_index,
-            my_noc_index
+            this->hw_command_queues_[0]->noc_index // Only one Mux - use NOC for CQ 0
         );
 
         detail::CompileProgram(this, *command_queue_program_ptr, /*fd_bootloader_mode=*/true);
@@ -2049,10 +2015,6 @@ uint32_t Device::dram_size_per_channel() const {
     return tt::Cluster::instance().get_soc_desc(id_).dram_bank_size;
 }
 
-CoreCoord Device::grid_size() const {
-    return tt::Cluster::instance().get_soc_desc(id_).grid_size;
-}
-
 CoreCoord Device::logical_grid_size() const {
     return tt::Cluster::instance().get_soc_desc(id_).worker_grid_size;
 }
@@ -2123,7 +2085,7 @@ std::vector<CoreCoord> Device::ethernet_cores_from_logical_cores(const std::vect
 }
 
 uint32_t Device::get_noc_unicast_encoding(uint8_t noc_index, const CoreCoord& physical_core) const {
-    const auto& grid_size = this->grid_size();
+    const auto& grid_size = tt::Cluster::instance().get_soc_desc(this->id()).grid_size;
     return NOC_XY_ENCODING(
         NOC_0_X(noc_index, grid_size.x, physical_core.x),
         NOC_0_Y(noc_index, grid_size.y, physical_core.y)
@@ -2131,7 +2093,7 @@ uint32_t Device::get_noc_unicast_encoding(uint8_t noc_index, const CoreCoord& ph
 }
 
 uint32_t Device::get_noc_multicast_encoding(uint8_t noc_index, const CoreRange& physical_cores) const {
-    const auto& grid_size = this->grid_size();
+    const auto& grid_size = tt::Cluster::instance().get_soc_desc(this->id()).grid_size;
 
     // NOC 1 mcasts from bottom left to top right, so we need to reverse the coords
     if (noc_index == 0) {
