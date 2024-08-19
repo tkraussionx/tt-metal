@@ -8,6 +8,7 @@ from enum import Enum, auto
 
 from tqdm import tqdm
 import torch
+import torch.nn.functional as F
 import transformers
 
 from lm_eval import utils
@@ -92,15 +93,17 @@ class TenstorrentLM(TemplateLM):
 
         model_class = getattr(self, "AUTO_MODEL_CLASS", None)
 
-        if model_class == ModelClasses.Seq2SeqLM:
+        if model_class == ModelClasses.CausalLM:
             context_enc = self.tok_encode(context)
             continuation_enc = self.tok_encode(continuation, add_special_tokens=False)
-        else:
+        elif model_class == ModelClasses.Seq2SeqLM:
+            raise NotImplementedError
             whole_enc = self.tok_encode(context + continuation)
             context_enc = self.tok_encode(context)
-
             context_enc_len = len(context_enc)
             continuation_enc = whole_enc[context_enc_len:]
+        else:
+            raise NotImplementedError
 
         return context_enc, continuation_enc
 
@@ -133,15 +136,15 @@ class TenstorrentLM(TemplateLM):
 
         return encoding["input_ids"], encoding["attention_mask"]
 
-    # def _loglikelihood_tokens(
-    #     self,
-    #     requests: List[Tuple[Tuple[str, str], List[int], List[int]]],
-    #     disable_tqdm: bool = False,
-    #     override_bs: int = None,
-    # ) -> List[Tuple[float, bool]]:
-    #     res = []
-    #     # note: given prefill and decode behaviour, having generic model call function is difficult
-    #     return res
+    def _loglikelihood_tokens(
+        self,
+        requests: List[Tuple[Tuple[str, str], List[int], List[int]]],
+        disable_tqdm: bool = False,
+        override_bs: int = None,
+    ) -> List[Tuple[float, bool]]:
+        res = []
+        # note: given prefill and decode behaviour, having generic model call function is difficult
+        return res
 
     def loglikelihood(self, requests, disable_tqdm: bool = False) -> List[Tuple[float, bool]]:
         """Compute log-likelihood of generating a continuation from a context.
@@ -169,13 +172,21 @@ class TenstorrentLM(TemplateLM):
         # batch requests first
         batched_requests = [requests[i : i + self.batch_size] for i in range(0, len(requests), self.batch_size)]
         for reqs in tqdm(batched_requests, disable=disable_tqdm):
+            batch = len(reqs)
+            continuation_enc_list = [self.tok_encode(req.args[1], add_special_tokens=False) for req in reqs]
             context_enc_list, continuation_enc_list = zip(
-                *(self._encode_pair(req.args[0], req.args[1]) for req in reqs)
+                *[self._encode_pair(context=req.args[0], continuation=req.args[1]) for req in reqs]
             )
-            model_backend.start_new_batch(context_enc_list)
-            logits = get_loglikelihood.get_logits()
-            # TODO: calculate log probability of continuation
-            res.append((-random.random(), False))
+            cond_ids = torch.tensor(continuation_enc_list).reshape(batch)
+            self.model_backend.start_new_batch(context_enc_list)
+            logits = self.model_backend.get_logits()
+            greedy_ids = torch.argmax(logits, dim=-1)
+            probs = F.softmax(logits, dim=-1)
+            cond_probs = probs[torch.arange(len(cond_ids)), cond_ids]
+            log_likelihoods = torch.log(cond_probs).tolist()
+            is_greedy = (greedy_ids == cond_ids).tolist()
+            output = list(zip(log_likelihoods, is_greedy))
+            res.extend(output)
 
         return res
 
