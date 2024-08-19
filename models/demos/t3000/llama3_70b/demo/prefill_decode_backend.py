@@ -31,6 +31,7 @@ from models.demos.t3000.llama2_70b.demo.demo import (
     # prepare_next_input,
     top_pk_logits_efficient,
 )
+from conftest import get_dispatch_core_type
 
 from inference_config import inference_config
 from inference_logger import get_logger
@@ -46,18 +47,16 @@ def get_t3k_device_mesh(num_devices_requested):
     # device_params is empty dict in llama3 70B demo pytest execution
     device_params = {}
     device_mesh = ttnn.open_device_mesh(
-        ttnn.DeviceGrid(1, num_devices_requested), device_ids[:num_devices_requested], **device_params
+        ttnn.DeviceGrid(1, num_devices_requested), device_ids[:num_devices_requested], dispatch_core_type=get_dispatch_core_type(), **device_params
     )
     logger.info(f"multidevice with {device_mesh.get_num_devices()} devices is created")
-    return device_mesh
-
-
-def close_devices(device_mesh):
-    logger.info("close_devices ...")
-    for device in device_mesh.get_devices():
-        ttl.device.DumpDeviceProfiler(device)
-    ttnn.close_device_mesh(device_mesh)
-    del device_mesh
+    try:
+        yield device_mesh
+    finally:
+        for device in device_mesh.get_devices():
+            ttl.device.DumpDeviceProfiler(device)
+        ttnn.close_device_mesh(device_mesh)
+        del device_mesh
 
 
 class UserInfo:
@@ -173,7 +172,8 @@ class PrefillDecodeBackend:
 
     def teardown(self):
         logger.info("teardown ...")
-        close_devices(self.t3k_device_mesh)
+        if self.t3k_device_mesh:
+            self.t3k_device_mesh.close()
 
     def init_tt_metal_device(self):
         logger.info("init_tt_metal_device ...")
@@ -247,8 +247,8 @@ class PrefillDecodeBackend:
         self.prev_forward_counter = self.forward_counter
         self.batch_start_time = time.time()
 
-    def start_new_batch(self, context_enc_list):
-        assert len(context_enc_list) <= self.batch_size
+    def add_users_from_prompts(self, context_enc_list):
+        assert len(context_enc_list) <= self.max_users
         # reset users
         for idx in range(len(self.get_users())):
             # reset memory
@@ -263,14 +263,14 @@ class PrefillDecodeBackend:
                 eos_token_id=self.tokenizer.eos_id,
             )
 
-        self.prepare_batch_inputs()
+    def batch_preprocessing(self):
         # TODO: investigate changing when continous batching supported
         # note: the cur_pos index if shared between all users
         # this may change for the continuous batching implementation
+        self.prepare_batch_inputs()
         self.cur_pos = 1
         self.prev_pos = 0
         self.batch_counter += 1
-        self.prefill()
 
     def prepare_batch_inputs(self):
         self.num_users = len(self.get_users())
