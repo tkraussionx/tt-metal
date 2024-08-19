@@ -178,7 +178,9 @@ class TenstorrentLM(TemplateLM):
                 *[self._encode_pair(context=req.args[0], continuation=req.args[1]) for req in reqs]
             )
             cond_ids = torch.tensor(continuation_enc_list).reshape(batch)
-            self.model_backend.start_new_batch(context_enc_list)
+            self.model_backend.add_users_from_prompts(context_enc_list)
+            self.model_backend.batch_preprocessing()
+            self.model_backend.prefill()
             logits = self.model_backend.get_logits()
             greedy_ids = torch.argmax(logits, dim=-1)
             probs = F.softmax(logits, dim=-1)
