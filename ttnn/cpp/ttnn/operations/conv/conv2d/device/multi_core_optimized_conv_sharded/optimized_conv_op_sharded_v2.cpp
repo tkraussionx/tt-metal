@@ -162,8 +162,6 @@ std::tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         auto cb_reblock = tt_metal::CreateCircularBuffer(program, core, cb_reblock_config);
         log_debug(LogOp, "Reblock CB: {}, npages: {}, pagesize: {}", untilize_mode_reblock_cb, num_reblock_cb_tiles, out_tile_size);
         bool need_unpad_after_untilize = output_shard_shape[1] * output_shard_shape[0] < num_writer_output_tiles * 1024;
-        cout << "output_shard_shape[0]: " << output_shard_shape[0] << " output_shard_shape[1]: " << output_shard_shape[1] << endl;
-        cout << "need_unpad_after_untilize: " << need_unpad_after_untilize << endl;
         if (need_unpad_after_untilize) {
             CircularBufferConfig compute_cb_output_config =
             CircularBufferConfig(num_writer_output_tiles * out_tile_size, {{untilized_padded_out_cb, out_df}})
@@ -2064,7 +2062,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     uint32_t conv_act_c_read_bytes = a_shard_spec.shape[1] * a.element_size();
     uint32_t act_block_w_extra_align_bytes = block_sharded ? (round_up(a_shard_spec.shape[1] * weight_size_w * weight_size_w, TILE_WIDTH) - (a_shard_spec.shape[1] * weight_size_w * weight_size_w)) * a.element_size() :
         (round_up(a_shard_spec.shape[1] * weight_size_w, TILE_WIDTH) - (a_shard_spec.shape[1] * weight_size_w)) * a.element_size();
-    cout << "act_block_w_extra_align_bytes: " << act_block_w_extra_align_bytes << endl;
     uint32_t in0_block_w = act_block_w_ntiles; // todo (nitika): fix how this value is set in conv2d.cpp
     uint32_t in1_block_num_tiles = weight_block_num_tiles;
     uint32_t in0_num_blocks_w =
@@ -2225,7 +2222,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     if (total_num_cores == 1) {
         writer_mcast_sender_defines["SKIP_MCAST"] = "1";
     }
-    cout << "has bias = " << has_bias << endl;
+    std::cout << "has bias = " << has_bias << std::endl;;
     if (has_bias) {
         writer_defines["FUSE_BIAS"] = "1";
         writer_mcast_sender_defines["FUSE_BIAS"] = "1";
@@ -2302,7 +2299,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     }
     bool need_unpad_after_untilize = parallelization_config.per_core_out_matrix_width < per_core_out_matrix_width_ntiles * TILE_WIDTH;
     if (need_unpad_after_untilize) {
-        cout << "need_unpad_after_untilize: " << need_unpad_after_untilize  << endl;
+        std::cout << "need_unpad_after_untilize: " << need_unpad_after_untilize  << std::endl;;
         TT_FATAL(block_sharded, "Need to handle this case for non-sliced weights");
         TT_FATAL(untilize_out, "Cannot support non-tile multiple shard width with tilized output");
         writer_compile_time_args.push_back(per_core_out_matrix_width_ntiles);
@@ -2819,7 +2816,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
     bool enable_subblock_padding) {
     tt_metal::Program program = tt_metal::CreateProgram();
     // TODO: conv params need to be cleaned up and replaced with sliding window config
-    ParallelConfig parallel_config;
+    ttnn::operations::sliding_window::ParallelConfig parallel_config;
     parallel_config.grid = a.shard_spec().value().grid;
     parallel_config.shard_scheme = a.memory_config().memory_layout;
     parallel_config.shard_orientation = a.shard_spec().value().orientation;
@@ -2830,7 +2827,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
     uint32_t stride_w = (uint32_t)conv_params[3];
     uint32_t pad_h = (uint32_t)conv_params[4];
     uint32_t pad_w = (uint32_t)conv_params[5];
-    SlidingWindowConfig sliding_window_config = SlidingWindowConfig(
+    ttnn::operations::sliding_window::SlidingWindowConfig sliding_window_config = ttnn::operations::sliding_window::SlidingWindowConfig(
         input_tensor_shape[0],
         input_tensor_shape[1],
         input_tensor_shape[2],
@@ -2847,18 +2844,18 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
         true);
 
     // create conv config tensors
-    auto pad_metadata = sliding_window::generate_pad_metadata(sliding_window_config);
-    auto op_trace_metadata = sliding_window::generate_op_trace_metadata(sliding_window_config);
-    auto shard_boundaries = sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
+    auto pad_metadata = ttnn::operations::sliding_window::generate_pad_metadata(sliding_window_config);
+    auto op_trace_metadata = ttnn::operations::sliding_window::generate_op_trace_metadata(sliding_window_config);
+    auto shard_boundaries = ttnn::operations::sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
     auto conv_sharded_input_top_left_indices =
-        sliding_window::generate_sliding_window_op_config(op_trace_metadata, shard_boundaries, true, true);
+        ttnn::operations::sliding_window::generate_sliding_window_op_config(op_trace_metadata, shard_boundaries, true, true);
     // create sharded ttnn config tensors
     DataType indices_tt_dtype = DataType::UINT16;
     // For block sharded convs, each core in a column or row share the same specs
     CoreCoord grid_size = parallel_config.grid.bounding_box().grid_size();
     // if(parallel_config.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED) {
     //     uint32_t num_shards_nhw = conv_sharded_input_top_left_indices.size();
-    //     TT_ASSERT(sliding_window_config.num_cores_nhw_ == num_shards_nhw);
+    //     TT_ASSERT(ttnn::operations::sliding_window_config.num_cores_nhw_ == num_shards_nhw);
     //     uint32_t num_shards_channels = 0;
     //     if(parallel_config.shard_orientation == ShardOrientation::COL_MAJOR) {
     //         num_shards_channels = grid_size.y;
@@ -2873,9 +2870,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
     //     }
     // }
     bool is_block_sharded = a.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED;
-    auto conv_reader_indices_tensor = sliding_window::construct_on_host_config_tensor(
+    auto conv_reader_indices_tensor = ttnn::operations::sliding_window::construct_on_host_config_tensor(
         conv_sharded_input_top_left_indices, sliding_window_config, parallel_config);
-    conv_reader_indices_tensor = sliding_window::move_config_tensor_to_device(
+    conv_reader_indices_tensor = ttnn::operations::sliding_window::move_config_tensor_to_device(
         conv_reader_indices_tensor, parallel_config, is_block_sharded, a.device());
 
     // add config tensor to program

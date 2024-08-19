@@ -435,7 +435,6 @@ std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_requir
         }
     }
     auto shape = input_tensor.shard_spec()->shape;
-    cout << "shard shape = " << shape[0] << ", " << shape[1] << endl;
     return {input_tensor, parallel_config, needs_shard_or_reshard};
 }
 
@@ -545,7 +544,7 @@ std::pair<ttnn::Tensor, std::optional<ttnn::Tensor>> prepare_conv_weights_biases
             if (bias_tensor_.get_dtype() != weights_bias_dtype) {
                 bias_tensor_ = ttnn::to_dtype(bias_tensor_, weights_bias_dtype);
             }
-            bias_tensor_ = ttnn::operations::core::to_device(bias_tensor_, device, nullopt);
+            bias_tensor_ = ttnn::operations::core::to_device(bias_tensor_, device, std::nullopt);
         } else {
             bias_tensor_ = convert_conv_bias_tensor_to_tiled_layout_block_sharded(
                 bias_tensor.value(), num_cores_c, weights_bias_dtype);
@@ -557,7 +556,7 @@ std::pair<ttnn::Tensor, std::optional<ttnn::Tensor>> prepare_conv_weights_biases
 }
 
 ttnn::operations::matmul::MatmulProgramConfig determine_matmul_op_config_from_conv_op_config(
-    OptimizedConvParallelizationConfig conv_parallelization_config,
+    OptimizedConvParallelizationConfigNew conv_parallelization_config,
     OptimizedConvBlockConfig conv_blocking_config,
     bool height_sharded,
     string activation,
@@ -569,8 +568,8 @@ ttnn::operations::matmul::MatmulProgramConfig determine_matmul_op_config_from_co
             .in0_block_w = conv_blocking_config.act_block_w_ntiles,
             .out_subblock_h = conv_blocking_config.out_subblock_h_ntiles,
             .out_subblock_w = conv_blocking_config.out_subblock_w_ntiles,
-            .per_core_M = conv_parallelization_config.per_core_out_matrix_height * TILE_HEIGHT,
-            .per_core_N = conv_parallelization_config.per_core_out_matrix_width * TILE_WIDTH,
+            .per_core_M = conv_parallelization_config.per_core_out_matrix_height,
+            .per_core_N = conv_parallelization_config.per_core_out_matrix_width,
             .fuse_batch = true,
             .mcast_in0 = false};
         if (activation != "") {
@@ -584,8 +583,8 @@ ttnn::operations::matmul::MatmulProgramConfig determine_matmul_op_config_from_co
             .in0_block_w = conv_blocking_config.act_block_w_ntiles / grid_size_along_c,
             .out_subblock_h = conv_blocking_config.out_subblock_h_ntiles,
             .out_subblock_w = conv_blocking_config.out_subblock_w_ntiles,
-            .per_core_M = conv_parallelization_config.per_core_out_matrix_height * TILE_HEIGHT,
-            .per_core_N = conv_parallelization_config.per_core_out_matrix_width * TILE_WIDTH,
+            .per_core_M = conv_parallelization_config.per_core_out_matrix_height,
+            .per_core_N = conv_parallelization_config.per_core_out_matrix_width,
             .transpose_mcast = transpose_mcast};
         if (activation != "") {
             matmul_config.fused_activation = ttnn::operations::unary::utils::string_to_unary_with_param(activation);

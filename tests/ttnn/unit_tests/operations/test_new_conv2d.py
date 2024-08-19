@@ -165,8 +165,6 @@ def run_conv(
 
     # torch_output_tensor is in row major layout and NHWC shape
     # NHWC to NCHW
-    print(torch_output_tensor.shape)
-    print(torch_output_tensor[0, 0, 0:10, :])
     torch_output_tensor = torch_output_tensor.reshape(batch_size, out_height, out_width, output_channels)
     torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
 

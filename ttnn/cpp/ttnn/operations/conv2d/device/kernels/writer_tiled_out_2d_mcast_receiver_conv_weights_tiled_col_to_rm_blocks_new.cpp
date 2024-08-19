@@ -82,8 +82,9 @@ void kernel_main() {
     // mcast args
     uint32_t weights_mcast_sender_noc_x           = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_sender_noc_y           = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
+
+    uint32_t weights_mcast_sender_semaphore_addr    = get_semaphore(get_arg_val<uint32_t>(i)); i+=1;
+    uint32_t weights_mcast_receiver_semaphore_addr  = get_semaphore(get_arg_val<uint32_t>(i)); i+=1;
     uint32_t out_aligned_page_size                  = get_arg_val<uint32_t>(i); i+=1;
 
     volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
@@ -108,12 +109,6 @@ void kernel_main() {
     uint32_t out_block_w_start_tile_id = out_start_tile_id;
     uint32_t out_block_w_start_tile_id_w = out_start_tile_id_w;
     uint32_t weight_start_tile_id = out_start_tile_id_w;
-    /*DPRINT << "weight receiver out_num_blocks_w = " << out_num_blocks_w << ENDL();*/
-    /*DPRINT << "weight receiver out_num_blocks_h = " << out_num_blocks_h << ENDL();*/
-    /*DPRINT << "weight receiver out_num_blocks_h = " << out_num_blocks_h << ENDL();*/
-    /*DPRINT << "weight receiver out_num_blocks_h = " << out_num_blocks_h << ENDL();*/
-    /*DPRINT << "weight receiver out_num_blocks_h = " << out_num_blocks_h << ENDL();*/
-    /*DPRINT << "weight receiver weight_block_height_num_outer = " << weight_block_height_num_outer << ENDL();*/
     int temp = 0;
     for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
         uint32_t out_block_h_start_tile_id = out_block_w_start_tile_id;

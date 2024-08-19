@@ -22,7 +22,6 @@ inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uin
 }
 #endif
 
-int temp = 0;
 FORCE_INLINE
 void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr, const uint32_t reader_channel_idx,
         const uint32_t conv_act_c_read_bytes, const uint32_t coalesced_read_bytes, const uint32_t stride_h_bytes) {
@@ -32,12 +31,6 @@ void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr,
     #pragma GCC unroll unroll_factor
     for (uint32_t inner = 0; inner < WINDOW_INNER; inner++) {
         noc_async_read_one_packet_with_state<true>(act_l1_read_addr_plus_offset, l1_write_addr_act);
-        if(temp < 10) {
-            /*DPRINT << "stride h bytes = " << stride_h_bytes << ENDL();*/
-            /*DPRINT << "window inner = " << WINDOW_INNER << ENDL();*/
-            /*print_pages(act_l1_read_addr_plus_offset,coalesced_read_bytes/2 ,1);*/
-            temp++;
-        }
         l1_write_addr_act += coalesced_read_bytes;
         // +2 is hard-coded, TODO: generalize
         act_l1_read_addr_plus_offset += stride_h_bytes;
@@ -96,7 +89,6 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_valid_addr_ptr = &l1_array[0];
     act_mcast_sender_semaphore_valid_addr_ptr[0] = 1; // Load const 1 to be used as semaphore valid value sent from sender to receivers
     uint32_t act_mcast_sender_semaphore_valid_addr = reinterpret_cast<uint32_t>(&l1_array[0]);
-
     // Set up remote VALID value
     volatile tt_l1_ptr uint32_t* act_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(act_mcast_receiver_semaphore_addr);
     noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, VALID);
@@ -117,11 +109,7 @@ void kernel_main() {
 
     // TODO: need to make the read coalescing optimization cleaner
     // currently works for the case of num_coalesced_reads == weight_size_w since these reads are contiguous on both src/dst side
-    /*DPRINT << "weight_size_w = " << weight_size_w << ENDL();*/
-    /*DPRINT << "conv_act_c_read_bytes = " << conv_act_c_read_bytes << ENDL();*/
-    /*DPRINT << "conv_act_size_w = " << conv_act_size_w << ENDL();*/
     constexpr uint32_t coalesced_read_bytes = weight_size_w * conv_act_c_read_bytes;
-    /*DPRINT << "coalesced_read_bytes = " << coalesced_read_bytes << ENDL();*/
 
 
     // Fully create act matrix and tilize it before mcast
@@ -131,8 +119,6 @@ void kernel_main() {
 
     // Reset reader_idx to finish act_block_h_datums
     uint32_t reader_idx = 0;
-    /*DPRINT << "act_num_blocks_h = " << act_num_blocks_h << ENDL();*/
-    /*DPRINT << "act_w_num_outer = " << act_w_num_outer << ENDL();*/
     for (uint32_t nbh = 0; nbh < act_num_blocks_h; nbh++) {
         cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
         uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
