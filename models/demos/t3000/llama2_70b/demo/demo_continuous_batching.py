@@ -256,6 +256,8 @@ def run_decode(
     # breakpoint()
     MAX_GEN_LENGTH = 180
 
+    # TODO: associate a user with a global user index
+
     while True:
         logger.info(f"Current batch valid: {batch_valid}")
         logger.info(f"Current batch token indices: {batch_token_indices}")
@@ -283,6 +285,7 @@ def run_decode(
             # What is the shape of tokens_tensor???
             breakpoint()
             logger.info(f"Decoding batch with indices {batch_token_indices}")
+            # TODO: call model.decode? Is it switching model_configs correctly?
             logits = model.forward(tokens_tensor, indices_tensor)
             next_logits = logits[:, -1, :]  # batch, vocab of last token
             next_token = sampling_func(next_logits)
@@ -294,10 +297,18 @@ def run_decode(
                     batch_token_outputs[i].append(next_token[i].item())
                     batch_token_indices[i] += 1
 
-                if batch_token_indices[i] > MAX_GEN_LENGTH:
-                    logger.info(f"User {i} has reached max gen length. Removing from batch.")
-                    batch_valid[i] = False
-                    batch_token_inputs[i] = None
+                    if batch_token_indices[i] > MAX_GEN_LENGTH:
+                        logger.info(f"User {i} has reached max gen length. Removing from batch.")
+                        # TODO: Print user output or save it somewhere
+                        batch_valid[i] = False
+                        batch_token_inputs[i] = 0
+                        batch_token_indices[i] = 0
+                        batch_token_outputs[i] = None
+                        batch_prompt_text[i] = None
+
+        else:
+            logger.info("All users have finished. Exiting.")
+            break
 
             # update output tokens
 
