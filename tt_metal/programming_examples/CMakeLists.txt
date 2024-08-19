@@ -12,6 +12,11 @@ set(PROGRAMMING_EXAMPLES_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multicore_reuse/matmul_multicore_reuse.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul_single_core/matmul_single_core.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/multicast/multicast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/one_to_one_datastream/one_to_one_datastream.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/one_to_one_datastream_2kernels/one_to_one_datastream_2kernels.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/one_to_one_datastream_2kernels_2cores/one_to_one_datastream_2kernels_2cores.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/one_to_one_datastream_3kernels_evenodd/one_to_one_datastream_3kernels_evenodd.cpp
 )
 
 include(${PROJECT_SOURCE_DIR}/cmake/helper_functions.cmake)

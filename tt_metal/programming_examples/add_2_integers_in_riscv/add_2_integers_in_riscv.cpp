@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "host_api.hpp"
-#include "impl/device/device.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 using namespace tt;
 using namespace tt::tt_metal;
 
 int main(int argc, char **argv) {
+
+    /* Get device type (ie. grayskull, wormhole, etc)*/
+    const char* arch_name = std::getenv("ARCH_NAME");
+    std::string archName(arch_name);
 
     /* Silicon accelerator setup */
     Device *device = CreateDevice(0);
@@ -19,26 +22,24 @@ int main(int argc, char **argv) {
     constexpr CoreCoord core = {0, 0};
 
     constexpr uint32_t single_tile_size = 2 * 1024;
-    InterleavedBufferConfig dram_config{
+    tt_metal::InterleavedBufferConfig dram_config{
                 .device= device,
                 .size = single_tile_size,
                 .page_size = single_tile_size,
-                .buffer_type = BufferType::DRAM
+                .buffer_type = tt_metal::BufferType::DRAM
     };
 
-    std::shared_ptr<Buffer> src0_dram_buffer = CreateBuffer(dram_config);
-    std::shared_ptr<Buffer> src1_dram_buffer = CreateBuffer(dram_config);
-    std::shared_ptr<Buffer> dst_dram_buffer = CreateBuffer(dram_config);
+    std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(dram_config);
+    std::shared_ptr<tt::tt_metal::Buffer> src1_dram_buffer = CreateBuffer(dram_config);
+    std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_config);
 
-    auto src0_dram_noc_coord = src0_dram_buffer->noc_coordinates();
-    auto src1_dram_noc_coord = src1_dram_buffer->noc_coordinates();
-    auto dst_dram_noc_coord = dst_dram_buffer->noc_coordinates();
-    uint32_t src0_dram_noc_x = src0_dram_noc_coord.x;
-    uint32_t src0_dram_noc_y = src0_dram_noc_coord.y;
-    uint32_t src1_dram_noc_x = src1_dram_noc_coord.x;
-    uint32_t src1_dram_noc_y = src1_dram_noc_coord.y;
-    uint32_t dst_dram_noc_x = dst_dram_noc_coord.x;
-    uint32_t dst_dram_noc_y = dst_dram_noc_coord.y;
+    /* DRAM NOC coordinates, depending on architecture.  Default is grayskull as initialized below. */
+    uint32_t dram_noc_x = 1;
+    uint32_t dram_noc_y = 0;
+    if (archName == "wormhole") {
+        dram_noc_x = 0;
+        dram_noc_y = 11;
+    }
 
     /* Create source data and write to DRAM */
     std::vector<uint32_t> src0_vec(1, 14);
@@ -64,19 +65,7 @@ int main(int argc, char **argv) {
         DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
 
     /* Configure program and runtime kernel arguments, then execute */
-    SetRuntimeArgs(program, binary_reader_kernel_id, core, 
-        {
-            src0_dram_buffer->address(), 
-            src1_dram_buffer->address(), 
-            dst_dram_buffer->address(),
-            src0_dram_noc_x, 
-            src0_dram_noc_y,
-            src1_dram_noc_x, 
-            src1_dram_noc_y,
-            dst_dram_noc_x, 
-            dst_dram_noc_y,
-        }
-    );
+    SetRuntimeArgs(program, binary_reader_kernel_id, core, {dram_noc_x, dram_noc_y, src0_dram_buffer->address(), src1_dram_buffer->address(), dst_dram_buffer->address()});
 
     EnqueueProgram(cq, program, false);
     Finish(cq);
