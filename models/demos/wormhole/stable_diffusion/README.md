@@ -30,9 +30,9 @@ Use `pytest --disable-warnings --input-path="models/demos/wormhole/stable_diffus
 
 If you wish to run the demo with a different input use `pytest --disable-warnings --input-path="<address_to_your_json_file.json>" models/demos/wormhole/stable_diffusion/demo/demo.py::test_demo`.
 
-If you would like to run an interactive demo which will prompt you for input via a web interface, use `python models/demos/wormhole/stable_diffusion/demo/web_demo/web_demo.py`.
-
 If you would like to run an interactive demo which will prompt you for input via command-line interface, use `pytest models/demos/wormhole/stable_diffusion/demo/demo.py::test_interactive_demo`.
+
+If you would like to run an interactive demo which will prompt you for input via a web interface, refer to the instructions in this README: `models/demos/wormhole/stable_diffusion/demo/web_demo/README.md`.
 
 Our second demo is designed to run poloclub/diffusiondb dataset, run this with `pytest --disable-warnings models/demos/wormhole/stable_diffusion/demo/demo.py::test_demo_diffusiondb`.
 
