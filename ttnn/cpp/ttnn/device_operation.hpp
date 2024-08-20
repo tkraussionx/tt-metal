@@ -294,7 +294,7 @@ void launch_on_worker_thread(auto cq_id, auto operation_id, const auto& operatio
 
         op_profiler::tracy_message("`TT_SIGNPOST: check_program_cache_hit_start`");
         auto program_cache_hit = program_cache.contains(program_hash);
-        op_profiler::tracy_message("`TT_SIGNPOST: check_program_cache_hit_start`");
+        op_profiler::tracy_message("`TT_SIGNPOST: check_program_cache_hit_end`");
 
         log_operation<device_operation_t>(operation_attributes, tensor_args, program_hash, program_cache_hit);
 
