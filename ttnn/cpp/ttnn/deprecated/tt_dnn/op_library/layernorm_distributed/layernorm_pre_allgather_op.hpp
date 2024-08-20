@@ -6,7 +6,7 @@
 
 #include <optional>
 
-#include "ttnn/deprecated/tt_dnn/op_library/compute_kernel_config.hpp"
+#include "ttnn/operations/core/compute_kernel/compute_kernel_config.hpp"
 #include "ttnn/run_operation.hpp"
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/operations/core/core.hpp"
@@ -26,13 +26,13 @@ operation::ProgramWithCallbacks layernorm_pre_allgather_multi_core(
     const Tensor &a,
     Tensor& output,
     LayerNormType norm_type,
-    DeviceComputeKernelConfig compute_kernel_config);
+    ttnn::DeviceComputeKernelConfig compute_kernel_config);
 
 
 
 struct LayerNormPreAllGather {
     LayerNormType norm_type;
-    const DeviceComputeKernelConfig compute_kernel_config;
+    const ttnn::DeviceComputeKernelConfig compute_kernel_config;
     const DataType output_dtype;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
@@ -52,7 +52,7 @@ template <LayerNormType layernorm_type>
 struct make_layernorm_pre_allgather {
     Tensor operator()(
         const Tensor& a,
-        std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
+        std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
         const DataType output_dtype = DataType::BFLOAT16) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
         operation::launch_op(

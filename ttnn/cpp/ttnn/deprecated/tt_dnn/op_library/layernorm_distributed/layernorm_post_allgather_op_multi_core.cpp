@@ -36,7 +36,7 @@ operation::ProgramWithCallbacks layernorm_post_allgather_multi_core(
     Tensor& output,
     LayerNormType norm_type,
     float eps,
-    DeviceComputeKernelConfig compute_kernel_config
+    ttnn::DeviceComputeKernelConfig compute_kernel_config
 ) {
     const bool is_rmsnorm = norm_type == LayerNormType::RMSNORM;
     const auto shape = a.get_legacy_shape();
@@ -82,12 +82,12 @@ operation::ProgramWithCallbacks layernorm_post_allgather_multi_core(
 
     std::visit([&](auto&& compute_kernel_config) {
         using T = std::decay_t<decltype(compute_kernel_config)>;
-        if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
+        if constexpr (std::is_same_v<T, ttnn::GrayskullComputeKernelConfig>) {
             TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
             math_fidelity = compute_kernel_config.math_fidelity;
             math_approx_mode = compute_kernel_config.math_approx_mode;
             fp32_dest_acc_en = false;
-        } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
+        } else if constexpr (std::is_same_v<T, ttnn::WormholeComputeKernelConfig>) {
             TT_ASSERT(ttnn::device::is_wormhole_or_blackhole(device->arch()), "kernel config is not for wormhole_b0 or blackhole");
             math_fidelity = compute_kernel_config.math_fidelity;
             math_approx_mode = compute_kernel_config.math_approx_mode;

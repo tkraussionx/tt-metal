@@ -6,7 +6,7 @@
 
 #include <optional>
 
-#include "ttnn/deprecated/tt_dnn/op_library/compute_kernel_config.hpp"
+#include "ttnn/operations/core/compute_kernel/compute_kernel_config.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/layernorm_distributed/layernorm_pre_allgather_op.hpp"
 #include "ttnn/run_operation.hpp"
 #include "ttnn/tensor/tensor.hpp"
@@ -26,7 +26,7 @@ operation::ProgramWithCallbacks layernorm_post_allgather_multi_core(
     Tensor& output,
     LayerNormType norm_type,
     float eps,
-    DeviceComputeKernelConfig compute_kernel_config);
+    ttnn::DeviceComputeKernelConfig compute_kernel_config);
 
 
 
@@ -35,7 +35,7 @@ struct LayerNormPostAllGather {
     float eps;
     MemoryConfig output_mem_config;
     // LayerNormProgramConfig program_config;
-    const DeviceComputeKernelConfig compute_kernel_config;
+    const ttnn::DeviceComputeKernelConfig compute_kernel_config;
 
     void validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -63,7 +63,7 @@ struct make_layernorm_post_allgather {
         std::optional<const Tensor> beta = std::nullopt,
         const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         // const LayerNormProgramConfig& program_config = LayerNormDefaultProgramConfig{},
-        std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
+        std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
         log_debug("layernorm_post_allgather: before launch_op");
         operation::launch_op(
