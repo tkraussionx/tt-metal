@@ -44,7 +44,7 @@ def bert_attention(
         key,
         memory_config=ttnn.L1_MEMORY_CONFIG,
         dtype=ttnn.bfloat16,
-        core_grid=ttnn.CoreGrid(y=batch_size, x=num_cores_x),
+        # core_grid=ttnn.CoreGrid(y=batch_size, x=num_cores_x),
     )
     ttnn.deallocate(query)
     ttnn.deallocate(key)
