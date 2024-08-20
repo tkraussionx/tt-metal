@@ -1,4 +1,4 @@
-[submodule "tt_metal/third_party/sfpi"]
+[submodule "src/ckernels/sfpi"]
 	path = tt_metal/third_party/sfpi
 	url = https://github.com/tenstorrent-metal/sfpi-rel-temp.git
 [submodule "third_party/pybind11"]
