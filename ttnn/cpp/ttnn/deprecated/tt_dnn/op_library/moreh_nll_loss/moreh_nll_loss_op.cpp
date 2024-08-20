@@ -212,7 +212,7 @@ Tensor moreh_nll_loss_step1(
     const DataType output_dtype,
     const uint32_t channel_size,
     const MemoryConfig& output_mem_config,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+    std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config) {
     auto device = target_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
@@ -257,7 +257,7 @@ Tensor moreh_nll_loss_step2(
     const int32_t ignore_index,
     const bool reduction_mean,
     const MemoryConfig& output_mem_config,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+    std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config) {
     auto device = input_tensor.device();
     auto grid_coord = device->compute_with_storage_grid_size();
     const CoreRange all_cores({0, 0}, {grid_coord.x - 1, grid_coord.y - 1});
@@ -301,7 +301,7 @@ Tensor moreh_nll_loss(
     const int32_t ignore_index,
     const bool reduction_mean,
     const MemoryConfig& output_mem_config,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+    std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config) {
     if (reduction_mean) {
         TT_ASSERT(divisor_tensor.has_value());
 
