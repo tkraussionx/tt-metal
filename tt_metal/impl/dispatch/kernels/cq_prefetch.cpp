@@ -115,7 +115,7 @@ bool process_cmd(uint32_t& cmd_ptr,
                  uint32_t& downstream_data_ptr,
                  uint32_t& stride);
 
-FORCE_INLINE
+// FORCE_INLINE
 void write_downstream(uint32_t& data_ptr,
                       uint32_t& downstream_data_ptr,
                       uint32_t length) {
@@ -135,7 +135,7 @@ void write_downstream(uint32_t& data_ptr,
 }
 
 // If prefetcher must stall after this fetch, wait for data to come back, and move to stalled state.
-FORCE_INLINE
+// FORCE_INLINE
 void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence, uint32_t& cmd_ptr) {
     noc_async_read_barrier();
     if (fence < cmd_ptr) {
@@ -147,7 +147,7 @@ void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence, uint32_t& c
 }
 
 template<uint32_t preamble_size>
-FORCE_INLINE
+// FORCE_INLINE
 uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_rd_ptr,
                     uint32_t& fence,
                     uint32_t& pcie_read_ptr,
@@ -591,7 +591,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
 
     InterleavedAddrGen<is_dram> addr_gen{.bank_base_address = base_addr, .page_size = page_size};
 
-    uint32_t ring_db_slot_size = 2 * page_size;
+    uint32_t ring_db_slot_size = 16 * page_size;
     uint32_t num_slots = scratch_db_size / ring_db_slot_size;
     num_slots = (num_slots > 32) ? 32 : num_slots;
     uint32_t ring_db_size = num_slots * ring_db_slot_size;
@@ -624,7 +624,6 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
         cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
         amt_to_write -= ring_db_slot_size;
         if (read_length != 0) {
-            cq_noc_set_read_txn_id(write_slot);
             amt_to_read = (ring_db_slot_size > read_length) ? read_length : ring_db_slot_size;
             amt_read = 0;
             ring_db_read_addr = ring_db_write_addr;
@@ -632,6 +631,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
             noc_async_writes_flushed();
             while (amt_to_read >= page_size) {
                 uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
+                cq_noc_set_read_txn_id(write_slot);
                 cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, write_slot);
                 ring_db_read_addr += page_size;
                 page_id++;

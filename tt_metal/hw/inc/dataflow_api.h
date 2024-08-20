@@ -1924,12 +1924,22 @@ void noc_async_read_tile_dram_sharded_set_trid(uint32_t trid = 0) {
     DEBUG_STATUS("NSTD");
 }
 
+
+inline void RISC_POST_STATUS_CQ(uint32_t status) {
+    volatile uint32_t *ptr = (volatile uint32_t *)(0xFFB2010C);
+    ptr[0] = status;
+}
+
 FORCE_INLINE
 void noc_async_read_barrier_with_trid(uint32_t trid) {
     DEBUG_STATUS("NBTW");
     #ifndef ARCH_GRAYSKULL
-    while (!ncrisc_noc_read_with_transaction_id_flushed(noc_index, trid))
-        ;
+    while (!ncrisc_noc_read_with_transaction_id_flushed(noc_index, trid)) {
+        uint32_t outstanding_reads = NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid));
+        uint32_t offset = (noc_index << NOC_INSTANCE_OFFSET_BIT) + NOC_STATUS(NIU_MST_REQS_OUTSTANDING_ID(trid));
+        RISC_POST_STATUS_CQ(offset);
+    }
+    RISC_POST_STATUS_CQ(0xddddd);
     #endif
     DEBUG_STATUS("NBTD");
 }
