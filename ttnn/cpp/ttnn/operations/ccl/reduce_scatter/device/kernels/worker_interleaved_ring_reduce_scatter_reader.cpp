@@ -100,16 +100,24 @@ constexpr bool src_is_dram = get_compile_time_arg_val(1) == 1;
 static constexpr tt::tt_metal::TensorMemoryLayout input_tensor_memory_layout =
     static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(2));
 
+/*
+* Readback accumulation is a mode that may be enabled for line reductions. This
+* option tells the worker that it must perform a second pass of the data and
+* and emit to the output tensor again:
+* The first pass would be a partial accumulated for a given direction (in a line reduce-scatter)
+* and the second one would be to accumulate that  b
+*/
+constexpr bool perform_readback_accumulation = get_compile_time_arg_val(3) != 0;
 // TODO: clean this up
 #ifdef SHARDED_MEM_LAYOUT
 static constexpr bool is_sharded_mode = true;
-static constexpr uint32_t input_tensor_shard_grid_height = get_compile_time_arg_val(3);
-static constexpr uint32_t input_tensor_shard_grid_width = get_compile_time_arg_val(4);
-static constexpr uint32_t input_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(5);
-static constexpr uint32_t input_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(6);
-static constexpr uint32_t input_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(7);
-static constexpr uint32_t input_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(8);
-static constexpr bool input_tensor_shard_grid_transposed = get_compile_time_arg_val(9) != 0;
+static constexpr uint32_t input_tensor_shard_grid_height = get_compile_time_arg_val(4);
+static constexpr uint32_t input_tensor_shard_grid_width = get_compile_time_arg_val(5);
+static constexpr uint32_t input_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(6);
+static constexpr uint32_t input_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(7);
+static constexpr uint32_t input_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(8);
+static constexpr uint32_t input_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(9);
+static constexpr bool input_tensor_shard_grid_transposed = get_compile_time_arg_val(10) != 0;
 #else
 static constexpr bool is_sharded_mode = false;
 static constexpr uint32_t input_tensor_shard_grid_height = 0;
@@ -207,9 +215,27 @@ advance_to_next_transfer_slice_result_t advance_to_next_transfer_slice(
     }
 }
 
+template <bool connected_to_producer>
+struct signal_receiver {
+    volatile uint32_t * noc_semaphore_address;
+
+    FORCE_INLINE static signal_receiver build(std::size_t arg_idx) {
+        if constexpr (connected_to_producer) {
+            return {reinterpret_cast<volatile uint32_t*>(get_semaphore(get_arg_val<uint32_t>(arg_idx)))};
+        } else {
+            return {0};
+        }
+    }
+
+    FORCE_INLINE void wait_main(uint32_t count) const {
+        if constexpr (connected_to_producer) {
+            noc_semaphore_wait_min(noc_semaphore_address, count);
+        }
+    }
+};
+
+
 void kernel_main() {
-
-
     uint32_t arg_idx = 0;
 
     constexpr uint32_t to_dm_sender_short_circuit_cb = tt::CB::c_out1;
@@ -218,6 +244,8 @@ void kernel_main() {
     auto args = reduce_scatter_reader_common_args_t(arg_idx, get_dataformat(cb_id_in0));
 
     auto s = build_source_address_generator<input_tensor_memory_layout, src_is_dram>(arg_idx, args);
+
+    auto output_partial_signal_ready_receiver = signal_receiver<perform_readback_accumulation>::build(arg_idx);
 
     ASSERT(args.half_cb_n_pages >= args.full_chunk_num_pages);
 
@@ -318,7 +346,7 @@ void kernel_main() {
                 uint32_t n_pages = std::min(args.full_chunk_num_pages, worker_slice_n_pages - p);
                 ASSERT(n_pages > 0);
                 // Fetch from input tensor
-
+                if (output_partial_signal_ready_receiver)
                 read_wrapped_chunk_from_output_tensor(
                     curr_tile_id,
                     offset_into_worker_slice,

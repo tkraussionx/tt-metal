@@ -69,6 +69,21 @@ struct ReduceScatterWorkerArgBuilder {
         uint32_t worker_index,
         bool is_clockwise) const;
 
+    std::vector<uint32_t> generate_line_start_sender_kernel_rt_args(
+        ttnn::ccl::WorkerXY edm_core,
+        uint32_t edm_core_semaphore_address,
+        uint32_t edm_core_buffer_address,
+        uint32_t link,
+        uint32_t worker_index,
+        bool is_clockwise) const;
+
+    std::vector<uint32_t> generate_line_start_sender_kernel_ct_args(
+        ttnn::ccl::WorkerXY edm_core,
+        uint32_t edm_core_semaphore_address,
+        uint32_t edm_core_buffer_address,
+        uint32_t link,
+        uint32_t worker_index,
+        bool is_clockwise) const;
 
     tt::tt_metal::Device const*device;
     ttnn::ccl::RingTopology const topology_config;
