@@ -70,8 +70,7 @@ std::vector<uint32_t> ReduceScatterWorkerArgBuilder::generate_receiver_kernel_ct
     auto args = std::vector<uint32_t>{
         static_cast<uint32_t>(this->op_config.is_input_sharded() ? 1 : 0),
         static_cast<uint32_t>(
-            this->op_config.get_input_tensor(0).memory_config().buffer_type == BufferType::DRAM ? 1 : 0),
-            static_cast<uint32_t>(perform_readback_accumulation ? 1 : 0)
+            this->op_config.get_input_tensor(0).memory_config().buffer_type == BufferType::DRAM ? 1 : 0)
             };
 
     std::size_t i = 0;
@@ -179,8 +178,7 @@ std::vector<uint32_t> ReduceScatterWorkerArgBuilder::generate_sender_kernel_ct_a
     auto args = std::vector<uint32_t>{
         static_cast<uint32_t>(this->op_config.is_input_sharded() ? 1 : 0),
         static_cast<uint32_t>(
-            this->op_config.get_output_tensor(0).memory_config().buffer_type == BufferType::DRAM ? 1 : 0),
-            static_cast<uint32_t>(signal_reader_on_output_tensor_partial_writes ? 1 : 0)
+            this->op_config.get_output_tensor(0).memory_config().buffer_type == BufferType::DRAM ? 1 : 0)
             };
 
     std::size_t i = 0;
@@ -237,11 +235,6 @@ std::vector<uint32_t> ReduceScatterWorkerArgBuilder::generate_sender_kernel_rt_a
 
         total_num_math_pages};
 
-    if (signal_reader_on_output_tensor_partial_writes) {
-        args.push_back(static_cast<uint32_t>(reader_noc_x));
-        args.push_back(static_cast<uint32_t>(reader_noc_y));
-        args.push_back(static_cast<uint32_t>(reader_semaphore_id));
-    }
 
     std::size_t i = 0;
     log_trace(tt::LogOp, "Reduce Scatter Sender Worker RT Args:");
