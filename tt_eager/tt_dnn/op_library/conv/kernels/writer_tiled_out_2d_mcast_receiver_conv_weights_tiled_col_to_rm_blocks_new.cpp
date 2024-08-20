@@ -5,7 +5,7 @@
 #include "dataflow_api.h"
 
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 
 #if ENABLE_DEBUG
 #include "debug/dprint.h"
@@ -83,6 +83,7 @@ void kernel_main() {
     uint32_t weights_mcast_sender_noc_y           = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t out_aligned_page_size                  = get_arg_val<uint32_t>(i); i+=1;
 
     volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
     uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
@@ -177,12 +178,16 @@ void kernel_main() {
                 uint32_t src_cb_addr = get_read_ptr(untilized_padded_out_cb);
                 DPRINT << "src_cb_addr: " << src_cb_addr << ENDL();
                 DPRINT << "Done waiting for out_block_width_ntiles: " << out_block_width_ntiles << ENDL();
+                uint32_t temp = dst_cb_addr;
                 for (uint32_t r = 0; r < 32; r++) {
                     noc_async_read(get_noc_addr(src_cb_addr), dst_cb_addr, out_block_width_bytes);
                     noc_async_read_barrier();
                     src_cb_addr += out_block_width_padded_bytes;
-                    dst_cb_addr += out_block_width_bytes;
+                    /*dst_cb_addr += out_block_width_bytes;*/
+                    dst_cb_addr += out_aligned_page_size;
                 }
+                print_pages(temp, out_aligned_page_size*16, 1);
+                cb_pop_front(untilized_padded_out_cb, out_block_width_ntiles);
             }
         }
     }

@@ -71,9 +71,22 @@ def run_conv(
     conv_weight_shape = [output_channels, input_channels // groups, filter_height, filter_width]
     conv_bias_shape = [1, 1, 1, output_channels]
     torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
+    # torch_input_tensor_nchw = torch.ones(conv_input_shape, dtype=torch.bfloat16).float()
+    # for i in range(0, batch_size):
+    #     for j in range(0, input_channels):
+    #         for k in range(0, input_height):
+    #             for l in range(0, input_width):
+    #                 torch_input_tensor_nchw[i, j, k, l] = 0.01
+
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
     torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
-    torch_bias_tensor = torch.zeros(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
+    # torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
+    # for i in range(0, output_channels):
+    #     for j in range(0, input_channels):
+    #         for k in range(0, filter_height):
+    #             for l in range(0, filter_width):
+    #                 torch_weight_tensor[i, j, k, l] = 1
+    torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
     torch_out_golden_tensor = torch.nn.functional.conv2d(
         torch_input_tensor_nchw,
         torch_weight_tensor,
@@ -145,9 +158,13 @@ def run_conv(
 
     # torch_output_tensor is in row major layout and NHWC shape
     # NHWC to NCHW
+    # nilay
     torch_output_tensor = torch_output_tensor.reshape(batch_size, out_height, out_width, output_channels)
     torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
     reader_patterns_cache.clear()
+    torch.set_printoptions(threshold=10_000)
+    # print(torch_output_tensor[0,0,:,:])
+    # print(torch_out_golden_tensor[0,0,:,:])
 
     if not fp32_accum:
         pcc = 0.995

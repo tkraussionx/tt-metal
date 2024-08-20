@@ -5,7 +5,7 @@
 #include "dataflow_api.h"
 
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 
 #if ENABLE_DEBUG
 #include "debug/dprint.h"
@@ -91,6 +91,7 @@ void kernel_main() {
     uint32_t weights_mcast_num_cores                = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t out_aligned_page_size                  = get_arg_val<uint32_t>(i); i+=1;
 
     #ifndef SKIP_MCAST
         // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
@@ -184,6 +185,8 @@ void kernel_main() {
                 //DPRINT << "Initiated read for weights" << ENDL();
                 noc_async_read_barrier();
                 //DPRINT << "Read weights" << ENDL();
+                /*DPRINT << "out_aligned_page_size = " << out_aligned_page_size << ENDL();*/
+                /*print_pages(get_write_ptr(cb_id_weight), 32*9, 10);*/
                 #ifndef SKIP_MCAST
                     // wait until all weights mcast destinations have atomically incremented the weights semaphore_addr (i.e. its value should be weights_mcast_num_dests), then reset
                     // the semaphore_addr value back to zero for the next block
@@ -289,12 +292,16 @@ void kernel_main() {
                 uint32_t src_cb_addr = get_read_ptr(untilized_padded_out_cb);
                 DPRINT << "src_cb_addr: " << src_cb_addr << ENDL();
                 DPRINT << "Done waiting for out_block_width_ntiles: " << out_block_width_ntiles << ENDL();
+                uint32_t temp = dst_cb_addr;
                 for (uint32_t r = 0; r < 32; r++) {
                     noc_async_read(get_noc_addr(src_cb_addr), dst_cb_addr, out_block_width_bytes);
                     noc_async_read_barrier();
                     src_cb_addr += out_block_width_padded_bytes;
-                    dst_cb_addr += out_block_width_bytes;
+                    /*dst_cb_addr += out_block_width_bytes;*/
+                    dst_cb_addr += out_aligned_page_size;
                 }
+                /*print_pages(temp, out_aligned_page_size*16, 1);*/
+                cb_pop_front(untilized_padded_out_cb, out_block_width_ntiles);
             }
         }
     }

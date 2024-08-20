@@ -221,6 +221,13 @@ class Buffer {
 
     uint64_t page_address(uint32_t bank_id, uint32_t page_index) const;
 
+
+    uint32_t alignment() const { return std::max(32, 16); }
+
+
+    uint32_t align(uint32_t addr, uint32_t alignment) const  { return ((addr - 1) | (alignment - 1)) + 1; }
+    uint32_t aligned_page_size() const { return align((uint32_t)page_size_, this->alignment());}
+
     // SHARDED API STARTS HERE
     // TODO: WILL SEPARATE INTO SHARDED BUFFER CLASS
 

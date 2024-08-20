@@ -2037,8 +2037,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
         TT_FATAL(block_sharded, "Need to handle this case for non-sliced weights");
         TT_FATAL(untilize_out, "Cannot support non-tile multiple shard width with tilized output");
         writer_compile_time_args.push_back(per_core_out_matrix_width_ntiles);
-        writer_compile_time_args.push_back(per_core_out_matrix_width_ntiles * TILE_WIDTH);
-        writer_compile_time_args.push_back(parallelization_config.per_core_out_matrix_width);
+        writer_compile_time_args.push_back(per_core_out_matrix_width_ntiles * TILE_WIDTH * 2);
+        writer_compile_time_args.push_back(parallelization_config.per_core_out_matrix_width * 2);
         writer_compile_time_args.push_back(untilized_padded_out_cb);
         writer_defines["UNPAD_UNTILIZE_OUT"] = 1;
         writer_mcast_sender_defines["UNPAD_UNTILIZE_OUT"] = 1;
@@ -2276,6 +2276,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
                     writer_rt_args.push_back(num_cores_x - 1);  // weights_mcast_num_cores
                     writer_rt_args.push_back(weights_mcast_sender_semaphore);
                     writer_rt_args.push_back(weights_mcast_receiver_semaphore);
+                    writer_rt_args.push_back(output.buffer()->aligned_page_size());
 
                     SetRuntimeArgs(program, writer_mcast_sender_id, core, writer_rt_args);
                 } else {
@@ -2284,6 +2285,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
                     writer_rt_args.push_back(right_core_physical.y);     // weights_mcast_sender_noc_y
                     writer_rt_args.push_back(weights_mcast_sender_semaphore);
                     writer_rt_args.push_back(weights_mcast_receiver_semaphore);
+                    writer_rt_args.push_back(output.buffer()->aligned_page_size());
 
                     SetRuntimeArgs(program, writer_mcast_receiver_id, core, writer_rt_args);
                 }

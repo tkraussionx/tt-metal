@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 
 #if ENABLE_DEBUG
 #include "debug/dprint.h"
@@ -26,7 +26,7 @@ FORCE_INLINE
 void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr, const uint32_t reader_channel_idx,
         const uint32_t conv_act_c_read_bytes, const uint32_t coalesced_read_bytes, const uint32_t stride_h_bytes, const uint32_t extra_align_bytes) {
 
-    constexpr uint32_t unroll_factor = WINDOW_INNER;
+    constexpr uint32_t unroll_factor = WINDOW_INNER;;
     uint32_t act_l1_read_addr_plus_offset = act_l1_read_addr + (reader_channel_idx * conv_act_c_read_bytes);
     #pragma GCC unroll unroll_factor
     for (uint32_t inner = 0; inner < WINDOW_INNER; inner++) {
@@ -35,6 +35,7 @@ void read_channels(uint32_t& l1_write_addr_act, const uint32_t act_l1_read_addr,
         act_l1_read_addr_plus_offset += stride_h_bytes;
     }
     l1_write_addr_act += extra_align_bytes;
+    /*print_pages(l1_write_addr_act-3*coalesced_read_bytes-extra_align_bytes, 3*coalesced_read_bytes/2 + extra_align_bytes/2, 1);*/
 }
 
 void kernel_main() {
@@ -71,6 +72,7 @@ void kernel_main() {
     uint32_t act_mcast_dest_noc_end_y   = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_mcast_sender_id        = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_mcast_sender_noc_x     = get_arg_val<uint32_t>(i); i+=1;
+    DPRINT << "extra_align_bytes  = " << act_block_w_extra_align_bytes << ENDL();
 
     volatile tt_l1_ptr uint32_t *act_mcast_sender_noc_y  = (volatile tt_l1_ptr uint32_t*)(get_arg_addr(i));
 
@@ -116,6 +118,7 @@ void kernel_main() {
     // Fully create act matrix and tilize it before mcast
     // set_state uses just x/y from the get_noc_addr, addr is ignored
     uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
+    DPRINT << "coalesced_read_bytes = " << coalesced_read_bytes << ENDL();
     noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), coalesced_read_bytes);
 
     // Reset reader_idx to finish act_block_h_datums
@@ -138,6 +141,8 @@ void kernel_main() {
         // noc_async_read_inc_num_issued(num_issued_reads_per_block); // "false" on read
         noc_async_read_barrier();
         cb_push_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
+        /*print_pages(get_write_ptr(cb_id_act_row_major_bfloat16), 32*9, act_block_h_datums);*/
+        /*print_pages(act_l1_read_addr, 24, 64);*/
 
         // Round robin self-mcast and receive tilized act matrix in cb_id_act
         // Compute should function like regular mm
