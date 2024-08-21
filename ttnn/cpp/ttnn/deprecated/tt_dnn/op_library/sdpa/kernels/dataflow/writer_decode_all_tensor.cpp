@@ -195,7 +195,7 @@ void generate_mask(uint32_t k_num_chunks, uint32_t PSt, uint32_t cur_pos) {
 
 template <uint32_t out_chunk_tiles, uint32_t cb_out, uint32_t cb_out_m, uint32_t cb_out_l, uint32_t cb_intermed_out, uint32_t PNHt>
 void worker_compute(uint64_t in0_sender_semaphore_noc_addr, uint32_t worker_id, uint32_t reduce_core_noc_x, uint32_t reduce_core_noc_y) {
-    // DPRINT << "[Writer Worker] Pushed statistics to copmute" << ENDL();
+    // DPRINT << "[Writer Worker] Pushed statistics to copmute worker" << ENDL();
 
     uint32_t out_tile_id = 0;
 
@@ -255,18 +255,23 @@ void kernel_main() {
 
     // Get cur_pos
     constexpr uint32_t cb_index_id = tt::CB::dataflow0;
+    // DPRINT << "[W] core_num " << core_num << " cur_batch " << cur_batch << ENDL();
+
     cb_wait_front(cb_index_id, 1);
     uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
     const uint32_t cur_pos = index_ptr[cur_batch];
+    // DPRINT << "[W] cur_pos " << cur_pos << ENDL();
+
     // Sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
 
-    tt_l1_ptr uint32_t * all_reducer_noc_x          = (tt_l1_ptr uint32_t*)(get_arg_addr(9));
-    tt_l1_ptr uint32_t * all_reducer_noc_y          = (tt_l1_ptr uint32_t*)(get_arg_addr(9 + B));
+    tt_l1_ptr uint32_t * all_reducer_noc_x          = (tt_l1_ptr uint32_t*)(get_arg_addr(5));
+    tt_l1_ptr uint32_t * all_reducer_noc_y          = (tt_l1_ptr uint32_t*)(get_arg_addr(5 + B));
 
     uint32_t reduce_core_noc_x = all_reducer_noc_x[cur_batch];
     uint32_t reduce_core_noc_y = all_reducer_noc_y[cur_batch];
+    // DPRINT << "[Writer] reduce_core_noc_x " << reduce_core_noc_x << " reduce_core_noc_y " << reduce_core_noc_y << ENDL();
 
     const uint64_t in0_sender_semaphore_noc_addr = get_noc_addr(reduce_core_noc_x, reduce_core_noc_y, semaphore_addr);
 

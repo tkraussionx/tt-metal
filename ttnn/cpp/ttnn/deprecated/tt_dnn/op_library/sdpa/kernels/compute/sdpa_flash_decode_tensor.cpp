@@ -487,9 +487,11 @@ void MAIN {
     // Get cur_pos
     constexpr uint32_t cb_index_id = tt::CB::dataflow0;
     cb_wait_front(cb_index_id, 1);
-    uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
-    volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
-    const uint32_t cur_pos = index_ptr[cur_batch];
+    volatile uint32_t *index_addr_ptr;
+    cb_get_tile(cb_index_id, 0, &index_addr_ptr);
+    uint32_t cur_pos = index_addr_ptr[4+cur_batch];
+    cb_release_tile(cb_index_id);
+
     // Sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
     if (k_chunk_start == k_chunk_end) {
