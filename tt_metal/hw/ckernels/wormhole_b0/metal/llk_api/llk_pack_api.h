@@ -215,7 +215,7 @@ inline void llk_pack_untilize(std::uint32_t block_rt_dim, std::uint32_t output, 
             block_rt*block_ct_dim
         );
 
-        pack_tile_addr += full_ct_dim*cb_interface[output_id].fifo_page_size;
+        pack_tile_addr += full_ct_dim*((std::uint32_t)SCALE_DATUM_SIZE(pack_dst_format[output_id], (num_faces*face_r_dim*FACE_C_DIM)/16));
     }
 }
 
