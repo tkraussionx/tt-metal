@@ -58,7 +58,7 @@ struct make_layernorm_pre_allgather {
         operation::launch_op(
             [compute_kernel_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 const auto& a = input_tensors.at(0);
-                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : ttnn::operations::experimental::auto_format::AutoFormat::GetDefaultDevice()->arch();
                 auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, false, false, false);
                 return operation::run(
                         LayerNormPreAllGather{

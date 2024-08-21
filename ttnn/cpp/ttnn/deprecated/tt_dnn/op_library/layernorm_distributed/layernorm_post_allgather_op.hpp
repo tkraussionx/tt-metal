@@ -74,7 +74,7 @@ struct make_layernorm_post_allgather {
                 const auto& stats = input_tensors.at(1);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
-                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : ttnn::operations::experimental::auto_format::AutoFormat::GetDefaultDevice()->arch();
                 auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, false, false, false);
                 return operation::run(
                         LayerNormPostAllGather{
