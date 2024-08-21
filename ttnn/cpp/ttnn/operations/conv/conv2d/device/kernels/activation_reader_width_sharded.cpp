@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
+#include <cstdint>
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #define ENABLE_DEBUG 0
@@ -88,6 +89,39 @@ uint32_t act_l1_read_addr;
 
 uint32_t reader_idx = 0;
 
+void init_read_sticks(uint32_t num_sticks) {
+    DPRINT<<"Init read sticks "<<num_sticks<<" "<<ENDL();
+
+    remaining_stick_read = num_sticks;
+    reader_idx = 0;
+    cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
+    l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
+}
+
+void read_n_sticks(uint32_t n)
+{
+    DPRINT<<"Reading "<<n<<" sticks"<<ENDL();
+    if(remaining_stick_read == 0) {
+        return;
+    }
+    while(n > 0 && remaining_stick_read > 0) {
+        uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
+        read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices & 0xffff, conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
+        read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices >> 16   , conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
+        n--;
+        remaining_stick_read--;
+        reader_idx++;
+    }
+    if(remaining_stick_read == 0) {
+        //After reading one block, increment the starting read pointer by the width of the block.
+        //Next read uses the next set of channels.
+        act_l1_read_addr +=conv_act_c_read_bytes;
+
+        noc_async_read_barrier();
+        cb_push_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
+    }
+}
+
 void kernel_main() {
 
 
@@ -155,26 +189,12 @@ void kernel_main() {
 
     for(uint32_t block_w_index = 0; block_w_index < act_num_blocks_w; block_w_index++)
     {
-        uint32_t reader_idx = 0;
-        cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
-        uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
-        // DPRINT<<"L1 Write Addr "<<l1_write_addr_act<<"\n";
+
+        init_read_sticks(act_block_h_datums / 2);
+        read_n_sticks(act_block_h_datums / 2);
 
 
-        for (uint32_t bh = 0; bh < act_block_h_datums / 2; bh++) {
-            uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
-            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices & 0xffff, conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
-            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices >> 16   , conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
 
-            reader_idx++;
-        }
-
-        //After reading one block, increment the starting read pointer by the width of the block.
-        //Next read uses the next set of channels.
-        act_l1_read_addr +=conv_act_c_read_bytes;
-
-        noc_async_read_barrier();
-        cb_push_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
 
 
         // Round robin self-mcast and receive tilized act matrix in cb_id_act
@@ -231,7 +251,7 @@ void kernel_main() {
                 noc_semaphore_inc(act_mcast_sender_semaphore_noc_addr, 1);
 
                 // wait on act semaphore value to become VALID (set by mcast sender after it multicasts data)
-
+                DPRINT<<"cb_id_act_row_major_bfloat16 free pages <<"<<(cb_back_get_free_pages(cb_id_act_row_major_bfloat16))<<ENDL();
                 noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
             }
             cb_push_back(cb_id_act, act_block_num_tiles);

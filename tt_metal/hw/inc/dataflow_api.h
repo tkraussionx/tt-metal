@@ -423,7 +423,7 @@ void cb_reserve_back(int32_t operand, int32_t num_pages) {
 }
 
 FORCE_INLINE
-uint32_t cb_back_free_pages(int32_t operand) {
+uint32_t cb_back_get_free_pages(int32_t operand) {
     uint32_t pages_acked_ptr = (uint32_t) get_cb_tiles_acked_ptr(operand);
 
     // while the producer (write-side interface) is waiting for space to free up "tiles_pushed" is not changing
@@ -485,7 +485,7 @@ void cb_wait_front(int32_t operand, int32_t num_pages) {
 }
 
 FORCE_INLINE
-uint32_t cb_front_full_pages(int32_t operand) {
+uint32_t cb_front_get_full_pages(int32_t operand) {
     uint32_t pages_acked = get_cb_tiles_acked_ptr(operand)[0];
     uint32_t pages_received_ptr = (uint32_t) get_cb_tiles_received_ptr(operand);
 
