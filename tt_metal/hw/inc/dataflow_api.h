@@ -422,6 +422,32 @@ void cb_reserve_back(int32_t operand, int32_t num_pages) {
     DEBUG_STATUS("CRBD");
 }
 
+FORCE_INLINE
+uint32_t cb_back_free_pages(int32_t operand) {
+    uint32_t pages_acked_ptr = (uint32_t) get_cb_tiles_acked_ptr(operand);
+
+    // while the producer (write-side interface) is waiting for space to free up "tiles_pushed" is not changing
+    // "tiles_pushed" is updated by the producer only when the tiles are pushed
+    uint32_t pages_received = get_cb_tiles_received_ptr(operand)[0];
+
+    int32_t free_space_pages;
+
+    // uint16_t's here because Tensix updates the val at tiles_acked_ptr as uint16 in llk_pop_tiles
+    // TODO: I think we could have TRISC update tiles_acked_ptr, and we wouldn't need uint16 here
+    uint16_t pages_acked = (uint16_t)reg_read(pages_acked_ptr);
+#ifdef ARCH_GRAYSKULL
+    // The following test slows down by 5% when removing the barrier
+    // TODO(pgk) investigate GS arbiter WAR in compiler, is this fixing an issue there?
+    // models/experimental/stable_diffusion/tests/test_perf_unbatched_stable_diffusion.py::test_perf_bare_metal
+    volatile uint32_t local_mem_barrier = pages_acked;
+#endif
+
+    uint16_t free_space_pages_wrap =
+        cb_interface[operand].fifo_num_pages - (pages_received - pages_acked);
+    free_space_pages = (int32_t)free_space_pages_wrap;
+    return free_space_pages;
+}
+
 /**
  * A blocking call that waits for the specified number of tiles to be available in the specified circular buffer (CB).
  * This call is used by the consumer of the CB to wait for the producer to fill the CB with at least the specified number
@@ -456,6 +482,17 @@ void cb_wait_front(int32_t operand, int32_t num_pages) {
         pages_received = ((uint16_t)reg_read(pages_received_ptr)) - pages_acked;
     } while (pages_received < num_pages);
     DEBUG_STATUS("CWFD");
+}
+
+FORCE_INLINE
+uint32_t cb_front_full_pages(int32_t operand) {
+    uint32_t pages_acked = get_cb_tiles_acked_ptr(operand)[0];
+    uint32_t pages_received_ptr = (uint32_t) get_cb_tiles_received_ptr(operand);
+
+    uint16_t pages_received;
+
+    pages_received = ((uint16_t)reg_read(pages_received_ptr)) - pages_acked;
+    return pages_received;
 }
 
 // NOC transfers
