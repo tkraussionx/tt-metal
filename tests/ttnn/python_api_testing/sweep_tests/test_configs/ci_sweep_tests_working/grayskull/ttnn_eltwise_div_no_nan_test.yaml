@@ -8,6 +8,7 @@ test-list:
         num-shapes: 2
         num-samples: 128
         args-sampling-strategy: "all"
+        method: "tt_nn-bcast"
       datagen:
         function: gen_rand
         args:

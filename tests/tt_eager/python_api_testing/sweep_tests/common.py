@@ -667,7 +667,7 @@ def shapes_and_datagen(
         elif method == "tt_nn-bcast":
 
             def _gen_tt_nn_bcast_shapes(shape):
-                shape_type = random.randint(0, 2)
+                shape_type = random.randint(0, 3)
                 second_shape = shape.copy()
 
                 if shape_type == 0:
@@ -679,9 +679,9 @@ def shapes_and_datagen(
                 elif shape_type == 2:
                     second_shape[-2] = 1
                     second_shape[-1] = shape[-1]
-                # elif shape_type == 2:
-                #     second_shape = [shape[-2], shape[-1]]
                 # elif shape_type == 3:
+                #     second_shape = [shape[-2], shape[-1]]
+                # elif shape_type == 4:
                 #     second_shape = [shape[-3], shape[-2], shape[-1]]
                 else:
                     second_shape = shape
