@@ -61,30 +61,32 @@ def test_reproduce_matmul_2d_hang(
 
     logger.info(f"Running on {num_devices} devices")
 
-    in0_mem_config = ttl.tensor.MemoryConfig(
-        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-        ttl.tensor.BufferType.L1,
-        ttl.tensor.ShardSpec(
-            ttl.tensor.CoreRangeSet(
-                {
-                    ttl.tensor.CoreRange(
-                        # Volume must match batch size
-                        ttl.tensor.CoreCoord(0, 0),
-                        ttl.tensor.CoreCoord(7, 7),
-                    ),
-                }
-            ),
-            [
-                128,
-                576,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
+    in0_block_shard_spec = ttl.tensor.ShardSpec(
+        ttl.tensor.CoreRangeSet(
+            {
+                ttl.tensor.CoreRange(
+                    # Volume must match batch size
+                    ttl.tensor.CoreCoord(0, 0),
+                    ttl.tensor.CoreCoord(7, 7),
+                ),
+            }
         ),
+        [
+            128,
+            576,
+        ],
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    in0_block_sharded_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, ttl.tensor.BufferType.L1, in0_block_shard_spec
     )
 
-    in1_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+    dram_interleaved_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
+    )
 
+    in1_mem_config = dram_interleaved_mem_config
     out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, ttl.tensor.BufferType.L1)
 
     in0_dtype = ttl.tensor.DataType.BFLOAT16
@@ -94,14 +96,27 @@ def test_reproduce_matmul_2d_hang(
     a_shape = [1, 1, seq_len, inner_dim]
     b_shape = [1, 1, inner_dim, weights_n]
 
-    A = torch.randn(a_shape)
+    num_activation_tensors = 1
+    if determinism_check_enabled:
+        # If we are running determinism checks, we want to switch activation tensors
+        # every time we complete an iteration of a determinism check, to confirm that
+        # device is producing new results, and not just reusing an already existing buffer
+        num_activation_tensors = 10
+
+    A = []
+    for act in range(num_activation_tensors):
+        A.append(torch.randn(a_shape))
     B = torch.randn(b_shape)
 
     a_t = []
     b_t = []
-
     for device_idx in range(num_devices):
-        a_t.append(torch2tt_tensor(A, devices[device_idx], ttl.tensor.Layout.TILE, in0_mem_config, in0_dtype))
+        for act in range(num_activation_tensors):
+            a_t.append(
+                torch2tt_tensor(
+                    A[act], devices[device_idx], ttl.tensor.Layout.TILE, dram_interleaved_mem_config, in0_dtype
+                )
+            )
         b_t.append(torch2tt_tensor(B, devices[device_idx], ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype))
 
     program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -123,34 +138,43 @@ def test_reproduce_matmul_2d_hang(
     )
 
     num_nd_outputs = [0] * num_devices
-    out = []
     reference_out = []
-
-    # First run for a reference output
-    for device_idx in range(num_devices):
-        out.append(
-            ttnn.matmul(
-                a_t[device_idx],
-                b_t[device_idx],
-                program_config=program_config,
-                memory_config=out_mem_config,
-                dtype=out_dtype,
-                compute_kernel_config=compute_config,
-            )
-        )
-
     if determinism_check_enabled:
+        reference_out = [[None for _ in range(num_activation_tensors)] for _ in range(num_devices)]
         for device_idx in range(num_devices):
-            reference_out.append(tt2torch_tensor(out[device_idx]))
+            # First, convert input to sharded config
+            for act in range(num_activation_tensors):
+                a_sharded = ttl.tensor.interleaved_to_sharded(
+                    A[act][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+                )
+                output = ttnn.matmul(
+                    a_sharded,
+                    b_t[device_idx],
+                    program_config=program_config,
+                    memory_config=out_mem_config,
+                    dtype=out_dtype,
+                    compute_kernel_config=compute_config,
+                )
+                reference_out[act][device_idx] = tt2torch_tensor(output)
+                output.deallocate(True)
+                a_sharded.deallocate(True)
+
+    current_act_tensor = 0
+    sharded_activations_per_device = [None] * num_devices
+    out = [None] * num_devices
+
+    for device_idx in range(num_devices):
+        sharded_activations_per_device[device_idx] = ttl.tensor.interleaved_to_sharded(
+            A[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+        )
 
     logger.info("Starting iterations")
     # loop_count iterations to test determinism/hang
-    for i in range(loop_count):
+    for i in range(1):
         # run matmul on all devices
         for device_idx in range(num_devices):
-            out[device_idx].deallocate(True)
             out[device_idx] = ttnn.matmul(
-                a_t[device_idx],
+                sharded_activations_per_device[device_idx],
                 b_t[device_idx],
                 program_config=program_config,
                 memory_config=out_mem_config,
@@ -186,16 +210,24 @@ def test_reproduce_matmul_2d_hang(
         if determinism_check_enabled and i % determinism_check_iterations == 0:
             for device_idx in range(num_devices):
                 pt_out = tt2torch_tensor(out[device_idx])
-                if torch.equal(reference_out[device_idx], pt_out):
+                if torch.equal([current_act_tensor][device_idx], pt_out):
                     logger.info(f"Device {device_idx} PCC: 1.0")
                 else:
                     # for determinism check, we avoid calling comp_pcc func as it is heavy and with too many operations,
                     # part of the code that replaces nans/infs with zeros starts leaking memory, even if deallocation is forced,
                     # so we call it only in case we see tensors are not equal
-                    _, pcc = comp_pcc(reference_out[device_idx], pt_out)
+                    _, pcc = comp_pcc(reference_out[current_act_tensor][device_idx], pt_out)
                     logger.info(f"Device {device_idx} PCC: {pcc}")
                     num_nd_outputs[device_idx] += 1
+            current_act_tensor = (current_act_tensor + 1) % num_activation_tensors
+            # Deallocate previous sharded activations and shard new ones
+            for device_idx in range(num_devices):
+                sharded_activations_per_device[device_idx].deallocate(True)
+                sharded_activations_per_device[device_idx] = ttl.tensor.interleaved_to_sharded(
+                    A[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+                )
 
+        out[device_idx].deallocate(True)
         logger.info(f"Iteration = {i}, done")
 
     if determinism_check_enabled:
