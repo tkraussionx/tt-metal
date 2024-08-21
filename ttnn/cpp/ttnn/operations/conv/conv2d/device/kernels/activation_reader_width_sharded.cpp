@@ -88,26 +88,6 @@ uint32_t act_l1_read_addr;
 
 uint32_t reader_idx = 0;
 
-void init_stick_read(uint32_t num_sticks)
-{
-    remaining_stick_read = num_sticks;
-    cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
-     l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
-
-}
-void read_n_stick(uint32_t n)
-{
-        while(remaining_stick_read>0 && n>0)
-        {
-            uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
-            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices & 0xffff, conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
-            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices >> 16   , conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
-
-            reader_idx++;
-            n--;
-            remaining_stick_read--;
-        }
-}
 void kernel_main() {
 
 
@@ -168,7 +148,6 @@ void kernel_main() {
 
     uint64_t act_mcast_receiver_semaphore_noc_addr = act_multicast_noc_addr | act_mcast_receiver_semaphore_addr;
 
-
     act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
     noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), conv_act_c_read_bytes);
 
@@ -176,11 +155,19 @@ void kernel_main() {
 
     for(uint32_t block_w_index = 0; block_w_index < act_num_blocks_w; block_w_index++)
     {
+        uint32_t reader_idx = 0;
+        cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
+        uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
         // DPRINT<<"L1 Write Addr "<<l1_write_addr_act<<"\n";
 
 
-        init_stick_read(act_block_h_datums/2);
-        read_n_stick(act_block_h_datums/2);
+        for (uint32_t bh = 0; bh < act_block_h_datums / 2; bh++) {
+            uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
+            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices & 0xffff, conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
+            read_channels<weight_size_h,weight_size_w>(l1_write_addr_act, act_l1_read_addr, two_reader_indices >> 16   , conv_act_c_bytes, conv_act_c_read_bytes, stride_h_bytes);
+
+            reader_idx++;
+        }
 
         //After reading one block, increment the starting read pointer by the width of the block.
         //Next read uses the next set of channels.
