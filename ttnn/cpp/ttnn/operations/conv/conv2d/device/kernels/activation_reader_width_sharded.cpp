@@ -113,6 +113,8 @@ void read_n_sticks(uint32_t n)
         reader_idx++;
     }
     if(remaining_stick_read == 0) {
+        DPRINT<<"Done reading block"<<ENDL();
+
         //After reading one block, increment the starting read pointer by the width of the block.
         //Next read uses the next set of channels.
         act_l1_read_addr +=conv_act_c_read_bytes;
@@ -145,9 +147,9 @@ void kernel_main() {
     tt_l1_ptr uint32_t *act_mcast_y_lookup  = (tt_l1_ptr uint32_t*)(get_arg_addr(i));
 
 
-    // DPRINT<<"Act Params L1 :  "<<conv_act_size_w<<"  "<<conv_act_c_read_bytes<<"  "<<weight_size_h<<"  "<<weight_size_w<<"  "<<act_block_h_datums<<"  "<<act_block_num_tiles<<ENDL()<<
-    // "L2  "<<act_w_num_outer<<"  "<<act_num_blocks_w<<"  "<<act_mcast_sender_semaphore_addr<<"  "<<act_mcast_receiver_semaphore_addr<<"  "<<act_mcast_dest_noc_start_x<<
-    // "L3  "<<act_mcast_dest_noc_start_y<<"  "<<act_mcast_dest_noc_end_x<<"  "<<act_mcast_dest_noc_end_y<<"  "<<act_mcast_sender_size_bytes<<"  "<<act_mcast_num_cores<<ENDL();
+    DPRINT<<"Act Params L1 :  "<<conv_act_size_w<<"  "<<conv_act_c_read_bytes<<"  "<<weight_size_h<<"  "<<weight_size_w<<"  "<<act_block_h_datums<<"  "<<act_block_num_tiles<<ENDL()<<
+    "L2  "<<act_w_num_outer<<"  "<<act_num_blocks_w<<"  "<<act_mcast_sender_semaphore_addr<<"  "<<act_mcast_receiver_semaphore_addr<<"  "<<act_mcast_dest_noc_start_x<<
+    "L3  "<<act_mcast_dest_noc_start_y<<"  "<<act_mcast_dest_noc_end_x<<"  "<<act_mcast_dest_noc_end_y<<"  "<<act_mcast_sender_size_bytes<<"  "<<act_mcast_num_cores<<ENDL();
 
     //Equivalent to Core Index.
     uint32_t act_mcast_sender_id = this_core_x + (num_cores_x * this_core_y) ;
@@ -189,9 +191,11 @@ void kernel_main() {
 
     for(uint32_t block_w_index = 0; block_w_index < act_num_blocks_w; block_w_index++)
     {
-
-        init_read_sticks(act_block_h_datums / 2);
-        read_n_sticks(act_block_h_datums / 2);
+        if(block_w_index==0)
+        {
+            init_read_sticks(act_block_h_datums / 2);
+            read_n_sticks(act_block_h_datums / 2);
+        }
 
 
 
@@ -218,6 +222,7 @@ void kernel_main() {
                 noc_semaphore_set(act_mcast_receiver_semaphore_addr_ptr, INVALID);
 
                 // // compute tilizes and pops cb_id_act and pushes to tilized_in0_cb_id
+                read_n_sticks(remaining_stick_read);
                 cb_wait_front(tilized_in0_cb_id, act_block_num_tiles);
 
                 // // Now we have the block in the CB address, we can mcast to dests!
@@ -251,8 +256,18 @@ void kernel_main() {
                 noc_semaphore_inc(act_mcast_sender_semaphore_noc_addr, 1);
 
                 // wait on act semaphore value to become VALID (set by mcast sender after it multicasts data)
-                DPRINT<<"cb_id_act_row_major_bfloat16 free pages <<"<<(cb_back_get_free_pages(cb_id_act_row_major_bfloat16))<<ENDL();
-                noc_semaphore_wait(act_mcast_receiver_semaphore_addr_ptr, VALID);
+                DPRINT<<"cb_id_act_row_major_bfloat16 free pages ="<<(cb_back_get_free_pages(cb_id_act_row_major_bfloat16))<<ENDL();
+                while((*act_mcast_receiver_semaphore_addr_ptr)!= VALID) {
+                    if(remaining_stick_read == 0) {
+                        if(cb_back_get_free_pages(cb_id_act_row_major_bfloat16) >= act_block_num_tiles) {
+                            init_read_sticks(act_block_h_datums / 2);
+                        }
+                    }
+                    else
+                    {
+                        read_n_sticks(2);
+                    }
+                }
             }
             cb_push_back(cb_id_act, act_block_num_tiles);
 
