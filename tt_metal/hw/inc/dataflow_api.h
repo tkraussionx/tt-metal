@@ -520,7 +520,7 @@ uint64_t get_l1_noc_addr(const uint32_t id, const uint32_t page_size, const uint
 }
 
 uint64_t get_system_memory_noc_addr(const uint32_t id, const uint32_t page_size, const uint32_t base_addr, const uint32_t offset = 0) {
-    uint64_t pcie_core_noc_encoding = uint64_t(NOC_XY_PCIE_ENCODING(NOC_X(PCIE_NOC_X), NOC_Y(PCIE_NOC_Y), noc_index));
+    uint64_t pcie_core_noc_encoding = uint64_t(NOC_XY_PCIE_ENCODING(NOC_X(PCIE_NOC_X), NOC_Y(PCIE_NOC_Y)));
     uint32_t addr = base_addr + page_size * id + offset;
     uint64_t noc_addr = pcie_core_noc_encoding | addr;
     return noc_addr;
@@ -552,14 +552,14 @@ std::uint64_t get_noc_addr(std::uint32_t addr) {
  * | size              | Size of data transfer in bytes                     | uint32_t  | 0..1MB                                   | Yes      |
  */
 inline
-void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
+void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint8_t noc_id=noc_index) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
     DEBUG_STATUS("NARW");
-    DEBUG_SANITIZE_NOC_READ_TRANSACTION(noc_index, src_noc_addr, dst_local_l1_addr, size);
-    ncrisc_noc_fast_read_any_len(noc_index, NCRISC_RD_CMD_BUF, src_noc_addr, dst_local_l1_addr, size);
+    DEBUG_SANITIZE_NOC_READ_TRANSACTION(noc_id, src_noc_addr, dst_local_l1_addr, size);
+    ncrisc_noc_fast_read_any_len(noc_id, NCRISC_RD_CMD_BUF, src_noc_addr, dst_local_l1_addr, size);
     DEBUG_STATUS("NARD");
 }
 
@@ -1375,9 +1375,9 @@ void noc_async_write_multicast_loopback_src(
  * Return value: None
  */
 FORCE_INLINE
-void noc_async_read_barrier() {
+void noc_async_read_barrier(uint8_t noc_id=noc_index) {
     DEBUG_STATUS("NRBW");
-    while (!ncrisc_noc_reads_flushed(noc_index))
+    while (!ncrisc_noc_reads_flushed(noc_id))
         ;
     DEBUG_STATUS("NRBD");
 }

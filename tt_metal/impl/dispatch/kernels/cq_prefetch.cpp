@@ -16,6 +16,8 @@
 
 typedef uint16_t prefetch_q_entry_type;
 
+constexpr uint8_t pcie_noc_index = 1;
+
 constexpr uint32_t downstream_cb_base = get_compile_time_arg_val(0);
 constexpr uint32_t downstream_cb_log_page_size = get_compile_time_arg_val(1);
 constexpr uint32_t downstream_cb_pages = get_compile_time_arg_val(2);
@@ -52,7 +54,7 @@ constexpr uint8_t my_noc_index = NOC_INDEX;
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
-constexpr uint64_t pcie_noc_xy = uint64_t(NOC_XY_PCIE_ENCODING(NOC_0_X(static_cast<uint8_t>(NOC_INDEX), noc_size_x, PCIE_NOC_X), NOC_0_Y(static_cast<uint8_t>(NOC_INDEX), noc_size_y, PCIE_NOC_Y), NOC_INDEX));
+constexpr uint64_t pcie_noc_xy = uint64_t(NOC_XY_PCIE_ENCODING(NOC_0_X(static_cast<uint8_t>(pcie_noc_index), noc_size_x, PCIE_NOC_X), NOC_0_Y(static_cast<uint8_t>(pcie_noc_index), noc_size_y, PCIE_NOC_Y)));
 constexpr uint32_t downstream_cb_page_size = 1 << downstream_cb_log_page_size;
 constexpr uint32_t downstream_cb_end = downstream_cb_base + (1 << downstream_cb_log_page_size) * downstream_cb_pages;
 constexpr uint32_t prefetch_q_end = prefetch_q_base + prefetch_q_size;
@@ -130,7 +132,7 @@ void write_downstream(uint32_t& data_ptr,
 // If prefetcher must stall after this fetch, wait for data to come back, and move to stalled state.
 FORCE_INLINE
 void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence, uint32_t& cmd_ptr) {
-    noc_async_read_barrier();
+    noc_async_read_barrier(pcie_noc_index);
     if (fence < cmd_ptr) {
         cmd_ptr = fence;
     }
@@ -167,7 +169,7 @@ uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_r
 
     uint64_t host_src_addr = pcie_noc_xy | pcie_read_ptr;
     //DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
-    noc_async_read(host_src_addr, fence + preamble_size, size);
+    noc_async_read(host_src_addr, fence + preamble_size, size, pcie_noc_index);
     pending_read_size = size + preamble_size;
     pcie_read_ptr += size;
 
@@ -245,7 +247,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
     }
     if (!cmd_ready) {
         if (pending_read_size != 0) {
-            noc_async_read_barrier();
+            noc_async_read_barrier(pcie_noc_index);
 
             // wrap the cmddat_q
             if (fence < cmd_ptr) {
@@ -1414,6 +1416,11 @@ void kernel_main_hd() {
 
 void kernel_main() {
     DPRINT << "prefetcher_" << is_h_variant << is_d_variant << ": start" << ENDL();
+
+    if constexpr (my_noc_index != pcie_noc_index) {
+        noc_local_state_init(pcie_noc_index);
+    }
+
     upstream_total_acquired_page_count = 0;
 
     volatile tt_l1_ptr uint32_t* sem_addr =
