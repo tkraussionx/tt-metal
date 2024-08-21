@@ -95,7 +95,7 @@ def test_time_sharded_attnention_hwb(
     attn_weights_torch_sm = torch.nn.functional.softmax(attn_weights_qkt, dim=-1)
     attn_weights_torch = attn_weights_torch_sm @ torch_value_layer
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -305,7 +305,7 @@ def test_time_sharded_attnention(
         tt_dtype=data_format,
     )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -495,7 +495,7 @@ def test_cross_attnention(
         tt_dtype=data_format,
     )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -523,7 +523,7 @@ def test_cross_attnention(
     )
     print(program_config)
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -591,7 +591,7 @@ def test_cross_attnention(
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         ttl.tensor.ShardOrientation.COL_MAJOR,
     )
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -692,7 +692,7 @@ def test_attention(
         tt_dtype=data_format,
     )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -722,7 +722,7 @@ def test_attention(
     )
     print(program_config)
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -806,7 +806,7 @@ def test_attention(
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -918,7 +918,7 @@ def test_q_and_kv(
         tt_dtype=data_format,
     )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -951,7 +951,7 @@ def test_q_and_kv(
         fused_activation=None,
     )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -983,7 +983,7 @@ def test_q_and_kv(
         transpose_mcast=False,
         fused_activation=None,
     )
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,

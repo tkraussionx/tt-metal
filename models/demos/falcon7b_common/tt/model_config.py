@@ -125,14 +125,14 @@ def get_ln_block_sharded_config(height_dim, hidden_dim):
 
     fp32_dest_acc_en = False
     if is_wormhole_b0():
-        ln_block_sharded_compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        ln_block_sharded_compute_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
             math_approx_mode=True,
             fp32_dest_acc_en=fp32_dest_acc_en,
             packer_l1_acc=False,
         )
     else:
-        ln_block_sharded_compute_kernel_config = ttnn.experimental.tensor.GrayskullComputeKernelConfig(
+        ln_block_sharded_compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
             math_approx_mode=True,
         )
@@ -280,22 +280,20 @@ def get_model_config(model_config_str, prefill_seq_len=0, decode_batch_size=32):
         )
 
         if is_wormhole_b0():
-            model_config["PRE_SOFTMAX_MM_COMPUTE_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            model_config["PRE_SOFTMAX_MM_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
                 math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
                 math_approx_mode=True,
                 fp32_dest_acc_en=False,
                 packer_l1_acc=True,
             )
-            model_config[
-                "POST_SOFTMAX_MM_COMPUTE_KERNEL_CONFIG"
-            ] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            model_config["POST_SOFTMAX_MM_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
                 math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
                 math_approx_mode=True,
                 fp32_dest_acc_en=True,
                 packer_l1_acc=True,
             )
         else:
-            gs_compute_kernel_config = ttnn.experimental.tensor.GrayskullComputeKernelConfig(
+            gs_compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
                 math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
                 math_approx_mode=True,
             )
@@ -316,14 +314,14 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["MLP_GRID_SIZE"] = (8, 8)
 
     if is_wormhole_b0():
-        default_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        default_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
             math_approx_mode=False,
             fp32_dest_acc_en=False,
             packer_l1_acc=True,
         )
     else:
-        default_kernel_config = ttnn.experimental.tensor.GrayskullComputeKernelConfig(
+        default_kernel_config = ttnn.GrayskullComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
         )
@@ -365,7 +363,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
         transpose_mcast=False,
         fused_activation=None,
     )
-    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -397,7 +395,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
         buffer_type=ttnn.experimental.tensor.BufferType.L1,
     )
 
-    model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+    model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,

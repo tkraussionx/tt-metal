@@ -74,7 +74,7 @@ class geglu:
             memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
             buffer_type=ttnn.experimental.tensor.BufferType.L1,
         )
-        self.compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        self.compute_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=False,
             fp32_dest_acc_en=False,

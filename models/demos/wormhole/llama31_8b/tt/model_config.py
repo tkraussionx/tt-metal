@@ -263,7 +263,7 @@ class TtModelArgs:
                 use_height_and_width_as_shard_shape=True,
             )
 
-            self.model_config["MLP_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            self.model_config["MLP_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
                 math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
                 math_approx_mode=True,
                 fp32_dest_acc_en=False,
@@ -276,7 +276,7 @@ class TtModelArgs:
                 k_chunk_size=32,
             )
 
-            self.model_config["SDPA_DECODE_COMPUTE_PROGCFG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            self.model_config["SDPA_DECODE_COMPUTE_PROGCFG"] = ttnn.WormholeComputeKernelConfig(
                 math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
                 math_approx_mode=False,
                 fp32_dest_acc_en=False,

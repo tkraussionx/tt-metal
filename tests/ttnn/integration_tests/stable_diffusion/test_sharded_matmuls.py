@@ -1659,7 +1659,7 @@ def test_matmul(
             tt_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
         )
 
-    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=False,

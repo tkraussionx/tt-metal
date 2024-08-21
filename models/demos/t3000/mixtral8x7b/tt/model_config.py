@@ -187,7 +187,7 @@ class TtModelArgs:
             k_chunk_size=32,
         )
 
-        self.model_config["SDPA_DECODE_COMPUTE_PROGCFG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        self.model_config["SDPA_DECODE_COMPUTE_PROGCFG"] = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
             math_approx_mode=False,
             fp32_dest_acc_en=False,
@@ -368,7 +368,7 @@ class TtModelArgs:
             fused_activation=None,
             fuse_batch=False,
         )
-        self.model_config["PREFILL_MLP_COMPUTE_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        self.model_config["PREFILL_MLP_COMPUTE_CONFIG"] = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
             fp32_dest_acc_en=False,
@@ -427,14 +427,14 @@ class TtModelArgs:
             packer_l1_acc=True,
         )
 
-        self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
             math_approx_mode=False,
             fp32_dest_acc_en=True,
             packer_l1_acc=True,
         )
 
-        self.model_config["GATE_MM_OUTPUT_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        self.model_config["GATE_MM_OUTPUT_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.HiFi4,
             fp32_dest_acc_en=True,
             packer_l1_acc=True,
