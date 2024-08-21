@@ -121,23 +121,25 @@ void write_downstream(uint32_t& data_ptr,
                       uint32_t length) {
 
     uint32_t remaining = downstream_cb_end - downstream_data_ptr;
+    cq_noc_set_write_txn_id(7);
     if (length > remaining) {
         if (remaining > 0) {
-            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), remaining);
+            cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), remaining, 7);
             data_ptr += remaining;
             length -= remaining;
         }
         downstream_data_ptr = downstream_cb_base;
     }
 
-    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
+    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length, 7);
     downstream_data_ptr += length;
 }
 
 // If prefetcher must stall after this fetch, wait for data to come back, and move to stalled state.
 // FORCE_INLINE
 void barrier_and_stall(uint32_t& pending_read_size, uint32_t& fence, uint32_t& cmd_ptr) {
-    noc_async_read_barrier();
+    noc_async_read_barrier_with_trid(0);
+    // noc_async_read_barrier();
     if (fence < cmd_ptr) {
         cmd_ptr = fence;
     }
@@ -174,7 +176,9 @@ uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_r
 
     uint64_t host_src_addr = pcie_noc_xy | pcie_read_ptr;
     //DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
-    noc_async_read(host_src_addr, fence + preamble_size, size);
+    cq_noc_set_read_txn_id(0);
+    cq_noc_async_read_with_trid_any_len(host_src_addr, fence + preamble_size, size, 0);
+    // noc_async_read(host_src_addr, fence + preamble_size, size);
     pending_read_size = size + preamble_size;
     pcie_read_ptr += size;
 
@@ -252,7 +256,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
     }
     if (!cmd_ready) {
         if (pending_read_size != 0) {
-            noc_async_read_barrier();
+            noc_async_read_barrier_with_trid(0);
 
             // wrap the cmddat_q
             if (fence < cmd_ptr) {
@@ -380,14 +384,15 @@ static uint32_t process_relay_inline_noflush_cmd(uint32_t cmd_ptr,
         dispatch_data_ptr = downstream_cb_base;
     }
     uint32_t remaining = cmddat_q_end - data_ptr;
+    cq_noc_set_write_txn_id(7);
     if (cmddat_wrap_enable && length > remaining) {
         // wrap cmddat
-        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining);
+        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining, 7);
         dispatch_data_ptr += remaining;
         length -= remaining;
         data_ptr = cmddat_q_base;
     }
-    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length);
+    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length, 7);
     dispatch_data_ptr += length;
 
     return cmd->relay_inline.stride;
@@ -411,20 +416,20 @@ static uint32_t write_pages_to_dispatcher(uint32_t& downstream_data_ptr,
     if (!test_for_nonzero || npages != 0) {
         cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
     }
-
+    cq_noc_set_write_txn_id(7);
     uint64_t noc_addr;
     if (downstream_data_ptr == downstream_cb_end) {
         downstream_data_ptr = downstream_cb_base;
     } else if (downstream_data_ptr + amt_to_write > downstream_cb_end) {  // wrap
         uint32_t last_chunk_size = downstream_cb_end - downstream_data_ptr;
         noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
-        noc_async_write(scratch_write_addr, noc_addr, last_chunk_size);
+        cq_noc_async_write_with_trid_any_len(scratch_write_addr, noc_addr, last_chunk_size, 7);
         downstream_data_ptr = downstream_cb_base;
         scratch_write_addr += last_chunk_size;
         amt_to_write -= last_chunk_size;
     }
     noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
-    noc_async_write(scratch_write_addr, noc_addr, amt_to_write);
+    cq_noc_async_write_with_trid_any_len(scratch_write_addr, noc_addr, amt_to_write, 7);
     downstream_data_ptr += amt_to_write;
 
     return npages;
@@ -577,6 +582,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
                                  uint32_t& downstream__data_ptr,
                                  uint32_t page_id) {
 
+    DeviceZoneScopedN("ProcessRelayPaged");
     // This ensures that a previous cmd using the scratch buf has finished
     noc_async_writes_flushed();
 
@@ -590,8 +596,9 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     }
 
     InterleavedAddrGen<is_dram> addr_gen{.bank_base_address = base_addr, .page_size = page_size};
-
-    uint32_t ring_db_slot_size = 16 * page_size;
+    // uint32_t ring_db_slot_size = 256 * page_size;
+    // ring_db_slot_size = ring_db_slot_size > 32768 ? ((32768 / page_size) * page_size) : ring_db_slot_size;
+    uint32_t ring_db_slot_size = 2 * page_size;
     uint32_t num_slots = scratch_db_size / ring_db_slot_size;
     num_slots = (num_slots > 32) ? 32 : num_slots;
     uint32_t ring_db_size = num_slots * ring_db_slot_size;
@@ -629,9 +636,9 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
             ring_db_read_addr = ring_db_write_addr;
             // Ensure data for this slot has been picked up, before reading into it
             noc_async_writes_flushed();
+            cq_noc_set_read_txn_id(write_slot);
             while (amt_to_read >= page_size) {
                 uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-                cq_noc_set_read_txn_id(write_slot);
                 cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, write_slot);
                 ring_db_read_addr += page_size;
                 page_id++;
@@ -996,9 +1003,10 @@ static uint32_t process_exec_buf_relay_inline_noflush_cmd(uint32_t& cmd_ptr,
     }
     uint32_t remaining_stride = exec_buf_state.length;
     uint32_t remaining = exec_buf_state.length - sizeof(CQPrefetchCmd);
+    cq_noc_set_write_txn_id(7);
     while (length > remaining) {
         // wrap cmddat
-        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining);
+        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining, 7);
         dispatch_data_ptr += remaining;
         length -= remaining;
         stride -= remaining_stride;
@@ -1013,7 +1021,7 @@ static uint32_t process_exec_buf_relay_inline_noflush_cmd(uint32_t& cmd_ptr,
         remaining = exec_buf_state.length;
         remaining_stride = exec_buf_state.length;
     }
-    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length);
+    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length, 7);
     dispatch_data_ptr += length;
 
     return stride;
@@ -1232,6 +1240,7 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
         // swipe all the downstream page credits from ourselves...
         // prefetch_h stalls sending commands to prefetch_d until notified by dispatch_d that the exec_buf is done
         // exec_buf completing on dispatch_h will free the pages and allow sending again
+        cq_noc_set_write_txn_id(8);
         volatile tt_l1_ptr uint32_t* sem_addr =
             reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_downstream_cb_sem_id));
         noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, (uint32_t)sem_addr), -downstream_cb_pages);
@@ -1241,19 +1250,20 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     }
 
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
+    cq_noc_set_write_txn_id(7);
     if (downstream_pages_left >= npages) {
-        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
+        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length, 7);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
         uint32_t tail_pages = npages - downstream_pages_left;
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
-            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
+            cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available, 7);
             data_ptr += available;
             length -= available;
         }
 
-        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length);
+        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length, 7);
         downstream_data_ptr = downstream_cb_base + tail_pages * downstream_cb_page_size;
     }
 
@@ -1406,6 +1416,7 @@ void kernel_main_d() {
     // TODO: This should be replaced with a signal similar to what packetized
     // components use.
     DPRINT << "prefetch_d done" << ENDL();
+    cq_noc_set_write_txn_id(8);
     noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_cb_sem_id)), 0x80000000);
 }
 

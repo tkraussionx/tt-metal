@@ -1935,9 +1935,9 @@ void noc_async_read_barrier_with_trid(uint32_t trid) {
     DEBUG_STATUS("NBTW");
     #ifndef ARCH_GRAYSKULL
     while (!ncrisc_noc_read_with_transaction_id_flushed(noc_index, trid)) {
-        uint32_t outstanding_reads = NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid));
-        uint32_t offset = (noc_index << NOC_INSTANCE_OFFSET_BIT) + NOC_STATUS(NIU_MST_REQS_OUTSTANDING_ID(trid));
-        RISC_POST_STATUS_CQ(offset);
+        // uint32_t outstanding_reads = NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid));
+        // uint32_t offset = (noc_index << NOC_INSTANCE_OFFSET_BIT) + NOC_STATUS(NIU_MST_REQS_OUTSTANDING_ID(trid));
+        RISC_POST_STATUS_CQ(trid);
     }
     RISC_POST_STATUS_CQ(0xddddd);
     #endif

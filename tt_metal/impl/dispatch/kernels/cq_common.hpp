@@ -283,12 +283,14 @@ void cb_acquire_pages(uint32_t n) {
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
     }
     DEBUG_STATUS("DAPD");
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     noc_semaphore_inc(get_noc_addr_helper(noc_xy, (uint32_t)sem_addr), -n);
 }
 
 template<uint8_t noc_idx, uint32_t noc_xy, uint32_t sem_id>
 // FORCE_INLINE
 void cb_release_pages(uint32_t n) {
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     noc_semaphore_inc(get_noc_addr_helper(noc_xy, get_semaphore(sem_id)), n, noc_idx);
 }
 
@@ -337,6 +339,7 @@ void cb_block_release_pages(uint32_t block_noc_writes_to_clear[],
     uint32_t sem_addr = get_semaphore(sem_id);
 
     uint32_t noc_progress = NOC_STATUS_READ_REG(noc_index, NIU_MST_NONPOSTED_WR_REQ_SENT);
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     if (wrap_ge(noc_progress, block_noc_writes_to_clear[wr_block_idx])) {
         noc_semaphore_inc(get_noc_addr_helper(noc_xy, sem_addr), cb_pages_per_block, noc_idx);
         wr_block_idx++;
@@ -440,7 +443,7 @@ void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, ui
 void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
     // Ensure that the total number of outstanding txns for this trid doesn't exceed max limit
-    while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) == NOC_MAX_TRANSACTION_ID_COUNT) {
+    while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/4)) {
         uint32_t outstanding_reads = NIU_MST_REQS_OUTSTANDING_ID(trid);
         RISC_POST_STATUS_CQ(0xB00000 | outstanding_reads);
     }
@@ -453,6 +456,34 @@ void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local
     noc_reads_num_issued[noc_index] += 1;
 }
 #endif
+
+// FORCE_INLINE
+void cq_noc_async_write_with_trid(std::uint32_t src_addr, std::uint64_t dst_addr, std::uint32_t size, uint32_t trid) {
+    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
+    // while (NOC_STATUS_READ_REG(noc_index,  NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/4));
+    uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR |NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | NOC_CMD_RESP_MARKED;
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(dst_addr >> NOC_ADDR_COORD_SHIFT));
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE, size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+
+    noc_nonposted_writes_num_issued[noc_index] += 1;
+    noc_nonposted_writes_acked[noc_index] += 1;
+}
+
+// FORCE_INLINE
+void cq_noc_async_write_with_trid_any_len(std::uint32_t src_addr, std::uint64_t dst_addr, std::uint32_t size, uint32_t trid) {
+    while (size > NOC_MAX_BURST_SIZE) {
+        cq_noc_async_write_with_trid(src_addr, dst_addr, NOC_MAX_BURST_SIZE, trid);
+        src_addr += NOC_MAX_BURST_SIZE;
+        dst_addr += NOC_MAX_BURST_SIZE;
+        size -= NOC_MAX_BURST_SIZE;
+    }
+    cq_noc_async_write_with_trid(src_addr, dst_addr, size, trid);
+}
 
 // FORCE_INLINE
 void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
@@ -485,5 +516,13 @@ void cq_noc_set_read_txn_id(uint32_t trid) {
 #ifndef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
     ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
+#endif
+}
+
+// FORCE_INLINE
+void cq_noc_set_write_txn_id(uint32_t trid) {
+#ifndef ARCH_GRAYSKULL
+    // Grayskull does not support tagged txns
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_WR_CMD_BUF, trid);
 #endif
 }
