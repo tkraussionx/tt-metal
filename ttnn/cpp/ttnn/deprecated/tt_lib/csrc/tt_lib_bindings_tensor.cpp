@@ -11,9 +11,12 @@
 #include "ttnn/tensor/tensor_utils.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/auto_format.hpp"
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include "ttnn/deprecated/tt_dnn/op_library/compute_kernel_config.hpp"
 =======
 #include "ttnn/operations/core/compute_kernel/compute_kernel_config.hpp"
+=======
+>>>>>>> 8357fac24d... #11645: Move pybind to TTNN
 #include "ttnn/deprecated/tt_dnn/op_library/layernorm_distributed/layernorm_pre_allgather_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/layernorm_distributed/layernorm_post_allgather_op.hpp"
 >>>>>>> deac3e238a... #11645: Move compute_kernel_config to ttnn
