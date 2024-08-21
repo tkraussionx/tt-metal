@@ -19,8 +19,25 @@ DeviceMesh::DeviceMesh(
     auto num_available_devices = tt::tt_metal::GetNumAvailableDevices();
     TT_ASSERT(num_requested_devices <= num_available_devices, "Requested more devices than available");
 
-    this->is_galaxy_ = tt::Cluster::instance().is_galaxy_cluster();
-    if (this->is_galaxy_) {
+    int max_row = 0;
+    int max_col = 0;
+    DeviceIds required_devices;
+    for (int physical_chip_id : tt::Cluster::instance().get_all_user_chip_ids()) {
+        auto eth_coord = tt::Cluster::instance().get_ethernet_coord(physical_chip_id);
+        max_col = std::max(max_col, std::get<0>(eth_coord));
+        max_row = std::min(max_row, std::get<1>(eth_coord));
+        if (std::get<0>(eth_coord) < num_cols and std::get<1>(eth_coord) < num_rows) {
+            required_devices.push_back(physical_chip_id);
+        }
+    }
+    TT_FATAL(num_rows <= max_row + 1, "Requested more rows than available");
+    TT_FATAL(num_cols <= max_cols + 1, "Requested more rows than available");
+    this->device_grid.resize(num_rows);
+    for (int i = 0; i < num_rows; i++) {
+        this->device_grid[i].resize(num_cols);
+    }
+
+    if (tt::Cluster::instance().is_galaxy_cluster()) {
         // Temp solution until we add algorithmic way to determine chip connectivity
         // Map col to tunnel depth and row to tunnel count
         int cluster_tunnel_depth = tt::Cluster::instance().get_mmio_device_max_tunnel_depth(0);
@@ -49,21 +66,22 @@ DeviceMesh::DeviceMesh(
         for (int i = 0; i < num_requested_devices; i++) {
             mesh_devices.emplace_back(i, managed_devices.at(galaxy_device_ids[i]));
         }
-        this->view = std::make_unique<tt::tt_metal::DeviceMeshView>(*this);
     } else {
-        DeviceIds device_ids;
-        for (int i = 0; i < num_requested_devices; i++) {
-            device_ids.push_back(i);
-        }
-        managed_devices = tt::tt_metal::detail::CreateDevices(device_ids, num_command_queues, l1_small_size, trace_region_size, dispatch_core_type);
+        managed_devices = tt::tt_metal::detail::CreateDevices(required_device_ids, num_command_queues, l1_small_size, trace_region_size, dispatch_core_type);
         for (int i = 0; i < num_requested_devices; i++) {
             mesh_devices.emplace_back(i, managed_devices.at(i));
+        }
+        for (int i = 0; i < num_rows; i++) {
+            for (int j = 0; j < num_cols; j++) {
+                this->device_grid[i][j] =
+            }
         }
     }
 
     for (const auto& [dev_id, dev]: mesh_devices) {
         log_debug(tt::LogMetal, "TTNN Dev {}: Metal Dev {}", dev_id, dev->id());
     }
+    this->view = std::make_unique<tt::tt_metal::DeviceMeshView>(*this);
 }
 
 DeviceMesh::~DeviceMesh() {
@@ -91,10 +109,6 @@ std::vector<Device*> DeviceMesh::get_devices() const
 }
 
 Device* DeviceMesh::get_device(int row_idx, int col_idx) const {
-    if (not is_galaxy_) {
-        TT_THROW("Non-galaxy device mesh does not currently support indexing over rows and columns of a logical 2D mesh.");
-    }
-
     TT_FATAL(
         this->num_rows() != 0 and this->num_cols() != 0,
         "#10419, Current device mesh does not support indexing by row or col indices.");
@@ -105,16 +119,10 @@ Device* DeviceMesh::get_device(int row_idx, int col_idx) const {
 }
 
 std::vector<Device*> DeviceMesh::get_devices_on_row(int row_idx) const {
-    if (not is_galaxy_) {
-        TT_THROW("Non-galaxy device mesh does not currently support indexing over rows and columns of a logical 2D mesh.");
-    }
     return this->view->get_devices_on_row(row_idx);
 }
 
 std::vector<Device*> DeviceMesh::get_devices_on_column(int col_idx) const {
-    if (not is_galaxy_) {
-        TT_THROW("Non-galaxy device mesh does not currently support indexing over rows and columns of a logical 2D mesh.");
-    }
     return this->view->get_devices_on_column(col_idx);
 }
 
@@ -127,6 +135,7 @@ std::vector<Device*> DeviceMesh::get_devices_on_ring() const {
 
 void DeviceMesh::reorder_devices_to_ring() {
     // Temporary api to reorder devices to ring
+    // We should instead update apis that call get_devices() to use get_devices_on_ring()
     const auto& ring_devices = this->get_devices_on_ring();
     int swap_index = 0;
     for (int i = 0; i < ring_devices.size(); i++) {

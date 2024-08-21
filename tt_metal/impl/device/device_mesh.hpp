@@ -62,7 +62,7 @@ public:
     std::shared_ptr<DeviceMeshView> get_view();
 
    private:
-    bool is_galaxy_;
+    std::vector<std::vector<Device*>> device_grid;
 };
 
 bool validate_worker_modes(const std::vector<Device*>& workers);

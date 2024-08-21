@@ -196,6 +196,19 @@ void Cluster::generate_cluster_descriptor() {
             this->cluster_desc_->get_all_chips().size(),
             total_num_hugepages);
     }
+
+    if (this->is_tg_cluster_) {
+        for (const auto &chip_id : this->cluster_desc_->get_all_chips()) {
+            if (this->cluster_desc_->get_board_type(chip_id) == BoardType::GALAXY) {
+                this->user_chip_ids_.emplace_back(chip_id);
+            }
+        }
+    } else {
+        for (const auto &chip_id : this->cluster_desc_->get_all_chips()) {
+            this->user_chip_ids_.emplace_back(chip_id);
+        }
+    }
+
 }
 
 void Cluster::initialize_device_drivers() {

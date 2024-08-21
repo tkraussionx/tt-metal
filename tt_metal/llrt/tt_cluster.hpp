@@ -46,20 +46,14 @@ class Cluster {
 
     // For TG Galaxy systems, mmio chips are gateway chips that are only used for dispatc, so user_devices are meant for
     // user facing host apis
-    size_t number_of_user_devices() const {
-        if (this->is_tg_cluster_) {
-            const auto &chips = this->cluster_desc_->get_all_chips();
-            return std::count_if(chips.begin(), chips.end(), [&](const auto &id) {
-                return this->cluster_desc_->get_board_type(id) == BoardType::GALAXY;
-            });
-        } else {
-            return this->cluster_desc_->get_number_of_chips();
-        }
-    }
+    size_t number_of_user_devices() const { return this->user_chip_ids_.size(); }
 
     size_t number_of_devices() const { return this->cluster_desc_->get_number_of_chips(); }
 
     size_t number_of_pci_devices() const { return this->cluster_desc_->get_chips_with_mmio().size(); }
+
+    eth_coord_t get_ethernet_coord(chip_id_t chip_id) const { return this->cluster_desc_->get_chip_locations().at(chip_id); };
+    std::vector<chip_id_t> get_all_user_chip_ids() const { return this->user_chip_ids_; }
 
     ARCH arch() const { return this->arch_; }
 
@@ -284,6 +278,9 @@ class Cluster {
 
     // Tunnels setup in cluster
     std::map<chip_id_t, std::vector<std::vector<chip_id_t>>> tunnels_from_mmio_device = {};
+
+    // Get all user chip ids, on TG cluster, mmio chips are gateway chips that are only used for dispatch
+    std::vector<chip_id_t> user_chip_ids_;
 
     // Currently, each device is mapped to its own channel in host memory to enable fast dispatch
     // Channels are unique within a group of devices all controlled by a particular MMIO device
