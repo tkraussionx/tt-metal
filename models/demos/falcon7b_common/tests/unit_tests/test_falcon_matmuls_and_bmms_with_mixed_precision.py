@@ -343,7 +343,7 @@ def test_falcon7b_attnention_sliced(
         tt_dtype=ttnn.experimental.tensor.DataType.BFLOAT16,
     )
 
-    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -591,7 +591,7 @@ def test_falcon7b_attention_softmax_sequence(
         tt_dtype=ttnn.experimental.tensor.DataType.BFLOAT4_B,
     )
 
-    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
@@ -883,7 +883,7 @@ def test_softmax(device, num_cores, seq_len):
     tiles_per_shard = math.ceil((((head_dim * seq_len) / num_cores) / num_slices) / 32)
     height_shard_spec = [tiles_per_shard * 32, seq_len]
 
-    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
         math_approx_mode=True,
         fp32_dest_acc_en=False,

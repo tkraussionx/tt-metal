@@ -543,7 +543,7 @@ class resnetBlock2D:
                     transpose_mcast=True,
                     fused_activation=None,
                 )
-                compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+                compute_kernel_config = ttnn.WormholeComputeKernelConfig(
                     math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
                     math_approx_mode=True,
                     fp32_dest_acc_en=False,
