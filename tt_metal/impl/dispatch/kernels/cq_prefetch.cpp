@@ -60,6 +60,7 @@ constexpr uint32_t cmddat_q_page_size = 1 << cmddat_q_log_page_size;
 constexpr uint32_t cmddat_q_end = cmddat_q_base + cmddat_q_size;
 
 constexpr uint32_t scratch_db_half_size = scratch_db_size / 2;
+constexpr uint32_t scratch_db_quarter_size = scratch_db_size / 4;
 constexpr uint32_t scratch_db_base0 = scratch_db_base;
 constexpr uint32_t scratch_db_base1 = scratch_db_base + scratch_db_half_size;
 
@@ -121,17 +122,15 @@ void write_downstream(uint32_t& data_ptr,
                       uint32_t length) {
 
     uint32_t remaining = downstream_cb_end - downstream_data_ptr;
-    cq_noc_set_write_txn_id(7);
     if (length > remaining) {
         if (remaining > 0) {
-            cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), remaining, 7);
+            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), remaining);
             data_ptr += remaining;
             length -= remaining;
         }
         downstream_data_ptr = downstream_cb_base;
     }
-
-    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length, 7);
+    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
     downstream_data_ptr += length;
 }
 
@@ -176,7 +175,6 @@ uint32_t read_from_pcie(volatile tt_l1_ptr prefetch_q_entry_type *& prefetch_q_r
 
     uint64_t host_src_addr = pcie_noc_xy | pcie_read_ptr;
     //DPRINT << "read_from_pcie: " << fence + preamble_size << " " << pcie_read_ptr << ENDL();
-    cq_noc_set_read_txn_id(0);
     cq_noc_async_read_with_trid_any_len(host_src_addr, fence + preamble_size, size, 0);
     // noc_async_read(host_src_addr, fence + preamble_size, size);
     pending_read_size = size + preamble_size;
@@ -384,15 +382,14 @@ static uint32_t process_relay_inline_noflush_cmd(uint32_t cmd_ptr,
         dispatch_data_ptr = downstream_cb_base;
     }
     uint32_t remaining = cmddat_q_end - data_ptr;
-    cq_noc_set_write_txn_id(7);
     if (cmddat_wrap_enable && length > remaining) {
         // wrap cmddat
-        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining, 7);
+        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining);
         dispatch_data_ptr += remaining;
         length -= remaining;
         data_ptr = cmddat_q_base;
     }
-    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length, 7);
+    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length);
     dispatch_data_ptr += length;
 
     return cmd->relay_inline.stride;
@@ -416,20 +413,19 @@ static uint32_t write_pages_to_dispatcher(uint32_t& downstream_data_ptr,
     if (!test_for_nonzero || npages != 0) {
         cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
     }
-    cq_noc_set_write_txn_id(7);
     uint64_t noc_addr;
     if (downstream_data_ptr == downstream_cb_end) {
         downstream_data_ptr = downstream_cb_base;
     } else if (downstream_data_ptr + amt_to_write > downstream_cb_end) {  // wrap
         uint32_t last_chunk_size = downstream_cb_end - downstream_data_ptr;
         noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
-        cq_noc_async_write_with_trid_any_len(scratch_write_addr, noc_addr, last_chunk_size, 7);
+        noc_async_write(scratch_write_addr, noc_addr, last_chunk_size);
         downstream_data_ptr = downstream_cb_base;
         scratch_write_addr += last_chunk_size;
         amt_to_write -= last_chunk_size;
     }
     noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr);
-    cq_noc_async_write_with_trid_any_len(scratch_write_addr, noc_addr, amt_to_write, 7);
+    noc_async_write(scratch_write_addr, noc_addr, amt_to_write);
     downstream_data_ptr += amt_to_write;
 
     return npages;
@@ -467,7 +463,6 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
     }
 
     uint32_t trid = 0; // Initialize read transaction id to 0
-    cq_noc_set_read_txn_id(trid);
     cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, amt_read, trid);
     uint32_t page_length = page_size - amt_read;
     uint32_t page_offset = amt_read;
@@ -486,7 +481,6 @@ uint32_t process_relay_paged_cmd_large(uint32_t cmd_ptr,
         db_toggle ^= 1;
         // Toggle and update trid
         trid ^= 1;
-        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -596,11 +590,13 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     }
 
     InterleavedAddrGen<is_dram> addr_gen{.bank_base_address = base_addr, .page_size = page_size};
-    // uint32_t ring_db_slot_size = 256 * page_size;
-    // ring_db_slot_size = ring_db_slot_size > 32768 ? ((32768 / page_size) * page_size) : ring_db_slot_size;
-    uint32_t ring_db_slot_size = 2 * page_size;
+    uint32_t ring_db_slot_size = 256 * page_size; // Cannot exceed more than 256 reads per slot
+    // For larger page sizes, cap the slot size to quarter of the scratch buffer
+    ring_db_slot_size = ring_db_slot_size > scratch_db_quarter_size ? ((scratch_db_quarter_size / page_size) * page_size) : ring_db_slot_size;
+    // If the page does not fit in the quarter buffer, set the slot size to the page size (1 read per slot)
+    ring_db_slot_size = (page_size > scratch_db_quarter_size) ? page_size : ring_db_slot_size;
     uint32_t num_slots = scratch_db_size / ring_db_slot_size;
-    num_slots = (num_slots > 32) ? 32 : num_slots;
+    num_slots = (num_slots > 13) ? 13 : num_slots;
     uint32_t ring_db_size = num_slots * ring_db_slot_size;
 
     uint32_t read_length = pages * page_size;
@@ -609,8 +605,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     uint32_t amt_read = 0;
     // Issue reads to fill all slots of the scratch buffer
     while (amt_to_read >= page_size) {
-        uint32_t trid = (ring_db_read_addr - scratch_db_base0) / ring_db_slot_size;
-        cq_noc_set_read_txn_id(trid);
+        uint32_t trid = (ring_db_read_addr - scratch_db_base0) / (ring_db_slot_size) + 1;
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
         cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, trid);
         ring_db_read_addr += page_size;
@@ -625,7 +620,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     uint32_t ring_db_write_addr = scratch_db_base0;
     while (read_length > 0 || amt_to_write > ring_db_slot_size) {
         // Ensure data for this slot has been read
-        cq_noc_async_read_barrier_with_trid(write_slot);
+        cq_noc_async_read_barrier_with_trid(write_slot + 1);
         uint32_t npages = write_pages_to_dispatcher<0, false>
             (downstream_data_ptr, ring_db_write_addr, ring_db_slot_size);
         cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
@@ -636,10 +631,9 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
             ring_db_read_addr = ring_db_write_addr;
             // Ensure data for this slot has been picked up, before reading into it
             noc_async_writes_flushed();
-            cq_noc_set_read_txn_id(write_slot);
             while (amt_to_read >= page_size) {
                 uint64_t noc_addr = addr_gen.get_noc_addr(page_id);
-                cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, write_slot);
+                cq_noc_async_read_with_trid_any_len(noc_addr, ring_db_read_addr, page_size, write_slot + 1);
                 ring_db_read_addr += page_size;
                 page_id++;
                 amt_to_read -= page_size;
@@ -653,7 +647,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     }
     amt_to_write -= cmd->relay_paged.length_adjust;
     // Ensure data for this slot has been read
-    cq_noc_async_read_barrier_with_trid(write_slot);
+    cq_noc_async_read_barrier_with_trid(write_slot + 1);
     uint32_t npages = write_pages_to_dispatcher<1, true>
         (downstream_data_ptr, ring_db_write_addr, amt_to_write);
     downstream_data_ptr = round_up_pow2(downstream_data_ptr, downstream_cb_page_size);
@@ -678,7 +672,7 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
     uint32_t amt_read = 0;
     uint32_t scratch_read_addr = scratch_db_top[0];
     uint32_t trid = 0; // Initialize read transaction id to 0
-    cq_noc_set_read_txn_id(trid);
+    // cq_noc_set_read_txn_id(trid);
     while (read_length <= amt_to_read) {
         uint32_t page_id = sub_cmd->start_page;
         uint32_t log_page_size = sub_cmd->log_page_size;
@@ -722,7 +716,6 @@ void process_relay_paged_packed_sub_cmds(uint32_t total_length) {
         db_toggle ^= 1;
         // Toggle and update trid
         trid ^= 1;
-        cq_noc_set_read_txn_id(trid);
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -834,7 +827,7 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
     uint32_t trid = 0; // Initialize read transaction id to 0
     uint32_t amt_to_read = (scratch_db_half_size > read_length) ? read_length : scratch_db_half_size;
     uint64_t noc_addr = get_noc_addr_helper(noc_xy_addr, read_addr);
-    cq_noc_set_read_txn_id(trid);
+
     cq_noc_async_read_with_trid_any_len(noc_addr, scratch_read_addr, amt_to_read, trid);
     read_addr += amt_to_read;
     cq_noc_async_read_barrier_with_trid(trid);
@@ -852,7 +845,7 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
         db_toggle ^= 1;
         // Toggle and update trid
         trid ^= 1;
-        cq_noc_set_read_txn_id(trid);
+
         scratch_read_addr = scratch_db_top[db_toggle];
         scratch_write_addr = scratch_db_top[db_toggle ^ 1];
 
@@ -1003,10 +996,9 @@ static uint32_t process_exec_buf_relay_inline_noflush_cmd(uint32_t& cmd_ptr,
     }
     uint32_t remaining_stride = exec_buf_state.length;
     uint32_t remaining = exec_buf_state.length - sizeof(CQPrefetchCmd);
-    cq_noc_set_write_txn_id(7);
     while (length > remaining) {
         // wrap cmddat
-        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining, 7);
+        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), remaining);
         dispatch_data_ptr += remaining;
         length -= remaining;
         stride -= remaining_stride;
@@ -1021,7 +1013,7 @@ static uint32_t process_exec_buf_relay_inline_noflush_cmd(uint32_t& cmd_ptr,
         remaining = exec_buf_state.length;
         remaining_stride = exec_buf_state.length;
     }
-    cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length, 7);
+    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length);
     dispatch_data_ptr += length;
 
     return stride;
@@ -1240,7 +1232,6 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
         // swipe all the downstream page credits from ourselves...
         // prefetch_h stalls sending commands to prefetch_d until notified by dispatch_d that the exec_buf is done
         // exec_buf completing on dispatch_h will free the pages and allow sending again
-        cq_noc_set_write_txn_id(8);
         volatile tt_l1_ptr uint32_t* sem_addr =
             reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_downstream_cb_sem_id));
         noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, (uint32_t)sem_addr), -downstream_cb_pages);
@@ -1250,20 +1241,20 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence, bool
     }
 
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
-    cq_noc_set_write_txn_id(7);
+
     if (downstream_pages_left >= npages) {
-        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length, 7);
+        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
         uint32_t tail_pages = npages - downstream_pages_left;
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
-            cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available, 7);
+            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
             data_ptr += available;
             length -= available;
         }
 
-        cq_noc_async_write_with_trid_any_len(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length, 7);
+        noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length);
         downstream_data_ptr = downstream_cb_base + tail_pages * downstream_cb_page_size;
     }
 
@@ -1416,7 +1407,6 @@ void kernel_main_d() {
     // TODO: This should be replaced with a signal similar to what packetized
     // components use.
     DPRINT << "prefetch_d done" << ENDL();
-    cq_noc_set_write_txn_id(8);
     noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_cb_sem_id)), 0x80000000);
 }
 
@@ -1446,6 +1436,10 @@ void kernel_main() {
 
     volatile tt_l1_ptr uint32_t* sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_downstream_cb_sem_id));
+
+    // Writes will be tagged with id 14 and atomics will be tagged with id 15
+    cq_noc_set_write_txn_id(14);
+    cq_noc_set_atomic_txn_id(15);
 
     if (is_h_variant and is_d_variant) {
         kernel_main_hd();

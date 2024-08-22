@@ -10,17 +10,17 @@
 #include "debug/ring_buffer.h"
 #include "cq_helpers.hpp"
 
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t round_up_pow2(uint32_t v, uint32_t pow2_size) {
     return (v + (pow2_size - 1)) & ~(pow2_size - 1);
 }
 
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t div_up(uint32_t n, uint32_t d) {
     return (n + d - 1) / d;
 }
 
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t wrap_ge(uint32_t a, uint32_t b) {
 
     // Careful below: have to take the signed diff for 2s complement to handle the wrap
@@ -30,7 +30,7 @@ uint32_t wrap_ge(uint32_t a, uint32_t b) {
     return diff >= 0;
 }
 
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t wrap_gt(uint32_t a, uint32_t b) {
 
     // Careful below: have to take the signed diff for 2s complement to handle the wrap
@@ -107,7 +107,7 @@ enum CQNocSend {
 };
 
 template<enum CQNocFlags flags, enum CQNocWait wait = CQ_NOC_WAIT, enum CQNocSend send = CQ_NOC_SEND>
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_async_write_with_state(uint32_t src_addr, uint64_t dst_addr, uint32_t size = 0, uint32_t ndests = 1) {
 
     if constexpr (wait) {
@@ -142,7 +142,7 @@ void cq_noc_async_write_with_state(uint32_t src_addr, uint64_t dst_addr, uint32_
 // More generic version of cq_noc_async_write_with_state: Allows writing an abitrary amount of data, when the NOC config (dst_noc,
 // VC..) have been specified.
 template<bool write_last_packet = true>
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t cq_noc_async_write_with_state_any_len(uint32_t src_addr, uint64_t dst_addr, uint32_t size = 0, uint32_t ndests = 1) {
     if (size > NOC_MAX_BURST_SIZE) {
         cq_noc_async_write_with_state<CQ_NOC_SnDL>(src_addr, dst_addr, NOC_MAX_BURST_SIZE, ndests);
@@ -166,7 +166,7 @@ uint32_t cq_noc_async_write_with_state_any_len(uint32_t src_addr, uint64_t dst_a
 
 
 template<enum CQNocFlags flags, bool mcast = false, bool linked = false>
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_async_write_init_state(uint32_t src_addr, uint64_t dst_addr, uint32_t size = 0) {
 
     DEBUG_STATUS("NSIW");
@@ -194,7 +194,7 @@ void cq_noc_async_write_init_state(uint32_t src_addr, uint64_t dst_addr, uint32_
 }
 
 template<enum CQNocInlineFlags flags, enum CQNocWait wait = CQ_NOC_WAIT, enum CQNocSend send = CQ_NOC_SEND>
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_inline_dw_write_with_state(uint64_t dst_addr, uint32_t val = 0, uint8_t be = 0xF) {
 
     if constexpr (wait) {
@@ -230,7 +230,7 @@ void cq_noc_inline_dw_write_with_state(uint64_t dst_addr, uint32_t val = 0, uint
 // TODO: noc_inline_dw_write currently hardcodes most of these parameters, which we copied here
 // If needed, add templates for setting these
 template<enum CQNocInlineFlags flags>
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_inline_dw_write_init_state(uint64_t dst_addr, uint32_t val = 0, uint8_t be = 0xF) {
 
     DEBUG_STATUS("NIIW");
@@ -256,7 +256,7 @@ void cq_noc_inline_dw_write_init_state(uint64_t dst_addr, uint32_t val = 0, uint
 }
 
 template<uint32_t sem_id>
-// FORCE_INLINE
+FORCE_INLINE
 void cb_wait_all_pages(uint32_t n) {
     volatile tt_l1_ptr uint32_t* sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(sem_id));
@@ -266,7 +266,7 @@ void cb_wait_all_pages(uint32_t n) {
 }
 
 template<uint32_t noc_xy, uint32_t sem_id>
-// FORCE_INLINE
+FORCE_INLINE
 void cb_acquire_pages(uint32_t n) {
 
     volatile tt_l1_ptr uint32_t* sem_addr =
@@ -283,21 +283,19 @@ void cb_acquire_pages(uint32_t n) {
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
     }
     DEBUG_STATUS("DAPD");
-    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     noc_semaphore_inc(get_noc_addr_helper(noc_xy, (uint32_t)sem_addr), -n);
 }
 
 template<uint8_t noc_idx, uint32_t noc_xy, uint32_t sem_id>
-// FORCE_INLINE
+FORCE_INLINE
 void cb_release_pages(uint32_t n) {
-    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     noc_semaphore_inc(get_noc_addr_helper(noc_xy, get_semaphore(sem_id)), n, noc_idx);
 }
 
 template<uint32_t noc_xy,
          uint32_t sem_id,
          uint32_t cb_log_page_size>
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t cb_acquire_pages(uint32_t cb_fence,
                           uint32_t block_next_start_addr[],
                           uint32_t rd_block_idx,
@@ -332,14 +330,13 @@ template<uint8_t noc_idx,
          uint32_t sem_id,
          uint32_t cb_blocks,
          uint32_t cb_pages_per_block>
-// FORCE_INLINE
+FORCE_INLINE
 void cb_block_release_pages(uint32_t block_noc_writes_to_clear[],
                             uint32_t& wr_block_idx) {
 
     uint32_t sem_addr = get_semaphore(sem_id);
 
     uint32_t noc_progress = NOC_STATUS_READ_REG(noc_index, NIU_MST_NONPOSTED_WR_REQ_SENT);
-    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, 8);
     if (wrap_ge(noc_progress, block_noc_writes_to_clear[wr_block_idx])) {
         noc_semaphore_inc(get_noc_addr_helper(noc_xy, sem_addr), cb_pages_per_block, noc_idx);
         wr_block_idx++;
@@ -357,7 +354,7 @@ void cb_block_release_pages(uint32_t block_noc_writes_to_clear[],
 }
 
 template<uint32_t cb_blocks>
-// FORCE_INLINE
+FORCE_INLINE
 void move_rd_to_next_block(uint32_t block_noc_writes_to_clear[],
                            uint32_t& rd_block_idx) {
 
@@ -379,7 +376,7 @@ template<uint32_t cb_base,
          uint32_t cb_log_page_size,
          uint32_t noc_xy,
          uint32_t cb_sem>
-// FORCE_INLINE
+FORCE_INLINE
 uint32_t get_cb_page(uint32_t& cmd_ptr,
                      uint32_t& cb_fence,
                      uint32_t block_noc_writes_to_clear[],
@@ -415,7 +412,7 @@ constexpr uint32_t l1_to_local_cache_copy_chunk = 6;
 // It is call "careful_copy" because you need to be careful...
 // It copies beyond count by up to 5 elements make sure src and dst addresses are safe
 template<uint32_t l1_to_local_cache_copy_chunk, uint32_t l1_cache_elements_rounded>
-// FORCE_INLINE
+FORCE_INLINE
 void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, uint32_t count, uint32_t * l1_cache) {
     uint32_t n = 0;
     ASSERT(l1_to_local_cache_copy_chunk == 6);
@@ -439,15 +436,10 @@ void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, ui
 
 #ifndef ARCH_GRAYSKULL
 // Grayskull does not support tagged txns
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
-    // Ensure that the total number of outstanding txns for this trid doesn't exceed max limit
-    while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/4)) {
-        uint32_t outstanding_reads = NIU_MST_REQS_OUTSTANDING_ID(trid);
-        RISC_POST_STATUS_CQ(0xB00000 | outstanding_reads);
-    }
-    RISC_POST_STATUS_CQ(0xcccc);
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_COORDINATE, src_addr >> NOC_ADDR_COORD_SHIFT);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
@@ -457,35 +449,7 @@ void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local
 }
 #endif
 
-// FORCE_INLINE
-void cq_noc_async_write_with_trid(std::uint32_t src_addr, std::uint64_t dst_addr, std::uint32_t size, uint32_t trid) {
-    while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_CMD_BUF));
-    // while (NOC_STATUS_READ_REG(noc_index,  NIU_MST_REQS_OUTSTANDING_ID(trid)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/4));
-    uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR |NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | NOC_CMD_RESP_MARKED;
-
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(dst_addr >> NOC_ADDR_COORD_SHIFT));
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE, size);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
-
-    noc_nonposted_writes_num_issued[noc_index] += 1;
-    noc_nonposted_writes_acked[noc_index] += 1;
-}
-
-// FORCE_INLINE
-void cq_noc_async_write_with_trid_any_len(std::uint32_t src_addr, std::uint64_t dst_addr, std::uint32_t size, uint32_t trid) {
-    while (size > NOC_MAX_BURST_SIZE) {
-        cq_noc_async_write_with_trid(src_addr, dst_addr, NOC_MAX_BURST_SIZE, trid);
-        src_addr += NOC_MAX_BURST_SIZE;
-        dst_addr += NOC_MAX_BURST_SIZE;
-        size -= NOC_MAX_BURST_SIZE;
-    }
-    cq_noc_async_write_with_trid(src_addr, dst_addr, size, trid);
-}
-
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
 #ifdef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
@@ -501,7 +465,7 @@ void cq_noc_async_read_with_trid_any_len(std::uint64_t src_addr, std::uint32_t d
 #endif
 }
 
-// FORCE_INLINE
+FORCE_INLINE
 void cq_noc_async_read_barrier_with_trid(uint32_t trid) {
 #ifdef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
@@ -511,18 +475,16 @@ void cq_noc_async_read_barrier_with_trid(uint32_t trid) {
 #endif
 }
 
-// FORCE_INLINE
-void cq_noc_set_read_txn_id(uint32_t trid) {
-#ifndef ARCH_GRAYSKULL
-    // Grayskull does not support tagged txns
-    ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
-#endif
-}
-
-// FORCE_INLINE
 void cq_noc_set_write_txn_id(uint32_t trid) {
 #ifndef ARCH_GRAYSKULL
     // Grayskull does not support tagged txns
     ncrisc_noc_set_transaction_id(noc_index, NCRISC_WR_CMD_BUF, trid);
+#endif
+}
+
+void cq_noc_set_atomic_txn_id(uint32_t trid) {
+#ifndef ARCH_GRAYSKULL
+    // Grayskull does not support tagged txns
+    ncrisc_noc_set_transaction_id(noc_index, NCRISC_AT_CMD_BUF, trid);
 #endif
 }
