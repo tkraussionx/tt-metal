@@ -108,14 +108,13 @@ def test_reproduce_matmul_2d_hang(
         A.append(torch.randn(a_shape))
     B = torch.randn(b_shape)
 
-    a_t = []
+    a_t = [[None for _ in range(num_devices)] for _ in range(num_activation_tensors)]
     b_t = []
+
     for device_idx in range(num_devices):
         for act in range(num_activation_tensors):
-            a_t.append(
-                torch2tt_tensor(
-                    A[act], devices[device_idx], ttl.tensor.Layout.TILE, dram_interleaved_mem_config, in0_dtype
-                )
+            a_t[act][device_idx] = torch2tt_tensor(
+                A[act], devices[device_idx], ttl.tensor.Layout.TILE, dram_interleaved_mem_config, in0_dtype
             )
         b_t.append(torch2tt_tensor(B, devices[device_idx], ttl.tensor.Layout.TILE, in1_mem_config, in1_dtype))
 
@@ -140,12 +139,12 @@ def test_reproduce_matmul_2d_hang(
     num_nd_outputs = [0] * num_devices
     reference_out = []
     if determinism_check_enabled:
-        reference_out = [[None for _ in range(num_activation_tensors)] for _ in range(num_devices)]
+        reference_out = [[None for _ in range(num_devices)] for _ in range(num_activation_tensors)]
         for device_idx in range(num_devices):
             # First, convert input to sharded config
             for act in range(num_activation_tensors):
-                a_sharded = ttl.tensor.interleaved_to_sharded(
-                    A[act][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+                a_sharded = ttnn.experimental.tensor.interleaved_to_sharded(
+                    a_t[act][device_idx], sharded_mem_config=in0_block_sharded_mem_config
                 )
                 output = ttnn.matmul(
                     a_sharded,
@@ -165,12 +164,12 @@ def test_reproduce_matmul_2d_hang(
 
     for device_idx in range(num_devices):
         sharded_activations_per_device[device_idx] = ttl.tensor.interleaved_to_sharded(
-            A[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+            a_t[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
         )
 
     logger.info("Starting iterations")
     # loop_count iterations to test determinism/hang
-    for i in range(1):
+    for i in range(loop_count):
         # run matmul on all devices
         for device_idx in range(num_devices):
             out[device_idx] = ttnn.matmul(
@@ -210,7 +209,7 @@ def test_reproduce_matmul_2d_hang(
         if determinism_check_enabled and i % determinism_check_iterations == 0:
             for device_idx in range(num_devices):
                 pt_out = tt2torch_tensor(out[device_idx])
-                if torch.equal([current_act_tensor][device_idx], pt_out):
+                if torch.equal(reference_out[current_act_tensor][device_idx], pt_out):
                     logger.info(f"Device {device_idx} PCC: 1.0")
                 else:
                     # for determinism check, we avoid calling comp_pcc func as it is heavy and with too many operations,
@@ -221,10 +220,11 @@ def test_reproduce_matmul_2d_hang(
                     num_nd_outputs[device_idx] += 1
             current_act_tensor = (current_act_tensor + 1) % num_activation_tensors
             # Deallocate previous sharded activations and shard new ones
+            logger.info("Switching activation tensor for new determinism iterations")
             for device_idx in range(num_devices):
                 sharded_activations_per_device[device_idx].deallocate(True)
                 sharded_activations_per_device[device_idx] = ttl.tensor.interleaved_to_sharded(
-                    A[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
+                    a_t[current_act_tensor][device_idx], sharded_mem_config=in0_block_sharded_mem_config
                 )
 
         out[device_idx].deallocate(True)
