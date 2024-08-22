@@ -15,9 +15,11 @@ from models.utility_functions import (
 )
 from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc, check_with_pcc_without_tensor_printout
 import ttnn
+import tt_lib
 import math
 import os
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 # def plot_diff(vals, fid, nsticks, stick_len):
@@ -32,6 +34,148 @@ import torch.nn as nn
 #     plt.imshow(bool_vals, interpolation="none", vmin=0, vmax=1, cmap="Blues")
 #     plt.savefig(f"diff_core_{fid}.png", bbox_inches="tight", pad_inches=0.1)
 #     plt.close()
+
+
+def run_conv_padded(
+    device,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    transpose_mcast=True,
+    enable_auto_formatting=False,
+    padded_input_channels=None,
+    fp32_accum=False,
+    packer_l1_acc=False,
+    output_layout=ttnn.TILE_LAYOUT,
+    deallocate_activation=False,
+    debug=False,
+    use_shallow_conv_variant=False,
+):
+    # has_bias = False
+    has_bias = True
+    torch.manual_seed(0)
+    conv_input_shape = [batch_size, input_channels, input_height, input_width]
+    conv_weight_shape = [output_channels, input_channels, filter_height, filter_width]
+    conv_bias_shape = [1, 1, 1, output_channels]
+    torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
+    pad = (1, 1, 1, 1)
+    padded_input = F.pad(torch_input_tensor_nchw, pad, "constant", 0)
+    input_height = padded_input.shape[2]
+    input_width = padded_input.shape[3]
+    torch_input_tensor = torch.permute(padded_input, (0, 2, 3, 1))
+    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
+    torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
+
+    torch_out_golden_tensor = torch.nn.functional.conv2d(
+        torch_input_tensor_nchw,
+        torch_weight_tensor,
+        bias=torch_bias_tensor.reshape(-1) if has_bias else None,
+        stride=(stride_h, stride_w),
+        padding=(pad_h, pad_w),
+    )
+
+    output_shape_nhwc = [
+        torch_out_golden_tensor.shape[0],
+        torch_out_golden_tensor.shape[2],
+        torch_out_golden_tensor.shape[3],
+        torch_out_golden_tensor.shape[1],
+    ]
+
+    reader_patterns_cache = {}
+
+    tt_weight_tensor = ttnn.from_torch(
+        torch_weight_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
+    )
+    tt_bias_tensor = None
+    if has_bias:
+        tt_bias_tensor = ttnn.from_torch(
+            torch_bias_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
+        )
+
+    tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+    # breakpoint()
+    conv_config = ttnn.Conv2dConfig(
+        dtype=activations_dtype,
+        weights_dtype=weights_dtype,
+        math_fidelity=math_fidelity,
+        height_sharding=use_1d_systolic_array,
+        input_channels_alignment=16 if input_channels < 16 else 32,
+        deallocate_activation=deallocate_activation,
+        math_approx_mode_enabled=True,
+        fp32_dest_acc_enabled=True,
+        transpose_shards=True,
+        reallocate_halo_output=False,
+        # reshard_if_not_optimal=True,
+        # act_block_h_override=0,
+    )
+    if config_override and "act_block_h" in config_override:
+        conv_config.act_block_h_override = config_override["act_block_h"]
+        print("Setting Act Block H to ", conv_config.act_block_h_override)
+    if config_override and "num_cores_nhw" in config_override:
+        if config_override["num_cores_nhw"] == 98:
+            conv_config.core_grid = ttnn.CoreRangeSet({ttnn.CoreRange((0, 0), (11, 7)), ttnn.CoreRange((0, 8), (1, 8))})
+            conv_config.override_sharding_config = True
+            print("Setting num_cores_nhw to 98")
+
+    [tt_output_tensor_on_device, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
+        input_tensor=tt_input_tensor,
+        weight_tensor=tt_weight_tensor,
+        in_channels=input_channels,
+        out_channels=output_channels,
+        device=device,
+        bias_tensor=tt_bias_tensor,
+        kernel_size=(filter_height, filter_width),
+        stride=(stride_h, stride_w),
+        padding=(pad_h, pad_w),
+        batch_size=batch_size,
+        input_height=input_height,
+        input_width=input_width,
+        conv_config=conv_config,
+        conv_op_cache=reader_patterns_cache,
+        debug=debug,
+    )
+
+    tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
+    torch_output_tensor = ttnn.to_torch(tt_output_tensor)
+
+    # if enable_auto_formatting:
+    #     torch_output_tensor = torch.split(torch_output_tensor, output_channels, 3)[0]
+    #     torch_output_tensor = torch.reshape(torch_output_tensor, output_shape_nhwc)
+    # else:
+    #     tt_output_tensor = conv.copy_output_from_device(tt_output_tensor_on_device)
+    #     assert tt_output_tensor.layout == ttnn.ROW_MAJOR_LAYOUT
+    #     torch_output_tensor = ttnn.to_torch(tt_output_tensor)
+
+    # torch_output_tensor is in row major layout and NHWC shape
+    # NHWC to NCHW
+    torch_output_tensor = torch_output_tensor.reshape(batch_size, out_height, out_width, output_channels)
+
+    torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
+    torch_output_tensor = torch_output_tensor[:, :, 1:-1, 1:-1]
+    reader_patterns_cache.clear()
+
+    if not fp32_accum:
+        pcc = 0.995
+    elif math_fidelity == ttnn.MathFidelity.LoFi and activations_dtype == ttnn.bfloat8_b:
+        pcc = 0.9969
+    else:
+        pcc = 0.998
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
+    print(pcc_msg)
+    assert passing
 
 
 def run_conv(
@@ -1060,7 +1204,7 @@ def test_unet_conv(
     )
 
 
-@pytest.mark.skip("New API needs to be tested")
+# @pytest.mark.skip("New API needs to be tested")
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
@@ -1134,12 +1278,12 @@ def test_unet_conv_wh(
     use_shallow_conv_variant,
     output_layout,
 ):
-    if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
-        pytest.skip("Test is not supported on n300 (8,7) grid")
-    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
-        pytest.skip("Row major layout not compatible with bfloat8_b")
-    if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
-        pytest.skip("OOM")
+    # if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
+    #     pytest.skip("Test is not supported on n300 (8,7) grid")
+    # if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+    #     pytest.skip("Row major layout not compatible with bfloat8_b")
+    # if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
+    #     pytest.skip("OOM")
     run_conv(
         device,
         math_fidelity,
@@ -1162,6 +1306,66 @@ def test_unet_conv_wh(
         transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
         padded_input_channels=None,
         output_layout=output_layout,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    ((2, 1, 16, 1056, 160, 3, 3, 1, 1, 0, 0, True, {"act_block_h": 5 * 32}, False),),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+def test_unet_conv_wh_padded_n300(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    run_conv_padded(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
     )
 
 
