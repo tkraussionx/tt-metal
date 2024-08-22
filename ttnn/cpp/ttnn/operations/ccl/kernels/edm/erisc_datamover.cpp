@@ -325,6 +325,7 @@ void kernel_main() {
         }
     }
 
+    DPRINT << "EDM DONE1\n";
     {
         for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
             auto &channel = buffer_channels[s];
@@ -360,6 +361,7 @@ void kernel_main() {
             }
         }
     }
+    DPRINT << "EDM DONE\n";
 
     WAYPOINT("DONE");
 }

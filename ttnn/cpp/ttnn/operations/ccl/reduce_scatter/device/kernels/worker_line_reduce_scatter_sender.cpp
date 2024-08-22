@@ -36,7 +36,6 @@ struct reader_signaler {
 
     FORCE_INLINE void notify() const {
         if constexpr (is_line) {
-            DPRINT << "SIGNALLER NOTIFYING RECEIVER (SHOULDNT HAPPEN FOR RING)\n";
             noc_semaphore_inc(noc_semaphore_address, 1);
         }
     }
@@ -46,25 +45,26 @@ struct reader_signaler {
 void kernel_main() {
     constexpr bool is_sharded = get_compile_time_arg_val(0) == 1;
     constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;
-    constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(2);
 
     constexpr tt::tt_metal::TensorMemoryLayout output_tensor_memory_layout =
-        static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(3));
+        static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(2));
 
     /*
      * Indicates to another reader core that we have written out a unit of data to the output tensor and
      * that unit of data can be readback for accumulation with the outputs from the opposite line directoin
      */
-    constexpr bool signal_reader_on_output_tensor_write = get_compile_time_arg_val(5) != 0;
+    constexpr bool signal_reader_on_output_tensor_write = get_compile_time_arg_val(3) != 0;
+    // TODO: enable me!!!!
+    // constexpr bool is_linear_topology = get_compile_time_arg_val(4) != 0;
 
     #ifdef SHARDED_MEM_LAYOUT
-    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(5);
-    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(6);
-    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(7);
-    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(8);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(9);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(10);
-    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(11) != 0;
+    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(4);
+    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(5);
+    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(6);
+    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(7);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(8);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(9);
+    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(10) != 0;
     #endif
 
 
@@ -153,41 +153,46 @@ void kernel_main() {
     // Used to wait until eth sender has space available
     volatile tt_l1_ptr uint32_t* writer_send_semaphore_addr_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(writer_send_sem_addr);
-
-    ccl::edm::WorkerToEdmSender<ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED> sender(
-        ttnn::ccl::WorkerXY(eth_sender_noc_x, eth_sender_noc_y),
-        eth_sender_l1_base_addr,
-        num_buffers_per_channel,
-        eth_sender_l1_sem_addr,
-        // (num_full_chunks > 0 ? num_pages_per_full_chunk : rem_num_pages) * page_size,
-        full_chunk_num_pages * page_size,
-        writer_send_semaphore_addr_ptr);
+    // This is different per writer core
+    const uint64_t eth_l1_sender_base_noc_addr =
+        get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_base_addr);
+    // Used to signal eth sender that data is available. This is different per writer core
+    const uint64_t eth_l1_sender_semaphore_addr =
+        get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_sem_addr);
 
     uint32_t total_lifetime_cb_pages_popped_from_math = 0;
-    DPRINT << "S num_transfers: " << num_transfers << "\n";
-    while (worker_slice_base_offset.x < output_tensor_shape.x && worker_slice_base_offset.y < output_tensor_shape.y) {
-        // First phase - we only forward messages to EDM
-        // Set the valid_worker_slice_shape
-        coord_t valid_worker_slice_shape = worker_slice_shape;
-        if (worker_slice_base_offset.y == output_tensor_shape.y - 1) { // Worker is on last row of tensor_slice
-            if (output_tensor_shape.x - worker_slice_base_offset.x < worker_slice_shape.x) { // Worker is cutoff by the end of the tensor_slice
-                valid_worker_slice_shape.x = output_tensor_shape.x - worker_slice_base_offset.x;
-            }
-        }
-        uint32_t const num_pages_to_write = valid_worker_slice_shape.x * valid_worker_slice_shape.y;
+    // while (worker_slice_base_offset.x < output_tensor_shape.x && worker_slice_base_offset.y < output_tensor_shape.y) {
+    //     // First phase - we only forward messages to EDM
+    //     // Set the valid_worker_slice_shape
 
-        ASSERT(total_lifetime_cb_pages_popped_from_math + num_pages_to_write <= total_eltwise_kernel_num_pages);
-        for (uint32_t i = 0; i < num_transfers; ++i) {
-            const uint32_t cb_in = ((i == 0) && !signal_reader_on_output_tensor_write) ? cb_id_in_short_circuit : cb_id_in0;
-            DPRINT << "S NEW TRANSFER\n";
+    coord_t valid_worker_slice_shape = worker_slice_shape;
+    if (worker_slice_base_offset.y == output_tensor_shape.y - 1) { // Worker is on last row of tensor_slice
+        if (output_tensor_shape.x - worker_slice_base_offset.x < worker_slice_shape.x) { // Worker is cutoff by the end of the tensor_slice
+            valid_worker_slice_shape.x = output_tensor_shape.x - worker_slice_base_offset.x;
+        }
+    }
+    uint32_t const num_pages_to_write = valid_worker_slice_shape.x * valid_worker_slice_shape.y;
+
+    ASSERT(total_lifetime_cb_pages_popped_from_math + num_pages_to_write <= total_eltwise_kernel_num_pages);
+    for (uint32_t i = 0; i < num_transfers; ++i) {
+        const uint32_t cb_in = ((i == 0) && !signal_reader_on_output_tensor_write) ? cb_id_in_short_circuit : cb_id_in0;
+        DPRINT << "S NEW TRANSFER\n";
+        bool last_transfer = i == num_transfers - 1;
+        if (!last_transfer) {
 
             for (uint32_t p = 0; p < num_pages_to_write; p += full_chunk_num_pages) {
                 uint32_t n_pages = std::min(full_chunk_num_pages, num_pages_to_write - p);
-                ASSERT(half_cb_n_pages >= n_pages);
+                ASSERT(half_cb_n_pages >= full_chunk_num_pages || half_cb_n_pages >= n_pages);
                 ASSERT(n_pages > 0);
-                sender.wait_for_empty_write_slot();
-                sender.send_payload_blocking(cb_in, n_pages, page_size);
-
+                DPRINT << "S SEM WAIT\n";
+                noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+                noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
+                DPRINT << "S SEND CHUNK\n";
+                send_chunk(cb_in, n_pages, page_size, eth_l1_sender_base_noc_addr);
+                DPRINT << "S SEM INC\n";
+                noc_semaphore_inc(
+                    eth_l1_sender_semaphore_addr,
+                    ttnn::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
                 if (i != 0) {
                     total_lifetime_cb_pages_popped_from_math += n_pages;
                 }
@@ -201,70 +206,66 @@ void kernel_main() {
                     }
                 }
             }
-        }
 
-        DPRINT << "S LAST TRANSFER\n";
-        // write the final reduced chunk for this chip out to the output tensor
-        // Second phase - Dump the local output to the output tensor
-        uint32_t curr_ring_slice_start_page_offset = 0;
-        const uint32_t worker_relative_start_offset_into_slice =
-            worker_slice_base_offset.x + (worker_slice_base_offset.y * output_tensor_shape.x);
+        } else {
+            DPRINT << "S LAST TRANSFER\n";
+            // write the final reduced chunk for this chip out to the output tensor
+            // Second phase - Dump the local output to the output tensor
+            uint32_t curr_ring_slice_start_page_offset = 0;
+            const uint32_t worker_relative_start_offset_into_slice =
+                worker_slice_base_offset.x + (worker_slice_base_offset.y * output_tensor_shape.x);
 
-        const uint32_t starting_tile_id = curr_ring_slice_start_page_offset + worker_relative_start_offset_into_slice;
-        uint32_t curr_tile_id = starting_tile_id;
+            const uint32_t starting_tile_id = curr_ring_slice_start_page_offset + worker_relative_start_offset_into_slice;
+            uint32_t curr_tile_id = starting_tile_id;
 
-        uint32_t offset_into_worker_slice = 0;
-        bool last_page_of_worker = false;
-        for (uint32_t p = 0; p < num_pages_to_write; p += full_chunk_num_pages) {
+            uint32_t offset_into_worker_slice = 0;
+            bool last_page_of_worker = false;
+            for (uint32_t p = 0; p < num_pages_to_write; p += full_chunk_num_pages) {
 
-            DPRINT << "S WRITE WRAPPED CHUNK\n";
-            ASSERT(curr_tile_id < output_tensor_shape.x * output_tensor_shape.y);
-            ASSERT(!last_page_of_worker);
-            uint32_t n_pages = std::min(full_chunk_num_pages, num_pages_to_write - p);
-            ASSERT(n_pages <= half_cb_n_pages);
-            write_wrapped_chunk(
-                curr_tile_id,
-                offset_into_worker_slice,
-                worker_slice_base_offset, // Offset into tensor slice
-                valid_worker_slice_shape,
-                output_tensor_shape,  // In tiles for tile layout
-                output_tensor_shape,
-                cb_id_in0,
-                d,
-                n_pages,
-                page_size,
-                last_page_of_worker);
+                DPRINT << "S WRITE WRAPPED CHUNK\n";
+                ASSERT(curr_tile_id < output_tensor_shape.x * output_tensor_shape.y);
+                ASSERT(!last_page_of_worker);
+                uint32_t n_pages = std::min(full_chunk_num_pages, num_pages_to_write - p);
+                ASSERT(n_pages <= half_cb_n_pages);
+                write_wrapped_chunk(
+                    curr_tile_id,
+                    offset_into_worker_slice,
+                    worker_slice_base_offset, // Offset into tensor slice
+                    valid_worker_slice_shape,
+                    output_tensor_shape,  // In tiles for tile layout
+                    output_tensor_shape,
+                    cb_id_in0,
+                    d,
+                    n_pages,
+                    page_size,
+                    last_page_of_worker);
+                total_lifetime_cb_pages_popped_from_math += n_pages;
 
-            DPRINT << "S Done writing  WRAPPED CHUNK\n";
-            total_lifetime_cb_pages_popped_from_math += n_pages;
+                // Nop when doesn't need to notify - only used for lines
+                readback_accumulation_signaler.notify();
 
-            // Nop when doesn't need to notify - only used for lines
-            readback_accumulation_signaler.notify();
-
-            DPRINT << "S Popping filler pages\n";
-            if (n_pages < half_cb_n_pages) {
-                uint32_t num_filler_pages = half_cb_n_pages - n_pages;
-                ASSERT(p + n_pages == num_pages_to_write);
-                pop_filler_pages_from_cb(cb_id_in0, num_filler_pages);
-                total_lifetime_cb_pages_popped_from_math += num_filler_pages;
+                if (n_pages < half_cb_n_pages) {
+                    uint32_t num_filler_pages = half_cb_n_pages - n_pages;
+                    ASSERT(p + n_pages == num_pages_to_write);
+                    pop_filler_pages_from_cb(cb_id_in0, num_filler_pages);
+                    total_lifetime_cb_pages_popped_from_math += num_filler_pages;
+                }
             }
-            DPRINT << "S DONE Popping filler pages\n";
         }
-
-
-        DPRINT << "S advance_wrapped_slice_row_major\n";
-        worker_slice_base_offset = advance_wrapped_slice_row_major(
-            worker_slice_base_offset, worker_slice_shape, output_tensor_shape, num_concurrent_workers);
     }
+    DPRINT << "S Done writes\n";
 
-    DPRINT << "S DONE\n";
     ASSERT(total_lifetime_cb_pages_popped_from_math <= total_eltwise_kernel_num_pages);
     for (; total_lifetime_cb_pages_popped_from_math < total_eltwise_kernel_num_pages;
          total_lifetime_cb_pages_popped_from_math++) {
         pop_filler_pages_from_cb(cb_id_in0, 1);
     }
 
-    sender.close();
+    noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
+    noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
+    noc_semaphore_inc(
+        eth_l1_sender_semaphore_addr, ttnn::ccl::EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY);
 
-    DPRINT << "S DONE DONE\n";
+
+    DPRINT << "S Done DONE\n";
 }

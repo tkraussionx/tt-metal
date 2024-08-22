@@ -519,6 +519,8 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     }
 
     sender_buffer_channel.clear_local_semaphore();
+
+    DPRINT << "EDMS notify worker @ " << (uint32_t)sender_buffer_channel.worker_semaphore_l1_address << "\n";
     sender_buffer_channel.increment_worker_semaphores();
 
     if (!channel_done) {
@@ -589,6 +591,8 @@ template <typename EDM_CONFIG>
 FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(ChannelBuffer<EDM_CONFIG> &buffer_channel) {
     buffer_channel.clear_local_semaphore();
     uint32_t worker_semaphore_address = buffer_channel.worker_semaphore_l1_address;
+
+    DPRINT << "EDMR notify worker @ " << (uint32_t)buffer_channel.worker_semaphore_l1_address << "\n";
     buffer_channel.increment_worker_semaphores();
 
     buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::RECEIVER_WAITING_FOR_WORKER);
