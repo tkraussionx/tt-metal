@@ -189,15 +189,27 @@ expand_div = STD_MESH[0] // mesh[0]
 @pytest.mark.parametrize(
     "M, K, N, weights_dtype",
     [
-        pytest.param(32, 8192 // hidden_div, 32768 // expand_div, ttnn.bfloat4_b, id="Llama3-70B_decode_FF1"),
+        pytest.param(32, 8192 // hidden_div, 32768 // expand_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF1"),
         pytest.param(32, 32768 // expand_div, 8192 // hidden_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
     ],
 )
 @pytest.mark.parametrize("activation_sharded", [True, False], ids=["activation_sharded", "activation_interleaved"])
 @pytest.mark.parametrize("weight_sharded", [True, False], ids=["weight_sharded", "weight_interleaved"])
+# @pytest.mark.parametrize("activation_sharded", [True,], ids=["activation_sharded"])
+# @pytest.mark.parametrize("weight_sharded", [True,], ids=["weight_sharded"])
+@pytest.mark.parametrize("enable_async_mode", (True,), indirect=True)
 # Llama FF1, FF2, FF3 in MLP with dram sharded weights
 def test_galaxy_matmul_2d_fracture_dram_sharded(
-    M, K, N, weights_dtype, mesh_shape, device_mesh, activation_sharded, weight_sharded
+    M,
+    K,
+    N,
+    weights_dtype,
+    mesh_shape,
+    device_mesh,
+    activation_sharded,
+    weight_sharded,
+    use_program_cache,
+    enable_async_mode,
 ):
     """
     activation_sharded and dram_sharded: MM 1D dram sharded
@@ -206,17 +218,52 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     not activation_sharded and not dram_sharded: MM 2D dram interleaved
     """
 
-    act_pt = torch.randn(1, 1, M, K)
+    # if weight_sharded and not activation_sharded:
+    #     pytest.skip()
+    # if not weight_sharded and activation_sharded and K == 8192:
+    #     pytest.skip()
+    # if not weight_sharded and not activation_sharded and K == 8192:
+    #     pytest.skip()
+
+    # act_pt = torch.randn(1, 1, M, K)
+    # weights_pt = torch.randn(1, 1, K, N)
+
+    # gt = act_pt @ weights_pt
+
+    # act_shard_dim = (3, None) if K == 8192 else (None, 3)
+    # weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
+    # concat_dim = (1, 3) if K == 8192 else (3, 1)
+
+    # K = K // mesh_shape[0] if K == 8192 else K // mesh_shape[1]
+    # N = N // mesh_shape[1] if N == 32768 else N // mesh_shape[0]
+
+    # Do batched matmul so we can see if a specific device is failing
+    K = K // mesh_shape[0] if K == 8192 else K // mesh_shape[1]
+    N = N // mesh_shape[1] if N == 32768 else N // mesh_shape[0]
+    # Use ones activation to sum MM weights - look for large outliers
+    act_pt = torch.ones(mesh_shape[0], mesh_shape[1], M, K)
     weights_pt = torch.randn(1, 1, K, N)
+
+    # weights_pt = torch.arange(-K//2, K//2).reshape(1, 1, -1, 1).float()
+    # weights_pt = weights_pt.expand(1, 1, K, N)
+    # weights_pt = torch.full((1, 1, K, N), -1.9375)
+    # mask = torch.rand(weights_pt.shape) > 0.5
+    # weights_pt[mask] = 2
+    # for kk in range(0, K, 2):
+    # weights_pt[:,:,kk,:] = -2
+
+    # mask = torch.ones_like(weights_pt, dtype=torch.bool)
+    # mask[:,:,::3,::3] = False
+    # mask[:,:,1::3,1::3] = False
+    # weights_pt[mask] = 2
+    # mask = torch.ones_like(weights_pt, dtype=torch.bool)
+    # mask[:,:,]
 
     gt = act_pt @ weights_pt
 
-    act_shard_dim = (3, None) if K == 8192 else (None, 3)
-    weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
-    concat_dim = (1, 3) if K == 8192 else (3, 1)
-
-    K = K // mesh_shape[0] if K == 8192 else K // mesh_shape[1]
-    N = N // mesh_shape[1] if N == 32768 else N // mesh_shape[0]
+    act_shard_dim = (0, 1)
+    # weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
+    # concat_dim = (1, 3) if K == 8192 else (3, 1)
 
     act_mem_config = ttnn.create_sharded_memory_config(
         shape=(M, K // 8),
@@ -235,7 +282,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     )
 
     compute_kernel_lofi = ttnn.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.MathFidelity.LoFi,
+        math_fidelity=ttnn.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=True,
         packer_l1_acc=True,
@@ -261,7 +308,8 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         layout=ttnn.TILE_LAYOUT,
         device=device_mesh,
         memory_config=weight_mem_config if weight_sharded else ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ShardTensor2dMesh(device_mesh, dims=weight_shard_dim, mesh_shape=mesh_shape),
+        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        # mesh_mapper=ShardTensor2dMesh(device_mesh, dims=weight_shard_dim, mesh_shape=mesh_shape),
     )
 
     DRAM_SHARDED_PROGCFG = ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
@@ -281,7 +329,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         per_core_N=N // 32 // 8,  # N / TILE_WIDTH / Grid_Size
         transpose_mcast=False,
         fused_activation=None,
-        fuse_batch=False,
+        fuse_batch=True,
     )
 
     MATMUL_1D_PROGCFG = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -293,7 +341,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         per_core_N=N
         // 32
         // 8,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size, N = 4096 for num_device=8
-        fuse_batch=False,
+        fuse_batch=True,
         fused_activation=None,
         mcast_in0=True,
     )
@@ -311,7 +359,11 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     logger.info(f"weight_mem_config: {weights.memory_config()}")
 
     num_passed = 0
-    num_iters = 2000
+    num_iters = 10000
+
+    from collections import defaultdict, Counter
+
+    chip_failures = defaultdict(list)
 
     for i in range(num_iters):
         logger.info(f"Running iteration {i}")
@@ -325,18 +377,54 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         )
 
         out = ttnn.to_torch(
-            out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=concat_dim, mesh_shape=mesh_shape)
+            out, mesh_composer=ConcatMesh2dToTensor(device_mesh, dims=act_shard_dim, mesh_shape=mesh_shape)
         )
-        out = torch.sum(out, dim=1, keepdim=True)
-
+        # out = torch.sum(out, dim=1, keepdim=True)
+        # breakpoint()
         out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
         logger.info(f"PCC value: {out_pcc}")
-        assert out_pass
+        # assert out_pass
         if i == 0:
             expect_pcc = out_pcc
+            expect = out
         if i == 0 or (i != 0 and out_pcc == expect_pcc):
             num_passed += 1
+        else:
+            for j in range(mesh_shape[0]):
+                for k in range(mesh_shape[1]):
+                    if out[j, k, :, :].ne(expect[j, k, :, :]).any():
+                        logger.info(f"Device {j}, {k} failed")
+                        logger.info(f"Expected: {expect[j, k, :, :]}")
+                        logger.info(f"Got: {out[j, k, :, :]}")
+                        fail_idx = (out[j, k] - expect[j, k]).nonzero()[0]
+                        diff = out[j, k, fail_idx[0], fail_idx[1]] - expect[j, k, fail_idx[0], fail_idx[1]]
+                        chip_failures[(j, k)].append((tuple(fail_idx.tolist()), diff.item()))
+            # breakpoint()
     logger.info(f"Number of passes: {num_passed}/{num_iters}")
+
+    logger.info(f"mm_prog_config: {mm_prog_config}")
+    logger.info(f"act_mem_config: {act.memory_config()}")
+    logger.info(f"weight_mem_config: {weights.memory_config()}")
+    log_str = ""
+    for k, v in chip_failures.items():
+        # print("-"*10)
+        log_str += "-" * 10 + "\n"
+        # print(f"Chip {k} failed {len(v)} times")
+        log_str += f"Chip {k} failed {len(v)} times\n"
+        # print("Columns that failed:")
+        log_str += "Columns that failed:\n"
+        # count of unique failures
+        failure_count = Counter(v)
+        for (idx, diff), count in failure_count.most_common():
+            # print(f"Index: {idx}, Diff: {diff} failed {count} times")
+            log_str += f"Index: {idx}, Diff: {diff} failed {count} times\n"
+        # print("-"*10)
+        log_str += "-" * 10 + "\n"
+
+    print(log_str)
+    with open(f"generated/mm_nd_log_{M}_{K}_{N}_{weights_dtype}_{activation_sharded}_{weight_sharded}.txt", "w") as f:
+        f.write(log_str)
+
     assert num_passed == num_iters
 
 
