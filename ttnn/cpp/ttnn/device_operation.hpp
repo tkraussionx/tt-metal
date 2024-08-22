@@ -127,12 +127,7 @@ inline auto& create_or_get_program_from_cache(
         auto program_factory = device_operation_t::select_program_factory(operation_attributes, tensor_args);
 
         auto& program = std::visit(
-            [&program_cache,
-             &program_hash,
-             &operation_attributes,
-             &tensor_args,
-             &tensor_return_value,
-             program_factory_index = program_factory.index()](auto&& program_factory) -> auto& {
+            [&, program_factory_index = program_factory.index()](auto&& program_factory) -> auto& {
                 using program_factory_t = std::decay_t<decltype(program_factory)>;
                 using cached_program_t =
                     decltype(program_factory_t::create(operation_attributes, tensor_args, tensor_return_value));
@@ -157,7 +152,7 @@ inline auto& create_or_get_program_from_cache(
         auto program_factory = map_index_to_variant(program_factory_index, program_factory_variant_t{});
 
         auto& program = std::visit(
-            [&cached_program_factory, &operation_attributes, &tensor_args, &tensor_return_value](
+            [&](
                 auto&& program_factory) -> auto& {
                 using program_factory_t = std::decay_t<decltype(program_factory)>;
 
@@ -222,7 +217,7 @@ inline void log_operation(
     tt::log_debug(tt::LogOp, "Tensors Args:");
     auto index = 0;
     tt::stl::reflection::visit_object_of_type<Tensor>(
-        [&index](auto&& tensor) {
+        [&](auto&& tensor) {
             tt::log_debug(tt::LogOp, "\t{}: {}", index, tensor);
             index++;
         },
@@ -313,7 +308,6 @@ void launch_on_worker_thread(auto cq_id, auto device_operation_id, const auto& o
             operation_attributes,
             tensor_args,
             tensor_return_value);
-
     } else {
         auto program_factory = device_operation_t::select_program_factory(operation_attributes, tensor_args);
 
@@ -357,13 +351,18 @@ typename device_operation_t::tensor_return_value_t launch_on_single_device(
     // Create output tensor first
     auto tensor_return_value = device_operation_t::create_output_tensors(operation_attributes, tensor_args);
     auto device = tt::stl::reflection::get_first_object_of_type<Tensor>(tensor_args).device();
-    launch_on_worker_thread<device_operation_t>(cq_id, device_operation_id, operation_attributes, tensor_args, tensor_return_value, device);
+    device->push_work([=]() mutable {
+        tt::log_debug(tt::LogAsync, "Device {}: launching operation {} on device", device->id(), get_operation_name<device_operation_t>(operation_attributes));
+        launch_on_worker_thread<device_operation_t>(
+            cq_id, device_operation_id, operation_attributes, tensor_args, tensor_return_value, device);
+        tt::log_debug(tt::LogAsync, "Device {}: launched operation {} on device", device->id(), get_operation_name<device_operation_t>(operation_attributes));
+    });
     return tensor_return_value;
 }
 
 template <DeviceOperationConcept device_operation_t>
 typename device_operation_t::tensor_args_t get_shard_tensor_args(std::size_t index, auto device, const typename device_operation_t::tensor_args_t& tensor_args) {
-    auto get_shard = [device](const auto& tensor) {
+    auto get_shard = [=](const auto& tensor) {
         auto& storage = std::get<tt::tt_metal::MultiDeviceStorage>(tensor.get_storage());
         return Tensor{
             DeviceStorage{storage.get_buffer_for_device(device)},
@@ -439,7 +438,7 @@ typename device_operation_t::tensor_return_value_t launch_on_multi_device(
     std::vector<tensor_return_value_t> outputs;
     outputs.reserve(num_shards);
 
-    bool launch_shards_in_parallel = false;
+    constexpr bool launch_shards_in_parallel = false;
     if (launch_shards_in_parallel) {
         std::vector<std::future<tensor_return_value_t>> shard_futures;
         shard_futures.reserve(num_shards);
@@ -449,7 +448,7 @@ typename device_operation_t::tensor_return_value_t launch_on_multi_device(
             shard_futures.emplace_back(
                 std::async(
                     std::launch::async,
-                    [cq_id, operation_attributes, tensor_args, shard_index, storage]() mutable {
+                    [=]() mutable {
                         auto device = storage.get_buffer_for_device_id(shard_index)->device();
                         auto shard_tensor_args = get_shard_tensor_args<device_operation_t>(shard_index, device, tensor_args);
                         return launch_on_single_device<device_operation_t>(cq_id, operation_attributes, shard_tensor_args);
@@ -467,7 +466,6 @@ typename device_operation_t::tensor_return_value_t launch_on_multi_device(
             outputs.push_back(launch_on_single_device<device_operation_t>(cq_id, operation_attributes, shard_tensor_args));
         }
     }
-
     return make_tensor_return_value_from_shards(storage, outputs);
 }
 
@@ -490,10 +488,12 @@ typename device_operation_t::tensor_return_value_t invoke(
     const auto& storage = first_tensor.get_storage();
 
     auto tensor_return_value = std::visit(
-        [&cq_id, &operation_attributes, &tensor_args](auto&& storage) -> tensor_return_value_t {
+        [&](auto&& storage) -> tensor_return_value_t {
             using storage_t = std::remove_cvref_t<decltype(storage)>;
             if constexpr (std::is_same_v<storage_t, tt::tt_metal::DeviceStorage>) {
-                return detail::launch_on_single_device<device_operation_t>(cq_id, operation_attributes, tensor_args);
+                auto output = detail::launch_on_single_device<device_operation_t>(cq_id, operation_attributes, tensor_args);
+                auto device = tt::stl::reflection::get_first_object_of_type<Tensor>(tensor_args).device();
+                return output;
             } else if constexpr (std::is_same_v<storage_t, tt::tt_metal::MultiDeviceStorage>) {
                 return detail::launch_on_multi_device<device_operation_t>(cq_id, operation_attributes, tensor_args);
             }
