@@ -304,7 +304,7 @@ namespace kernel_profiler{
             .page_size = pageSize
         };
 
-        if ( currEndIndex < PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
+        if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
         {
 
             uint32_t dram_offset =
@@ -339,6 +339,7 @@ namespace kernel_profiler{
         {
             mark_dropped_timestamps(hostIndex);
         }
+        profiler_control_buffer[deviceIndex] = 0;
 #endif
 #if  defined(COMPILE_FOR_BRISC)
         int hostIndex;
@@ -444,6 +445,10 @@ namespace kernel_profiler{
         mark_time_at_index_inlined(wIndex, get_end_timer_id(hash));
         wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
 
+	for (uint32_t i = 0; i < (wIndex % NOC_ALIGNMENT_FACTOR); i++)
+	{
+	    mark_padding();
+	}
         uint32_t currEndIndex = profiler_control_buffer[riscIndex] + wIndex;
 
         if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
@@ -453,6 +458,7 @@ namespace kernel_profiler{
                     dram_bank_dst_noc_addr,
                     wIndex * sizeof(uint32_t));
 
+	    noc_async_write_barrier();
             profiler_control_buffer[riscIndex] = currEndIndex;
 
             if constexpr (setExternalBuffer == DoingExternalNocBuffer::SET_EXTERNAL_NOC_BUFFER)

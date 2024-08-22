@@ -371,61 +371,40 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
         {
             if (tt::llrt::OptionsG.get_profiler_do_dispatch_cores())
             {
-                bool waitForDispatch = true;
-                uint8_t loopCount = 0;
-                CoreCoord unfinishedCore = {0,0};
+                auto device_id = device->id();
                 constexpr uint8_t maxLoopCount = 10;
                 constexpr uint32_t loopDuration_us = 10000;
-                while (waitForDispatch)
+                auto device_num_hw_cqs = device->num_hw_cqs();
+                std::vector<CoreCoord> dispatchCores = tt::get_logical_dispatch_cores(device_id, device_num_hw_cqs, dispatch_core_type);
+
+                while (dispatchCores.size() > 0)
                 {
-                    waitForDispatch = false;
-                    std::this_thread::sleep_for(std::chrono::microseconds(loopDuration_us));
-                    auto device_id = device->id();
-                    auto device_num_hw_cqs = device->num_hw_cqs();
-                    loopCount++;
-                    if (loopCount > maxLoopCount)
+                    bool coreDone = false;
+
+                    const auto curr_core = device->physical_core_from_logical_core(dispatchCores[0], dispatch_core_type);
+                    for (int i =0; i < maxLoopCount; i++)
                     {
-                        std::string msg = fmt::format(
-                                "Device profiling never finished on device {}, worker core {}, {}",
-                                device_id, unfinishedCore.x, unfinishedCore.y);
-                        TracyMessageC(msg.c_str(), msg.size(), tracy::Color::Tomato3);
-                        log_warning(msg.c_str());
-                        break;
-                    }
-                    for (const CoreCoord& core :
-                         tt::get_logical_dispatch_cores(device_id, device_num_hw_cqs, dispatch_core_type)) {
-                        const auto curr_core = device->physical_core_from_logical_core(core, dispatch_core_type);
                         vector<std::uint32_t> control_buffer = tt::llrt::read_hex_vec_from_core(
                                 device_id,
                                 curr_core,
-                                PROFILER_L1_BUFFER_CONTROL,
-                                PROFILER_L1_CONTROL_BUFFER_SIZE);
-                        if (control_buffer[kernel_profiler::PROFILER_DONE] == 0)
-                        {
-                            unfinishedCore = curr_core;
-                            waitForDispatch = true;
-                            continue;
-                        }
-                    }
-                    if (waitForDispatch)
-                    {
-                        continue;
-                    }
-                    for (const CoreCoord& core : tt::Cluster::instance().get_soc_desc(device_id).physical_ethernet_cores)
-                    {
-                        vector<std::uint32_t> control_buffer = tt::llrt::read_hex_vec_from_core(
-                                device_id,
-                                core,
                                 eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL,
                                 PROFILER_L1_CONTROL_BUFFER_SIZE);
-                        if (control_buffer[kernel_profiler::PROFILER_DONE] == 0)
+                        if (control_buffer[kernel_profiler::PROFILER_DONE] == 1)
                         {
-                            unfinishedCore = core;
-                            waitForDispatch = true;
-                            continue;
+                            coreDone = true;
+                            break;
                         }
+                        std::this_thread::sleep_for(std::chrono::microseconds(loopDuration_us));
                     }
-
+                    if (!coreDone)
+                    {
+                        std::string msg = fmt::format(
+                                "Device profiling never finished on device {}, worker core {}, {}",
+                                device_id, curr_core.x, curr_core.y);
+                        TracyMessageC(msg.c_str(), msg.size(), tracy::Color::Tomato3);
+                        log_warning(msg.c_str());
+                    }
+                    dispatchCores.erase(dispatchCores.begin());
                 }
             }
         }

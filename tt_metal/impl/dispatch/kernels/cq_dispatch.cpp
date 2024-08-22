@@ -1075,7 +1075,7 @@ void kernel_main() {
     bool done = false;
     uint32_t heartbeat = 0;
     while (!done) {
-        DeviceZoneScopedNDN("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
+	DeviceZoneScopedNDN("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
         if (cmd_ptr == cb_fence) {
             get_cb_page<
                 dispatch_cb_base,
