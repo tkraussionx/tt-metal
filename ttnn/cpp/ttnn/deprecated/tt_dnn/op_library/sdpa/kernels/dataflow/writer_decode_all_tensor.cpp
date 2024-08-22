@@ -50,32 +50,32 @@ void fill_tile_partial(uint32_t cb_id, uint32_t tile_id, uint32_t cur_pos_in_til
 
     fill_tile<tile_bytes>(cb_id, tile_id, 0);
     if (cur_pos_in_tile == 31 || partial_val == 0) {
-        // DPRINT << "Fill entire tile to 0 and exit" << ENDL();
+        DPRINT << "Fill entire tile to 0 and exit" << ENDL();
         return;
     }
-    // DPRINT << "Fill partial tile" << ENDL();
+    DPRINT << "Fill partial tile" << ENDL();
     const uint16_t scalar_val = partial_val>>16;
     volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(get_write_ptr(cb_id) + tile_id*tile_bytes);
     int phase_start = (cur_pos_in_tile < 15) ? 0:1;
     uint32_t fill_pos_in_phase = (cur_pos_in_tile+1) % 16;
-    // DPRINT << "phase_start: " << phase_start << ENDL();
-    // DPRINT << "fill_pos_in_phase: " << fill_pos_in_phase << ENDL();
+    DPRINT << "phase_start: " << phase_start << ENDL();
+    DPRINT << "fill_pos_in_phase: " << fill_pos_in_phase << ENDL();
     if (phase_start == 0) {
-        // DPRINT << "Fill second and fourth phase" << ENDL();
+        DPRINT << "Fill second and fourth phase" << ENDL();
         for (int k = 1; k < 4; k+=2) {
             uint32_t idx = k << 8;
-            // DPRINT << "k: " << k << ENDL();
-            // DPRINT << "idx: " << idx << ENDL();
+            DPRINT << "k: " << k << ENDL();
+            DPRINT << "idx: " << idx << ENDL();
             for (int j = 0; j < 256; j++) {
                 ptr[idx + j] = scalar_val;
             }
         }
     }
-    // DPRINT << "Fill phase" << ENDL();
+    DPRINT << "Fill phase" << ENDL();
     for (int k = phase_start; k < 4; k+=2) {
         uint32_t idx = k << 8;
-        // DPRINT << "k: " << k << ENDL();
-        // DPRINT << "idx: " << idx << ENDL();
+        DPRINT << "k: " << k << ENDL();
+        DPRINT << "idx: " << idx << ENDL();
         for (int j_start_pos = fill_pos_in_phase; j_start_pos < 16; j_start_pos++) {
             for (int j = j_start_pos; j < 256; j+=16) {
                 ptr[idx + j] = scalar_val;
@@ -139,18 +139,18 @@ void generate_mask(uint32_t k_num_chunks, uint32_t PSt, uint32_t cur_pos) {
     uint32_t q_write_ptr_base = get_read_ptr(cb_mask_in);
     constexpr uint32_t tile_bytes = get_tile_size(cb_mask_in);
 
-    // DPRINT << "[Writer Reducer] Generate Attention Mask" << ENDL();
-    // DPRINT << "k_num_chunks: " << k_num_chunks << ENDL();
-    // DPRINT << "cur_pos: " << cur_pos << ENDL();
-    // DPRINT << "Sk_chunk_t: " << Sk_chunk_t << ENDL();
-    // DPRINT << "cur_pos_in_chunk: " << cur_pos_in_chunk << ENDL();
-    // DPRINT << "cur_pos_in_chunk_t: " << cur_pos_in_chunk_t << ENDL();
-    // DPRINT << "cur_pos_in_tile: " << cur_pos_in_tile << ENDL();
+    DPRINT << "[Writer Reducer] Generate Attention Mask" << ENDL();
+    DPRINT << "k_num_chunks: " << k_num_chunks << ENDL();
+    DPRINT << "cur_pos: " << cur_pos << ENDL();
+    DPRINT << "Sk_chunk_t: " << Sk_chunk_t << ENDL();
+    DPRINT << "cur_pos_in_chunk: " << cur_pos_in_chunk << ENDL();
+    DPRINT << "cur_pos_in_chunk_t: " << cur_pos_in_chunk_t << ENDL();
+    DPRINT << "cur_pos_in_tile: " << cur_pos_in_tile << ENDL();
 
     for (uint32_t i = 0; i < Sk_chunk_t; ++i) {
-        // DPRINT << "iteration " << i << ENDL();
+        DPRINT << "iteration " << i << ENDL();
         if (i < cur_pos_in_chunk_t) {
-            // DPRINT << "fill with zero" << ENDL();
+            DPRINT << "fill with zero" << ENDL();
             // fill with zero
             if (i == 0) {
                 fill_tile<tile_bytes>(cb_mask_in, i, 0);
@@ -163,12 +163,12 @@ void generate_mask(uint32_t k_num_chunks, uint32_t PSt, uint32_t cur_pos) {
             }
         }
         else if (i == cur_pos_in_chunk_t) {
-            // DPRINT << "fill with partial zero/-inf" << ENDL();
+            DPRINT << "fill with partial zero/-inf" << ENDL();
             // fill with partial zero/-inf
             fill_tile_partial<tile_bytes>(cb_mask_in, i, cur_pos_in_tile, NEG_INF);
         }
         else {
-            // DPRINT << "fill with -inf" << ENDL();
+            DPRINT << "fill with -inf" << ENDL();
             // fill with -inf
             if (i == cur_pos_in_chunk_t+1){
                 fill_tile<tile_bytes>(cb_mask_in, i, NEG_INF);
@@ -181,7 +181,7 @@ void generate_mask(uint32_t k_num_chunks, uint32_t PSt, uint32_t cur_pos) {
             }
         }
         for (uint32_t j = 1; j < PNHt; ++j) {
-            // DPRINT << "Should not reach" << ENDL();
+            DPRINT << "Should not reach" << ENDL();
             // copy from cb_mask_in[i] to cb_mask_in[j*Sk_chunk_t + i]
             copy_tile<tile_bytes>(noc_read_addr_base, q_write_ptr_base, i, j*Sk_chunk_t + i);
             if (j == PNHt-1){
@@ -195,7 +195,7 @@ void generate_mask(uint32_t k_num_chunks, uint32_t PSt, uint32_t cur_pos) {
 
 template <uint32_t out_chunk_tiles, uint32_t cb_out, uint32_t cb_out_m, uint32_t cb_out_l, uint32_t cb_intermed_out, uint32_t PNHt>
 void worker_compute(uint64_t in0_sender_semaphore_noc_addr, uint32_t worker_id, uint32_t reduce_core_noc_x, uint32_t reduce_core_noc_y) {
-    // DPRINT << "[Writer Worker] Pushed statistics to copmute worker" << ENDL();
+    DPRINT << "[Writer Worker] Pushed statistics to copmute worker" << ENDL();
 
     uint32_t out_tile_id = 0;
 
@@ -204,7 +204,7 @@ void worker_compute(uint64_t in0_sender_semaphore_noc_addr, uint32_t worker_id, 
     cb_wait_front(cb_out_m, PNHt);
     cb_wait_front(cb_out_l, PNHt);
 
-    // DPRINT << "[Writer Worker] Received output chunk from compute" << ENDL();
+    DPRINT << "[Writer Worker] Received output chunk from compute" << ENDL();
 
     // Write output chunk to reducer
     constexpr uint32_t tile_bytes = get_tile_size(cb_out);
@@ -218,20 +218,20 @@ void worker_compute(uint64_t in0_sender_semaphore_noc_addr, uint32_t worker_id, 
     output_write_addr+=ml_write_size;
     noc_async_write(get_read_ptr(cb_out_l), output_write_addr, ml_write_size);
 
-    // DPRINT << "[Writer Worker] Wrote output chunk to reducer" << ENDL();
+    DPRINT << "[Writer Worker] Wrote output chunk to reducer" << ENDL();
 
     // increment semaphore
     noc_async_write_barrier();
     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
 
-    // DPRINT << "[Writer Worker] Incremented semaphore" << ENDL();
+    DPRINT << "[Writer Worker] Incremented semaphore" << ENDL();
 
     // pop front
     cb_pop_front(cb_out, out_chunk_tiles);
     cb_pop_front(cb_out_m, PNHt);
     cb_pop_front(cb_out_l, PNHt);
 
-    // DPRINT << "[Writer Worker] Done" << ENDL();
+    DPRINT << "[Writer Worker] Done" << ENDL();
 }
 
 void kernel_main() {
@@ -255,23 +255,24 @@ void kernel_main() {
 
     // Get cur_pos
     constexpr uint32_t cb_index_id = tt::CB::dataflow0;
-    // DPRINT << "[W] core_num " << core_num << " cur_batch " << cur_batch << ENDL();
+    DPRINT << "[W] core_num " << core_num << " cur_batch " << cur_batch << "k_chunk_size"<< k_chunk_size<<ENDL();
 
     cb_wait_front(cb_index_id, 1);
     uint32_t index_cb_ptr = get_read_ptr(cb_index_id);
     volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
     const uint32_t cur_pos = index_ptr[cur_batch];
-    // DPRINT << "[W] cur_pos " << cur_pos << ENDL();
+    DPRINT << "[W] cur_pos " << cur_pos << ENDL();
 
     // Sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end] = get_runtime_args(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size);
-
+    DPRINT << "[Writer] PSt " << PSt << " k_num_chunks " << k_num_chunks << " k_chunk_start " << k_chunk_start << " k_chunk_end " << k_chunk_end << ENDL();
+    DPRINT << "worker_id " << worker_id << " is_worker " << get_arg_val<uint32_t>(3) << ENDL();
     tt_l1_ptr uint32_t * all_reducer_noc_x          = (tt_l1_ptr uint32_t*)(get_arg_addr(5));
     tt_l1_ptr uint32_t * all_reducer_noc_y          = (tt_l1_ptr uint32_t*)(get_arg_addr(5 + B));
 
     uint32_t reduce_core_noc_x = all_reducer_noc_x[cur_batch];
     uint32_t reduce_core_noc_y = all_reducer_noc_y[cur_batch];
-    // DPRINT << "[Writer] reduce_core_noc_x " << reduce_core_noc_x << " reduce_core_noc_y " << reduce_core_noc_y << ENDL();
+    DPRINT << "[Writer] reduce_core_noc_x " << reduce_core_noc_x << " reduce_core_noc_y " << reduce_core_noc_y << ENDL();
 
     const uint64_t in0_sender_semaphore_noc_addr = get_noc_addr(reduce_core_noc_x, reduce_core_noc_y, semaphore_addr);
 
@@ -280,8 +281,9 @@ void kernel_main() {
     }
 
     constexpr uint32_t out_chunk_tiles = PNHt * DHt;
-    constexpr uint32_t num_cores_to_wait = num_cores_per_batch-1;
-    constexpr uint32_t num_tiles_to_wait = (out_chunk_tiles+2*PNHt)*num_cores_to_wait;
+    uint32_t num_cores_to_wait = num_cores_per_batch-1;
+    if (num_cores_per_batch>k_num_chunks) num_cores_to_wait = k_num_chunks-1;
+    uint32_t num_tiles_to_wait = (out_chunk_tiles+2*PNHt)*num_cores_to_wait;
 
     constexpr bool is_dram = true;
     constexpr uint32_t cb_out = tt::CB::c_out4;
@@ -301,8 +303,8 @@ void kernel_main() {
     // generate and send scaler to compute
     generate_bcast_unary_scalar(cb_scale_in, scale_val);
     generate_reduce_scaler(cb_identity_scale_in, identity_scalar_packed);
-
     if (is_worker) {
+        DPRINT<<"[W] is worker"<<ENDL();
         worker_compute<out_chunk_tiles, cb_out_worker, cb_out_m, cb_out_l, cb_intermed_out, PNHt>(in0_sender_semaphore_noc_addr, worker_id, reduce_core_noc_x, reduce_core_noc_y);
         return;
     }
@@ -328,57 +330,57 @@ void kernel_main() {
     // generate and send mask to compute
     generate_mask<cb_mask_in, PNHt>(k_num_chunks, PSt, cur_pos);
 
-    // DPRINT << "[Writer Reducer] Pushed statistics to copmute" << ENDL();
+    DPRINT << "[Writer Reducer] Pushed statistics to copmute" << ENDL();
 
     if (k_chunk_end - k_chunk_start < k_num_chunks){
         // This indicates that there are computes done by other workers. Needs to wait for them and send to reducer's compute
         // Wait for compute to deliver output chunk, and write to compute again for reduction
         // data in cb_intermed_out is arranged as [o,m,l,o,m,l,...] with size (out_chunk_tiles + 2*PNHt)*num_cores_to_wait
         // wait on in0 semaphore value to become VALID (set by sender)
-        // DPRINT << "[Writer Reducer] Waiting for semaphore to be set from "<< num_cores_to_wait << " cores" << ENDL();
+        DPRINT << "[Writer Reducer] Waiting for semaphore to be set from "<< num_cores_to_wait << " cores" << ENDL();
         noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, num_cores_to_wait);
-        // DPRINT << "[Writer Reducer] Received signal that semaphore has set" << ENDL();
+        DPRINT << "[Writer Reducer] Received signal that semaphore has set" << ENDL();
         // noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
 
         // cb_wait_front(cb_intermed_out, num_tiles_to_wait);
         constexpr uint32_t q_read_size = out_chunk_tiles*tile_bytes_intermed;
         constexpr uint32_t ml_read_size = PNHt*tile_bytes_intermed;
-        // DPRINT << "[Writer Reducer] Received intermediate chunks from worker cores" << ENDL();
-        // DPRINT << "[Writer Reducer] Sending intermediate chunks to compute" << ENDL();
-        for(uint32_t block = 0; block < num_cores_per_batch; ++block) {
+        DPRINT << "[Writer Reducer] Received intermediate chunks from worker cores" << ENDL();
+        DPRINT << "[Writer Reducer] Sending intermediate chunks to compute" << ENDL();
+        for(uint32_t block = 0; block < num_cores_to_wait+1; ++block) {
 
-            // DPRINT << "[Writer Reducer] Iteration " << block << ENDL();
+            DPRINT << "[Writer Reducer] Iteration " << block << ENDL();
             cb_reserve_back(cb_out_o, out_chunk_tiles);
             cb_reserve_back(cb_m_in, PNHt);
             cb_reserve_back(cb_l_in, PNHt);
-            // DPRINT << "[Writer Reducer] Reserved space in cb for Q, M, L" << ENDL();
+            DPRINT << "[Writer Reducer] Reserved space in cb for Q, M, L" << ENDL();
 
             uint32_t q_write_ptr = get_read_ptr(cb_out_o);
             noc_async_read(intermed_l1_read_addr, q_write_ptr, q_read_size);
             intermed_l1_read_addr+=q_read_size;
             noc_async_read_barrier();
             cb_push_back(cb_out_o, out_chunk_tiles);
-            // DPRINT << "[Writer Reducer] pushed Q" << ENDL();
+            DPRINT << "[Writer Reducer] pushed Q" << ENDL();
 
             uint32_t m_write_ptr = get_read_ptr(cb_m_in);
             noc_async_read(intermed_l1_read_addr, m_write_ptr, ml_read_size);
             intermed_l1_read_addr+=ml_read_size;
             noc_async_read_barrier();
             cb_push_back(cb_m_in, PNHt);
-            // DPRINT << "[Writer Reducer] pushed M" << ENDL();
+            DPRINT << "[Writer Reducer] pushed M" << ENDL();
 
             uint32_t l_write_ptr = get_read_ptr(cb_l_in);
             noc_async_read(intermed_l1_read_addr, l_write_ptr, ml_read_size);
             intermed_l1_read_addr+=ml_read_size;
             noc_async_read_barrier();
             cb_push_back(cb_l_in, PNHt);
-            // DPRINT << "[Writer Reducer] pushed L" << ENDL();
+            DPRINT << "[Writer Reducer] pushed L" << ENDL();
 
-            // DPRINT << "[Writer Reducer] Done iteration " << block << ENDL();
+            DPRINT << "[Writer Reducer] Done iteration " << block << ENDL();
         }
         // cb_pop_front(cb_intermed_out, num_tiles_to_wait);
 
-        // DPRINT << "[Writer Reducer] Done sending intermediate chunks to compute" << ENDL();
+        DPRINT << "[Writer Reducer] Done sending intermediate chunks to compute" << ENDL();
     }
 
     // Offset for current batch
@@ -388,7 +390,7 @@ void kernel_main() {
     uint32_t out_tile_id = out_batch_offset;
     cb_wait_front(cb_out, out_chunk_tiles);
 
-    // DPRINT << "[Writer Reducer] recieved output chunk from reduce compute" << ENDL();
+    DPRINT << "[Writer Reducer] recieved output chunk from reduce compute" << ENDL();
     if (! is_out_sharded){
         uint32_t l1_read_addr = get_read_ptr(cb_out);
         for (uint32_t tile = 0; tile < out_chunk_tiles; ++tile) {
@@ -404,6 +406,6 @@ void kernel_main() {
     noc_async_write_barrier();
     cb_pop_front(cb_out, out_chunk_tiles);
 
-    // DPRINT << "[Writer Reducer] Wrote output chunk to memory. Done Reduce Writer" << ENDL();
+    DPRINT << "[Writer Reducer] Wrote output chunk to memory. Done Reduce Writer" << ENDL();
 
 }

@@ -497,6 +497,8 @@ void MAIN {
     if (k_chunk_start == k_chunk_end) {
         return; // early exit because no computes needs to be done
     }
+    uint32_t num_cores_to_wait = num_cores_per_batch-1;
+    if (num_cores_per_batch>k_num_chunks) num_cores_to_wait = k_num_chunks-1;
 
     mm_init();
     cb_wait_front(cb_q_in, q_chunk_tiles);
@@ -621,7 +623,7 @@ void MAIN {
         // DPRINT << "[Compute] Start for reducer" << ENDL();
         if (k_chunk_end - k_chunk_start < k_num_chunks){
             // This indicates that there are computes done by other workers. Needs to wait for them and send to reducer's compute
-            for (uint32_t i = 0; i < num_cores_per_batch-1 ; i++) {
+            for (uint32_t i = 0; i < num_cores_to_wait ; i++) {
 
                 // DPRINT << "[C] Reduce Iter" << ENDL();
 

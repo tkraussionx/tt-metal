@@ -545,7 +545,7 @@ Tensor scaled_dot_product_attention_decode(
             const auto& input_tensor_pos = input_tensors.at(3);
             auto arch = input_tensor_q.storage_type() == StorageType::DEVICE ? input_tensor_q.device()->arch()
                                                                              : AutoFormat::GetDefaultDevice()->arch();
-            uint32_t max_cur_pos = 1024; //*std::max_element(cur_pos.begin(), cur_pos.end());
+            uint32_t max_cur_pos = 32*1024; //*std::max_element(cur_pos.begin(), cur_pos.end());
             uint32_t k_chunk_size = get_chunk_size(max_cur_pos+1);
             // get chunk size and then pass to sdpa decode as an attribute for prgm cache
             auto kernel_config_val = init_device_compute_kernel_config(
