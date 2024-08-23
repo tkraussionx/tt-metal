@@ -32,6 +32,7 @@ CoreRange worker_g = {{0, 0}, {0, 0}};;
 CoreCoord src_worker_g = {0, 0};
 uint32_t page_size_g;
 uint32_t page_count_g;
+uint32_t scratch_db_size_g;
 uint32_t source_mem_g;
 uint32_t dram_channel_g;
 bool latency_g;
@@ -86,6 +87,7 @@ void init(int argc, char **argv) {
     uint32_t size_bytes = test_args::get_command_option_uint32(input_args, "-bs", DEFAULT_BATCH_SIZE_K) * 1024;
     latency_g = test_args::has_command_option(input_args, "-l");
     page_size_g = test_args::get_command_option_uint32(input_args, "-p", DEFAULT_PAGE_SIZE);
+    scratch_db_size_g =  test_args::get_command_option_uint32(input_args, "-ss", 131072);
     page_size_as_runtime_arg_g = test_args::has_command_option(input_args, "-psrta");
     read_one_packet_g = test_args::has_command_option(input_args, "-o");
     if (read_one_packet_g && page_size_g > 8192) {
@@ -212,7 +214,8 @@ int main(int argc, char **argv) {
             {"NOC_ADDR_Y", std::to_string(noc_addr_y)},
             {"NOC_MEM_ADDR", std::to_string(noc_mem_addr)},
             {"READ_ONE_PACKET", std::to_string(read_one_packet_g)},
-            {"DRAM_BANKED", std::to_string(dram_banked)}
+            {"DRAM_BANKED", std::to_string(dram_banked)},
+            {"SCRATCH_DB_SIZE", std::to_string(scratch_db_size_g)}
         };
         if (!page_size_as_runtime_arg_g) {
             defines.insert(pair<string, string>("PAGE_SIZE", std::to_string(page_size_g)));
@@ -236,7 +239,7 @@ int main(int argc, char **argv) {
         std::shared_ptr<Event> sync_event = std::make_shared<Event>();
 
         CoreCoord w = device->physical_core_from_logical_core(worker_g.start_coord, CoreType::WORKER);
-        log_info(LogTest, "Master core: {}", w.str());
+        log_info(LogTest, "Master core: {} {}",  worker_g.start_coord.str(), w.str());
         if (source_mem_g == 3) {
             log_info(LogTest, "Reading: {}", src_mem);
         } else if (source_mem_g == 4) {

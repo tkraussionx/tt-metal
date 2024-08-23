@@ -1242,7 +1242,7 @@ FORCE_INLINE void noc_async_read_tile(
  * | size              | Size of data transfer in bytes                          | uint32_t | 0..1MB                                                         | True     |
  */
 template<uint32_t max_page_size=NOC_MAX_BURST_SIZE + 1>
-inline
+FORCE_INLINE
 void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
     if constexpr (max_page_size <= NOC_MAX_BURST_SIZE) {
         noc_async_write_one_packet(src_local_l1_addr, dst_noc_addr, size);
