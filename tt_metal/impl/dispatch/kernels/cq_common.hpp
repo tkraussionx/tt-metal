@@ -412,7 +412,7 @@ constexpr uint32_t l1_to_local_cache_copy_chunk = 6;
 // It is call "careful_copy" because you need to be careful...
 // It copies beyond count by up to 5 elements make sure src and dst addresses are safe
 template<uint32_t l1_to_local_cache_copy_chunk, uint32_t l1_cache_elements_rounded>
-FORCE_INLINE
+// FORCE_INLINE
 void careful_copy_from_l1_to_local_cache(volatile uint32_t tt_l1_ptr *l1_ptr, uint32_t count, uint32_t * l1_cache) {
     uint32_t n = 0;
     ASSERT(l1_to_local_cache_copy_chunk == 6);
@@ -440,12 +440,7 @@ FORCE_INLINE
 void cq_noc_async_read_with_trid(std::uint64_t src_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, uint32_t trid) {
     while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
     ncrisc_noc_set_transaction_id(noc_index, NCRISC_RD_CMD_BUF, trid);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_COORDINATE, src_addr >> NOC_ADDR_COORD_SHIFT);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
-    noc_reads_num_issued[noc_index] += 1;
+    ncrisc_noc_fast_read(noc_index, NCRISC_RD_CMD_BUF, src_addr, dst_local_l1_addr, size);
 }
 #endif
 

@@ -82,6 +82,12 @@ class default_setup(metaclass=MergeMetaclass):
             "type": "sum",
             "marker": {"risc": "TRISC_2", "zone_name": "CB-COMPUTE-RESERVE-BACK"},
         },
+        "process_relay_paged": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "ANY", "zone_name": "ProcessRelayPaged"},
+            "end": {"risc": "ANY", "zone_name": "ProcessRelayPaged"},
+        },
     }
 
     displayStats = ["Count", "Average", "Max", "Median", "Min", "Sum", "Range"]
@@ -134,7 +140,7 @@ class test_custom_cycle_count(default_setup):
             "end": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
         },
         "TRISC_2 KERNEL_START->KERNEL_END": {
-            "across": "core",
+            "across": "op",
             "type": "adjacent",
             "start": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
