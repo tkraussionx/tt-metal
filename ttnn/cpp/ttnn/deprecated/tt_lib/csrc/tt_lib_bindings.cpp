@@ -5,7 +5,6 @@
 #include "tt_lib_bindings.hpp"
 
 #include "operations/module.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/auto_format.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/math.hpp"
 #include "tt_lib_bindings_tensor.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
@@ -154,20 +153,6 @@ void DeviceModule(py::module &m_device) {
 
     m_device.def("GetPCIeDeviceID", &GetPCIeDeviceID, R"doc(
         Returns associated mmio device of give device id.
-    )doc");
-
-    m_device.def("SetDefaultDevice", &AutoFormat::SetDefaultDevice, R"doc(
-        Sets the default device to use for ops when inputs aren't on device.
-
-        +------------------+------------------------+-----------------------+-------------+----------+
-        | Argument         | Description            | Data type             | Valid range | Required |
-        +==================+========================+=======================+=============+==========+
-        | device           | TT Device to use       | tt_lib.device.Device  |             | Yes      |
-        +------------------+------------------------+-----------------------+-------------+----------+
-    )doc");
-
-    m_device.def("GetDefaultDevice", &AutoFormat::GetDefaultDevice, R"doc(
-        Gets the default device to use for ops when inputs aren't on device.
     )doc");
 
     m_device.def("EnablePersistentKernelCache", &detail::EnablePersistentKernelCache, R"doc(
