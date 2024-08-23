@@ -721,7 +721,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_(const Tensor& a, cons
         true,
         untilize_out,
 
-        bias_ntiles_per_core
+        bias_ntiles_per_core,
+        out0_cb
     };
 
     auto writer_mcast_noc = tt_metal::detail::GetPreferredNOCForDRAMWrite(device->arch());

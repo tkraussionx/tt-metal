@@ -2110,7 +2110,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     string writer_mcast_receiver_kernel;
     bool tilize_in0 = true;
 
-    compute_kernel = "ttnn/cpp/ttnn/operations/conv2d/device/kernels/conv_bmm_tilize_col_major_out_blocks_sharded.cpp";
+    compute_kernel = "ttnn/cpp/ttnn/operations/conv2d/device/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
     // Input should always be sharded in this conv; always use reader kernel for input shard with halo and padding
     if (weight_size_h == weight_size_w and weight_size_w >= 1 and (stride_h == 1 or stride_h == 2)) {
         if (block_sharded) {
@@ -2120,10 +2120,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
                 "reader_conv_activations_2d_mcast_padded_with_halo_3x3_weights_v2.cpp";
             writer_mcast_sender_kernel =
                 "ttnn/cpp/ttnn/operations/conv2d/device/kernels/"
-                "writer_tiled_out_2d_mcast_sender_conv_weights_tiled_col_to_rm_blocks_new.cpp";
+                "writer_tiled_out_2d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
             writer_mcast_receiver_kernel =
                 "ttnn/cpp/ttnn/operations/conv2d/device/kernels/"
-                "writer_tiled_out_2d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks_new.cpp";
+                "writer_tiled_out_2d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
             act_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
             act_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
