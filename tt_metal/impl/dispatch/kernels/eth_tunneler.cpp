@@ -7,7 +7,6 @@
 #include "debug/dprint.h"
 #include "debug/ring_buffer.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
-#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen.hpp"
 // clang-format on
 
 #define NUM_BIDIR_TUNNELS 1
