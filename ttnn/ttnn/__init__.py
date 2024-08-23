@@ -151,6 +151,11 @@ from ttnn.device import (
     manage_device,
     synchronize_device,
     dump_device_memory_state,
+    SetDefaultDevice,
+    GetDefaultDevice,
+    format_input_tensor,
+    format_output_tensor,
+    pad_to_tile_shape,
 )
 
 from ttnn.multi_device import (

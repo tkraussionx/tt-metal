@@ -111,6 +111,7 @@ def device_params(request):
 @pytest.fixture(scope="function")
 def device(request, device_params):
     import tt_lib as ttl
+    import ttnn
 
     device_id = request.config.getoption("device_id")
     request.node.pci_ids = [ttl.device.GetPCIeDeviceID(device_id)]
@@ -118,7 +119,7 @@ def device(request, device_params):
     num_devices = ttl.device.GetNumPCIeDevices()
     assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
     device = ttl.device.CreateDevice(device_id=device_id, dispatch_core_type=get_dispatch_core_type(), **device_params)
-    ttl.device.SetDefaultDevice(device)
+    ttnn.SetDefaultDevice(device)
 
     yield device
 
@@ -295,10 +296,11 @@ def clear_compile_cache():
 @pytest.fixture(autouse=True)
 def reset_default_device():
     import tt_lib as ttl
+    import ttnn
 
-    device = ttl.device.GetDefaultDevice()
+    device = ttnn.GetDefaultDevice()
     yield
-    ttl.device.SetDefaultDevice(device)
+    ttnn.SetDefaultDevice(device)
 
 
 def get_devices(request):
