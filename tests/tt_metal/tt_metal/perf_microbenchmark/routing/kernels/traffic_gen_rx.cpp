@@ -76,10 +76,14 @@ void kernel_main() {
                       remote_tx_x, remote_tx_y, remote_tx_queue_id,
                       rx_rptr_update_network_type);
 
+    DPRINT << "traffic rx hs start" << ENDL();
+
     if (!wait_all_src_dest_ready(input_queue, 1, NULL, 0, timeout_cycles)) {
+        DPRINT << "traffic rx hs error" << ENDL();
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         return;
     }
+    DPRINT << "traffic rx hs done" << ENDL();
 
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 

@@ -675,7 +675,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
 
                     compile_args[5] = packet_switch_4B_pack(demux_settings.worker_physical_core.x,
                                         demux_settings.worker_physical_core.y,
-                                        device_worker_variants[DispatchWorkerType::DISPATCH].size(),//num_dest_endpoints,
+                                        0,//demux input,
                                         (uint32_t)DispatchRemoteNetworkType::NOC0); // 5: remote_receiver_1_info
                     compile_args[8] = demux_settings.cb_start_address >> 4; // 8: remote_receiver_queue_start_addr_words 1
                     compile_args[9] = demux_settings.cb_size_bytes >> 4; // 9: remote_receiver_queue_size_words 1
@@ -688,13 +688,14 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     auto &demux_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DEMUX_D][0]);
                     compile_args[5] = packet_switch_4B_pack(mux_d_settings.worker_physical_core.x,
                                         mux_d_settings.worker_physical_core.y,
-                                        1,//num_dest_endpoints,
+                                        1,//mux_d input. This is return path from next tunnel stop towards mmio device.
+                                          //mux_d iput 0 is driven by local Dispatch D
                                         (uint32_t)DispatchRemoteNetworkType::NOC0); // 5: remote_receiver_1_info
                     compile_args[8] = (mux_d_settings.cb_start_address + mux_d_settings.cb_size_bytes) >> 4; // 8: remote_receiver_queue_start_addr_words 1
                     compile_args[9] = mux_d_settings.cb_size_bytes >> 4; // 9: remote_receiver_queue_size_words 1
                     compile_args[10] = packet_switch_4B_pack(demux_d_settings.worker_physical_core.x,
                                         demux_d_settings.worker_physical_core.y,
-                                        1, // demux output queue id
+                                        2, // demux output queue id. 0=> demux input, 1=> demux_d output to local Prefetch D, 2=> demux_d output to tunneler (to next tunnel stop)
                                         (uint32_t)DispatchRemoteNetworkType::NOC0); // 10: remote_sender_0_info
                 }
 
@@ -818,7 +819,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
 
                 compile_args[4] = packet_switch_4B_pack(demux_d_settings.worker_physical_core.x,
                                     demux_d_settings.worker_physical_core.y,
-                                    device_worker_variants[DispatchWorkerType::PREFETCH_D].size() + device_worker_variants[DispatchWorkerType::US_TUNNELER_REMOTE].size(), // input queue id of DEMUX_D
+                                    0, // input queue id of DEMUX_D
                                     (uint32_t)DispatchRemoteNetworkType::NOC0); // 4: remote_receiver_0_info
 
                 compile_args[5] = packet_switch_4B_pack(tunneler_settings.eth_partner_physical_core.x,

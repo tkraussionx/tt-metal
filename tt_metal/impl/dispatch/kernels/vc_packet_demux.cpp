@@ -7,7 +7,7 @@
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_helpers.hpp"
 
-packet_input_queue_state_t input_queue;
+packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 packet_output_queue_state_t output_queues[MAX_SWITCH_FAN_OUT];
 
 constexpr uint32_t endpoint_id_start_index = get_compile_time_arg_val(0);
@@ -79,12 +79,46 @@ static_assert((demux_fan_out < 2) || is_power_of_2(remote_tx_queue_size_words[1]
 static_assert((demux_fan_out < 3) || is_power_of_2(remote_tx_queue_size_words[2]), "remote_tx_queue_size_words must be a power of 2");
 static_assert((demux_fan_out < 4) || is_power_of_2(remote_tx_queue_size_words[3]), "remote_tx_queue_size_words must be a power of 2");
 
-constexpr uint32_t remote_rx_x = get_compile_time_arg_val(16);
-constexpr uint32_t remote_rx_y = get_compile_time_arg_val(17);
-constexpr uint32_t remote_rx_queue_id = get_compile_time_arg_val(18);
-constexpr DispatchRemoteNetworkType
-    remote_rx_network_type =
-        static_cast<DispatchRemoteNetworkType>(get_compile_time_arg_val(19));
+//constexpr uint32_t remote_rx_x = get_compile_time_arg_val(16);
+//constexpr uint32_t remote_rx_y = get_compile_time_arg_val(17);
+//constexpr uint32_t remote_rx_queue_id = get_compile_time_arg_val(18);
+//constexpr DispatchRemoteNetworkType
+//    remote_rx_network_type =
+//        static_cast<DispatchRemoteNetworkType>(get_compile_time_arg_val(19));
+
+constexpr uint32_t remote_rx_x[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(16) & 0xFF),
+        (get_compile_time_arg_val(17) & 0xFF),
+        (get_compile_time_arg_val(18) & 0xFF),
+        (get_compile_time_arg_val(19) & 0xFF)
+    };
+
+constexpr uint32_t remote_rx_y[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(16) >> 8) & 0xFF,
+        (get_compile_time_arg_val(17) >> 8) & 0xFF,
+        (get_compile_time_arg_val(18) >> 8) & 0xFF,
+        (get_compile_time_arg_val(19) >> 8) & 0xFF
+    };
+
+constexpr uint32_t remote_rx_queue_id[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(16) >> 16) & 0xFF,
+        (get_compile_time_arg_val(17) >> 16) & 0xFF,
+        (get_compile_time_arg_val(18) >> 16) & 0xFF,
+        (get_compile_time_arg_val(19) >> 16) & 0xFF
+    };
+
+constexpr DispatchRemoteNetworkType remote_rx_network_type[MAX_SWITCH_FAN_OUT] =
+    {
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(16) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(17) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(18) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(19) >> 24) & 0xFF)
+    };
+
+
 
 static_assert(MAX_DEST_ENDPOINTS <= 32 && MAX_SWITCH_FAN_OUT <= 4,
     "We assume MAX_DEST_ENDPOINTS <= 32 and MAX_SWITCH_FAN_OUT <= 4 for the initialization below to work");
@@ -189,6 +223,8 @@ inline uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
 
 void kernel_main() {
 
+    noc_init();
+
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
     write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xbb000000 | demux_fan_out);
@@ -197,23 +233,26 @@ void kernel_main() {
     write_test_results(test_results, PQ_TEST_MISC_INDEX+4, endpoint_id_start_index);
 
     for (uint32_t i = 0; i < demux_fan_out; i++) {
-        output_queues[i].init(i + 1, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
+        output_queues[i].init(i + demux_fan_out, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
                               remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], remote_tx_network_type[i],
-                              &input_queue, 1,
+                              &input_queues[i], 1,
                               output_depacketize[i], output_depacketize_log_page_size[i],
                               output_depacketize_local_sem[i], output_depacketize_downstream_sem[i],
                               output_depacketize_remove_header[i]);
     }
-    input_queue.init(0, rx_queue_start_addr_words, rx_queue_size_words,
-                     remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
+    for (uint32_t i = 0; i < demux_fan_out; i++) {
+        input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
+                        remote_rx_x[i], remote_rx_y[i], remote_rx_queue_id[i], remote_rx_network_type[i]);
+    }
 
-    if (!wait_all_src_dest_ready(&input_queue, 1, output_queues, demux_fan_out, timeout_cycles)) {
+    if (!wait_all_src_dest_ready(input_queues, demux_fan_out, output_queues, demux_fan_out, timeout_cycles)) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
     }
 
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
 
+    uint32_t curr_input = 0;
     bool timeout = false;
     bool all_outputs_finished = false;
     uint64_t data_words_sent = 0;
@@ -231,20 +270,27 @@ void kernel_main() {
                 break;
             }
         }
-        if (input_queue.get_curr_packet_valid()) {
-            uint32_t dest = input_queue.get_curr_packet_dest();
-            uint8_t output_queue_id = dest_output_queue_id(dest);
+        if (input_queues[curr_input].get_curr_packet_valid()) {
+            //uint32_t dest = input_queues[curr_input].get_curr_packet_dest();
+            //uint8_t output_queue_id = dest_output_queue_id(dest);
             bool full_packet_sent;
-            uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());
+            uint32_t words_sent = output_queues[curr_input].forward_data_from_input(0, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
             }
         }
+
+        output_queues[curr_input].prev_words_in_flight_check_flush();
+
         all_outputs_finished = true;
         for (uint32_t i = 0; i < demux_fan_out; i++) {
-            output_queues[i].prev_words_in_flight_check_flush();
             all_outputs_finished &= output_queues[i].is_remote_finished();
+        }
+
+        curr_input++;
+        if (curr_input == demux_fan_out) {
+            curr_input = 0;
         }
     }
 
@@ -261,7 +307,9 @@ void kernel_main() {
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000003);
-        input_queue.send_remote_finished_notification();
+        for (uint32_t i = 0; i < demux_fan_out; i++) {
+            input_queues[i].send_remote_finished_notification();
+        }
     }
 
     set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
@@ -270,9 +318,9 @@ void kernel_main() {
 
     if (timeout) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
-        // DPRINT << "demux timeout" << ENDL();
+        //DPRINT << "demux timeout" << ENDL();
         // // input_queue.dprint_object();
-        // output_queues[0].dprint_object();
+        //output_queues[0].dprint_object();
     } else {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
