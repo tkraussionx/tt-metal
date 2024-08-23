@@ -7,10 +7,8 @@
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_helpers.hpp"
 
-packet_input_queue_state_t input_queue;
+packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 packet_output_queue_state_t output_queues[MAX_SWITCH_FAN_OUT];
-
-constexpr uint32_t endpoint_id_start_index = get_compile_time_arg_val(0);
 
 constexpr uint32_t rx_queue_start_addr_words = get_compile_time_arg_val(1);
 constexpr uint32_t rx_queue_size_words = get_compile_time_arg_val(2);
@@ -18,15 +16,15 @@ constexpr uint32_t rx_queue_size_bytes = rx_queue_size_words*PACKET_WORD_SIZE_BY
 
 static_assert(is_power_of_2(rx_queue_size_words), "rx_queue_size_words must be a power of 2");
 
-constexpr uint32_t demux_fan_out = get_compile_time_arg_val(3);
+constexpr uint32_t router_lanes = get_compile_time_arg_val(3);
 
 // FIXME imatosevic - is there a way to do this without explicit indexes?
-static_assert(demux_fan_out > 0 && demux_fan_out <= MAX_SWITCH_FAN_OUT,
+static_assert(router_lanes > 0 && router_lanes <= MAX_SWITCH_FAN_OUT,
     "demux fan-out 0 or higher than MAX_SWITCH_FAN_OUT");
 static_assert(MAX_SWITCH_FAN_OUT == 4,
     "MAX_SWITCH_FAN_OUT must be 4 for the initialization below to work");
 
-constexpr uint32_t remote_tx_x[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t remote_tx_x[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(4) & 0xFF),
         (get_compile_time_arg_val(5) & 0xFF),
@@ -34,7 +32,7 @@ constexpr uint32_t remote_tx_x[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(7) & 0xFF)
     };
 
-constexpr uint32_t remote_tx_y[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t remote_tx_y[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(4) >> 8) & 0xFF,
         (get_compile_time_arg_val(5) >> 8) & 0xFF,
@@ -42,7 +40,7 @@ constexpr uint32_t remote_tx_y[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(7) >> 8) & 0xFF
     };
 
-constexpr uint32_t remote_tx_queue_id[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t remote_tx_queue_id[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(4) >> 16) & 0xFF,
         (get_compile_time_arg_val(5) >> 16) & 0xFF,
@@ -75,61 +73,41 @@ constexpr uint32_t remote_tx_queue_size_words[MAX_SWITCH_FAN_OUT] =
     };
 
 static_assert(is_power_of_2(remote_tx_queue_size_words[0]), "remote_tx_queue_size_words must be a power of 2");
-static_assert((demux_fan_out < 2) || is_power_of_2(remote_tx_queue_size_words[1]), "remote_tx_queue_size_words must be a power of 2");
-static_assert((demux_fan_out < 3) || is_power_of_2(remote_tx_queue_size_words[2]), "remote_tx_queue_size_words must be a power of 2");
-static_assert((demux_fan_out < 4) || is_power_of_2(remote_tx_queue_size_words[3]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((router_lanes < 2) || is_power_of_2(remote_tx_queue_size_words[1]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((router_lanes < 3) || is_power_of_2(remote_tx_queue_size_words[2]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((router_lanes < 4) || is_power_of_2(remote_tx_queue_size_words[3]), "remote_tx_queue_size_words must be a power of 2");
 
-constexpr uint32_t remote_rx_x = get_compile_time_arg_val(16);
-constexpr uint32_t remote_rx_y = get_compile_time_arg_val(17);
-constexpr uint32_t remote_rx_queue_id = get_compile_time_arg_val(18);
-constexpr DispatchRemoteNetworkType
-    remote_rx_network_type =
-        static_cast<DispatchRemoteNetworkType>(get_compile_time_arg_val(19));
-
-static_assert(MAX_DEST_ENDPOINTS <= 32 && MAX_SWITCH_FAN_OUT <= 4,
-    "We assume MAX_DEST_ENDPOINTS <= 32 and MAX_SWITCH_FAN_OUT <= 4 for the initialization below to work");
-
-constexpr uint32_t dest_endpoint_output_map_hi = get_compile_time_arg_val(20);
-constexpr uint32_t dest_endpoint_output_map_lo = get_compile_time_arg_val(21);
-
-constexpr uint8_t dest_output_queue_id_map[MAX_DEST_ENDPOINTS] =
+constexpr uint8_t remote_rx_x[MAX_SWITCH_FAN_OUT] =
     {
-        (dest_endpoint_output_map_lo >> 0) & 0x3,
-        (dest_endpoint_output_map_lo >> 2) & 0x3,
-        (dest_endpoint_output_map_lo >> 4) & 0x3,
-        (dest_endpoint_output_map_lo >> 6) & 0x3,
-        (dest_endpoint_output_map_lo >> 8) & 0x3,
-        (dest_endpoint_output_map_lo >> 10) & 0x3,
-        (dest_endpoint_output_map_lo >> 12) & 0x3,
-        (dest_endpoint_output_map_lo >> 14) & 0x3,
-        (dest_endpoint_output_map_lo >> 16) & 0x3,
-        (dest_endpoint_output_map_lo >> 18) & 0x3,
-        (dest_endpoint_output_map_lo >> 20) & 0x3,
-        (dest_endpoint_output_map_lo >> 22) & 0x3,
-        (dest_endpoint_output_map_lo >> 24) & 0x3,
-        (dest_endpoint_output_map_lo >> 26) & 0x3,
-        (dest_endpoint_output_map_lo >> 28) & 0x3,
-        (dest_endpoint_output_map_lo >> 30) & 0x3,
-        (dest_endpoint_output_map_hi >> 0) & 0x3,
-        (dest_endpoint_output_map_hi >> 2) & 0x3,
-        (dest_endpoint_output_map_hi >> 4) & 0x3,
-        (dest_endpoint_output_map_hi >> 6) & 0x3,
-        (dest_endpoint_output_map_hi >> 8) & 0x3,
-        (dest_endpoint_output_map_hi >> 10) & 0x3,
-        (dest_endpoint_output_map_hi >> 12) & 0x3,
-        (dest_endpoint_output_map_hi >> 14) & 0x3,
-        (dest_endpoint_output_map_hi >> 16) & 0x3,
-        (dest_endpoint_output_map_hi >> 18) & 0x3,
-        (dest_endpoint_output_map_hi >> 20) & 0x3,
-        (dest_endpoint_output_map_hi >> 22) & 0x3,
-        (dest_endpoint_output_map_hi >> 24) & 0x3,
-        (dest_endpoint_output_map_hi >> 26) & 0x3,
-        (dest_endpoint_output_map_hi >> 28) & 0x3,
-        (dest_endpoint_output_map_hi >> 30) & 0x3
+        (get_compile_time_arg_val(16) & 0xFF),
+        (get_compile_time_arg_val(17) & 0xFF),
+        (get_compile_time_arg_val(18) & 0xFF),
+        (get_compile_time_arg_val(19) & 0xFF)
     };
 
-constexpr uint32_t output_queue_index_bits = 2;
-constexpr uint32_t output_queue_index_mask = (1 << output_queue_index_bits) - 1;
+constexpr uint8_t remote_rx_y[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(16) >> 8) & 0xFF,
+        (get_compile_time_arg_val(17) >> 8) & 0xFF,
+        (get_compile_time_arg_val(18) >> 8) & 0xFF,
+        (get_compile_time_arg_val(19) >> 8) & 0xFF
+    };
+
+constexpr uint8_t remote_rx_queue_id[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(16) >> 16) & 0xFF,
+        (get_compile_time_arg_val(17) >> 16) & 0xFF,
+        (get_compile_time_arg_val(18) >> 16) & 0xFF,
+        (get_compile_time_arg_val(19) >> 16) & 0xFF
+    };
+
+constexpr DispatchRemoteNetworkType remote_rx_network_type[MAX_SWITCH_FAN_OUT] =
+    {
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(16) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(17) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(18) >> 24) & 0xFF),
+        static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(19) >> 24) & 0xFF)
+    };
 
 constexpr uint32_t test_results_buf_addr_arg = get_compile_time_arg_val(22);
 constexpr uint32_t test_results_buf_size_bytes = get_compile_time_arg_val(23);
@@ -148,7 +126,7 @@ constexpr bool output_depacketize[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(25) >> 3) & 0x1
     };
 
-constexpr uint32_t output_depacketize_log_page_size[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t output_depacketize_log_page_size[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(26) >> 0) & 0xFF,
         (get_compile_time_arg_val(27) >> 0) & 0xFF,
@@ -156,7 +134,7 @@ constexpr uint32_t output_depacketize_log_page_size[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(29) >> 0) & 0xFF
     };
 
-constexpr uint32_t output_depacketize_downstream_sem[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t output_depacketize_downstream_sem[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(26) >> 8) & 0xFF,
         (get_compile_time_arg_val(27) >> 8) & 0xFF,
@@ -164,7 +142,7 @@ constexpr uint32_t output_depacketize_downstream_sem[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(29) >> 8) & 0xFF
     };
 
-constexpr uint32_t output_depacketize_local_sem[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t output_depacketize_local_sem[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(26) >> 16) & 0xFF,
         (get_compile_time_arg_val(27) >> 16) & 0xFF,
@@ -172,7 +150,7 @@ constexpr uint32_t output_depacketize_local_sem[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(29) >> 16) & 0xFF
     };
 
-constexpr uint32_t output_depacketize_remove_header[MAX_SWITCH_FAN_OUT] =
+constexpr uint8_t output_depacketize_remove_header[MAX_SWITCH_FAN_OUT] =
     {
         (get_compile_time_arg_val(26) >> 24) & 0x1,
         (get_compile_time_arg_val(27) >> 24) & 0x1,
@@ -180,40 +158,84 @@ constexpr uint32_t output_depacketize_remove_header[MAX_SWITCH_FAN_OUT] =
         (get_compile_time_arg_val(29) >> 24) & 0x1
     };
 
+constexpr uint8_t input_packetize[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(30) >> 0) & 0x1,
+        (get_compile_time_arg_val(31) >> 0) & 0x1,
+        (get_compile_time_arg_val(32) >> 0) & 0x1,
+        (get_compile_time_arg_val(33) >> 0) & 0x1
+    };
 
+constexpr uint8_t input_packetize_log_page_size[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(30) >> 8) & 0xFF,
+        (get_compile_time_arg_val(31) >> 8) & 0xFF,
+        (get_compile_time_arg_val(32) >> 8) & 0xFF,
+        (get_compile_time_arg_val(33) >> 8) & 0xFF
+    };
 
-inline uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
-    uint32_t dest_endpoint_index = dest_endpoint_id - endpoint_id_start_index;
-    return dest_output_queue_id_map[dest_endpoint_index];
-}
+constexpr uint8_t input_packetize_upstream_sem[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(30) >> 16) & 0xFF,
+        (get_compile_time_arg_val(31) >> 16) & 0xFF,
+        (get_compile_time_arg_val(32) >> 16) & 0xFF,
+        (get_compile_time_arg_val(33) >> 16) & 0xFF
+    };
+
+constexpr uint8_t input_packetize_local_sem[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(30) >> 24) & 0xFF,
+        (get_compile_time_arg_val(31) >> 24) & 0xFF,
+        (get_compile_time_arg_val(32) >> 24) & 0xFF,
+        (get_compile_time_arg_val(33) >> 24) & 0xFF
+    };
+
+constexpr uint8_t input_packetize_src_endpoint[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(34) >> 0) & 0xFF,
+        (get_compile_time_arg_val(34) >> 8) & 0xFF,
+        (get_compile_time_arg_val(34) >> 16) & 0xFF,
+        (get_compile_time_arg_val(34) >> 24) & 0xFF
+    };
+
+constexpr uint8_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(35) >> 0) & 0xFF,
+        (get_compile_time_arg_val(35) >> 8) & 0xFF,
+        (get_compile_time_arg_val(35) >> 16) & 0xFF,
+        (get_compile_time_arg_val(35) >> 24) & 0xFF
+    };
 
 void kernel_main() {
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xbb000000 | demux_fan_out);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX+2, dest_endpoint_output_map_hi);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX+3, dest_endpoint_output_map_lo);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX+4, endpoint_id_start_index);
+    write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xbb000000 | router_lanes);
 
-    for (uint32_t i = 0; i < demux_fan_out; i++) {
-        output_queues[i].init(i + 1, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
+    for (uint32_t i = 0; i < router_lanes; i++) {
+        output_queues[i].init(i + router_lanes, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
                               remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], remote_tx_network_type[i],
-                              &input_queue, 1,
+                              &input_queues[i], 1,
                               output_depacketize[i], output_depacketize_log_page_size[i],
                               output_depacketize_local_sem[i], output_depacketize_downstream_sem[i],
                               output_depacketize_remove_header[i]);
     }
-    input_queue.init(0, rx_queue_start_addr_words, rx_queue_size_words,
-                     remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
+    for (uint32_t i = 0; i < router_lanes; i++) {
+        input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
+                        remote_rx_x[i], remote_rx_y[i], remote_rx_queue_id[i], remote_rx_network_type[i],
+                        input_packetize[i], input_packetize_log_page_size[i],
+                        input_packetize_local_sem[i], input_packetize_upstream_sem[i],
+                        input_packetize_src_endpoint[i], input_packetize_dest_endpoint[i]);
+    }
 
-    if (!wait_all_src_dest_ready(&input_queue, 1, output_queues, demux_fan_out, timeout_cycles)) {
+    if (!wait_all_src_dest_ready(input_queues, router_lanes, output_queues, router_lanes, timeout_cycles)) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
     }
 
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
 
+    uint32_t curr_input = 0;
     bool timeout = false;
     bool all_outputs_finished = false;
     uint64_t data_words_sent = 0;
@@ -231,26 +253,31 @@ void kernel_main() {
                 break;
             }
         }
-        if (input_queue.get_curr_packet_valid()) {
-            uint32_t dest = input_queue.get_curr_packet_dest();
-            uint8_t output_queue_id = dest_output_queue_id(dest);
+        if (input_queues[curr_input].get_curr_packet_valid()) {
             bool full_packet_sent;
-            uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent, input_queue.get_end_of_cmd());
+            uint32_t words_sent = output_queues[curr_input].forward_data_from_input(0, full_packet_sent, input_queues[curr_input].get_end_of_cmd());
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
                 progress_timestamp = get_timestamp_32b();
             }
         }
+
+        output_queues[curr_input].prev_words_in_flight_check_flush();
+
         all_outputs_finished = true;
-        for (uint32_t i = 0; i < demux_fan_out; i++) {
-            output_queues[i].prev_words_in_flight_check_flush();
+        for (uint32_t i = 0; i < router_lanes; i++) {
             all_outputs_finished &= output_queues[i].is_remote_finished();
+        }
+
+        curr_input++;
+        if (curr_input == router_lanes) {
+            curr_input = 0;
         }
     }
 
     if (!timeout) {
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000002);
-        for (uint32_t i = 0; i < demux_fan_out; i++) {
+        for (uint32_t i = 0; i < router_lanes; i++) {
             if (!output_queues[i].output_barrier(timeout_cycles)) {
                 timeout = true;
                 break;
@@ -261,7 +288,9 @@ void kernel_main() {
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000003);
-        input_queue.send_remote_finished_notification();
+        for (uint32_t i = 0; i < router_lanes; i++) {
+            input_queues[i].send_remote_finished_notification();
+        }
     }
 
     set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
@@ -270,9 +299,6 @@ void kernel_main() {
 
     if (timeout) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
-        // DPRINT << "demux timeout" << ENDL();
-        // // input_queue.dprint_object();
-        // output_queues[0].dprint_object();
     } else {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
