@@ -464,7 +464,7 @@ operation::ProgramWithCallbacks embeddings_rm(
         input_offset += local_num_blocks;
     }
 
-    auto runp = [num_cores_x, num_cores_y, reader_kernel_id, writer_kernel_id, cores, device](
+    auto override_runtime_args_callback = [num_cores_x, num_cores_y, reader_kernel_id, writer_kernel_id, cores, device](
                                               const Program &program,
                                               const std::vector<Buffer *> &input_buffers,
                                               const std::vector<Buffer *> &output_buffers) {
