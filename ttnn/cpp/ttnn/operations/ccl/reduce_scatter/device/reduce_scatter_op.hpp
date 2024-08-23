@@ -52,7 +52,9 @@ namespace ccl{
     const uint32_t scatter_split_dim,
     ttnn::operations::reduction::ReduceType reduce_op = ttnn::operations::reduction::ReduceType::Sum,
     const uint32_t num_links = 1,
-    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    int topology = 0);
+    // const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring);
 } // namespace ccl
 } // namespace operations
 

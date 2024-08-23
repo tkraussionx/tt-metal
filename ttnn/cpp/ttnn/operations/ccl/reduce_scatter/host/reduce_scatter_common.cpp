@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "ttnn/cpp/ttnn/operations/ccl/reduce_scatter/host/reduce_scatter_common.hpp"
+// #include "ttnn/tensor/tensor.hpp"
+#include "tt_metal/common/base.hpp"
 
 namespace ttnn {
 namespace ccl {
@@ -18,7 +20,9 @@ WorkerTransferInfo::WorkerTransferInfo(
     num_workers(num_workers) {}
 
 uint32_t WorkerTransferInfo::get_num_pages_per_full_chunk(uint32_t link, uint32_t worker_idx) const {
-    return pages_per_full_chunk_per_worker.at(link * num_workers + worker_idx);
+    std::size_t index = link * num_workers + worker_idx;
+    TT_ASSERT(index < pages_per_full_chunk_per_worker.size(), "Index {} out of bounds for pages_per_full_chunk_per_worker of size {}", index, pages_per_full_chunk_per_worker.size());
+    return pages_per_full_chunk_per_worker.at(index);
 }
 
 

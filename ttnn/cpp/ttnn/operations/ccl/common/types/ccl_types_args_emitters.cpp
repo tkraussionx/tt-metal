@@ -17,14 +17,13 @@ args_list_t emit_runtime_args(WorkerEdmInterfaceArgs const& edm_interface_args) 
         edm_interface_args.edm_noc_x,
         edm_interface_args.edm_noc_x,
         reinterpret_cast<uint32_t>(edm_interface_args.edm_buffer_base_address),
-        reinterpret_cast<uint32_t>(edm_interface_args.edm_semaphore_address)
+        reinterpret_cast<uint32_t>(edm_interface_args.edm_semaphore_address),
+        edm_interface_args.num_buffers_per_channel
     };
 }
 
 args_list_t emit_compile_time(WorkerEdmInterfaceArgs const& edm_interface_args) {
-    return {
-        edm_interface_args.num_buffers_per_channel
-    };
+    return {};
 }
 
 
@@ -39,9 +38,10 @@ args_list_t emit_address_generator_runtime_args(tt::tt_metal::Device const* cons
 
         case tt::tt_metal::TensorMemoryLayout::INTERLEAVED:
             TT_ASSERT(t.buffer()->page_size() != 1024);
+            // For now we won't emit these args... assume these are passed in elsewhere
             return {
-                static_cast<uint32_t>(t.buffer()->address()),
-                static_cast<uint32_t>(t.buffer()->page_size())
+                // static_cast<uint32_t>(t.buffer()->address()),
+                // static_cast<uint32_t>(t.buffer()->page_size())
             };
 
         break;

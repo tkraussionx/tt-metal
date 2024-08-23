@@ -28,8 +28,16 @@ struct Shape4D {
     T y;
     T x;
 
+    Shape4D() = default;
+    Shape4D(T w, T z, T y, T x): w(w), z(z), y(y), x(x) {}
+    Shape4D(Shape4D& rhs) = default;
+
     Shape4D<T> operator+(const Shape4D<T> &rhs) const {
         return {w + rhs.w, z + rhs.z, y + rhs.y, x + rhs.x};
+    }
+
+    bool operator==(const Shape4D<T> &rhs) const {
+        return w == rhs.w && z == rhs.z && y == rhs.y && x == rhs.x;
     }
 
     constexpr std::size_t volume() const {

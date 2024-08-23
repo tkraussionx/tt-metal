@@ -9,6 +9,7 @@
 
 #include "common/constants.hpp"
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"
+#include "ttnn/operations/ccl/common/types/ccl_types.hpp"
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/program/program.hpp"
@@ -27,6 +28,9 @@ struct RingTopology {
         uint32_t num_links,
         uint32_t ring_size,
         uint32_t ring_index);
+
+    bool is_first_device_in_line(bool in_clockwise_direction) const;
+    bool is_last_device_in_line(bool in_clockwise_direction) const;
 
     const Device *device;
 
@@ -191,7 +195,7 @@ struct LegacyCclTensorSlicer {
 
 
 struct TensorSlice {
-    using ords_t = tt_xy_pair;
+    using ords_t = tt_xy_pair;//Shape4D<uint32_t>;
     ords_t tensor_shape;
     ords_t tensor_slice_shape;
     ords_t tensor_slice_offset;
@@ -200,13 +204,17 @@ struct TensorSlice {
     std::size_t dim;
 };
 
+// Workers iterate over tensor slices in a sequence along a
+// single, specified dimension. Workers iterator over the tensor
+// slice in wrapped mode
 std::vector<TensorSlice> generate_slice_sequence_on_dim(
     TensorSlice::ords_t tensor_shape,
     TensorSlice::ords_t worker_slice_shape,
     std::size_t fracture_dim,
     std::size_t num_slices,
     std::size_t start_slice_index,
-    std::size_t end_slice_index
+    std::size_t end_slice_index,
+    std::size_t worker_index
 );
 
 // Uniform Tensor Worker Slice
@@ -266,11 +274,13 @@ class RingReduceScatterBaseTensorSlicer : public LegacyCclTensorSlicer {
         uint32_t half_cb_n_pages);
 
     ccl::InterleavedTensorWorkerSlice get_worker_slice(std::size_t global_worker_index, bool wrapped) {
+        TT_ASSERT(global_worker_index < this->worker_slice_shapes.size(), "Invalid worker index {} in `worker_slice_shapes` of size {}", global_worker_index, worker_slice_shapes.size());
+        TT_ASSERT(global_worker_index < this->worker_slice_offsets.size(), "Invalid worker index {} in `worker_slice_offsets` of size {}", global_worker_index, worker_slice_offsets.size());
         return ccl::InterleavedTensorWorkerSlice(
             this->flattened_tensor_shape,
             this->tensor_slice_shape,
-            this->worker_slice_shapes.at(global_worker_index),
-            this->worker_slice_offsets.at(global_worker_index),
+            this->worker_slice_shapes[global_worker_index],
+            this->worker_slice_offsets[global_worker_index],
             wrapped);
     }
 
@@ -281,7 +291,8 @@ class RingReduceScatterBaseTensorSlicer : public LegacyCclTensorSlicer {
 
    public:
     std::vector<tt_xy_pair> get_worker_slice_shapes() const { return this->worker_slice_shapes; }
-    uint32_t get_worker_slice_size_bytes(int worker_index) {
+    uint32_t get_worker_slice_size_bytes(std::size_t worker_index) {
+        TT_ASSERT(this->worker_slice_shapes.size() > worker_index, "Invalid worker index {} in `worker_slice_shapes` of size {}", worker_index, worker_slice_shapes.size());
         auto worker_slice_shape = this->worker_slice_shapes.at(worker_index);
         return worker_slice_shape.x * worker_slice_shape.y * this->input_page_size;
     }

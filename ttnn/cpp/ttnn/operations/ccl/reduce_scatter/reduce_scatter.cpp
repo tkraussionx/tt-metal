@@ -13,10 +13,12 @@ ttnn::Tensor ExecuteReduceScatter::invoke(
     const uint32_t scatter_dim,
     ttnn::operations::reduction::ReduceType math_op,
     const uint32_t num_links,
-    const std::optional<ttnn::MemoryConfig>& memory_config) {
+    const std::optional<ttnn::MemoryConfig>& memory_config,
+    int topology) {
+    // ttnn::ccl::Topology topology) {
 
     MemoryConfig out_memory_config = memory_config.value_or(input_tensor.memory_config());
-    return ttnn::operations::ccl::reduce_scatter(input_tensor, scatter_dim, math_op, num_links, out_memory_config);
+    return ttnn::operations::ccl::reduce_scatter(input_tensor, scatter_dim, math_op, num_links, out_memory_config, topology);
 }
 
 }  // namespace ttnn::operations::ccl

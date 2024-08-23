@@ -67,6 +67,14 @@ RingTopology::RingTopology(
     }
 }
 
+bool RingTopology::is_first_device_in_line(bool in_clockwise_direction) const {
+    return this->is_linear && ((in_clockwise_direction && this->ring_index == 0) ||
+                               (!in_clockwise_direction && this->ring_index == this->ring_size - 1));
+}
+bool RingTopology::is_last_device_in_line(bool in_clockwise_direction) const {
+    return this->is_linear && ((in_clockwise_direction && this->ring_index == this->ring_size - 1) ||
+                               (!in_clockwise_direction && this->ring_index == 0));
+}
 
 CclOpTensorConfig::CclOpTensorConfig(Tensor const& tensor) :
     buffer_start_address(tensor.buffer()->address()),
@@ -111,35 +119,76 @@ std::vector<TensorSlice> generate_slice_sequence_on_dim(
     std::size_t fracture_dim,
     std::size_t num_slices,
     std::size_t start_slice_index,
-    std::size_t end_slice_index
+    std::size_t end_slice_index_exclusive,
+    std::size_t worker_index
 ) {
     static_assert(std::is_same_v<TensorSlice::ords_t, tt_xy_pair>, "generate_slice_sequence_on_dim not yet implemented for type not of tt_xy_pair");
-    TT_ASSERT(fracture_dim < 2);
-    TT_ASSERT(start_slice_index < num_slices);
-    TT_ASSERT(end_slice_index < num_slices);
+    TT_ASSERT(fracture_dim == 3);
+    // We don't support 4D shapes in the CCL kernels yet, which are needed for proper reduction/concatenation in some cases
+    // so for now we subtract the outer dims from the fracture_dim since we only support 2D at the moment.
+    fracture_dim -= 2;
 
-    TT_ASSERT(worker_slice_shape == worker_slice_shape);
+    // TT_ASSERT(start_slice_index < num_slices);
+    // TT_ASSERT(end_slice_index < num_slices, "Specified end_slice_index {} when generating slices on dim with num_slices {}");
+
+    TT_ASSERT(worker_slice_shape.y == 1);
 
     std::vector<TensorSlice> slices;
-    auto dim_size = fracture_dim == 0 ? tensor_shape.x : tensor_shape.y;
+    auto dim_size = fracture_dim == 1 ? tensor_shape.x : tensor_shape.y;
     TT_ASSERT(dim_size % num_slices == 0);
     auto slice_size_on_dim = dim_size / num_slices;
-    auto slice_shape = fracture_dim == 0 ? tt_xy_pair{slice_size_on_dim, tensor_shape.y} : tt_xy_pair{tensor_shape.x, slice_size_on_dim};
+    auto slice_shape = fracture_dim == 0 ? tt_xy_pair{tensor_shape.x, slice_size_on_dim} : tt_xy_pair{slice_size_on_dim, tensor_shape.y};
 
     auto dim_start_offset = start_slice_index * slice_size_on_dim;
-    TensorSlice::ords_t slice_start_offset = fracture_dim == 0 ? tt_xy_pair{dim_start_offset, 0} : tt_xy_pair{0, dim_start_offset};
+    TensorSlice::ords_t tensor_slice_offset = fracture_dim == 0 ? tt_xy_pair{dim_start_offset, 0} : tt_xy_pair{0, dim_start_offset};
 
-    auto incr = start_slice_index < end_slice_index ? 1 : -1;
+    auto incr = start_slice_index < end_slice_index_exclusive ? 1 : -1;
+    log_info(tt::LogOp, "slice_size_on_dim {}", slice_size_on_dim);
+    auto worker_slice_start_offset = TensorSlice::ords_t{0, worker_index * worker_slice_shape.x};
 
-    auto generate_slice = [&slices, &tensor_shape, &slice_shape, &worker_slice_shape, &slice_start_offset, fracture_dim, dim_start_offset, slice_size_on_dim](std::size_t i){
-        auto slice_offset = fracture_dim == 0 ? tt_xy_pair{dim_start_offset + i * slice_size_on_dim, 0} : tt_xy_pair{0, dim_start_offset + i * slice_size_on_dim};
-        slices.push_back(TensorSlice(tensor_shape, slice_shape, slice_offset, worker_slice_shape, slice_start_offset));
+    auto generate_slice = [&slices, &tensor_shape, &slice_shape, &worker_slice_shape, &tensor_slice_offset, &worker_slice_start_offset, fracture_dim, dim_start_offset, slice_size_on_dim](std::size_t i){
+        if (fracture_dim == 0) {
+            tensor_slice_offset.y += slice_size_on_dim;
+        } else {
+            tensor_slice_offset.x += slice_size_on_dim;
+        }
+        TT_ASSERT(tensor_shape.x > 0, "Invalid tensor shape. x = 0 but it must be > 0");
+        TT_ASSERT(tensor_shape.y > 0, "Invalid tensor shape. y = 0 but it must be > 0");
+        TT_ASSERT(slice_shape.x > 0, "Invalid tensor slice shape. x = 0 but it must be > 0");
+        TT_ASSERT(slice_shape.y > 0, "Invalid tensor slice shape. x = 0 but it must be > 0");
+        TT_ASSERT(tensor_slice_offset.x < tensor_shape.x, "Invalid tensor slice offset. x = {} but it must be < tensor shape x={}. slice_offset: (y={},x={}), tensor_shape: (y={},x={})", tensor_slice_offset.x, tensor_shape.x, tensor_slice_offset.y, tensor_slice_offset.x, tensor_shape.y, tensor_shape.x);
+        TT_ASSERT(tensor_slice_offset.y < tensor_shape.y, "Invalid tensor slice offset. y = {} but it must be < tensor shape y={}. slice_offset: (y={},x={}), tensor_shape: (y={},x={})", tensor_slice_offset.y, tensor_shape.y, tensor_slice_offset.y, tensor_slice_offset.x, tensor_shape.y, tensor_shape.x);
+        TT_ASSERT(worker_slice_shape.x > 0, "Invalid worker slice shape. x = 0 but it must be > 0");
+        TT_ASSERT(worker_slice_shape.y > 0, "Invalid worker slice shape. y = 0 but it must be > 0");
+        // TT_ASSERT(slice_start_offset.x < slice_shape.x, "Invalid worker slice start offset. x = {} but it must be < tensor slice shape x={}. slice_start_offset: (y={},x={}), slice_shape: (y={},x={})", slice_start_offset.x, slice_shape.x, slice_start_offset.y, slice_start_offset.x, slice_shape.y, slice_shape.x);
+        // TT_ASSERT(slice_start_offset.y < slice_shape.y, "Invalid worker slice start offset. y = {} but it must be < tensor slice shape y={}. slice_start_offset: (y={},x={}), slice_shape: (y={},x={})", slice_start_offset.y, slice_shape.y, slice_start_offset.y, slice_start_offset.x, slice_shape.y, slice_shape.x);
+
+        auto const& tensor_slice = TensorSlice(tensor_shape, slice_shape, tensor_slice_offset, worker_slice_shape, worker_slice_start_offset, fracture_dim);
+        log_info(
+            tt::LogOp,
+            "generate_slice ({}):\n\ttensor_shape: (y={},x={})\n\ttensor_slice_shape: (y={},x={})\n\ttensor_slice_offset: (y={},x={})\n\tslice_start_shape: (y={},x={})\n\tworker relative slice_start_offset: (y={},x={})\n\tfracture_dim: {}\n\tdim_start_offset: {}\n\tslice_size_on_dim: {}\n",
+            i,
+            tensor_slice.tensor_shape.y,
+            tensor_slice.tensor_shape.x,
+            tensor_slice.tensor_slice_shape.y,
+            tensor_slice.tensor_slice_shape.x,
+            tensor_slice.tensor_slice_offset.y,
+            tensor_slice.tensor_slice_offset.x,
+            tensor_slice.worker_slice_shape.y,
+            tensor_slice.worker_slice_shape.x,
+            tensor_slice.worker_slice_offset.y,
+            tensor_slice.worker_slice_offset.x,
+            fracture_dim,
+            dim_start_offset,
+            slice_size_on_dim);
+
+        slices.push_back(tensor_slice);
     };
 
-    for (std::size_t i = start_slice_index; i != end_slice_index + incr; i += incr) {
+    for (std::size_t i = start_slice_index; i + incr != end_slice_index_exclusive; i += incr) {
         generate_slice(i);
     }
-    generate_slice(end_slice_index);
+    // generate_slice(end_slice_index_exclusive);
 
     return slices;
 }

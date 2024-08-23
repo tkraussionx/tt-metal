@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ttnn/operations/ccl/reduce_scatter/device/reduce_scatter_op.hpp"
+#include <cstdint>
 
 #include "ttnn/operations/reduction/generic/device/common.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
@@ -72,9 +73,12 @@ Tensor reduce_scatter(
     const uint32_t scatter_dim,
     ttnn::operations::reduction::ReduceType math_op,
     const uint32_t num_links,
-    const MemoryConfig& output_mem_config) {
+    const MemoryConfig& output_mem_config,
+    // const ttnn::ccl::Topology topology) {
+    int topology_) {
+    ttnn::ccl::Topology topology = static_cast<ttnn::ccl::Topology>(topology_);
     ttnn::operations::binary::BinaryOpType binary_op_type = convert_reduce_type_to_eltwise_type(math_op);
-    const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring;
+    // const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring;
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
 
     auto devices = input_tensor.get_workers();
@@ -84,8 +88,8 @@ Tensor reduce_scatter(
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
-
-            bool is_ring = topology ==ttnn::ccl::Topology::Ring;
+            TT_ASSERT(input_tensors.size() >= 1, "Reduce scatter op expects an input tensor");
+            bool is_linear = topology == ttnn::ccl::Topology::Linear;
 
             const auto& input_tensor = input_tensors.at(0);
             uint32_t num_devices = devices.size();
@@ -94,11 +98,18 @@ Tensor reduce_scatter(
             std::optional<chip_id_t> sender_device_id = std::nullopt; // Initialize sender device ID
             for (uint32_t i = 0; i < num_devices; ++i) {
                 if (devices.at(i) == input_tensor.device()) {
-                    bool is_last_chip_in_clockwise_direction = is_ring ? false : i == (input_tensors.size() - 1);
-                    bool is_last_chip_in_counter_clockwise_direction = is_ring ? false : i == 0;
+
+                    bool is_last_chip_in_clockwise_direction = is_linear && i == (num_devices - 1);
+                    bool is_last_chip_in_counter_clockwise_direction = is_linear && i == 0;
                     device_index = i;
-                    receiver_device_id = devices.at((i + 1) % num_devices)->id(); // Next device in the ring
-                    sender_device_id = devices.at((i + num_devices - 1) % num_devices)->id(); // Previous device in the ring
+                    receiver_device_id = is_last_chip_in_clockwise_direction ?
+                        std::nullopt :
+                        std::optional<chip_id_t>(devices.at((i + 1) % num_devices)->id());
+                    sender_device_id = is_last_chip_in_counter_clockwise_direction ?
+                        std::nullopt :
+                        std::optional<chip_id_t>(devices.at((i + num_devices - 1) % num_devices)->id());
+                    // receiver_device_id = devices.at((i + 1) % num_devices)->id(); // Next device in the ring
+                    // sender_device_id = devices.at((i + num_devices - 1) % num_devices)->id(); // Previous device in the ring
                     break;
                 }
             }

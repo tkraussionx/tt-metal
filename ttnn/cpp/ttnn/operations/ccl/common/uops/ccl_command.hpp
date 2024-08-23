@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ttnn/operations/ccl/common/types/ccl_types.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/common/types/ccl_types.hpp"
 
 #include <cstdint>
 
