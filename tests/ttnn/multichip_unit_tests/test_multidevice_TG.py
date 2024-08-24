@@ -176,7 +176,7 @@ def test_galaxy_matmul_2d_fracture(M, K, N, weights_dtype, mesh_shape, device_me
 
 # @pytest.mark.skip("See GH #10673: DRAM-SHARDED Matmuls gives ND PCC on TG")
 ## BEGIN: Set your mesh here
-mesh = (8, 4)
+mesh = (1, 1)
 ## END
 
 STD_MESH = (8, 4)
@@ -190,13 +190,25 @@ expand_div = STD_MESH[0] // mesh[0]
     "M, K, N, weights_dtype",
     [
         pytest.param(32, 8192 // hidden_div, 32768 // expand_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF1"),
-        pytest.param(32, 32768 // expand_div, 8192 // hidden_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
+        # pytest.param(32, 32768 // expand_div, 8192 // hidden_div, ttnn.bfloat8_b, id="Llama3-70B_decode_FF2"),
     ],
 )
-@pytest.mark.parametrize("activation_sharded", [True, False], ids=["activation_sharded", "activation_interleaved"])
-@pytest.mark.parametrize("weight_sharded", [True, False], ids=["weight_sharded", "weight_interleaved"])
-# @pytest.mark.parametrize("activation_sharded", [True,], ids=["activation_sharded"])
-# @pytest.mark.parametrize("weight_sharded", [True,], ids=["weight_sharded"])
+# @pytest.mark.parametrize("activation_sharded", [True, False], ids=["activation_sharded", "activation_interleaved"])
+# @pytest.mark.parametrize("weight_sharded", [True, False], ids=["weight_sharded", "weight_interleaved"])
+@pytest.mark.parametrize(
+    "activation_sharded",
+    [
+        True,
+    ],
+    ids=["activation_sharded"],
+)
+@pytest.mark.parametrize(
+    "weight_sharded",
+    [
+        True,
+    ],
+    ids=["weight_sharded"],
+)
 @pytest.mark.parametrize("enable_async_mode", (True,), indirect=True)
 # Llama FF1, FF2, FF3 in MLP with dram sharded weights
 def test_galaxy_matmul_2d_fracture_dram_sharded(
@@ -211,6 +223,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     use_program_cache,
     enable_async_mode,
 ):
+    torch.manual_seed(0)
     """
     activation_sharded and dram_sharded: MM 1D dram sharded
     activation_sharded and not dram_sharded: MM 1D dram interleaved
@@ -242,24 +255,28 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     N = N // mesh_shape[1] if N == 32768 else N // mesh_shape[0]
     # Use ones activation to sum MM weights - look for large outliers
     act_pt = torch.ones(mesh_shape[0], mesh_shape[1], M, K)
-    weights_pt = torch.randn(1, 1, K, N)
+    # weights_pt = torch.randn(1, 1, K, N)
 
-    # weights_pt = torch.arange(-K//2, K//2).reshape(1, 1, -1, 1).float()
+    # weights_pt = torch.rand(1, 1, K, N)
+    # weights_pt = torch.randn(K).reshape(1, 1, -1, 1)
+    # weights_pt = weights_pt.repeat(K // 8).reshape(1, 1, -1, 1)
+
+    # weights_pt = torch.randn(N).reshape(1, 1, 1, -1)
     # weights_pt = weights_pt.expand(1, 1, K, N)
-    # weights_pt = torch.full((1, 1, K, N), -1.9375)
-    # mask = torch.rand(weights_pt.shape) > 0.5
-    # weights_pt[mask] = 2
-    # for kk in range(0, K, 2):
-    # weights_pt[:,:,kk,:] = -2
 
-    # mask = torch.ones_like(weights_pt, dtype=torch.bool)
-    # mask[:,:,::3,::3] = False
-    # mask[:,:,1::3,1::3] = False
-    # weights_pt[mask] = 2
-    # mask = torch.ones_like(weights_pt, dtype=torch.bool)
-    # mask[:,:,]
+    """Consistently fails on 107!!"""
+    elem_in_row = N
+    weights_pt = torch.randn(elem_in_row).repeat(N // elem_in_row).reshape(1, 1, 1, -1).clone()
+    # weights_pt[:,:,:,:-1] = weights_pt[:,:,:,1:].clone()
+    # weights_pt[:,:,:,107] = 0
+    # weights_pt[:,:,:,107] = 0.2272
+    weights_pt = weights_pt.expand(1, 1, K, N).clone()
+
+    # Nice failures too
+    # weights_pt = torch.randn(32, 32).repeat(K // 32, N // 32).reshape(1, 1, K, N)
 
     gt = act_pt @ weights_pt
+    gt_datacopy = weights_pt[:, :, :M, :].expand(mesh_shape[0], mesh_shape[1], M, N)
 
     act_shard_dim = (0, 1)
     # weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
@@ -359,7 +376,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
     logger.info(f"weight_mem_config: {weights.memory_config()}")
 
     num_passed = 0
-    num_iters = 10000
+    num_iters = 1000
 
     from collections import defaultdict, Counter
 
@@ -381,13 +398,19 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         )
         # out = torch.sum(out, dim=1, keepdim=True)
         # breakpoint()
-        out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
+
+        # out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
+        out_pass, out_pcc = comp_pcc(gt_datacopy, out, pcc=0.99)
         logger.info(f"PCC value: {out_pcc}")
+        # breakpoint()
+        # mse = ((gt - out) ** 2).mean()
+        # breakpoint()
         # assert out_pass
         if i == 0:
             expect_pcc = out_pcc
+            # expect_mse = mse
             expect = out
-        if i == 0 or (i != 0 and out_pcc == expect_pcc):
+        if i == 0 or (i != 0 and (out == expect).all() and out_pcc == expect_pcc):
             num_passed += 1
         else:
             for j in range(mesh_shape[0]):
@@ -399,6 +422,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
                         fail_idx = (out[j, k] - expect[j, k]).nonzero()[0]
                         diff = out[j, k, fail_idx[0], fail_idx[1]] - expect[j, k, fail_idx[0], fail_idx[1]]
                         chip_failures[(j, k)].append((tuple(fail_idx.tolist()), diff.item()))
+            # breakpoint()
             # breakpoint()
     logger.info(f"Number of passes: {num_passed}/{num_iters}")
 
@@ -417,13 +441,21 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         failure_count = Counter(v)
         for (idx, diff), count in failure_count.most_common():
             # print(f"Index: {idx}, Diff: {diff} failed {count} times")
-            log_str += f"Index: {idx}, Diff: {diff} failed {count} times\n"
+            log_str += f"Index: {idx}, Bank: {idx[1] // shard_shape[1]}, Tile_col: {idx[1]%32}, Diff: {diff} failed {count} times\n"
         # print("-"*10)
         log_str += "-" * 10 + "\n"
 
     print(log_str)
-    with open(f"generated/mm_nd_log_{M}_{K}_{N}_{weights_dtype}_{activation_sharded}_{weight_sharded}.txt", "w") as f:
+    import os
+    import datetime
+
+    # Make unique dir
+    dir = os.path.join("generated", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+    os.makedirs(dir, exist_ok=True)
+    with open(f"{dir}/mm_nd_log_{M}_{K}_{N}_{weights_dtype}_{activation_sharded}_{weight_sharded}.txt", "w") as f:
         f.write(log_str)
+
+    breakpoint()
 
     assert num_passed == num_iters
 
