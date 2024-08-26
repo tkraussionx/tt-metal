@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
+import hashlib
 import sys
 import pathlib
 import importlib
@@ -97,7 +98,7 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
             result["e2e_perf"] = None
         else:
             test_vector.pop("invalid_reason")
-            test_vector.pop("status")
+            # test_vector.pop("status")
             test_vector.pop("validity")
             if p is None and len(test_vectors) > 1:
                 p = Process(target=run, args=(test_module, input_queue, output_queue))
@@ -155,8 +156,14 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
     return results
 
 
+def get_module_hash(module_path):
+    with open(module_path, "rb") as file:
+        data = file.read()
+        return hashlib.sha224(data).hexdigest()
+
+
 def sanitize_inputs(test_vectors):
-    info_field_names = ["sweep_name", "suite_name", "vector_id"]
+    info_field_names = ["sweep_name", "suite_name", "vector_id", "input_hash", "module_hash"]
     header_info = []
     for vector in test_vectors:
         header = dict()
@@ -167,14 +174,10 @@ def sanitize_inputs(test_vectors):
     return header_info, test_vectors
 
 
-def get_suite_vectors(client, vector_index, suite):
+def get_suite_vectors(client, vector_index, suite, module_hash):
     response = client.search(
         index=vector_index,
-        query={
-            "bool": {
-                "must": [{"match": {"status": str(VectorStatus.CURRENT)}}, {"match": {"suite_name.keyword": suite}}]
-            }
-        },
+        query={"bool": {"must": [{"match": {"module_hash": module_hash}}, {"match": {"suite_name.keyword": suite}}]}},
         size=10000,
     )
     test_ids = [hit["_id"] for hit in response["hits"]["hits"]]
@@ -195,6 +198,7 @@ def run_sweeps(module_name, suite_name, vector_id):
         for file in sorted(sweeps_path.glob("**/*.py")):
             sweep_name = str(pathlib.Path(file).relative_to(sweeps_path))[:-3].replace("/", ".")
             test_module = importlib.import_module("sweeps." + sweep_name)
+            module_hash = get_module_hash(file)
             vector_index = VECTOR_INDEX_PREFIX + sweep_name
             print(f"SWEEPS: Executing tests for module {sweep_name}...")
             try:
@@ -209,7 +213,7 @@ def run_sweeps(module_name, suite_name, vector_id):
                 module_pbar = pbar_manager.counter(total=len(suites), desc=f"Module: {sweep_name}", leave=False)
                 for suite in suites:
                     print(f"SWEEPS: Executing tests for module {sweep_name}, suite {suite}.")
-                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite)
+                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite, module_hash)
                     results = execute_suite(test_module, test_vectors, pbar_manager, suite)
                     print(f"SWEEPS: Completed tests for module {sweep_name}, suite {suite}.")
                     print(f"SWEEPS: Tests Executed - {len(results)}")
@@ -230,6 +234,7 @@ def run_sweeps(module_name, suite_name, vector_id):
             print(f"SWEEPS: No module found with name {module_name}")
             exit(1)
         vector_index = VECTOR_INDEX_PREFIX + module_name
+        module_hash = get_module_hash(os.path.abspath(test_module.__file__))
 
         if vector_id:
             test_vector = client.get(index=vector_index, id=vector_id)["_source"]
@@ -251,14 +256,14 @@ def run_sweeps(module_name, suite_name, vector_id):
 
                     for suite in suites:
                         print(f"SWEEPS: Executing tests for module {module_name}, suite {suite}.")
-                        header_info, test_vectors = get_suite_vectors(client, vector_index, suite)
+                        header_info, test_vectors = get_suite_vectors(client, vector_index, suite, module_hash)
                         results = execute_suite(test_module, test_vectors, pbar_manager, suite)
                         print(f"SWEEPS: Completed tests for module {module_name}, suite {suite}.")
                         print(f"SWEEPS: Tests Executed - {len(results)}")
                         export_test_results(header_info, results)
                 else:
                     print(f"SWEEPS: Executing tests for module {module_name}, suite {suite_name}.")
-                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite_name)
+                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite_name, module_hash)
                     results = execute_suite(test_module, test_vectors, pbar_manager, suite_name)
                     print(f"SWEEPS: Completed tests for module {module_name}, suite {suite_name}.")
                     print(f"SWEEPS: Tests Executed - {len(results)}")

@@ -85,11 +85,11 @@ def export_suite_vectors(module_name, suite_name, vectors, module_hash):
         for elem in vectors[i].keys():
             vector[elem] = serialize(vectors[i][elem], warnings)
         input_hash = hashlib.sha224(str(vector).encode("utf-8")).hexdigest()
-        new_vector_ids.add(id)
         vector["input_hash"] = input_hash
         vector["module_hash"] = module_hash
         id = hashlib.sha224(str(vector).encode("utf-8")).hexdigest()
         vector["timestamp"] = current_time
+        new_vector_ids.add(id)
         serialized_vectors[id] = vector
 
     if old_vector_ids == new_vector_ids:
@@ -101,8 +101,6 @@ def export_suite_vectors(module_name, suite_name, vectors, module_hash):
         print(
             f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Saving new suite. This step may take several minutes."
         )
-        # for old_vector_id in old_vector_ids:
-        #     client.update(index=index_name, id=old_vector_id, doc={"status": str(VectorStatus.ARCHIVED)})
         for new_vector_id in serialized_vectors.keys():
             client.index(index=index_name, id=new_vector_id, body=serialized_vectors[new_vector_id])
         print(f"SWEEPS: Generated {len(serialized_vectors)} test vectors for suite {suite_name}.")
@@ -124,9 +122,11 @@ def generate_tests(module_name):
             print(f"SWEEPS: Finished generating test vectors for module {module_name}.\n\n")
     else:
         print(f"SWEEPS: Generating test vectors for module {module_name}.")
-        generate_vectors(module_name)
+        module_hash = get_module_hash(SWEEP_SOURCES_DIR / (module_name.replace(".", "/") + ".py"))
+        generate_vectors(module_name, module_hash)
 
 
+# TODO: This needs to be changed for new identif (remove?)
 def clean_module(module_name):
     client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
     vector_index = VECTOR_INDEX_PREFIX + module_name
