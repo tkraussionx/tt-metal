@@ -176,7 +176,7 @@ def test_galaxy_matmul_2d_fracture(M, K, N, weights_dtype, mesh_shape, device_me
 
 # @pytest.mark.skip("See GH #10673: DRAM-SHARDED Matmuls gives ND PCC on TG")
 ## BEGIN: Set your mesh here
-mesh = (1, 1)
+mesh = (8, 4)
 ## END
 
 STD_MESH = (8, 4)

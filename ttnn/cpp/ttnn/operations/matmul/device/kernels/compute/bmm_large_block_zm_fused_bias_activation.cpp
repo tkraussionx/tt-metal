@@ -227,7 +227,7 @@ void MAIN {
                     // for (volatile uint32_t xxx = 0; xxx < 1000; xxx++){;}
                     for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
                         if (block == 0 && inner_dim_idx == 0) {
-                            UNPACK(DPRINT << "add_tiles no acc_to_dst" << ENDL());
+                            // UNPACK(DPRINT << "add_tiles no acc_to_dst" << ENDL());
                             add_tiles_init(in1_cb_id, in1_cb_id, false);
                             // copy_tile_to_dst_init_short(in1_cb_id);
                             unpack_reconfig_data_format(in1_cb_id, in1_cb_id);
@@ -236,12 +236,12 @@ void MAIN {
                             //     copy_tile(in1_cb_id, in1_index + w, w);
                             // }
                         } else {
-                            UNPACK(DPRINT << "add_tiles acc_to_dst" << ENDL());
+                            // UNPACK(DPRINT << "add_tiles acc_to_dst" << ENDL());
                             add_tiles_init(in1_cb_id, in1_cb_id, true);
                             unpack_reconfig_data_format(in1_cb_id, in1_cb_id);
                         }
                         for (uint32_t w = 0; w < out_subblock_w; w++) {
-                            UNPACK(DPRINT << "add_tiles w="<<w<<" " << ENDL());
+                            // UNPACK(DPRINT << "add_tiles w="<<w<<" " << ENDL());
                             add_tiles(in1_cb_id, in1_cb_id, in1_index + w, in1_index + w, w);
                         }
                         in0_index++;                  // stride right by 1
