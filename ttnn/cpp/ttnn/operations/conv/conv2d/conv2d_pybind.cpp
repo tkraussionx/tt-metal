@@ -268,33 +268,15 @@ void py_bind_conv2d(py::module& module) {
             py::kw_only(),
             py::arg("grid_size"),
             py::arg("num_cores_nhw"),
-            py::arg("per_core_out_matrix_height_ntiles").noconvert(),
-            py::arg("per_core_out_matrix_width_ntiles").noconvert())
+            py::arg("per_core_out_matrix_height").noconvert(),
+            py::arg("per_core_out_matrix_width").noconvert())
         .def_property_readonly("grid_size", [](OptimizedConvParallelizationConfig const& c) { return c.grid_size; })
         .def_property_readonly(
             "num_cores_nhw", [](OptimizedConvParallelizationConfig const& c) { return c.num_cores_nhw; })
         .def_property_readonly(
-            "per_core_out_matrix_height_ntiles",
-            [](OptimizedConvParallelizationConfig const& c) { return c.per_core_out_matrix_height_ntiles; })
-        .def_property_readonly("per_core_out_matrix_width_ntiles", [](OptimizedConvParallelizationConfig const& c) {
-            return c.per_core_out_matrix_width_ntiles;
-        });
-
-    py::class_<OptimizedConvParallelizationConfigNew>(module, "OptimizedConvParallelizationConfigNew")
-        .def(
-            py::init<CoreCoord, uint32_t, uint32_t, uint32_t>(),
-            py::kw_only(),
-            py::arg("grid_size"),
-            py::arg("num_cores_nhw"),
-            py::arg("per_core_out_matrix_height").noconvert(),
-            py::arg("per_core_out_matrix_width").noconvert())
-        .def_property_readonly("grid_size", [](OptimizedConvParallelizationConfigNew const& c) { return c.grid_size; })
-        .def_property_readonly(
-            "num_cores_nhw", [](OptimizedConvParallelizationConfigNew const& c) { return c.num_cores_nhw; })
-        .def_property_readonly(
             "per_core_out_matrix_height",
-            [](OptimizedConvParallelizationConfigNew const& c) { return c.per_core_out_matrix_height; })
-        .def_property_readonly("per_core_out_matrix_width", [](OptimizedConvParallelizationConfigNew const& c) {
+            [](OptimizedConvParallelizationConfig const& c) { return c.per_core_out_matrix_height; })
+        .def_property_readonly("per_core_out_matrix_width_ntiles", [](OptimizedConvParallelizationConfig const& c) {
             return c.per_core_out_matrix_width;
         });
 

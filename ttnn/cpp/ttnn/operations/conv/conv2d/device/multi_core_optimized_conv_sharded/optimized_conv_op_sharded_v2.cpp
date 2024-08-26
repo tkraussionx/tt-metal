@@ -352,8 +352,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_ASSERT(output_channels <= b.get_legacy_shape()[3], "Invalid weight shape. Incorrect weight tensor.");
     uint32_t act_block_h_ntiles = block_config.act_block_h_ntiles;
     uint32_t act_block_w_ntiles = block_config.act_block_w_ntiles;
-    uint32_t weight_block_w_ntiles = parallelization_config.per_core_out_matrix_width_ntiles;
-    uint32_t out_block_h_ntiles = parallelization_config.per_core_out_matrix_height_ntiles;
+    uint32_t weight_block_w_ntiles = parallelization_config.per_core_out_matrix_width / TILE_WIDTH;
+    uint32_t out_block_h_ntiles = parallelization_config.per_core_out_matrix_height / TILE_HEIGHT;
     uint32_t out_subblock_h_ntiles = block_config.out_subblock_h_ntiles;
     uint32_t out_subblock_w_ntiles = block_config.out_subblock_w_ntiles;
 
@@ -469,8 +469,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t total_num_cores = num_cores_x * num_cores_y;
     assert(num_cores_x < 13);
     assert(num_cores_y < 10);
-    uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height_ntiles;
-    uint32_t per_core_out_matrix_width_ntiles = p_config.per_core_out_matrix_width_ntiles;
+    uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height / TILE_HEIGHT;
+    uint32_t per_core_out_matrix_width_ntiles = p_config.per_core_out_matrix_width / TILE_WIDTH;
 
     // weight_width_sliced determines is 1d-sysarr-conv or 2d-sysarr-conv
     bool weight_width_sliced = per_core_out_matrix_width_ntiles < weight_matrix_width_ntiles;
@@ -845,7 +845,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     }
 
     if (has_bias) {
-        assert(bias_ntiles % num_weight_slices_width == 0);
+        /*assert(bias_ntiles % num_weight_slices_width == 0);*/
         assert(bias_ntiles == weight_matrix_width_ntiles);
     }
     uint32_t bias_ntiles_per_core = bias_ntiles / num_weight_slices_width;
@@ -1673,7 +1673,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     bool untilize_out,
     bool has_bias,
     bool fuse_relu,
-    const OptimizedConvParallelizationConfigNew& parallelization_config,
+    const OptimizedConvParallelizationConfig& parallelization_config,
     const OptimizedConvBlockConfig& block_config,
     uint32_t extra_padding_for_32B_alignment,
     bool use_shallow_conv_variant,
@@ -1893,7 +1893,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     uint32_t act_noc_y = act_dram_noc_xy.y;
 
     assert(act_block_h_ntiles % out_subblock_h_ntiles == 0);
-    assert(out_block_h_ntiles % out_subblock_h_ntiles == 0);
+    /*assert(out_block_h_ntiles % out_subblock_h_ntiles == 0);*/
     uint32_t act_num_subblocks = act_block_h_ntiles / out_subblock_h_ntiles;
     uint32_t act_block_num_tiles = act_block_h_ntiles * act_block_w_ntiles;
     uint32_t act_subblock_h_ntiles = out_subblock_h_ntiles;
@@ -1939,13 +1939,14 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
 
     assert(per_core_out_matrix_width_ntiles % weight_block_w_ntiles == 0);
     uint32_t num_blocks_weight_w_per_core = per_core_out_matrix_width_ntiles / weight_block_w_ntiles;
-    assert(per_core_out_matrix_height_ntiles % act_block_h_ntiles == 0);
+    /*assert(per_core_out_matrix_height_ntiles % act_block_h_ntiles == 0);*/
     uint32_t num_blocks_act_h_per_core = per_core_out_matrix_height_ntiles / act_block_h_ntiles;
-    assert(per_core_out_matrix_height_ntiles % out_block_h_ntiles == 0);
+    /*assert(per_core_out_matrix_height_ntiles % out_block_h_ntiles == 0);*/
     uint32_t num_blocks_out_h_per_core = per_core_out_matrix_height_ntiles / out_block_h_ntiles;
     bool act_height_sliced = a_memory_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED;
 
     uint32_t total_active_num_cores = a_shard_spec.grid.num_cores();
+    uint32_t act_block_h_datums_last_block = (per_core_out_matrix_height_ntiles - (num_blocks_act_h_per_core - 1) * act_block_h_ntiles) * TILE_HEIGHT;
     TT_FATAL(total_active_num_cores <= total_num_cores);
     uint32_t total_noop_cores = total_num_cores - total_active_num_cores;
     if (block_sharded) {
@@ -2147,7 +2148,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
             TT_ASSERT(act_block_w_datums == round_up(a_shard_spec.shape[1] * weight_size_w, TILE_WIDTH));
 
             reader_kernel =
-                "ttnn/operations/conv/conv2d/device/kernels/reader_conv_activations_padded_with_halo_3x3_weights_v2.cpp";
+                "ttnn/cpp/ttnn/operations/conv/conv2d/device/kernels/reader_conv_activations_padded_with_halo_3x3_weights_v2.cpp";
             if (split_reader) {
                 writer_mcast_sender_kernel =
                     "ttnn/cpp/ttnn/operations/conv/conv2d/device/kernels/"
@@ -2207,6 +2208,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
         (uint32_t)act_mcast_receiver_semaphore,
         (uint32_t)act_block_num_tiles * tilized_act_tile_size,  // act_mcast_sender_size_bytes
         (uint32_t)(transpose_mcast ? 1 : 0),
+        (uint32_t)act_block_h_datums_last_block
     };
 
     // define for bias
@@ -2222,7 +2224,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl_new(
     if (total_num_cores == 1) {
         writer_mcast_sender_defines["SKIP_MCAST"] = "1";
     }
-    std::cout << "has bias = " << has_bias << std::endl;;
     if (has_bias) {
         writer_defines["FUSE_BIAS"] = "1";
         writer_mcast_sender_defines["FUSE_BIAS"] = "1";
@@ -2803,7 +2804,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(
     bool untilize_out,
     bool fuse_relu,
     MathFidelity math_fidelity,
-    const OptimizedConvParallelizationConfigNew& parallelization_config,
+    const OptimizedConvParallelizationConfig& parallelization_config,
     const OptimizedConvBlockConfig& block_config,
     uint32_t extra_padding_for_32B_alignment,
     DataType output_dtype,
