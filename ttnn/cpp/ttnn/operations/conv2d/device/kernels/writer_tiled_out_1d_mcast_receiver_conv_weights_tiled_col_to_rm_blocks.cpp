@@ -46,6 +46,11 @@ void kernel_main() {
 
     constexpr uint32_t total_weight_num_tiles = weight_block_height_num_outer * num_blocks_weight_h * weight_block_num_tiles;
 
+
+    DPRINT << "mcast_sender " <<  num_blocks_weight_h << "  " << weight_block_num_tiles << "    " << weight_block_height_num_outer << "  " << weight_block_height_ntiles << "  " << weight_block_width_ntiles << "  " << weight_stride_h << "  " << weight_next_block_stride_h << "  " << weight_next_block_stride_w << "  " << bias_ntiles << ENDL();
+    DPRINT << "mcast_sender_2" << out_next_tile_stride_h << "  " << out_next_tile_stride_w << "  " << out_next_subblock_stride_h << "  " << out_next_subblock_stride_w << "  " << out_next_block_stride_h << "  " << out_next_block_stride_w << "  " << out_subblock_h << "  " << out_subblock_w << "  " << out_subblock_tile_count << ENDL();
+    DPRINT << "mcast_sender_3" << out_num_subblocks_h << "  " << out_num_subblocks_w << "  " << out_num_blocks_h << "  " << out_num_blocks_w << "  " << out_block_height_num_tiles << "  " << out_height_num_tiles << "  " << out_width_num_tiles << ENDL();
+
     uint32_t i = 0;
     i+=19;
     uint32_t out_start_tile_id = get_arg_val<uint32_t>(i); i+=1;
@@ -56,6 +61,10 @@ void kernel_main() {
     if(noop) {
         return;
     }
+
+    // if( my_x[0] != 0 || my_y[0] >4){
+    //     return;
+    // }
 
     // mcast args
     uint32_t weights_mcast_sender_noc_x           = get_arg_val<uint32_t>(i); i+=1;
@@ -120,7 +129,7 @@ void kernel_main() {
                 // read weight slice - 1 block of weights in width dim and full weight matrix height
                 // read slice only once for all activation blocks
                 for(uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer; weight_tile_h_outer_i++) {
-                    for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                    for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) { // num_blocks_weight_h = 1
                         cb_reserve_back(cb_id_weight, weight_block_num_tiles);
                         // Set weights semaphore value to INVALID
                         noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
@@ -160,6 +169,7 @@ void kernel_main() {
                 cb_push_back(cb_id_weight, total_weight_num_tiles);
             }
             #ifndef SHARDED_OUT
+            DPRINT << "#ifndef SHARDED_OUT testing" << ENDL();
             uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
             uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
             for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -212,6 +222,8 @@ void kernel_main() {
     } // out_num_blocks_w
 
     #ifdef SHARDED_OUT
+    DPRINT << "sharded out testing started" << ENDL();
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    DPRINT << "sharded out testing finished" << ENDL();
     #endif
 }

@@ -9,7 +9,7 @@
 #include "compute_kernel_api/pack_untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
@@ -102,6 +102,11 @@ void MAIN {
     constexpr bool tilize_in0                 = get_compile_time_arg_val(14);
     constexpr bool untilize_out               = get_compile_time_arg_val(15);
 
+    //UNPACK(DPRINT << "TESTING_1 " << in0_block_w << "  " << in0_num_subblocks << " " << in0_block_num_tiles << " " << in0_subblock_num_tiles << " " << in0_subblock_h << " " << in1_num_subblocks << " " << in1_block_num_tiles << " " << in1_block_w << ENDL());
+    //UNPACK(DPRINT << "TESTING_2 " << in0_num_blocks_h << " " << in0_num_blocks_w << " " << in1_num_blocks_w << " " << out_subblock_h << " " << out_subblock_w << " " << out_subblock_num_tiles << ENDL());
+    /*if( my_x[0] != 0 || (uint) my_y[0] >4){
+        return;
+    }*/
     constexpr uint32_t out_block_num_tiles    = in0_num_subblocks * in1_num_subblocks * out_subblock_num_tiles;
     constexpr uint32_t out_block_w = in1_block_w;
     constexpr bool spill = in0_num_blocks_w > 1;
@@ -142,17 +147,18 @@ void MAIN {
     SFPU_OP_INIT_ACTIVATION
     #endif
     // in1 num blocks w is the outer loop. Output blocks are computed in col major order.
-    for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
+    //UNPACK(DPRINT << "in1_num_blocks_w: " << in1_num_blocks_w << "in0_num_blocks_h: " << in0_num_blocks_h << " in0_num_blocks_w: " << in0_num_blocks_w << ENDL());
+    for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) { // make 1
 
-        for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
+        for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) { // make 1
             #ifdef PRE_TILIZE
             unpack_reconfig_data_format_srca(in1_cb_id, in0_pretilize_cb_id);
 
             tilize_in(in0_pretilize_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
-
+            //DPRINT << "compute testing 155" << ENDL();
             mm_block_init_short_with_dt(in0_cb_id, in1_cb_id, in0_pretilize_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
             #endif
-
+            //UNPACK(DPRINT << "tilization done" << ENDL());
             bool enable_reload = false;
 
             #ifdef PACK_RELU
@@ -162,6 +168,9 @@ void MAIN {
 
             UNPACK( const uint32_t partials_cb_read_ptr = cb_interface[matmul_partials_cb].fifo_rd_ptr );
             PACK( const uint32_t partials_cb_write_ptr = cb_interface[matmul_partials_cb].fifo_wr_ptr );
+            // UNPACK(DPRINT << " unpack 168" << ENDL());
+            // PACK(DPRINT << " pack 169" << ENDL());
+            //DPRINT << "line 171" << ENDL();
             uint32_t curr_matmul_out_cb = matmul_partials_cb;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
@@ -178,16 +187,24 @@ void MAIN {
                     #endif
 
                     unpack_reconfig_data_format_srca(in1_cb_id, in0_cb_id);
-
+                    //DPRINT << "line 186" << ENDL();
+                    //DPRINT << " in0_subblock_h: " << in0_subblock_h << " in0_block_w: " << in0_block_w << " in0_num_subblocks_read: " << in0_num_subblocks_read << ENDL();
                     tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks_read, tilized_in0_cb_id);
+                    //DPRINT << "line 188" << ENDL();
                     #ifdef SPLIT_READER
+                    //DPRINT << "line 190" << ENDL();
                     tilize_in(in0_cb_second_reader_id, in0_subblock_h, in0_block_w, in0_num_subblocks_read_last, tilized_in0_cb_id);
+                    //DPRINT << "line 192" << ENDL();
                     #endif
 
+                    //UNPACK(DPRINT << "out_subblock_w: " << out_subblock_w << " out_subblock_h: " << out_subblock_h << " in0_block_w: " << in0_block_w << ENDL());
                     mm_block_init_short_with_dt(mm_in0_cb_id, in1_cb_id, /*srca_old_operand=*/in0_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
                 }
+                //UNPACK(DPRINT << "line 192");
+                //UNPACK(DPRINT << "in0_block_num_tiles: " << in0_block_num_tiles << " in1_block_num_tiles: " << in1_block_num_tiles << ENDL());
                 cb_wait_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
+                //UNPACK(DPRINT << "line 195");
 
                 if (last_out) {
                     #if defined PACK_RELU and not defined FUSE_BIAS
@@ -198,11 +215,12 @@ void MAIN {
                     curr_matmul_out_cb = mm_out_cb_id;
                     #endif
                 }
-
+                //#if 0
                 #ifdef PACKER_L1_ACC
                 pack_reconfig_data_format(curr_matmul_out_cb);
                 #endif
                 uint32_t in0_index_subblock_offset = 0;
+                //DPRINT << "coming here" << ENDL();
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     uint32_t in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
@@ -272,6 +290,7 @@ void MAIN {
 
                         tile_regs_release();
                         cb_push_back(curr_matmul_out_cb, out_subblock_num_tiles);
+                        //DPRINT << "compute testing done total write tiles " <<  out_subblock_num_tiles << ENDL();
 
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
@@ -279,6 +298,7 @@ void MAIN {
                 }
 
                 #ifdef PACKER_L1_ACC
+                    DPRINT << "PACKER_L1_ACC " << ENDL();
                     #ifdef FUSE_BIAS
                         if (in0_block_w_i < in0_num_blocks_w  - 1) {
                             //Wait for l1 accumulation to populate interm buffer,
@@ -306,10 +326,13 @@ void MAIN {
                         PACK( cb_interface[matmul_partials_cb].fifo_wr_ptr = partials_cb_write_ptr );
                     }
                 }
+                //DPRINT << "pop front started" << " in0_block_num_tiles " << in0_block_num_tiles << " in1_block_num_tiles " << in1_block_num_tiles << ENDL();
 
                 cb_pop_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
+                //DPRINT << "pop front complete" << ENDL();
             } // for in0_num_blocks_w
+            //UNPACK(DPRINT << "exiting from the loop" << ENDL());
             if constexpr(matmul_partials_cb == mm_out_cb_id) {
                 UNPACK( cb_interface[matmul_partials_cb].fifo_rd_ptr = partials_cb_read_ptr );
             }
@@ -321,12 +344,19 @@ void MAIN {
             #ifdef PACKER_L1_ACC
             pack_reconfig_l1_acc(0);
             #endif
+            //UNPACK(DPRINT << " fuse bias entering" << ENDL());
             pack_reconfig_data_format(matmul_partials_cb, out_cb_id);
             unpack_reconfig_data_format(in1_cb_id, matmul_partials_cb, mm_in0_cb_id, bias_cb_id);
             add_bcast_rows_init_short(matmul_partials_cb, bias_cb_id);
-
+            //DPRINT << "347" << ENDL();
+            //UNPACK(DPRINT << " packing done cb wait start " << bias_ntiles_w << "   " << out_block_num_tiles << "   " << out_subblock_num_tiles << ENDL());
             cb_wait_front(bias_cb_id, bias_ntiles_w);
-            cb_wait_front(matmul_partials_cb, out_block_num_tiles);
+            //UNPACK(DPRINT << " packing done cb wait complete " << ENDL());
+            //cb_wait_front(matmul_partials_cb, out_block_num_tiles);
+            cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
+            //UNPACK(DPRINT << " cb wait complete " << ENDL());
+            //DPRINT << "bias_cb_id & matmul_partials_cb" << ENDL();
+            //DPRINT << "in0_num_subblocks: " << in0_num_subblocks << " in1_num_subblocks: " << in1_num_subblocks << " out_subblock_num_tiles: " << out_subblock_num_tiles << ENDL();
             for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                 uint32_t in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
@@ -356,6 +386,7 @@ void MAIN {
                         pack_tile(i, untilize_mode_out_cb_id);
                     }
                     tile_regs_release();
+                    UNPACK (DPRINT << "untilize_mode_out_cb_id " << out_subblock_num_tiles << ENDL());
                     cb_push_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
 
                     in1_index_subblock_offset += out_subblock_w;
@@ -363,6 +394,7 @@ void MAIN {
             } // in0_num_subblocks
             #endif
             if constexpr(untilize_out) {
+                //DPRINT << "TESTING untiled output" << ENDL();
                 #if defined PACKER_L1_ACC and not defined FUSE_BIAS
                 pack_reconfig_l1_acc(0);
                 pack_reconfig_data_format(matmul_partials_cb, out_cb_id);
@@ -386,6 +418,7 @@ void MAIN {
                 pack_untilize_uninit(matmul_partials_cb);
             }
             if constexpr((in1_num_blocks_w > 1 || in0_num_blocks_h > 1)) {
+                //DPRINT << "TESTING mm_block_init_short output" << ENDL();
                 #ifdef FUSE_BIAS
                 unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, bias_cb_id, mm_in0_cb_id);
                 #else
@@ -401,5 +434,6 @@ void MAIN {
             bias_block_offset += in1_block_w;
         #endif
     } // for in1_num_blocks_w
+    //DPRINT << "compute complted  " << ENDL();
 } // MAIN
 } // NAMESPACE

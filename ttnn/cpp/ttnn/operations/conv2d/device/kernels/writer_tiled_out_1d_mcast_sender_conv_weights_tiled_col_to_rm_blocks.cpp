@@ -4,7 +4,22 @@
 
 #include "dataflow_api.h"
 
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
+#define ENABLE_DEBUG 1
+
+#if ENABLE_DEBUG
+
+inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uint32_t start = 0) {
+    volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr) + start * pagelen;
+    for (uint32_t page = 0; page < npages; ++ page) {
+        DPRINT << start + page << ": ";
+        for (uint32_t j = 0; j < pagelen; ++ j, ++ ptr) {
+            DPRINT << BF16(*ptr) << " ";
+        }
+        DPRINT << ENDL();
+    }
+}
+#endif
 
 
 void kernel_main() {
@@ -44,6 +59,9 @@ void kernel_main() {
 
     constexpr uint32_t out_addr = get_compile_time_arg_val(29);
 
+    //DPRINT << "mcast_sender " <<  num_blocks_weight_h << "  " << weight_block_num_tiles << "    " << weight_block_height_num_outer << "  " << weight_block_height_ntiles << "  " << weight_block_width_ntiles << "  " << weight_stride_h << "  " << weight_next_block_stride_h << "  " << weight_next_block_stride_w << "  " << bias_ntiles << ENDL();
+    //DPRINT << "mcast_sender_2 " << out_next_tile_stride_h << "  " << out_next_tile_stride_w << "  " << out_next_subblock_stride_h << "  " << out_next_subblock_stride_w << "  " << out_next_block_stride_h << "  " << out_next_block_stride_w << "  " << out_subblock_h << "  " << out_subblock_w << "  " << out_subblock_tile_count << ENDL();
+    //DPRINT << "mcast_sender_3 " << out_num_subblocks_h << "  " << out_num_subblocks_w << "  " << out_num_blocks_h << "  " << out_num_blocks_w << "  " << out_block_height_num_tiles << "  " << out_height_num_tiles << "  " << out_width_num_tiles << ENDL();
     constexpr uint32_t total_weight_num_tiles = weight_block_height_num_outer * num_blocks_weight_h * weight_block_num_tiles;
 
     uint32_t i = 0;
@@ -152,6 +170,8 @@ void kernel_main() {
     uint32_t weight_start_tile_id = out_start_tile_id_w;
     uint32_t weight_inner_block_stride_h = weight_next_block_stride_h / weight_block_height_num_outer; // TODO: Pass as args
     //DPRINT << "weight_start_tile_id=" << weight_start_tile_id << ENDL();
+    //DPRINT << "out_num_blocks_w " << out_num_blocks_w << " out_num_blocks_h " << out_num_blocks_h << ENDL();
+    //DPRINT << "weight_block_height_num_outer " << weight_block_height_num_outer << " num_blocks_weight_h " << num_blocks_weight_h << ENDL();
     for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
         uint32_t out_block_h_start_tile_id = out_block_w_start_tile_id;
         uint32_t out_block_h_start_tile_id_h = out_start_tile_id_h;
@@ -165,7 +185,7 @@ void kernel_main() {
                 uint32_t weight_h_offset = 0;
                 for(uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer; weight_tile_h_outer_i++) {
                     uint32_t weight_current_block_start_tile_id = weight_start_tile_id;
-                    for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                    for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) { // num_blocks_weight_h = 1
                         cb_reserve_back(cb_id_weight, weight_block_num_tiles);
                         uint32_t weight_write_l1_addr = get_write_ptr(cb_id_weight);
                         uint32_t weight_row_start_tile_id = weight_current_block_start_tile_id + weight_h_offset;
@@ -189,9 +209,11 @@ void kernel_main() {
                         } // for weight_block_h
                         noc_async_read_barrier();
 
+
                         #ifndef SKIP_MCAST
                         // wait until all weights mcast destinations have atomically incremented the weights semaphore_addr (i.e. its value should be weights_mcast_num_dests), then reset
                         // the semaphore_addr value back to zero for the next block
+                        //DPRINT << "skip_mcast" << ENDL();
                         noc_semaphore_wait(weights_mcast_sender_semaphore_addr_ptr, weights_mcast_num_dests);
                         noc_semaphore_set(weights_mcast_sender_semaphore_addr_ptr, 0);
 
@@ -215,13 +237,18 @@ void kernel_main() {
 
                         weight_current_block_start_tile_id += weight_next_block_stride_h;
 
+                        DPRINT << "pushing weight_block_num_tiles - " << weight_block_num_tiles << ENDL();
+
                         cb_push_back(cb_id_weight, weight_block_num_tiles);
+                        // uint32_t act_l1_read_addr = get_read_ptr(cb_id_weight);
+                        // print_pages(act_l1_read_addr, 64, 64, 0);
                     } // for num_blocks_weight_h
                     weight_h_offset += weight_inner_block_stride_h;
                 } // for weight_block_height_num_outer
 
 
                 #ifdef FUSE_BIAS
+                //DPRINT << "FUSE_BIAS_start" << ENDL();
                 if (load_bias) {
                     cb_reserve_back(bias_cb_id, bias_ntiles);
                     uint32_t bias_l1_addr = get_write_ptr(bias_cb_id);
@@ -260,18 +287,20 @@ void kernel_main() {
                     // num_dests must not include source, since we are NOT really doing a local copy!
                     noc_semaphore_set_multicast(weights_mcast_receiver_semaphore_addr, weights_mcast_receiver_semaphore_noc_addr, weights_mcast_num_cores, false, false);
                     #endif
-
+                    DPRINT << "pushing bias_ntiles - " << bias_ntiles << ENDL();
                     cb_push_back(bias_cb_id, bias_ntiles);
                     load_bias = false;
                 }
                 #endif
                 read_weights = false;
             } else {
+                //DPRINT << "Skipping reading weights" << ENDL();
                 cb_reserve_back(cb_id_weight, total_weight_num_tiles);
                 cb_push_back(cb_id_weight, total_weight_num_tiles);
             }
 
             #ifndef SHARDED_OUT
+            //DPRINT << "SHARDED_OUT_start false" << ENDL();
             uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
             uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
             for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -323,6 +352,8 @@ void kernel_main() {
         weight_start_tile_id += weight_next_block_stride_w;
     } // out_num_blocks_w
     #ifdef SHARDED_OUT
+    DPRINT << "SHARDED_OUT_start" << ENDL();
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    DPRINT << "weight writer FINISHED " << ENDL();
     #endif
 }

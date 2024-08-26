@@ -38,6 +38,20 @@ inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uin
 //     }
 // }
 
+#define ALWI inline __attribute__((always_inline))
+
+// Fill an L1 buffer with the given val
+// WARNING: Use with caution as there's no memory protection. Make sure size is within limits
+ALWI bool fill_with_val(uint32_t begin_addr, uint32_t n, uint16_t val) {
+    // simplest impl:
+    volatile tt_l1_ptr uint32_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(begin_addr);
+    for (uint32_t i = 0; i < n/4; ++ i) {
+        ptr[i] = 0;
+    }
+    return true;
+}
+
+
 void kernel_main() {
     constexpr uint32_t LOCAL_PACKED_READER_INDICES_MAX_SIZE = 128;
     uint32_t local_packed_reader_indices[LOCAL_PACKED_READER_INDICES_MAX_SIZE];
@@ -69,6 +83,10 @@ void kernel_main() {
     } else {
         act_block_h_datums_read_last_block = act_block_h_datums_last_block / 2;
     }
+
+    // if( my_x[0] != 0 || (uint) my_y[0] >4){
+    //     return;
+    // }
 
     uint32_t i = 0;
     uint32_t noop = get_arg_val<uint32_t>(i); i+=1;
@@ -139,12 +157,14 @@ void kernel_main() {
     uint32_t start_reader_idx = 0;
     for (uint32_t bh = 0; bh < act_num_blocks_h; bh++) {
         #ifdef SPLIT_READER
+        DPIRNT << "SPLIT_READER" << ENDL();
         if constexpr (cache_packed_reader_indices) {
             for (uint32_t i = 0; i < act_block_h_datums_read; i++) {
                 local_packed_reader_indices[i] = packed_reader_indices_ptr[start_reader_idx+i];
             }
         }
         #endif
+        //window_outer = 1;
         for (uint32_t outer = 0; outer < window_outer; outer++) {
             // Reset reader_idx to finish act_block_h_datums
             reader_idx = start_reader_idx;
@@ -159,7 +179,7 @@ void kernel_main() {
             // #pragma GCC unroll 4 // unroll didn't help, but act_block_h_datums (loop bound) being const does help
             uint32_t act_block_h_datums_read_curr = bh == act_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
             DPRINT << " act_block_h_datums_read_curr " << act_block_h_datums_read_curr << " act_block_num_tiles_read " << act_block_num_tiles_read << ENDL();
-            for (uint32_t bhd = 0; bhd < act_block_h_datums_read_curr; bhd++) {
+            for (uint32_t bhd = 0; bhd < 25; bhd++) {
                 // local read from reader_index + reader_offset;
                 #ifdef SPLIT_READER
                 uint32_t two_reader_indices = cache_packed_reader_indices ? local_packed_reader_indices[bhd] : packed_reader_indices_ptr[reader_idx];
@@ -173,12 +193,20 @@ void kernel_main() {
                 noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
                 l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
 
-                act_l1_offset = reader_offset + (reader_idx_2 * conv_act_c_read_bytes);
-                noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
-                l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
+                if(bhd != 24){
+                    act_l1_offset = reader_offset + (reader_idx_2 * conv_act_c_read_bytes);
+                    noc_async_read_one_packet_with_state<true>(act_l1_offset, l1_write_addr_act);
+                    l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
+                }
+
+
                 //print_pages(reader_offset, 64, 1, 0);
 
                 reader_idx++;
+            }
+            for (uint32_t bhd=0; bhd < 15; bhd++){
+                fill_with_val(l1_write_addr_act, coalesced_read_bytes, 0);
+                l1_write_addr_act += (coalesced_read_bytes + act_block_w_extra_align_bytes);
             }
             noc_async_read_barrier();
 
@@ -193,4 +221,5 @@ void kernel_main() {
         start_reader_idx += act_block_h_datums_read;
         #endif
     }
+    DPRINT << "reader completed " << ENDL();
 }

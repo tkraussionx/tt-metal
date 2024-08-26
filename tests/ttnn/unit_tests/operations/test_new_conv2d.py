@@ -40,6 +40,19 @@ import torch.nn as nn
 #     plt.close()
 
 
+def write_to_file_special(file_name, tensor):
+    tensor = tensor.cpu().detach().numpy()
+    with open(file_name, "w") as f:
+        for i in range(1):
+            for j in range(tensor.shape[1]):
+                for k in range(tensor.shape[2] // 16):
+                    # for l in range(tensor.shape[3]):
+                    # f.write(str(round(tensor[i][j][k][l]), 2) + " ")
+                    f.write("{:.2f}".format(tensor[i][j][k][0]) + " ")
+                    if k % 14 == 13:
+                        f.write("\n")
+
+
 def write_to_file(file_name, tensor):
     tensor = tensor.cpu().detach().numpy()
     with open(file_name, "w") as f:
@@ -47,7 +60,8 @@ def write_to_file(file_name, tensor):
             for j in range(tensor.shape[1]):
                 for k in range(tensor.shape[2]):
                     for l in range(tensor.shape[3]):
-                        f.write(str(tensor[i][j][k][l]) + " ")
+                        # f.write(str(round(tensor[i][j][k][l]), 2) + " ")
+                        f.write("{:.2f}".format(tensor[i][j][k][l]) + " ")
                     f.write("\n")
 
 
@@ -90,17 +104,17 @@ def run_conv(
     torch_input_tensor_nchw = torch.randn(conv_input_shape, dtype=torch.bfloat16).float()
     # torch_input_tensor_nchw = torch.ones(conv_input_shape, dtype=torch.bfloat16).float()
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
-    for i in range(batch_size):
-        for j in range(input_channels):
-            for k in range(input_height):
-                for l in range(input_width):
-                    torch_input_tensor[i][k][l][j] = 1
-    torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
+    # for i in range(batch_size):
+    #     for j in range(input_channels):
+    #         for k in range(input_height):
+    #             for l in range(input_width):
+    #                 torch_input_tensor[i][k][l][j] = 1 if j == 0 else 0
+    torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
     # for i in range(output_channels):
     #     for j in range(input_channels // groups):
     #         for k in range(filter_height):
     #             for l in range(filter_width):
-    #                 torch_weight_tensor[i][j][k][l] = 0
+    #                 torch_weight_tensor[i][j][k][l] = 1
     # torch_weight_tensor = 0.0
     # torch_weight_tensor = torch.ones(conv_weight_shape, dtype=torch.bfloat16).float()
     torch_bias_tensor = torch.zeros(conv_bias_shape, dtype=torch.bfloat16).float() if has_bias else None
@@ -146,6 +160,7 @@ def run_conv(
         enable_act_double_buffer=False,
         enable_split_reader=False,
         enable_subblock_padding=False,
+        output_layout=ttnn.ROW_MAJOR_LAYOUT,
     )
     if config_override and "act_block_h" in config_override:
         conv_config.act_block_h_override = config_override["act_block_h"]
@@ -174,10 +189,14 @@ def run_conv(
         debug=debug,
         groups=groups,
     )
-
+    # breakpoint()
     tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
     torch_output_tensor = ttnn.to_torch(tt_output_tensor)
+    write_to_file_special("abc.pt", torch_output_tensor.float())
+    print(tt_output_tensor_on_device)
+    print(ttnn.get_memory_config(tt_output_tensor_on_device))
     # print(torch_output_tensor[0][0])
+    # write_to_file("ref_hw.pt", torch_output_tensor.float())
 
     # if enable_auto_formatting:
     #     torch_output_tensor = torch.split(torch_output_tensor, output_channels, 3)[0]
@@ -200,9 +219,11 @@ def run_conv(
         pcc = 0.9969
     else:
         pcc = 0.998
+
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
     write_to_file("ref_cpu.pt", torch_out_golden_tensor)
-    write_to_file("ref_hw.pt", torch_output_tensor)
+    write_to_file("ref_hw.pt", torch_output_tensor.float())
+
     print(pcc_msg)
     # assert passing
 
@@ -315,6 +336,7 @@ def run_conv_with_split(
         )
         tt_conv_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
         print(tt_conv_output_tensor)
+        print(ttnn.get_memory_config(tt_conv_output_tensor))
         torch_conv_output_tensor = ttnn.to_torch(tt_conv_output_tensor)
         print(f"Output shape : {batch_size} {out_height} {out_width} {output_channels}")
         torch_conv_output_tensor = torch_conv_output_tensor.reshape(batch_size, out_height, out_width, output_channels)
@@ -496,7 +518,7 @@ def test_resnet50_conv_gs(
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat8_b],
+    [ttnn.bfloat16],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("packer_l1_acc", [False], ids=["no_pack_l1"])
@@ -523,8 +545,8 @@ def test_resnet50_conv_wh(
 ):
     if device.core_grid.y == 7:
         pytest.skip("Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range")
-    if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
-        pytest.skip("Batch > 8 must be run fully bfp8")
+    # if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
+    #     pytest.skip("Batch > 8 must be run fully bfp8")
 
     if (
         (

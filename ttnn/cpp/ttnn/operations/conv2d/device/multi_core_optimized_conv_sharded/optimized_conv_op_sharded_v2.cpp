@@ -68,7 +68,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
     uint32_t tilized_act_tile_size = tt_metal::detail::TileSize(tilized_act_df);
     uint32_t out_tile_size = tt_metal::detail::TileSize(out_df);
     uint32_t interm0_single_tile_size = tt_metal::detail::TileSize(interm0_df);
-
+    //input.print();
     CBHandle cb_sharded_act = 0;
     if (input.memory_config().is_sharded()) {
         uint32_t num_bytes_for_df = datum_size(act_df);
@@ -240,13 +240,14 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     TT_ASSERT(a.get_layout() == Layout::ROW_MAJOR, "Conv activation should be in row major layout");
     TT_ASSERT(a.memory_config().is_sharded(), "Conv activation must be sharded.");
     TT_ASSERT(output_channels <= b.get_legacy_shape()[3], "Invalid weight shape. Incorrect weight tensor.");
-    uint32_t act_block_h_ntiles = block_config.act_block_h_ntiles;
+    uint32_t testing_test_h_ntiles = (block_config.act_block_h_ntiles + TILE_HEIGHT - 1) / TILE_HEIGHT;
+    uint32_t act_block_h_ntiles = (block_config.act_block_h_ntiles + TILE_HEIGHT - 1) / TILE_HEIGHT;
     uint32_t act_block_w_ntiles = block_config.act_block_w_ntiles;
     uint32_t weight_block_w_ntiles = parallelization_config.per_core_out_matrix_width_ntiles / TILE_WIDTH;
-    uint32_t out_block_h_ntiles = parallelization_config.per_core_out_matrix_height_ntiles;
+    uint32_t out_block_h_ntiles = (parallelization_config.per_core_out_matrix_height_ntiles + TILE_HEIGHT - 1) / TILE_HEIGHT;
     uint32_t out_subblock_h_ntiles = block_config.out_subblock_h_ntiles;
     uint32_t out_subblock_w_ntiles = block_config.out_subblock_w_ntiles;
-
+    //has_bias = false;
     // out_subblock_h_ntiles = 8;
 
     DataFormat act_df = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
@@ -359,7 +360,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t total_num_cores = num_cores_x * num_cores_y;
     assert(num_cores_x < 13);
     assert(num_cores_y < 10);
-    uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height_ntiles;
+    uint32_t per_core_out_matrix_height_ntiles = (p_config.per_core_out_matrix_height_ntiles + TILE_HEIGHT - 1) / TILE_HEIGHT;
     uint32_t per_core_out_matrix_width_ntiles = p_config.per_core_out_matrix_width_ntiles / TILE_WIDTH;
 
     // weight_width_sliced determines is 1d-sysarr-conv or 2d-sysarr-conv
@@ -467,7 +468,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t act_block_w_datums = act_matrix_width / num_blocks_act_w;
     uint32_t act_block_h_datums = act_matrix_height / num_blocks_act_h;
 
-    uint32_t act_block_h_nsubblocks = block_config.act_block_h_ntiles / block_config.out_subblock_h_ntiles;
+    uint32_t act_block_h_nsubblocks = testing_test_h_ntiles / block_config.out_subblock_h_ntiles;
     uint32_t act_block_h_nsubblocks_split = act_block_h_nsubblocks;
     uint32_t act_block_h_nsubblocks_split_last = 0;
     if (split_reader) {
@@ -714,10 +715,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     log_debug(LogOp, "num_blocks_out_h_per_core: {}", num_blocks_out_h_per_core);
 
     assert(act_matrix_height_ntiles % per_core_out_matrix_height_ntiles == 0);
-    uint32_t total_active_num_cores_per_weight_slice = (act_matrix_height_ntiles * 32) / per_core_out_matrix_height_ntiles;
+    uint32_t total_active_num_cores_per_weight_slice = act_matrix_height_ntiles  / per_core_out_matrix_height_ntiles;
     assert(total_active_num_cores_per_weight_slice <= total_num_cores_per_weight_slice);
-    uint32_t total_noop_cores = total_num_cores_per_weight_slice - total_active_num_cores_per_weight_slice;
-    uint32_t total_active_num_cores = total_active_num_cores_per_weight_slice * num_weight_slices_width;
+    uint32_t total_noop_cores = 0; // total_num_cores_per_weight_slice - total_active_num_cores_per_weight_slice;
+    uint32_t total_active_num_cores = 64; // total_active_num_cores_per_weight_slice * num_weight_slices_width;
     if (weight_width_sliced) {
         assert(total_noop_cores == 0);
         assert(total_active_num_cores == total_num_cores);
@@ -1113,7 +1114,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         writer_compile_time_args.insert(
             writer_compile_time_args.end(), split_reader_args.begin(), split_reader_args.end());
     }
-
+    std::cout << "tilize_in " << tilize_in0 << " untilize_out: " << untilize_out << std::endl;
     vector<uint32_t> compute_kernel_args = {
         in0_block_w,
         act_num_subblocks,
