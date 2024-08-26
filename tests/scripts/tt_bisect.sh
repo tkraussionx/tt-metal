@@ -55,6 +55,17 @@ git bisect start $bad_commit $good_commit --
 while [[ "$found" = "false" ]]; do
    build_code=0
    echo "at commit `git rev-parse HEAD`"
+   echo "Cherry-pick test loop commit"
+   git cherry-pick 0cc60261014c2da70850d640e001541f7482e2c3
+
+   # Check if the cherry-pick was successful
+   if [ $? -ne 0 ]; then
+      echo "Cherry-pick failed"
+      git cherry-pick --abort
+      git bisect skip
+      continue
+   fi
+
    echo "building Metal"
    . build_metal.sh; build_code+=$?
 
@@ -67,6 +78,8 @@ while [[ "$found" = "false" ]]; do
    timeout $timeout_duration $test
    timeout_code=${PIPESTATUS[0]}
    echo $timeout_code
+
+   git reset --hard HEAD^
 
    if [ $timeout_code -eq 0 ]; then
       first_line=$(git bisect good | head -n 1)
