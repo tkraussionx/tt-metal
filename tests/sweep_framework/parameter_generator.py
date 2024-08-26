@@ -21,7 +21,7 @@ SWEEP_SOURCES_DIR = SWEEPS_DIR / "sweeps"
 
 
 # Generate vectors from module parameters
-def generate_vectors(module_name):
+def generate_vectors(module_name, module_hash):
     test_module = importlib.import_module("sweeps." + module_name)
     parameters = test_module.parameters
 
@@ -32,11 +32,11 @@ def generate_vectors(module_name):
             v["suite_name"] = suite
             v["validity"] = VectorValidity.VALID
             v["invalid_reason"] = ""
-            v["status"] = VectorStatus.CURRENT
+            # v["status"] = VectorStatus.CURRENT - commented becasue of move to uniqueness by module hash + input hash
             v["sweep_name"] = module_name
 
         invalidate_vectors(test_module, suite_vectors)
-        export_suite_vectors(module_name, suite, suite_vectors)
+        export_suite_vectors(module_name, suite, suite_vectors, module_hash)
 
 
 # Perform any post-gen validation to the resulting vectors.
@@ -51,7 +51,7 @@ def invalidate_vectors(test_module, vectors) -> None:
 
 
 # Output the individual test vectors.
-def export_suite_vectors(module_name, suite_name, vectors):
+def export_suite_vectors(module_name, suite_name, vectors, module_hash):
     # Perhaps we export with some sort of readable id, which can be passed to a runner to run specific sets of input vectors. (export seed as well for reproducability)
     client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
 
@@ -64,7 +64,7 @@ def export_suite_vectors(module_name, suite_name, vectors):
             query={
                 "bool": {
                     "must": [
-                        {"match": {"status.keyword": str(VectorStatus.CURRENT)}},
+                        {"match": {"module_hash": module_hash}},
                         {"match": {"suite_name.keyword": suite_name}},
                     ]
                 }
@@ -84,25 +84,34 @@ def export_suite_vectors(module_name, suite_name, vectors):
         vector = dict()
         for elem in vectors[i].keys():
             vector[elem] = serialize(vectors[i][elem], warnings)
-        id = hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        input_hash = hashlib.sha224(str(vector).encode("utf-8")).hexdigest()
         new_vector_ids.add(id)
+        vector["input_hash"] = input_hash
+        vector["module_hash"] = module_hash
+        id = hashlib.sha224(str(vector).encode("utf-8")).hexdigest()
         vector["timestamp"] = current_time
         serialized_vectors[id] = vector
 
     if old_vector_ids == new_vector_ids:
         print(
-            f"SWEEPS: Vectors generated for module {module_name}, suite {suite_name} already exist, and have not changed. Skipping..."
+            f"SWEEPS: Vectors generated for module {module_name}, suite {suite_name} already exist with the same run logic, and have not changed. Skipping..."
         )
         return
     else:
         print(
-            f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Archiving old vectors and saving new suite. This step may take several minutes."
+            f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Saving new suite. This step may take several minutes."
         )
-        for old_vector_id in old_vector_ids:
-            client.update(index=index_name, id=old_vector_id, doc={"status": str(VectorStatus.ARCHIVED)})
+        # for old_vector_id in old_vector_ids:
+        #     client.update(index=index_name, id=old_vector_id, doc={"status": str(VectorStatus.ARCHIVED)})
         for new_vector_id in serialized_vectors.keys():
             client.index(index=index_name, id=new_vector_id, body=serialized_vectors[new_vector_id])
         print(f"SWEEPS: Generated {len(serialized_vectors)} test vectors for suite {suite_name}.")
+
+
+def get_module_hash(module_path):
+    with open(module_path, "rb") as file:
+        data = file.read()
+        return hashlib.sha224(data).hexdigest()
 
 
 # Generate one or more sets of test vectors depending on module_name
@@ -111,7 +120,7 @@ def generate_tests(module_name):
         for file_name in sorted(SWEEP_SOURCES_DIR.glob("**/*.py")):
             module_name = str(pathlib.Path(file_name).relative_to(SWEEP_SOURCES_DIR))[:-3].replace("/", ".")
             print(f"SWEEPS: Generating test vectors for module {module_name}.")
-            generate_vectors(module_name)
+            generate_vectors(module_name, get_module_hash(file_name))
             print(f"SWEEPS: Finished generating test vectors for module {module_name}.\n\n")
     else:
         print(f"SWEEPS: Generating test vectors for module {module_name}.")
