@@ -7,6 +7,7 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/pack_untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "compute_kernel_api/eltwise_binary.h"
 #include "mod_div_lib.h"
 
 #ifdef FUSE_BIAS
@@ -164,15 +165,15 @@ void MAIN {
                 for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
                     tile_regs_acquire();
                     if (enable_reload) {
-                    //     reload_from_cb_to_dst(
-                    //         in0_cb_id,
-                    //         in1_cb_id,
-                    //         mm_partials_cb_id,
-                    //         out_subblock_num_tiles,
-                    //         out_subblock_w,
-                    //         out_subblock_h,
-                    //         in0_block_w);
-                    // }
+                        reload_from_cb_to_dst(
+                            in0_cb_id,
+                            in1_cb_id,
+                            mm_partials_cb_id,
+                            out_subblock_num_tiles,
+                            out_subblock_w,
+                            out_subblock_h,
+                            in0_block_w);
+                    }
 
 #ifndef SKIP_COMPUTE
                     // Compute output sub-block
@@ -203,20 +204,49 @@ void MAIN {
                     //                                   // called in1_block_w)
                     // }
 
+                    // dst_index = 0;  // start at 0, each call to matmul_block internally increments dst_index
+                    // in0_index = in0_index_subblock_offset;  // offset into in0 block
+                    // in1_index = in1_index_subblock_offset;  // offset into in1 block
+                    // // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
+                    // copy_tile_to_dst_init_short(in1_cb_id);
+                    // unpack_reconfig_data_format_srca(in1_cb_id);
+                    // for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
+                    //     uint32_t start_dst_index = 0;
+                    //     uint32_t start_tile_index = in1_index;
+                    //     copy_block_matmul_partials(in1_cb_id, start_tile_index, start_dst_index, out_subblock_num_tiles);
+                    //     in0_index++;                  // stride right by 1
+                    //     in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
+                    //                                   // called in1_block_w)
+                    // }
+
                     dst_index = 0;  // start at 0, each call to matmul_block internally increments dst_index
                     in0_index = in0_index_subblock_offset;  // offset into in0 block
                     in1_index = in1_index_subblock_offset;  // offset into in1 block
                     // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
-                    copy_tile_to_dst_init_short(in1_cb_id);
+                    // copy_tile_to_dst_init_short(in1_cb_id);
+                    // for (volatile uint32_t xxx = 0; xxx < 1000; xxx++){;}
                     for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
-                        if (inner_dim_idx + block * in0_block_w == 0) {
-                        uint32_t start_dst_index = 0;
-                        uint32_t start_tile_index = in1_index;
-                        copy_block_matmul_partials(in1_cb_id, start_tile_index, start_dst_index, out_subblock_num_tiles);
+                        if (block == 0 && inner_dim_idx == 0) {
+                            UNPACK(DPRINT << "add_tiles no acc_to_dst" << ENDL());
+                            add_tiles_init(in1_cb_id, in1_cb_id, false);
+                            // copy_tile_to_dst_init_short(in1_cb_id);
+                            unpack_reconfig_data_format(in1_cb_id, in1_cb_id);
+                            // for (uint32_t w = 0; w < out_subblock_w; w++) {
+                            //     // UNPACK(DPRINT << "add_tiles w="<<w<<" " << ENDL());
+                            //     copy_tile(in1_cb_id, in1_index + w, w);
+                            // }
+                        } else {
+                            UNPACK(DPRINT << "add_tiles acc_to_dst" << ENDL());
+                            add_tiles_init(in1_cb_id, in1_cb_id, true);
+                            unpack_reconfig_data_format(in1_cb_id, in1_cb_id);
+                        }
+                        for (uint32_t w = 0; w < out_subblock_w; w++) {
+                            UNPACK(DPRINT << "add_tiles w="<<w<<" " << ENDL());
+                            add_tiles(in1_cb_id, in1_cb_id, in1_index + w, in1_index + w, w);
+                        }
                         in0_index++;                  // stride right by 1
                         in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                       // called in1_block_w)
-                        }
                     }
 
 

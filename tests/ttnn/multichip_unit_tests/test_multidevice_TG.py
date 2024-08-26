@@ -266,17 +266,28 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
 
     """Consistently fails on 107!!"""
     elem_in_row = N
-    weights_pt = torch.randn(elem_in_row).repeat(N // elem_in_row).reshape(1, 1, 1, -1).clone()
     # weights_pt[:,:,:,:-1] = weights_pt[:,:,:,1:].clone()
     # weights_pt[:,:,:,107] = 0
     # weights_pt[:,:,:,107] = 0.2272
+    # USE THIS ONE
+    weights_pt = torch.randn(elem_in_row).repeat(N // elem_in_row).reshape(1, 1, 1, -1).clone()
     weights_pt = weights_pt.expand(1, 1, K, N).clone()
+
+    # weights_pt = torch.ones(1, 1, K, N)
 
     # Nice failures too
     # weights_pt = torch.randn(32, 32).repeat(K // 32, N // 32).reshape(1, 1, K, N)
 
     gt = act_pt @ weights_pt
-    gt_datacopy = weights_pt[:, :, :M, :].expand(mesh_shape[0], mesh_shape[1], M, N)
+    # gt_datacopy = weights_pt[:, :, :M, :].expand(mesh_shape[0], mesh_shape[1], M, N)
+    gt_add = torch.zeros_like(gt)
+    for r in range(weights_pt.shape[2] // 32):
+        for c in range(weights_pt.shape[3] // 32):
+            # mult = 2 if r > 0 else 1
+            mult = 2
+            gt_add[:, :, :, c * 32 : (c + 1) * 32] += (
+                mult * weights_pt[:, :, r * 32 : (r + 1) * 32, c * 32 : (c + 1) * 32]
+            )
 
     act_shard_dim = (0, 1)
     # weight_shard_dim = (2, 3) if K == 8192 else (3, 2)
@@ -302,7 +313,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         math_fidelity=ttnn.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=True,
-        packer_l1_acc=True,
+        packer_l1_acc=False,
     )
 
     weight_grid = ttnn.CoreRangeSet(
@@ -400,7 +411,7 @@ def test_galaxy_matmul_2d_fracture_dram_sharded(
         # breakpoint()
 
         # out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99)
-        out_pass, out_pcc = comp_pcc(gt_datacopy, out, pcc=0.99)
+        out_pass, out_pcc = comp_pcc(gt_add, out, pcc=0.99)
         logger.info(f"PCC value: {out_pcc}")
         # breakpoint()
         # mse = ((gt - out) ** 2).mean()
