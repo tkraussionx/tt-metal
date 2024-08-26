@@ -299,73 +299,75 @@ def run_test_LlamaAttention_inference(
         )
 
         # TT hardware execution -------------------------------------------------------------
-        attention_input, start_pos, rot_mat, attn_mask = tt_llama_attention_prepare_inputs(
-            tt_LlamaAttention_model, tt_input, start_pos
-        )
-        tt_out = tt_LlamaAttention_model(
-            attention_input,
-            rot_mat,
-            start_pos,
-            attn_mask,
-        )
-
-        tt_out = ttnn.from_device(tt_out)
-        tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=3))
-        tt_out = tt_out.permute(2, 1, 0, 3).squeeze(1)  # [batch, seq_len, hidden_dim]
-        if model_config["LLM_MODE"] == "decode":
-            tt_out = tt_out[:batch]
-
-        # check outputs ----------------------------------------------------------------------
-        does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
-        logger.info(f"Output: {output_pcc}")
-        all_pccs.append(extract_pcc_from_log(output_pcc))
-
-        if does_pass:
-            logger.info(f"[start_pos={start_pos}] {llama_version} Attention output Passed!")
-        else:
-            logger.warning(
-                f"[start_pos={start_pos}] {llama_version} Attention output Failed! PCC value is lower than {pcc}"
+        for i in range(100):
+            print(f"Iteration {i}")
+            attention_input, start_pos, rot_mat, attn_mask = tt_llama_attention_prepare_inputs(
+                tt_LlamaAttention_model, tt_input, start_pos
             )
-            all_tests_pass = False
+            tt_out = tt_LlamaAttention_model(
+                attention_input,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
 
-    logger.info(f"Average PCC over {len(all_pccs)} tokens: {sum(all_pccs) / len(all_pccs)}")
+            tt_out = ttnn.from_device(tt_out)
+            tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=3))
+            tt_out = tt_out.permute(2, 1, 0, 3).squeeze(1)  # [batch, seq_len, hidden_dim]
+            if model_config["LLM_MODE"] == "decode":
+                tt_out = tt_out[:batch]
 
-    # Check kv cache
-    # PyTorch output --------------------------------------------------------------------
-    pytorch_layer_present = [
-        pytorch_LlamaAttention_model.attention.cache_k.clone().permute(0, 2, 1, 3)[
-            :batch, ...
-        ],  # [batch, n_kv_heads, seq, head_dim]
-        pytorch_LlamaAttention_model.attention.cache_v.clone().permute(0, 2, 1, 3)[
-            :batch, ...
-        ],  # [batch, n_kv_heads, seq, head_dim]
-    ]
-    # TT hardware output ----------------------------------------------------------------
+            # check outputs ----------------------------------------------------------------------
+            does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
+            logger.info(f"Output: {output_pcc}")
+            all_pccs.append(extract_pcc_from_log(output_pcc))
 
-    # concat the pasts by heads
-    tt_layer_present_all = [ttnn.from_device(lp) for lp in tt_LlamaAttention_model.layer_past]
-    tt_layer_present_all = [
-        ttnn.to_torch(lp, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)).transpose(0, 1)[:batch, ...]
-        for lp in tt_layer_present_all
-    ]
+            if does_pass:
+                logger.info(f"[start_pos={start_pos}] {llama_version} Attention output Passed!")
+            else:
+                logger.warning(
+                    f"[start_pos={start_pos}] {llama_version} Attention output Failed! PCC value is lower than {pcc}"
+                )
+                all_tests_pass = False
 
-    cache_test_pass = check_kv_cache(
-        pytorch_layer_present,
-        tt_layer_present_all,
-        generation_start_pos,
-        generation_length,
-        seq_len,
-        model_config["LLM_MODE"] == "prefill",
-        pcc,
-    )
+        logger.info(f"Average PCC over {len(all_pccs)} tokens: {sum(all_pccs) / len(all_pccs)}")
 
-    all_tests_pass = all_tests_pass and cache_test_pass
+        # Check kv cache
+        # PyTorch output --------------------------------------------------------------------
+        pytorch_layer_present = [
+            pytorch_LlamaAttention_model.attention.cache_k.clone().permute(0, 2, 1, 3)[
+                :batch, ...
+            ],  # [batch, n_kv_heads, seq, head_dim]
+            pytorch_LlamaAttention_model.attention.cache_v.clone().permute(0, 2, 1, 3)[
+                :batch, ...
+            ],  # [batch, n_kv_heads, seq, head_dim]
+        ]
+        # TT hardware output ----------------------------------------------------------------
 
-    if all_tests_pass:
-        logger.info(f"{llama_version} Attention output Passed!")
-    else:
-        logger.warning(f"{llama_version} Attention output Failed!")
-        assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+        # concat the pasts by heads
+        tt_layer_present_all = [ttnn.from_device(lp) for lp in tt_LlamaAttention_model.layer_past]
+        tt_layer_present_all = [
+            ttnn.to_torch(lp, mesh_composer=ConcatMeshToTensor(t3k_device_mesh, dim=0)).transpose(0, 1)[:batch, ...]
+            for lp in tt_layer_present_all
+        ]
+
+        cache_test_pass = check_kv_cache(
+            pytorch_layer_present,
+            tt_layer_present_all,
+            generation_start_pos,
+            generation_length,
+            seq_len,
+            model_config["LLM_MODE"] == "prefill",
+            pcc,
+        )
+
+        all_tests_pass = all_tests_pass and cache_test_pass
+
+        if all_tests_pass:
+            logger.info(f"{llama_version} Attention output Passed!")
+        else:
+            logger.warning(f"{llama_version} Attention output Failed!")
+            assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
