@@ -46,6 +46,24 @@ namespace tt {
 namespace operations {
 namespace primary {
 
+void py_module_types(py::module& m_primary) {
+        py::enum_<MorehSoftmaxOpParallelizationStrategy>(m_primary, "MorehSoftmaxOpParallelizationStrategy")
+        .value("NONE", MorehSoftmaxOpParallelizationStrategy::NONE)
+        .value("SMALL_W", MorehSoftmaxOpParallelizationStrategy::SMALL_W)
+        .value("SMALL_H", MorehSoftmaxOpParallelizationStrategy::SMALL_H)
+        .value("LARGE_W", MorehSoftmaxOpParallelizationStrategy::LARGE_W)
+        .value("LARGE_H", MorehSoftmaxOpParallelizationStrategy::LARGE_H)
+        .value("LARGE_C", MorehSoftmaxOpParallelizationStrategy::LARGE_C);
+
+    py::enum_<MorehSoftmaxBackwardOpParallelizationStrategy>(m_primary, "MorehSoftmaxBackwardOpParallelizationStrategy")
+        .value("NONE", MorehSoftmaxBackwardOpParallelizationStrategy::NONE)
+        .value("SMALL_W", MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_W)
+        .value("SMALL_H", MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_H)
+        .value("LARGE_W", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_W)
+        .value("LARGE_H", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_H)
+        .value("LARGE_C", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_C);
+}
+
 void py_module(py::module& m_primary) {
     m_primary.def(
         "layernorm_pre_allgather",
@@ -408,20 +426,6 @@ void py_module(py::module& m_primary) {
             "queue_id", "command queue id", "uint8_t", "Default is 0", "No"
     )doc");
 
-    py::enum_<MorehSoftmaxOpParallelizationStrategy>(m_primary, "MorehSoftmaxOpParallelizationStrategy")
-        .value("NONE", MorehSoftmaxOpParallelizationStrategy::NONE)
-        .value("SMALL_W", MorehSoftmaxOpParallelizationStrategy::SMALL_W)
-        .value("SMALL_H", MorehSoftmaxOpParallelizationStrategy::SMALL_H)
-        .value("LARGE_W", MorehSoftmaxOpParallelizationStrategy::LARGE_W)
-        .value("LARGE_H", MorehSoftmaxOpParallelizationStrategy::LARGE_H)
-        .value("LARGE_C", MorehSoftmaxOpParallelizationStrategy::LARGE_C);
-    py::enum_<MorehSoftmaxBackwardOpParallelizationStrategy>(m_primary, "MorehSoftmaxBackwardOpParallelizationStrategy")
-        .value("NONE", MorehSoftmaxBackwardOpParallelizationStrategy::NONE)
-        .value("SMALL_W", MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_W)
-        .value("SMALL_H", MorehSoftmaxBackwardOpParallelizationStrategy::SMALL_H)
-        .value("LARGE_W", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_W)
-        .value("LARGE_H", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_H)
-        .value("LARGE_C", MorehSoftmaxBackwardOpParallelizationStrategy::LARGE_C);
     m_primary.def(
         "moreh_softmax",
         &moreh_softmax,
