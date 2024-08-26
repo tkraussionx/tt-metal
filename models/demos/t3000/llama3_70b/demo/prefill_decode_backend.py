@@ -53,6 +53,7 @@ def get_t3k_device_mesh(num_devices_requested):
     try:
         yield device_mesh
     finally:
+        logger.info("closing t3k device mesh ...")
         for device in device_mesh.get_devices():
             ttl.device.DumpDeviceProfiler(device)
         ttnn.close_device_mesh(device_mesh)
@@ -172,7 +173,7 @@ class PrefillDecodeBackend:
 
     def teardown(self):
         logger.info("teardown ...")
-        if self.t3k_device_mesh:
+        if self.t3k_device_mesh is not None:
             self.t3k_device_mesh.close()
 
     def init_tt_metal_device(self):
@@ -184,9 +185,6 @@ class PrefillDecodeBackend:
             device.enable_program_cache()
         self.t3k_device_mesh = t3k_device_mesh
         check_device_mesh(self.t3k_device_mesh, self.model_config)
-        for i in self.t3k_device_mesh.get_device_ids():
-            device = self.t3k_device_mesh.get_device(i)
-            device.enable_async(True)
         logger.info("init_tt_metal_device finished.")
 
     def init_model(self):
@@ -275,18 +273,22 @@ class PrefillDecodeBackend:
     def prepare_batch_inputs(self):
         self.num_users = len(self.get_users())
         assert self.num_users <= self.max_users
-        input_prompts = [user_info.prompt_tokens if user_info else [self.tokenizer.pad_id] for user_info in self.users]
+        input_prompts = [user_info.prompt_tokens for user_info in self.get_users()]
         # initialize_inputs:
         # pad inputs, empty users get pad id
-        tokens, input_text_mask, _ = initialize_inputs(
+        prefill_tokens, input_text_mask, _ = initialize_inputs(
             tokenizer=self.tokenizer,
             prompt_tokens=input_prompts,
-            bsz=self.batch_size,
+            bsz=len(input_prompts),
             total_len=self.max_seq_len,
         )
+        # where does intput_text_mask get used?
         self.input_text_mask = input_text_mask
-        self.prefill_ids = tokens
-        self.decode_ids = tokens[:, :1].clone()
+        self.prefill_ids = prefill_tokens
+        # decode_ids are padded to batch_size
+        decode_ids = torch.full((self.batch_size, 1), self.tokenizer.pad_id, dtype=torch.long, device="cpu")
+        decode_ids[:self.num_users, :1] = prefill_tokens[:, :1].clone()
+        self.decode_ids = decode_ids
 
     def prefill(self):
         if self.prefill_ids is None:
