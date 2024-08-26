@@ -75,6 +75,37 @@ void reduce_c() {
    UNPACK(tensix_sync()); // Workaround for issue #9370
 }
 
+template<PoolType pool_type, ReduceDim reduce_dim, uint32_t in0_cb, uint32_t scale_cb, uint32_t out_cb, uint32_t rows, uint32_t cols>
+void reduce_c_mmllk() {
+    // Precondition: in0_cb has rows*cols produced. in0_cb has tiles in row-major order
+    // Precondition: scale_cb has 1 produced
+    // Precondition: out_cb has rows free
+    // Postcondition: in0_cb has rows*cols produced
+    // Precondition: scale_cb has 1 produced
+    // Postcondition: out_cb has rows produced
+
+    mm_init(in0_cb, scale_cb, out_cb);
+
+    const uint32_t num_tiles = rows * cols;
+    cb_wait_front(scale_cb, 1);
+    cb_wait_front(in0_cb, num_tiles);
+    cb_reserve_back(out_cb, rows);
+
+    constexpr uint32_t reduce_dst_idx = 0;
+
+    for (uint32_t i = 0; i < rows; i++) {
+        acquire_dst(tt::DstMode::Half);
+        for (uint32_t j = 0; j < cols; j++) {
+            matmul_tiles(in0_cb, scale_cb, 0, 0, 0, false);
+        }
+
+        cb_reserve_back(out_cb, 1);
+        pack_tile(reduce_dst_idx, out_cb);
+        cb_push_back(out_cb, 1);
+        release_dst(tt::DstMode::Half);
+    }
+}
+
 void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
     // Precondition: in_cb has num_tiles produced
     // Postcondition: in_cb has num_tiles produced
@@ -365,6 +396,7 @@ void MAIN {
     constexpr uint32_t cb_mask_in = tt::CB::c_in3;
     constexpr uint32_t cb_scale_in = tt::CB::c_in4;
     constexpr uint32_t cb_identity_scale_in = tt::CB::c_in5;
+    // constexpr uint32_t cb_identity_scale_mm_in = tt::CB::c_in6;
 
     constexpr uint32_t cb_qk_im = tt::CB::c_intermed0;
     constexpr uint32_t cb_out_im = tt::CB::c_intermed1;
@@ -379,6 +411,7 @@ void MAIN {
 
 
     mm_init();
+    // tensix_sync(); // Workaround for issue #9370
 
     for (uint32_t nb = local_batch_start; nb < local_batch_end; ++nb) {
         for (uint32_t nq = local_nh_start; nq < local_nh_end; ++nq) {
@@ -436,6 +469,10 @@ void MAIN {
                     sub_exp_block_bcast_cols_inplace<cb_qk_im, cb_cur_max, Sq_chunk_t, Sk_chunk_t>();
 
                     /* cb_cur_sum = sum(cb_qk_im, dim=-1) */
+                    // !!!!!!!!!!!!!!! Reduce sum !!!!!!!!!!!!!!!
+                    // unpack_reconfig_data_format(cb_qk_im, cb_identity_scale_mm_in);
+                    // reduce_c_mmllk<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_mm_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
+                    unpack_reconfig_data_format(cb_qk_im, cb_identity_scale_in);
                     reduce_c<PoolType::SUM, ReduceDim::REDUCE_ROW, cb_qk_im, cb_identity_scale_in, cb_cur_sum, Sq_chunk_t, Sk_chunk_t>();
 
                     /* OUT_IM = QK @ V_CHUNK */

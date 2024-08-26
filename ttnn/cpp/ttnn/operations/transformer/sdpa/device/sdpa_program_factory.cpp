@@ -397,6 +397,11 @@ operation::ProgramWithCallbacks sdpa_multi_core(
                             .set_page_size(tt::CB::c_in5, scalar_tile_size);
     auto cb_in5_id = CreateCircularBuffer(program, core_grid, c_in5_config);
 
+    // // identity scale input for mm reduction
+    // auto c_in6_config = CircularBufferConfig(scale_tiles * scalar_tile_size, {{tt::CB::c_in6, scalar_df}})
+    //                         .set_page_size(tt::CB::c_in6, scalar_tile_size);
+    // auto cb_in6_id = CreateCircularBuffer(program, core_grid, c_in6_config);
+
     // cb_qk_im
     auto c_intermed0_config = CircularBufferConfig(qk_tiles * im_tile_size, {{tt::CB::c_intermed0, im_df}})
                                   .set_page_size(tt::CB::c_intermed0, im_tile_size);
