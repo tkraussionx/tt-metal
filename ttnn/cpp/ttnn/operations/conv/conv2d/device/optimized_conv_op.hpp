@@ -292,10 +292,6 @@ using namespace tt::tt_metal;
 
 pair<uint32_t, uint32_t> compute_opt_conv_output_face_shape(uint32_t conv_activation_h, uint32_t conv_activation_w, uint32_t filter_h, uint32_t filter_w, uint32_t stride_h, uint32_t stride_w, uint32_t pad_h, uint32_t pad_w, uint32_t padding_for_32B_alignment=0);
 
-<<<<<<< HEAD:ttnn/cpp/ttnn/operations/conv/conv2d/device/optimized_conv_op.hpp
-pair<vector<uint32_t>, vector<uint32_t>> compute_opt_conv_activation_as_mm_shape(const Shape& conv_activation_shape, vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t padding_for_32B_alignment);
-=======
 pair<vector<uint32_t>, vector<uint32_t>> compute_opt_conv_activation_as_mm_shape(const Shape& conv_activation_shape, vector<int> conv_params, uint32_t act_block_h_datums, uint32_t padding_for_32B_alignment);
->>>>>>> Rebase on main:ttnn/cpp/ttnn/operations/conv2d/device/optimized_conv_op.hpp
 
 } // optimized_conv_op_utils
