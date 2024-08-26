@@ -11,6 +11,8 @@ set(TT_DNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_w/bcast_op_multi_core_w.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bcast/multi_core_hw/bcast_op_multi_core_hw.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_helper_functions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/moreh_test2/moreh_test2.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/moreh_test2/moreh_test2_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_adam/moreh_adam.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_adam/moreh_adam_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/moreh_adamw/moreh_adamw.cpp
