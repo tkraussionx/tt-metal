@@ -27,16 +27,16 @@ def create_custom_preprocessor(device):
         parameters = {}
         if isinstance(model, SegformerEfficientSelfAttention):
             parameters["query"] = {}
-            parameters["query"]["weight"] = preprocess_linear_weight(model.query.weight, dtype=ttnn.bfloat16)
-            parameters["query"]["bias"] = preprocess_linear_bias(model.query.bias, dtype=ttnn.bfloat16)
+            parameters["query"]["weight"] = preprocess_linear_weight(model.query.weight, dtype=ttnn.bfloat8_b)
+            parameters["query"]["bias"] = preprocess_linear_bias(model.query.bias, dtype=ttnn.bfloat8_b)
 
             parameters["key"] = {}
-            parameters["key"]["weight"] = preprocess_linear_weight(model.key.weight, dtype=ttnn.bfloat16)
-            parameters["key"]["bias"] = preprocess_linear_bias(model.key.bias, dtype=ttnn.bfloat16)
+            parameters["key"]["weight"] = preprocess_linear_weight(model.key.weight, dtype=ttnn.bfloat8_b)
+            parameters["key"]["bias"] = preprocess_linear_bias(model.key.bias, dtype=ttnn.bfloat8_b)
 
             parameters["value"] = {}
-            parameters["value"]["weight"] = preprocess_linear_weight(model.value.weight, dtype=ttnn.bfloat16)
-            parameters["value"]["bias"] = preprocess_linear_bias(model.value.bias, dtype=ttnn.bfloat16)
+            parameters["value"]["weight"] = preprocess_linear_weight(model.value.weight, dtype=ttnn.bfloat8_b)
+            parameters["value"]["bias"] = preprocess_linear_bias(model.value.bias, dtype=ttnn.bfloat8_b)
 
             if model.sr_ratio > 1:
                 parameters["sr"] = {}

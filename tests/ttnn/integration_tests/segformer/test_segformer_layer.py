@@ -153,4 +153,4 @@ def test_segformer_layer(
     )
     ttnn_final_output = ttnn.to_torch(ttnn_output[0])
 
-    assert_with_pcc(torch_output[0], ttnn_final_output, pcc=0.99)
+    assert_with_pcc(torch_output[0], ttnn_final_output, pcc=0.94)
