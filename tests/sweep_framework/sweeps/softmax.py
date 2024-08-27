@@ -35,7 +35,7 @@ ELASTIC_DEFAULT_URL = "http://yyz-elk:9200"
 from collections import namedtuple
 
 parameters = {
-    "dict_softmax_t": {
+    "dict_softmax_t5": {
         "batch_sizes": [(1,)],
         "num_inputs": [1],
         "input_a_height": [1024],
@@ -249,6 +249,22 @@ def scale_mask_softmax_in_place_check(
             input_tensor, scale, mask, program_config, is_causal_mask, compute_kernel_config
         )
     )[0]
+
+
+def get_hash(test_vector):
+    values = []
+    for key, value in test_vector.items():
+        if value is not None:
+            if key not in ["validity", "invalid_reason", "suite_name", "status"]:
+                values.append(str(key) + str(value))
+
+    # Concatenate all string values
+    concatenated_string = "".join(values)
+    print("conc_string=", concatenated_string)
+    # Convert concatenated string to hex using hashlib for a consistent length
+    hex_result = hashlib.md5(concatenated_string.encode()).hexdigest()
+
+    return hex_result
 
 
 def softmax_in_place_check(input_tensor, program_config=ttnn.SoftmaxDefaultProgramConfig, compute_kernel_config=None):

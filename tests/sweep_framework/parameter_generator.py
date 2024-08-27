@@ -36,7 +36,7 @@ def generate_vectors(module_name):
             v["sweep_name"] = module_name
 
         invalidate_vectors(test_module, suite_vectors)
-        export_suite_vectors(module_name, suite, suite_vectors)
+        export_suite_vectors(module_name, suite, suite_vectors, test_module)
 
 
 # Perform any post-gen validation to the resulting vectors.
@@ -51,7 +51,7 @@ def invalidate_vectors(test_module, vectors) -> None:
 
 
 # Output the individual test vectors.
-def export_suite_vectors(module_name, suite_name, vectors):
+def export_suite_vectors(module_name, suite_name, vectors, test_module):
     # Perhaps we export with some sort of readable id, which can be passed to a runner to run specific sets of input vectors. (export seed as well for reproducability)
     client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
 
@@ -80,7 +80,10 @@ def export_suite_vectors(module_name, suite_name, vectors):
         vector = dict()
         for elem in vectors[i].keys():
             vector[elem] = serialize(vectors[i][elem])
-        id = hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        # print("vectors[i]=", vectors[i])
+        # id = hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        id = test_module.get_hash(vectors[i])
+        print("id=", id)
         new_vector_ids.add(id)
         vector["timestamp"] = current_time
         serialized_vectors[id] = vector

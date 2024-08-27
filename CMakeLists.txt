@@ -121,10 +121,10 @@ endif()
 ############################################################################################################################
 add_library(stdlib INTERFACE)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_link_libraries(stdlib INTERFACE c++ c++abi)
+    target_link_libraries(stdlib INTERFACE c++ c++abi ssl crypto)
     target_compile_options(stdlib INTERFACE -stdlib=libc++)
 else()
-    target_link_libraries(stdlib INTERFACE stdc++)
+    target_link_libraries(stdlib INTERFACE stdc++ ssl crypto)
 endif()
 
 add_library(metal_common_libs INTERFACE)
