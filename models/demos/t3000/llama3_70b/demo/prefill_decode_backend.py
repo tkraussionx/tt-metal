@@ -47,17 +47,20 @@ def get_t3k_device_mesh(num_devices_requested):
     # device_params is empty dict in llama3 70B demo pytest execution
     device_params = {}
     device_mesh = ttnn.open_device_mesh(
-        ttnn.DeviceGrid(1, num_devices_requested), device_ids[:num_devices_requested], dispatch_core_type=get_dispatch_core_type(), **device_params
+        ttnn.DeviceGrid(1, num_devices_requested),
+        device_ids[:num_devices_requested],
+        dispatch_core_type=get_dispatch_core_type(),
+        **device_params,
     )
     logger.info(f"multidevice with {device_mesh.get_num_devices()} devices is created")
-    try:
-        yield device_mesh
-    finally:
-        logger.info("closing t3k device mesh ...")
-        for device in device_mesh.get_devices():
-            ttl.device.DumpDeviceProfiler(device)
-        ttnn.close_device_mesh(device_mesh)
-        del device_mesh
+    return device_mesh
+
+
+def close_t3k_device_mesh(device_mesh):
+    for device in device_mesh.get_devices():
+        ttl.device.DumpDeviceProfiler(device)
+    ttnn.close_device_mesh(device_mesh)
+    del device_mesh
 
 
 class UserInfo:
@@ -174,7 +177,7 @@ class PrefillDecodeBackend:
     def teardown(self):
         logger.info("teardown ...")
         if self.t3k_device_mesh is not None:
-            self.t3k_device_mesh.close()
+            close_t3k_device_mesh(self.t3k_device_mesh)
 
     def init_tt_metal_device(self):
         logger.info("init_tt_metal_device ...")
@@ -344,7 +347,8 @@ class PrefillDecodeBackend:
         logits = self.model.forward(self.decode_ids, self.prev_pos, decode_only=self.decode_only)
         self.timer_stop("decode")
         self.timer_start("token_selection")
-        next_tokens = batch_top_pk_logits_efficient(
+        # FIXME: enforce same top p top k per batch
+        next_tokens = top_pk_logits_efficient(
             logits,
             top_ps=self.get_user_param("top_p"),
             top_ks=self.get_user_param("top_k"),
