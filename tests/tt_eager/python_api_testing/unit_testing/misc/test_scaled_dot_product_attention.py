@@ -61,6 +61,8 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
 
+    past_result = None
+
     for i in range(1000):
         tt_back = ttnn.transformer.scaled_dot_product_attention(
             tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
@@ -69,6 +71,12 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
 
         out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
         logger.debug(f"python vs pytorch: {out_pcc}")
+
+        if past_result is None:
+            past_result = out_pcc
+        else:
+            assert out_pcc == past_result
+
         assert out_pass
 
 
@@ -77,7 +85,7 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
 @skip_for_grayskull("Unsupported in GS since L1 runs OOM with most configs")
 @pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat16], ids=["bfp8", "bf16"])
 @pytest.mark.parametrize("q_chunk_size", [32, 128, 256], ids=["q32", "q128", "q256"])
-@pytest.mark.parametrize("k_chunk_size", [32, 128, 256], ids=["q32", "k128", "k256"])
+@pytest.mark.parametrize("k_chunk_size", [32, 128, 256], ids=["k32", "k128", "k256"])
 @pytest.mark.parametrize(
     "b, nh, nkv, s, d",
     (
