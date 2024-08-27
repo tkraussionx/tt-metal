@@ -22,8 +22,15 @@ def is_watcher_enabled():
 def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
     torch.manual_seed(1234)
 
+    device_grid_size = device.compute_with_storage_grid_size()
+
+    if nh == 2 and s == 2048 and d == 128:  # Specific known ND case
+        device_grid_size = (8, 2)
+    elif nh == 8 and s == 128 and d == 128:  # Current setting for Llama on TG
+        device_grid_size = (8, 7)
+
     program_config = ttnn.SDPAProgramConfig(
-        compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        compute_with_storage_grid_size=device_grid_size,
         q_chunk_size=q_chunk_size,
         k_chunk_size=k_chunk_size,
     )
@@ -51,27 +58,31 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
     tt_K = ttnn.Tensor(K, dtype).to(ttnn.TILE_LAYOUT).to(device)
     tt_V = ttnn.Tensor(V, dtype).to(ttnn.TILE_LAYOUT).to(device)
     tt_attn_mask = ttnn.Tensor(attn_mask, dtype).to(ttnn.TILE_LAYOUT).to(device)
-    tt_back = ttnn.transformer.scaled_dot_product_attention(
-        tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
-    )
-    tt_back = tt_back.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
 
     gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
 
-    out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
-    logger.debug(f"python vs pytorch: {out_pcc}")
-    assert out_pass
+    for i in range(1000):
+        tt_back = ttnn.transformer.scaled_dot_product_attention(
+            tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
+        )
+        tt_back = tt_back.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
+
+        out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
+        logger.debug(f"python vs pytorch: {out_pcc}")
+        assert out_pass
 
 
 # @pytest.mark.skip(reason="ND PCC issues")
 @pytest.mark.skipif(is_watcher_enabled(), reason="Kernel OOM with watcher enabled")
 @skip_for_grayskull("Unsupported in GS since L1 runs OOM with most configs")
 @pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat16], ids=["bfp8", "bf16"])
-@pytest.mark.parametrize("q_chunk_size", [128, 256], ids=["q128", "q256"])
-@pytest.mark.parametrize("k_chunk_size", [128, 256], ids=["k128", "k256"])
+@pytest.mark.parametrize("q_chunk_size", [32, 128, 256], ids=["q32", "q128", "q256"])
+@pytest.mark.parametrize("k_chunk_size", [32, 128, 256], ids=["q32", "k128", "k256"])
 @pytest.mark.parametrize(
     "b, nh, nkv, s, d",
     (
+        [1, 2, 1, 2048, 128],  # Known ND case
+        [1, 8, 1, 128, 128],  # Llama2-70B small sequence
         [1, 8, 1, 2048, 128],  # Llama2-70B
         [1, 16, 1, 2048, 64],  # Falcon-40B
         [1, 71, 1, 2048, 64],  # Falcon-7B
