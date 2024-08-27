@@ -16,8 +16,21 @@
 #include "compute_kernel_api/matmul.h"
 #include "compute_kernel_api/reduce.h"
 
+#include "debug/dprint.h"
+
 
 namespace NAMESPACE {
+
+inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
+    DPRINT << "======" << ENDL();
+    for (int32_t r = 0; r < 32; ++ r) {
+    //for (int32_t r = 0; r < 1; ++ r) {
+        SliceRange sr = SliceRange{.h0 = r, .h1 = r+1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+        DPRINT << (uint)r << " " << TileSlice(cb_id, tile_id, sr, true, untilize) << ENDL();
+    }
+    DPRINT << "++++++" << ENDL();
+}
+
 template<uint32_t in0, uint32_t in1, uint32_t num_tiles>
 void max_block_inplace() {
     // inputs come in full, outputs go out full
@@ -91,6 +104,9 @@ void reduce_c_mmllk() {
     cb_wait_front(in0_cb, num_tiles);
     cb_reserve_back(out_cb, rows);
 
+    DPRINT_UNPACK(DPRINT << "in0:" << ENDL());
+    UNPACK(print_full_tile(in0_cb, 0, true));
+
     constexpr uint32_t reduce_dst_idx = 0;
 
     for (uint32_t i = 0; i < rows; i++) {
@@ -104,6 +120,8 @@ void reduce_c_mmllk() {
         cb_push_back(out_cb, 1);
         release_dst(tt::DstMode::Half);
     }
+    DPRINT_UNPACK(DPRINT << "out_cb:" << ENDL());
+    UNPACK(print_full_tile(out_cb, 0, true));
 }
 
 void recip_block_inplace(uint32_t in_cb, uint32_t num_tiles) {
