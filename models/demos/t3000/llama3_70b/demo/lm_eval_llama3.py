@@ -139,6 +139,8 @@ def main():
         limit=10,
         bootstrap_iters=0,
         batch_size=32,
+        write_out=True,
+        log_samples=True,
     )
     print(eval_output["results"])
 
