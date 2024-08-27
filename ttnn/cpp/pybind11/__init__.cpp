@@ -41,7 +41,10 @@ PYBIND11_MODULE(_ttnn, module) {
     ttnn::core::py_module(m_core);
 
     auto m_device = module.def_submodule("device", "ttnn devices");
-    ttnn::device::py_module(m_device);
+    //TYPES
+    ttnn::device::py_device_module_types(m_device);
+    // FUNCTIONS / OPERATIONS
+    ttnn::device::py_device_module(m_device);
 
     auto m_multi_device = module.def_submodule("multi_device", "ttnn multi_device");
     ttnn::multi_device::py_module(m_multi_device);
