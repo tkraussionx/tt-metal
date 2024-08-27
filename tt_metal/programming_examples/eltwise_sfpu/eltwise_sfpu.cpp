@@ -4,6 +4,7 @@
 
 #include "tt_metal/host_api.hpp"
 #include "common/bfloat16.hpp"
+#include "tt_metal/third_party/taskflow/3rd-party/httplib/httplib.hpp"
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -13,183 +14,283 @@ using namespace tt::tt_metal;
 * 2. Device eltwise performs a unary SFPU operation on the data.
 * 3. Read result back and compare to golden.
 * */
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <sstream>
+#include <vector>
+#include <stdexcept>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <chrono> // For time measurement
+#include <openssl/md5.h>
 
-int main(int argc, char **argv) {
-    if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
-        TT_THROW("Test not supported w/ slow dispatch, exiting");
+
+std::string base64_encode(const std::string& in) {
+    static const std::string base64_chars =
+                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                 "abcdefghijklmnopqrstuvwxyz"
+                 "0123456789+/";
+    std::string out;
+    int val = 0, valb = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back(base64_chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back(base64_chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+
+
+std::vector<long long> durations;
+
+std::string send_get_request(const std::string& hostname, const std::string& port, const std::string& request1, const std::string& request2, int num_tries) {
+    int sockfd;
+    struct addrinfo hints, *res;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(hostname.c_str(), port.c_str(), &hints, &res) != 0) {
+        throw std::runtime_error("getaddrinfo failed");
     }
 
-    bool pass = true;
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd == -1) {
+        freeaddrinfo(res);
+        throw std::runtime_error("socket creation failed");
+    }
 
-    try {
-        /*
-        * Silicon accelerator setup
-        */
-        constexpr int device_id = 0;
-        Device *device =
-            CreateDevice(device_id);
-
-
-        /*
-        * Setup program to execute along with its buffers and kernels to use
-        */
-        CommandQueue& cq = device->command_queue();
-
-        Program program = CreateProgram();
-
-        constexpr CoreCoord core = {0, 0};
-
-        constexpr uint32_t single_tile_size = 2 * 1024;
-        constexpr uint32_t num_tiles = 64;
-        constexpr uint32_t dram_buffer_size = single_tile_size * num_tiles;
-
-        tt_metal::InterleavedBufferConfig dram_config{
-                    .device= device,
-                    .size = dram_buffer_size,
-                    .page_size = dram_buffer_size,
-                    .buffer_type = tt_metal::BufferType::DRAM
-        };
-
-        std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(dram_config);
-        const uint32_t dram_buffer_src0_addr = src0_dram_buffer->address();
-
-        std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_config);
-        const uint32_t dram_buffer_dst_addr = dst_dram_buffer->address();
-
-        /*
-         * Use circular buffers to set input and output buffers that the
-         * compute engine will use.
-         */
-        constexpr uint32_t src0_cb_index = CB::c_in0;
-        constexpr uint32_t num_input_tiles = 2;
-        CircularBufferConfig cb_src0_config = CircularBufferConfig(num_input_tiles * single_tile_size, {{src0_cb_index, tt::DataFormat::Float16_b}}).set_page_size(src0_cb_index, single_tile_size);
-        CBHandle cb_src0 = tt_metal::CreateCircularBuffer(program, core, cb_src0_config);
-
-        constexpr uint32_t output_cb_index = CB::c_out0;
-        constexpr uint32_t num_output_tiles = 2;
-        CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * single_tile_size, {{output_cb_index, tt::DataFormat::Float16_b}}).set_page_size(output_cb_index, single_tile_size);
-        CBHandle cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
-
-        /*
-         * Specify data movement kernels for reading/writing data to/from
-         * DRAM.
-         */
-        KernelHandle unary_reader_kernel_id = CreateKernel(
-            program,
-            "tt_metal/kernels/dataflow/reader_unary.cpp",
-            core,
-            DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
-
-        KernelHandle unary_writer_kernel_id = CreateKernel(
-            program,
-            "tt_metal/kernels/dataflow/writer_unary.cpp",
-            core,
-            DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
-
-        /*
-         * Set the parameters that the compute kernel will use.
-         */
-        vector<uint32_t> compute_kernel_args = {
-            num_tiles,
-            1
-        };
-
-        constexpr bool math_approx_mode = false;
-
-        /*
-         * Use defines to control the operations to execute in the eltwise_sfpu
-         * compute kernel.
-         */
-        const std::map<std::string, std::string> sfpu_defines = {
-            {"SFPU_OP_EXP_INCLUDE", "1"},
-            {"SFPU_OP_CHAIN_0", "exp_tile_init(); exp_tile(0);"}
-        };
-
-        KernelHandle eltwise_sfpu_kernel_id = CreateKernel(
-            program,
-            "tt_metal/kernels/compute/eltwise_sfpu.cpp",
-            core,
-            ComputeConfig{
-                .math_approx_mode = math_approx_mode,
-                .compile_args = compute_kernel_args,
-                .defines = sfpu_defines,
-            }
-        );
-
-        /*
-         * Create source data and write to DRAM.
-         */
-        std::vector<uint32_t> src0_vec = create_random_vector_of_bfloat16(
-            dram_buffer_size, 1, std::chrono::system_clock::now().time_since_epoch().count());
-
-        EnqueueWriteBuffer(cq, src0_dram_buffer, src0_vec, false);
-
-        /*
-         * Configure program and runtime kernel arguments, then execute.
-         */
-        SetRuntimeArgs(
-            program,
-            unary_reader_kernel_id,
-            core,
+    if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+        close(sockfd);
+        freeaddrinfo(res);
+        throw std::runtime_error("connection failed");
+    }
+    auto end1 = std::chrono::high_resolution_clock::now();
+    int num_calls = 0;
+    std::vector<char> response_buffer;
+    for (int j=0, k=0;j<10;j++)
+    {
+        for (int i=0;i<num_tries;i++,k++)
+        {
+            response_buffer.clear();
+            // Sending the request directly
+            num_calls++;
+            if (num_calls % 100 == 0)
             {
-                src0_dram_buffer->address(),
-                static_cast<uint32_t>(src0_dram_buffer->noc_coordinates().x),
-                static_cast<uint32_t>(src0_dram_buffer->noc_coordinates().y),
-                num_tiles,
+                close(sockfd);
+                freeaddrinfo(res);
+                if (getaddrinfo(hostname.c_str(), port.c_str(), &hints, &res) != 0) {
+                    throw std::runtime_error("getaddrinfo failed");
+                }
+                sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+                if (sockfd == -1) {
+                    freeaddrinfo(res);
+                    throw std::runtime_error("socket creation failed");
+                }
+                if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+                    close(sockfd);
+                    freeaddrinfo(res);
+                    throw std::runtime_error("connection failed");
+                }
             }
-        );
-
-        SetRuntimeArgs(
-            program,
-            unary_writer_kernel_id,
-            core,
+            if (i%2==0)
             {
-                dst_dram_buffer->address(),
-                static_cast<uint32_t>(dst_dram_buffer->noc_coordinates().x),
-                static_cast<uint32_t>(dst_dram_buffer->noc_coordinates().y),
-                num_tiles
+                send(sockfd, request1.c_str(), request1.size(), 0);
             }
-        );
+            else
+            {
+                send(sockfd, request2.c_str(), request2.size(), 0);
+            }
+            char buffer[4096];
+            int bytes_received;
 
-        EnqueueProgram(cq, program, false);
-        Finish(cq);
+            while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
+                response_buffer.clear();
+                response_buffer.insert(response_buffer.end(), buffer, buffer + bytes_received);
+                if (response_buffer[response_buffer.size()-5] == '0') break;
+            }
+        }
+    }
+    auto end2 = std::chrono::high_resolution_clock::now();
+    auto response_time2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end1).count();
+    std::cout << "times=" << num_tries << std::endl;
+    std::cout << "overall_duration=" << response_time2/10 << std::endl;
+    durations.push_back(response_time2/10);
+    close(sockfd);
+    freeaddrinfo(res);
 
-        /*
-         * Read the result and compare to a golden result. Record pass/fail
-         * and teardown.
-         */
-        std::vector<uint32_t> result_vec;
-        EnqueueReadBuffer(cq, dst_dram_buffer, result_vec, true);
+    std::string response_string(response_buffer.begin(), response_buffer.end());
+    return response_string;
+}
 
-        auto transform_to_golden = [](const bfloat16 &a) {
-            return bfloat16(std::exp(a.to_float()));
-        };
-        std::vector<uint32_t> golden_vec = pack_bfloat16_vec_into_uint32_vec(unpack_uint32_vec_into_bfloat16_vec(src0_vec, transform_to_golden));
+std::string extract_status(const std::string& json_response) {
+    // Simple manual JSON parsing for demonstration purposes
+    size_t status_pos = json_response.find("\"status\":\"");
+    if (status_pos == std::string::npos) return "";
 
-        constexpr float abs_tolerance = 0.02f;
-        constexpr float rel_tolerance = 0.02f;
-        auto comparison_function = [](const float a, const float b) {
-            return is_close(a, b, rel_tolerance, abs_tolerance);
-        };
+    status_pos += 10;  // Move past the "status":" part
+    size_t end_pos = json_response.find("\"", status_pos);
+    if (end_pos == std::string::npos) return "";
 
-        pass &= packed_uint32_t_vector_comparison(golden_vec, result_vec, comparison_function);
+    return json_response.substr(status_pos, end_pos - status_pos);
+}
 
-        pass &= CloseDevice(device);
+std::string to_hash(const std::string& input) {
+    // Create a buffer to hold the MD5 digest
+    unsigned char digest[MD5_DIGEST_LENGTH];
 
-    } catch (const std::exception &e) {
-        tt::log_error(tt::LogTest, "Test failed with exception!");
-        tt::log_error(tt::LogTest, "{}", e.what());
+    // Compute the MD5 hash
+    MD5((unsigned char*)input.c_str(), input.length(), digest);
 
-        throw;
+    // Convert the digest to a hexadecimal string
+    std::ostringstream md5str;
+    for (int i = 0; i < MD5_DIGEST_LENGTH; ++i) {
+        md5str << std::hex << std::setw(2) << std::setfill('0') << (int)digest[i];
     }
 
-    if (pass) {
-        tt::log_info(tt::LogTest, "Test Passed");
-    } else {
-        TT_THROW("Test Failed");
+    return md5str.str();
+}
+
+std::string create_hex_string(
+    int batch_size,
+    int num_inputs,
+    int input_a_height,
+    int input_a_width,
+    const std::string& input_a_dtype,
+    const std::string& input_a_layout,
+    const std::string& input_a_memory_config,
+    const std::string& input_a_sharding_strategy,
+    const std::string& multi_core_program_config,
+    bool is_scale_causal_mask_hw_dims_softmax,
+    bool is_inplace,
+    bool is_causal_mask,
+    const std::string& input_a_shard_orientation,
+    const std::string& input_b_memory_config,
+    const std::string& softmax_type
+)
+{
+    std::ostringstream concatenated_string;
+
+    concatenated_string << "batch_sizes(" + std::to_string(batch_size) + ",)";
+    concatenated_string << "num_inputs" + std::to_string(num_inputs);
+    concatenated_string << "input_a_height" << std::to_string(input_a_height);
+    concatenated_string << "input_a_width" << std::to_string(input_a_width);
+    concatenated_string << "input_a_dtype" << input_a_dtype;
+    concatenated_string << "input_a_layout" << input_a_layout;
+    concatenated_string << "input_a_memory_config" << input_a_memory_config;
+    concatenated_string << "input_a_sharding_strategy" << input_a_sharding_strategy;
+    concatenated_string << "multi_core_program_config" << multi_core_program_config;
+    concatenated_string << "is_scale_causal_mask_hw_dims_softmax" << (is_scale_causal_mask_hw_dims_softmax ? "True" : "False");
+    concatenated_string << "is_inplace" << (is_inplace ? "True" : "False");
+    concatenated_string << "is_causal_mask" << (is_causal_mask ? "True" : "False");
+    concatenated_string << "input_a_shard_orientation" << input_a_shard_orientation;
+    concatenated_string << "input_b_memory_config" << input_b_memory_config;
+    concatenated_string << "softmax_type" << softmax_type;
+
+    return to_hash(concatenated_string.str());
+}
+
+std::string create_predefined_hex_string() {
+    int batch_size = 1;
+    int num_inputs = 1;
+    int input_a_height = 1024;
+    int input_a_width = 1024;
+    std::string input_a_dtype = "DataType.FLOAT32";
+    std::string input_a_layout = "Layout.TILE";
+    std::string input_a_memory_config = "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)";
+    std::string input_a_sharding_strategy = "ShardStrategy.WIDTH";
+    std::string multi_core_program_config = "<class 'ttnn._ttnn.operations.normalization.SoftmaxDefaultProgramConfig'>";
+    bool is_scale_causal_mask_hw_dims_softmax = false;
+    bool is_inplace = false;
+    bool is_causal_mask = false;
+    std::string input_a_shard_orientation = "ShardOrientation.COL_MAJOR";
+    std::string input_b_memory_config = "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)";
+    std::string softmax_type = "softmax";
+
+    return create_hex_string(
+        batch_size,
+        num_inputs,
+        input_a_height,
+        input_a_width,
+        input_a_dtype,
+        input_a_layout,
+        input_a_memory_config,
+        input_a_sharding_strategy,
+        multi_core_program_config,
+        is_scale_causal_mask_hw_dims_softmax,
+        is_inplace,
+        is_causal_mask,
+        input_a_shard_orientation,
+        input_b_memory_config,
+        softmax_type
+    );
+}
+
+const std::string vector_id1 = "ada59cc88b3dd017c271b40b3fccbb9f72ed34a080f7f92015f259f4";
+const std::string vector_id2 = "8c0e346cf8b21f9d36d261d221313f8f33a920961ec887b1ccf99383";
+const std::string ELASTIC_DEFAULT_URL = "yyz-elk";
+const std::string ELASTIC_PORT = "9200";
+
+std::string get_request(int index)
+{
+    const std::string ELASTIC_USERNAME = "es_sweeps";
+    const std::string ELASTIC_PASSWORD = "RkdH2k*Bhrsd";
+    const std::string results_index = "ttnn_sweeps_test_results_softmax";
+
+    const std::string vector_id1 = "ada59cc88b3dd017c271b40b3fccbb9f72ed34a080f7f92015f259f4";
+    std::string matches = "[{\"match\": {\"vector_id\": \"" + ((index == 0) ? vector_id1 : vector_id2)  + "\"}}]";
+
+    std::stringstream request;
+    request << "GET /" << results_index << "/_search HTTP/1.1\r\n";
+    request << "Host: " << ELASTIC_DEFAULT_URL << ":" << ELASTIC_PORT << "\r\n";
+    std::string auth = ELASTIC_USERNAME + ":" + ELASTIC_PASSWORD;
+    request << "Authorization: Basic " << base64_encode(auth) << "\r\n";
+    request << "Content-Type: application/json\r\n";
+    std::string body = "{"
+                       "\"size\": 10000,"
+                       "\"sort\": [{\"timestamp.keyword\": {\"order\": \"asc\"}}],"
+                       "\"query\": {\"bool\": {\"must\": " + matches + "}}"
+                       "}";
+
+    request << "Content-Length: " << body.size() << "\r\n";
+    request << "\r\n";
+    request << body;
+    return request.str();
+}
+
+int main() {
+    std::string req0 = get_request(0);
+    std::string req1 = get_request(1);
+    for (int times=1;times<100;times+=5)
+    {
+        try {
+            std::string response = send_get_request(ELASTIC_DEFAULT_URL, ELASTIC_PORT, req0, req1, times);
+            //std::cout << "response:" << response << std::endl;
+            std::string status = extract_status(response);
+            if (!status.empty()) {
+                //std::cout << "Status: " << status << std::endl;
+            } else {
+                //std::cout << "No status found in response." << std::endl;
+            }
+        } catch (const std::exception& e) {
+            //std::cerr << "Error: " << e.what() << std::endl;
+        }
     }
-
-    TT_FATAL(pass);
-
+    std::cout << "[";
+    for (int i=0;i<durations.size();i++)
+    {
+        std::cout << durations[i];
+        if (i<durations.size()-1) std::cout << ", ";
+    }
+    std::cout << "]" << std::endl;
     return 0;
 }

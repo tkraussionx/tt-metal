@@ -10,6 +10,7 @@
 #include "ttnn/operations/eltwise/unary/device/unary_op.hpp"
 #include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/operations/matmul/device/matmul_op.hpp"
+#include "ttnn/cpp/ttnn/operations/matmul/device/matmul_validate_parameters.hpp"
 #include "ttnn/tensor/tensor_utils.hpp"
 
 namespace ttnn {

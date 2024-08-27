@@ -7,6 +7,7 @@
 #include "tt_metal/host_api.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
 #include "ttnn/operations/matmul/device/matmul_op.hpp"
+#include "ttnn/cpp/ttnn/operations/matmul/device/matmul_validate_parameters.hpp"
 
 using namespace tt::constants;
 

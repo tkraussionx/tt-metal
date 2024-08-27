@@ -6,6 +6,7 @@
 #include "softmax_validate_parameters.hpp"
 #include "tt_metal/common/assert.hpp"
 #include "tt_metal/common/constants.hpp"
+#include "softmax_validate_parameters.hpp"
 
 namespace ttnn::operations::normalization {
 

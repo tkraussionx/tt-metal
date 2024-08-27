@@ -13,6 +13,7 @@
 #include "ttnn/operation.hpp"
 #include "ttnn/operations/eltwise/unary/common/unary_op_utils.hpp"
 #include "ttnn/operations/matmul/device/matmul_op.hpp"
+#include "ttnn/cpp/ttnn/operations/matmul/device/matmul_validate_parameters.hpp"
 
 using namespace tt::constants;
 using namespace tt;
