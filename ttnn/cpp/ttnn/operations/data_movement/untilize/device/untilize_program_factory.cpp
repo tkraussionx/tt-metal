@@ -19,6 +19,18 @@ using namespace tt::constants;
 
 namespace ttnn::operations::data_movement::detail {
 
+constexpr uint32_t MAX_NUM_TILES_PER_CB = 1;
+
+uint32_t get_cb_size(uint32_t num_tiles_per_block, uint32_t max_cb_size){
+
+    for(uint32_t i=max_cb_size; i>=1; i--) {
+        if(num_tiles_per_block % i == 0) {
+            return i;
+        }
+    }
+    return 1;
+}
+
 operation::ProgramWithCallbacks untilize_multi_core(
     const Tensor& a, Tensor& output, bool use_pack_untilize, bool fp32_dest_acc_en) {
     tt::tt_metal::Program program{};
@@ -78,23 +90,34 @@ operation::ProgramWithCallbacks untilize_multi_core(
         end_core = (*shard_spec.grid.ranges().begin()).end_coord;
     }
 
+    // reader_unary_interleaved_start_id only does one tile in loop, only need CB of a single tile
+    // 2 for double buffer
     uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
+    uint32_t cb_size =  ntiles_per_block;
+    uint32_t num_cb_iterations_per_row = 1;
+    if(ntiles_per_block * 2 > MAX_NUM_TILES_PER_CB) {
+        cb_size = get_cb_size(ntiles_per_block, MAX_NUM_TILES_PER_CB);
+        num_cb_iterations_per_row = ntiles_per_block / cb_size;
+
+    }
     auto [src0_cb_index, cb_src0] = create_cb(
         tt::CB::c_in0,
         program,
         all_cores,
         input_single_tile_size,
-        num_input_tiles,
+        cb_size * 2,
         input_cb_data_format,
         src_sharded ? a.buffer() : nullptr);
 
     uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
+
+
     auto [output_cb_index, cb_output] = create_cb(
         tt::CB::c_out0,
         program,
         all_cores,
         output_single_tile_size,
-        num_output_tiles,
+        cb_size * 2,
         output_cb_data_format,
         out_sharded ? output.buffer() : nullptr);
 
@@ -281,8 +304,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
                     block_size_nbytes,               // block_size_nbytes
                     ntiles_per_block,                // ntiles_per_block
                     block_size_nbytes,               // block_size_nbytes
-                    1,                               // full blocks in a row
-                    0,
+                    num_cb_iterations_per_row,                               // full blocks in a row
+                    cb_size,
                     0,
                     row_start_id};
             }
@@ -368,8 +391,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
                     block_size_nbytes,                     // stick_size_nbytes
                     ntiles_per_block,                      // ntiles_per_block
                     block_size_nbytes,                     // block_width_nbytes
-                    1,                                     // full blocks in a row
-                    0,                                     // UNUSED
+                    num_cb_iterations_per_row,                               // full blocks in a row
+                    cb_size,
                     0,                                     // UNUSED
                     row_start_id};
             }
