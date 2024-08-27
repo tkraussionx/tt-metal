@@ -11,6 +11,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tests/tt_metal/test_utils/packing.hpp"
+#include "tt_metal/test_utils/print_helpers.hpp"
 
 
 namespace unit_tests::compute {
@@ -76,33 +77,38 @@ std::vector<uint32_t> gold_standard_untilize(const std::vector<uint32_t> &src_ve
 std::vector<uint32_t> gold_standard_tilize(const std::vector<uint32_t> &src_vec, const GoldenConfig &config) {
     vector<uint32_t> dst_vec;
 
-    //TODO: RT update this one to use variable tile sizes
-    int num_rows = config.num_tiles_r_dim * config.face_r_dim * (config.num_faces > 2 ? 2: 1);
+    int num_rows_stride = config.face_r_dim * (config.num_faces > 2 ? 2: 1);
+    int num_rows = config.num_tiles_r_dim * num_rows_stride;
     //Due to each element being 32 bits, for bfloat16 thats 2 elements
-    int num_cols = (config.num_tiles_c_dim * config.face_c_dim *  (config.num_faces >= 2 ? 2: 1)) / 2;
-    for (int x = 0; x < num_rows; x += 32) {
-        for (int y = 0; y < num_cols; y += 16) {
+    int num_cols_stride = (config.face_c_dim *  (config.num_faces >= 2 ? 2: 1)) / 2;
+    int num_cols = config.num_tiles_c_dim * num_cols_stride;
+    int num_c_dim = config.face_c_dim / 2;
+    for (int x = 0; x < num_rows; x += num_rows_stride) {
+        for (int y = 0; y < num_cols; y += num_cols_stride) {
             int start = x * num_cols + y;
 
             // Top faces
-            for (int j = 0; j < 2; j++) {
-                int start_ = start + 8 * j;
-                for (int k = 0; k < 16; k++) {
-                    for (int i = 0; i < 8; i++) {
+            uint num_top_faces = (config.num_faces >= 2 ? 2: 1);
+            for (int j = 0; j < num_top_faces; j++) {
+                int start_ = start + num_c_dim * j;
+                for (int k = 0; k < config.face_r_dim; k++) {
+                    for (int i = 0; i < num_c_dim; i++) {
                         int idx = start_ + num_cols * k + i;
                         dst_vec.push_back(src_vec.at(idx));
                     }
                 }
             }
 
-            // Bottom faces
-            start += 16 * num_cols;
-            for (int j = 0; j < 2; j++) {
-                int start_ = start + 8 * j;
-                for (int k = 0; k < 16; k++) {
-                    for (int i = 0; i < 8; i++) {
-                        int idx = start_ + num_cols * k + i;
-                        dst_vec.push_back(src_vec.at(idx));
+            if(config.num_faces > 2) {
+                // Bottom faces
+                start += config.face_r_dim * num_cols;
+                for (int j = 0; j < 2; j++) {
+                    int start_ = start + num_c_dim * j;
+                    for (int k = 0; k < config.face_r_dim; k++) {
+                        for (int i = 0; i < num_c_dim; i++) {
+                            int idx = start_ + num_cols * k + i;
+                            dst_vec.push_back(src_vec.at(idx));
+                        }
                     }
                 }
             }
@@ -242,5 +248,38 @@ std::vector<uint32_t> gold_standard_tilize_w_elwadd(const std::vector<uint32_t> 
     return tt::test_utils::pack_vector<uint32_t, bfloat16>(result_vec);
 }
 
+std::vector<uint32_t> gold_standard_tilize_w_reduce(const std::vector<uint32_t> &src0_vec, const GoldenConfig &config) {
+
+    std::vector<bfloat16> unpacked_tilize_src0_vec = tt::test_utils::unpack_vector<bfloat16, uint32_t>(gold_standard_tilize(src0_vec, config));
+
+    // std::cout << "unpacked_tilize_src0_vec "  << std::endl;
+    // tt::test_utils::print_vector(unpacked_tilize_src0_vec);
+    int num_faces_c_dim = config.num_faces >= 2 ? 2 : 1;
+    int num_faces_r_dim = config.num_faces > 2 ? 2 : 1;
+
+    int num_rows_per_tile = config.face_r_dim * num_faces_r_dim;
+
+    int num_rows = config.num_tiles_r_dim * num_rows_per_tile;
+    int num_cols = config.num_tiles_c_dim * config.face_c_dim *  num_faces_c_dim;
+
+    int dst_idx = 0;
+    std::vector<bfloat16> result_vec((unpacked_tilize_src0_vec.size()/num_rows_per_tile));
+    // std::cout << "unpacked_tilize_src0_vec size = " << unpacked_tilize_src0_vec.size() << std::endl;
+
+    for(int r = 0; r < num_rows; r+=num_rows_per_tile) {
+        for(int c = 0; c < num_cols; c++) {
+            float sum = -std::numeric_limits<float>::max();
+            int datum_idx = r * num_cols + c;
+            for(int row = 0; row < num_rows_per_tile; row++) {
+                result_vec[dst_idx] = fmaxf(bfloat16(unpacked_tilize_src0_vec[datum_idx]).to_float(), sum);
+                datum_idx+=num_cols;
+            }
+            dst_idx++;
+        }
+    }
+
+
+    return tt::test_utils::pack_vector<uint32_t, bfloat16>(result_vec);
+}
 
 }   // unit_tests::compute

@@ -14,7 +14,7 @@ template <typename T>
 void print_vector(const std::vector<T>& vec) {
     int idx = 0;
     for (int i = 0; i < vec.size(); i++) {
-        std::cout << vec.at(i) << ", ";
+        std::cout << vec.at(i).to_float() << ", ";
     }
     std::cout << std::endl;
 }

@@ -51,4 +51,9 @@ std::vector<uint16_t> gold_reduce_hw(const std::vector<uint16_t> &src_vec, const
 // Assumes all elements in bfloat16
 std::vector<uint32_t> gold_standard_tilize_w_elwadd(const std::vector<uint32_t> &src0_vec, const std::vector<uint32_t> &src1_vec, const GoldenConfig &config);
 
+// Takes untilized src0_vec
+// returns tilized result of reduce max cols
+// Assumes all elements in bfloat16
+std::vector<uint32_t> gold_standard_tilize_w_reduce(const std::vector<uint32_t> &src0_vec, const GoldenConfig &config);
+
 }   // unit_tests::compute
