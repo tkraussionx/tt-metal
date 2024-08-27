@@ -33,6 +33,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     const std::optional<const Tensor> beta,
     Tensor& output,
     LayerNormType norm_type,
+    LayerNormDistributedType distributed_type,
     float eps,
     CoreCoord compute_grid_size,
     uint32_t subblock_wt,
@@ -43,6 +44,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
 
 struct LayerNorm {
     LayerNormType norm_type;
+    LayerNormDistributedType distributed_type;
     float eps;
     MemoryConfig output_mem_config;
     LayerNormProgramConfig program_config;
