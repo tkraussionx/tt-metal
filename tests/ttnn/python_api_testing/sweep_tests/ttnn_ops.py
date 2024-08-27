@@ -4614,9 +4614,7 @@ def complex_polar(x, *args, device, dtype, layout, input_mem_config, output_mem_
 
     t1 = ttnn.polar(t0, memory_config=output_mem_config)
 
-    return torch.complex(
-        ttnn_tensor_to_torch(t1.real).to(torch.float32), ttnn_tensor_to_torch(t1.imag).to(torch.float32)
-    )
+    return torch.complex(ttnn_tensor_to_torch(t1.real).to(torch.float), ttnn_tensor_to_torch(t1.imag).to(torch.float))
 
 
 def complex_mul_bw(

@@ -16,7 +16,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_
 from tests.tt_eager.python_api_testing.sweep_tests import pytorch_ops
 
 
-def run_complex_polar_tests(
+def run_complex_recip_tests(
     input_shape,
     dtype,
     dlayout,
@@ -31,17 +31,13 @@ def run_complex_polar_tests(
         torch.Tensor(size=input_shape[0]).uniform_(-100, 100), torch.Tensor(size=input_shape[0]).uniform_(-100, 100)
     )
 
-    if dtype[0] == ttnn.bfloat8_b:
-        x.real = ttnn.to_torch(
-            ttnn.from_torch(x.real, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=None, memory_config=None)
-        ).to(torch.float)
+    x.real = ttnn.to_torch(
+        ttnn.from_torch(x.real, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=None, memory_config=None)
+    ).to(torch.float)
 
-        x.imag = ttnn.to_torch(
-            ttnn.from_torch(x.imag, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=None, memory_config=None)
-        ).to(torch.float)
-    else:
-        x.real = x.real.to(torch.bfloat16).to(torch.float)
-        x.imag = x.imag.to(torch.bfloat16).to(torch.float)
+    x.imag = ttnn.to_torch(
+        ttnn.from_torch(x.imag, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=None, memory_config=None)
+    ).to(torch.float)
 
     try:
         # get ref result
@@ -52,7 +48,7 @@ def run_complex_polar_tests(
             ttnn_ops.setup_ttnn_tensor(x.imag, device, dlayout[0], in_mem_config[0], dtype[0]),
         )
 
-        tt_result = ttnn.polar(x, memory_config=output_mem_config)
+        tt_result = ttnn.reciprocal(x, memory_config=output_mem_config)
         tt_result = torch.complex(
             ttnn_ops.ttnn_tensor_to_torch(tt_result.real).to(torch.float),
             ttnn_ops.ttnn_tensor_to_torch(tt_result.imag).to(torch.float),
@@ -73,27 +69,27 @@ def run_complex_polar_tests(
 test_sweep_args = [
     (
         [(224, 128)],
-        [ttnn.bfloat16],
+        [ttnn.bfloat8_b],
         [ttnn.TILE_LAYOUT],
         [ttnn.DRAM_MEMORY_CONFIG],
         ttnn.DRAM_MEMORY_CONFIG,
         14112040,
     ),
     (
-        [(6, 160, 64)],
+        [(8, 128, 128)],
         [ttnn.bfloat8_b],
         [ttnn.TILE_LAYOUT],
-        [ttnn.DRAM_MEMORY_CONFIG],
+        [ttnn.L1_MEMORY_CONFIG],
         ttnn.DRAM_MEMORY_CONFIG,
-        9456908,
+        12014143,
     ),
     (
-        [(3, 2, 192, 64)],
-        [ttnn.bfloat16],
+        [(5, 3, 96, 64)],
+        [ttnn.bfloat8_b],
         [ttnn.TILE_LAYOUT],
-        [ttnn.DRAM_MEMORY_CONFIG],
+        [ttnn.L1_MEMORY_CONFIG],
         ttnn.L1_MEMORY_CONFIG,
-        11871267,
+        4931206,
     ),
 ]
 
@@ -102,5 +98,5 @@ test_sweep_args = [
     "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed",
     (test_sweep_args),
 )
-def test_complex_polar(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
-    run_complex_polar_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+def test_complex_recip(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
+    run_complex_recip_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
