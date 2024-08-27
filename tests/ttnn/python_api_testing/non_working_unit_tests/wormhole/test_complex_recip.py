@@ -41,7 +41,7 @@ def run_complex_recip_tests(
 
     try:
         # get ref result
-        ref_value = torch.polar(x.real, x.imag)
+        ref_value = torch.reciprocal(x)
 
         x = ttnn.complex_tensor(
             ttnn_ops.setup_ttnn_tensor(x.real, device, dlayout[0], in_mem_config[0], dtype[0]),
