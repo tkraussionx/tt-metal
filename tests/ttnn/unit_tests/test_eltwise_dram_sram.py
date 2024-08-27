@@ -22,7 +22,7 @@ def test_run_elt_binary_dram_interleaved(test_func_name, torch_func_name, device
 
     # TODO: fill in MemoryConfig(...) to make a configuration for interleaved
     # DRAM tensor
-    # mem_config = ttnn.MemoryConfig(<fill here!>)
+    mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
 
     in0 = torch.randn(shape).bfloat16()
     in1 = torch.randn(shape).bfloat16()
@@ -48,7 +48,12 @@ def test_run_elt_binary_sram_sharded(test_func_name, torch_func_name, device):
 
     # TODO: fill in create_sharded_memory_config(...) to make a configuration
     # for sharded SRAM tensor (Use 56 Tensix cores, BLOCK_SHARDED, ROW_MAJOR)
-    # mem_config = ttnn.create_sharded_memory_config(<fill here!>)
+    mem_config = ttnn.create_sharded_memory_config(
+        shape=shape,
+        core_grid=ttnn.CoreGrid(x=8, y=7),
+        strategy=ttnn.ShardStrategy.BLOCK,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+    )
 
     in0 = torch.randn(shape).bfloat16()
     in1 = torch.randn(shape).bfloat16()

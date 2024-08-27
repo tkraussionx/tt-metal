@@ -19,11 +19,11 @@ void kernel_main() {
 
   for (uint32_t tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
     // TODO: write a single tile within a for loop
-    cb_wait_front(cb1_id, 1);
-    const auto cb1_l1_addr = get_read_ptr(cb1_id);
+    cb_wait_front(cb1_id, 1/* TODO */);
+    const auto cb1_l1_addr = get_read_ptr(cb1_id/* TODO */);
     noc_async_write_tile(tile_idx, dram_buffer1_addrg, cb1_l1_addr);
     noc_async_write_barrier();
-    cb_pop_front(cb1_id, 1);
+    cb_pop_front(cb1_id, 1/* TODO */);
   }
 
   DPRINT << "Writer END" << ENDL();

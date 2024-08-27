@@ -33,6 +33,9 @@ void kernel_main() {
         #endif
 
         // TODO: get output_dram_buffer_noc_addr and write tile
+        std::uint64_t output_dram_buffer_noc_addr = get_noc_addr(output_dram_noc_x, output_dram_noc_y, output_addr);
+        noc_async_write(cb1_l1_addr, output_dram_buffer_noc_addr, tile_size);
+        noc_async_write_barrier();
 
         cb_pop_front(cb1_id, 1);
 

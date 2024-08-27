@@ -34,7 +34,7 @@ void MAIN {
         tile_regs_wait();
         // TODO 3. Copy dst0 register to cb1 with cb_reserve_back and cb_push_back.
         cb_reserve_back(cb1_id, onetile);
-        pack_tile(dst0, cb1_id, first);
+        pack_tile<false>(dst0, cb1_id, first);
         cb_push_back(cb1_id, onetile);
 
         tile_regs_release();

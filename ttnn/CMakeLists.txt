@@ -80,7 +80,6 @@ set(TTNN_SRCS
 
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/moreh_relu_device_operation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh_eltwise/moreh_relu/device/multi_core_program_factory.cpp
-
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh_eltwise/moreh_binary/device/moreh_binary_device_operation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh_eltwise/moreh_binary/device/add_program_factory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh_eltwise/moreh_binary/device/fusion_program_factory.cpp

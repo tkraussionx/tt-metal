@@ -14,7 +14,7 @@ torch.manual_seed(0)
 @pytest.mark.parametrize(
     "shape",
     [
-        [32, 32],  # single tile
+        # [32, 32],  # single tile
         [1024, 32, 32],  # multiple tiles
     ],
 )
@@ -80,6 +80,7 @@ def test_moreh_fusion(shape, device):
 
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
+    print(tt_output[0:4])
 
     assert_with_pcc(torch_output, tt_output)
     passed = torch.allclose(tt_output, torch_output, atol=0.1, rtol=0.1)

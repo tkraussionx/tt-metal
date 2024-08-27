@@ -21,6 +21,9 @@ void kernel_main() {
         const auto cb0_l1_addr = get_write_ptr(cb0_id);
 
         // TODO: get input_dram_buffer_noc_addr and read tile
+        std::uint64_t input_dram_buffer_noc_addr = get_noc_addr(input_dram_noc_x, input_dram_noc_y, input_addr);
+        noc_async_read(input_dram_buffer_noc_addr, cb0_l1_addr, tile_size);
+        noc_async_read_barrier();
 
         // This section is reserved for kernel debug print practice session.
         #if 0
@@ -36,5 +39,6 @@ void kernel_main() {
         cb_push_back(cb0_id, 1);
 
         // TODO: need to update input_addr
+        input_addr += tile_size;
     }
 }

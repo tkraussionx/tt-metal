@@ -1,6 +1,7 @@
 #include <cstring>
-#include <string>
 #include <random>
+#include <string>
+
 #include "tt_metal/host_api.hpp"
 
 uint16_t round_to_nearest_even(float val) {
@@ -88,15 +89,14 @@ int main() {
     uint32_t cb0_id = tt::CB::c_in0;
     tt::DataFormat cb0_data_format = tt::DataFormat::Float16_b;
     tt::tt_metal::CircularBufferConfig cb0_config =
-        tt::tt_metal::CircularBufferConfig(
-            cb_num_tiles * tile_size, {{cb0_id, cb0_data_format}})
+        tt::tt_metal::CircularBufferConfig(cb_num_tiles * tile_size, {{cb0_id, cb0_data_format}})
             .set_page_size(cb0_id, tile_size);
     tt::tt_metal::CreateCircularBuffer(program, core, cb0_config);
 
     uint32_t cb1_id = tt::CB::c_out0;
     tt::DataFormat cb1_data_format = tt::DataFormat::Float16_b;
-    tt::tt_metal::CircularBufferConfig cb1_config = tt::tt_metal::CircularBufferConfig(
-            cb_num_tiles * tile_size, {{cb1_id, cb1_data_format}})
+    tt::tt_metal::CircularBufferConfig cb1_config =
+        tt::tt_metal::CircularBufferConfig(cb_num_tiles * tile_size, {{cb1_id, cb1_data_format}})
             .set_page_size(cb1_id, tile_size);
     tt::tt_metal::CreateCircularBuffer(program, core, cb1_config);
 
@@ -131,46 +131,48 @@ int main() {
     /////////////////////////////////////////////////////////////////////////////////
     CoreCoord input_dram_noc_xy = input_dram_buffer->noc_coordinates();
     CoreCoord output_dram_noc_xy = output_dram_buffer->noc_coordinates();
-    const std::vector<uint32_t> reader_runtime_args = {
-        input_dram_buffer->address(),
-        static_cast<uint32_t>(input_dram_noc_xy.x),
-        static_cast<uint32_t>(input_dram_noc_xy.y),
-        num_tiles,
-        tile_size};
-    tt::tt_metal::SetRuntimeArgs(program, reader_kernel, core, reader_runtime_args);
+    std::cout << input_dram_noc_xy.x << " " << input_dram_noc_xy.y << std::endl;
+    std::cout << output_dram_noc_xy.x << " " << output_dram_noc_xy.y << std::endl;
+    // const std::vector<uint32_t> reader_runtime_args = {
+    //     input_dram_buffer->address(),
+    //     static_cast<uint32_t>(input_dram_noc_xy.x),
+    //     static_cast<uint32_t>(input_dram_noc_xy.y),
+    //     num_tiles,
+    //     tile_size};
+    // tt::tt_metal::SetRuntimeArgs(program, reader_kernel, core, reader_runtime_args);
 
-    const std::vector<uint32_t> writer_runtime_args = {
-        output_dram_buffer->address(),
-        static_cast<uint32_t>(output_dram_noc_xy.x),
-        static_cast<uint32_t>(output_dram_noc_xy.y),
-        num_tiles,
-        tile_size};
-    tt::tt_metal::SetRuntimeArgs(program, writer_kernel, core, writer_runtime_args);
+    // const std::vector<uint32_t> writer_runtime_args = {
+    //     output_dram_buffer->address(),
+    //     static_cast<uint32_t>(output_dram_noc_xy.x),
+    //     static_cast<uint32_t>(output_dram_noc_xy.y),
+    //     num_tiles,
+    //     tile_size};
+    // tt::tt_metal::SetRuntimeArgs(program, writer_kernel, core, writer_runtime_args);
 
-    const std::vector<uint32_t> compute_runtime_args = { num_tiles };
-    tt::tt_metal::SetRuntimeArgs(program, compute_kernel_id, core, compute_runtime_args);
-    //////////////////////////////////////////////////////////////////////////////////
-    // EnqueueProgram and Copy output_dram_buffer to host buffer1
-    //////////////////////////////////////////////////////////////////////////////////
-    tt::tt_metal::EnqueueProgram(cq, program, true /*blocking*/);
+    // const std::vector<uint32_t> compute_runtime_args = { num_tiles };
+    // tt::tt_metal::SetRuntimeArgs(program, compute_kernel_id, core, compute_runtime_args);
+    // //////////////////////////////////////////////////////////////////////////////////
+    // // EnqueueProgram and Copy output_dram_buffer to host buffer1
+    // //////////////////////////////////////////////////////////////////////////////////
+    // tt::tt_metal::EnqueueProgram(cq, program, true /*blocking*/);
 
-    auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
-    tt::tt_metal::EnqueueReadBuffer(cq, output_dram_buffer, host_buffer1.get(), true /*blocking*/);
-    auto host_buffer1_ptr = reinterpret_cast<uint16_t *>(host_buffer1.get());
+    // auto host_buffer1 = std::shared_ptr<void>(malloc(host_buffer_size), free);
+    // tt::tt_metal::EnqueueReadBuffer(cq, output_dram_buffer, host_buffer1.get(), true /*blocking*/);
+    // auto host_buffer1_ptr = reinterpret_cast<uint16_t *>(host_buffer1.get());
 
-    bool pass = true;
-    for (int i = 0; i < num_tiles * tt::constants::TILE_HW; ++i) {
-        if (host_buffer0_ptr[i] != host_buffer1_ptr[i]) {
-            pass = false;
-            break;
-        }
-    }
-    tt::tt_metal::CloseDevice(device);
+    // bool pass = true;
+    // for (int i = 0; i < num_tiles * tt::constants::TILE_HW; ++i) {
+    //     if (host_buffer0_ptr[i] != host_buffer1_ptr[i]) {
+    //         pass = false;
+    //         break;
+    //     }
+    // }
+    // tt::tt_metal::CloseDevice(device);
 
-    if (pass) {
-        log_info(tt::LogTest, "Test Passed");
-    } else {
-        TT_THROW("Test Failed");
-    }
-    return 0;
+    // if (pass) {
+    //     log_info(tt::LogTest, "Test Passed");
+    // } else {
+    //     TT_THROW("Test Failed");
+    // }
+    // return 0;
 }

@@ -24,4 +24,7 @@ void kernel_main() {
 
     // step2. multicast local L1 buffer to all destination cores
     /* TODO: fill this seciont */
+    uint64_t dst_noc_addr_multicast = get_noc_multicast_addr(dest_noc_x_start, dest_noc_y_start, dest_noc_x_end, dest_noc_y_end, l1_buffer_dest_addr);
+    noc_async_write_multicast(l1_buffer_src_addr, dst_noc_addr_multicast, dram_buffer_size, num_dests);
+    noc_async_write_barrier();
 }
