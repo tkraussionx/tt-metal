@@ -378,8 +378,8 @@ def test_vit_layer(device, model_name, batch_size, sequence_size):
     assert_with_pcc(torch_output, output, 0.9999)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
-@skip_for_wormhole_b0()
+# @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+# @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
 @pytest.mark.parametrize("sequence_size", [224])  ## padded from 197 to 224
