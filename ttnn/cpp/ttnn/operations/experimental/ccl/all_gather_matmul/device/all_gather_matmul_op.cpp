@@ -62,8 +62,6 @@ std::vector<Tensor> AllGatherMatmul::create_output_tensors(const std::vector<Ten
 
 operation::ProgramWithCallbacks AllGatherMatmul::create_program(const std::vector<Tensor> & input_tensors, const std::vector<std::optional<const ttnn::Tensor>>& optional_input_tensors, std::vector<Tensor> &output_tensors) const {
 
-    auto& program_config = std::get<operations::matmul::MatmulMultiCoreReuseMultiCastProgramConfig>(this->matmul_struct.program_config.value());
-
     // Return the AllGatherMatmul program with callbacks
     return all_gather_matmul_multi_core_with_workers(
         input_tensors[0], // input_tensor
@@ -85,16 +83,8 @@ operation::ProgramWithCallbacks AllGatherMatmul::create_program(const std::vecto
         /* Matmul Params */
         {}, // Bias
         this->matmul_struct.bcast_batch.value(),
-        program_config.compute_with_storage_grid_size,
         this->matmul_struct.compute_kernel_config.value(),
-        program_config.in0_block_w,
-        program_config.out_subblock_h,
-        program_config.out_subblock_w,
-        program_config.per_core_M,
-        program_config.per_core_N,
-        program_config.fuse_batch,
-        program_config.transpose_mcast,
-        program_config.fused_activation,
+        this->matmul_struct.program_config.value(),
         this->matmul_struct.untilize_out
     );
 }

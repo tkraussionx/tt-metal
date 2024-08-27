@@ -9,7 +9,7 @@ from ttnn import experimental as ttl
 import ttnn
 from ttnn import ShardTensorToMesh
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from models.utility_functions import skip_for_grayskull
+from models.utility_functions import skip_for_grayskull, skip_for_wormhole_b0
 from tests.ttnn.unit_tests.operations.test_all_gather import is_unsupported_case
 
 
@@ -22,6 +22,8 @@ def run_all_gather_matmul_on_t3000_impl(
     input_dtype,
     layout,
     matmul_output_dim,
+    matmul_config,
+    matmul_weights_dtype,
     max_in0_block_w,
     mem_config,
     num_iters=1,
@@ -40,7 +42,7 @@ def run_all_gather_matmul_on_t3000_impl(
 
     # Create input tensor for the all gather
     _, _, _, hidden_dim = input_shape
-    input_tensor = torch.randn(input_shape).bfloat16().float()
+    input_tensor = torch.randn(input_shape).float()
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
     for i, t in enumerate(input_tensors):
@@ -48,10 +50,10 @@ def run_all_gather_matmul_on_t3000_impl(
     input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
 
     # Create the weight matrix for the matmul
-    weights_tensor = torch.randn([1, 1, hidden_dim, matmul_output_dim * num_devices]).bfloat16().float()
+    weights_tensor = torch.randn([1, 1, hidden_dim, matmul_output_dim * num_devices]).float()
     weight_tt = ttnn.as_tensor(
         weights_tensor,
-        dtype=input_dtype,
+        dtype=matmul_weights_dtype,
         layout=layout,
         device=t3k_device_mesh,
         memory_config=mem_config,
@@ -62,18 +64,35 @@ def run_all_gather_matmul_on_t3000_impl(
     matmul_output = torch.chunk(torch.matmul(input_tensor, weights_tensor), num_devices, dim)
 
     # Configs for ttnn.matmul
-    core_grid = (8, 4)
-    program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
-        compute_with_storage_grid_size=core_grid,
-        in0_block_w=min(max_in0_block_w, hidden_dim // 32 // core_grid[0]),  # how much inner dim you take each time
-        out_subblock_h=1,  # Must be divisible by per_core_M
-        out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
-        per_core_M=max(1, input_shape[2] // 32 // core_grid[1]),  # M / TILE_HEIGHT / Grid_Size
-        per_core_N=max(1, matmul_output_dim // 32 // core_grid[0]),  # N / TILE_WIDTH / Grid_Size
-        transpose_mcast=False,
-        fused_activation=None,  # ttnn.UnaryOpType.SILU,
-        fuse_batch=False,
-    )
+    if matmul_config == "matmul_1d":
+        core_grid = (8, 4)
+        program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=core_grid,
+            in0_block_w=min(max_in0_block_w, hidden_dim // 32 // core_grid[0]),  # how much inner dim you take each time
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=max(1, input_shape[2] // 32 // core_grid[1]),  # M / TILE_HEIGHT / Grid_Size
+            per_core_N=max(1, matmul_output_dim // 32 // core_grid[0]),  # N / TILE_WIDTH / Grid_Size
+            mcast_in0=True,
+            fused_activation=None,  # ttnn.UnaryOpType.SILU,
+            fuse_batch=True,
+        )
+    elif matmul_config == "matmul_2d":
+        core_grid = (8, 4)
+        program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=core_grid,
+            in0_block_w=min(max_in0_block_w, hidden_dim // 32 // core_grid[0]),  # how much inner dim you take each time
+            out_subblock_h=1,  # Must be divisible by per_core_M
+            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            per_core_M=max(1, input_shape[2] // 32 // core_grid[1]),  # M / TILE_HEIGHT / Grid_Size
+            per_core_N=max(1, matmul_output_dim // 32 // core_grid[0]),  # N / TILE_WIDTH / Grid_Size
+            transpose_mcast=False,
+            fused_activation=None,  # ttnn.UnaryOpType.SILU,
+            fuse_batch=False,
+        )
+    else:
+        raise ValueError(f"Unsupported matmul_config: {matmul_config}")
+
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.HiFi4,
         math_approx_mode=True,
@@ -145,13 +164,20 @@ def run_all_gather_matmul_on_t3000_impl(
         logger.info(f"Output {i}: {output}")
         if not eq:
             logger.error(f"output mismatch for tensor {i}")
-        assert eq, f"{i} FAILED: {output}"
+    assert eq, f"{i} FAILED: {output}"
 
 
 # Enumerate the post-commit cases explicitly
+# @skip_for_wormhole_b0()  # Used to disable test
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
-    "num_devices, num_links, input_shape, dim, layout, matmul_output_dim, max_in0_block_w",
+    "matmul_config",
+    [
+        "matmul_2d",
+    ],
+)
+@pytest.mark.parametrize(
+    "num_devices, num_links, input_shape, dim, layout, matmul_output_dim, max_in0_block_w, matmul_weights_dtype",
     [
         (
             8,
@@ -161,6 +187,7 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             1024,
             2,
+            ttl.tensor.DataType.BFLOAT16,
         ),
         (
             8,
@@ -170,6 +197,7 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             1024,
             16,
+            ttl.tensor.DataType.BFLOAT16,
         ),
         (
             8,
@@ -179,6 +207,7 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             1024,
             16,  # NOTE: 64 for some reason gives lower perf
+            ttl.tensor.DataType.BFLOAT16,
         ),
         (
             8,
@@ -188,6 +217,7 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             1024,
             16,
+            ttl.tensor.DataType.BFLOAT16,
         ),
         (  # AllGather + Fused QKV Matmul llama 2k prefill
             8,
@@ -197,6 +227,7 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             1280,
             8,
+            ttl.tensor.DataType.BFLOAT16,
         ),
         (  # AllGather + FF1 Matmul llama 1k prefill
             8,
@@ -206,24 +237,114 @@ def run_all_gather_matmul_on_t3000_impl(
             ttl.tensor.Layout.TILE,
             4096,
             4,
+            ttl.tensor.DataType.BFLOAT16,
         ),
-        ### Test cases that are not supported
-        # (
-        #     8,
-        #     1,
-        #     [8, 1, 33, 256],
-        #     0,
-        #     ttl.tensor.Layout.ROW_MAJOR,
-        #     1024,
-        # ),
-        # (
-        #     4,
-        #     2,
-        #     [4, 1, 33, 256],
-        #     0,
-        #     ttl.tensor.Layout.ROW_MAJOR,
-        #     1024,
-        # ),
+    ],
+)
+@pytest.mark.parametrize(
+    "input_dtype",
+    [
+        ttl.tensor.DataType.BFLOAT16,
+    ],
+)
+@pytest.mark.parametrize(
+    "mem_config",
+    [
+        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
+    ],
+)
+@pytest.mark.parametrize(
+    "enable_async",
+    [
+        True,
+        # False,
+    ],
+)
+def test_all_gather_matmul_on_t3000_post_commit(
+    t3k_device_mesh,
+    num_devices,
+    input_shape,
+    dim,
+    num_links,
+    input_dtype,
+    layout,
+    matmul_output_dim,
+    matmul_config,
+    matmul_weights_dtype,
+    max_in0_block_w,
+    mem_config,
+    use_program_cache,
+    function_level_defaults,
+    enable_async,
+):
+    run_all_gather_matmul_on_t3000_impl(
+        t3k_device_mesh,
+        num_devices,
+        input_shape,
+        dim,
+        num_links,
+        input_dtype,
+        layout,
+        matmul_output_dim,
+        matmul_config,
+        matmul_weights_dtype,
+        max_in0_block_w,
+        mem_config,
+    )
+
+
+# Enumerate the post-commit cases explicitly
+# @skip_for_wormhole_b0() # Used to disable test
+@skip_for_grayskull("Requires eth connected devices to run")
+@pytest.mark.parametrize(
+    "matmul_config",
+    [
+        "matmul_1d",
+    ],
+)
+@pytest.mark.parametrize(
+    "num_devices, num_links, input_shape, dim, layout, matmul_output_dim, max_in0_block_w, matmul_weights_dtype",
+    [
+        (
+            8,
+            1,
+            [1, 1, 32, 16 * 32],
+            3,
+            ttl.tensor.Layout.TILE,
+            1024,
+            2,
+            ttl.tensor.DataType.BFLOAT16,
+        ),
+        (  # Llama decode FF1
+            8,
+            1,
+            [1, 1, 32, 1024 * 8],
+            3,
+            ttl.tensor.Layout.TILE,
+            4096,
+            2,  # TODO: update
+            ttl.tensor.DataType.BFLOAT4_B,
+        ),
+        (  # Llama decode Fused QKV
+            8,
+            1,
+            [1, 1, 32, 1024 * 8],
+            3,
+            ttl.tensor.Layout.TILE,
+            1280,
+            2,  # TODO: update
+            ttl.tensor.DataType.BFLOAT4_B,
+        ),
+        (  # Llama decode Selfout
+            8,
+            1,
+            [1, 1, 32, 1024 * 8],
+            3,
+            ttl.tensor.Layout.TILE,
+            1024,
+            2,  # TODO: update
+            ttl.tensor.DataType.BFLOAT4_B,
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -245,7 +366,7 @@ def run_all_gather_matmul_on_t3000_impl(
         False,
     ],
 )
-def test_all_gather_matmul_on_t3000_post_commit(
+def test_all_gather_matmul_1d_on_t3000_post_commit(
     t3k_device_mesh,
     num_devices,
     input_shape,
@@ -254,6 +375,8 @@ def test_all_gather_matmul_on_t3000_post_commit(
     input_dtype,
     layout,
     matmul_output_dim,
+    matmul_config,
+    matmul_weights_dtype,
     max_in0_block_w,
     mem_config,
     use_program_cache,
@@ -269,6 +392,8 @@ def test_all_gather_matmul_on_t3000_post_commit(
         input_dtype,
         layout,
         matmul_output_dim,
+        matmul_config,
+        matmul_weights_dtype,
         max_in0_block_w,
         mem_config,
     )

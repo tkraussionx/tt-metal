@@ -71,16 +71,8 @@ operation::ProgramWithCallbacks all_gather_matmul_multi_core_with_workers(
     /* Matmul Params */
     const std::optional<const Tensor> bias,
     bool bcast_batch,
-    CoreCoord compute_with_storage_grid_size,
     DeviceComputeKernelConfig compute_kernel_config,
-    uint32_t in0_block_w,
-    uint32_t out_subblock_h,
-    uint32_t out_subblock_w,
-    uint32_t per_core_M,
-    uint32_t per_core_N,
-    bool fuse_batch,
-    bool transpose_mcast,
-    std::optional<operations::matmul::UnaryWithParam> fused_activation,
+    const operations::matmul::MatmulProgramConfig program_config,
     bool untilize_out
 );
 }  // namespace experimental
