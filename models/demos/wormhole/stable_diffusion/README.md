@@ -32,6 +32,8 @@ If you wish to run the demo with a different input use `pytest --disable-warning
 
 If you would like to run an interactive demo which will prompt you for the input, use `pytest models/demos/wormhole/stable_diffusion/demo/demo.py::test_interactive_demo`
 
+If you would like to run a batch of 100 image generations with prompts from Gustavosta/Stable-Diffusion-Prompts, use `pytest models/demos/wormhole/stable_diffusion/demo/demo.py::test_sd_100_batch`. Images will show up in the root folder, along with a metrics.txt file with the time-to-generate for each image.
+
 Our second demo is designed to run poloclub/diffusiondb dataset, run this with `pytest --disable-warnings models/demos/wormhole/stable_diffusion/demo/demo.py::test_demo_diffusiondb`.
 
 If you wish to run for `num_prompts` samples and `num_inference_steps` denoising steps, use `pytest --disable-warnings models/demos/wormhole/stable_diffusion/demo/demo.py::test_demo_diffusiondb[<num_prompts>-<num_inference_steps>]`
