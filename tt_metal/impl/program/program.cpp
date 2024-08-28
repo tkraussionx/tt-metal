@@ -154,7 +154,8 @@ KernelGroup::KernelGroup(
     kernel_id_array_t kernel_ids,
     bool erisc_is_idle,
     int last_cb_index,
-    const CoreRangeSet &new_ranges) :
+    const CoreRangeSet &new_ranges,
+    bool send_go) :
     core_ranges({}) {
 
     this->programmable_core_type_index = programmable_core_type_index;
@@ -195,7 +196,7 @@ KernelGroup::KernelGroup(
 
     this->launch_msg.kernel_config.exit_erisc_kernel = false;
     this->launch_msg.kernel_config.max_cb_index = last_cb_index + 1;
-    this->launch_msg.go.run = RUN_MSG_GO;
+    if (send_go) this->launch_msg.go.run = RUN_MSG_GO;
 }
 
 CoreType KernelGroup::get_core_type() const {
@@ -245,6 +246,7 @@ struct KernelGroupIntHasher {
 };
 
 void Program::update_kernel_groups(uint32_t programmable_core_type_index) {
+    bool send_go = false;
     if (core_to_kernel_group_index_table_[programmable_core_type_index].size() == 0) {
         bool erisc_is_idle = false;
 
@@ -272,6 +274,10 @@ void Program::update_kernel_groups(uint32_t programmable_core_type_index) {
         grid.resize(grid_extent_[programmable_core_type_index].x * grid_extent_[programmable_core_type_index].y);
         for (auto [id, kernel] : kernels_[programmable_core_type_index]) {
             for (auto core : kernel->logical_cores()) {
+                if ((core.x == 1 and core.y == 7) || (core.x == 0 and core.y == 7)) {
+                    // std::cout << "Encountered Dispatch Kernel sending go signal " << core.x << " " << core.y << std::endl;
+                    send_go = true;
+                }
                 int core_index = core.y * grid_extent_[programmable_core_type_index].x + core.x;
                 grid[core_index].valid = true;
                 grid[core_index].update(kernel->dispatch_class(), id);
@@ -327,7 +333,8 @@ void Program::update_kernel_groups(uint32_t programmable_core_type_index) {
                 kg_to_cores.first.kernel_ids,
                 erisc_is_idle,
                 last_cb_index,
-                kg_to_cores.second));
+                kg_to_cores.second,
+                send_go));
             index++;
         }
     }

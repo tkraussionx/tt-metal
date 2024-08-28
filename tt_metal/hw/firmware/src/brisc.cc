@@ -378,6 +378,8 @@ int main() {
             cfg_regs[RISCV_IC_INVALIDATE_InvalidateAll_ADDR32] = RISCV_IC_BRISC_MASK | RISCV_IC_TRISC_ALL_MASK | RISCV_IC_NCRISC_MASK;
 
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch.kernel_config.enables;
+            // true if the launch_msg encodes that this tensix core is running DM or compute kernels. If false, this go signal is basically ignored.
+            bool run_kernels = enables & (DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM1 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM0 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_COMPUTE);
             run_triscs(enables);
 
             noc_index = mailboxes->launch.kernel_config.brisc_noc_id;
@@ -405,8 +407,8 @@ int main() {
 
             mailboxes->launch.go.run = RUN_MSG_DONE;
 
-            // Notify dispatcher core that it has completed
-            if (mailboxes->launch.kernel_config.mode == DISPATCH_MODE_DEV) {
+            // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
+            if (mailboxes->launch.kernel_config.mode == DISPATCH_MODE_DEV && run_kernels) {
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(mailboxes->launch.kernel_config.dispatch_core_x),
                         NOC_Y(mailboxes->launch.kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);

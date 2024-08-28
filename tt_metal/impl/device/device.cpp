@@ -566,7 +566,8 @@ void Device::configure_kernel_variant(
     NOC my_noc_index,
     NOC upstream_noc_index,
     NOC downstream_noc_index,
-    bool is_active_eth_core) {
+    bool is_active_eth_core,
+    bool send_to_brisc) {
 
     const auto& grid_size = this->grid_size();
 
@@ -590,12 +591,15 @@ void Device::configure_kernel_variant(
     defines.insert(defines_in.begin(), defines_in.end());
 
     if (dispatch_core_type == CoreType::WORKER) {
+        if (send_to_brisc) {
+            // std::cout << "placing kernel " << path << " on brisc" << std::endl;
+        }
         tt::tt_metal::CreateKernel(
             program,
             path,
             kernel_core,
             tt::tt_metal::DataMovementConfig {
-                .processor = tt::tt_metal::DataMovementProcessor::RISCV_1,
+                .processor = send_to_brisc ? tt::tt_metal::DataMovementProcessor::RISCV_0 : tt::tt_metal::DataMovementProcessor::RISCV_1,
                 .noc = my_noc_index,
                 .compile_args = compile_args,
                 .defines = defines
@@ -1465,7 +1469,10 @@ void Device::compile_command_queue_programs() {
     constexpr uint32_t prefetch_sync_sem = 0;
     constexpr uint32_t prefetch_downstream_cb_sem = 1;
     constexpr uint32_t prefetch_sem = 1;
+    constexpr uint32_t prefetch_dispatch_s_sync_sem = 2;
     constexpr uint32_t dispatch_sem = 0;
+    constexpr uint32_t dispatch_s_sem = 1;
+    constexpr uint32_t dispatch_s_sync_sem_id = 2;
     constexpr uint32_t mux_sem = 0;
     constexpr uint32_t demux_sem = 0;
 
@@ -1498,14 +1505,15 @@ void Device::compile_command_queue_programs() {
             CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
-            log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
-            log_debug(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
+            log_info(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
+            log_info(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_core.str(), dispatch_physical_core.str());
 
             uint32_t command_queue_start_addr = get_absolute_cq_offset(channel, cq_id, cq_size);
             uint32_t issue_queue_start_addr = command_queue_start_addr + CQ_START;
             uint32_t issue_queue_size = this->sysmem_manager_->get_issue_queue_size(cq_id);
             uint32_t completion_queue_start_addr = issue_queue_start_addr + issue_queue_size;
             uint32_t completion_queue_size = this->sysmem_manager_->get_completion_queue_size(cq_id);
+            uint32_t dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
 
             std::vector<uint32_t> prefetch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1530,7 +1538,10 @@ void Device::compile_command_queue_programs() {
                 dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
                 dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
                 true,   // is_dram_variant
-                true    // is_host_variant
+                true,    // is_host_variant
+                dispatch_s_buffer_base,
+                prefetch_dispatch_s_sync_sem,
+                dispatch_s_sem
             };
 
             configure_kernel_variant(
@@ -1550,6 +1561,7 @@ void Device::compile_command_queue_programs() {
 
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // sync with dispatch_s
 
             std::vector<uint32_t> dispatch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1573,7 +1585,11 @@ void Device::compile_command_queue_programs() {
                 0,      // unused prefetch_downstream_buffer_pages
                 num_compute_cores, // max_write_packed_cores
                 true,   // is_dram_variant
-                true    // is_host_variant
+                true,    // is_host_variant
+                dispatch_s_buffer_base,
+                dispatch_s_sem,
+                prefetch_dispatch_s_sync_sem,
+                dispatch_s_sync_sem_id,
             };
 
             configure_kernel_variant(
@@ -1591,7 +1607,25 @@ void Device::compile_command_queue_programs() {
                 my_noc_index
             );
 
+            configure_kernel_variant(
+                *command_queue_program_ptr,
+                "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp",
+                dispatch_compile_args,
+                dispatch_core,
+                dispatch_physical_core,
+                dispatch_core_type,
+                prefetch_physical_core,
+                CoreCoord{0, 0},
+                std::map<string, string> {},
+                dispatch_upstream_noc_index,
+                dispatch_upstream_noc_index,
+                dispatch_upstream_noc_index,
+                false,
+                true
+            );
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type);
         }
         detail::CompileProgram(this, *command_queue_program_ptr, /*fd_bootloader_mode=*/true);
         this->command_queue_programs.push_back(std::move(command_queue_program_ptr));

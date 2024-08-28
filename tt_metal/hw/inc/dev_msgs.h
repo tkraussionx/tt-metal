@@ -95,6 +95,9 @@ struct kernel_config_msg_t {
     volatile uint8_t exit_erisc_kernel;
     volatile uint8_t pad1;
     volatile uint16_t pad2;
+    volatile uint32_t pad3;
+    volatile uint32_t pad4;
+    volatile uint32_t pad5;
 } __attribute__((packed));
 
 struct go_msg_t {

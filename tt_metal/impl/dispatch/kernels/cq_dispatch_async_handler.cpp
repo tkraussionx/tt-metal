@@ -1,0 +1,156 @@
+// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+// Dispatch kernel
+//  - receives data in pages from prefetch kernel into the dispatch buffer ring buffer
+//  - processes commands with embedded data from the dispatch buffer to write/sync/etc w/ destination
+//  - sync w/ prefetcher is via 2 semaphores, page_ready, page_done
+//  - page size must be a power of 2
+//  - # blocks must evenly divide the dispatch buffer size
+//  - dispatch buffer base must be page size aligned
+
+#include "debug/assert.h"
+#include "debug/dprint.h"
+#include "tt_metal/impl/dispatch/cq_commands.hpp"
+#include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
+#include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
+#include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+
+constexpr uint32_t dispatch_cb_log_page_size = get_compile_time_arg_val(1);
+constexpr uint32_t dispatch_cb_page_size = 1 << dispatch_cb_log_page_size;
+constexpr uint32_t dispatch_cb_pages = get_compile_time_arg_val(2);
+constexpr uint32_t cb_base = get_compile_time_arg_val(22);
+constexpr uint32_t cb_end = cb_base + dispatch_cb_pages * dispatch_cb_page_size;
+
+constexpr uint32_t my_dispatch_cb_sem_id = get_compile_time_arg_val(23);
+constexpr uint32_t upstream_dispatch_cb_sem_id = get_compile_time_arg_val(24);
+constexpr uint32_t dispatch_s_sync_sem_id = get_compile_time_arg_val(25);
+
+constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
+constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
+
+static uint32_t num_pages_acquired = 0;
+static uint32_t num_mcasts_sent = 0;
+
+FORCE_INLINE
+void dispatch_s_noc_semaphore_inc(uint64_t addr, uint32_t incr, uint8_t noc_id = noc_index) {
+    /*
+    [REFER TO grayskull/noc/noc.h for the documentation of noc_atomic_increment()]
+    Generic increment with 32-bit wrap.
+  */
+    DEBUG_STATUS("NSIW");
+    DEBUG_SANITIZE_NOC_ADDR(noc_id, addr, 4);
+    DEBUG_INSERT_DELAY(TransactionAtomic);
+    noc_fast_atomic_increment(noc_id, BRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/, false /*posted*/);
+    DEBUG_STATUS("NSID");
+}
+
+FORCE_INLINE
+uint32_t wrapped_distance(uint32_t num_pages_released, uint32_t num_pages_acquired) {
+    // num_pages_released >= num_pages_acquired at all times
+    return (num_pages_released > num_pages_acquired) ? (num_pages_released - num_pages_acquired) : (UINT32_MAX - num_pages_acquired + num_pages_released + 1);
+}
+
+template<uint32_t noc_xy, uint32_t sem_id>
+FORCE_INLINE
+void cb_acquire_pages_dispatch_s(uint32_t n) {
+
+    volatile tt_l1_ptr uint32_t* sem_addr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(sem_id));
+
+    DEBUG_STATUS("DAPW");
+    // Use a wrapping compare here to compare distance
+    // Required for trace which steals downstream credits and may make the value negative
+    uint32_t heartbeat = 0;
+    // DPRINT << " Num Pages acquired: " << num_pages_acquired << ENDL();
+    // DPRINT <<  "Num pages release: " << *sem_addr << ENDL();
+    while (wrapped_distance(*sem_addr, num_pages_acquired) < n) {
+        IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
+    }
+    DEBUG_STATUS("DAPD");
+    num_pages_acquired += n;
+}
+
+template<uint32_t noc_xy, uint32_t sem_id>
+FORCE_INLINE
+void cb_release_pages_dispatch_s(uint32_t n) {
+    dispatch_s_noc_semaphore_inc(get_noc_addr_helper(noc_xy, get_semaphore<fd_core_type>(sem_id)), n, 1);
+}
+
+FORCE_INLINE
+void noc_async_write_multicast_one_packet_dispatch_s(
+    std::uint32_t src_local_l1_addr,
+    std::uint64_t dst_noc_addr_multicast,
+    std::uint32_t size,
+    std::uint32_t num_dests,
+    bool linked = false,
+    bool multicast_path_reserve = true) {
+    DEBUG_STATUS("NMPW");
+    DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(1, dst_noc_addr_multicast, src_local_l1_addr, size);
+    while (!noc_cmd_buf_ready(1, NCRISC_WR_CMD_BUF));
+    DEBUG_STATUS("NWPD");
+
+    uint32_t noc_cmd_field =
+                            NOC_CMD_CPY | NOC_CMD_WR |
+                            NOC_CMD_VC_STATIC |
+                            NOC_CMD_STATIC_VC(NOC_MULTICAST_WRITE_VC) |
+                            (linked ? NOC_CMD_VC_LINKED : 0x0) |
+                            ((multicast_path_reserve ? NOC_CMD_PATH_RESERVE : 0) | NOC_CMD_BRCST_PACKET) |
+                            NOC_CMD_RESP_MARKED;
+
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_noc_addr_multicast);
+#ifdef ARCH_BLACKHOLE
+    // Handles writing to PCIe
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_MID, (uint32_t)(dst_noc_addr_multicast >> 32) & 0x1000000F);
+#endif
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(dst_noc_addr_multicast >> NOC_ADDR_COORD_SHIFT) & NOC_COORDINATE_MASK);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_AT_LEN_BE,  size);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_WR_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_nonposted_writes_num_issued[1] += 1;
+    noc_nonposted_writes_acked[1] += num_dests;
+}
+
+void kernel_main() {
+    DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
+    uint32_t cmd_ptr = cb_base;
+    bool done = false;
+    while(!done) {
+        // These need to use NOC 1 BRISC_AT_CMD_BUF
+        // DPRINT << "Trying to acquire pages" << ENDL();
+        cb_acquire_pages_dispatch_s<my_noc_xy, my_dispatch_cb_sem_id>(1);
+        // DPRINT << "Acquired pages" << ENDL();
+        volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
+        if (cmd->base.cmd_id == CQ_DISPATCH_CMD_INLINE_MCAST) {
+            DPRINT << "Received Mcast Command " << cmd->mcast.num_mcast_dests  << " " << cmd_ptr <<  ENDL();
+            volatile tt_l1_ptr uint32_t* sync_sem_addr =
+                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
+            uint32_t mcast_grid = cmd->mcast.mcast_grid;
+            uint32_t go_signal_addr = 96;
+            uint32_t tt_l1_ptr* go_signal_location = (uint32_t tt_l1_ptr*)go_signal_addr;
+            *go_signal_location = 0x80;
+            uint64_t dst = get_noc_addr_helper(mcast_grid, 96);
+
+            // Wait for notification from dispatch_d, signalling that its safe to send the go signal
+            while (*sync_sem_addr <= num_mcasts_sent);
+            num_mcasts_sent++;
+            // DPRINT << "Recieved Sem update" << ENDL();
+            noc_async_write_multicast_one_packet_dispatch_s(96, dst, 4, cmd->mcast.num_mcast_dests);
+            while (!ncrisc_noc_nonposted_writes_flushed(1));
+            DPRINT << "Mcast done" << ENDL();
+        }
+        else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
+            DPRINT << "Terminating" << ENDL();
+            done = true;
+        }
+
+        cmd_ptr += sizeof(CQDispatchCmd);
+        cmd_ptr = round_up_pow2(cmd_ptr, dispatch_cb_page_size);
+        cb_release_pages_dispatch_s<upstream_noc_xy, upstream_dispatch_cb_sem_id>(1);
+        if (cmd_ptr == cb_end) {
+            cmd_ptr = cb_base;
+        }
+    }
+}

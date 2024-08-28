@@ -21,7 +21,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 @pytest.mark.parametrize("N", [1024])
 @pytest.mark.parametrize("activations_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("weights_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_matmul_1d_in0_batched(
     device,
     batch,
@@ -123,7 +123,7 @@ def test_matmul_1d_in0_batched(
 @pytest.mark.parametrize("N", [1024])
 @pytest.mark.parametrize("activations_dtype", [ttnn.bfloat8_b])
 @pytest.mark.parametrize("weights_dtype", [ttnn.bfloat8_b])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_linear_fp32_acc_l1(
     device,
     packer_l1_acc,
@@ -230,7 +230,7 @@ def test_linear_fp32_acc_l1(
 @pytest.mark.parametrize("out_sharded", [True, False], ids=["out_sharded", "out_unsharded"])
 @pytest.mark.parametrize("B, H, M, K, N, out_subblock_h, out_subblock_w", [[2, 16, 384, 64, 128, 1, 4]])
 @pytest.mark.parametrize("activations_dtype", [ttnn.bfloat8_b])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_matmul_no_mcast_fp32_acc_l1(
     device,
     packer_l1_acc,
@@ -346,7 +346,7 @@ def test_matmul_no_mcast_fp32_acc_l1(
 @pytest.mark.parametrize("N", [1024])
 @pytest.mark.parametrize("activations_dtype", [ttnn.float32])
 @pytest.mark.parametrize("weights_dtype", [ttnn.float32])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_matmul_1d_fp32_input_output(
     device,
     packer_l1_acc,
@@ -459,7 +459,7 @@ def test_matmul_1d_fp32_input_output(
 @pytest.mark.parametrize("out_sharded", [True, False], ids=["out_sharded", "out_unsharded"])
 @pytest.mark.parametrize("B, H, M, K, N, out_subblock_h, out_subblock_w", [[2, 16, 384, 64, 128, 1, 4]])
 @pytest.mark.parametrize("activations_dtype", [ttnn.float32])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_matmul_no_mcast_fp32_input_output(
     device,
     packer_l1_acc,
@@ -574,7 +574,7 @@ def test_matmul_no_mcast_fp32_input_output(
 @pytest.mark.parametrize("B, H, M, K, N, out_subblock_h, out_subblock_w", [[2, 16, 384, 128, 64, 2, 2]])
 @pytest.mark.parametrize("activations_dtype", [ttnn.bfloat8_b])
 @pytest.mark.parametrize("output_dtype", [ttnn.bfloat16, ttnn.float32])
-@pytest.mark.parametrize("enable_async, num_loops", ((True, 2), (False, 1)))
+@pytest.mark.parametrize("enable_async, num_loops", ((True, 20), (False, 1)))
 def test_matmul_no_untilize_output_param(
     device,
     packer_l1_acc,
