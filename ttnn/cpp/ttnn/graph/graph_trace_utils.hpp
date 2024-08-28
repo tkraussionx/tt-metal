@@ -10,6 +10,9 @@
 
 namespace ttnn::graph {
 
+std::vector<uint32_t> extract_circular_buffer_allocations(const nlohmann::json& trace);
+std::vector<uint32_t> extract_l1_buffer_allocations(const nlohmann::json& trace);
+
 uint32_t extract_peak_L1_memory_usage(const nlohmann::json& trace);
 
 // Returns count of intermediate and output tensors
