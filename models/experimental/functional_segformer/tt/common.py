@@ -48,12 +48,16 @@ class Conv:
             transpose_shards=False,
             reshard_if_not_optimal=self.reshard,
             deallocate_activation=self.deallocate,
+            act_block_w_div=1,
             reallocate_halo_output=True,
             enable_act_double_buffer=True,
             enable_split_reader=False,
         )
         if self.act_block_h is not None:
             conv_config.act_block_h_override = self.act_block_h
+
+        print("input_tensor shape", input_tensor.shape)
+        print("input_tensor memory", input_tensor.memory_config())
 
         [output_tensor, _out_height, _out_width, self.weights, self.bias] = ttnn.conv2d(
             input_tensor=input_tensor,
@@ -72,7 +76,7 @@ class Conv:
             groups=self.groups,
         )
         print("completed conv")
-        output_tensor = ttnn.from_device(output_tensor)
+        output_tensor = ttnn.from_device(output_tensor)  # hang from here
         print("completed removing from device")
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = ttnn.reshape(
