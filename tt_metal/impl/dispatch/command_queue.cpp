@@ -984,13 +984,20 @@ void EnqueueProgramCommand::assemble_device_commands(
         std::vector<CQDispatchWritePackedUnicastSubCmd> unicast_go_signal_sub_cmds;
         std::vector<std::pair<uint32_t, uint32_t>> multicast_go_signals_payload;
         std::vector<std::pair<uint32_t, uint32_t>> unicast_go_signals_payload;
+
         constexpr uint32_t go_signal_sizeB = sizeof(launch_msg_t);
+        launch_msg_t empty_launch_msg;
+        std::memset(&empty_launch_msg, 0, go_signal_sizeB);
+        cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + go_signal_sizeB, PCIE_ALIGNMENT);
+
         constexpr uint32_t aligned_go_signal_sizeB = align(go_signal_sizeB, L1_ALIGNMENT);
         constexpr uint32_t go_signal_size_words = aligned_go_signal_sizeB / sizeof(uint32_t);
 
         // TODO: eventually the code below could be structured to loop over programmable_indices
         // and check for mcast/unicast
         uint32_t programmable_core_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX);
+        std::vector<uint32_t> go_signal_mcast_grids = {};
+        std::vector<uint16_t> go_signal_num_mcast_dests = {};
         for (KernelGroup& kernel_group : program.get_kernel_groups(programmable_core_index)) {
             kernel_group.launch_msg.kernel_config.mode = DISPATCH_MODE_DEV;
             kernel_group.launch_msg.kernel_config.dispatch_core_x = this->dispatch_core.x;
@@ -1010,7 +1017,9 @@ void EnqueueProgramCommand::assemble_device_commands(
                     .noc_xy_addr = this->device->get_noc_multicast_encoding(
                         this->noc_index, CoreRange(physical_start, physical_end)),
                     .num_mcast_dests = (uint32_t)core_range.size()});
-
+                go_signal_mcast_grids.push_back(this->device->get_noc_multicast_encoding(
+                        NOC::NOC_1, CoreRange(physical_start, physical_end)));
+                go_signal_num_mcast_dests.push_back((uint16_t)(core_range.size()));
                 multicast_go_signal_data.emplace_back(launch_message_data, go_signal_sizeB);
             }
         }
@@ -1058,6 +1067,10 @@ void EnqueueProgramCommand::assemble_device_commands(
                 this->packed_write_max_unicast_sub_cmds,
                 unicast_go_signals_payload);
         }
+        // dispatch_s sem update
+        // cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        // Go signal Mcast Cmd
+        cmd_sequence_sizeB += 2 * go_signal_mcast_grids.size() * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
         cached_program_command_sequence.program_command_sequence = HostMemDeviceCommand(cmd_sequence_sizeB);
 
@@ -1166,14 +1179,13 @@ void EnqueueProgramCommand::assemble_device_commands(
                 kernel_bins_prefetch_subcmds[i].size());
         }
 
-        // Wait Noc Write Barrier, wait for binaries/configs to be written to worker cores
-        if (program.program_transfer_info.num_active_cores > 0) {
-            program_command_sequence.add_dispatch_wait(true, DISPATCH_MESSAGE_ADDR, 0, 0, false, false);
-        }
-
         // Go Signals
         cached_program_command_sequence.go_signals.reserve(
             multicast_go_signal_sub_cmds.size() + unicast_go_signal_sub_cmds.size());
+        CoreCoord start_phys = device->physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER);
+        CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(7, 6), CoreType::WORKER);
+        CoreRange full_grid = CoreRange(start_phys, end_phys);
+        program_command_sequence.add_dispatch_write_linear<true>(true, 56, device->get_noc_multicast_encoding(this->noc_index, full_grid), hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH), go_signal_sizeB, &empty_launch_msg);
         if (multicast_go_signal_sub_cmds.size() > 0) {
             uint32_t curr_sub_cmd_idx = 0;
             for (const auto& [num_sub_cmds_in_cmd, multicast_go_signal_payload_sizeB] : multicast_go_signals_payload) {
@@ -1225,6 +1237,16 @@ void EnqueueProgramCommand::assemble_device_commands(
                 }
             }
         }
+
+        // Wait Noc Write Barrier, wait for binaries/configs and launch_msg to be written to worker cores
+        if (program.program_transfer_info.num_active_cores > 0) {
+            program_command_sequence.add_dispatch_wait(true, DISPATCH_MESSAGE_ADDR, 0, 0, false, false);
+        }
+        // Have dispatch_s send the go signal
+        auto mcast_grid = this->device->get_noc_multicast_encoding(
+                        NOC::NOC_1, CoreRange(start_phys, end_phys));
+        program_command_sequence.add_dispatch_s_sem_update();
+        program_command_sequence.add_dispatch_s_mcast(mcast_grid, 56, 1);
     } else {
         uint32_t i = 0;
         ZoneScopedN("program_loaded_on_device");
@@ -1661,8 +1683,15 @@ void EnqueueTerminateCommand::process() {
 
     // dispatch and prefetch terminate commands each needs to be a separate fetch queue entry
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
-    HugepageDeviceCommand dispatch_command_sequence(cmd_region, cmd_sequence_sizeB);
-    dispatch_command_sequence.add_dispatch_terminate();
+    HugepageDeviceCommand dispatch_d_command_sequence(cmd_region, cmd_sequence_sizeB);
+    dispatch_d_command_sequence.add_dispatch_terminate(0);
+    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
+    this->manager.fetch_queue_reserve_back(this->command_queue_id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);
+
+    cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
+    HugepageDeviceCommand dispatch_s_command_sequence(cmd_region, cmd_sequence_sizeB);
+    dispatch_s_command_sequence.add_dispatch_terminate(1);
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->command_queue_id);
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->command_queue_id);

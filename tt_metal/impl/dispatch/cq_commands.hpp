@@ -50,6 +50,8 @@ enum CQDispatchCmdId : uint8_t {
     CQ_DISPATCH_CMD_REMOTE_WRITE = 13,      // dispatch_d issues write to address on L-Chip through dispatch_h
     CQ_DISPATCH_CMD_SET_WRITE_OFFSET = 14,  // set the offset to add to all non-host destination addresses (relocation)
     CQ_DISPATCH_CMD_TERMINATE = 15,         // quit
+    CQ_DISPATCH_CMD_INLINE_MCAST = 16,
+    CQ_DISPATCH_CMD_SEM_UPDATE = 17,
     CQ_DISPATCH_CMD_MAX_COUNT,              // for checking legal IDs
 };
 
@@ -109,7 +111,7 @@ struct CQPrefetchRelayPagedPackedSubCmd {
 constexpr uint32_t CQ_PREFETCH_CMD_RELAY_PAGED_PACKED_MAX_SUB_CMDS = 35;
 
 struct CQPrefetchRelayInlineCmd {
-    uint8_t pad1;
+    uint8_t dispatcher_type;
     uint16_t pad2;
     uint32_t length;
     uint32_t stride;          // explicit stride saves a few insns on device
@@ -261,6 +263,18 @@ struct CQDispatchSetWriteOffsetCmd {
     uint32_t offset2;
 } __attribute__((packed));
 
+struct CQDispatchInlineMcastCmd {
+    uint8_t wait_count;
+    uint16_t num_mcast_dests;
+    uint32_t mcast_grid;
+} __attribute__((packed));
+
+struct CQDispatchSemUpdate {
+    uint8_t pad1;
+    uint16_t pad2;
+    uint32_t pad3;
+} __attribute__((packed));
+
 struct CQDispatchCmd {
     CQDispatchBaseCmd base;
 
@@ -275,6 +289,7 @@ struct CQDispatchCmd {
         CQGenericDebugCmd debug;
         CQDispatchDelayCmd delay;
         CQDispatchSetWriteOffsetCmd set_write_offset;
+        CQDispatchInlineMcastCmd mcast;
     } __attribute__((packed));
 };
 
