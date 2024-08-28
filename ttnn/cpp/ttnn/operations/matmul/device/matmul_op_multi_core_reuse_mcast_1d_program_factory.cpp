@@ -642,6 +642,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
 
             if (i < num_cores_with_work) {
+                if (fuse_op) {
+                    fused_op_signaler->emit_matmul_fused_op_rt_args(mm_in0_sender_args, false);
+                }
+
                 tt_metal::SetRuntimeArgs(
                     program,
                     mm_kernel_in0_mcast_cores_with_work_and_in_receiver_grid_id,
