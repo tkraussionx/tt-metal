@@ -13,13 +13,14 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 
 @pytest.mark.parametrize("height", [32])  # [32, 30])
 # @pytest.mark.parametrize("width", [128 * 1024])  # [32, 62])
-@pytest.mark.parametrize("width", [128])  # [32, 62])
+@pytest.mark.parametrize("width", [64])  # [32, 62])
 @pytest.mark.parametrize("on_device", [True])  # [True, False])
 @pytest.mark.parametrize("from_layout", [ttnn.TILE_LAYOUT])  # [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 @pytest.mark.parametrize("to_layout", [ttnn.ROW_MAJOR_LAYOUT])  # [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 @pytest.mark.parametrize("start_with_padding", [False])
 # @pytest.mark.parametrize("start_with_padding", [False, True])
 def test_to_layout_2D(device, height, width, on_device, from_layout, to_layout, start_with_padding):
+    torch.manual_seed(0)
     torch_input_tensor = torch.rand((height, width), dtype=torch.bfloat16)
 
     pad_h = (ttnn.TILE_SIZE - height % ttnn.TILE_SIZE) % ttnn.TILE_SIZE
@@ -57,6 +58,11 @@ def test_to_layout_2D(device, height, width, on_device, from_layout, to_layout, 
         assert output_tensor.shape.with_tile_padding() == (height, width)
 
     output_tensor = ttnn.to_torch(output_tensor)
+    torch.set_printoptions(profile="full")
+
+    print(torch_input_tensor)
+    print(output_tensor)
 
     assert_with_pcc(torch_input_tensor, output_tensor)
+
     assert torch.allclose(torch_input_tensor, output_tensor)

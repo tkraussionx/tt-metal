@@ -33,15 +33,22 @@ void kernel_main() {
     for (uint32_t i = start_id; i != end_id; -- i) {
     #else
     uint32_t end_id = start_id + num_tiles;
+    DPRINT << "READER NUM TILES " << num_tiles  << ENDL();
     for (uint32_t i = start_id; i < end_id; ++ i) {
     #endif
         DPRINT << "PUSHING TILE " << i  << ENDL();
         cb_reserve_back(cb_id_in0, onetile);
         uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
         noc_async_read_tile(i, s, l1_write_addr);
+//        for (uint16_t r = 0; r < 32; ++r) {
+//            uint16_t r_next = r + 1;
+//            SliceRange sr =  SliceRange{.h0 = r, .h1 = r_next, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+//            DPRINT << (uint)r << " --READ--cin0-- " << TileSlice(cb_id_in0, 0, sr, true, true) << ENDL();
+//        }
         noc_async_read_barrier();
         cb_push_back(cb_id_in0, onetile);
         DPRINT << "PUSHED TILE " << i << ENDL();
     }
 
+    DPRINT << "READER FINISHED " << ENDL();
 }

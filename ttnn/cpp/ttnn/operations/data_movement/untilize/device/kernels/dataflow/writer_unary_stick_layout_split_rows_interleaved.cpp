@@ -17,8 +17,8 @@ void kernel_main() {
     const uint32_t stick_size                 = get_arg_val<uint32_t>(2);
     const uint32_t num_tiles_per_block        = get_arg_val<uint32_t>(3);
     const uint32_t block_width_size           = get_arg_val<uint32_t>(4);
-    const uint32_t num_cb_iterations_in_row     = get_arg_val<uint32_t>(5);
-    const uint32_t num_tiles_in_cb_in_row     = get_arg_val<uint32_t>(6);
+    const uint32_t num_full_blocks_per_row     = get_arg_val<uint32_t>(5);
+    //const uint32_t num_tiles_in_cb_in_row     = get_arg_val<uint32_t>(6);
     // const uint32_t leftover_width_in_row      = get_arg_val<uint32_t>(7);
     const uint32_t start_stick_id = get_arg_val<uint32_t>(8);
 
@@ -40,14 +40,27 @@ void kernel_main() {
 
     uint64_t base_dst_noc_addr[tile_height];
 
-    auto write_tiles = [&] (const uint32_t& num_tiles, const uint32_t& width_size) {
-        DPRINT << "WAITING FOR " << num_tiles << " TILES " << ENDL();
+
+
+    DPRINT << "WRITER STICK SIZE " << stick_size << ENDL();
+    auto write_tiles = [&] (const uint32_t& num_tiles, const uint32_t& width_size, uint32_t stride) {
+//        DPRINT << "WAITING FOR " << num_tiles << " TILES " << ENDL();
         cb_wait_front(cb_id_out0, num_tiles);
         uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-        DPRINT << "ENTERING WRITE LOOP " << ENDL();
+//        DPRINT << "ENTERING WRITE LOOP " << ENDL();
         for (uint32_t k = 0; k < tile_height; k++) {
-            uint64_t dst_noc_addr = base_dst_noc_addr[k];
+            uint64_t dst_noc_addr = base_dst_noc_addr[k] + stride;
             noc_async_write(l1_read_addr, dst_noc_addr, width_size);
+
+            volatile tt_l1_ptr uint16_t* input_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_read_addr);
+            DPRINT << "WRITER PRINTING ROW " << k << ENDL();
+            for (uint32_t i=0; i<width_size/2; i++) {
+                    uint32_t num = (uint32_t)input_addr_ptr[i];
+                    num = num << 16;
+                    float * f_num  = reinterpret_cast<float *> (&num);
+                    DPRINT << f_num[0] << " ";
+            }
+            DPRINT << ENDL();
             l1_read_addr += width_size;
             base_dst_noc_addr[k] += width_size;
         }
@@ -55,10 +68,13 @@ void kernel_main() {
         cb_pop_front(cb_id_out0, num_tiles);
     };
 
-    DPRINT << "NUM CB ITERATIONS IN ROW " << num_cb_iterations_in_row << ENDL();
-    DPRINT << "NUM TILES IN CB ROW " << num_tiles_in_cb_in_row << ENDL();
-    DPRINT << "NUM TILES PER BLOCK " << num_tiles_per_block << ENDL();
+
+
+
+//    DPRINT << "NUM FULL BLOCKS PER ROW " << num_full_blocks_per_row << ENDL();
+//    DPRINT << "NUM TILES PER BLOCK " << num_tiles_per_block << ENDL();
     uint32_t stick_id = start_stick_id;
+    uint32_t stride = 0;
     for (uint32_t i = 0; i < num_sticks / tile_height; i++) {
         // Get Base Addresses
         for (uint32_t j = 0; j < tile_height; j++) {
@@ -66,8 +82,9 @@ void kernel_main() {
             stick_id++;
         }
 
-        for (uint32_t j = 0; j < num_cb_iterations_in_row; j++) {
-            write_tiles(num_tiles_in_cb_in_row, block_width_size);
+        for (uint32_t j = 0; j < num_full_blocks_per_row; j++) {
+            write_tiles(num_tiles_per_block, block_width_size, stride);
+            stride += block_width_size;
         }
 
         // if (num_leftover_tiles_in_row > 0) {

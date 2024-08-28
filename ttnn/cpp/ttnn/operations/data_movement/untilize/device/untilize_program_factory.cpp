@@ -17,9 +17,11 @@
 
 using namespace tt::constants;
 
+constexpr uint32_t MAX_NUM_TILES_PER_BLOCK = 1;
+//#define COMMENT_OUT_WRITER_COMPUTE 1
+
 namespace ttnn::operations::data_movement::detail {
 
-constexpr uint32_t MAX_NUM_TILES_PER_CB = 1;
 
 uint32_t get_cb_size(uint32_t num_tiles_per_block, uint32_t max_cb_size){
 
@@ -46,16 +48,34 @@ operation::ProgramWithCallbacks untilize_multi_core(
     Device* device = a.device();
 
     uint32_t ntiles = a.volume() / TILE_HW;
-    uint32_t ntiles_per_block = a.get_legacy_shape()[-1] / TILE_WIDTH;
-    uint32_t nblocks = ceil((float)ntiles / ntiles_per_block);
-    uint32_t block_size_nbytes = a.get_legacy_shape()[-1] * output.element_size();
 
+    uint32_t ntiles_per_block;
+    uint32_t num_full_blocks_per_row;
+    uint32_t block_size_nbytes;
+    uint32_t full_stick_size_nbytes = a.get_legacy_shape()[-1] / TILE_WIDTH;
+    if((a.get_legacy_shape()[-1] / TILE_WIDTH) > MAX_NUM_TILES_PER_BLOCK) {
+        ntiles_per_block = MAX_NUM_TILES_PER_BLOCK;
+        num_full_blocks_per_row = (a.get_legacy_shape()[-1] / TILE_WIDTH) / MAX_NUM_TILES_PER_BLOCK; //floor
+        block_size_nbytes = MAX_NUM_TILES_PER_BLOCK * TILE_HW * output.element_size();
+    }
+    else{
+        ntiles_per_block =  a.get_legacy_shape()[-1] / TILE_WIDTH;
+        num_full_blocks_per_row = 1;
+        block_size_nbytes = a.get_legacy_shape()[-1] * output.element_size();
+    }
+
+    uint32_t nblocks = ceil((float)ntiles / ntiles_per_block);
     auto grid_size = device->compute_with_storage_grid_size();
     auto [ncores, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff] =
         split_blocks_for_tilize(grid_size, nblocks);
     uint32_t ncores_x = grid_size.x;
     uint32_t ncores_y = std::ceil(static_cast<float>(ncores) / ncores_x);
 
+    std::cout << "Ncores " << ncores << std::endl;
+    std::cout << "Ncores_x " << ncores_x << std::endl;
+    std::cout << "Ncores_y " << ncores_y << std::endl;
+    std::cout << "Nblocks_per_core " << nblocks_per_core << std::endl;
+    std::cout << "num_full_blocks_per_row " << num_full_blocks_per_row << std::endl;
     bool row_major = true;
     bool src_block_sharded = false;
     uint32_t num_rows_block = 0, block_row_size = 0, output_row_size = 0, last_block_row_size_unpadded = 0,
@@ -64,6 +84,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
     std::vector<CoreCoord> cores_with_rtargs;
 
     if (src_sharded) {
+
         auto shard_spec = a.shard_spec().value();
         src_block_sharded = a.memory_config().memory_layout != TensorMemoryLayout::HEIGHT_SHARDED;
         row_major = shard_spec.orientation == ShardOrientation::ROW_MAJOR;
@@ -92,32 +113,27 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
     // reader_unary_interleaved_start_id only does one tile in loop, only need CB of a single tile
     // 2 for double buffer
-    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
-    uint32_t cb_size =  ntiles_per_block;
-    uint32_t num_cb_iterations_per_row = 1;
-    if(ntiles_per_block * 2 > MAX_NUM_TILES_PER_CB) {
-        cb_size = get_cb_size(ntiles_per_block, MAX_NUM_TILES_PER_CB);
-        num_cb_iterations_per_row = ntiles_per_block / cb_size;
+    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * num_full_blocks_per_row *  2;
 
-    }
     auto [src0_cb_index, cb_src0] = create_cb(
         tt::CB::c_in0,
         program,
         all_cores,
         input_single_tile_size,
-        cb_size * 2,
+        num_input_tiles,
         input_cb_data_format,
         src_sharded ? a.buffer() : nullptr);
 
-    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
+    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * num_full_blocks_per_row * 2;
 
+    std::cout << "Num input and output tiles in CB " << num_input_tiles << std::endl;
 
     auto [output_cb_index, cb_output] = create_cb(
         tt::CB::c_out0,
         program,
         all_cores,
         output_single_tile_size,
-        cb_size * 2,
+        num_output_tiles,
         output_cb_data_format,
         out_sharded ? output.buffer() : nullptr);
 
@@ -177,23 +193,36 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 (uint32_t)log2_stick_size,
             };
 
+#ifndef COMMENT_OUT_WRITER_COMPUTE
             unary_writer_kernel_id = CreateKernel(
                 program,
                 "ttnn/cpp/ttnn/operations/data_movement/untilize/device/kernels/dataflow/"
                 "writer_unary_stick_layout_split_rows_interleaved.cpp",
                 all_cores,
                 WriterDataMovementConfig(writer_ct_args));
+#endif
         }
     }
 
+#ifndef COMMENT_OUT_WRITER_COMPUTE
     /** compute
      */
+
+//    vector<uint32_t> compute_args = {
+//        (uint32_t)nblocks_per_core * num_full_blocks_per_row,  // per_core_block_cnt
+//        (uint32_t)ntiles_per_block,  // per_block_ntiles
+//    };
+//    vector<uint32_t> compute_args_cliff = {
+//        (uint32_t)nblocks_per_core_cliff * num_full_blocks_per_row,
+//        (uint32_t)ntiles_per_block,  // per_block_ntiles
+//    };
+
     vector<uint32_t> compute_args = {
-        (uint32_t)nblocks_per_core,  // per_core_block_cnt
+        (uint32_t)num_full_blocks_per_row,  // per_core_block_cnt
         (uint32_t)ntiles_per_block,  // per_block_ntiles
     };
     vector<uint32_t> compute_args_cliff = {
-        (uint32_t)nblocks_per_core_cliff,
+        (uint32_t)num_full_blocks_per_row,
         (uint32_t)ntiles_per_block,  // per_block_ntiles
     };
 
@@ -219,6 +248,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
             core_range_cliff,
             ComputeConfig{.fp32_dest_acc_en = fp32_dest_acc_en, .compile_args = compute_args_cliff});
     }
+#endif
 
     // 1D distribution of blocks across all cores
     uint32_t ncores_full = ncores;
@@ -246,7 +276,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         } else {
             reader_rt_args = {
                 src0_buffer->address(),               // src_addr
-                ntiles_per_block * nblocks_per_core,  // ntiles
+                ntiles_per_block * nblocks_per_core * num_full_blocks_per_row,  // ntiles
                 tile_start_id                         // start_id
             };
         }
@@ -301,11 +331,11 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 writer_rt_args = {
                     dst_buffer->address(),           // dst_addr
                     nblocks_per_core * TILE_HEIGHT,  // nblocks per core
-                    block_size_nbytes,               // block_size_nbytes
+                    block_size_nbytes * num_full_blocks_per_row,               // block_size_nbytes
                     ntiles_per_block,                // ntiles_per_block
                     block_size_nbytes,               // block_size_nbytes
-                    num_cb_iterations_per_row,                               // full blocks in a row
-                    cb_size,
+                    num_full_blocks_per_row,              // full blocks in a row
+                    0,
                     0,
                     row_start_id};
             }
@@ -315,7 +345,9 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
         tt::tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, core, reader_rt_args);
 
+#ifndef COMMENT_OUT_WRITER_COMPUTE
         tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, writer_rt_args);
+#endif
         cores_with_rtargs.push_back(core);
         tile_start_id += ntiles_per_block * nblocks_per_core;
         row_start_id += TILE_HEIGHT * nblocks_per_core;
@@ -391,8 +423,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
                     block_size_nbytes,                     // stick_size_nbytes
                     ntiles_per_block,                      // ntiles_per_block
                     block_size_nbytes,                     // block_width_nbytes
-                    num_cb_iterations_per_row,                               // full blocks in a row
-                    cb_size,
+                    num_full_blocks_per_row,                                     // full blocks in a row
+                    0,                                     // UNUSED
                     0,                                     // UNUSED
                     row_start_id};
             }
@@ -401,11 +433,15 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
         tt::tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, core, reader_rt_args);
 
+#ifndef COMMENT_OUT_WRITER_COMPUTE
         tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, writer_rt_args);
+#endif
         cores_with_rtargs.push_back(core);
     }
     auto override_runtime_arguments_callback = [reader_kernel_id = unary_reader_kernel_id,
+#ifndef COMMENT_OUT_WRITER_COMPUTE
                                                 writer_kernel_id = unary_writer_kernel_id,
+#endif
                                                 cb_src0 = cb_src0,
                                                 cb_output = cb_output,
                                                 cores_with_rtargs](
@@ -432,17 +468,20 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
         if (out_sharded) {
             UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
-        } else {
+        } else {;
+#ifndef COMMENT_OUT_WRITER_COMPUTE
             auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
             for (const CoreCoord& core : cores_with_rtargs) {
                 auto& runtime_args = runtime_args_by_core[core.x][core.y];
                 runtime_args[0] = dst_buffer->address();
             }
+#endif
         }
     };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
+
 
 operation::ProgramWithCallbacks untilize_single_core(
     const Tensor& a, Tensor& output, bool use_pack_untilize, bool fp32_dest_acc_en) {
