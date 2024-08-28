@@ -434,7 +434,8 @@ void GraphProcessor::begin_capture(RunMode mode) {
     if (!tt::tt_metal::GraphTracker::instance().get_hook()) {
         hook = std::make_shared<ProcessorHooks>();
         tt::tt_metal::GraphTracker::instance().add_hook(hook);
-        hook->set_block(mode == RunMode::NO_DISPATCH);
+        hook->set_block(mode != RunMode::NORMAL);
+        hook->set_memory_alloc(mode != RunMode::NO_DISPATCH);
     }
     current_op_id.push(0);
 }
@@ -482,11 +483,11 @@ nlohmann::json GraphProcessor::end_graph_capture() {
 }
 
 bool ProcessorHooks::hook_allocate(tt::tt_metal::Buffer* buffer, bool bottom_up) {
-    return do_block;
+    return !do_memory_alloc;
 }
 
 bool ProcessorHooks::hook_deallocate(tt::tt_metal::Buffer* buffer) {
-    return do_block;
+    return !do_memory_alloc;
 }
 
 bool ProcessorHooks::hook_program(tt::tt_metal::Program*) {
@@ -498,5 +499,12 @@ void ProcessorHooks::set_block(bool block) {
 }
 bool ProcessorHooks::get_block() const {
     return do_block;
+}
+
+void ProcessorHooks::set_memory_alloc(bool block) {
+    do_memory_alloc = block;
+}
+bool ProcessorHooks::get_memory_alloc() const {
+    return do_memory_alloc;
 }
 }

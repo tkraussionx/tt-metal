@@ -19,7 +19,8 @@ namespace tt::tt_metal {
     public:
         enum class RunMode {
             NORMAL, // running everything as is
-            NO_DISPATCH // don't do memory allocations and program runs.
+            NO_DISPATCH, // don't do memory allocations and program runs.
+            COMPILER_TRACE, // do memory allocations but don't dispatch programs.
         };
 
         IGraphProcessor() = default;
