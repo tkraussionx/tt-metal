@@ -595,7 +595,7 @@ class PrefillDecodeBackend:
                     # user just finished
                     self.decode_ids[idx][0] = user.eos_token_id
                     user.stop_decode_timer()
-                    user.get_user_stats()
+                    # user.get_user_stats()
 
         self.cur_pos += 1
         self.prev_pos += 1
