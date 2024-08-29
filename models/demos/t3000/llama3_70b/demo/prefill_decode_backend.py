@@ -314,7 +314,6 @@ class PrefillDecodeBackend:
         if seq_len > 1:
             # prefill is defined in TtLlamaModelForGeneration by sending seq_len > 1
             # seq_len is tokens.shape[1]
-            breakpoint()
             prefill_logits = self.model.forward(self.prefill_ids, self.prev_pos)
             self.num_tokens_prefilled = seq_len
         else:
