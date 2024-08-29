@@ -111,7 +111,7 @@ def get_model_backend(mock_model=False):
 def main():
     eval_output_fpath = "eval_output"
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
-    model_backend, tokenizer = get_model_backend(mock_model=True)
+    model_backend, tokenizer = get_model_backend(mock_model=False)
     task = "mmlu_high_school_statistics"
     # pretrained must be the hugginface pretrained model name
     # see: https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct
