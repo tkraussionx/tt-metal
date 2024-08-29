@@ -135,10 +135,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND ENABLE_LIBCXX)
         message(FATAL_ERROR "libc++ or libc++abi not found. Make sure you have libc++ and libc++abi installed and in your PATH")
     endif()
 
-    target_link_libraries(stdlib INTERFACE ${LIBC++} ${LIBC++ABI})
+    target_link_libraries(stdlib INTERFACE ${LIBC++} ${LIBC++ABI} ssl crypto)
     target_compile_options(stdlib INTERFACE -stdlib=libc++)
 else()
-    target_link_libraries(stdlib INTERFACE stdc++)
+    target_link_libraries(stdlib INTERFACE stdc++ ssl crypto)
     target_compile_options(stdlib INTERFACE -fsized-deallocation)
 endif()
 
