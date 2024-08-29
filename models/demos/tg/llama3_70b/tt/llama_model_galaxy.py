@@ -19,12 +19,16 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
     get_rot_transformation_mat,
     num_to_corerange,
     gather_cos_sin,
+    gather_cos_sin,
     ShardTensor2dMesh,
     ConcatMesh2DToTensor,
 )
 from models.demos.tg.llama3_70b.tt.llama_common import (
     tt_all_reduce,
     tt_all_gather,
+)
+from models.demos.t3000.falcon40b.tt.model_utils import (
+    matmul_2d_config_from_tensor_shapes as get_matmul_2d_config_from_tensor_shapes,
 )
 from models.demos.t3000.falcon40b.tt.model_utils import (
     matmul_2d_config_from_tensor_shapes as get_matmul_2d_config_from_tensor_shapes,
@@ -309,6 +313,8 @@ class TtLlamaModel_galaxy:
             return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
         elif self.model_config["LLM_MODE"] == "prefill":
             return self.prefill_forward(xs, rot_mats, start_pos, attn_masks, user_id)
+        elif self.model_config["LLM_MODE"] == "prefill":
+            return self.prefill_forward(xs, rot_mats, start_pos, attn_masks, user_id)
         else:
             raise ValueError(f"Unknown llm_mode: {self.model_config['LLM_MODE']}")
 
@@ -318,6 +324,8 @@ class TtLlamaModel_galaxy:
             inp, compute_kernel_config=self.LN_COMPUTE_KERNEL_CONFIG, dtype=ttnn.bfloat16
         )
 
+        padded_shape = (1, 1, inp.shape[-2], 32)
+        tt_stats = ttnn.reshape(tt_stats, ttnn.Shape(padded_shape, padded_shape))  # TODO: Figure out why we need this
         padded_shape = (1, 1, inp.shape[-2], 32)
         tt_stats = ttnn.reshape(tt_stats, ttnn.Shape(padded_shape, padded_shape))  # TODO: Figure out why we need this
         tt_stats = tt_all_gather(
