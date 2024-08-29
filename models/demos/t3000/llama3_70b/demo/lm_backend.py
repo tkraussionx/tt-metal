@@ -570,7 +570,7 @@ class PrefillDecodeBackend:
                     user.generated_logits = torch.cat(
                         [user.generated_logits, logits[idx]], dim=0
                     )
-                if user.num_tokens_decoded == 0:
+                if user.num_tokens_decoded == 1:
                     user.first_decode_time = time.time()
                 if user_decode_id in user.stop_tokens:
                     # generated stop token
