@@ -196,10 +196,9 @@ class TenstorrentLM(TemplateLM):
             ]
             cond_ids = torch.tensor(continuation_enc_list)
             self.model_backend.add_users_from_context(context_enc_list)
-            self.model_backend.generate_n(n_tokens=1, return_logits=True)
-            breakpoint()
-            # logits = self.model_backend.get_logits()
-            logits = logits[:batch_size, :]
+            logits = self.model_backend.generate_n(n_tokens=1, return_logits=True)
+            # select 1st token in logits
+            logits = logits[:, -1, :]
             targets = [req_list[0].doc['answer'] for req_list in req_group]
             target_ids = cond_ids[torch.arange(len(cond_ids)), targets]
             # next: set target indexes high for testing
@@ -214,7 +213,6 @@ class TenstorrentLM(TemplateLM):
                 is_greedy = (greedy_ids == target_ids).tolist()
                 output = list(zip(ll, is_greedy))
                 res.extend(output)
-        breakpoint()
         return res
 
     def loglikelihood_rolling(self, requests, disable_tqdm: bool = False):

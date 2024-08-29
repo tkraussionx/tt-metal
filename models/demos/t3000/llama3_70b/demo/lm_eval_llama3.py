@@ -89,7 +89,7 @@ def get_model_backend(mock_model=False):
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
             with patch(
-                "models.demos.t3000.llama3_70b.demo.lm_engine.build_generator", new=mock_build_generator
+                "models.demos.t3000.llama3_70b.demo.lm_backend.build_generator", new=mock_build_generator
             ):
                 # "models.demos.t3000.llama3_70b.demo.prefill_decode_backend.build_generator", new=mock_build_generator
                 # model_backend = PrefillDecodeBackend(
@@ -107,19 +107,26 @@ def get_model_backend(mock_model=False):
                     batch_size=32,
                     num_layers=80,
                     max_seq_len=2048,
-                    cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs/",
+                    cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
                 )
     else:
         model_backend = PrefillDecodeBackend(
+            model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
             batch_size=32,
             num_layers=80,
             max_seq_len=2048,
-            n_devices=8,
-            model_config=model_config,
-            ckpt_dir=ckpt_dir,
-            tokenizer_path=tokenizer_path,
-            cache_path=cache_path,
+            cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
         )
+        # model_backend = PrefillDecodeBackend(
+        #     batch_size=32,
+        #     num_layers=80,
+        #     max_seq_len=2048,
+        #     n_devices=8,
+        #     model_config=model_config,
+        #     ckpt_dir=ckpt_dir,
+        #     tokenizer_path=tokenizer_path,
+        #     cache_path=cache_path,
+        # )
 
     return model_backend, model_backend.formatter
 
@@ -127,7 +134,7 @@ def get_model_backend(mock_model=False):
 def main():
     eval_output_fpath = "/home/user/eval_output"
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
-    model_backend, tokenizer = get_model_backend(mock_model=True)
+    model_backend, tokenizer = get_model_backend(mock_model=False)
     task = "mmlu_high_school_statistics"
     # pretrained must be the hugginface pretrained model name
     # see: https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct
