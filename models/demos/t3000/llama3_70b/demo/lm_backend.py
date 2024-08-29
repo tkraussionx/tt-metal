@@ -568,9 +568,8 @@ class PrefillDecodeBackend:
                 user.generated_tokens.append(user_decode_id)
                 if return_logits:
                     user.generated_logits = torch.cat(
-                        [user.generated_logits, logits[idx].unsqueeze(0)], dim=0
+                        [user.generated_logits, logits[idx]], dim=0
                     )
-                    breakpoint()
                 if user.num_tokens_decoded == 0:
                     user.first_decode_time = time.time()
                 if user_decode_id in user.stop_tokens:
@@ -727,7 +726,10 @@ class PrefillDecodeBackend:
         while not all([user.num_tokens_decoded >= n_tokens for user in self.get_users()]):
             self.decode(return_logits=return_logits)
         self.get_batch_stats(log=True)
-        breakpoint()
+        if return_logits:
+            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
+        else:
+            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
 
 
     def run_generate(self, prompt_q, output_q, status_q, loop_once):
