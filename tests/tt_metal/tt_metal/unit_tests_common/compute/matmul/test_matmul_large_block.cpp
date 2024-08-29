@@ -124,15 +124,15 @@ void create_CBs_for_fused_matmul(tt_metal::Program &program, tt_metal::Device* d
     }
 }
 
-bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool activations_rm, bool output_rm) {
+bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool activations_rm, bool output_rm, const uint32_t M, const uint32_t N, const uint32_t K) {
     bool pass = true;
 
     tt_metal::Program program = tt_metal::CreateProgram();
 
     CoreCoord core = {0, 0};
-    uint32_t M = 4;
-    uint32_t K = 2;
-    uint32_t N = K;
+    //uint32_t M = 4;
+    //uint32_t K = 2;
+    //uint32_t N = K;
     int out_subblock_h = 2;
     int out_subblock_w = 1;
     int in0_block_w = K;
@@ -340,14 +340,18 @@ bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool a
 }
 
 TEST_F(CommonFixture, MatmulLargeBlock) {
-    for (unsigned int id=0; id < devices_.size(); id++){
-        ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), false, false));
-        log_info (LogTest, "Tilized input, Tilized output Passed");
-        ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), true, false));
-        log_info (LogTest, "Row major input, Tilized output Passed");
-        ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), false, true));
-        log_info (LogTest, "Tilized input, Row major output Passed");
-        ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), true, true));
-        log_info (LogTest, "Row major input, Row major output Passed");
+    std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> num_tiles_configs = {std::make_tuple(4, 2, 2), std::make_tuple(2, 1, 1)};
+    for (auto& elem: num_tiles_configs)
+    {
+        for (unsigned int id=0; id < devices_.size(); id++){
+            ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), false, false, get<0>(elem), get<1>(elem), get<2>(elem)));
+            log_info (LogTest, "Tilized input, Tilized output Passed");
+            ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), true, false, get<0>(elem), get<1>(elem), get<2>(elem)));
+            log_info (LogTest, "Row major input, Tilized output Passed");
+            ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), false, true, get<0>(elem), get<1>(elem), get<2>(elem)));
+            log_info (LogTest, "Tilized input, Row major output Passed");
+            ASSERT_TRUE(unit_tests_common::matmul::test_matmul_large_block::matmul_large_block(this, devices_.at(id), true, true, get<0>(elem), get<1>(elem), get<2>(elem)));
+            log_info (LogTest, "Row major input, Row major output Passed");
+        }
     }
 }
