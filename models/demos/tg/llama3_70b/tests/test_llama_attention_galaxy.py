@@ -347,24 +347,37 @@ def run_test_LlamaAttention_inference(
         attention_input, start_pos, rot_mat, attn_mask = tt_llama_attention_prepare_inputs(
             tt_LlamaAttention_model, tt_input, start_pos, configuration.rope_theta
         )
-        tt_out = tt_LlamaAttention_model(
-            attention_input,
-            rot_mat,
-            start_pos,
-            attn_mask,
-        )
 
-        # tt_out = ttnn.to_torch(tt_out, mesh_composer=ListMeshToTensor(device_mesh))[0]
+        for n in range(1000):
+            logger.info(f"Running inference on TT hardware, iteration {n}")
 
-        tt_out = ttnn.to_torch(
-            tt_out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(3, 1), cluster_shape=cluster_shape)
-        )
-        tt_out = tt_out[:, 0:1, :, :]
-        tt_out = tt_out.permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+            tt_out = tt_LlamaAttention_model(
+                attention_input,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
 
-        # check outputs ----------------------------------------------------------------------
-        does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
-        logger.info(f"Output: {output_pcc}")
+            # tt_out = ttnn.to_torch(tt_out, mesh_composer=ListMeshToTensor(device_mesh))[0]
+
+            tt_out = ttnn.to_torch(
+                tt_out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(3, 1), cluster_shape=cluster_shape)
+            )
+            tt_out = tt_out[:, 0:1, :, :]
+            tt_out = tt_out.permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+
+            # check outputs ----------------------------------------------------------------------
+            does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
+            logger.info(f"Output: {output_pcc}")
+
+            if n == 0:
+                expect_pcc = output_pcc
+                tt_expect = tt_out
+            else:
+                if output_pcc != expect_pcc:
+                    logger.info(f"PCC value is not consistent with the first iteration: {output_pcc} vs {expect_pcc}")
+                    breakpoint()
+
         all_pccs.append(extract_pcc_from_log(output_pcc))
 
         if does_pass:
