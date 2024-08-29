@@ -183,10 +183,6 @@ class TenstorrentLM(TemplateLM):
 
         for batch_idx, req_group in tqdm(batched_requests.items(), disable=disable_tqdm):
             batch_size = len(req_group)
-            # continuation_enc_list = [self.tok_encode(req.args[1], add_special_tokens=False) for req in reqs]
-            # context_enc_list, continuation_enc_list = zip(
-            #     *[self._encode_pair(context=req_list[0].args[0], continuation=req.args[1]) for req_list in req_group]
-            # )
             context_enc_list = [self.tok_encode(req_list[0].args[0]) for req_list in req_group]
             continuation_enc_list = [
                 [self.tok_encode(req.args[1], add_special_tokens=False)[0]
@@ -255,33 +251,8 @@ class TenstorrentLM(TemplateLM):
         """
         loglikelihoods = []
 
-        for (string,) in tqdm([req.args for req in requests], disable=(disable_tqdm or (self.rank != 0))):
-            rolling_token_windows = list(
-                map(
-                    utils.make_disjoint_window,
-                    utils.get_rolling_token_windows(
-                        token_list=self.tok_encode(string),
-                        prefix_token=self.prefix_token_id,
-                        max_seq_len=self.max_length,
-                        context_len=1,
-                    ),
-                )
-            )
-
-            # TODO: Right now, we pass single EOT token to the Encoder and the full context to the decoder, in seq2seq case
-            rolling_token_windows = [(None,) + x for x in rolling_token_windows]
-
-            string_nll = self._loglikelihood_tokens(
-                requests=rolling_token_windows,
-                disable_tqdm=True,
-                override_bs=adaptive_batch_size,
-            )
-
-            # discard is_greedy
-            string_nll = [x[0] for x in string_nll]
-
-            string_nll = sum(string_nll)
-            loglikelihoods.append(string_nll)
+        # TODO: use model_backend.generate_n
+        # logits = self.model_backend.generate_n(n_tokens=1, return_logits=True)
 
         return loglikelihoods
 
@@ -302,9 +273,8 @@ class TenstorrentLM(TemplateLM):
         # TODO
         res = []
 
-        for ctx, _ in tqdm(requests, disable=disable_tqdm):
-            res.append("dummy_output")
-            assert ctx.strip() != ""
+        # TODO: use model_backend.generate_n
+        # tokens = self.model_backend.generate_n(n_tokens=1, return_logits=False)
 
         return res
 
