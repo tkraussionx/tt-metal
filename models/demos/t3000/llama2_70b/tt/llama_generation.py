@@ -117,7 +117,7 @@ class TtLlamaModelForGeneration:
         assert seq_len <= 2048, f"Only prefill up to 2048 tokens is supported, got {seq_len}"
 
         prefill_seq_len = 128 if seq_len <= 128 else 2048
-        self._update_model_config("prefill", batch, prefill_seq_len)
+        self._update_model_config("prefill", 1, prefill_seq_len)
 
         batch, seq_len = tokens.shape
         output_logits = torch.zeros(batch, seq_len, self.params.vocab_size)
