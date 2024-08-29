@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <vector>
 #include <unordered_set>
 
@@ -38,7 +39,7 @@ class BankManager {
 
     int64_t bank_offset(uint32_t bank_id) const;
 
-    uint64_t allocate_buffer(uint32_t size, uint32_t page_size, bool bottom_up, CoreCoord compute_grid_size, std::optional<uint32_t> num_shards);
+    uint64_t allocate_buffer(uint32_t size, uint32_t page_size, bool bottom_up, CoreCoord compute_grid_size, std::optional<uint32_t> num_shards, std::optional<uint32_t> preallocated_address);
 
     void deallocate_buffer(uint64_t address);
     void deallocate_all();
@@ -94,9 +95,9 @@ void dump_memory_blocks(const Allocator &allocator, const BufferType &buffer_typ
 
 std::optional<uint64_t> lowest_occupied_l1_address(const Allocator &allocator, uint32_t bank_id);
 
-uint64_t base_alloc(const AllocatorConfig & config, BankManager &bank_manager, uint64_t size, uint64_t page_size, bool bottom_up, std::optional<uint32_t> num_shards);
+uint64_t base_alloc(const AllocatorConfig & config, BankManager &bank_manager, uint64_t size, uint64_t page_size, bool bottom_up, std::optional<uint32_t> num_shards, std::optional<uint32_t> preallocated_address);
 
-uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size, const BufferType &buffer_type, bool bottom_up, std::optional<uint32_t> num_shards = std::nullopt);
+uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size, const BufferType &buffer_type, bool bottom_up, std::optional<uint32_t> num_shards = std::nullopt, std::optional<uint32_t> preallocated_address = std::nullopt);
 
 void disable_allocs(Allocator &allocator);
 

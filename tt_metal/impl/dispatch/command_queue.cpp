@@ -2653,7 +2653,8 @@ void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md) {
             buffer->page_size(),
             buffer->buffer_type(),
             alloc_md.bottom_up,
-            buffer->num_cores());
+            buffer->num_cores(),
+            alloc_md.preallocated_address);
     } else {
         allocated_addr = allocator::allocate_buffer(
             *(buffer->device()->allocator_),
@@ -2661,7 +2662,8 @@ void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md) {
             buffer->page_size(),
             buffer->buffer_type(),
             alloc_md.bottom_up,
-            std::nullopt);
+            std::nullopt,
+            alloc_md.preallocated_address);
     }
     buffer->set_address(static_cast<uint64_t>(allocated_addr));
 }
@@ -2671,6 +2673,7 @@ void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, boo
         .buffer = buffer,
         .allocator = *(buffer->device()->allocator_),
         .bottom_up = bottom_up,
+        .preallocated_address = buffer->preallocated_address
     };
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ALLOCATE_BUFFER,

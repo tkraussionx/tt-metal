@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <optional>
+#include "logger.hpp"
 #include "tt_metal/host_api.hpp"
 #include "common/bfloat16.hpp"
 #include "tt_metal/impl/device/device.hpp"
@@ -44,18 +46,30 @@ int main(int argc, char **argv) {
         constexpr uint32_t num_tiles = 64;
         constexpr uint32_t dram_buffer_size = single_tile_size * num_tiles;
 
-        tt_metal::InterleavedBufferConfig dram_config{
+        const uint32_t dram_buffer_src0_addr = 0x60;
+        const uint32_t dram_buffer_dst_addr = 0x30060;
+
+        tt_metal::InterleavedBufferConfig src0_dram_config{
                     .device= device,
                     .size = dram_buffer_size,
                     .page_size = dram_buffer_size,
-                    .buffer_type = tt_metal::BufferType::DRAM
+                    .buffer_type = tt_metal::BufferType::DRAM,
+                    .preallocated_address = std::make_optional(dram_buffer_src0_addr)
         };
 
-        std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(dram_config);
-        const uint32_t dram_buffer_src0_addr = src0_dram_buffer->address();
+        tt_metal::InterleavedBufferConfig dest_dram_config{
+                    .device= device,
+                    .size = dram_buffer_size,
+                    .page_size = dram_buffer_size,
+                    .buffer_type = tt_metal::BufferType::DRAM,
+                    .preallocated_address = std::make_optional(dram_buffer_dst_addr)
+        };
 
-        std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_config);
-        const uint32_t dram_buffer_dst_addr = dst_dram_buffer->address();
+        std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(src0_dram_config);
+        std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dest_dram_config);
+
+        tt::log_info("dram_buffer_src0_addr: {0:x}", src0_dram_buffer->address());
+        tt::log_info("dram_buffer_dst_addr: {0:x}", dst_dram_buffer->address());
 
         /*
          * Use circular buffers to set input and output buffers that the

@@ -121,6 +121,7 @@ Buffer::Buffer(
     const TensorMemoryLayout buffer_layout,
     const std::optional<ShardSpecBuffer>& shard_parameters,
     const std::optional<bool> bottom_up,
+    const std::optional<uint32_t> preallocated_address,
     bool allocate) :
     device_(device),
     size_(size),
@@ -128,6 +129,7 @@ Buffer::Buffer(
     buffer_type_(buffer_type),
     buffer_layout_(buffer_layout),
     shard_parameters_(shard_parameters),
+    preallocated_address(preallocated_address),
     bottom_up_(bottom_up) {
     TT_FATAL(this->device_ != nullptr and this->device_->allocator_ != nullptr);
     validate_buffer_size_and_page_size(size, page_size, buffer_type, buffer_layout, shard_parameters);
@@ -203,6 +205,7 @@ Buffer::Buffer(const Buffer &other) :
     buffer_type_(other.buffer_type_),
     buffer_layout_(other.buffer_layout_),
     shard_parameters_(other.shard_parameters_),
+    preallocated_address(other.preallocated_address),
     bottom_up_(other.bottom_up_) {
     this->allocate();
 }
@@ -229,6 +232,7 @@ Buffer::Buffer(Buffer &&other) :
     buffer_type_(other.buffer_type_),
     buffer_layout_(other.buffer_layout_),
     shard_parameters_(other.shard_parameters_),
+    preallocated_address(other.preallocated_address),
     bottom_up_(other.bottom_up_) {
     // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is
     // transferred to `this`
@@ -244,6 +248,7 @@ Buffer &Buffer::operator=(Buffer &&other) {
         this->buffer_type_ = other.buffer_type_;
         this->buffer_layout_ = other.buffer_layout_;
         this->shard_parameters_ = other.shard_parameters_;
+        this->preallocated_address = other.preallocated_address;
         this->bottom_up_ = other.bottom_up_;
         // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is
         // transferred to `this`

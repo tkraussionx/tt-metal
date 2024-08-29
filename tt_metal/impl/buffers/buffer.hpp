@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -114,6 +115,9 @@ struct BufferConfig {
     uint64_t page_size;  // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type;
     TensorMemoryLayout buffer_layout = TensorMemoryLayout::INTERLEAVED;
+
+
+    std::optional<uint32_t> preallocated_address;
 };
 
 typedef BufferConfig InterleavedBufferConfig;
@@ -152,7 +156,8 @@ class Buffer {
         buffer_type_(BufferType::DRAM),
         buffer_layout_(TensorMemoryLayout::INTERLEAVED),
         shard_parameters_(std::nullopt),
-        bottom_up_(std::nullopt) {}
+        bottom_up_(std::nullopt),
+        preallocated_address(std::nullopt) {}
 
     Buffer(
         Device *device,
@@ -162,6 +167,7 @@ class Buffer {
         const TensorMemoryLayout buffer_layout = TensorMemoryLayout::INTERLEAVED,
         const std::optional<ShardSpecBuffer>& shard_parameter = std::nullopt,
         const std::optional<bool> bottom_up = std::nullopt,
+        const std::optional<uint32_t> preallocated_address = std::nullopt,
         bool allocate = true);
 
     Buffer(const Buffer &other);
@@ -256,6 +262,9 @@ class Buffer {
             return this->shard_spec().tensor_shard_spec.grid.num_cores();
         }
     }
+
+   public:
+    std::optional<uint32_t> preallocated_address;
 
    private:
     virtual void allocate();

@@ -4,6 +4,10 @@
 
 #include "tt_metal/impl/allocator/allocator.hpp"
 
+#include <cstdint>
+#include <optional>
+
+#include "common/logger.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/detail/util.hpp"
@@ -112,7 +116,8 @@ uint64_t BankManager::allocate_buffer(
     uint32_t page_size,
     bool bottom_up,
     CoreCoord compute_grid_size,
-    std::optional<uint32_t> num_shards) {
+    std::optional<uint32_t> num_shards,
+    std::optional<uint32_t> preallocated_address) {
     uint32_t num_banks = this->num_banks();
     bool is_sharded = false;
     if (num_shards.has_value()) {
@@ -130,7 +135,9 @@ uint64_t BankManager::allocate_buffer(
         TT_FATAL(address_limit > 0);
     }
     TT_ASSERT(bool(this->allocator_), "Allocator not initialized!");
-    auto address = this->allocator_->allocate(size_per_bank, bottom_up, address_limit);
+    auto address = preallocated_address.has_value()
+                       ? this->allocator_->allocate_at_address(preallocated_address.value(), size_per_bank)
+                       : this->allocator_->allocate(size_per_bank, bottom_up, address_limit);
     if (not address.has_value()) {
         TT_THROW(
             "Out of Memory: Not enough space to allocate {} B {} buffer across {} banks, where each bank needs to "
@@ -348,8 +355,10 @@ uint64_t base_alloc(
     uint64_t size,
     uint64_t page_size,
     bool bottom_up,
-    std::optional<uint32_t> num_shards) {
-    return bank_manager.allocate_buffer(size, page_size, bottom_up, config.compute_grid_size, num_shards);
+    std::optional<uint32_t> num_shards,
+    std::optional<uint32_t> preallocated_address) {
+    return bank_manager.allocate_buffer(
+        size, page_size, bottom_up, config.compute_grid_size, num_shards, preallocated_address);
 }
 
 void disable_allocs(Allocator &allocator) { allocator.disabled_allocs = true; }
@@ -362,23 +371,39 @@ uint64_t allocate_buffer(
     uint32_t page_size,
     const BufferType &buffer_type,
     bool bottom_up,
-    std::optional<uint32_t> num_shards) {
-    uint64_t address = 0;
+    std::optional<uint32_t> num_shards,
+    std::optional<uint32_t> preallocated_address) {
+    uint64_t address = preallocated_address.value_or(0u);
+
+    tt::log_info("allocate_buffer got preallocated address: {0:x}", preallocated_address.value_or(0u));
+
     TT_FATAL(!allocator.disabled_allocs, "Allocation of new buffers has been disabled");
     switch (buffer_type) {
         case BufferType::DRAM:
             return allocator.descriptor.dram.alloc(
-                allocator.config, allocator.dram_manager, size, page_size, bottom_up, num_shards);
+                allocator.config, allocator.dram_manager, size, page_size, bottom_up, num_shards, preallocated_address);
         case BufferType::L1:
             return allocator.descriptor.l1.alloc(
-                allocator.config, allocator.l1_manager, size, page_size, bottom_up, num_shards);
+                allocator.config, allocator.l1_manager, size, page_size, bottom_up, num_shards, preallocated_address);
         case BufferType::L1_SMALL: {
             TT_FATAL(num_shards.has_value(), "L1_SMALL only supports sharded allocations, see validate_num_banks");
             return allocator.descriptor.l1.alloc(
-                allocator.config, allocator.l1_small_manager, size, page_size, bottom_up, num_shards);
+                allocator.config,
+                allocator.l1_small_manager,
+                size,
+                page_size,
+                bottom_up,
+                num_shards,
+                preallocated_address);
             case BufferType::TRACE:
                 return allocator.descriptor.dram.alloc(
-                    allocator.config, allocator.trace_buffer_manager, size, page_size, bottom_up, num_shards);
+                    allocator.config,
+                    allocator.trace_buffer_manager,
+                    size,
+                    page_size,
+                    bottom_up,
+                    num_shards,
+                    preallocated_address);
         }
         default: {
             TT_THROW("Unsupported buffer type!");

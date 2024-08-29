@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "common/logger.hpp"
 #include "dev_msgs.h"
 #include "llrt/hal.hpp"
 #include "impl/allocator/allocator.hpp"
@@ -976,7 +977,7 @@ uint32_t CreateSemaphore(
 
 std::shared_ptr<Buffer> CreateBuffer(const InterleavedBufferConfig &config) {
     return std::make_shared<Buffer>(
-        config.device, config.size, config.page_size, config.buffer_type, config.buffer_layout);
+        config.device, config.size, config.page_size, config.buffer_type, config.buffer_layout, std::nullopt, std::nullopt, config.preallocated_address);
 }
 
 std::shared_ptr<Buffer> CreateBuffer(const ShardedBufferConfig &config) {

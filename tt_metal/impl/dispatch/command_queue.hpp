@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -477,6 +478,7 @@ struct AllocBufferMetadata {
     BufferType buffer_type;
     uint32_t device_address;
     bool bottom_up;
+    std::optional<uint32_t> preallocated_address;
 };
 
 struct RuntimeArgsMetadata {
