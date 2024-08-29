@@ -112,7 +112,7 @@ def main():
     eval_output_fpath = "eval_output"
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
     model_backend, tokenizer = get_model_backend(mock_model=False)
-    task = "mmlu_high_school_statistics"
+    tasks = ["mmlu_econometrics", "mmlu_high_school_statistics"]
     # pretrained must be the hugginface pretrained model name
     # see: https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct
     pretrained = "meta-llama/Meta-Llama-3.1-70B-Instruct"
@@ -138,7 +138,7 @@ def main():
     log_samples = True
     results = evaluator.simple_evaluate(
         model=lm,
-        tasks=[task],
+        tasks=tasks,
         num_fewshot=5,
         limit=None,
         bootstrap_iters=0,
