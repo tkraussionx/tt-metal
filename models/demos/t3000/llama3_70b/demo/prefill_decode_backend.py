@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Set
@@ -33,10 +34,8 @@ from models.demos.t3000.llama2_70b.demo.demo import (
 )
 from conftest import get_dispatch_core_type
 
-from inference_config import inference_config
-from inference_logger import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 logger.info(f"importing {__name__}")
 
 
@@ -192,7 +191,6 @@ class PrefillDecodeBackend:
 
     def init_model(self):
         # set up variables for model init
-        n_devices = inference_config.n_devices
         logger.info("init_model ...")
         # logger.info("todo ckpt vars ")
 
@@ -248,7 +246,19 @@ class PrefillDecodeBackend:
         self.prev_forward_counter = self.forward_counter
         self.batch_start_time = time.time()
 
-    def add_users_from_prompts(self, context_enc_list):
+    def add_users_from_context(self, context_enc_list):
+        """
+        Add users from the given context_enc_list.
+
+        Parameters:
+        - context_enc_list (list): A list of encoded context tokens for each user.
+
+        Raises:
+        - AssertionError: If the length of context_enc_list exceeds the maximum number of users.
+
+        Returns:
+        - None
+        """
         assert len(context_enc_list) <= self.max_users
         # reset users
         for idx in range(len(self.get_users())):
@@ -277,6 +287,9 @@ class PrefillDecodeBackend:
         self.num_users = len(self.get_users())
         assert self.num_users <= self.max_users
         input_prompts = [user_info.prompt_tokens for user_info in self.get_users()]
+        min_prompt_len = min(
+            [user.num_prefill_tokens for user in self.get_users()]
+        )
         # initialize_inputs:
         # pad inputs, empty users get pad id
         prefill_tokens, input_text_mask, _ = initialize_inputs(
@@ -301,6 +314,7 @@ class PrefillDecodeBackend:
         if seq_len > 1:
             # prefill is defined in TtLlamaModelForGeneration by sending seq_len > 1
             # seq_len is tokens.shape[1]
+            breakpoint()
             prefill_logits = self.model.forward(self.prefill_ids, self.prev_pos)
             self.num_tokens_prefilled = seq_len
         else:

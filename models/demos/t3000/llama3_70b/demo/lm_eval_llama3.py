@@ -1,19 +1,30 @@
 from unittest.mock import patch
+import json
 
 import torch
 
 import lm_eval.evaluator as evaluator
 import lm_eval.tasks as tasks
+from lm_eval.loggers import EvaluationTracker
 from lm_eval.evaluator_utils import print_writeout
 
+from lm_eval.utils import (
+    eval_logger,
+    handle_non_serializable,
+    hash_string,
+    positional_deprecated,
+    simple_parse_args_string,
+)
+
 from models.demos.t3000.llama2_70b.reference.llama.llama.tokenizer3 import Tokenizer3
-from models.demos.t3000.llama2_70b.reference.llama.llama.tokenizer import Tokenizer
+# from models.demos.t3000.llama2_70b.reference.llama.llama.tokenizer import Tokenizer
 
 from models.demos.t3000.llama2_70b.tt.llama_common import (
     setup_llama_env,
 )
 from models.demos.utils.tenstorrent_lm import TenstorrentLM
-from models.demos.t3000.llama3_70b.demo.prefill_decode_backend import PrefillDecodeBackend, build_generator
+# from models.demos.t3000.llama3_70b.demo.prefill_decode_backend import PrefillDecodeBackend, build_generator
+from models.demos.t3000.llama3_70b.demo.lm_backend import PrefillDecodeBackend, build_generator
 
 """
 This script uses the as a library (see https://github.com/EleutherAI/lm-evaluation-harness)
@@ -78,17 +89,25 @@ def get_model_backend(mock_model=False):
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
             with patch(
-                "models.demos.t3000.llama3_70b.demo.prefill_decode_backend.build_generator", new=mock_build_generator
+                "models.demos.t3000.llama3_70b.demo.lm_engine.build_generator", new=mock_build_generator
             ):
+                # "models.demos.t3000.llama3_70b.demo.prefill_decode_backend.build_generator", new=mock_build_generator
+                # model_backend = PrefillDecodeBackend(
+                #     batch_size=32,
+                #     num_layers=80,
+                #     max_seq_len=2048,
+                #     n_devices=8,
+                #     model_config=model_config,
+                #     ckpt_dir=ckpt_dir,
+                #     tokenizer_path=tokenizer_path,
+                #     cache_path=cache_path,
+                # )
                 model_backend = PrefillDecodeBackend(
+                    model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
                     batch_size=32,
                     num_layers=80,
                     max_seq_len=2048,
-                    n_devices=8,
-                    model_config=model_config,
-                    ckpt_dir=ckpt_dir,
-                    tokenizer_path=tokenizer_path,
-                    cache_path=cache_path,
+                    cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs/",
                 )
     else:
         model_backend = PrefillDecodeBackend(
@@ -106,6 +125,8 @@ def get_model_backend(mock_model=False):
 
 
 def main():
+    eval_output_fpath = "/home/user/eval_output"
+    evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
     model_backend, tokenizer = get_model_backend(mock_model=True)
     task = "mmlu_high_school_statistics"
     # pretrained must be the hugginface pretrained model name
@@ -129,20 +150,36 @@ def main():
         List of task names or Task objects. Task objects will be taken to have name task.EVAL_HARNESS_NAME if defined and type(task).__name__ otherwise.
     :param batch_size: int or str, optional
         Batch size for model
-    
     """
-    use_cache = "/home/user/cache_root/lm_eval_cache"
-    eval_output = evaluator.simple_evaluate(
+    log_samples = True
+    results = evaluator.simple_evaluate(
         model=lm,
         tasks=[task],
         num_fewshot=0,
-        limit=10,
+        limit=30,
         bootstrap_iters=0,
         batch_size=32,
         write_out=True,
-        log_samples=True,
+        log_samples=log_samples,
+        evaluation_tracker=evaluation_tracker,
+        model_args={},
     )
-    print(eval_output["results"])
+    print(results["results"])
+    if results is not None:
+        if log_samples:
+            samples = results.pop("samples")
+        dumped = json.dumps(
+            results, indent=2, default=handle_non_serializable, ensure_ascii=False
+        )
+        # print(dumped)
+        evaluation_tracker.save_results_aggregated(
+            results=results, samples=samples if log_samples else None
+        )
+        if log_samples:
+            for task_name, config in results["configs"].items():
+                evaluation_tracker.save_results_samples(
+                    task_name=task_name, samples=samples[task_name]
+                )
 
 
 if __name__ == "__main__":
