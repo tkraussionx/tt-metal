@@ -252,15 +252,18 @@ class TtLlamaModelForGeneration:
         del tt_logits
         return logits
 
-    def prefill_forward(self, tokens: torch.Tensor, start_pos: int, page_table=None, kv_cache=None, prompt_lens=None):
-        batch, batch_seq_len = tokens.shape
-        output_logits = torch.zeros(batch, 1, self.params.vocab_size)
-        prompt_lens = prompt_lens if prompt_lens is not None else torch.tensor([batch_seq_len] * batch)
+    def prefill_forward(self, tokens: torch.Tensor, start_pos: int):
+        batch, seq_len = tokens.shape
+        assert seq_len <= 8 * 1024, f"Only prefill up to 2048 tokens is supported, got {seq_len}"
 
-        if page_table is not None:
-            assert isinstance(
-                page_table, torch.Tensor
-            ), "page_table must be a torch.Tensor when passing into prefill_forward"
+        prefill_seq_len = 128 if seq_len <= 128 else 2048
+        self._update_model_config("prefill", 1, prefill_seq_len)
+
+        batch, seq_len = tokens.shape
+        last_token_idx = seq_len - 1
+        output_logits = torch.zeros(batch, seq_len, self.params.vocab_size)
+        # pad tokens to 128 or 2048
+        prefill_ids = torch.cat([tokens, torch.zeros(batch, prefill_seq_len - seq_len).long()], dim=-1)
 
         for user_id in range(batch):
             seq_len = prompt_lens[user_id]
