@@ -9,6 +9,7 @@ import pathlib
 import datetime
 import os
 import hashlib
+import json_writer
 
 from permutations import *
 from serialize import serialize
@@ -18,6 +19,7 @@ from elastic_config import *
 
 SWEEPS_DIR = pathlib.Path(__file__).parent
 SWEEP_SOURCES_DIR = SWEEPS_DIR / "sweeps"
+USE_JSON = os.getenv("USE_JSON")
 
 
 # Generate vectors from module parameters
@@ -36,7 +38,10 @@ def generate_vectors(module_name):
             v["sweep_name"] = module_name
 
         invalidate_vectors(test_module, suite_vectors)
-        export_suite_vectors(module_name, suite, suite_vectors)
+        if USE_JSON:
+            export_suite_vectors_json(module_name, suite, suite_vectors, test_module)
+        else:
+            export_suite_vectors_elasticsearch(module_name, suite, suite_vectors, test_module)
 
 
 # Perform any post-gen validation to the resulting vectors.
@@ -50,8 +55,38 @@ def invalidate_vectors(test_module, vectors) -> None:
             vector["invalid_reason"] = reason
 
 
+def export_suite_vectors_json(module_name, suite_name, vectors, test_module):
+    client = json_writer.JSONVectorManager("database.json")
+
+    index_name = VECTOR_INDEX_PREFIX + module_name
+    warnings = []
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    new_vector_ids = set()
+    serialized_vectors = dict()
+    for i in range(len(vectors)):
+        vector = dict()
+        for elem in vectors[i].keys():
+            vector[elem] = serialize(vectors[i][elem], warnings)
+        id = (
+            test_module.get_hash(vectors[i])
+            if test_module.get_hash
+            else hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        )
+        new_vector_ids.add(id)
+        vector["timestamp"] = current_time
+        serialized_vectors[id] = vector
+
+    print(
+        f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Archiving old vectors and saving new suite. This step may take several minutes."
+    )
+    for new_vector_id in serialized_vectors.keys():
+        client.index(new_vector_id=new_vector_id, body=serialized_vectors[new_vector_id])
+    print(f"SWEEPS: Generated {len(serialized_vectors)} test vectors for suite {suite_name}.")
+
+
 # Output the individual test vectors.
-def export_suite_vectors(module_name, suite_name, vectors):
+def export_suite_vectors_elasticsearch(module_name, suite_name, vectors, test_module):
     # Perhaps we export with some sort of readable id, which can be passed to a runner to run specific sets of input vectors. (export seed as well for reproducability)
     client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
 
@@ -84,7 +119,11 @@ def export_suite_vectors(module_name, suite_name, vectors):
         vector = dict()
         for elem in vectors[i].keys():
             vector[elem] = serialize(vectors[i][elem], warnings)
-        id = hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        id = (
+            test_module.get_hash(vectors[i])
+            if test_module.get_hash
+            else hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
+        )
         new_vector_ids.add(id)
         vector["timestamp"] = current_time
         serialized_vectors[id] = vector

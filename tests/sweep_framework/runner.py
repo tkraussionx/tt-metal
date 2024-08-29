@@ -17,8 +17,10 @@ import tt_smi_util
 from device_fixtures import default_device
 from elasticsearch import Elasticsearch, NotFoundError
 from elastic_config import *
+import json_writer
 
 ARCH = os.getenv("ARCH_NAME")
+USE_JSON = os.getenv("USE_JSON")
 
 
 def git_hash():
@@ -120,6 +122,10 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
                     run(test_module, input_queue, output_queue)
                 response = output_queue.get(block=True, timeout=timeout)
                 status, message, e2e_perf = response[0], response[1], response[2]
+                # print("test_vector=",test_vector)
+                # print("status=", status)
+                # print("message=", message)
+                # print("e2e_perf=", e2e_perf)
                 if status:
                     result["status"] = TestStatus.PASS
                     result["message"] = message
@@ -167,7 +173,35 @@ def sanitize_inputs(test_vectors):
     return header_info, test_vectors
 
 
-def get_suite_vectors(client, vector_index, suite):
+def get_suite_vectors_json(suite):
+    """
+    Retrieves vectors for a given suite from the JSON data.
+
+    Args:
+        vector_manager (VectorManager): The instance of the VectorManager handling the JSON data.
+        suite (str): The name of the suite to filter vectors by.
+
+    Returns:
+        tuple: header_info and test_vectors after sanitization.
+    """
+    client = json_writer.JSONVectorManager("database.json")
+    # Load all vectors from the VectorManager instance
+    serialized_vectors = client.data.get("serialized_vectors", {})
+
+    # Filter vectors that match the suite name and have the status 'CURRENT'
+    test_vectors = []
+    for vector_id, vector_data in serialized_vectors.items():
+        if vector_data.get("status") == "VectorStatus.CURRENT" and vector_data.get("suite_name") == suite:
+            vector_data["vector_id"] = vector_id  # Add vector_id to vector data
+            test_vectors.append(vector_data)
+
+    # Sanitize the inputs as per the original function
+    header_info, sanitized_vectors = sanitize_inputs(test_vectors)
+
+    return header_info, sanitized_vectors
+
+
+def get_suite_vectors_elasticsearch(client, vector_index, suite):
     response = client.search(
         index=vector_index,
         query={
@@ -186,12 +220,17 @@ def get_suite_vectors(client, vector_index, suite):
 
 
 def run_sweeps(module_name, suite_name, vector_id):
-    client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
+    if USE_JSON:
+        client = json_writer.JSONVectorManager("database.json")
+    else:
+        client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))
     pbar_manager = enlighten.get_manager()
 
     sweeps_path = pathlib.Path(__file__).parent / "sweeps"
 
     if not module_name:
+        if USE_JSON:
+            raise Exception("Not having a module name not supported with JSON databse.")
         for file in sorted(sweeps_path.glob("**/*.py")):
             sweep_name = str(pathlib.Path(file).relative_to(sweeps_path))[:-3].replace("/", ".")
             test_module = importlib.import_module("sweeps." + sweep_name)
@@ -209,11 +248,18 @@ def run_sweeps(module_name, suite_name, vector_id):
                 module_pbar = pbar_manager.counter(total=len(suites), desc=f"Module: {sweep_name}", leave=False)
                 for suite in suites:
                     print(f"SWEEPS: Executing tests for module {sweep_name}, suite {suite}.")
-                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite)
+                    header_info, test_vectors = (
+                        get_suite_vectors_json(suite)
+                        if USE_JSON
+                        else get_suite_vectors_elasticsearch(client, vector_index, suite)
+                    )
                     results = execute_suite(test_module, test_vectors, pbar_manager, suite)
                     print(f"SWEEPS: Completed tests for module {sweep_name}, suite {suite}.")
                     print(f"SWEEPS: Tests Executed - {len(results)}")
-                    export_test_results(header_info, results)
+                    if USE_JSON:
+                        export_test_results_json(header_info, results)
+                    else:
+                        export_test_results_elasticsearch(header_info, results)
                     module_pbar.update()
                 module_pbar.close()
             except NotFoundError as e:
@@ -236,10 +282,15 @@ def run_sweeps(module_name, suite_name, vector_id):
             test_vector["vector_id"] = vector_id
             header_info, test_vectors = sanitize_inputs([test_vector])
             results = execute_suite(test_module, test_vectors, pbar_manager, "Single Vector")
-            export_test_results(header_info, results)
+            if USE_JSON:
+                export_test_results_json(header_info, results)
+            else:
+                export_test_results_elasticsearch(header_info, results)
         else:
             try:
                 if not suite_name:
+                    if USE_JSON:
+                        raise Exception("Not having a suite name not supported with JSON databse.")
                     response = client.search(
                         index=vector_index,
                         aggregations={"suites": {"terms": {"field": "suite_name.keyword", "size": 10000}}},
@@ -251,26 +302,91 @@ def run_sweeps(module_name, suite_name, vector_id):
 
                     for suite in suites:
                         print(f"SWEEPS: Executing tests for module {module_name}, suite {suite}.")
-                        header_info, test_vectors = get_suite_vectors(client, vector_index, suite)
+                        header_info, test_vectors = (
+                            get_suite_vectors_json(suite)
+                            if USE_JSON
+                            else get_suite_vectors_elasticsearch(client, vector_index, suite)
+                        )
                         results = execute_suite(test_module, test_vectors, pbar_manager, suite)
                         print(f"SWEEPS: Completed tests for module {module_name}, suite {suite}.")
                         print(f"SWEEPS: Tests Executed - {len(results)}")
-                        export_test_results(header_info, results)
+                        if USE_JSON:
+                            export_test_results_json(header_info, results)
+                        else:
+                            export_test_results_elasticsearch(header_info, results)
                 else:
                     print(f"SWEEPS: Executing tests for module {module_name}, suite {suite_name}.")
-                    header_info, test_vectors = get_suite_vectors(client, vector_index, suite_name)
+                    header_info, test_vectors = (
+                        get_suite_vectors_json(suite_name)
+                        if USE_JSON
+                        else get_suite_vectors_elasticsearch(client, vector_index, suite_name)
+                    )
                     results = execute_suite(test_module, test_vectors, pbar_manager, suite_name)
                     print(f"SWEEPS: Completed tests for module {module_name}, suite {suite_name}.")
                     print(f"SWEEPS: Tests Executed - {len(results)}")
-                    export_test_results(header_info, results)
+                    if USE_JSON:
+                        export_test_results_json(header_info, results)
+                    else:
+                        export_test_results_elasticsearch(header_info, results)
             except Exception as e:
                 print(e)
+    if not USE_JSON:
+        client.close()
 
-    client.close()
+
+def export_test_results_json(header_info, results):
+    """
+    Exports test results to the JSON file managed by VectorManager.
+
+    Args:
+        header_info (list): List containing header information.
+        results (list): List of test results to be exported.
+    """
+    if len(results) == 0:
+        return
+
+    client = json_writer.JSONVectorManager("database.json")
+
+    # Get the sweep name from header_info and set the index name
+    sweep_name = header_info[0]["sweep_name"]
+    results_index = RESULT_INDEX_PREFIX + sweep_name
+
+    # Get the current Git hash
+    curr_git_hash = git_hash()
+    for result in results:
+        result["git_hash"] = curr_git_hash
+
+    # Initialize the 'results' section if it doesn't exist
+    if "results" not in client.data:
+        client.data["results"] = {}
+
+    # Remove all existing results with the same vector_id from the 'results' section
+    vector_ids_to_remove = {result.get("vector_id") for result in results}
+    client.data["results"] = {
+        result_id: result_data
+        for result_id, result_data in client.data["results"].items()
+        if result_data.get("vector_id") not in vector_ids_to_remove
+    }
+
+    # Merge results with header_info and serialize fields
+    indexed_results = []
+    for i in range(len(results)):
+        result = header_info[i].copy()  # Copy to avoid modifying original header_info
+        for elem in results[i].keys():
+            result[elem] = serialize(results[i][elem])
+        indexed_results.append(result)
+
+    # Save new results to the 'results' section in the JSON file managed by VectorManager
+    for result in indexed_results:
+        result_id = result.get("vector_id", f"result_{len(client.data['results']) + 1}")
+        client.data["results"][result_id] = result
+
+    # Save the modified data back to the JSON file
+    client._save_data()
 
 
 # Export test output (msg), status, exception (if applicable), git hash, timestamp, test vector, test UUID?,
-def export_test_results(header_info, results):
+def export_test_results_elasticsearch(header_info, results):
     if len(results) == 0:
         return
     client = Elasticsearch(ELASTIC_CONNECTION_STRING, basic_auth=(ELASTIC_USERNAME, ELASTIC_PASSWORD))

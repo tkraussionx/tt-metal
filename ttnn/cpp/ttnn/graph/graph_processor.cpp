@@ -187,7 +187,7 @@ void GraphProcessor::track_program(tt::tt_metal::Program* program) {
 
 void GraphProcessor::track_function_start(std::string_view function_name, std::span<std::any> input_parameters) {
     const std::lock_guard<std::mutex> lock(mutex);
-    tt::log_info("Begin op: {}", function_name);
+    // tt::log_info("Begin op: {}", function_name);
     std::unordered_map<std::string, std::string> params = {
         {kInputs, std::to_string(input_parameters.size())},
         {kName, std::string(function_name)},
@@ -216,14 +216,14 @@ void GraphProcessor::track_function_start(std::string_view function_name, std::s
         if (it != begin_function_any_map.end()) {
             it->second(any);
         } else {
-            tt::log_info("input any type name ignored: {}", demangle(any.type().name()));
+            // tt::log_info("input any type name ignored: {}", demangle(any.type().name()));
         }
     }
 }
 
 void GraphProcessor::track_function_end_impl() {
     auto name = graph[current_op_id.top()].params[kName];
-    tt::log_info("End op: {}", name);
+    // tt::log_info("End op: {}", name);
 
     auto counter = graph.size();
     {
@@ -255,7 +255,7 @@ void GraphProcessor::track_function_end(const std::any& output_tensors) {
     if (it != end_function_any_map.end()) {
         it->second(output_tensors);
     } else {
-        tt::log_info("output any type name ignored: {}", demangle(output_tensors.type().name()));
+        // tt::log_info("output any type name ignored: {}", demangle(output_tensors.type().name()));
     }
     TT_ASSERT(current_op_id.size() > 0);  // we should always have capture_start on top
     current_op_id.pop();
@@ -297,7 +297,7 @@ int GraphProcessor::add_tensor(const Tensor& t) {
         auto buffer_idx = add_buffer(buffer);
         graph[buffer_idx].connections.push_back(tensor_counter);
     } else {
-        tt::log_info("Tensor doesn't have buffer, but storage is {}", demangle(get_type_in_var(t.get_storage()).name()));
+        // tt::log_info("Tensor doesn't have buffer, but storage is {}", demangle(get_type_in_var(t.get_storage()).name()));
     }
     return tensor_counter;
 }
