@@ -139,7 +139,7 @@ def main():
     results = evaluator.simple_evaluate(
         model=lm,
         tasks=[task],
-        num_fewshot=0,
+        num_fewshot=5,
         limit=None,
         bootstrap_iters=0,
         batch_size=32,
