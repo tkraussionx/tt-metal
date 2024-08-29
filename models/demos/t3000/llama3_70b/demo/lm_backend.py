@@ -341,13 +341,6 @@ class PrefillDecodeBackend:
             self.users[idx] = UserRow(
                 user_id=0, prompt=None, rag_context=None, position_id=0, params=params, tokenizer=self.tokenizer, formatter=None, prompt_tokens=context_enc_list[idx]
             )
-            
-            # UserRow(
-            #     user_id=1,
-            #     prompt_tokens=context_enc_list[idx],
-            #     stop_tokens=self.tokenizer.stop_tokens,
-            #     eos_token_id=self.tokenizer.eos_id,
-            # )
 
     def init_model(self):
         # set up variables for model init
