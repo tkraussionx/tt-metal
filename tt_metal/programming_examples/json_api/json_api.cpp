@@ -4,7 +4,9 @@
 #include <unordered_map>
 #include <chrono>
 #include <vector>
+#include "tt_metal/common/hash_id_maker.hpp"
 
+HashIdMaker hash_id_maker;
 
 struct TestResult {
     std::string sweep_name;
@@ -92,6 +94,44 @@ public:
         }
     }
 
+    bool does_softmax_pass(
+        int batch_size,
+        int num_inputs,
+        int input_a_height,
+        int input_a_width,
+        const std::string& datatype_str,
+        const std::string& layout_str,
+        const std::string& memory_layout_str_1,
+        const std::string& buffer_str_1,
+        const std::string& shard_strategy_str,
+        bool is_scale_causal_mask_hw_dims_softmax,
+        bool is_inplace,
+        bool is_causal_mask,
+        const std::string& shard_orientation_str,
+        const std::string& memory_layout_str_2,
+        const std::string& buffer_str_2)
+    {
+        std::string vector_id = hash_id_maker.create_string_for_softmax(
+            batch_size,
+            num_inputs,
+            input_a_height,
+            input_a_width,
+            datatype_str,
+            layout_str,
+            memory_layout_str_1,
+            buffer_str_1,
+            shard_strategy_str,
+            is_scale_causal_mask_hw_dims_softmax,
+            is_inplace,
+            is_causal_mask,
+            shard_orientation_str,
+            memory_layout_str_2,
+            buffer_str_2
+        );
+        std::string status = queryTestStatus(vector_id);
+        return status == "TestStatus.PASS";
+    }
+
 private:
     // Helper functions to trim whitespace and remove quotes
     std::string trim(const std::string& str) {
@@ -117,17 +157,24 @@ private:
 int main() {
     JSONParser parser;
     parser.parseFile("database.json");
-
-    auto end1 = std::chrono::high_resolution_clock::now();
-    std::vector<std::string> statuses;
-    for (int i=0;i<1000000;i++)
-    {
-        std::string vector_id = "2e1b633d169f4a45995b85bb11da8455";
-        std::string status = parser.queryTestStatus(vector_id);
-        statuses.push_back(status);
-    }
-    auto end2 = std::chrono::high_resolution_clock::now();
-    auto response_time2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end1).count();
-    std::cout << "response_time2=" << response_time2 << std::endl;
+    bool sol =
+        parser.does_softmax_pass(
+            1,
+            1,
+            1024,
+            1024,
+            "FLOAT32",
+            "TILE",
+            "INTERLEAVED",
+            "L1",
+            "WIDTH",
+            false,
+            false,
+            false,
+            "COL_MAJOR",
+            "INTERLEAVED",
+            "DRAM"
+        );
+    std::cout << "sol=" << sol << std::endl;
     return 0;
 }

@@ -1,4 +1,6 @@
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/hash_id_maker)
+
 set(PROGRAMMING_EXAMPLES_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/add_2_integers_in_compute/add_2_integers_in_compute.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/add_2_integers_in_riscv/add_2_integers_in_riscv.cpp
