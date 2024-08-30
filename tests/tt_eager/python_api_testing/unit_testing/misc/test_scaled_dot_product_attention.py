@@ -51,16 +51,38 @@ def run_test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype
     tt_K = ttnn.Tensor(K, dtype).to(ttnn.TILE_LAYOUT).to(device)
     tt_V = ttnn.Tensor(V, dtype).to(ttnn.TILE_LAYOUT).to(device)
     tt_attn_mask = ttnn.Tensor(attn_mask, dtype).to(ttnn.TILE_LAYOUT).to(device)
-    tt_back = ttnn.transformer.scaled_dot_product_attention(
-        tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
-    )
-    tt_back = tt_back.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
 
-    gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
+    # tt_back = ttnn.transformer.scaled_dot_product_attention(
+    #     tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
+    # )
+    # tt_back = tt_back.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
 
-    out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
-    logger.debug(f"python vs pytorch: {out_pcc}")
-    assert out_pass
+    # gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
+
+    # out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
+    # logger.debug(f"python vs pytorch: {out_pcc}")
+    # assert out_pass
+
+    diff_pccs = []
+    for idx in range(1000):
+        tt_back = ttnn.transformer.scaled_dot_product_attention(
+            tt_Q, tt_K, tt_V, tt_attn_mask, is_causal=True, program_config=program_config
+        )
+        tt_back = tt_back.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
+        gt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, attn_mask, is_causal=False)
+        out_pass, out_pcc = comp_pcc(gt, tt_back, 0.994)
+        assert out_pass
+
+        if idx == 0:
+            expected_pcc = out_pcc
+            print(f"First iteration PCC: {out_pcc}")
+        else:
+            if out_pcc != expected_pcc:
+                diff_pccs.append(out_pcc)
+                logger.info(f"WWW: Failed ND PCC check on iter {idx}: {out_pcc}")
+                breakpoint()
+    print("\n\nDifferent PCCs")
+    print("\n".join(diff_pccs))
 
 
 # @pytest.mark.skip(reason="ND PCC issues")
@@ -89,7 +111,7 @@ def test_sdpa_tt(device, b, nh, nkv, s, d, q_chunk_size, k_chunk_size, dtype):
 
 
 # @pytest.mark.skip(reason="ND PCC issues")
-@pytest.mark.skipif(is_watcher_enabled(), reason="Kernel OOM with watcher enabled")
+# @pytest.mark.skipif(is_watcher_enabled(), reason="Kernel OOM with watcher enabled")
 @skip_for_grayskull("Unsupported in GS since L1 runs OOM with most configs")
 @pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat16], ids=["bfp8", "bf16"])
 @pytest.mark.parametrize("q_chunk_size", [128, 256], ids=["q128", "q256"])
