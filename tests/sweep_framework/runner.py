@@ -382,7 +382,8 @@ def export_test_results_json(header_info, results):
         client.data["results"][result_id] = result
 
     # Save the modified data back to the JSON file
-    client._save_data()
+    with open(client.json_file_path, "w") as f:
+        json.dump(client.data, f, indent=4)
 
 
 # Export test output (msg), status, exception (if applicable), git hash, timestamp, test vector, test UUID?,

@@ -34,13 +34,43 @@ ELASTIC_DEFAULT_URL = "http://yyz-elk:9200"
 
 from collections import namedtuple
 
+# parameters = {
+#     "dict_softmax_trace_hash3": {
+#         "batch_sizes": [(1,)],
+#         "num_inputs": [1],
+#         "input_a_height": [1024],
+#         "input_a_width": [1024],
+#         "input_a_dtype": [ttnn.bfloat16, ttnn.float32],
+#         "input_a_layout": [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT],
+#         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+#         "input_a_sharding_strategy": [
+#             None,
+#             ttnn.ShardStrategy.BLOCK,
+#             ttnn.ShardStrategy.HEIGHT,
+#             ttnn.ShardStrategy.WIDTH,
+#         ],
+#         "multi_core_program_config": [ttnn.SoftmaxDefaultProgramConfig],
+#         "is_scale_causal_mask_hw_dims_softmax": [False],
+#         "is_inplace": [False],
+#         "is_causal_mask": [False],
+#         "input_a_shard_orientation": [None, ttnn.ShardOrientation.ROW_MAJOR, ttnn.ShardOrientation.COL_MAJOR],
+#         "input_b_height": [None],
+#         "input_b_width": [None],
+#         "input_b_dtype": [None],
+#         "input_b_layout": [None],
+#         "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
+#         "input_b_sharding_strategy": [None],
+#         "softmax_type": ["softmax"],
+#     },
+# }
+
 parameters = {
-    "dict_softmax_trace_hash3": {
+    "dict_softmax_trace_hash_multicore": {
         "batch_sizes": [(1,)],
         "num_inputs": [1],
         "input_a_height": [1024],
         "input_a_width": [1024],
-        "input_a_dtype": [ttnn.bfloat16, ttnn.float32],
+        "input_a_dtype": [ttnn.bfloat16, ttnn.float32, ttnn.bfloat8_b],
         "input_a_layout": [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
         "input_a_sharding_strategy": [
@@ -49,18 +79,36 @@ parameters = {
             ttnn.ShardStrategy.HEIGHT,
             ttnn.ShardStrategy.WIDTH,
         ],
-        "multi_core_program_config": [ttnn.SoftmaxDefaultProgramConfig],
-        "is_scale_causal_mask_hw_dims_softmax": [False],
-        "is_inplace": [False],
-        "is_causal_mask": [False],
+        "multi_core_program_config": [
+            ttnn.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=[8, 8],
+                subblock_w=8,
+                block_h=12 * 2,
+                block_w=24,
+            )
+        ],
+        "is_scale_causal_mask_hw_dims_softmax": [False, True],
+        "is_inplace": [False, True],
+        "is_causal_mask": [False, True],
         "input_a_shard_orientation": [None, ttnn.ShardOrientation.ROW_MAJOR, ttnn.ShardOrientation.COL_MAJOR],
         "input_b_height": [None],
         "input_b_width": [None],
-        "input_b_dtype": [None],
-        "input_b_layout": [None],
-        "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
-        "input_b_sharding_strategy": [None],
-        "softmax_type": ["softmax"],
+        "input_b_dtype": [ttnn.bfloat16, ttnn.float32, ttnn.bfloat8_b],
+        "input_b_layout": [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT],
+        "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+        "input_b_sharding_strategy": [
+            None,
+            ttnn.ShardStrategy.BLOCK,
+            ttnn.ShardStrategy.HEIGHT,
+            ttnn.ShardStrategy.WIDTH,
+        ],
+        "softmax_type": [
+            "softmax",
+            "softmax_in_place",
+            "scale_mask_softmax_in_place",
+            "scale_causal_mask_hw_dims_softmax_in_place",
+            "scale_mask_softmax",
+        ],
     },
 }
 

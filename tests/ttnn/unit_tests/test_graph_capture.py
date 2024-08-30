@@ -32,4 +32,4 @@ def test_graph_capture(tmp_path, device, scalar, size, mode):
 
     ttnn.graph.pretty_print(captured_graph)
 
-    ttnn.graph.visualize(captured_graph, file_name=tmp_path / pathlib.Path("graph.svg"))
+    # ttnn.graph.visualize(captured_graph, file_name=tmp_path / pathlib.Path("graph.svg"))

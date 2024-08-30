@@ -80,8 +80,7 @@ def export_suite_vectors_json(module_name, suite_name, vectors, test_module):
     print(
         f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Archiving old vectors and saving new suite. This step may take several minutes."
     )
-    for new_vector_id in serialized_vectors.keys():
-        client.index(new_vector_id=new_vector_id, body=serialized_vectors[new_vector_id])
+    client.index_vectors(serialized_vectors)
     print(f"SWEEPS: Generated {len(serialized_vectors)} test vectors for suite {suite_name}.")
 
 

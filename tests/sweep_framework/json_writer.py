@@ -25,34 +25,19 @@ class JSONVectorManager:
             return json.load(f)
 
     def update_vectors(self, old_vector_id):
-        """
-        Updates the status of the given old vectors to 'ARCHIVED'.
-
-        Args:
-            old_vector_ids (list): List of vector IDs to be updated.
-        """
-        # Update old vectors to 'ARCHIVED' status
-        if old_vector_id in self.data.get("serialized_vectors", {}):
-            self.data["serialized_vectors"][old_vector_id]["status"] = "ARCHIVED"
-        else:
-            self.data["serialized_vectors"][old_vector_id] = {"status": "ARCHIVED"}
-
-        self._save_data()
-
-    def index(self, new_vector_id, body):
-        """
-        Indexes a new vector by adding it to the JSON data.
-
-        Args:
-            new_vector_id (str): The ID of the new vector to be indexed.
-            body (dict): The body of the new vector data.
-        """
-        # Index the new vector by adding/updating an entry
-        self.data.setdefault("serialized_vectors", {})[new_vector_id] = body
-
-        self._save_data()
-
-    def _save_data(self):
-        """Save the modified data back to the JSON file."""
         with open(self.json_file_path, "w") as f:
+            # Update old vectors to 'ARCHIVED' status
+            if old_vector_id in self.data.get("serialized_vectors", {}):
+                self.data["serialized_vectors"][old_vector_id]["status"] = "ARCHIVED"
+            else:
+                self.data["serialized_vectors"][old_vector_id] = {"status": "ARCHIVED"}
+
+            json.dump(self.data, f, indent=4)
+
+    def index_vectors(self, serialized_vectors):
+        with open(self.json_file_path, "w") as f:
+            for new_vector_id, body in serialized_vectors.items():
+                # Index the new vector by adding/updating an entry
+                self.data.setdefault("serialized_vectors", {})[new_vector_id] = body
+
             json.dump(self.data, f, indent=4)
