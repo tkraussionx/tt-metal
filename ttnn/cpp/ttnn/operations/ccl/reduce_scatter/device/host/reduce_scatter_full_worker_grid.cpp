@@ -57,10 +57,7 @@ struct WorkerTransferInfo {
 };
 
 static std::size_t decide_number_of_edm_channels(
-   ttnn::ccl::CCLOpConfig const& ccl_op_config, std::size_t max_num_workers, std::size_t user_defined_num_edm_channels, bool enable_bidirectional) {
-    if (user_defined_num_edm_channels != std::size_t(-1)) {
-        return std::min<std::size_t>(max_num_workers, user_defined_num_edm_channels);
-    }
+   ttnn::ccl::CCLOpConfig const& ccl_op_config, std::size_t max_num_workers, bool enable_bidirectional) {
     return std::min<std::size_t>(max_num_workers, enable_bidirectional ? 8 : 4);
 }
 
@@ -731,7 +728,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
     const std::optional<chip_id_t> receiver_device_id,
     const std::optional<chip_id_t> sender_device_id,
     ttnn::ccl::Topology topology,
-    const std::size_t user_defined_num_edm_channels,
+    const std::size_t user_defined_num_workers,
     const std::size_t user_defined_num_buffers_per_channel) {
     log_trace(tt::LogOp, "reduce_scatter_with_workers entry");
     TT_ASSERT(
@@ -758,9 +755,9 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
         input_tensor_n_elems_per_slice / (tt::constants::TILE_WIDTH * tt::constants::TILE_HEIGHT);
 
     TT_ASSERT(input_tensor_num_units_per_tensor_slice > 0);
-    uint32_t max_num_workers = std::min<std::size_t>(8, input_tensor_num_units_per_tensor_slice);
+    uint32_t max_num_workers = std::min<std::size_t>(user_defined_num_workers, input_tensor_num_units_per_tensor_slice);
     bool enable_bidirectional = true;
-    std::size_t num_edm_channels = decide_number_of_edm_channels(op_config, max_num_workers, user_defined_num_edm_channels, enable_bidirectional);
+    std::size_t num_edm_channels = decide_number_of_edm_channels(op_config, max_num_workers, enable_bidirectional);
     log_trace(tt::LogOp, "num_edm_channels: {}", num_edm_channels);
     auto edm_termination_mode = ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED;
 

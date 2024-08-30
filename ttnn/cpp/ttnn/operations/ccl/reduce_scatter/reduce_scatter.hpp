@@ -19,7 +19,7 @@ struct ExecuteReduceScatter {
         ttnn::operations::reduction::ReduceType math_op,
         const uint32_t num_links = 1,
         const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
-        const std::size_t num_edm_channels = std::size_t(-1),
+        const std::size_t num_workers = 8,
         const std::size_t num_buffers_per_channel = 2);
 };
 
