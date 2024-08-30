@@ -48,7 +48,6 @@ class TtLlamaModel_galaxy:
         cache_path=None,
         read_cache=False,
     ):
-        self.saved_tensors = {}
         self.state_dict = state_dict
         self.device_mesh = device_mesh
         self.num_devices = device_mesh.get_num_devices()
@@ -412,7 +411,16 @@ class TtLlamaModel_galaxy:
             epsilon=self.norm_eps,
             gamma=self.norm_sharded,
         )
-        # self.saved_tensors[f"model.norm_out"] = norm_out
+
+        # Slice out last 32 tokens in LM head to produce next token
+        # TODO: Does not work for perplexity, or if we padded input to current sequence length
+        seq_len = norm_out.shape[2]
+        dmodel = norm_out.shape[3]
+        norm_out = ttnn.slice(
+            norm_out,
+            [0, 0, seq_len - 32, 0],
+            [0, 0, seq_len - 1, dmodel - 1],
+        )
 
         ### Each device does an LM head fracture
         lm_head_out = ttnn.matmul(
@@ -421,11 +429,10 @@ class TtLlamaModel_galaxy:
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
             compute_kernel_config=self.COMPUTE_KERNEL_CONFIG,
-            # program_config=self.LM_HEAD_PROGCFG,
+            program_config=self.LM_HEAD_PROGCFG,
         )
-        # self.saved_tensors[f"model.lm_head_out"] = lm_head_out
 
-        # norm_out.deallocate(True)
+        norm_out.deallocate(True)
 
         lm_head_out = tt_all_reduce(
             lm_head_out,
@@ -435,6 +442,5 @@ class TtLlamaModel_galaxy:
             num_links=2,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
-        # self.saved_tensors[f"model.lm_head_out_all_reduce"] = lm_head_out
 
         return lm_head_out
