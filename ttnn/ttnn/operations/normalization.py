@@ -161,6 +161,7 @@ def determine_expected_group_norm_sharded_config_and_grid_size(
     shard_orientation = (
         ttnn.ShardOrientation.ROW_MAJOR if is_height_sharded or is_row_major else ttnn.ShardOrientation.COL_MAJOR
     )
+    print(ttnn.CoreGrid(y=grid_size[1], x=grid_size[0]))
     return ttnn.create_sharded_memory_config(
         shard_shape,
         ttnn.CoreGrid(y=grid_size[1], x=grid_size[0]),

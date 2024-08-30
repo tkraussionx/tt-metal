@@ -109,6 +109,8 @@ class cross_attention_upblock2d:
             res_skip_channels = in_channels if (i == num_layers - 1) else out_channels
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
+            ttnn.dump_device_memory_state(self.device, "before_rn_1_")
+
             res_hidden_states = res_hidden_states_tuple[-1]
             res_hidden_states_tuple = res_hidden_states_tuple[:-1]
 
@@ -142,6 +144,8 @@ class cross_attention_upblock2d:
                 )
             hidden_states = dealloc_input(ttnn.concat, [hidden_states, on_dev_res_hidden_states], dim=3)
             ttnn.deallocate(on_dev_res_hidden_states)
+            ttnn.dump_device_memory_state(self.device, "before_rn_2_")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!")
             hidden_states = resnet(
                 hidden_states,
                 temb=temb,

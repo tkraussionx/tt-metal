@@ -358,10 +358,18 @@ class resnetBlock2D:
         else:
             nonlinearity = ttnn.silu
 
+        print(input_tensor.shape)
+        ttnn.dump_device_memory_state(self.device, "before_gn_1_")
         out_channels = in_channels if out_channels is None else out_channels
         hidden_states = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.dump_device_memory_state(self.device, "before_gn_2_")
         if ttnn.get_memory_config(hidden_states) != self.first_gn_expected_input_sharded_memory_config:
             hidden_states = ttnn.to_memory_config(hidden_states, self.first_gn_expected_input_sharded_memory_config)
+            print(self.first_gn_expected_input_sharded_memory_config)
+            ttnn.dump_device_memory_state(self.device, "before_gn_3_")
+            hidden_states = ttnn.reallocate(hidden_states)
+            ttnn.dump_device_memory_state(self.device, "before_gn_4_")
+            print(hidden_states.shape)
 
         hidden_states = ttnn.reshape(
             hidden_states, (self.batch_size, 1, self.conv2_input_height * self.conv2_input_width, in_channels)

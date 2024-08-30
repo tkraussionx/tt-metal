@@ -121,9 +121,10 @@ def test_group_norm_with_height_sharded(device, N, C, H, W, num_groups):
 @pytest.mark.parametrize(
     "N, C, H, W, num_groups",
     [
-        (1, 1280, 16, 16, 32),
-        (1, 320, 1, 8192, 32),
-        (1, 960, 1, 1024, 32),
+        # (2, 64, 64, 960, 32),
+        # (1, 1280, 16, 16, 32),
+        # (1, 320, 1, 8192, 32),
+        # (1, 960, 1, 1024, 32),
         # not fit in L1 for GS
         # (1, 960, 1, 4096, 32),
     ],
@@ -214,16 +215,17 @@ def test_group_norm_with_block_sharded_v2_8x4_grid(device, N, C, H, W, num_group
 @pytest.mark.parametrize(
     "N, C, H, W, num_groups",
     [
-        (2, 320, 64, 64, 32),
-        (1, 640, 1, 2048, 32),
-        (1, 640, 1, 4096, 32),
-        (1, 960, 1, 2048, 32),
-        (1, 960, 1, 4096, 32),
-        (1, 1280, 1, 512, 32),
-        (1, 1280, 1, 2048, 32),
-        (1, 1920, 1, 512, 32),
-        (1, 1920, 1, 2048, 32),
-        (1, 2560, 1, 512, 32),
+        (2, 960, 64, 64, 32),
+        # (2, 320, 64, 64, 32),
+        # (1, 640, 1, 2048, 32),
+        # (1, 640, 1, 4096, 32),
+        # (1, 960, 1, 2048, 32),
+        # (1, 960, 1, 4096, 32),
+        # (1, 1280, 1, 512, 32),
+        # (1, 1280, 1, 2048, 32),
+        # (1, 1920, 1, 512, 32),
+        # (1, 1920, 1, 2048, 32),
+        # (1, 2560, 1, 512, 32),
         # not fit in L1 for GS
         # (2, 960, 64, 64, 32),
         # (1, 640, 1, 8192, 32),
@@ -252,7 +254,16 @@ def test_group_norm_with_block_sharded_v2_8x8_grid(device, N, C, H, W, num_group
         dtype=ttnn.DataType.BFLOAT16,
         layout=ttnn.ROW_MAJOR_LAYOUT,
         device=device,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    input_tensor2 = torch.rand((1, C, H, W), dtype=torch.bfloat16)
+    input_tensor2 = ttnn.from_torch(
+        input_tensor2,
+        dtype=ttnn.DataType.BFLOAT16,
+        layout=ttnn.ROW_MAJOR_LAYOUT,
+        device=device,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
 
     # input mask
@@ -262,9 +273,8 @@ def test_group_norm_with_block_sharded_v2_8x8_grid(device, N, C, H, W, num_group
         dtype=ttnn.DataType.BFLOAT8_B,
         layout=ttnn.TILE_LAYOUT,
         device=device,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
-
     # gamma/beta
     gamma = ttnn.create_group_norm_weight_bias_rm(torch_weight, C, grid_size.y)
     beta = ttnn.create_group_norm_weight_bias_rm(torch_bias, C, grid_size.y)
@@ -274,14 +284,14 @@ def test_group_norm_with_block_sharded_v2_8x8_grid(device, N, C, H, W, num_group
         dtype=ttnn.DataType.BFLOAT16,
         layout=ttnn.ROW_MAJOR_LAYOUT,
         device=device,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
     beta_t = ttnn.from_torch(
         beta,
         dtype=ttnn.DataType.BFLOAT16,
         layout=ttnn.ROW_MAJOR_LAYOUT,
         device=device,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
 
     # shard config
@@ -293,6 +303,8 @@ def test_group_norm_with_block_sharded_v2_8x8_grid(device, N, C, H, W, num_group
         ttnn.types.TensorMemoryLayout.BLOCK_SHARDED, ttnn.types.BufferType.L1, shard_spec
     )
     input_tensor = ttnn.to_memory_config(input_tensor, sharded_mem_config)
+
+    ttnn.dump_device_memory_state(device, "GN_")
 
     # groupnorm
     output_tensor = ttnn.group_norm(

@@ -36,8 +36,8 @@ def ttnn_to_torch(input):
     return input
 
 
-@skip_for_grayskull()
-@pytest.mark.skip(reason="#9599: Tests are failing.")
+# @skip_for_grayskull()
+# @pytest.mark.skip(reason="#9599: Tests are failing.")
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
 @pytest.mark.parametrize(
     "hidden_states, res_hidden_states_tuple, index, prev_output_channel, in_channels ,out_channels",
