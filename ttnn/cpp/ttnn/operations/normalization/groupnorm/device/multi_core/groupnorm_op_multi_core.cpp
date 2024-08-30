@@ -342,9 +342,6 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
 
     // create a vector of cores, in either RM or CM
     std::vector<CoreCoord> core_coords = grid_to_cores(num_cores, num_cores_c, num_cores_r, shard_orientation == ShardOrientation::ROW_MAJOR);
-    for (int i=0; i < core_coords.size(); ++i) {
-        log_debug(tt::LogOp, "worker coord: {} {}", core_coords[i].x, core_coords[i].y);
-    }
     std::vector<std::vector<CoreCoord> > core_coords2D;
     if (shard_orientation == ShardOrientation::ROW_MAJOR) {
         for (int i=0; i < num_cores_c / num_cores_per_group; ++i) {
@@ -381,17 +378,11 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
             core_index_offset += num_cores_per_batch * num_cores_per_group;
         }
     }
-    for (auto& coord : mcast_sender_core_ranges) {
-        log_debug(tt::LogOp, "mcast sender coord: {} {}", coord.start_coord.x, coord.start_coord.y);
-    }
     for (int i=0; i < num_cores; ++i) {
         // not found in mcast sender
         if (mcast_sender_core_ranges.find(CoreRange(core_coords[i])) == mcast_sender_core_ranges.end()) {
             mcast_receiver_core_ranges.insert(CoreRange(core_coords[i]));
         }
-    }
-    for (auto& coord : mcast_receiver_core_ranges) {
-        log_debug(tt::LogOp, "mcast receiver coord: {} {}", coord.start_coord.x, coord.start_coord.y);
     }
     CoreRangeSet mcast_sender_cores = CoreRangeSet(mcast_sender_core_ranges);
     CoreRangeSet mcast_receiver_cores = CoreRangeSet(mcast_receiver_core_ranges);
@@ -419,11 +410,6 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
                 }
                 mcast_groups[group_index].push_back(core_coords2D[i][j]);
             }
-        }
-    }
-    for (int i=0; i < mcast_groups.size(); ++i) {
-        for (int j=0; j < mcast_groups[i].size(); ++j) {
-            log_debug(tt::LogOp, "mcast group: {} coord: {} {}", i, mcast_groups[i][j].x, mcast_groups[i][j].y);
         }
     }
     // how many cores in a mcast group
@@ -811,13 +797,9 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
                 mcast_sender_args.push_back(mcast_end.y);
                 if (not mcast_group_first.empty()) {
                     mcast_sender_args.push_back(mcast_group_mid.size());
-                    log_debug(tt::LogOp, "mcast mid group size: {}", mcast_group_mid.size());
                 } else {
                     mcast_sender_args.push_back(mcast_group_mid.size() - 1); // mcast w/o itself
-                    log_debug(tt::LogOp, "mcast mid group size: {}", mcast_group_mid.size() - 1);
                 }
-
-                log_debug(tt::LogOp, "mcast mid group start coord: {} {} end coord: {} {}", mcast_start.x, mcast_start.y, mcast_end.x, mcast_end.y);
 
                 if (not mcast_group_first.empty()) {
                     CoreCoord mcast_first_start = device->worker_core_from_logical_core(mcast_group_first.front());
@@ -831,9 +813,6 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
                     mcast_sender_args.push_back(mcast_first_end.x);
                     mcast_sender_args.push_back(mcast_first_end.y);
                     mcast_sender_args.push_back(mcast_group_first.size() - 1); // mcast w/0 itself
-
-                    log_debug(tt::LogOp, "mcast first group start coord: {} {} end coord: {} {}", mcast_first_start.x, mcast_first_start.y, mcast_first_end.x, mcast_first_end.y);
-                    log_debug(tt::LogOp, "mcast first group size: {}", mcast_group_first.size() - 1);
                 }
                 if (not mcast_group_last.empty()) {
                     CoreCoord mcast_last_start = device->worker_core_from_logical_core(mcast_group_last.front());
@@ -847,9 +826,6 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
                     mcast_sender_args.push_back(mcast_last_end.x);
                     mcast_sender_args.push_back(mcast_last_end.y);
                     mcast_sender_args.push_back(mcast_group_last.size());
-
-                    log_debug(tt::LogOp, "mcast last group start coord: {} {} end coord: {} {}", mcast_last_start.x, mcast_last_start.y, mcast_last_end.x, mcast_last_end.y);
-                    log_debug(tt::LogOp, "mcast last group size: {}", mcast_group_last.size());
                 }
 
                 // add all coords within a group
@@ -866,7 +842,6 @@ operation::ProgramWithCallbacks groupnorm_multi_core_sharded(
                 tt::tt_metal::SetRuntimeArgs(program, reader_mcast_sender_kernels_id, core, mcast_sender_args);
 
             } else { // mcast receiver
-                log_debug(tt::LogOp, "mcast receiver receive from coord: {} {}", group.front().x, group.front().y);
                 std::vector<uint32_t> mcast_receiver_args;
                 mcast_receiver_args.push_back(device->worker_core_from_logical_core(group.front()).x);
                 mcast_receiver_args.push_back(device->worker_core_from_logical_core(group.front()).y);
