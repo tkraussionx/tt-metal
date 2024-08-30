@@ -131,6 +131,8 @@ struct ShardedBufferConfig {
     BufferType buffer_type = BufferType::L1;
     TensorMemoryLayout buffer_layout = TensorMemoryLayout::HEIGHT_SHARDED;
     ShardSpecBuffer shard_parameters;
+
+    std::optional<uint32_t> preallocated_address;
 };
 
 bool is_sharded(const TensorMemoryLayout &layout);

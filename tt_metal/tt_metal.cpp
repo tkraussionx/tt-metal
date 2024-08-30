@@ -13,20 +13,18 @@
 
 #include "common/logger.hpp"
 #include "dev_msgs.h"
-#include "llrt/hal.hpp"
 #include "impl/allocator/allocator.hpp"
 #include "impl/debug/dprint_server.hpp"
 #include "impl/dispatch/command_queue.hpp"
+#include "llrt/hal.hpp"
 #include "tools/profiler/profiler.hpp"
-
+#include "tt_metal/graph/graph_tracking.hpp"
 #include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/trace/trace.hpp"
+#include "tt_metal/impl/buffers/circular_buffer.hpp"
 #include "tt_metal/impl/device/device_pool.hpp"
 #include "tt_metal/impl/kernels/kernel.hpp"
-#include "tt_metal/impl/buffers/circular_buffer.hpp"
+#include "tt_metal/impl/trace/trace.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
-
-#include "tt_metal/graph/graph_tracking.hpp"
 
 namespace tt {
 
@@ -37,26 +35,24 @@ namespace {
 CoreRangeSet GetCoreRangeSet(const std::variant<CoreCoord, CoreRange, CoreRangeSet> &specified_core_spec) {
     ZoneScoped;
     return std::visit(
-        [](auto&& core_spec) -> CoreRangeSet
-        {
+        [](auto &&core_spec) -> CoreRangeSet {
             using T = std::decay_t<decltype(core_spec)>;
             if constexpr (std::is_same_v<T, CoreCoord>) {
                 return CoreRangeSet({CoreRange(core_spec, core_spec)});
-            }
-            else if constexpr (std::is_same_v<T, CoreRange>) {
+            } else if constexpr (std::is_same_v<T, CoreRange>) {
                 return CoreRangeSet({core_spec});
-            }
-            else if constexpr (std::is_same_v<T, CoreRangeSet>) {
+            } else if constexpr (std::is_same_v<T, CoreRangeSet>) {
                 return core_spec;
             }
         },
-        specified_core_spec
-    );
+        specified_core_spec);
 }
 
 void CheckDataMovementConfig(Program &program, const std::string &file_name, const CoreRangeSet &core_ranges) {
-    bool riscv0_in_use = false; bool riscv1_in_use = false;
-    bool noc0_in_use = false; bool noc1_in_use = false;
+    bool riscv0_in_use = false;
+    bool riscv1_in_use = false;
+    bool noc0_in_use = false;
+    bool noc1_in_use = false;
 
     auto set_global_and_local_noc_usage = [&](KernelHandle kernel_id, bool &local_noc0_usage, bool &local_noc1_usage) {
         const auto kernel = detail::GetKernel(program, kernel_id);
@@ -71,35 +67,53 @@ void CheckDataMovementConfig(Program &program, const std::string &file_name, con
     for (const auto &core_range : core_ranges.ranges()) {
         for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
             for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
-                const KernelGroup * kernel_group = program.kernels_on_core(CoreCoord(x, y),
-                    hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX));
+                const KernelGroup *kernel_group = program.kernels_on_core(
+                    CoreCoord(x, y), hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX));
                 if (kernel_group != nullptr) {
-                    bool local_noc0_in_use = false; bool local_noc1_in_use = false;
+                    bool local_noc0_in_use = false;
+                    bool local_noc1_in_use = false;
                     if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].has_value()) {
                         riscv0_in_use = true;
-                        set_global_and_local_noc_usage(kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].value(), local_noc0_in_use, local_noc1_in_use);
+                        set_global_and_local_noc_usage(
+                            kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].value(),
+                            local_noc0_in_use,
+                            local_noc1_in_use);
                     }
                     if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].has_value()) {
                         riscv1_in_use = true;
-                        set_global_and_local_noc_usage(kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].value(), local_noc0_in_use, local_noc1_in_use);
+                        set_global_and_local_noc_usage(
+                            kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].value(),
+                            local_noc0_in_use,
+                            local_noc1_in_use);
                     }
                     if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].has_value() and
                         kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].has_value()) {
-                        TT_FATAL(local_noc0_in_use and local_noc1_in_use, "Illegal NOC usage: data movement kernels on logical core {} cannot use the same NOC, doing so results in hangs!", CoreCoord(x, y).str());
+                        TT_FATAL(
+                            local_noc0_in_use and local_noc1_in_use,
+                            "Illegal NOC usage: data movement kernels on logical core {} cannot use the same NOC, "
+                            "doing so results in hangs!",
+                            CoreCoord(x, y).str());
                     }
                 }
             }
         }
     }
 
-    TT_FATAL(not (riscv0_in_use and riscv1_in_use), "DataMovementKernel creation failure: Cannot create data movement kernel for {} across specified cores because both data movement processors are in use!", file_name);
-    TT_FATAL(not (noc0_in_use and noc1_in_use), "DataMovementKernel creation failure: Cannot create data movement kernels for {} across specified cores because both NOCs are in use!", file_name);
+    TT_FATAL(
+        not(riscv0_in_use and riscv1_in_use),
+        "DataMovementKernel creation failure: Cannot create data movement kernel for {} across specified cores because "
+        "both data movement processors are in use!",
+        file_name);
+    TT_FATAL(
+        not(noc0_in_use and noc1_in_use),
+        "DataMovementKernel creation failure: Cannot create data movement kernels for {} across specified cores "
+        "because both NOCs are in use!",
+        file_name);
 }
 
 void ConfigureKernelGroup(
     const Program &program, const KernelGroup *kernel_group, Device *device, const CoreCoord &logical_core) {
-
-    for (auto& optional_id : kernel_group->kernel_ids) {
+    for (auto &optional_id : kernel_group->kernel_ids) {
         if (optional_id) {
             detail::GetKernel(program, optional_id.value())->configure(device, logical_core);
         }
@@ -134,7 +148,7 @@ std::optional<uint32_t> get_semaphore_id(const Program &program, const CoreRange
     }
 
     if (uninitialized_sem_id.has_value()) {
-        semaphore_id =  uninitialized_sem_id.value();
+        semaphore_id = uninitialized_sem_id.value();
     } else {
         TT_THROW("Unable to initialize semaphores on core range " + core_range.str());
     }
@@ -230,47 +244,55 @@ inline void SetRuntimeArgs(
 
 namespace detail {
 
-bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, std::vector<uint32_t> &host_buffer)
-{
+bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, std::vector<uint32_t> &host_buffer) {
     bool pass = true;
-    TT_FATAL(address >= DRAM_UNRESERVED_BASE, "Cannot write to reserved DRAM region, addresses [0, {}) are reserved!", DRAM_UNRESERVED_BASE);
+    TT_FATAL(
+        address >= DRAM_UNRESERVED_BASE,
+        "Cannot write to reserved DRAM region, addresses [0, {}) are reserved!",
+        DRAM_UNRESERVED_BASE);
     tt::Cluster::instance().write_dram_vec(host_buffer, tt_target_dram{device->id(), dram_channel, 0}, address);
     return pass;
 }
 
-bool ReadFromDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer)
-{
+bool ReadFromDeviceDRAMChannel(
+    Device *device, int dram_channel, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer) {
     bool pass = true;
     tt::Cluster::instance().dram_barrier(device->id());
     tt::Cluster::instance().read_dram_vec(host_buffer, size, tt_target_dram{device->id(), dram_channel, 0}, address);
     return pass;
 }
 
-bool WriteToDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t address, std::vector<uint32_t> &host_buffer, CoreType core_type)
-{
+bool WriteToDeviceL1(
+    Device *device,
+    const CoreCoord &logical_core,
+    uint32_t address,
+    std::vector<uint32_t> &host_buffer,
+    CoreType core_type) {
     ZoneScoped;
     auto worker_core = device->physical_core_from_logical_core(logical_core, core_type);
     llrt::write_hex_vec_to_core(device->id(), worker_core, host_buffer, address);
     return true;
 }
 
-bool WriteRegToDevice(Device *device, const CoreCoord &logical_core, uint32_t address, const uint32_t &regval)
-{
+bool WriteRegToDevice(Device *device, const CoreCoord &logical_core, uint32_t address, const uint32_t &regval) {
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     tt::Cluster::instance().write_reg(&regval, tt_cxy_pair(device->id(), worker_core), address);
     return true;
 }
 
-bool ReadFromDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer)
-{
+bool ReadFromDeviceL1(
+    Device *device,
+    const CoreCoord &logical_core,
+    uint32_t address,
+    uint32_t size,
+    std::vector<uint32_t> &host_buffer) {
     tt::Cluster::instance().l1_barrier(device->id());
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     host_buffer = llrt::read_hex_vec_from_core(device->id(), worker_core, address, size);
     return true;
 }
 
-bool ReadRegFromDevice(Device *device, const CoreCoord &logical_core, uint32_t address, uint32_t &regval)
-{
+bool ReadRegFromDevice(Device *device, const CoreCoord &logical_core, uint32_t address, uint32_t &regval) {
     tt::Cluster::instance().l1_barrier(device->id());
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     tt::Cluster::instance().read_reg(&regval, tt_cxy_pair(device->id(), worker_core), address);
@@ -278,7 +300,7 @@ bool ReadRegFromDevice(Device *device, const CoreCoord &logical_core, uint32_t a
 }
 
 std::map<chip_id_t, Device *> CreateDevices(
-    const std::vector<chip_id_t>& device_ids,
+    const std::vector<chip_id_t> &device_ids,
     const uint8_t num_hw_cqs,
     const size_t l1_small_size,
     const size_t trace_region_size,
@@ -292,11 +314,11 @@ std::map<chip_id_t, Device *> CreateDevices(
     tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size, trace_region_size, dispatch_core_type);
     std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
     std::map<chip_id_t, Device *> ret_devices;
-    //Only include the mmio device in the active devices set returned to the caller if we are not running
-    //on a Galaxy cluster.
-    //On Galaxy, gateway (mmio devices) cannot run compute workloads.
+    // Only include the mmio device in the active devices set returned to the caller if we are not running
+    // on a Galaxy cluster.
+    // On Galaxy, gateway (mmio devices) cannot run compute workloads.
 
-    for (Device * dev: devices) {
+    for (Device *dev : devices) {
         if (is_galaxy and dev->is_mmio_capable()) {
             continue;
         }
@@ -313,17 +335,17 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
     // If this is not done, non-blocking CCLs followed by a close will hang, since
     // the main thread will modify device state while the CCL is running on device.
     for (const auto &[device_id, dev] : devices) {
-        dev->synchronize(); // Synchronize worker queue
-        Synchronize(dev); // Synchronize device
+        dev->synchronize();  // Synchronize worker queue
+        Synchronize(dev);    // Synchronize device
     }
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     std::map<chip_id_t, Device *> mmio_devices = {};
     bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
 
     if (is_galaxy) {
-        //On Galaxy, gateway wormhole devices (mmio devices) are not included in the set of devices
-        //created by CreateDevices(). So when closing devices, we need to find the corresponding
-        //gateway chips for all the tunneled devcies.
+        // On Galaxy, gateway wormhole devices (mmio devices) are not included in the set of devices
+        // created by CreateDevices(). So when closing devices, we need to find the corresponding
+        // gateway chips for all the tunneled devcies.
         for (const auto &[device_id, dev] : devices) {
             const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             if (mmio_devices.find(mmio_device_id) == mmio_devices.end()) {
@@ -333,7 +355,7 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         }
     } else {
         for (const auto &[device_id, dev] : devices) {
-            if(dev->is_mmio_capable()) {
+            if (dev->is_mmio_capable()) {
                 mmio_devices.insert({device_id, dev});
             }
         }
@@ -343,19 +365,19 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
     }
 
     for (const auto &[device_id, dev] : mmio_devices) {
-        //For each mmio device, first close all the remote tunneled devices.
-        //Close the farthest tunneled device first.
+        // For each mmio device, first close all the remote tunneled devices.
+        // Close the farthest tunneled device first.
         auto tunnels_from_mmio = dev->tunnels_from_mmio_;
-        //iterate over all tunnels origination from this mmio device
+        // iterate over all tunnels origination from this mmio device
         for (auto t : tunnels_from_mmio) {
-            //iterate over all tunneled devices (tunnel stops) in this tunnel and close them.
+            // iterate over all tunneled devices (tunnel stops) in this tunnel and close them.
             for (uint32_t ts = t.size() - 1; ts > 0; ts--) {
                 if (devices.find(t[ts]) != devices.end()) {
                     devices[t[ts]]->close();
                 }
             }
         }
-        //finally close the mmio device
+        // finally close the mmio device
         dev->close();
     }
 }
@@ -530,7 +552,11 @@ void read_pages_to_host_helper(
     auto noc_coordinates = dev_buffer.noc_coordinates(bank_id);
     uint32_t num_entries_per_page = page_size / sizeof(uint32_t);
     uint32_t host_buffer_start = host_page_id * num_entries_per_page;
-    tt::Cluster::instance().read_core(host_buffer.data() + host_buffer_start, page_size, tt_cxy_pair(device->id(), noc_coordinates), absolute_address);
+    tt::Cluster::instance().read_core(
+        host_buffer.data() + host_buffer_start,
+        page_size,
+        tt_cxy_pair(device->id(), noc_coordinates),
+        absolute_address);
 }
 
 void ReadFromDeviceSharded(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bool shard_order) {
@@ -629,10 +655,10 @@ void ReadShard(const Buffer &buffer, std::vector<uint32_t> &host_buffer, const u
     }
 }
 
-void LaunchProgram(Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done, bool force_slow_dispatch) {
+void LaunchProgram(
+    Device *device, std::shared_ptr<Program> program, bool wait_until_cores_done, bool force_slow_dispatch) {
     LaunchProgram(device, *program, wait_until_cores_done, force_slow_dispatch);
 }
-
 
 void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done, bool force_slow_dispatch) {
     {  // Profiler scope start
@@ -656,7 +682,9 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
 
         std::vector<std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
         std::unordered_set<CoreCoord> not_done_cores;
-        for (uint32_t programmable_core_type_index = 0; programmable_core_type_index < logical_cores_used_in_program.size(); programmable_core_type_index++) {
+        for (uint32_t programmable_core_type_index = 0;
+             programmable_core_type_index < logical_cores_used_in_program.size();
+             programmable_core_type_index++) {
             CoreType core_type = hal.get_core_type(programmable_core_type_index);
             for (const auto &logical_core : logical_cores_used_in_program[programmable_core_type_index]) {
                 launch_msg_t *msg = &program.kernels_on_core(logical_core, programmable_core_type_index)->launch_msg;
@@ -664,7 +692,8 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
 
                 auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
                 not_done_cores.insert(physical_core);
-                tt::llrt::write_launch_msg_to_core(device->id(), physical_core, msg, device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH));
+                tt::llrt::write_launch_msg_to_core(
+                    device->id(), physical_core, msg, device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH));
             }
         }
         if (wait_until_cores_done) {
@@ -682,7 +711,7 @@ void WaitProgramDone(Device *device, Program &program) {
     std::vector<std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
     std::unordered_set<CoreCoord> not_done_cores;
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
-        const auto & logical_cores = logical_cores_used_in_program[index];
+        const auto &logical_cores = logical_cores_used_in_program[index];
         CoreType core_type = hal.get_core_type(index);
         for (const auto &logical_core : logical_cores) {
             auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
@@ -710,7 +739,7 @@ bool ConfigureDeviceWithProgram(Device *device, Program &program, bool fd_bootlo
 
     std::vector<std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
-        const auto & logical_cores = logical_cores_used_in_program[index];
+        const auto &logical_cores = logical_cores_used_in_program[index];
         CoreType core_type = hal.get_core_type(index);
         for (const auto &logical_core : logical_cores) {
             KernelGroup *kernel_group = program.kernels_on_core(logical_core, index);
@@ -720,7 +749,8 @@ bool ConfigureDeviceWithProgram(Device *device, Program &program, bool fd_bootlo
             // TODO: add support for CB for ethernet cores
             if (core_type == CoreType::WORKER) {
                 // CircularBufferConfigVec -- common across all kernels, so written once to the core
-                std::vector<uint32_t> circular_buffer_config_vec(NUM_CIRCULAR_BUFFERS * UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG, 0);
+                std::vector<uint32_t> circular_buffer_config_vec(
+                    NUM_CIRCULAR_BUFFERS * UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG, 0);
 
                 auto cbs_on_core = program.circular_buffers_on_core(logical_core);
                 for (auto circular_buffer : cbs_on_core) {
@@ -733,8 +763,10 @@ bool ConfigureDeviceWithProgram(Device *device, Program &program, bool fd_bootlo
                             addr_in_bytes >> 4;  // convert to addr in 16B words
                         circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * buffer_index + 1) =
                             size_in_bytes >> 4;  // convert to addr in 16B words
-                        circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * buffer_index + 2) = num_pages;
-                        circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * buffer_index + 3) = page_size >> 4;
+                        circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * buffer_index + 2) =
+                            num_pages;
+                        circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * buffer_index + 3) =
+                            page_size >> 4;
                     }
                 }  // PROF_END("CBS")
 
@@ -758,7 +790,7 @@ void WriteRuntimeArgsToDevice(Device *device, Program &program, bool force_slow_
 
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
         CoreType core_type = hal.get_core_type(index);
-        for (auto& kg : program.get_kernel_groups(index)) {
+        for (auto &kg : program.get_kernel_groups(index)) {
             uint32_t kernel_config_base = kg.launch_msg.kernel_config.kernel_config_base[index];
             for (const CoreRange &core_range : kg.core_ranges.ranges()) {
                 for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
@@ -766,38 +798,44 @@ void WriteRuntimeArgsToDevice(Device *device, Program &program, bool force_slow_
                         CoreCoord logical_core(x, y);
                         auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
                         for (int dispatch_class = 0; dispatch_class < DISPATCH_CLASS_MAX; dispatch_class++) {
-                            auto& optional_id = kg.kernel_ids[dispatch_class];
+                            auto &optional_id = kg.kernel_ids[dispatch_class];
                             if (optional_id) {
                                 const auto &kernel = detail::GetKernel(program, optional_id.value());
                                 const auto &rt_args = kernel->runtime_args(logical_core);
 
                                 if (rt_args.size() > 0) {
-                                    auto rt_args_addr = kernel_config_base + kg.launch_msg.kernel_config.mem_map[dispatch_class].rta_offset;
+                                    auto rt_args_addr = kernel_config_base +
+                                                        kg.launch_msg.kernel_config.mem_map[dispatch_class].rta_offset;
                                     log_trace(
-                                              tt::LogMetal,
-                                              "{} - Writing {} unique rtargs to core {} (physical: {}) addr 0x{:x} => args: {}",
-                                              __FUNCTION__,
-                                              rt_args.size(),
-                                              logical_core.str(),
-                                              physical_core.str(),
-                                              rt_args_addr,
-                                              rt_args);
+                                        tt::LogMetal,
+                                        "{} - Writing {} unique rtargs to core {} (physical: {}) addr 0x{:x} => args: "
+                                        "{}",
+                                        __FUNCTION__,
+                                        rt_args.size(),
+                                        logical_core.str(),
+                                        physical_core.str(),
+                                        rt_args_addr,
+                                        rt_args);
                                     tt::llrt::write_hex_vec_to_core(device_id, physical_core, rt_args, rt_args_addr);
                                 }
 
                                 const auto &common_rt_args = kernel->common_runtime_args();
                                 if (common_rt_args.size() > 0) {
-                                    auto common_rt_args_addr = kernel_config_base + kg.launch_msg.kernel_config.mem_map[dispatch_class].crta_offset;
+                                    auto common_rt_args_addr =
+                                        kernel_config_base +
+                                        kg.launch_msg.kernel_config.mem_map[dispatch_class].crta_offset;
                                     log_trace(
-                                              tt::LogMetal,
-                                              "{} - Writing {} common rtargs to core {} (physical: {}) addr 0x{:x} => args: {}",
-                                              __FUNCTION__,
-                                              common_rt_args.size(),
-                                              logical_core.str(),
-                                              physical_core.str(),
-                                              common_rt_args_addr,
-                                              common_rt_args);
-                                    tt::llrt::write_hex_vec_to_core(device_id, physical_core, common_rt_args, common_rt_args_addr);
+                                        tt::LogMetal,
+                                        "{} - Writing {} common rtargs to core {} (physical: {}) addr 0x{:x} => args: "
+                                        "{}",
+                                        __FUNCTION__,
+                                        common_rt_args.size(),
+                                        logical_core.str(),
+                                        physical_core.str(),
+                                        common_rt_args_addr,
+                                        common_rt_args);
+                                    tt::llrt::write_hex_vec_to_core(
+                                        device_id, physical_core, common_rt_args, common_rt_args_addr);
                                 }
                             }
                         }
@@ -814,7 +852,7 @@ void CompileProgram(Device *device, Program &program, bool fd_bootloader_mode) {
 }
 
 void AllocateBuffer(Buffer *buffer, bool bottom_up) {
-    if(GraphTracker::instance().hook_allocate(buffer, bottom_up)) {
+    if (GraphTracker::instance().hook_allocate(buffer, bottom_up)) {
         GraphTracker::instance().track_allocate(buffer, bottom_up);
         return;
     }
@@ -824,7 +862,7 @@ void AllocateBuffer(Buffer *buffer, bool bottom_up) {
 
 void DeallocateBuffer(Buffer *buffer) {
     GraphTracker::instance().track_deallocate(buffer);
-    if(GraphTracker::instance().hook_deallocate(buffer)) {
+    if (GraphTracker::instance().hook_deallocate(buffer)) {
         return;
     }
     EnqueueDeallocateBuffer(
@@ -835,21 +873,13 @@ void DeallocateBuffer(Buffer *buffer) {
         false);
 }
 
-
-
 }  // namespace detail
 
-size_t GetNumAvailableDevices() {
-    return tt::Cluster::instance().number_of_user_devices();
-}
+size_t GetNumAvailableDevices() { return tt::Cluster::instance().number_of_user_devices(); }
 
-size_t GetNumPCIeDevices() {
-    return tt::Cluster::instance().number_of_pci_devices();
-}
+size_t GetNumPCIeDevices() { return tt::Cluster::instance().number_of_pci_devices(); }
 
-chip_id_t GetPCIeDeviceID(chip_id_t device_id){
-    return tt::Cluster::instance().get_associated_mmio_device(device_id);
-}
+chip_id_t GetPCIeDeviceID(chip_id_t device_id) { return tt::Cluster::instance().get_associated_mmio_device(device_id); }
 
 Device *CreateDevice(
     chip_id_t device_id,
@@ -860,7 +890,8 @@ Device *CreateDevice(
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
 
-    tt::DevicePool::initialize({device_id}, num_hw_cqs, l1_small_size, trace_region_size, dispatch_core_type, l1_bank_remap);
+    tt::DevicePool::initialize(
+        {device_id}, num_hw_cqs, l1_small_size, trace_region_size, dispatch_core_type, l1_bank_remap);
     auto dev = tt::DevicePool::instance().get_active_device(device_id);
     return dev;
 }
@@ -977,7 +1008,14 @@ uint32_t CreateSemaphore(
 
 std::shared_ptr<Buffer> CreateBuffer(const InterleavedBufferConfig &config) {
     return std::make_shared<Buffer>(
-        config.device, config.size, config.page_size, config.buffer_type, config.buffer_layout, std::nullopt, std::nullopt, config.preallocated_address);
+        config.device,
+        config.size,
+        config.page_size,
+        config.buffer_type,
+        config.buffer_layout,
+        std::nullopt,
+        std::nullopt,
+        config.preallocated_address);
 }
 
 std::shared_ptr<Buffer> CreateBuffer(const ShardedBufferConfig &config) {
@@ -987,7 +1025,9 @@ std::shared_ptr<Buffer> CreateBuffer(const ShardedBufferConfig &config) {
         config.page_size,
         config.buffer_type,
         config.buffer_layout,
-        config.shard_parameters);
+        config.shard_parameters,
+        std::nullopt,
+        config.preallocated_address);
 }
 
 void DeallocateBuffer(Buffer &buffer) { buffer.deallocate(); }
