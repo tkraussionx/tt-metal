@@ -54,21 +54,38 @@ Tensor create_scalar(T scalar, DataType data_type, Layout layout, Device* device
 }
 
 template <typename T>
+inline ttnn::Tensor full_impl(
+    uint8_t queue_id,
+    const ttnn::Shape& shape,
+    const T fill_value,
+    const std::optional<DataType>& dtype = std::nullopt,
+    const std::optional<Layout>& layout = std::nullopt,
+    const std::optional<std::reference_wrapper<Device>>& device_arg = std::nullopt,
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt) {
+    Device* device = device_arg.has_value() ? &(device_arg.value().get()) : nullptr;
+    return tt::numpy::full_impl(
+        queue_id,
+        shape.value,
+        fill_value,
+        dtype.value_or(ttnn::bfloat16),
+        layout.value_or(ttnn::ROW_MAJOR_LAYOUT),
+        device,
+        memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG),
+        optional_output_tensor);
+}
+
+template <typename T>
 inline ttnn::Tensor full(
     const ttnn::Shape& shape,
     const T fill_value,
     const std::optional<DataType>& dtype = std::nullopt,
     const std::optional<Layout>& layout = std::nullopt,
     const std::optional<std::reference_wrapper<Device>>& device_arg = std::nullopt,
-    const std::optional<MemoryConfig>& memory_config = std::nullopt) {
-    Device* device = device_arg.has_value() ? &(device_arg.value().get()) : nullptr;
-    return tt::numpy::full(
-        shape.value,
-        fill_value,
-        dtype.value_or(ttnn::bfloat16),
-        layout.value_or(ttnn::ROW_MAJOR_LAYOUT),
-        device,
-        memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt,
+    uint8_t queue_id = 0) {
+    return full_impl(queue_id, shape, fill_value, dtype, layout, device_arg, memory_config, optional_output_tensor);
 }
 
 namespace detail {
@@ -158,23 +175,27 @@ inline constexpr EmptyLike empty_like{};
 
 struct Full {
     static ttnn::Tensor invoke(
+        uint8_t queue_id,
         const ttnn::Shape& shape,
         const float fill_value,
         const std::optional<DataType>& dtype = std::nullopt,
         const std::optional<Layout>& layout = std::nullopt,
         const std::optional<std::reference_wrapper<Device>>& device = std::nullopt,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt) {
-        return full(shape, fill_value, dtype, layout, device, memory_config);
+        const std::optional<MemoryConfig>& memory_config = std::nullopt,
+        std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt) {
+        return full_impl(queue_id, shape, fill_value, dtype, layout, device, memory_config, optional_output_tensor);
     }
 
     static ttnn::Tensor invoke(
+        uint8_t queue_id,
         const ttnn::Shape& shape,
         const int fill_value,
         const std::optional<DataType>& dtype = std::nullopt,
         const std::optional<Layout>& layout = std::nullopt,
         const std::optional<std::reference_wrapper<Device>>& device = std::nullopt,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt) {
-        return full(shape, fill_value, dtype, layout, device, memory_config);
+        const std::optional<MemoryConfig>& memory_config = std::nullopt,
+        std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt) {
+        return full_impl(queue_id, shape, fill_value, dtype, layout, device, memory_config, optional_output_tensor);
     }
 };
 

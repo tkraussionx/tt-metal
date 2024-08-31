@@ -139,6 +139,35 @@ def test_full(device, input_shape, fill_value):
 
 
 @pytest.mark.parametrize(
+    "input_shape",
+    [
+        [32, 32],
+        [5, 96, 64],
+    ],
+)
+@pytest.mark.parametrize(
+    "fill_value",
+    [-5.25, 0, 1.0],
+)
+@pytest.mark.parametrize("pass_queue_id", [True, False])
+def test_full_opt_tensor(device, input_shape, fill_value, pass_queue_id):
+    torch_tensor = torch.full(input_shape, dtype=torch.bfloat16, fill_value=fill_value)
+    opt_tensor = torch.randn(input_shape, dtype=torch.bfloat16)
+    opt_tensor = ttnn.from_torch(opt_tensor, ttnn.bfloat16, layout=ttnn.Layout.TILE, device=device)
+
+    cq_id = 0
+    if pass_queue_id:
+        ttnn.full(input_shape, device=device, fill_value=fill_value, optional_tensor=opt_tensor, queue_id=cq_id)
+    else:
+        ttnn.full(input_shape, device=device, fill_value=fill_value, optional_tensor=opt_tensor)
+    assert ttnn.is_tensor_storage_on_device(opt_tensor)
+    tensor = ttnn.to_torch(opt_tensor)
+
+    assert_with_pcc(torch_tensor, tensor, 0.9999)
+    assert torch.allclose(torch_tensor, tensor)
+
+
+@pytest.mark.parametrize(
     "start",
     [4, 8, 16, 32],
 )
