@@ -34,13 +34,36 @@ operation::ProgramWithCallbacks untilize_multi_core(
     Device* device = a.device();
 
     uint32_t ntiles = a.volume() / TILE_HW;
-    uint32_t ntiles_per_block = a.get_legacy_shape()[-1] / TILE_WIDTH;
-    uint32_t nblocks = ceil((float)ntiles / ntiles_per_block);
-    uint32_t block_size_nbytes = a.get_legacy_shape()[-1] * output.element_size();
+    uint32_t stick_s = a.get_legacy_shape()[-1];
+    uint32_t stick_size = stick_s * output.element_size();
+    uint32_t ntiles_in_row = stick_s / TILE_WIDTH;
+    uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - L1_UNRESERVED_BASE;
+    uint32_t max_tiles = (max_l1_size / (input_single_tile_size + output_single_tile_size));  // 2 CBs, double buffering each
+    // Currently need the number of tiles in a row to be divisible by tiles in a block
+    uint32_t ntiles_per_block = 1;
+    if (ntiles_in_row <= max_tiles) {
+        ntiles_per_block = ntiles_in_row;
+    } else {
+        for (uint32_t n_t = max_tiles; n_t > 0; n_t--) {
+            if (ntiles_in_row % n_t == 0) {
+                ntiles_per_block = n_t;
+                break;
+            }
+        }
+    }
+
+    uint32_t num_full_blocks_in_row = ntiles_in_row / ntiles_per_block;
+    uint32_t num_leftover_tiles = ntiles_in_row % ntiles_per_block;
+    uint32_t leftover_width_in_row = num_leftover_tiles * output.element_size();
+
+
+    //uint32_t ntiles_per_block = a.get_legacy_shape()[-1] / TILE_WIDTH;
+    uint32_t nblocks_height = ceil((float)(ntiles/ntiles_in_row)); //parallelizing on row
+    uint32_t block_size_nbytes = ntiles_per_block * TILE_WIDTH * output.element_size();
 
     auto grid_size = device->compute_with_storage_grid_size();
     auto [ncores, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff] =
-        ttnn::split_blocks_for_tilize(grid_size, nblocks);
+        ttnn::split_blocks_for_tilize(grid_size, nblocks_height);
     uint32_t ncores_x = grid_size.x;
     uint32_t ncores_y = std::ceil(static_cast<float>(ncores) / ncores_x);
 
@@ -78,7 +101,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         end_core = (*shard_spec.grid.ranges().begin()).end_coord;
     }
 
-    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
+    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block;
     auto [src0_cb_index, cb_src0] = create_cb(
         tt::CB::c_in0,
         program,
@@ -88,7 +111,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         input_cb_data_format,
         src_sharded ? a.buffer() : nullptr);
 
-    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
+    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block;
     auto [output_cb_index, cb_output] = create_cb(
         tt::CB::c_out0,
         program,
@@ -146,8 +169,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 all_cores,
                 WriterDataMovementConfig(writer_ct_args));
         } else {
-            bool stick_size_is_power_of_two = is_power_of_two_at_least_32(block_size_nbytes);
-            uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)std::log2(block_size_nbytes) : 0;
+            bool stick_size_is_power_of_two = is_power_of_two_at_least_32(stick_size);
+            uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)std::log2(stick_size) : 0;
             vector<uint32_t> writer_ct_args = {
                 (uint32_t)out_is_dram,
                 (uint32_t)stick_size_is_power_of_two,
@@ -165,14 +188,26 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
     /** compute
      */
+
     vector<uint32_t> compute_args = {
-        (uint32_t)nblocks_per_core,  // per_core_block_cnt
+        (uint32_t)nblocks_per_core * (ntiles_in_row/ ntiles_per_block),  // per_core_block_cnt
         (uint32_t)ntiles_per_block,  // per_block_ntiles
     };
     vector<uint32_t> compute_args_cliff = {
-        (uint32_t)nblocks_per_core_cliff,
+        (uint32_t)nblocks_per_core_cliff * (ntiles_in_row/ ntiles_per_block),
         (uint32_t)ntiles_per_block,  // per_block_ntiles
     };
+
+    if (src_sharded) {
+       compute_args = {
+            (uint32_t)nblocks_per_core,  // per_core_block_cnt
+            (uint32_t)ntiles_per_block,  // per_block_ntiles
+        };
+       compute_args_cliff = {
+            (uint32_t)nblocks_per_core_cliff,
+            (uint32_t)ntiles_per_block,  // per_block_ntiles
+        };
+    }
 
     std::string compute_kernel("ttnn/cpp/ttnn/operations/data_movement/untilize/device/kernels/compute/pack_untilize.cpp");
     if (ntiles_per_block > MAX_PACK_UNTILIZE_WIDTH || !use_pack_untilize) {
@@ -223,7 +258,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         } else {
             reader_rt_args = {
                 src0_buffer->address(),               // src_addr
-                ntiles_per_block * nblocks_per_core,  // ntiles
+                ntiles_in_row * nblocks_per_core,  // ntiles
                 tile_start_id                         // start_id
             };
         }
@@ -278,12 +313,12 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 writer_rt_args = {
                     dst_buffer->address(),           // dst_addr
                     nblocks_per_core * TILE_HEIGHT,  // nblocks per core
-                    block_size_nbytes,               // block_size_nbytes
+                    stick_size,               // stick_size
                     ntiles_per_block,                // ntiles_per_block
                     block_size_nbytes,               // block_size_nbytes
-                    1,                               // full blocks in a row
-                    0,
-                    0,
+                    num_full_blocks_in_row,                               // full blocks in a row
+                    num_leftover_tiles,
+                    leftover_width_in_row,
                     row_start_id};
             }
         }
@@ -294,7 +329,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
 
         tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, writer_rt_args);
         cores_with_rtargs.push_back(core);
-        tile_start_id += ntiles_per_block * nblocks_per_core;
+        tile_start_id += ntiles_in_row * nblocks_per_core;
         row_start_id += TILE_HEIGHT * nblocks_per_core;
     }
     if (ncores_full < ncores) {
@@ -311,7 +346,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         } else {
             reader_rt_args = {
                 src0_buffer->address(),                               // src_addr
-                (uint32_t)ntiles_per_block * nblocks_per_core_cliff,  // ntiles
+                (uint32_t)ntiles_in_row * nblocks_per_core_cliff,  // ntiles
                 tile_start_id                                         // start_id
             };
         }
@@ -365,12 +400,12 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 writer_rt_args = {
                     dst_buffer->address(),                 // dst_addr
                     nblocks_per_core_cliff * TILE_HEIGHT,  // nsticks
-                    block_size_nbytes,                     // stick_size_nbytes
+                    stick_size,                     // stick_size_nbytes
                     ntiles_per_block,                      // ntiles_per_block
                     block_size_nbytes,                     // block_width_nbytes
-                    1,                                     // full blocks in a row
-                    0,                                     // UNUSED
-                    0,                                     // UNUSED
+                    num_full_blocks_in_row,                                     // full blocks in a row
+                    num_leftover_tiles,                                     // UNUSED
+                    leftover_width_in_row,                                     // UNUSED
                     row_start_id};
             }
         }
