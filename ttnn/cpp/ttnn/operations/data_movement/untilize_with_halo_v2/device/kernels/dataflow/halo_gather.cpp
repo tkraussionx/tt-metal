@@ -6,7 +6,7 @@
 
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 
 #if ENABLE_DEBUG
 #include "debug/dprint.h"
@@ -73,10 +73,12 @@ void copy_sticks_async(
                 uint32_t dst_addr = out_base_l1_addr + dst_offset;
                 uint64_t src_addr = base_addr + src_offset;
                 noc_async_read(src_addr, dst_addr, size);
+                DPRINT << "nsticks: " << nsticks << " src_addr: " << src_addr << " dst_addr: " << dst_addr << " size: " << size << ENDL();
             } else {
                 uint64_t dst_addr = base_addr + dst_offset;
                 uint32_t src_addr = in_base_l1_addr + src_offset;
                 noc_async_write(src_addr, dst_addr, size);
+                DPRINT << "nsticks: " << nsticks << " src_addr: " << src_addr << " dst_addr: " << dst_addr << " size: " << size << ENDL();
             }
         }
 
@@ -108,6 +110,17 @@ void kernel_main() {
     const uint32_t in_base_l1_addr = get_read_ptr(in_cb_id);
     const uint32_t out_base_l1_addr = get_write_ptr(out_cb_id);
 
+    DPRINT << "========= " << my_noc_x << "," << my_noc_y << " =========" << ENDL();
+    DPRINT << "in_nsticks: " << in_nsticks << ENDL();
+    DPRINT << "stick_nbytes: " << stick_nbytes << ENDL();
+    DPRINT << "in_nsticks * stick_nbytes: " << in_nsticks * stick_nbytes << ENDL();
+    DPRINT << "in_base_l1_addr: " << in_base_l1_addr << ENDL();
+    DPRINT << "out_base_l1_addr: " << out_base_l1_addr << ENDL();
+    DPRINT << "remote_read: " << remote_read << ENDL();
+    DPRINT << "padding_config_cb_id: " << padding_config_cb_id << ENDL();
+    DPRINT << "local_config_cb_id: " << padding_config_cb_id << ENDL();
+    DPRINT << "remote_config_cb_id: " << padding_config_cb_id << ENDL();
+
     if constexpr (padding_config_cb_id) {
         // construct the pad stick in its buffer
         cb_reserve_back(pad_cb_id, 1);
@@ -118,7 +131,6 @@ void kernel_main() {
         uint32_t padding_config_l1_addr = get_read_ptr(padding_config_cb_id);
         volatile tt_l1_ptr uint16_t* config_data =
             reinterpret_cast<volatile tt_l1_ptr uint16_t*>(padding_config_l1_addr);
-        // print_data_u16(padding_config_l1_addr, 1, 16);
         const uint64_t padding_l1_addr = get_noc_addr(my_noc_x, my_noc_y, get_read_ptr(pad_cb_id));
         const uint32_t dst_base_addr = out_base_l1_addr;
         uint16_t nsticks = 1;
@@ -126,9 +138,12 @@ void kernel_main() {
             uint16_t dst_local_idx = config_data[j + 0];
             nsticks = config_data[j + 1];
 
+            DPRINT << "pad nsticks: " << nsticks << ENDL();
+
             uint64_t dst_addr = dst_base_addr + dst_local_idx * stick_nbytes;
             for (uint16_t k = 0; k < nsticks; ++k) {
                 noc_async_read(padding_l1_addr, dst_addr, stick_nbytes);
+                DPRINT << "pad dst_addr: " << dst_addr << ENDL();
                 dst_addr += stick_nbytes;
             }
         }
@@ -144,6 +159,7 @@ void kernel_main() {
 
     if constexpr (remote_config_cb_id) {
         uint32_t config_data_l1_addr = get_read_ptr(remote_config_cb_id);
+        DPRINT << "remote config_data_l1_addr: " << config_data_l1_addr << ENDL();
         tt_l1_ptr uint16_t const* config_data = reinterpret_cast<tt_l1_ptr uint16_t const*>(config_data_l1_addr);
         copy_sticks_async<stick_nbytes, is_block_sharded, remote_read, is_col_major>(
             config_data, my_noc_x, my_noc_y, in_base_l1_addr, out_base_l1_addr);
@@ -151,6 +167,7 @@ void kernel_main() {
 
     if constexpr (local_config_cb_id) {
         uint32_t config_data_l1_addr = get_read_ptr(local_config_cb_id);
+        DPRINT << "local config_data_l1_addr: " << config_data_l1_addr << ENDL();
         tt_l1_ptr uint16_t const* config_data = reinterpret_cast<tt_l1_ptr uint16_t const*>(config_data_l1_addr);
         copy_sticks_async<stick_nbytes, is_block_sharded, false, is_col_major>(
             config_data, my_noc_x, my_noc_y, in_base_l1_addr, out_base_l1_addr);
@@ -158,4 +175,6 @@ void kernel_main() {
 
     noc_async_read_barrier();
     noc_async_write_barrier();
+
+    print_pages(in_base_l1_addr, 16, 32);
 }

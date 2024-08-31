@@ -65,6 +65,9 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
         input_npages = remapped_input_shard_shape_for_output_grid;
     }
 
+    log_debug(tt::LogOp, "out_stick_nbytes: {}", out_stick_nbytes);
+    log_debug(tt::LogOp, "in_page_size: {}", in_page_size);
+
     // Construct CBs
     // //
 

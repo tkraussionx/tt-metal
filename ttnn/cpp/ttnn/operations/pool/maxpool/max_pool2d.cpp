@@ -85,6 +85,10 @@ Tensor MaxPoolNewOp::invoke(uint8_t queue_id, const Tensor& input_tensor, uint32
                                             num_cores_nhw,
                                             parallel_config.grid,
                                             false);
+
+    auto tmp_input_tensor = input_tensor_sharded.cpu();
+    tmp_input_tensor.print();
+
     // call the halo uop
     uint32_t neg_inf_pad_val = 0xf7ff;
     auto haloed_tensor = ttnn::halo(
@@ -97,6 +101,11 @@ Tensor MaxPoolNewOp::invoke(uint8_t queue_id, const Tensor& input_tensor, uint32
         0,
         input_tensor_sharded.memory_config(),
         is_out_tiled);
+
+    // auto tmp_input_tensor = haloed_tensor.cpu();
+    // tmp_input_tensor.print();
+
+    return haloed_tensor;
 
     return ttnn::prim::max_pool_new(
         queue_id,

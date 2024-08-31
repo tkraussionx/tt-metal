@@ -27,7 +27,7 @@ void HaloDeviceOperation::validate(const std::vector<Tensor> &input_tensors) con
 
 std::vector<tt::tt_metal::Shape> HaloDeviceOperation::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     const auto& input = input_tensors.at(0);
-    const auto& input_shape = input.get_legacy_shape();
+    const auto& input_shape = input.get_legacy_shape().without_padding();
     tt::tt_metal::Shape output_shape = input_shape;
 
     uint32_t nbatch = input_shape[0];
@@ -90,6 +90,13 @@ operation::ProgramWithCallbacks HaloDeviceOperation::create_program(const std::v
     auto pad_config_tensor = sliding_window::construct_on_host_config_tensor(pad_config, this->config_, this->parallel_config_);
     auto local_config_tensor = sliding_window::construct_on_host_config_tensor(local_config, this->config_, this->parallel_config_);
     auto remote_config_tensor = sliding_window::construct_on_host_config_tensor(remote_config, this->config_, this->parallel_config_);
+
+    std::cout << "pad_config_tensor: " << std::endl;
+    pad_config_tensor.print();
+    std::cout << "local_config_tensor: " << std::endl;
+    local_config_tensor.print();
+    std::cout << "remote_config_tensor: " << std::endl;
+    remote_config_tensor.print();
 
     auto pad_config_device_tensor = sliding_window::move_config_tensor_to_device(pad_config_tensor, parallel_config_, is_block_sharded, device);
     auto local_config_device_tensor = sliding_window::move_config_tensor_to_device(local_config_tensor, parallel_config_, is_block_sharded, device);

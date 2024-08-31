@@ -8,7 +8,7 @@ import torch
 import pytest
 import math
 
-from models.utility_functions import is_wormhole_b0
+from models.utility_functions import is_wormhole_b0, is_grayskull
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 import ttnn
@@ -42,6 +42,7 @@ from ttnn.operations.conv2d import determine_parallel_config, create_sharded_mem
             # [64, 32, 264, 40],    ## oom
             # [128, 32, 264, 40],   ## oom
             # [256, 32, 264, 40],   ## oom
+            [1, 16, 1056, 160],
             [4, 16, 1056, 160],
             # [8, 16, 1056, 160],     ## oom
             # [16, 16, 1056, 160],    ## oom
@@ -104,7 +105,7 @@ def test_run_max_pool(
     if in_c % 16 != 0:
         pytest.skip("Current maxpool writer needs nchannels to be multiple of 16!")
 
-    if in_c == 16 and dtype == ttnn.bfloat8_b and in_n * in_h * in_w > 600000:
+    if in_c == 16 and dtype == ttnn.bfloat8_b and in_n * in_h * in_w > 600000 and is_grayskull():
         pytest.skip("This case runs out of memory on Grayskull")
 
     if in_n > 16 and in_c > 64 and dtype == ttnn.bfloat8_b and is_wormhole_b0():
@@ -114,15 +115,16 @@ def test_run_max_pool(
     torch.set_printoptions(precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32)
 
     ## construct the tensor in NCHW shape
-    act = torch.randn(act_shape, dtype=torch.bfloat16)
+    # act = torch.randn(act_shape, dtype=torch.bfloat16)
     # act = torch.zeros(act_shape, dtype=torch.bfloat16)
-    # act = torch.ones(act_shape, dtype=torch.bfloat16)
-    # act = torch.arange(0, volume(act_shape), dtype=torch.bfloat16).reshape(act_shape)
-    # for n in range(act_shape[0]):
-    #     for c in range(act_shape[1]):
-    #         for h in range(act_shape[2]):
-    #             for w in range(act_shape[3]):
-    #                 act[n, c, h, w] = 1 + n + h + w + c # + torch.rand(1) * 0.15
+    act = torch.ones(act_shape, dtype=torch.bfloat16)
+    act_volume = act_shape[0] * act_shape[1] * act_shape[2] * act_shape[3]
+    act = torch.arange(0, act_volume, dtype=torch.bfloat16).reshape(act_shape)
+    for n in range(act_shape[0]):
+        for c in range(act_shape[1]):
+            for h in range(act_shape[2]):
+                for w in range(act_shape[3]):
+                    act[n, c, h, w] = 1 + n + h + w + c  # + torch.rand(1) * 0.15
     # torch.save(act, "act.pt")
     # act = torch.load("act.pt")
 
@@ -153,6 +155,7 @@ def test_run_max_pool(
             output_channels=in_c,
             device=device,
             is_out_tiled=False,
+            config_override={"num_cores_nhw": 64},
         )
         sharded_memory_config = create_sharded_memory_config_from_parallel_config(
             tensor_shape=act_shape,
@@ -160,6 +163,8 @@ def test_run_max_pool(
             tile_size=32 if dtype == ttnn.bfloat8_b else 1,
         )
         ttact_device = ttnn.to_memory_config(ttact_device, sharded_memory_config)
+        # tmp_ttact = torch.Tensor(ttnn.to_torch(ttact_device.cpu()))
+        # torch.save(tmp_ttact, "ttact_device.pt")
     output = ttnn.max_pool2d_new(
         input_tensor=ttact_device,
         batch_size=in_n,
@@ -176,7 +181,8 @@ def test_run_max_pool(
     # interleaved_mem_config = ttnn.L1_MEMORY_CONFIG
     # output = ttnn.to_memory_config(output, interleaved_mem_config)
     output_host = output.cpu()
-    output_pytorch_padded = ttnn.to_torch(output_host)
+    output_pytorch_padded = torch.Tensor(ttnn.to_torch(output_host))
+    torch.save(output_pytorch_padded, "output_pytorch_padded.pt")
     output_pytorch = output_pytorch_padded[:, :, :, :in_c]
 
     ## reference
