@@ -40,10 +40,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
     uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - L1_UNRESERVED_BASE;
     uint32_t max_tiles = (max_l1_size / (input_single_tile_size + output_single_tile_size));  // 2 CBs, double buffering each
     // Currently need the number of tiles in a row to be divisible by tiles in a block
-    uint32_t ntiles_per_block = 1;
-    if (ntiles_in_row <= max_tiles) {
-        ntiles_per_block = ntiles_in_row;
-    } else {
+    uint32_t ntiles_per_block = ntiles_in_row;
+    if (ntiles_in_row > max_tiles) {
         for (uint32_t n_t = max_tiles; n_t > 0; n_t--) {
             if (ntiles_in_row % n_t == 0) {
                 ntiles_per_block = n_t;
@@ -56,8 +54,6 @@ operation::ProgramWithCallbacks untilize_multi_core(
     uint32_t num_leftover_tiles = ntiles_in_row % ntiles_per_block;
     uint32_t leftover_width_in_row = num_leftover_tiles * output.element_size();
 
-
-    //uint32_t ntiles_per_block = a.get_legacy_shape()[-1] / TILE_WIDTH;
     uint32_t nblocks_height = ceil((float)(ntiles/ntiles_in_row)); //parallelizing on row
     uint32_t block_size_nbytes = ntiles_per_block * TILE_WIDTH * output.element_size();
 
@@ -170,7 +166,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
                 WriterDataMovementConfig(writer_ct_args));
         } else {
             bool stick_size_is_power_of_two = is_power_of_two_at_least_32(stick_size);
-            uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)std::log2(stick_size) : 0;
+            uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::bit_width(stick_size) - 1): 0;
             vector<uint32_t> writer_ct_args = {
                 (uint32_t)out_is_dram,
                 (uint32_t)stick_size_is_power_of_two,
@@ -404,8 +400,8 @@ operation::ProgramWithCallbacks untilize_multi_core(
                     ntiles_per_block,                      // ntiles_per_block
                     block_size_nbytes,                     // block_width_nbytes
                     num_full_blocks_in_row,                                     // full blocks in a row
-                    num_leftover_tiles,                                     // UNUSED
-                    leftover_width_in_row,                                     // UNUSED
+                    num_leftover_tiles,
+                    leftover_width_in_row,
                     row_start_id};
             }
         }
@@ -533,7 +529,7 @@ operation::ProgramWithCallbacks untilize_single_core(
 
     bool out_is_dram = dst_buffer->buffer_type() == tt::tt_metal::BufferType::DRAM ? 1 : 0;
     bool stick_size_is_power_of_two = is_power_of_two_at_least_32(stick_size);
-    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)log2(stick_size) : 0;
+    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::bit_width(stick_size) - 1): 0;
     std::vector<uint32_t> writer_compile_time_args = {
         (std::uint32_t)out_is_dram,
         (std::uint32_t)stick_size_is_power_of_two,
