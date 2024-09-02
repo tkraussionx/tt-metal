@@ -95,7 +95,6 @@ static Tensor full(
         if (device != nullptr) {
             output = output.to(device, output_mem_config);
         }
-        std::cout<<"no opt value \n";
         return output;
     }
 

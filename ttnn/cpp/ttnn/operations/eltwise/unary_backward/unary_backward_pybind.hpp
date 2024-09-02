@@ -1025,7 +1025,7 @@ void py_module(py::module& module) {
         ttnn::lgamma_bw,
         R"doc(Performs backward operations for lgamma on :attr:`input_tensor` with given :attr:`grad_tensor`.)doc");
 
-    detail::bind_unary_backward(
+    detail::bind_unary_backward_unary_optional(
         module,
         ttnn::fill_bw,
         R"doc(Performs backward operations for fill on :attr:`input_tensor` with given :attr:`grad_tensor`.

@@ -147,7 +147,6 @@ std::vector<Tensor> _gt_bw( const Tensor& grad, const Tensor& input, float other
 std::vector<Tensor> _assign_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
 std::vector<Tensor> _multigammaln_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
 std::vector<Tensor> _lgamma_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
-std::vector<Tensor> _fill_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
 std::vector<Tensor> _hardsigmoid_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
 std::vector<Tensor> _cos_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
 std::vector<Tensor> _acosh_bw( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config);
@@ -183,6 +182,7 @@ std::vector<std::optional<Tensor>> _pow_bw(uint8_t queue_id, const Tensor& grad,
 std::vector<std::optional<Tensor>> _exp_bw(uint8_t queue_id, const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad);
 std::vector<std::optional<Tensor>> _tanh_bw(uint8_t queue_id, const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad);
 std::vector<std::optional<Tensor>> _sqrt_bw(uint8_t queue_id, const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad);
+std::vector<std::optional<Tensor>> _fill_bw(uint8_t queue_id, const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad);
 
 std::vector<Tensor> _prod_bw( const Tensor& grad, const Tensor& input, bool all_dimensions = true, int64_t dim = 0, const std::optional<MemoryConfig>& output_mem_config = std::nullopt);
 Tensor change_layout_to_tile(const Tensor& temp, const MemoryConfig& output_mem_config);
@@ -592,8 +592,8 @@ struct OpHandler<UnaryBackwardOpType::LGAMMA_BW> {
 
 template <>
 struct OpHandler<UnaryBackwardOpType::FILL_BW> {
-    static std::vector<Tensor> handle( const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config ) {
-        return _fill_bw(grad, input, output_mem_config);
+    static std::vector<std::optional<Tensor>> handle(uint8_t queue_id, const Tensor& grad, const Tensor& input, const std::optional<MemoryConfig>& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad) {
+        return _fill_bw(queue_id, grad, input, output_mem_config, are_required_outputs, input_grad);
     }
 };
 
