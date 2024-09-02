@@ -446,7 +446,8 @@ def vit_layer(
         dtype=ttnn.bfloat8_b,
     )
     ttnn.deallocate(hidden_states)
-    ttnn.reallocate(multi_head_attention_output)
+    ttnn.deallocate(layernorm_before_output)
+    multi_head_attention_output = ttnn.reallocate(multi_head_attention_output)
 
     layernorm_after_output = ttnn.layer_norm(
         multi_head_attention_output,
@@ -455,6 +456,7 @@ def vit_layer(
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         program_config=config.program_configs["layernorm_after_output_program_config"],
     )
+    ttnn.deallocate(multi_head_attention_output)
 
     feedforward_output = vit_feedforward(
         config,
@@ -462,6 +464,7 @@ def vit_layer(
         multi_head_attention_output,
         parameters=parameters,
     )
+    ttnn.deallocate(layernorm_after_output)
 
     return feedforward_output
 

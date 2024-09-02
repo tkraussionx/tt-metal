@@ -14,8 +14,6 @@ import ttnn
 # import tt_lib as ttl
 from ttnn.dot_access import DotAccessDict
 
-core_grid = ttnn.CoreGrid(y=8, x=12)
-
 
 def update_model_config(config, batch_size):
     core_grid = ttnn.CoreGrid(y=8, x=12)
@@ -245,42 +243,40 @@ def vit_embeddings(
     return embedding_output
 
 
-# def vit_layernorm_before(
-#     config,
-#     hidden_states,
-#     *,
-#     parameters,
-# ):
-#     attention_output = ttnn.layer_norm(
-#         hidden_states,
-#         weight=parameters.layernorm_before.weight,
-#         bias=parameters.layernorm_before.bias,
-#         epsilon=config.layer_norm_eps,
-#         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-#         #core_grid=core_grid,
-#         program_config=config.program_configs["layernorm_program_config"],
-#     )
+def vit_layernorm_before(
+    config,
+    hidden_states,
+    *,
+    parameters,
+):
+    attention_output = ttnn.layer_norm(
+        hidden_states,
+        weight=parameters.layernorm_before.weight,
+        bias=parameters.layernorm_before.bias,
+        epsilon=config.layer_norm_eps,
+        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        program_config=config.program_configs["layernorm_program_config"],
+    )
 
-#     return attention_output
+    return attention_output
 
 
-# def vit_layernorm_after(
-#     config,
-#     hidden_states,
-#     *,
-#     parameters,
-# ):
-#     attention_output = ttnn.layer_norm(
-#         hidden_states,
-#         weight=parameters.layernorm_after.weight,
-#         bias=parameters.layernorm_after.bias,
-#         epsilon=config.layer_norm_eps,
-#         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-#         #core_grid=core_grid,
-#         program_config=config.program_configs["layernorm_program_config"],
-#     )
+def vit_layernorm_after(
+    config,
+    hidden_states,
+    *,
+    parameters,
+):
+    attention_output = ttnn.layer_norm(
+        hidden_states,
+        weight=parameters.layernorm_after.weight,
+        bias=parameters.layernorm_after.bias,
+        epsilon=config.layer_norm_eps,
+        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        program_config=config.program_configs["layernorm_program_config"],
+    )
 
-#     return attention_output
+    return attention_output
 
 
 def vit_attention(
@@ -300,8 +296,7 @@ def vit_attention(
         bias=parameters.attention.query_key_value.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        core_grid=core_grid,
-        # program_config=config.program_configs["query_key_value_matmul_program_config"],
+        program_config=config.program_configs["query_key_value_matmul_program_config"],
     )
     ttnn.deallocate(hidden_states)
     query_key_value = ttnn.reallocate(query_key_value)
@@ -318,16 +313,15 @@ def vit_attention(
 
     ttnn.deallocate(query_key_value)
     ##
-    query = ttnn.reallocate(query)
-    key = ttnn.reallocate(key)
-    value = ttnn.reallocate(value)
+    ttnn.reallocate(query)
+    ttnn.reallocate(key)
+    ttnn.reallocate(value)
 
     attention_scores = ttnn.matmul(
         query,
         key,
         memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        # core_grid=core_grid,
         program_config=config.program_configs["query_by_key_matmul_program_config"],
     )
     ttnn.deallocate(query)
@@ -339,7 +333,6 @@ def vit_attention(
         attention_scores,
         attention_mask=attention_mask,
         head_size=head_size,
-        # core_grid=core_grid,
         program_config=config.program_configs["softmax_program_config"],
     )
     ##
@@ -352,7 +345,6 @@ def vit_attention(
         value,
         memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        # core_grid=core_grid,
         program_config=config.program_configs["attention_probabilities_by_value_matmul_program_config"],
     )
     ttnn.deallocate(attention_probs)
@@ -371,8 +363,7 @@ def vit_attention(
         bias=parameters.output.dense.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        core_grid=core_grid,
-        # program_config=config.program_configs["self_output_matmul_program_config"],
+        program_config=config.program_configs["self_output_matmul_program_config"],
     )
     ttnn.deallocate(context_layer)
 
@@ -391,8 +382,7 @@ def vit_intermediate(
         bias=parameters.dense.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        core_grid=core_grid,
-        # program_config=config.program_configs["ff1_matmul_program_config"],
+        program_config=config.program_configs["ff1_matmul_program_config"],
     )
     ttnn.deallocate(hidden_states)
     ##
@@ -414,8 +404,7 @@ def vit_output(
         bias=parameters.dense.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
         dtype=ttnn.bfloat8_b,
-        core_grid=core_grid,
-        # program_config=config.program_configs["ff2_matmul_program_config"],
+        program_config=config.program_configs["ff2_matmul_program_config"],
     )
     ttnn.deallocate(hidden_states)
 
@@ -448,7 +437,6 @@ def vit_layer(
         weight=parameters.layernorm_before.weight,
         bias=parameters.layernorm_before.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-        # core_grid=core_grid,
         program_config=config.program_configs["layernorm_program_config"],
     )
 
@@ -473,7 +461,6 @@ def vit_layer(
         weight=parameters.layernorm_after.weight,
         bias=parameters.layernorm_after.bias,
         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
-        # core_grid=core_grid,
         program_config=config.program_configs["layernorm_after_output_program_config"],
     )
 
