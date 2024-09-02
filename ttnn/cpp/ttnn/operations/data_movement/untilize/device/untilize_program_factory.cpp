@@ -38,7 +38,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
     uint32_t stick_size = stick_s * output.element_size();
     uint32_t ntiles_in_row = stick_s / TILE_WIDTH;
     uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - L1_UNRESERVED_BASE;
-    uint32_t max_tiles = (max_l1_size / (input_single_tile_size + output_single_tile_size));  // 2 CBs, double buffering each
+    uint32_t max_tiles = (max_l1_size / (input_single_tile_size + output_single_tile_size))/2;  // 2 CBs, double buffering each
     // Currently need the number of tiles in a row to be divisible by tiles in a block
     uint32_t ntiles_per_block = ntiles_in_row;
     if (ntiles_in_row > max_tiles) {
@@ -97,7 +97,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         end_core = (*shard_spec.grid.ranges().begin()).end_coord;
     }
 
-    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block;
+    uint32_t num_input_tiles = src_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
     auto [src0_cb_index, cb_src0] = create_cb(
         tt::CB::c_in0,
         program,
@@ -107,7 +107,7 @@ operation::ProgramWithCallbacks untilize_multi_core(
         input_cb_data_format,
         src_sharded ? a.buffer() : nullptr);
 
-    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block;
+    uint32_t num_output_tiles = out_sharded ? ntiles_per_block * nblocks_per_core : ntiles_per_block * 2;
     auto [output_cb_index, cb_output] = create_cb(
         tt::CB::c_out0,
         program,
