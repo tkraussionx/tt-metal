@@ -44,7 +44,7 @@ void kernel_main() {
 
     uint32_t w = curr_col_in_batch;
 
-    // DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
+    DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
     // this reader will read a NHW tensor in NWH order
     for (uint32_t i = 0; i < num_cols; i++) {
         uint32_t curr_id = col_start_tile_id;

@@ -70,6 +70,8 @@ def get_tensors(
         torch_input = torch.rand(input_shape, dtype=cpu_dtype, requires_grad=True)
         torch_output = torch.rand(tt_output_shape, dtype=cpu_dtype)
 
+    # torch_input = torch.normal(0, 99999, input_shape, dtype=cpu_dtype, requires_grad=True)
+
     if with_padding:
         tt_input = ttnn.Tensor(torch_input, npu_dtype).pad_to_tile(float("nan")).to(npu_layout).to(device)
         tt_output = ttnn.Tensor(torch_output, npu_dtype).pad_to_tile(float("nan")).to(npu_layout).to(device)
@@ -305,9 +307,9 @@ def test_moreh_sum_fp32_dest_acc(input_shape, dim, compute_kernel_options, devic
 @pytest.mark.parametrize(
     "params",
     (
-        (0, [24, TILE_HEIGHT * 1, TILE_WIDTH * 1]),
-        (1, [1, TILE_HEIGHT * 24, TILE_WIDTH * 1]),
-        (2, [1, TILE_HEIGHT * 1, TILE_WIDTH * 24]),
+        (0, [320, TILE_HEIGHT * 1, TILE_WIDTH * 1]),
+        (1, [1, TILE_HEIGHT * 64, TILE_WIDTH * 1]),
+        (2, [1, TILE_HEIGHT * 1, TILE_WIDTH * 64]),
     ),
     ids=[
         "batch-dim, (24, TILE_HEIGHT * 1, TILE_WIDTH * 1)",
@@ -316,7 +318,7 @@ def test_moreh_sum_fp32_dest_acc(input_shape, dim, compute_kernel_options, devic
     ],
 )
 def test_each_dim_in_fp32_mode(params, device):
-    torch.manual_seed(3037)
+    torch.manual_seed(30371)
     compute_kernel_config = get_compute_kernel_options(True)
     dim, input_shape = params
 
@@ -326,9 +328,11 @@ def test_each_dim_in_fp32_mode(params, device):
     torch_input = torch_input.float()
     torch_output = torch.sum(torch_input, dim, True)
 
-    cpu_layout = ttl.tensor.Layout.ROW_MAJOR
+    # breakpoint()
+
+    cpu_layout = ttnn.ROW_MAJOR_LAYOUT
     tt_output_cpu = (
-        ttl.operations.primary.moreh_sum(
+        ttnn.experimental.operations.primary.moreh_sum(
             tt_input, dim=dim, keep_batch_dim=True, output=tt_output, compute_kernel_config=compute_kernel_config
         )
         .cpu()

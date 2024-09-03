@@ -39,7 +39,7 @@ void kernel_main() {
     const InterleavedAddrGenFast<input_is_dram> input_addrg = {
         .bank_base_address = input_addr, .page_size = input_tile_bytes, .data_format = input_data_format};
 
-    // DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
+    DPRINT << "READER fp32 CB addr " << get_write_ptr(24) << ENDL();
     for (uint32_t i = start_id; i < start_id + num_output_tiles; i++) {
         auto read_tile_id = (dim == 0) ? (i) : (get_read_tile_id(i, reduce_tile_size, inner_tile_size));
         for (uint32_t j = 0; j < num_input_tiles; ++j) {

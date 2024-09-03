@@ -45,7 +45,7 @@ void MAIN {
         #endif
         pack_tile(dst0, cb_intermed0);
         cb_push_back(cb_intermed0, onetile);
-        print_bits("batch-dim", 114016);
+        print_bits("batch-dim", 113504);
         tile_regs_release();
 
         // unpack to DST

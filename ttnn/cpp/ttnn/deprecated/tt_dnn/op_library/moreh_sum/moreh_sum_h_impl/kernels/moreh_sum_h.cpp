@@ -52,7 +52,7 @@ void MAIN {
                 pack_reconfig_data_format(cb_intermed0);
             #endif
             pack_tile(reduce_dst_idx, cb_intermed0);
-            print_bits("h-dim", 116064);
+            print_bits("h-dim", 115552);
             tile_regs_release();
             cb_push_back(cb_intermed0, onetile);
 
@@ -64,6 +64,31 @@ void MAIN {
             #endif
             copy_tile_to_dst_init_short(cb_intermed0);
             copy_tile(cb_intermed0, 0, 0);
+
+            cb_pop_front(cb_intermed0, onetile);
+            tile_regs_commit();
+
+            // re pack
+            cb_reserve_back(cb_intermed0, onetile);
+            tile_regs_wait();
+            #if defined FP32_DEST_ACC_EN
+                pack_reconfig_data_format(cb_intermed0);
+            #endif
+            pack_tile(reduce_dst_idx, cb_intermed0);
+            print_bits("h-dim", 115552);
+            tile_regs_release();
+            cb_push_back(cb_intermed0, onetile);
+
+            // unpack to DST
+            tile_regs_acquire();
+            cb_wait_front(cb_intermed0, onetile);
+            #if defined FP32_DEST_ACC_EN
+                unpack_reconfig_data_format_srca(cb_intermed0);
+            #endif
+            copy_tile_to_dst_init_short(cb_intermed0);
+            copy_tile(cb_intermed0, 0, 0);
+
+            cb_pop_front(cb_intermed0, onetile);
             tile_regs_commit();
 
             cb_reserve_back(cb_out, onetile);
