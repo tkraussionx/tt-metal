@@ -285,14 +285,16 @@ class DeviceCommand {
         }
     }
 
-    void add_dispatch_s_mcast(uint32_t mcast_grid, uint16_t num_mcast_dests, uint8_t wait_count) {
-        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), 1);
+    void add_dispatch_s_mcast(uint32_t mcast_grid, uint16_t num_mcast_dests, uint8_t wait_count, void* data, uint32_t data_sizeB, uint32_t write_addr) {
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + data_sizeB, 1);
         auto initialize_mcast_cmd = [&](CQDispatchCmd *mcast_cmd) {
             *mcast_cmd = {};
             mcast_cmd->base.cmd_id = CQ_DISPATCH_CMD_INLINE_MCAST;
             mcast_cmd->mcast.wait_count = wait_count;
             mcast_cmd->mcast.mcast_grid = mcast_grid;
             mcast_cmd->mcast.num_mcast_dests = num_mcast_dests;
+            mcast_cmd->mcast.length = data_sizeB;
+            mcast_cmd->mcast.address = write_addr;
         };
         CQDispatchCmd *mcast_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
@@ -303,7 +305,9 @@ class DeviceCommand {
         } else {
             initialize_mcast_cmd(mcast_cmd_dst);
         }
-        this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
+        TT_ASSERT(data != nullptr);
+        uint32_t increment_sizeB = align(data_sizeB, PCIE_ALIGNMENT);
+        this->add_data(data, data_sizeB, increment_sizeB);
     }
 
     void add_dispatch_s_sem_update() {

@@ -1071,10 +1071,8 @@ void EnqueueProgramCommand::assemble_device_commands(
                 this->packed_write_max_unicast_sub_cmds,
                 unicast_go_signals_payload);
         }
-        // dispatch_s sem update
-        // cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE;
-        // Go signal Mcast Cmd
-        cmd_sequence_sizeB += 2 * go_signal_mcast_grids.size() * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        // dispatch_d -> dispatch_s semaphore update and go signal mcast by dispatch_s
+        cmd_sequence_sizeB += align(2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(uint32_t), PCIE_ALIGNMENT);
 
         cached_program_command_sequence.program_command_sequence = HostMemDeviceCommand(cmd_sequence_sizeB);
 
@@ -1186,10 +1184,14 @@ void EnqueueProgramCommand::assemble_device_commands(
         // Go Signals
         cached_program_command_sequence.go_signals.reserve(
             multicast_go_signal_sub_cmds.size() + unicast_go_signal_sub_cmds.size());
+        std::size_t num_mcast_cols = device->compute_with_storage_grid_size().x;
+        std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
+        uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
         CoreCoord start_phys = device->physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER);
-        CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(7, 6), CoreType::WORKER);
+        CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(num_mcast_cols - 1, num_mcast_rows - 1), CoreType::WORKER);
         CoreRange full_grid = CoreRange(start_phys, end_phys);
-        program_command_sequence.add_dispatch_write_linear<true>(true, 56, device->get_noc_multicast_encoding(this->noc_index, full_grid), hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH), go_signal_sizeB, &empty_launch_msg);
+        program_command_sequence.add_dispatch_write_linear<true>(true, num_mcast_cores, device->get_noc_multicast_encoding(this->noc_index, full_grid), hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH), go_signal_sizeB, &empty_launch_msg);
+
         if (multicast_go_signal_sub_cmds.size() > 0) {
             uint32_t curr_sub_cmd_idx = 0;
             for (const auto& [num_sub_cmds_in_cmd, multicast_go_signal_payload_sizeB] : multicast_go_signals_payload) {
@@ -1249,8 +1251,9 @@ void EnqueueProgramCommand::assemble_device_commands(
         // Have dispatch_s send the go signal
         auto mcast_grid = this->device->get_noc_multicast_encoding(
                         NOC::NOC_1, CoreRange(start_phys, end_phys));
+        uint32_t go = 0x80;
         program_command_sequence.add_dispatch_s_sem_update();
-        program_command_sequence.add_dispatch_s_mcast(mcast_grid, 56, 1);
+        program_command_sequence.add_dispatch_s_mcast(mcast_grid, num_mcast_cores, 1, &go, 4, 96);
     } else {
         uint32_t i = 0;
         ZoneScopedN("program_loaded_on_device");
