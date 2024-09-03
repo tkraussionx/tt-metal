@@ -769,7 +769,7 @@ static void process_wait() {
     volatile tt_l1_ptr uint32_t *sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(addr);
     uint32_t heartbeat = 0;
     if (wait) {
-        DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
+        // DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
         do {
             invalidate_l1_cache();
             IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
@@ -809,7 +809,7 @@ re_run_command:
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR:
             DEBUG_STATUS("DWB");
-            DPRINT << "cmd_write\n";
+            // DPRINT << "cmd_write\n";
             process_write(block_noc_writes_to_clear, block_next_start_addr);
             DEBUG_STATUS("DWD");
             break;
@@ -947,12 +947,12 @@ static inline bool process_cmd_h(uint32_t &cmd_ptr, uint32_t& block_noc_writes_t
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
             // DPRINT << "dispatch_h write_linear_h\n";
-            process_write();
+            process_write(block_noc_writes_to_clear, block_next_start_addr);
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
             // DPRINT << "dispatch_h linear_h_host\n";
-            process_write_host_h();
+            process_write_host_h(block_noc_writes_to_clear, block_next_start_addr);
             break;
 
         case CQ_DISPATCH_CMD_EXEC_BUF_END:
