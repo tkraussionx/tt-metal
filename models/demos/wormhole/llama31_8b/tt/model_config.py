@@ -282,6 +282,12 @@ class TtModelArgs:
                 fp32_dest_acc_en=False,
                 packer_l1_acc=False,
             )
+            self.model_config["LN_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi2,
+                math_approx_mode=False,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=False,
+            )
             # Useful core grid based on batch size
             if self.max_batch_size == 32:
                 core_grid_by_batch = ttnn.CoreGrid(y=4, x=8)
