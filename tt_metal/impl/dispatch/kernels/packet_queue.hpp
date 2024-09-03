@@ -82,7 +82,6 @@ class packet_queue_state_t {
     uint32_t local_rptr_cleared;
 
 protected:
-    volatile uint32_t* local_wptr_reset;
     volatile uint32_t* local_rptr_sent_reset;
     volatile uint32_t* local_rptr_cleared_reset;
 
@@ -153,9 +152,6 @@ public:
 
             this->local_wptr_update = reinterpret_cast<volatile uint32_t*>(
                 STREAM_REG_ADDR(NUM_PTR_REGS_PER_INPUT_QUEUE*queue_id, STREAM_REMOTE_DEST_BUF_SPACE_AVAILABLE_UPDATE_REG_INDEX));
-            // Setting STREAM_REMOTE_DEST_BUF_SIZE_REG_INDEX resets the credit register
-            this->local_wptr_reset = reinterpret_cast<volatile uint32_t*>(
-                STREAM_REG_ADDR(NUM_PTR_REGS_PER_INPUT_QUEUE*queue_id, STREAM_REMOTE_DEST_BUF_SIZE_REG_INDEX));
         } else {
             this->local_wptr_val = &this->local_wptr;
             this->local_rptr_sent_val = reinterpret_cast<volatile uint32_t*>(
@@ -450,10 +446,10 @@ protected:
     uint16_t curr_packet_src;
     uint16_t curr_packet_dest;
     uint32_t curr_packet_size_words;
-    uint32_t end_of_cmd;
     uint32_t curr_packet_words_sent;
     uint32_t curr_packet_tag;
     uint16_t curr_packet_flags;
+    uint16_t end_of_cmd;
 
     uint32_t packetizer_page_words_cleared;
 
@@ -489,7 +485,10 @@ protected:
     }
 
     inline void reset_queue_local_wptr() {
-        *this->local_wptr_reset = 0;
+        // Setting STREAM_REMOTE_DEST_BUF_SIZE_REG_INDEX resets the credit register
+        volatile uint32_t* local_wptr_reset = reinterpret_cast<volatile uint32_t*>(
+                STREAM_REG_ADDR(NUM_PTR_REGS_PER_INPUT_QUEUE*queue_id, STREAM_REMOTE_DEST_BUF_SIZE_REG_INDEX));
+        *local_wptr_reset = 0;
     }
 
 public:
@@ -535,7 +534,7 @@ public:
     }
 
     inline uint32_t get_end_of_cmd() const {
-        return this->end_of_cmd;
+        return (uint32_t)this->end_of_cmd;
     }
 
     inline bool is_packetizer_input() const {

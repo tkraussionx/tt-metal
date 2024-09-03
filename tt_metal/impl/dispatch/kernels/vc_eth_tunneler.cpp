@@ -7,11 +7,8 @@
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 // clang-format on
 
-#define NUM_BIDIR_TUNNELS 1
-#define NUM_TUNNEL_QUEUES (NUM_BIDIR_TUNNELS * 10)
-
-packet_input_queue_state_t input_queues[NUM_TUNNEL_QUEUES];
-packet_output_queue_state_t output_queues[NUM_TUNNEL_QUEUES];
+packet_input_queue_state_t input_queues[MAX_TUNNEL_LANES];
+packet_output_queue_state_t output_queues[MAX_TUNNEL_LANES];
 
 constexpr uint32_t endpoint_id_start_index = get_compile_time_arg_val(0);
 constexpr uint32_t tunnel_lanes = get_compile_time_arg_val(1);
@@ -19,10 +16,10 @@ constexpr uint32_t in_queue_start_addr_words = get_compile_time_arg_val(2);
 constexpr uint32_t in_queue_size_words = get_compile_time_arg_val(3);
 constexpr uint32_t in_queue_size_bytes = in_queue_size_words * PACKET_WORD_SIZE_BYTES;
 static_assert(is_power_of_2(in_queue_size_words), "in_queue_size_words must be a power of 2");
-static_assert(tunnel_lanes <= NUM_TUNNEL_QUEUES, "cannot have more than 2 tunnel directions.");
+static_assert(tunnel_lanes <= MAX_TUNNEL_LANES, "cannot have more than 2 tunnel directions.");
 static_assert(tunnel_lanes, "tunnel directions cannot be 0. 1 => Unidirectional. 2 => Bidirectional");
 
-constexpr uint32_t remote_receiver_x[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_receiver_x[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(4)  & 0xFF),
         (get_compile_time_arg_val(5)  & 0xFF),
@@ -36,7 +33,7 @@ constexpr uint32_t remote_receiver_x[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(13) & 0xFF)
     };
 
-constexpr uint32_t remote_receiver_y[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_receiver_y[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(4)  >> 8) & 0xFF,
         (get_compile_time_arg_val(5)  >> 8) & 0xFF,
@@ -50,7 +47,7 @@ constexpr uint32_t remote_receiver_y[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(13) >> 8) & 0xFF
     };
 
-constexpr uint32_t remote_receiver_queue_id[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_receiver_queue_id[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(4)  >> 16) & 0xFF,
         (get_compile_time_arg_val(5)  >> 16) & 0xFF,
@@ -64,7 +61,7 @@ constexpr uint32_t remote_receiver_queue_id[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(13) >> 16) & 0xFF
     };
 
-constexpr DispatchRemoteNetworkType remote_receiver_network_type[NUM_TUNNEL_QUEUES] =
+constexpr DispatchRemoteNetworkType remote_receiver_network_type[MAX_TUNNEL_LANES] =
     {
         static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(4)  >> 24) & 0xFF),
         static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(5)  >> 24) & 0xFF),
@@ -78,7 +75,7 @@ constexpr DispatchRemoteNetworkType remote_receiver_network_type[NUM_TUNNEL_QUEU
         static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(13) >> 24) & 0xFF)
     };
 
-constexpr uint32_t remote_receiver_queue_start_addr_words[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_receiver_queue_start_addr_words[MAX_TUNNEL_LANES] =
     {
         get_compile_time_arg_val(14),
         get_compile_time_arg_val(16),
@@ -92,7 +89,7 @@ constexpr uint32_t remote_receiver_queue_start_addr_words[NUM_TUNNEL_QUEUES] =
         get_compile_time_arg_val(32)
     };
 
-constexpr uint32_t remote_receiver_queue_size_words[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_receiver_queue_size_words[MAX_TUNNEL_LANES] =
     {
         get_compile_time_arg_val(15),
         get_compile_time_arg_val(17),
@@ -106,12 +103,18 @@ constexpr uint32_t remote_receiver_queue_size_words[NUM_TUNNEL_QUEUES] =
         get_compile_time_arg_val(33)
     };
 
-static_assert(
-    is_power_of_2(remote_receiver_queue_size_words[0]), "remote_receiver_queue_size_words must be a power of 2");
-static_assert(
-    is_power_of_2(remote_receiver_queue_size_words[1]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[0]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[1]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[2]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[3]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[4]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[5]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[6]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[7]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[8]), "remote_receiver_queue_size_words must be a power of 2");
+static_assert(is_power_of_2(remote_receiver_queue_size_words[9]), "remote_receiver_queue_size_words must be a power of 2");
 
-constexpr uint32_t remote_sender_x[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_sender_x[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(34) & 0xFF),
         (get_compile_time_arg_val(35) & 0xFF),
@@ -125,7 +128,7 @@ constexpr uint32_t remote_sender_x[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(43) & 0xFF)
     };
 
-constexpr uint32_t remote_sender_y[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_sender_y[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(34) >> 8) & 0xFF,
         (get_compile_time_arg_val(35) >> 8) & 0xFF,
@@ -139,7 +142,7 @@ constexpr uint32_t remote_sender_y[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(43) >> 8) & 0xFF
     };
 
-constexpr uint32_t remote_sender_queue_id[NUM_TUNNEL_QUEUES] =
+constexpr uint32_t remote_sender_queue_id[MAX_TUNNEL_LANES] =
     {
         (get_compile_time_arg_val(34) >> 16) & 0xFF,
         (get_compile_time_arg_val(35) >> 16) & 0xFF,
@@ -153,7 +156,7 @@ constexpr uint32_t remote_sender_queue_id[NUM_TUNNEL_QUEUES] =
         (get_compile_time_arg_val(43) >> 16) & 0xFF
     };
 
-constexpr DispatchRemoteNetworkType remote_sender_network_type[NUM_TUNNEL_QUEUES] =
+constexpr DispatchRemoteNetworkType remote_sender_network_type[MAX_TUNNEL_LANES] =
     {
         static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(34) >> 24) & 0xFF),
         static_cast<DispatchRemoteNetworkType>((get_compile_time_arg_val(35) >> 24) & 0xFF),
@@ -179,7 +182,7 @@ constexpr uint32_t inner_stop_mux_d_bypass = get_compile_time_arg_val(47);
 
 void kernel_main() {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
-    noc_init();
+    //noc_init();
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
@@ -201,7 +204,7 @@ void kernel_main() {
 
     for (uint32_t i = 0; i < tunnel_lanes; i++) {
         output_queues[i].init(
-            i + tunnel_lanes, //NUM_TUNNEL_QUEUES,
+            i + tunnel_lanes, //MAX_TUNNEL_LANES,
             remote_receiver_queue_start_addr_words[i],
             remote_receiver_queue_size_words[i],
             remote_receiver_x[i],
@@ -254,10 +257,11 @@ void kernel_main() {
             output_queues[i].prev_words_in_flight_check_flush();
             bool output_finished = output_queues[i].is_remote_finished();
             if (output_finished) {
-                if ((i == 1) && (inner_stop_mux_d_bypass != 0)) {
-                    input_queues[1].remote_x = inner_stop_mux_d_bypass & 0xFF;
-                    input_queues[1].remote_y = (inner_stop_mux_d_bypass >> 8) & 0xFF;
-                    input_queues[1].set_remote_ready_status_addr((inner_stop_mux_d_bypass >> 16) & 0xFF);
+                uint32_t return_vc = (inner_stop_mux_d_bypass >> 24) & 0xFF;
+                if ((i == return_vc) && (inner_stop_mux_d_bypass != 0)) {
+                    input_queues[i].remote_x = inner_stop_mux_d_bypass & 0xFF;
+                    input_queues[i].remote_y = (inner_stop_mux_d_bypass >> 8) & 0xFF;
+                    input_queues[i].set_remote_ready_status_addr((inner_stop_mux_d_bypass >> 16) & 0xFF);
                 }
                 input_queues[i].send_remote_finished_notification();
             }
