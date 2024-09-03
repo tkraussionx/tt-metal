@@ -267,6 +267,8 @@ struct CQDispatchInlineMcastCmd {
     uint8_t wait_count;
     uint16_t num_mcast_dests;
     uint32_t mcast_grid;
+    uint32_t length;
+    uint32_t address;
 } __attribute__((packed));
 
 struct CQDispatchSemUpdate {

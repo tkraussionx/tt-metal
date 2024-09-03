@@ -128,17 +128,16 @@ void kernel_main() {
             volatile tt_l1_ptr uint32_t* sync_sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
             uint32_t mcast_grid = cmd->mcast.mcast_grid;
-            uint32_t go_signal_addr = 96;
-            uint32_t tt_l1_ptr* go_signal_location = (uint32_t tt_l1_ptr*)go_signal_addr;
-            *go_signal_location = 0x80;
-            uint64_t dst = get_noc_addr_helper(mcast_grid, 96);
+            uint32_t data_ptr = cmd_ptr + sizeof(CQDispatchCmd);
+            uint32_t tt_l1_ptr* go_signal_location = (uint32_t tt_l1_ptr*)data_ptr;
+            uint64_t dst = get_noc_addr_helper(mcast_grid, cmd->mcast.address);
 
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
             while (*sync_sem_addr <= num_mcasts_sent);
             num_mcasts_sent++;
-            // DPRINT << "Recieved Sem update" << ENDL();
-            noc_async_write_multicast_one_packet_dispatch_s(96, dst, 4, cmd->mcast.num_mcast_dests);
-            while (!ncrisc_noc_nonposted_writes_flushed(1));
+            noc_async_write_multicast_one_packet_dispatch_s(data_ptr, dst, cmd->mcast.length, cmd->mcast.num_mcast_dests);
+            // while (!ncrisc_noc_nonposted_writes_flushed(1));
+            cmd_ptr += cmd->mcast.length; // Offset cmd_ptr by size of data that was inlined here. cmd_ptr will get offset by command size at the end of the loop.
             DPRINT << "Mcast done" << ENDL();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
