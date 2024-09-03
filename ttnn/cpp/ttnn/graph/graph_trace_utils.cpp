@@ -46,7 +46,7 @@ ttnn::Shape parse_shape(std::string_view shape_string) {
 } // namespace
 
 // returns sizes for every circular buffer allocation
-std::vector<uint32_t> extract_circular_buffer_allocations(const nlohmann::json& trace) {
+std::vector<uint32_t> extract_circular_buffer_allocations_per_core(const nlohmann::json& trace) {
     std::vector<uint32_t> circular_buffer_sizes;
     for (const auto& v : trace) {
         if (v["name"] == "circular_buffer_allocate") {

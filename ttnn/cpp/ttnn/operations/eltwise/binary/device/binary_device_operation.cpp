@@ -22,24 +22,33 @@ BinaryDeviceOperation::program_factory_t BinaryDeviceOperation::select_program_f
 
     auto height_b = input_shape_b[-2];
     auto width_b = input_shape_b[-1];
+    // std::cout << "height_a: " << height_a << " width_a: " << width_a << " height_b: " << height_b << " width_b: " << width_b << std::endl;
+
+    std::cout << input_shape_a << " " << input_shape_b << std::endl;
 
     if (height_a == height_b and width_a == width_b) {
+        std::cout << "ElementWiseMultiCore" << std::endl;
         return ElementWiseMultiCore{};
     } else if (height_b == 1 or width_b == 1) {
         if (height_b == 1 and width_b == 1) {
+            std::cout << "BroadcastHeightAndWidthMultiCore" << std::endl;
             return BroadcastHeightAndWidthMultiCore{};
         } else if (height_b == 1) {
             if(tensor_args.input_tensor_a.is_sharded()){
                 if (tensor_args.input_tensor_a.get_legacy_shape()[0] == tensor_args.input_tensor_b.get_legacy_shape()[0]
                         || tensor_args.input_tensor_a.get_legacy_shape()[0] > 1
                         and tensor_args.input_tensor_b.get_legacy_shape()[0] == 1){
+                            std::cout << "BroadcastHeightMultiCoreShardedOptimized" << std::endl;
                         return BroadcastHeightMultiCoreShardedOptimized{};
                 } else {
+                    std::cout << "BroadcastHeightMultiCoreSharded" << std::endl;
                         return BroadcastHeightMultiCoreSharded{};
                 }
             }
+            std::cout << "BroadcastHeightMultiCore" << std::endl;
             return BroadcastHeightMultiCore{};
         } else if (width_b == 1) {
+            std::cout << "BroadcastWidthMultiCore" << std::endl;
             return BroadcastWidthMultiCore{};
         }
     }
