@@ -16,6 +16,8 @@
 #include "ttnn/operations/data_movement/copy/copy.hpp"
 #include "ttnn/operations/core/core.hpp"
 #include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/cpp/ttnn/common/constants.hpp"
+
 namespace tt {
 
 namespace numpy {
@@ -73,31 +75,31 @@ static Tensor full(
             tt::constants::TILE_HEIGHT);
     }
 
-    constexpr DataType data_type = detail::get_data_type<T>();
-    auto owned_buffer = tt_metal::owned_buffer::create<T>(tt_metal::compute_volume(shape));
-    std::fill(std::begin(owned_buffer), std::end(owned_buffer), value);
+        constexpr DataType data_type = detail::get_data_type<T>();
+        auto owned_buffer = tt_metal::owned_buffer::create<T>(tt_metal::compute_volume(shape));
+        std::fill(std::begin(owned_buffer), std::end(owned_buffer), value);
 
-    if (optional_output_tensor.has_value()) {
-        Tensor output = Tensor(OwnedStorage{std::move(owned_buffer)}, shape, data_type, layout);
-        auto owned_buffer_zero = tt_metal::owned_buffer::create<T>(tt_metal::compute_volume(shape));
-        std::fill(std::begin(owned_buffer_zero), std::end(owned_buffer_zero), 0);
-        Tensor zeros_tensor = Tensor(OwnedStorage{std::move(owned_buffer_zero)}, shape, data_type, layout);
-        if (device != nullptr) {
-            output = output.to(device, output_mem_config);
-            zeros_tensor = zeros_tensor.to(device, output_mem_config);
-        }
-        output = ttnn::to_layout(output, ttnn::TILE_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
-        zeros_tensor = ttnn::to_layout(zeros_tensor, ttnn::TILE_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
-        output = ttnn::add(queue_id, output, zeros_tensor, std::nullopt, output_mem_config, optional_output_tensor);
-        return optional_output_tensor.value();
-    } else {
-        auto output = Tensor(OwnedStorage{std::move(owned_buffer)}, shape, data_type, layout);
-        if (device != nullptr) {
-            output = output.to(device, output_mem_config);
-        }
-        return output;
-    }
+        if(!optional_output_tensor.has_value()){
+            auto output = Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout);
+            if (device != nullptr) {
+                output = output.to(device, output_mem_config);
+            }
+            return output;
 
+        }
+        else {
+            auto device_buffer = std::get<DeviceStorage>(optional_output_tensor.value().tensor_attributes->storage).get_buffer();
+            bool using_fast_dispatch = (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr);
+
+            if (using_fast_dispatch) {
+                tt::tt_metal::EnqueueWriteBuffer(device->command_queue(queue_id), device_buffer, owned_buffer.get_ptr(), false);
+            } else {
+                auto uint32_data = tt::tt_metal::tensor_impl::pack_vec_into_uint32_vec<T>(owned_buffer);
+                tt::tt_metal::detail::WriteToBuffer(*device_buffer, uint32_data);
+            }
+
+            return optional_output_tensor.value();
+        }
 }
 
 }  // namespace detail
@@ -143,7 +145,7 @@ static Tensor full(
     Device* device = nullptr,
     const MemoryConfig& output_mem_config = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
-    return full_impl(0, shape, value, data_type, layout, device, output_mem_config, std::nullopt);
+    return full_impl(ttnn::DefaultQueueId, shape, value, data_type, layout, device, output_mem_config, std::nullopt);
 }
 
 static Tensor zeros(

@@ -63,13 +63,16 @@ inline ttnn::Tensor full_impl(
     const std::optional<std::reference_wrapper<Device>>& device_arg = std::nullopt,
     const std::optional<MemoryConfig>& memory_config = std::nullopt,
     std::optional<ttnn::Tensor> optional_output_tensor = std::nullopt) {
-    Device* device = device_arg.has_value() ? &(device_arg.value().get()) : nullptr;
+    Device* device = optional_output_tensor.has_value() ? optional_output_tensor.value().device() : device_arg.has_value() ? &(device_arg.value().get()) : nullptr;
+    Layout layout_value = optional_output_tensor.has_value() ? optional_output_tensor.value().get_layout() : layout.value_or(ttnn::ROW_MAJOR_LAYOUT);
+    DataType dtype_value = optional_output_tensor.has_value() ? optional_output_tensor.value().get_dtype() : dtype.value_or(ttnn::bfloat16);
+    tt::tt_metal::Shape shape_value = optional_output_tensor.has_value() ? optional_output_tensor.value().get_legacy_shape() : shape.value;
     return tt::numpy::full_impl(
         queue_id,
-        shape.value,
+        shape_value,
         fill_value,
-        dtype.value_or(ttnn::bfloat16),
-        layout.value_or(ttnn::ROW_MAJOR_LAYOUT),
+        dtype_value,
+        layout_value,
         device,
         memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG),
         optional_output_tensor);
