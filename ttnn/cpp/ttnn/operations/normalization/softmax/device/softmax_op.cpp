@@ -14,7 +14,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/detail/util.hpp"
-
+#include <iostream>
 #include <optional>
 #include <type_traits>
 
@@ -24,6 +24,8 @@ using namespace tt::constants;
 namespace ttnn::operations::normalization {
 
 void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
+    std::cerr << "I AM CHECKING HERE=" << optional_input_tensors.size() << std::endl;
+    std::cerr << "HAS_VALUE=" << optional_input_tensors.at(0).has_value() << std::endl;
     TT_FATAL(input_tensors.size() == 1 and optional_input_tensors.size() <= 1, "Must have 1 or 2 input tensors");
     auto& input_tensor = input_tensors.at(0);
     TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to softmax need to be on device!");
@@ -32,6 +34,7 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
     TT_FATAL(input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::BFLOAT8_B);
     if (optional_input_tensors.size() == 1) {
         if (optional_input_tensors.at(0).has_value()) {
+            std::cerr << "THERE?" << std::endl;
             auto& mask = optional_input_tensors.at(0).value();
             TT_FATAL(mask.storage_type() == StorageType::DEVICE, "Operands to softmax need to be on device!");
             TT_FATAL(input_tensor.device() == mask.device());
