@@ -29,6 +29,7 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
     comp_pcc,
     should_skip_model_load,
     check_kv_cache,
+    load_llama_state_dict,
 )
 import gc
 
@@ -95,12 +96,12 @@ def run_test_LlamaModel_inference(
         tokenizer_path,
         max_seq_len=MAX_SEQ_LEN if llama_version == "llama2" else MAX_SEQ_LEN_LLAMA3,
         max_batch_size=batch,
-        n_layers=n_layers,
+        n_layers=1,
         skip_model_load=skip_model_load,
     )
     hugging_face_reference_model = hugging_face_reference.model
     hugging_face_reference_model.eval()
-    state_dict = hugging_face_reference_model.state_dict()
+    state_dict = load_llama_state_dict(ckpt_dir, n_layers=n_layers)
     logger.info(state_dict.keys())
     torch.manual_seed(0)
     configuration = hugging_face_reference_model.params
@@ -149,27 +150,43 @@ def run_test_LlamaModel_inference(
         start_pos = generation_start_pos + i
 
         # PyTorch output --------------------------------------------------------------------
-        pytorch_out = pytorch_model(
-            pt_inp_ids,
-            start_pos,
-        )
+        # pytorch_out = pytorch_model(
+        #     pt_inp_ids,
+        #     start_pos,
+        # )
 
         # TT hardware execution -------------------------------------------------------------
         if device_perf:
             signpost(DEVICE_PERF_START_SIGNPOST)  # start for device perf measurement
 
-        tt_inp_emb, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(tt_inp_ids, start_pos)
+        import time
+        from tqdm import tqdm
 
-        tt_out = tt_model(
-            tt_inp_emb,
-            rot_mat,
-            start_pos,
-            attn_mask,
-        )
-        del tt_inp_emb, rot_mat, attn_mask
+        inference_time = 0
+        N = 15
+        N_warmup = 5
+        for j in tqdm(range(N)):
+            start_time = time.time()
+            tt_inp_emb, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(tt_inp_ids, start_pos)
 
-        tt_out = ttnn.from_device(tt_out)
-        tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))
+            tt_out = tt_model(
+                tt_inp_emb,
+                rot_mat,
+                start_pos,
+                attn_mask,
+            )
+            del tt_inp_emb, rot_mat, attn_mask
+
+            tt_out = ttnn.from_device(tt_out)
+            tt_out = ttnn.to_torch(tt_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))
+
+            if j >= N_warmup:
+                inference_time += time.time() - start_time
+
+        avg_inference_time = inference_time / (N - N_warmup)
+        print("Inference time:", avg_inference_time)
+        print("tokens/s:", batch * seq_len / avg_inference_time)
+        breakpoint()
 
         if device_perf:
             signpost(DEVICE_PERF_END_SIGNPOST)  # end for device perf measurement

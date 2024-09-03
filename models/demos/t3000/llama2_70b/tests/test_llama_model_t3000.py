@@ -9,9 +9,7 @@ from models.demos.t3000.llama2_70b.tt.llama_common import setup_llama_env, check
 from models.demos.t3000.llama2_70b.tests.test_llama_model import run_test_LlamaModel_inference
 
 
-N_LAYERS_TO_PCC = {
-    1: 0.99,
-}
+N_LAYERS_TO_PCC = {1: 0.99, 80: 0.99}
 
 
 @skip_for_grayskull("Requires eth connected devices to run")

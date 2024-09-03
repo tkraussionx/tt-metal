@@ -5,7 +5,7 @@
 import sys
 import pytest
 from models.utility_functions import skip_for_grayskull
-from models.demos.t3000.llama2_70b.tt.llama_common import setup_llama_env, check_device_mesh
+from models.demos.t3000.llama2_70b.tt.llama_common import setup_llama_env, check_mesh_device
 from models.demos.t3000.llama2_70b.tests.test_llama_model import run_test_LlamaModel_inference
 from models.demos.t3000.llama2_70b.tests.test_llama_model_t3000 import N_LAYERS_TO_PCC
 from models.demos.t3000.llama2_70b.tests.test_llama_model import DEVICE_PERF_START_SIGNPOST
@@ -18,7 +18,7 @@ from models.perf.device_perf_utils import check_device_perf
     "llama_version",
     (("llama3"),),
 )
-@pytest.mark.parametrize("n_layers", (1,), ids=("1L",))
+@pytest.mark.parametrize("n_layers", (80,), ids=("1L",))
 @pytest.mark.parametrize(
     "batch, seq_len, generation_start_pos",
     (
@@ -57,7 +57,7 @@ def test_run_device_perf_llama(
     seq_len,
     generation_start_pos,
     n_layers,
-    t3k_device_mesh,
+    t3k_mesh_device,
     llama_version,
     use_program_cache,
 ):
@@ -72,10 +72,10 @@ def test_run_device_perf_llama(
         max_context_len=max_context_len,
     )
 
-    check_device_mesh(t3k_device_mesh, model_config)
+    check_mesh_device(t3k_mesh_device, model_config)
 
     run_test_LlamaModel_inference(
-        t3k_device_mesh,
+        t3k_mesh_device,
         batch,
         seq_len,
         N_LAYERS_TO_PCC[n_layers],
