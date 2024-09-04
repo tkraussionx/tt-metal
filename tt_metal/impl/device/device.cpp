@@ -254,7 +254,7 @@ void Device::build_firmware() {
     jit_build_set(this->firmware_build_states_, nullptr, "");
 }
 
-void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) {
+void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {
     ZoneScoped;
 
     if (llrt::is_ethernet_core(phys_core, this->id())) {
@@ -301,28 +301,35 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
     //This is an initialization launch message.
     //Clears launch message fields to 0 in target core L1.
     //Sets launch.run to RUN_MSG_INIT.
-    llrt::write_launch_msg_to_core(this->id(), phys_core, launch_msg,
+    llrt::write_launch_msg_to_core(this->id(), phys_core, launch_msg, go_msg,
         this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
 }
 
 void Device::reset_cores() {
     ZoneScoped;
 
-    auto kernel_still_running = [](launch_msg_t *launch_msg) {
-        return launch_msg->go.run == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
+    auto kernel_still_running = [](launch_msg_t* launch_msg, go_msg_t *go_signal) {
+        return go_signal->run == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
     };
 
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     // Assert worker cores + dispatch cores, in case they were in a bad state from before.
     std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> dispatch_cores, other_dispatch_cores, device_to_early_exit_cores;
+    go_msg_t go_msg;
+    std::memset(&go_msg, 0, sizeof(go_msg_t));
     for (const auto &eth_core : this->get_active_ethernet_cores()) {
         CoreCoord physical_core = this->ethernet_core_from_logical_core(eth_core);
         std::vector<uint32_t> data(sizeof(launch_msg_t) / sizeof(uint32_t));
+        std::vector<uint32_t> go_rb(sizeof(go_msg_t) / sizeof(uint32_t));
         DeviceAddr launch_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH);
+        DeviceAddr go_signal_addr = launch_addr + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
         data = tt::llrt::read_hex_vec_from_core(
             this->id(), physical_core, launch_addr, sizeof(launch_msg_t));
+        go_rb = tt::llrt::read_hex_vec_from_core(
+            this->id(), physical_core, go_signal_addr, sizeof(go_msg_t));
         launch_msg_t *launch_msg = (launch_msg_t *)(&data[0]);
-        if (kernel_still_running(launch_msg)) {
+        go_msg_t * go_signal = (go_msg_t *)(&go_rb[0]);
+        if (kernel_still_running(launch_msg, go_signal)) {
             log_info(
                 tt::LogMetal,
                 "While initializing Device {}, ethernet tunneler core {} on Device {} detected as still running, issuing exit signal.",
@@ -330,7 +337,7 @@ void Device::reset_cores() {
                 physical_core.str(),
                 this->id());
             launch_msg->kernel_config.exit_erisc_kernel = 1;
-            llrt::write_launch_msg_to_core(this->id(), physical_core, launch_msg, launch_addr, false);
+            llrt::write_launch_msg_to_core(this->id(), physical_core, launch_msg, &go_msg, launch_addr, false);
             device_to_early_exit_cores[this->id()].insert(physical_core);
         }
     }
@@ -344,11 +351,16 @@ void Device::reset_cores() {
             if (llrt::is_ethernet_core(phys_core, id_and_cores.first)) {
                 // Ethernet cores won't be reset, so just signal the dispatch cores to early exit.
                 std::vector<uint32_t> data(sizeof(launch_msg_t) / sizeof(uint32_t));
+                std::vector<uint32_t> go_rb(sizeof(go_msg_t) / sizeof(uint32_t));
                 DeviceAddr launch_addr = hal.get_dev_addr(HalProgrammableCoreType::IDLE_ETH, HalMemAddrType::LAUNCH);
+                DeviceAddr go_signal_addr = launch_addr + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
                 data = tt::llrt::read_hex_vec_from_core(
                     id_and_cores.first, phys_core, launch_addr, sizeof(launch_msg_t));
+                go_rb = tt::llrt::read_hex_vec_from_core(
+                    this->id(), phys_core, go_signal_addr, sizeof(go_msg_t));
                 launch_msg_t *launch_msg = (launch_msg_t *)(&data[0]);
-                if (kernel_still_running(launch_msg)) {
+                go_msg_t * go_signal = (go_msg_t *)(&go_rb[0]);
+                if (kernel_still_running(launch_msg, go_signal)) {
                     log_info(
                         tt::LogMetal,
                         "While initializing device {}, ethernet dispatch core {} on Device {} detected as still running, issuing exit signal.",
@@ -356,7 +368,7 @@ void Device::reset_cores() {
                         phys_core.str(),
                         id_and_cores.first);
                     launch_msg->kernel_config.exit_erisc_kernel = 1;
-                    llrt::write_launch_msg_to_core(id_and_cores.first, phys_core, launch_msg, launch_addr, false);
+                    llrt::write_launch_msg_to_core(id_and_cores.first, phys_core, launch_msg, &go_msg, launch_addr, false);
                     device_to_early_exit_cores[id_and_cores.first].insert(phys_core);
                 }
             }
@@ -396,9 +408,10 @@ void Device::initialize_and_launch_firmware() {
     ZoneScoped;
 
     launch_msg_t launch_msg;
+    go_msg_t go_msg;
     std::memset(&launch_msg, 0, sizeof(launch_msg_t));
-    launch_msg.kernel_config.mode = DISPATCH_MODE_HOST,
-    launch_msg.go.run = RUN_MSG_INIT;
+    launch_msg.kernel_config.mode = DISPATCH_MODE_HOST;
+    go_msg.run = RUN_MSG_INIT;
 
     // Populate core info, which will be written to device
     vector<uint32_t> core_info_vec(sizeof(core_info_msg_t) / sizeof(uint32_t));
@@ -464,10 +477,9 @@ void Device::initialize_and_launch_firmware() {
             CoreCoord logical_core(x, y);
             if (!this->storage_only_cores_.count(logical_core)) {
                 CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
-
                 tt::llrt::write_hex_vec_to_core(
                     this->id(), worker_core, core_info_vec, this->get_dev_addr(worker_core, HalMemAddrType::CORE_INFO));
-                this->initialize_firmware(worker_core, &launch_msg);
+                this->initialize_firmware(worker_core, &launch_msg, &go_msg);
                 not_done_cores.insert(worker_core);
             }
         }
@@ -487,14 +499,14 @@ void Device::initialize_and_launch_firmware() {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
         tt::llrt::write_hex_vec_to_core(
             this->id(), phys_eth_core, core_info_vec, this->get_dev_addr(phys_eth_core, HalMemAddrType::CORE_INFO));
-        this->initialize_firmware(phys_eth_core, &launch_msg);
+        this->initialize_firmware(phys_eth_core, &launch_msg, &go_msg);
     }
 
     for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
         CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
         tt::llrt::write_hex_vec_to_core(
             this->id(), phys_eth_core, core_info_vec, this->get_dev_addr(phys_eth_core, HalMemAddrType::CORE_INFO));
-        this->initialize_firmware(phys_eth_core, &launch_msg);
+        this->initialize_firmware(phys_eth_core, &launch_msg, &go_msg);
         not_done_cores.insert(phys_eth_core);
     }
 
@@ -2048,8 +2060,9 @@ void Device::init_command_queue_device() {
         CoreType core_type = hal.get_core_type(index);
         for (const CoreCoord &logical_dispatch_core : logical_dispatch_cores) {
             launch_msg_t msg = command_queue_program.kernels_on_core(logical_dispatch_core, index)->launch_msg;
+            go_msg_t go_msg = command_queue_program.kernels_on_core(logical_dispatch_core, index)->go_msg;
             CoreCoord phys_core = this->physical_core_from_logical_core(logical_dispatch_core, core_type);
-            tt::llrt::write_launch_msg_to_core(this->id(), phys_core, &msg, this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+            tt::llrt::write_launch_msg_to_core(this->id(), phys_core, &msg, &go_msg, this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
         }
     }
 
@@ -2064,8 +2077,9 @@ void Device::init_command_queue_device() {
                 CoreType core_type = hal.get_core_type(index);
                 for (const CoreCoord &logical_dispatch_core : logical_dispatch_cores) {
                     launch_msg_t msg = mmio_command_queue_program.kernels_on_core(logical_dispatch_core, index)->launch_msg;
+                    go_msg_t go_msg = command_queue_program.kernels_on_core(logical_dispatch_core, index)->go_msg;
                     CoreCoord phys_core = mmio_device->physical_core_from_logical_core(logical_dispatch_core, core_type);
-                    tt::llrt::write_launch_msg_to_core(mmio_device_id, phys_core, &msg, mmio_device->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+                    tt::llrt::write_launch_msg_to_core(mmio_device_id, phys_core, &msg, &go_msg, mmio_device->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
                 }
             }
         }

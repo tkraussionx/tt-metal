@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+    // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -106,7 +106,6 @@ struct go_msg_t {
 
 struct launch_msg_t {  // must be cacheline aligned
     kernel_config_msg_t kernel_config;
-    go_msg_t go;
 } __attribute__((packed));
 
 struct slave_sync_msg_t {
@@ -278,14 +277,17 @@ struct core_info_msg_t {
     volatile uint8_t pad[29];
 };
 
+
+constexpr uint32_t launch_msg_buffer_num_entries = 4;
 struct mailboxes_t {
     struct ncrisc_halt_msg_t ncrisc_halt;
     struct slave_sync_msg_t slave_sync;
-    uint32_t pads_1[LAUNCH_NOC_ALIGMENT_PAD_COUNT];
-    struct launch_msg_t launch;
+    uint32_t launch_msg_rd_ptr;
+    struct launch_msg_t launch[launch_msg_buffer_num_entries];
+    struct go_msg_t go_message;
     struct watcher_msg_t watcher;
     struct dprint_buf_msg_t dprint_buf;
-    uint32_t pads_2[PROFILER_NOC_ALIGMENT_PAD_COUNT];
+    uint32_t pads_2[PROFILER_NOC_ALIGMENT_PAD_COUNT]; // May need to change this
     struct profiler_msg_t profiler;
     struct core_info_msg_t core_info;
 };
@@ -295,6 +297,7 @@ static_assert(sizeof(watcher_msg_t) % sizeof(uint32_t) == 0);
 static_assert(sizeof(kernel_config_msg_t) % sizeof(uint32_t) == 0);
 static_assert(sizeof(core_info_msg_t) % sizeof(uint32_t) == 0);
 
+// These asserts may need to be modified
 #ifndef TENSIX_FIRMWARE
 // Validate assumptions on mailbox layout on host compile
 // Constexpr definitions allow for printing of breaking values at compile time

@@ -236,7 +236,7 @@ class Device {
     void initialize_allocator(size_t l1_small_size, size_t trace_region_size, const std::vector<uint32_t> &l1_bank_remap = {});
     void initialize_build();
     void build_firmware();
-    void initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg);
+    void initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg);
     void reset_cores();
     void initialize_and_launch_firmware();
     void init_command_queue_host();
