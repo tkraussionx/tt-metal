@@ -290,7 +290,7 @@ class EnqueueProgramCommand : public Command {
     CoreType dispatch_core_type;
     uint32_t expected_num_workers_completed;
     uint32_t packed_write_max_unicast_sub_cmds;
-
+    uint32_t launch_message_wptr = 0;
    public:
     struct CachedProgramCommandSequence {
         HostMemDeviceCommand preamble_command_sequence;
@@ -302,6 +302,8 @@ class EnqueueProgramCommand : public Command {
         std::vector<std::vector<std::shared_ptr<CircularBuffer>>> circular_buffers_on_core_ranges;
         std::vector<launch_msg_t*> go_signals;
         uint32_t program_config_buffer_data_size_bytes;
+        CQDispatchWriteCmd* empty_launch_msg_mcast_cmd_ptr;
+        std::vector<CQDispatchWritePackedCmd*> launch_msg_write_packed_cmd_ptrs;
     };
     thread_local static std::unordered_map<uint64_t, CachedProgramCommandSequence> cached_program_command_sequences;
 
@@ -312,7 +314,8 @@ class EnqueueProgramCommand : public Command {
         Program& program,
         CoreCoord& dispatch_core,
         SystemMemoryManager& manager,
-        uint32_t expected_num_workers_completed);
+        uint32_t expected_num_workers_completed,
+        uint32_t launch_message_wptr);
 
     void assemble_preamble_commands(std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(bool prefetch_stall);
@@ -521,7 +524,7 @@ class HWCommandQueue {
     volatile uint32_t num_completed_completion_q_reads;  // completion queue reader thread increments this after reading
                                                          // an entry out of the completion queue
     detail::CompletionReaderQueue issued_completion_q_reads;
-
+    uint32_t launch_message_wptr = 0;
     Device* device;
 
     std::condition_variable reader_thread_cv;

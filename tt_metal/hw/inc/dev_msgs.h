@@ -106,7 +106,6 @@ struct go_msg_t {
 
 struct launch_msg_t {  // must be cacheline aligned
     kernel_config_msg_t kernel_config;
-    go_msg_t go;
 } __attribute__((packed));
 
 struct slave_sync_msg_t {
@@ -237,11 +236,13 @@ struct watcher_msg_t {
     struct debug_ring_buf_msg_t debug_ring_buf;
 };
 
+constexpr uint32_t launch_msg_buffer_num_entries = 4;
 struct mailboxes_t {
     struct ncrisc_halt_msg_t ncrisc_halt;
     struct slave_sync_msg_t slave_sync;
-    uint32_t pad;
-    struct launch_msg_t launch;
+    uint32_t launch_msg_rd_ptr;
+    struct launch_msg_t launch[launch_msg_buffer_num_entries];
+    struct go_msg_t go_message;
     struct watcher_msg_t watcher;
     struct dprint_buf_msg_t dprint_buf;
 };
@@ -261,6 +262,7 @@ static_assert(
     MEM_MAILBOX_BASE + offsetof(mailboxes_t, ncrisc_halt.stack_save) == MEM_NCRISC_HALT_STACK_MAILBOX_ADDRESS);
 #endif
 static_assert(MEM_MAILBOX_BASE + sizeof(mailboxes_t) < MEM_MAILBOX_END);
+// Similar assert for idle ethernet?
 #endif
 
 struct eth_word_t {

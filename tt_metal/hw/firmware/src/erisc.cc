@@ -78,7 +78,7 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
-        if (mailboxes->launch.go.run == RUN_MSG_GO) {
+        if (mailboxes->go_message.run == RUN_MSG_GO) {
             DeviceZoneScopedMainN("ERISC-FW");
             DeviceZoneSetCounter(mailboxes->launch.kernel_config.host_assigned_id);
 
