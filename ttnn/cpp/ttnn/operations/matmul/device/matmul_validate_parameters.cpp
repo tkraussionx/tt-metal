@@ -21,6 +21,66 @@ bool MatmulValidateParameters::validateOutput(
     const std::optional<std::vector<std::vector<uint32_t>>>& output_shard_shapes,
     const std::optional<std::vector<CoreRangeSet>>& output_core_range_sets)
 {
+    try
+    {
+        std::visit(
+        [&](const auto& program_config) {
+            using ProgramConfigType = std::decay_t<decltype(program_config)>;
+            // TODO: For 1D and 2D mcasts, we don't check if tensor is single core or single row/col
+            // We can uplift these variants to skip mcasting to support single core (1D) or single row/col (2D)
+            if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
+                if (program_config.mcast_in0) {
+                    TT_FATAL(false, "Currently not supported");
+                } else {
+                    if (is_sharded_by_index(0, output_sharded)) {
+                        TT_FATAL(memory_layout_by_index(0, output_memory_layouts) == TensorMemoryLayout::HEIGHT_SHARDED);
+                        uint32_t N = shape_by_index(0, output_shapes_vectors)[-1] / tt::constants::TILE_WIDTH;
+                        uint32_t per_core_M = program_config.per_core_M;
+                        uint32_t per_core_N = program_config.per_core_N;
+
+                        TT_FATAL(N == per_core_N);
+                        TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1);
+                    }
+                }
+            } else if constexpr (std::is_same_v<
+                                     ProgramConfigType,
+                                     MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>) {
+                TT_FATAL(false, "Program config is not supported.");
+            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
+                if (is_sharded_by_index(0, output_sharded)) {
+                    TT_FATAL(memory_layout_by_index(0, output_memory_layouts) == TensorMemoryLayout::BLOCK_SHARDED);
+                    uint32_t per_core_M = program_config.per_core_M;
+                    uint32_t per_core_N = program_config.per_core_N;
+
+                    TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1);
+                }
+            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseProgramConfig>) {
+                uint32_t per_core_M = program_config.per_core_M;
+                uint32_t per_core_N = program_config.per_core_N;
+                if (is_sharded_by_index(0, output_sharded)) {
+                    TT_FATAL(memory_layout_by_index(1, output_memory_layouts) != TensorMemoryLayout::WIDTH_SHARDED);
+                    TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1);
+                }
+            } else {
+                TT_FATAL(false, "Program config not supported.");
+            }
+            if constexpr (
+                std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig> ||
+                std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
+                TT_FATAL(
+                    program_config.per_core_M % program_config.out_subblock_h == 0,
+                    "per_core_M must be divisible by out_subblock_h");
+                TT_FATAL(
+                    program_config.per_core_N % program_config.out_subblock_w == 0,
+                    "per_core_N must be divisible by out_subblock_w");
+            }
+        },
+        program_config_parameters);
+    }
+    catch(const std::runtime_error& e)
+    {
+        return false;
+    }
     return true;
 }
 
@@ -171,7 +231,7 @@ bool MatmulValidateParameters::validateInputAndOutput(
                         get_core_range_set_by_index(1, input_core_range_sets.value()).bounding_box().end_coord.y);
                 }
 
-                if (is_sharded_by_index(0, input_sharded)) {
+                if (is_sharded_by_index(0, output_sharded)) {
                     TT_FATAL(memory_layout_by_index(0, output_memory_layouts) == TensorMemoryLayout::BLOCK_SHARDED);
                     tt::tt_metal::Shape input_a_shape = shape_by_index(0, input_shapes_vectors);
                     uint32_t M = volume(input_a_shape) / shape_by_index(0, input_shapes_vectors)[-1] / tt::constants::TILE_HEIGHT;
