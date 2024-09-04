@@ -17,7 +17,7 @@ void CopyDeviceOperation::validate(const std::vector<Tensor> &input_tensors) con
         input_tensor_a.get_dtype() == DataType::BFLOAT16 or input_tensor_a.get_dtype() == DataType::BFLOAT8_B or input_tensor_a.get_dtype() == DataType::FLOAT32,
         "Typecast operation is only supported on Grayskull for float/bfloat inputs");
     TT_FATAL(
-        this->output_dtype == DataType::BFLOAT16 or this->output_dtype == DataType::BFLOAT8_B or this->output_dtype == DataType::FLOAT32,
+        this->output_dtype == DataType::BFLOAT16 or this->output_dtype == DataType::BFLOAT8_B or this->output_dtype == DataType::BFLOAT4_B or this->output_dtype == DataType::FLOAT32,
         "Typecast operation is only supported on Grayskull for float/bfloat outputs");
     TT_FATAL(input_tensor_a.storage_type() == StorageType::DEVICE, "Operands to copy need to be on device!");
     TT_FATAL(input_tensor_a.buffer() != nullptr , "Operands to copy need to be allocated in buffers on device!");

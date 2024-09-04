@@ -19,8 +19,8 @@ void UpdateCache::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL(input_tensor.device() == cache_tensor.device(), "Operands to update_cache need to be on the same device!");
     TT_FATAL(input_tensor.buffer() != nullptr and cache_tensor.buffer() != nullptr, "Operands to update_cache need to be allocated in buffers on device!");
     TT_FATAL((input_tensor.get_layout() == Layout::TILE && cache_tensor.get_layout() == Layout::TILE), "Inputs to update_cache must be tilized");
-    TT_FATAL(input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::BFLOAT8_B);
-    TT_FATAL(cache_tensor.get_dtype() == DataType::FLOAT32 || cache_tensor.get_dtype() == DataType::BFLOAT16 || cache_tensor.get_dtype() == DataType::BFLOAT8_B);
+    TT_FATAL(input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::BFLOAT8_B || input_tensor.get_dtype() == DataType::BFLOAT4_B);
+    TT_FATAL(cache_tensor.get_dtype() == DataType::FLOAT32 || cache_tensor.get_dtype() == DataType::BFLOAT16 || cache_tensor.get_dtype() == DataType::BFLOAT8_B || cache_tensor.get_dtype() == DataType::BFLOAT4_B);
 
     TT_FATAL(input_tensor.get_legacy_shape()[-1] == cache_tensor.get_legacy_shape()[-1]);
     TT_FATAL(input_tensor.get_legacy_shape()[0] == 1);
