@@ -16,7 +16,7 @@ namespace ttnn::operations::experimental::matmul {
         const CoreCoord& compute_with_storage_grid_size,
         const std::optional<MemoryConfig>& memory_config,
         std::optional<const DataType> output_dtype,
-        std::optional<const DeviceComputeKernelConfig> compute_kernel_config,
+        std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config,
         std::optional<Tensor> optional_output_tensor) {
 
         auto mem_config = memory_config.value_or(input_tensor_a.memory_config());
@@ -32,7 +32,7 @@ namespace ttnn::operations::experimental::matmul {
             }
         }
 
-        auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+        auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : ttnn::operations::experimental::auto_format::AutoFormat::GetDefaultDevice()->arch();
         auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
 
         // Need to cache on out_subblock_w because it must be a compile time arg for optimal use of templated pack_untilize APIs
@@ -59,7 +59,7 @@ namespace ttnn::operations::experimental::matmul {
         const CoreCoord& compute_with_storage_grid_size,
         const std::optional<MemoryConfig>& memory_config,
         std::optional<const DataType> output_dtype,
-        std::optional<const DeviceComputeKernelConfig> compute_kernel_config,
+        std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config,
         std::optional<Tensor> optional_output_tensor) {
         return invoke(
             ttnn::DefaultQueueId, input_tensor_a, input_tensor_b, compute_with_storage_grid_size, memory_config, output_dtype, compute_kernel_config, optional_output_tensor);

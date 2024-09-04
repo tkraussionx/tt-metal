@@ -22,7 +22,7 @@ def load_inputs(user_input, batch):
     return in_prompt
 
 
-def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, device_mesh):
+def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, mesh_device):
     """
     Run tokenizer on inputs, and create embeddings for the first token of each input
     """
@@ -51,27 +51,29 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
     input_tokens_tt = [
         ttnn.from_torch(
             input_tokens[:, i].unsqueeze(0),
-            device=device_mesh,
+            device=mesh_device,
             dtype=ttnn.uint32,
             layout=ttnn.ROW_MAJOR_LAYOUT,
-            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            mesh_mapper=ReplicateTensorToMesh(mesh_device),
         )
         for i in range(max_prompt_len)
     ]
     input_mask_tt = [
         ttnn.from_torch(
             input_mask[:, i].unsqueeze(0),
-            device=device_mesh,
+            device=mesh_device,
             dtype=ttnn.bfloat16,
             layout=ttnn.ROW_MAJOR_LAYOUT,
-            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            mesh_mapper=ReplicateTensorToMesh(mesh_device),
         )
         for i in range(max_prompt_len)
     ]
     return input_tokens_tt, max_prompt_len, input_mask_tt, input_tokens, input_mask_bool
 
 
-def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instruct, device_mesh):
+def preprocess_inputs_prefill(
+    input_prompts, tokenizer, model_args, dtype, instruct, mesh_device, is_ci_env=False, max_prefill_len=16384
+):
     """
     Run tokenizer on inputs, and create embeddings for the first token of each input
     """
@@ -82,9 +84,26 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instr
         encoded_prompts = [tokenizer.encode(prompt) for prompt in input_prompts]
 
     prompt_lens = [len(x) for x in encoded_prompts]
-
     min_prompt_len = min(prompt_lens)
     max_prompt_len = max(prompt_lens)
+
+    # The large input demo contains more tokens than the maximum (32k tokens)
+    # To avoid running out of memory, clip to max_prefill_len (16k tokens or value given by the test)
+    if min_prompt_len > 1024 * 16:
+        logger.info(
+            f"Clipping prompts to {max_prefill_len} tokens to avoid running out of memory. Also avoids `prefill-as-decode` mode for the entire demo (since it only computes 120 iterations)"
+        )
+        if instruct:
+            encoded_prompts = [encod[:max_prefill_len] for encod in encoded_prompts]
+            dec_prompts = [tokenizer.decode(encod) + " [/INST]" for encod in encoded_prompts]
+            encoded_prompts = [tokenizer.encode(prompt) for prompt in dec_prompts]
+        else:
+            encoded_prompts = [encod[:max_prefill_len] for encod in encoded_prompts]
+
+        # Update prompt lengths
+        prompt_lens = [len(x) for x in encoded_prompts]
+        min_prompt_len = min(prompt_lens)
+        max_prompt_len = max(prompt_lens)
 
     assert (
         max_prompt_len <= model_args.max_seq_len
@@ -94,17 +113,32 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instr
 
     if min_prompt_len < 128:
         prefill_seq_len = 0  # For short prompts do decode-as-prefill instead
+    # Maximum KV-cache length support is 32k. To avoid going over it, the max prefill size is fixed at 16K tokens.
+    # Any tokens beyond 16K in the prompt will be prefilled-as-decode.
     else:
-        prefill_seq_len = (
-            2048 if min_prompt_len > 2048 else (1024 if min_prompt_len > 1024 else 128)
-        )  # TODO Only supports prefill lengths of 128, 1024 and 2048
+        if min_prompt_len > 1024 * 16:
+            prefill_seq_len = 1024 * 16
+        elif min_prompt_len > 1024 * 8:
+            prefill_seq_len = 1024 * 8
+        elif min_prompt_len > 1024 * 4:
+            prefill_seq_len = 1024 * 4
+        elif min_prompt_len > 1024 * 2:
+            prefill_seq_len = 1024 * 2
+        elif min_prompt_len > 1024:
+            prefill_seq_len = 1024
+        else:
+            prefill_seq_len = 128
         # Initial prefill tensor full of pad tokens
         input_tokens_prefill = torch.full((len(input_prompts), prefill_seq_len), tokenizer.pad_id, dtype=torch.int32)
 
+    # Start couting from the first token after prefill
+    initial_decode_token = max_prompt_len - prefill_seq_len
+    if (
+        initial_decode_token == 0
+    ):  # Avoid a tensor with dim=0, for the special case where all users have the same prompt length exactly the same size of prefill
+        initial_decode_token = 1
     # Initial decode tensor full of pad tokens
-    input_tokens_decode = torch.full(
-        (len(input_prompts), max_prompt_len - prefill_seq_len), tokenizer.pad_id, dtype=torch.int32
-    )
+    input_tokens_decode = torch.full((len(input_prompts), initial_decode_token), tokenizer.pad_id, dtype=torch.int32)
 
     logger.info(f"# of users: {len(encoded_prompts)}")
     for i, encoded in enumerate(encoded_prompts):
@@ -124,10 +158,10 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instr
         input_tokens_prefill_tt = [
             ttnn.from_torch(
                 input_tokens_prefill[i, :].unsqueeze(0),
-                device=device_mesh,
+                device=mesh_device,
                 dtype=ttnn.uint32,
                 layout=ttnn.ROW_MAJOR_LAYOUT,
-                mesh_mapper=ReplicateTensorToMesh(device_mesh),
+                mesh_mapper=ReplicateTensorToMesh(mesh_device),
             )
             for i in range(len(encoded_prompts))
         ]
@@ -137,10 +171,10 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instr
     input_tokens_decode_tt = [
         ttnn.from_torch(
             input_tokens_decode[:, i].unsqueeze(0),
-            device=device_mesh,
+            device=mesh_device,
             dtype=ttnn.uint32,
             layout=ttnn.ROW_MAJOR_LAYOUT,
-            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            mesh_mapper=ReplicateTensorToMesh(mesh_device),
         )
         for i in range(max_prompt_len - prefill_seq_len)
     ]
@@ -148,17 +182,17 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, instr
     input_mask_tt = [
         ttnn.from_torch(
             input_mask[:, i].unsqueeze(0),
-            device=device_mesh,
+            device=mesh_device,
             dtype=ttnn.bfloat16,
             layout=ttnn.ROW_MAJOR_LAYOUT,
-            mesh_mapper=ReplicateTensorToMesh(device_mesh),
+            mesh_mapper=ReplicateTensorToMesh(mesh_device),
         )
         for i in range(max_prompt_len - prefill_seq_len)
     ]
     return (
         input_tokens_prefill_tt,
         input_tokens_decode_tt,
-        max_prompt_len,
+        max_prompt_len - prefill_seq_len,
         input_mask_tt,
         input_tokens_prefill,
         input_tokens_decode,
@@ -172,7 +206,7 @@ def nearest_n(x, n):
     return ((x + n - 1) // n) * n
 
 
-def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, model_args, device_mesh):
+def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, model_args, mesh_device):
     """
     Prepare inputs for decode mode.
     x: (batch, seq, hidden_dim)
@@ -197,11 +231,11 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, current_pos, model_args, device_mesh
     # input goes to L1
     xs_1SBH = ttnn.from_torch(
         x_1SBH,
-        device=device_mesh,
+        device=mesh_device,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.L1_MEMORY_CONFIG,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
 
     return xs_1SBH
@@ -231,29 +265,30 @@ def sample(logits: torch.Tensor, temperature: float, top_p: float):
     return next_token
 
 
-def cache_attention(device_mesh, state_dict, model_args, current_rot_mat, rot_matrix, seq_start, seq_len, dtype):
-    logger.info(f"Caching attention ops for iterations {seq_start} to {seq_start + seq_len}...")
+def cache_attention(mesh_device, state_dict, model_args, current_rot_mat, rot_matrix, dtype):
     from models.demos.t3000.mixtral8x7b.tt.mixtral_attention import TtMixtralAttention
+
+    logger.info(f"Caching attention...")
 
     attention_inputs = ttnn.from_torch(
         torch.randn(1, 1, 32, 4096),
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        device=device_mesh,
+        device=mesh_device,
         memory_config=ttnn.L1_MEMORY_CONFIG,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
 
     tt_attn = TtMixtralAttention(
-        device_mesh,
+        mesh_device,
         state_dict,
         model_args,
         layer_num=0,
         dtype=dtype,
     )
 
-    for iter in [32, 200, 1024]:  # corresponds to chunk size 32, 256, 512
-        logger.info(f"Caching iteration {iter}...")
+    # SDPA in attention only supports chunk sizes of 32, 256, 512. This loop caches all 3 variants of SDPA
+    for iter in [32, 200, 1024]:
         if iter > 0:
             current_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         pos = iter
@@ -265,8 +300,6 @@ def cache_attention(device_mesh, state_dict, model_args, current_rot_mat, rot_ma
             None,
             current_rot_mat,
         )
-        # ttnn.deallocate(tt_out[0])
-
     logger.info("Attention ops cached")
 
 
@@ -288,10 +321,10 @@ def get_single_rot_mat_torch(dhead, start_pos=0, theta: float = 1000000.0):
     current_rot_mat[torch.arange(0, dhead, 2), torch.arange(1, dhead, 2)] = -sin_freqs.clone()
     current_rot_mat[torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
 
-    return current_rot_mat.unsqueeze(0).unsqueeze(0), rot_matrix.unsqueeze(0).unsqueeze(0)
+    return current_rot_mat.unsqueeze(0).unsqueeze(0).transpose(-1, -2), rot_matrix.unsqueeze(0).unsqueeze(0)
 
 
-def get_single_rot_mat(dhead, device_mesh, start_pos=0, theta: float = 1000000.0):
+def get_single_rot_mat(dhead, mesh_device, start_pos=0, theta: float = 1000000.0):
     freqs = 1.0 / (theta ** (torch.arange(0, dhead, 2)[: (dhead // 2)].float() / dhead))
     sin_freqs, cos_freqs = torch.sin(freqs), torch.cos(freqs)
     rot_matrix = torch.zeros(dhead, dhead)
@@ -311,17 +344,17 @@ def get_single_rot_mat(dhead, device_mesh, start_pos=0, theta: float = 1000000.0
     current_rot_mat[torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
 
     return ttnn.from_torch(
-        current_rot_mat.unsqueeze(0).unsqueeze(0),  # 1,1,head_dim,head_dim
-        device=device_mesh,
+        current_rot_mat.unsqueeze(0).unsqueeze(0).transpose(-1, -2),  # 1,1,head_dim,head_dim
+        device=mesh_device,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     ), ttnn.from_torch(
         rot_matrix.unsqueeze(0).unsqueeze(0),  # 1,1,head_dim,head_dim
-        device=device_mesh,
+        device=mesh_device,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
 
 
@@ -351,7 +384,7 @@ def get_rot_transformation_mat(dhead):
     return rot_emb_matrix
 
 
-def get_prefill_rot_mat(head_dim, max_seq_len, device_mesh, seq_len):
+def get_prefill_rot_mat(head_dim, max_seq_len, mesh_device, seq_len):
     cos, sin = precompute_freqs(head_dim, max_seq_len * 2)
     cos_gathered, sin_gathered = gather_cos_sin(torch.arange(0, seq_len), cos, sin)
     assert cos_gathered.size() == (1, 1, seq_len, head_dim)
@@ -361,22 +394,22 @@ def get_prefill_rot_mat(head_dim, max_seq_len, device_mesh, seq_len):
         cos_gathered,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
-        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
+        device=mesh_device,
     )
     sin_gathereds = ttnn.from_torch(
         sin_gathered,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
-        device=device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
+        device=mesh_device,
     )
 
     rot_mats = [cos_gathereds, sin_gathereds]
     return rot_mats
 
 
-def prepare_inputs_ttnn_prefill(x_bsh, device_mesh):
+def prepare_inputs_ttnn_prefill(x_bsh, mesh_device):
     """
     Prepare inputs for prefill mode.
     x: (batch, seq, hidden_dim)
@@ -396,21 +429,21 @@ def prepare_inputs_ttnn_prefill(x_bsh, device_mesh):
 
     attn_mask = ttnn.from_torch(
         attn_mask,
-        device=device_mesh,
+        device=mesh_device,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
 
     # input goes to L1
     xs_1BSH = ttnn.from_torch(
         x_1BSH,
-        device=device_mesh,
+        device=mesh_device,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
     return xs_1BSH, attn_mask, attn_mask_torch
 
