@@ -43,6 +43,7 @@ struct KernelGroup {
     uint32_t rta_sizes[DISPATCH_CLASS_MAX];
     uint32_t total_rta_size;
     launch_msg_t launch_msg;
+    go_msg_t go_msg;
 
     KernelGroup();
     KernelGroup(
@@ -51,8 +52,7 @@ struct KernelGroup {
         kernel_id_array_t kernel_ids,
         bool erisc_is_idle,
         int last_cb_index,
-        const CoreRangeSet &new_ranges,
-        bool send_go = false);
+        const CoreRangeSet &new_ranges);
 
     uint32_t get_programmable_core_type_index() const;
 

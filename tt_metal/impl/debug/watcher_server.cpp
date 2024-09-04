@@ -482,7 +482,7 @@ static void dump_run_state(FILE *f, CoreCoord core, const launch_msg_t *launch_m
 }
 
 static void dump_run_mailboxes(
-    FILE *f, CoreCoord core, const launch_msg_t *launch_msg, const slave_sync_msg_t *slave_sync) {
+    FILE *f, CoreCoord core, const launch_msg_t *launch_msg, const go_msg_t* go_signal, const slave_sync_msg_t *slave_sync) {
     fprintf(f, "rmsg:");
 
     if (launch_msg->kernel_config.mode == DISPATCH_MODE_DEV) {
@@ -509,7 +509,7 @@ static void dump_run_mailboxes(
             launch_msg->kernel_config.brisc_noc_id);
     }
 
-    dump_run_state(f, core, launch_msg, launch_msg->go.run);
+    dump_run_state(f, core, launch_msg, go_signal->run);
 
     fprintf(f, "|");
 
@@ -667,7 +667,7 @@ static void dump_core(
     mailboxes_t *mbox_data = (mailboxes_t *)(&data[0]);
 
     // Validate these first since they are used in diagnostic messages below.
-    validate_kernel_ids(f, used_kernel_names, device->id(), core, &mbox_data->launch);
+    validate_kernel_ids(f, used_kernel_names, device->id(), core, &mbox_data->launch[0]);
 
     // Whether or not watcher data is available depends on a flag set on the device.
     bool enabled = (mbox_data->watcher.enable == WatcherEnabled);
@@ -675,11 +675,11 @@ static void dump_core(
     if (enabled) {
         // Dump state only gathered if device is compiled w/ watcher
         if (!tt::llrt::OptionsG.watcher_status_disabled())
-            dump_debug_status(f, core, &mbox_data->launch, mbox_data->watcher.debug_status);
+            dump_debug_status(f, core, &mbox_data->launch[0], mbox_data->watcher.debug_status);
         // Ethernet cores have firmware that starts at address 0, so no need to check it for a
         // magic value.
         if (!is_eth_core)
-            dump_l1_status(f, device, core, &mbox_data->launch);
+            dump_l1_status(f, device, core, &mbox_data->launch[0]);
         if (!tt::llrt::OptionsG.watcher_noc_sanitize_disabled()) {
             for (uint32_t noc = 0; noc < NUM_NOCS; noc++) {
                 dump_noc_sanity_status(
@@ -687,7 +687,7 @@ static void dump_core(
                     device,
                     core,
                     core_str,
-                    &mbox_data->launch,
+                    &mbox_data->launch[0],
                     noc,
                     &mbox_data->watcher.sanitize_noc[noc],
                     mbox_data->watcher.debug_status);
@@ -695,7 +695,7 @@ static void dump_core(
         }
         if (!tt::llrt::OptionsG.watcher_assert_disabled())
             dump_assert_status(
-                f, device, core, core_str, &mbox_data->launch, &mbox_data->watcher.assert_status, mbox_data->watcher.debug_status);
+                f, device, core, core_str, &mbox_data->launch[0], &mbox_data->watcher.assert_status, mbox_data->watcher.debug_status);
         if (!tt::llrt::OptionsG.watcher_pause_disabled())
             dump_pause_status(core, &mbox_data->watcher.pause_status, paused_cores);
     }
@@ -703,7 +703,7 @@ static void dump_core(
     // Ethernet cores don't use the launch message/sync reg
     if (!is_eth_core) {
         // Dump state always available
-        dump_run_mailboxes(f, core, &mbox_data->launch, &mbox_data->slave_sync);
+        dump_run_mailboxes(f, core, &mbox_data->launch[0], &mbox_data->go_message, &mbox_data->slave_sync);
         if (tt::llrt::OptionsG.get_watcher_dump_all()) {
             // Reading registers while running can cause hangs, only read if
             // requested explicitly
@@ -711,20 +711,20 @@ static void dump_core(
         }
     } else {
         fprintf(f, "rmsg:");
-        dump_run_state(f, core, &mbox_data->launch, mbox_data->launch.go.run);
+        dump_run_state(f, core, &mbox_data->launch[0], mbox_data->go_message.run);
         fprintf(f, " ");
     }
 
     // Eth core only reports erisc kernel id, uses the brisc field
     if (is_eth_core) {
-        fprintf(f, "k_id:%d", mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_ETH_DM0]);
+        fprintf(f, "k_id:%d", mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_ETH_DM0]);
     } else {
         fprintf(
             f,
             "k_ids:%d|%d|%d",
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM0],
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM1],
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_COMPUTE]);
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM0],
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM1],
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_COMPUTE]);
     }
 
     // Ring buffer at the end because it can print a bunch of data, same for stack usage

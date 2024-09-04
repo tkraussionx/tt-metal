@@ -276,7 +276,7 @@ inline void deassert_ncrisc_trisc() {
     // Below sets ncrisc to go so we can wait until it is cleared on first iteration
     mailboxes->slave_sync.all = RUN_SYNC_MSG_ALL_SLAVES_DONE;
 
-    uint16_t fw_size16 = mailboxes->launch.kernel_config.ncrisc_kernel_size16;
+    uint16_t fw_size16 = mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.ncrisc_kernel_size16;
     ncrisc_kernel_start_offset16 = fw_size16;
 
     // Copies from L1 to IRAM on chips where NCRISC has IRAM
@@ -342,6 +342,8 @@ int main() {
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
     l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr*)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
 
+    mailboxes->launch_msg_rd_ptr = 0; // Initialize the rdptr to 0
+
     risc_init();
     device_setup();
     noc_init();
@@ -357,48 +359,47 @@ int main() {
     // Wait for ncrisc to halt
     wait_for_ncrisc_to_halt();
 
-    mailboxes->launch.go.run = RUN_MSG_DONE;
+    mailboxes->go_message.run = RUN_MSG_DONE;
 
     while (1) {
         init_sync_registers();
         reset_ncrisc_with_iram();
 
         DEBUG_STATUS("GW");
-        DPRINT << "Wait for Go Signal at addr: " << (uint32_t)(&(mailboxes->launch.go)) << ENDL();
         uint32_t count = 0;
-        while (mailboxes->launch.go.run != RUN_MSG_GO);
-        DPRINT << "Done waiting for Go Signal" << ENDL();
+        while (mailboxes->go_message.run != RUN_MSG_GO);
+        uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         DEBUG_STATUS("GD");
 
         {
             DeviceZoneScopedMainN("BRISC-FW");
-            DeviceZoneSetCounter(mailboxes->launch.kernel_config.host_assigned_id);
+            DeviceZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id);
 
             // Copies from L1 to IRAM on chips where NCRISC has IRAM
-            l1_to_ncrisc_iram_copy(mailboxes->launch.kernel_config.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
+            l1_to_ncrisc_iram_copy(mailboxes->launch[launch_msg_rd_ptr].kernel_config.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
 
             // Invalidate the i$ now the kernels have loaded and before running
             volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
             cfg_regs[RISCV_IC_INVALIDATE_InvalidateAll_ADDR32] = RISCV_IC_BRISC_MASK | RISCV_IC_TRISC_ALL_MASK | RISCV_IC_NCRISC_MASK;
 
-            enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch.kernel_config.enables;
+            enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables;
             // true if the launch_msg encodes that this tensix core is running DM or compute kernels. If false, this go signal is basically ignored.
             bool run_kernels = enables & (DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM1 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM0 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_COMPUTE);
             run_triscs(enables);
 
-            noc_index = mailboxes->launch.kernel_config.brisc_noc_id;
+            noc_index = mailboxes->launch[launch_msg_rd_ptr].kernel_config.brisc_noc_id;
 
             uint32_t kernel_config_base = firmware_config_init(mailboxes, ProgrammableCoreType::TENSIX, DISPATCH_CLASS_TENSIX_DM0);
             uint32_t tt_l1_ptr *cb_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
-                mailboxes->launch.kernel_config.cb_offset);
+                mailboxes->launch[launch_msg_rd_ptr].kernel_config.cb_offset);
             setup_cb_read_write_interfaces(cb_l1_base, 0, num_cbs_to_early_init, true, true, false);
 
             finish_ncrisc_copy_and_run(enables);
 
-            // Run the BRISC kernel
+            // Run the BRISC kernel\
             DEBUG_STATUS("R");
             if (enables & DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM0) {
-                setup_cb_read_write_interfaces(cb_l1_base, num_cbs_to_early_init, mailboxes->launch.kernel_config.max_cb_index, true, true, false);
+                setup_cb_read_write_interfaces(cb_l1_base, num_cbs_to_early_init, mailboxes->launch[launch_msg_rd_ptr].kernel_config.max_cb_index, true, true, false);
                 kernel_init();
                 RECORD_STACK_USAGE();
             } else {
@@ -409,13 +410,13 @@ int main() {
 
             wait_ncrisc_trisc();
 
-            mailboxes->launch.go.run = RUN_MSG_DONE;
+            mailboxes->go_message.run = RUN_MSG_DONE;
 
             // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
-            if (mailboxes->launch.kernel_config.mode == DISPATCH_MODE_DEV && run_kernels) {
+            if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV && run_kernels) {
                 uint64_t dispatch_addr =
-                    NOC_XY_ADDR(NOC_X(mailboxes->launch.kernel_config.dispatch_core_x),
-                        NOC_Y(mailboxes->launch.kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                    NOC_XY_ADDR(NOC_X(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_x),
+                        NOC_Y(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(
                     noc_index,
@@ -426,6 +427,7 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
             }
+            mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
         }
     }
 
