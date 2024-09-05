@@ -405,6 +405,10 @@ FORCE_INLINE void receiver_side_start(std::uint32_t handshake_register_address) 
     initialize_edm_common_datastructures(handshake_register_address);
 }
 
+FORCE_INLINE bool receiver_side_can_finish() {
+    return eth_bytes_are_available_on_channel(0);
+}
+
 FORCE_INLINE void receiver_side_finish(std::uint32_t handshake_register_address) {
     eth_wait_for_bytes(16, A_LONG_TIMEOUT_BEFORE_CONTEXT_SWITCH);
     while (eth_txq_reg_read(0, ETH_TXQ_CMD) != 0) {
