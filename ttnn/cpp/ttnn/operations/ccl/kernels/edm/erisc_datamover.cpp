@@ -338,12 +338,12 @@ void kernel_main() {
             // we may mess up transaction state because it's possible for receiver of this
             // op to send the completion done after that one has already started.
             uint32_t wait_count = 0;
-            uint32_t wait_max = 5000000;
             for (uint8_t buffer_index = 0; buffer_index < num_buffers_per_channel; buffer_index++) {
                 wait_count = 0;
                 channel.buffer_index = buffer_index;
                 if (!channel.is_sender_side) {
                     if (!channel.eth_is_receiver_channel_send_done()) {
+                        busy_wait_for_eth_txq_not_busy(0);
                         channel.eth_receiver_channel_done();
                     }
                 }
@@ -352,7 +352,7 @@ void kernel_main() {
                 if (channel.is_sender_side) {
                     while (!channel.eth_is_receiver_channel_send_done()) {
                         wait_count++;
-                        if (wait_count > wait_max) {
+                        if (wait_count > SWITCH_INTERVAL) {
                             DEBUG_STATUS("STK");
                             run_routing();
                             wait_count = 0;

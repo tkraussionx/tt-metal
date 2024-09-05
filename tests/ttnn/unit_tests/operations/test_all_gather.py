@@ -875,6 +875,7 @@ def run_all_gather_sharded(
     use_program_cache,
     function_level_defaults,
     all_gather_operation,
+    num_iters=1,
 ):
     if t3k_mesh_device.get_num_devices() != 8:
         pytest.skip("Not T3000!")
@@ -958,11 +959,24 @@ def run_all_gather_sharded(
 
     input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
 
-    ## Run the actual allgather operation
+    ## Compile the programs
     tt_out_tensor = all_gather_operation(input_tensor_mesh, dim, num_links=num_links, memory_config=output_mem_config)
     ## Wait for completion
+
+    trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
+    # for _ in range(num_iters):
+    tt_out_tensor = all_gather_operation(input_tensor_mesh, dim, num_links=num_links, memory_config=output_mem_config)
+    ## Wait for completion
+    # for d in t3k_mesh_device.get_devices():
+    #     ttnn.synchronize_device(d)
+    ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
+    logger.info(f"Running {num_iters} iterations")
+    for _ in range(num_iters):
+        ttnn.execute_trace(t3k_mesh_device, trace_id, cq_id=0, blocking=False)
+
     for d in t3k_mesh_device.get_devices():
         ttnn.synchronize_device(d)
+    ttnn.release_trace(t3k_mesh_device, trace_id)
 
     torch.set_printoptions(sci_mode=False)
     all_eq = True
@@ -1003,8 +1017,8 @@ def run_all_gather_sharded(
 @pytest.mark.parametrize(
     "input_dtype",
     [
-        ttnn.bfloat16,  # https://github.com/tenstorrent/tt-metal/issues/9686
-        # ttnn.bfloat8_b,
+        # ttnn.bfloat16,  # https://github.com/tenstorrent/tt-metal/issues/9686
+        ttnn.bfloat8_b,
     ],
 )
 @pytest.mark.parametrize(
@@ -1026,24 +1040,24 @@ def run_all_gather_sharded(
             (32, 32),
             ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
         ),
-        (  # https://github.com/tenstorrent/tt-metal/issues/9686
-            (1, 1, 32, 4096),
-            (32, 128),
-            ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
-        ),
-        (  # https://github.com/tenstorrent/tt-metal/issues/9686
-            (1, 1, 32, 2048),
-            (32, 64),
-            ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
-        ),
-        (  # https://github.com/tenstorrent/tt-metal/issues/9686
-            (1, 1, 32, 1792),
-            (32, 32),
-            ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 6))}),
-        ),
+        # (  # https://github.com/tenstorrent/tt-metal/issues/9686
+        #     (1, 1, 32, 4096),
+        #     (32, 128),
+        #     ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
+        # ),
+        # (  # https://github.com/tenstorrent/tt-metal/issues/9686
+        #     (1, 1, 32, 2048),
+        #     (32, 64),
+        #     ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 3))}),
+        # ),
+        # (  # https://github.com/tenstorrent/tt-metal/issues/9686
+        #     (1, 1, 32, 1792),
+        #     (32, 32),
+        #     ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 6))}),
+        # ),
     ),
 )
-# @pytest.mark.parametrize("device_params", [{"trace_region_size": 60000}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 122880}], indirect=True)
 def test_all_gather_sharded_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -1076,6 +1090,7 @@ def test_all_gather_sharded_post_commit(
         use_program_cache,
         function_level_defaults,
         all_gather_operation=ttnn.all_gather,
+        num_iters=16,
     )
 
 

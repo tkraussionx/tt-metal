@@ -16,6 +16,8 @@
 #include "../dataflow_api.h"
 #include "tunneling.h"
 
+#include <limits>
+
 
 /**
  * Indicates if the ethernet transaction queue is busy ingesting a command at this moment,
@@ -27,6 +29,17 @@ FORCE_INLINE bool eth_txq_is_busy() {
     return internal_::eth_txq_is_busy(0);
 }
 
+FORCE_INLINE void busy_wait_for_eth_txq_not_busy(uint32_t eth_txq_id, std::uint32_t context_switch_timeout = std::numeric_limits<uint32_t>::max()) {
+    uint32_t count = 0;
+    while (internal_::eth_txq_is_busy(eth_txq_id)) {
+        if (count == context_switch_timeout) {
+            run_routing();
+            count = 0;
+        } else {
+            count++;
+        }
+    }
+}
 
 /**
  * A blocking call that waits until the value of a local L1 memory address on
