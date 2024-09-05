@@ -24,6 +24,7 @@ enum class BinaryBackwardOpType {
     ASSIGN_BW,
     CONCAT_BW,
     BIAS_GELU_BW,
+    LT_BW,
     MIN_BW,
     MAX_BW,
     DIV_BW,
