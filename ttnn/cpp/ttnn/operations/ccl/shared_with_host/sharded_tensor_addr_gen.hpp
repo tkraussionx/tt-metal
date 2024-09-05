@@ -79,6 +79,11 @@ struct test_shard_location_t {
     device_core_location_t core_location;
     std::uint32_t page_offset;
 };
+struct test_shard_location_with_contig_t {
+    device_core_location_t core_location;
+    std::uint32_t page_offset;
+    std::uint32_t contig_pages_in_row;
+};
 
 /* Similar to interleaved address generators found in dataflow API, this acts
  * as a somewhat standardized interface to generate addresses for sharded tensors
@@ -218,6 +223,39 @@ struct WidthShardedAddressGenerator {
         noc_grid_index_t noc_y = worker_to_noc_lookup.get_noc_y_from_worker_y(worker_y_logical);
 
         return test_shard_location_t{device_core_location_t{noc_y, noc_x}, page_offset_in_shard};
+    }
+
+    test_shard_location_with_contig_t get_page_location_with_contiguous_pages_in_row_in_bank(std::uint32_t global_page_id) const {
+        // With width sharding, the tensor is fractured along width, but can be mapped onto a 2D grid, in such a case
+        // the logical tensor is still fractured only along 1 dimension but the placement/allocation snakes through the
+        // grid.
+        std::uint32_t global_pages_per_row_logical = tensor_shard_spec.get_pages_per_tensor_x();
+
+        std::uint32_t page_global_outer_dim = global_page_id / global_pages_per_row_logical;
+        std::uint32_t page_global_inner_dim = global_page_id - (page_global_outer_dim * global_pages_per_row_logical);
+
+        // might be able to save on some divides here if we can multiply out the pages per shard_x and shards per row
+        // ... think about it
+        // likewise maybe we can also take it a step further and do the same sort of thing above too to get away with a
+        // single divide for the full function
+        std::uint32_t global_shard_index = page_global_inner_dim / tensor_shard_spec.get_pages_per_shard_x();
+
+        auto [shard_grid_inner_dim_index, shard_grid_outer_dim_index] = flat_index_to_2d<std::uint32_t>(global_shard_index, tensor_shard_spec.get_shard_grid_inner_dim());
+
+        std::uint32_t worker_y_offset = (!tensor_shard_spec.transposed_grid * shard_grid_outer_dim_index) + (tensor_shard_spec.transposed_grid * shard_grid_inner_dim_index);
+        std::uint32_t worker_x_offset = (!tensor_shard_spec.transposed_grid * shard_grid_inner_dim_index) + (tensor_shard_spec.transposed_grid * shard_grid_outer_dim_index);
+
+        std::uint32_t page_in_shard_x = page_global_inner_dim - (global_shard_index * tensor_shard_spec.get_pages_per_shard_x());
+        std::uint32_t page_in_shard_y = page_global_outer_dim;
+        std::uint32_t page_offset_in_shard = (page_global_outer_dim * tensor_shard_spec.get_pages_per_shard_x()) + page_in_shard_x;
+
+        std::uint32_t worker_x_logical = tensor_shard_spec.shard_grid_start_x_logical + worker_x_offset;
+        std::uint32_t worker_y_logical = tensor_shard_spec.shard_grid_start_y_logical + worker_y_offset;
+
+        noc_grid_index_t noc_x = worker_to_noc_lookup.get_noc_x_from_worker_x(worker_x_logical);
+        noc_grid_index_t noc_y = worker_to_noc_lookup.get_noc_y_from_worker_y(worker_y_logical);
+
+        return test_shard_location_with_contig_t{device_core_location_t{noc_y, noc_x}, page_offset_in_shard, tensor_shard_spec.get_pages_per_shard_x() - page_in_shard_x};
     }
 
     // Upon support of macros that indicate if compiling for host or device, we can enable this by stubbing out `get_noc_addr`
