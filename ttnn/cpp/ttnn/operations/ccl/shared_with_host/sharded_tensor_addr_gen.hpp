@@ -321,8 +321,7 @@ struct HeightShardedAddressGenerator {
         noc_grid_index_t noc_x = worker_to_noc_lookup.get_noc_x_from_worker_x(worker_x_logical);
         noc_grid_index_t noc_y = worker_to_noc_lookup.get_noc_y_from_worker_y(worker_y_logical);
 
-        std::uint32_t page_in_shard_x = pages_per_shard - ((page_offset_in_shard / tensor_shard_spec.get_pages_per_shard_x()) * tensor_shard_spec.get_pages_per_shard_x());
-        return test_shard_location_with_contig_t{device_core_location_t{noc_y, noc_x}, page_offset_in_shard, tensor_shard_spec.get_pages_per_shard_x() - page_in_shard_x};
+        return test_shard_location_with_contig_t{device_core_location_t{noc_y, noc_x}, page_offset_in_shard, 1};//tensor_shard_spec.get_pages_per_shard_x() - page_in_shard_x};
     }
 
     test_shard_location_t get_page_location(std::uint32_t global_page_id) const {
