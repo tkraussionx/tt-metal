@@ -137,12 +137,7 @@ def run_inference(tt_model, tokenizer, tokens, mesh_device, configuration, total
 
         logger.info("Capturing trace")
         trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
-        tt_logits = tt_model(
-            tt_inp_emb,
-            rot_mat,
-            prev_pos,
-            attn_mask,
-        )
+        tt_logits = tt_model(tt_inp_emb, rot_mat, prev_pos, attn_mask, cache_idxs=cache_idxs)
         tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
         logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)

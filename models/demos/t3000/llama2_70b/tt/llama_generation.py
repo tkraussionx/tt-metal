@@ -220,6 +220,7 @@ class TtLlamaModelForGeneration:
         return output_logits
 
     def _process_logits(self, tt_logits):
+        # TODO: remove ocmpose, use to_layout on device!
         logits = ttnn.to_torch(
             tt_logits, device=self.mesh_device, mesh_composer=ConcatMeshToTensor(self.mesh_device, dim=3)
         )
