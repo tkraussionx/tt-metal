@@ -7,6 +7,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <type_traits>
 #include <vector>
 
 #include "tt_metal/common/assert.hpp"
@@ -19,8 +20,7 @@ class bfloat16 {
 
  public:
     static const size_t SIZEOF = 2;
-    bfloat16() {
-    }
+    constexpr bfloat16() noexcept = default;
 
     // create from float: no rounding, just truncate
     bfloat16(float float_num) {
@@ -72,6 +72,7 @@ class bfloat16 {
         return bfloat16(this->to_float() * rhs.to_float());
     }
 };
+static_assert(std::is_trivial_v<::bfloat16>);
 
 inline std::ostream& operator<<(std::ostream& os, const bfloat16& bfp16)
 {
