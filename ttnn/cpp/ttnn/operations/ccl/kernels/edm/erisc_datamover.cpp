@@ -327,6 +327,7 @@ void kernel_main() {
     }
 
     {
+        DeviceZoneScopedN("EDM_TEARDOWN");
         for (uint32_t s = 0; s < num_senders + num_receivers; s++) {
             auto &channel = buffer_channels[s];
             // We need to explicitly check for channel send done because we may

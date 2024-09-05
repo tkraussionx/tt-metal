@@ -155,6 +155,7 @@ class ChannelBuffer final {
 
     // Increment the semaphore in the remote L1s of every worker associated with this ChannelBuffer
     FORCE_INLINE void increment_worker_semaphores() {
+        DeviceZoneScopedN("EDM::seminc");
         if constexpr (BUFFER_SHARING_MODE == EriscDataMoverBufferSharingMode::NOT_SHARED) {
             // We have to be careful that the worker x/y matches for the `noc_index`
             // active on the erisc

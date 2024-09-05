@@ -196,6 +196,7 @@ struct WidthShardedAddressGenerator {
         // With width sharding, the tensor is fractured along width, but can be mapped onto a 2D grid, in such a case
         // the logical tensor is still fractured only along 1 dimension but the placement/allocation snakes through the
         // grid.
+        DeviceZoneScopedN("WidthShardAddrGen::get_loc")
         std::uint32_t global_pages_per_row_logical = tensor_shard_spec.get_pages_per_tensor_x();
 
         std::uint32_t page_global_outer_dim = global_page_id / global_pages_per_row_logical;
