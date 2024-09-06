@@ -12,6 +12,7 @@ on:
           - ALL SWEEPS (Nightly)
           - add
           - line_all_gather
+          - all_gather_t3k_sharded
           - logical_and_
           - matmul.full.matmul_default_block_sharded
           - matmul.full.matmul_default_height_sharded
