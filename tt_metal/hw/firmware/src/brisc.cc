@@ -396,7 +396,7 @@ int main() {
 
             finish_ncrisc_copy_and_run(enables);
 
-            // Run the BRISC kernel\
+            // Run the BRISC kernel
             DEBUG_STATUS("R");
             if (enables & DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM0) {
                 setup_cb_read_write_interfaces(cb_l1_base, num_cbs_to_early_init, mailboxes->launch[launch_msg_rd_ptr].kernel_config.max_cb_index, true, true, false);

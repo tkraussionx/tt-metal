@@ -60,7 +60,7 @@ struct address_map {
   // erisc early exit functionality re-uses mailboxes_t::ncrisc_halt_msg_t::stack_save memory
   static constexpr std::int32_t ERISC_MEM_MAILBOX_STACK_SAVE = ERISC_MEM_MAILBOX_BASE + 4;
 
-  static constexpr std::uint32_t PROFILER_L1_BUFFER_ER = ERISC_MEM_MAILBOX_BASE + 288 + 256 + 16;
+  static constexpr std::uint32_t PROFILER_L1_BUFFER_ER = ERISC_MEM_MAILBOX_BASE + 1584; //288 + 256 + 16; // + 1560 + 8; // this is the size of the mem_mailbox // 288 + 256 + 16;
   static constexpr std::uint32_t PROFILER_L1_BUFFER_CONTROL = PROFILER_L1_BUFFER_ER + PROFILER_L1_BUFFER_SIZE;
 
   static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_BASE = PROFILER_L1_BUFFER_CONTROL + PROFILER_L1_CONTROL_BUFFER_SIZE;

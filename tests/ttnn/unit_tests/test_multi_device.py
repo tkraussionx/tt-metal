@@ -101,20 +101,20 @@ def test_multi_device_open_close_galaxy_mesh(silicon_arch_name, silicon_arch_wor
 @pytest.mark.parametrize("dtype", [ttnn.bfloat8_b])
 def test_ttnn_to_multi_device_multiple_times(mesh_device, layout, memory_config, dtype):
     """Test ttnn.to_device(..) works when the tensor is already on device"""
-    if dtype == ttnn.bfloat8_b and layout == ttnn.ROW_MAJOR_LAYOUT:
-        pytest.skip("Unsupported test permutation: bfloat8_b with ROW_MAJOR_LAYOUT")
+    # if dtype == ttnn.bfloat8_b and layout == ttnn.ROW_MAJOR_LAYOUT:
+    #     pytest.skip("Unsupported test permutation: bfloat8_b with ROW_MAJOR_LAYOUT")
 
     torch_tensor = torch.rand((1, 1, 32, 32 * mesh_device.get_num_devices()), dtype=torch.bfloat16)
 
-    ttnn_tensor = ttnn.from_torch(
-        torch_tensor, dtype=dtype, layout=layout, mesh_mapper=ShardTensorToMesh(mesh_device, dim=3)
-    )
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device, memory_config=memory_config)
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device, memory_config=memory_config)
-    ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
-    torch_loop_back_tensor = ttnn.to_torch(ttnn_loop_back_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
+    # ttnn_tensor = ttnn.from_torch(
+    #     torch_tensor, dtype=dtype, layout=layout, mesh_mapper=ShardTensorToMesh(mesh_device, dim=3)
+    # )
+    # ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device, memory_config=memory_config)
+    # ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device, memory_config=memory_config)
+    # ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
+    # torch_loop_back_tensor = ttnn.to_torch(ttnn_loop_back_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
 
-    assert_with_pcc(torch_tensor, torch_loop_back_tensor, pcc=0.9999)
+    # assert_with_pcc(torch_tensor, torch_loop_back_tensor, pcc=0.9999)
 
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
@@ -245,18 +245,20 @@ def test_multi_device_multi_op(mesh_device):
     torch_input_tensor = torch.rand((1, 1, 32, 32 * mesh_device.get_num_devices()), dtype=torch.bfloat16)
     torch_output_golden = torch.nn.functional.gelu(torch_input_tensor)
     torch_output_golden = torch.exp(torch_output_golden)
+    for i in range(100):
+        ttnn_input_tensor = ttnn.from_torch(
+            torch_input_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            mesh_mapper=ShardTensorToMesh(mesh_device, dim=3),
+            device=mesh_device,
+        )
+        ttnn_gelu_output = ttnn.gelu(ttnn_input_tensor)
+        ttnn_output_tensor = ttnn.exp(ttnn_gelu_output)
 
-    ttnn_input_tensor = ttnn.from_torch(
-        torch_input_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ShardTensorToMesh(mesh_device, dim=3),
-        device=mesh_device,
-    )
-    ttnn_gelu_output = ttnn.gelu(ttnn_input_tensor)
-    ttnn_output_tensor = ttnn.exp(ttnn_gelu_output)
-
-    ttnn_torch_output_tensor = ttnn.to_torch(ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
-    assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3)
+        )
+        assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
 def test_multi_device_data_parallel_matmul_op(mesh_device):

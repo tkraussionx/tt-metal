@@ -45,6 +45,7 @@ enum DispatchCoreType: uint32_t {
 
 struct dispatch_worker_build_settings_t{
     std::string kernel_file;
+    std::string dispatch_s_kernel_file;
     std::vector<uint32_t> compile_args;
     std::vector<tt_cxy_pair> upstream_cores;
     std::vector<tt_cxy_pair> downstream_cores;
@@ -59,6 +60,9 @@ struct dispatch_worker_build_settings_t{
     std::vector<uint32_t> semaphores;
     uint32_t producer_semaphore_id;
     uint32_t consumer_semaphore_id;
+    uint32_t prefetch_dispatch_s_semaphore_id;
+    uint32_t dispatch_s_semaphore_id;
+    uint32_t dispatch_s_sync_semaphore_id;
     uint32_t cb_start_address;
     uint32_t cb_size_bytes;
     uint32_t cb_log_page_size;
