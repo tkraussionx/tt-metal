@@ -94,7 +94,7 @@ def test_matmul_does_dot_product(device, w):
 
 
 # fmt: off
-@pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="Unsupported on WH and BH")
+# @pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="Unsupported on WH and BH")
 @pytest.mark.parametrize("n_size,c,h,w", [
     (1, 1, 2, 4),
     (1, 1, 4, 2),
@@ -108,11 +108,49 @@ def test_matmul_with_matched_width_height_4D(device, n_size, c, h, w):
     torch_input_tensor_a = torch.rand((n_size, c, h, w), dtype=torch.bfloat16)
     torch_input_tensor_b = torch.rand((n_size, c, w, h), dtype=torch.bfloat16)
     torch_output_tensor = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
+    print(f"torch shapes a={torch_input_tensor_a.shape}, b={torch_input_tensor_b.shape}, o={torch_output_tensor.shape}")
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
     output = ttnn.matmul(input_tensor_a, input_tensor_b)
     output = ttnn.to_torch(output)
+    print(f"ttnn shapes a={input_tensor_a.shape}, b={input_tensor_b.shape}, o={output.shape}")
+
+    input_aa = ttnn.empty((n_size, c, h, w), device=device)
+    input_bb = ttnn.zeros((n_size, c, w, h), device=device)
+    print(f"empty shape={input_aa.shape}, zeros shape={input_bb.shape}")
+
+    ### shape constructs ####
+    basic_shape = ttnn.Shape([14, 62])
+    manually_padded_shape = ttnn.Shape([14, 62], [32, 32])
+    manually_padded_shape_right = ttnn.Shape([14, 62], [32, 64])
+    print(f"basic_shape: {basic_shape}")
+    print(f"basic_shape_with_padding: {basic_shape.with_tile_padding()}")
+    print(f"manually_padded_shape: {manually_padded_shape}")
+    print(f"manually_padded_shape_with_padding: {manually_padded_shape.with_tile_padding()}")
+    print(f"manually_padded_shape_right: {manually_padded_shape_right}")
+    print(f"manually_padded_shape_right_with_padding: {manually_padded_shape_right.with_tile_padding()}")
+    #######
+
+    ### tensor with padding constructs
+    padded_h = ((h + 31) // 32) * 32
+    padded_w = ((w + 32) // 32) * 32
+    padded_shape = ttnn.Shape([n_size, c, h, w], [n_size, c, padded_h, padded_w])
+
+    empty_row_major = ttnn.empty(shape=padded_shape, device=device)
+    empty_row_major_with_tile_padding = ttnn.empty(shape=padded_shape.with_tile_padding(), device=device)
+    # empty_tile_layout = ttnn.empty(shape=padded_shape, layout=ttnn.TILE_LAYOUT, device=device)
+    # empty_tile_layout = ttnn.zeros(shape=padded_shape, layout=ttnn.TILE_LAYOUT, device=device)
+    # RuntimeError: TT_ASSERT @ ../ttnn/cpp/ttnn/deprecated/tt_numpy/functions.hpp:65: shape[-1] % tt::constants::TILE_WIDTH == 0
+    empty_tile_layout_with_tile_padding = ttnn.empty(
+        shape=padded_shape.with_tile_padding(), layout=ttnn.TILE_LAYOUT, device=device
+    )
+
+    print(f"empty_row_major: {empty_row_major.shape}")
+    print(f"empty_row_major_with_tile_padding: {empty_row_major_with_tile_padding.shape}")
+    # print(f"empty_tile_layout: {empty_tile_layout.shape}")
+    print(f"empty_tile_layout_with_tile_padding: {empty_tile_layout_with_tile_padding.shape}")
+    #######
 
     assert len(output.shape) == len(torch_output_tensor.shape)
     assert output.shape == torch_output_tensor.shape
