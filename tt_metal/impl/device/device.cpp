@@ -21,6 +21,7 @@
 #include "noc/noc_parameters.h"
 #include "tt_metal/impl/device/device_pool.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
+#include "tt_metal/tools/profiler/tt_metal_tracy.hpp"
 #include "llrt/hal.hpp"
 
 namespace tt {
@@ -2488,6 +2489,8 @@ bool Device::using_slow_dispatch() const {
 }
 
 void Device::begin_trace(const uint8_t cq_id, const uint32_t tid) {
+    ZoneScoped;
+    TracyTTMetalBeginTrace(this->id(), tid);
     TT_FATAL(this->trace_buffer_pool_.count(tid) == 0, "Trace already exists for tid {} on device", tid);
     TT_FATAL(!this->hw_command_queues_[cq_id]->tid.has_value(), "CQ {} is already being used for tracing tid {}", (uint32_t)cq_id, tid);
     this->EnableAllocs();
@@ -2497,6 +2500,8 @@ void Device::begin_trace(const uint8_t cq_id, const uint32_t tid) {
 }
 
 void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
+    ZoneScoped;
+    TracyTTMetalEndTrace(this->id(), tid);
     TT_FATAL(this->hw_command_queues_[cq_id]->tid == tid, "CQ {} is not being used for tracing tid {}", (uint32_t)cq_id, tid);
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance {} must exist on device", tid);
     this->hw_command_queues_[cq_id]->record_end();
@@ -2513,6 +2518,8 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
 }
 
 void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking) {
+    ZoneScoped;
+    TracyTTMetalReplayTrace(this->id(), tid);
     constexpr bool check = false;
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance {}  must exist on device" , tid);
     if constexpr (check) {
@@ -2526,6 +2533,8 @@ void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool bl
 }
 
 void Device::release_trace(const uint32_t tid) {
+    ZoneScoped;
+    TracyTTMetalReleaseTrace(this->id(), tid);
     uint32_t erased = this->trace_buffer_pool_.erase(tid);
     // Only enable allocations once all captured traces are released
     if (this->trace_buffer_pool_.empty()) {
