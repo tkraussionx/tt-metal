@@ -152,6 +152,20 @@ def test_matmul_with_matched_width_height_4D(device, n_size, c, h, w):
     print(f"empty_tile_layout_with_tile_padding: {empty_tile_layout_with_tile_padding.shape}")
     #######
 
+    input_row_major_unpadded = ttnn.empty(
+        (n_size, c, h, w), layout=ttnn.ROW_MAJOR_LAYOUT, dtype=ttnn.bfloat16, device=device
+    )
+    input_tileized_val = ttnn.tilize_with_val_padding(
+        input_row_major_unpadded,
+        padded_shape.with_tile_padding(),
+        0,
+        # memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        # dtype=ttnn.bfloat16,
+    )
+
+    print(f"input_row_major_unpadded: {input_row_major_unpadded.shape}")
+    print(f"input_tileized_val: {input_tileized_val.shape}")
+
     assert len(output.shape) == len(torch_output_tensor.shape)
     assert output.shape == torch_output_tensor.shape
     assert_with_pcc(torch_output_tensor, output, 0.999599)
