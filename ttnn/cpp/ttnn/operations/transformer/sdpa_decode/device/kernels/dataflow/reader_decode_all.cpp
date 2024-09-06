@@ -30,6 +30,7 @@ void kernel_main() {
     constexpr uint32_t k_chunk_size = get_compile_time_arg_val(8);
     constexpr uint32_t log_base_2_of_page_size = get_compile_time_arg_val(9);
     constexpr uint32_t index_stick_size_B = get_compile_time_arg_val(10);
+    constexpr uint32_t Bkv = get_compile_time_arg_val(11);
 
     const uint32_t q_addr  = get_arg_val<uint32_t>(0);
     const uint32_t k_addr  = get_arg_val<uint32_t>(1);
@@ -154,8 +155,8 @@ void kernel_main() {
     };
 
     // Offset for current batch
-    const uint32_t k_batch_offset = cur_batch * St * DHt;
-    const uint32_t v_batch_offset = cur_batch * St * DHt;
+    const uint32_t k_batch_offset = (cur_batch % Bkv) * St * DHt;
+    const uint32_t v_batch_offset = (cur_batch % Bkv) * St * DHt;
 
     // DPRINT << "[Reader] read Q" << ENDL();
 
