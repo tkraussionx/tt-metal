@@ -166,6 +166,32 @@ def test_matmul_with_matched_width_height_4D(device, n_size, c, h, w):
     print(f"input_row_major_unpadded: {input_row_major_unpadded.shape}")
     print(f"input_tileized_val: {input_tileized_val.shape}")
 
+    tensor_a = ttnn.Tensor(torch_input_tensor_a)
+    tensor_b = ttnn.Tensor(torch_input_tensor_b)
+
+    input_tensor_a_to_layout = ttnn.to_layout(tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b_to_layout = ttnn.to_layout(tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    input_tensor_a_to_layout_to_device = ttnn.to_device(
+        input_tensor_a_to_layout, device, memory_config=ttnn.DRAM_MEMORY_CONFIG
+    )
+    input_tensor_b_to_layout_to_device = ttnn.to_device(
+        input_tensor_b_to_layout, device, memory_config=ttnn.DRAM_MEMORY_CONFIG
+    )
+
+    #       dtype cannot be specified when converting layout on host!
+    # input_tensor_aaa = ttnn.to_layout(tensor_a, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, memory_config=ttnn.DRAM_MEMORY_CONFIG, device=device)
+    # input_tensor_b_to_layout = ttnn.to_layout(tensor_b, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, memory_config=ttnn.DRAM_MEMORY_CONFIG, device=device)
+
+    print(f"input_tensor_a_to_layout: {input_tensor_a_to_layout.shape}")
+    print(f"input_tensor_b_to_layout: {input_tensor_b_to_layout.shape}")
+    # print(input_tensor_b_to_layout.device()) # Cannot get the device from a tensor with host storage
+    print(f"input_tensor_a_to_layout_to_device: {input_tensor_a_to_layout_to_device.shape}")
+    print(f"input_tensor_b_to_layout_to_device: {input_tensor_b_to_layout_to_device.shape}")
+    print(input_tensor_b_to_layout_to_device.device())
+    output = ttnn.matmul(input_tensor_a_to_layout_to_device, input_tensor_b_to_layout_to_device)
+    output = ttnn.to_torch(output)
+
     assert len(output.shape) == len(torch_output_tensor.shape)
     assert output.shape == torch_output_tensor.shape
     assert_with_pcc(torch_output_tensor, output, 0.999599)
