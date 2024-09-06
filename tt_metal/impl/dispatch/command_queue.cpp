@@ -1055,6 +1055,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                         for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
                             CoreCoord physical_coord = device->physical_core_from_logical_core(
                                 CoreCoord({x, y}), kernel_group.get_core_type());
+                            std::cout << "Eth Physical Core:" << this->device->id() << " " <<  physical_coord.str() << " " << CoreCoord({x, y}).str() << std::endl;
                             unicast_go_signal_sub_cmds.emplace_back(CQDispatchWritePackedUnicastSubCmd{
                                 .noc_xy_addr =
                                     this->device->get_noc_unicast_encoding(this->noc_index, physical_coord)});
@@ -1258,7 +1259,7 @@ void EnqueueProgramCommand::assemble_device_commands(
         // Have dispatch_s send the go signal
         auto mcast_grid = this->device->get_noc_multicast_encoding(
                         NOC::NOC_1, CoreRange(start_phys, end_phys));
-        uint32_t go = 0x80;
+        uint32_t go = RUN_MSG_GO;
         program_command_sequence.add_dispatch_s_sem_update();
         uint64_t go_signal_addr = 288;
         program_command_sequence.add_dispatch_s_mcast(mcast_grid, num_mcast_cores, 1, &go, 4, go_signal_addr);

@@ -13,7 +13,7 @@
 #include "dev_mem_map.h"
 #include "hostdevcommon/kernel_structs.h"
 #include "dev_msgs.h"
-
+#include "debug/dprint.h"
 extern uint32_t __ldm_bss_start[];
 extern uint32_t __ldm_bss_end[];
 extern uint32_t __ldm_data_start[];

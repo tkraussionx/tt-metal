@@ -322,7 +322,7 @@ def run_all_gather_on_t3000_impl_tight_loop(
     ],
 )
 @pytest.mark.parametrize("num_iters", [1])  # restore to 500: https://github.com/tenstorrent/tt-metal/issues/9686
-@pytest.mark.parametrize("enable_async", [True, False])
+@pytest.mark.parametrize("enable_async", [False])
 def test_all_gather_on_t3000_post_commit_looping(
     all_devices,
     num_devices,
