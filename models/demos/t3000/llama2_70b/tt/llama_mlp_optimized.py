@@ -225,6 +225,8 @@ class TtLlamaMLP_optimized:
             math_op=ttnn.ReduceType.Sum,
             num_links=1,
             memory_config=self.model_config["ATTN_ADD_OUTPUT_MEMCFG"],
+            num_workers=self.model_config["DECODE_REDUCE_SCATTER_NUM_WORKERS"],
+            num_buffers_per_channel=self.model_config["DECODE_REDUCE_SCATTER_NUM_BUFFERS"],
         )
         hidden_states.deallocate(True)
         return hidden_states_reduced

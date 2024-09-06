@@ -207,6 +207,8 @@ class TtLlamaDecoder_optimized:
             dim=3,
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"],
+            num_workers=self.model_config["DECODE_ALL_GATHER_NUM_WORKERS"],
+            num_buffers_per_channel=self.model_config["DECODE_ALL_GATHER_NUM_BUFFERS"],
         )
 
         # In-place RMSNorm

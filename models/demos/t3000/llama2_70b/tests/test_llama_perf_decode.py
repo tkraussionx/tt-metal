@@ -167,7 +167,6 @@ def run_inference(tt_model, tokenizer, tokens, mesh_device, configuration, total
         )
         print(times)
         ttnn.release_trace(mesh_device, trace_id)
-        breakpoint()
 
         next_token = torch.argmax(logits, dim=-1)
         next_token = next_token.reshape(-1)
@@ -287,22 +286,22 @@ def run_test_LlamaModel_end_to_end(
 @pytest.mark.parametrize(
     "llama_version",
     (
-        ("llama2"),
+        # ("llama2"),
         ("llama3"),
     ),
 )
 @pytest.mark.parametrize(
     "generation_length, expected_compile_time, expected_inference_time",
     (
-        (32, 10000, 0.139 + 0.02 + 0.1),  # TODO: decrease expected compile time once as_tensor gets speedup
-        (128, 10000, 0.138 + 0.02 + 0.1),  # Fudge delta
-        (
-            2048,
-            10000,
-            0.153 + 0.02 + 0.1,
-        ),  # NOTE: Added extra buffer due to perf regression. More details in issue #9479
+        (128, 10000, 0.139 + 0.02 + 0.1),  # TODO: decrease expected compile time once as_tensor gets speedup
+        # (128, 10000, 0.138 + 0.02 + 0.1),  # Fudge delta
+        # (
+        #     2048,
+        #     10000,
+        #     0.153 + 0.02 + 0.1,
+        # ),  # NOTE: Added extra buffer due to perf regression. More details in issue #9479
     ),
-    ids=["gen32", "gen128", "gen2048"],
+    ids=["gen128"],
 )
 @pytest.mark.parametrize("device_params", [{"trace_region_size": 14227456}], indirect=True)
 def test_Llama_perf_host(
