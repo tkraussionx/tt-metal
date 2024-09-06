@@ -5,6 +5,8 @@
 #include <optional>
 #include <tuple>
 #include <vector>
+#include "impl/buffers/buffer.hpp"
+#include "ttnn/tensor/types.hpp"
 
 // forward declarations
 namespace tt {
@@ -31,9 +33,9 @@ uint32_t calculate_circular_buffer_l1_allocation_size_per_core(
     const tt::tt_metal::DataType data_type,
     const tt::tt_metal::Layout& layout,
     const tt::tt_metal::MemoryConfig& memory_config,
-    const int max_block_size = 1);
+    const uint32_t max_block_size);
 
-inline uint32_t calculate_circular_buffer_l1_allocation_size_per_core(EltwiseOpParams input, int max_block_size = 1) {
+inline uint32_t calculate_circular_buffer_l1_allocation_size_per_core(EltwiseOpParams input, uint32_t max_block_size) {
     return calculate_circular_buffer_l1_allocation_size_per_core(
         std::get<ttnn::types::Shape>(input),
         std::get<tt::tt_metal::DataType>(input),
@@ -58,6 +60,12 @@ inline uint32_t calculate_tensor_l1_allocation_size_per_core(EltwiseOpParams inp
 
 uint32_t get_num_of_cores(const std::optional<tt::tt_metal::ShardSpec>& shard_spec);
 
+uint32_t get_num_pages(const tt::tt_metal::ShardSpec& shard_spec);
+
+uint32_t calculate_repeat_circular_buffer_size(tt::tt_metal::DataType data_type);
+
+uint32_t calculate_max_block_size(const std::optional<tt::tt_metal::ShardSpec>& shard_spec);
+
 class EltwiseOpL1Usage {
    public:
     EltwiseOpL1Usage(const EltwiseOpParams& input_a, const EltwiseOpParams& input_b, const EltwiseOpParams& output);
@@ -67,9 +75,15 @@ class EltwiseOpL1Usage {
     virtual std::vector<std::tuple<uint32_t, uint32_t>> get_tensor_l1_allocations_per_core() const = 0;
 
    protected:
+    std::optional<EltwiseOpParams> calculate_repeat_buffer_impl(
+        const EltwiseOpParams& input_a, const EltwiseOpParams& input_b);
+
+    std::optional<ShardSpec> get_op_shard_spec() const;
+
     EltwiseOpParams input_a;
     EltwiseOpParams input_b;
     EltwiseOpParams output;
+    std::optional<EltwiseOpParams> repeat;
 };
 
 class ElementWiseMultiCoreOpL1Usage : public EltwiseOpL1Usage {
@@ -80,11 +94,6 @@ class ElementWiseMultiCoreOpL1Usage : public EltwiseOpL1Usage {
 
     virtual std::vector<std::tuple<uint32_t, uint32_t>> get_circular_buffer_l1_allocations_per_core() const override;
     virtual std::vector<std::tuple<uint32_t, uint32_t>> get_tensor_l1_allocations_per_core() const override;
-
-   protected:
-    std::optional<EltwiseOpParams> intermediate;
-    std::optional<EltwiseOpParams> calculate_intermediate_buffer_impl(
-        const EltwiseOpParams& input_a, const EltwiseOpParams& input_b);
 };
 
 class BroadcastWidthMultiCoreOpL1Usage : public EltwiseOpL1Usage {
@@ -95,11 +104,6 @@ class BroadcastWidthMultiCoreOpL1Usage : public EltwiseOpL1Usage {
 
     virtual std::vector<std::tuple<uint32_t, uint32_t>> get_circular_buffer_l1_allocations_per_core() const override;
     virtual std::vector<std::tuple<uint32_t, uint32_t>> get_tensor_l1_allocations_per_core() const override;
-
-   protected:
-    std::optional<EltwiseOpParams> intermediate;
-    std::optional<EltwiseOpParams> calculate_intermediate_buffer_impl(
-        const EltwiseOpParams& input_a, const EltwiseOpParams& input_b);
 };
 
 class EltwiseOpL1UsageFactory {
