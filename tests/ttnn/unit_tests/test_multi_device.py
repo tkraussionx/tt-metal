@@ -265,21 +265,26 @@ def test_multi_device_data_parallel_matmul_op(mesh_device):
     torch_input_b_tensor = torch.rand((1, 1, 32, 32), dtype=torch.bfloat16)
     torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
 
-    ttnn_input_a_tensor = ttnn.from_torch(
-        torch_input_a_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=mesh_device,
-        mesh_mapper=ShardTensorToMesh(mesh_device, dim=0),
-    )
-    ttnn_input_b_tensor = ttnn.from_torch(
-        torch_input_b_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=mesh_device,
-        mesh_mapper=ReplicateTensorToMesh(mesh_device),
-    )
-    ttnn_output_tensor = ttnn_input_a_tensor @ ttnn_input_b_tensor
+    for i in range(100000000):
+        if i % 100 == 0:
+            logger.info(f"i={i}")
+        ttnn_input_a_tensor = ttnn.from_torch(
+            torch_input_a_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=mesh_device,
+            mesh_mapper=ShardTensorToMesh(mesh_device, dim=0),
+        )
+        ttnn_input_b_tensor = ttnn.from_torch(
+            torch_input_b_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=mesh_device,
+            mesh_mapper=ReplicateTensorToMesh(mesh_device),
+        )
+        ttnn_output_tensor = ttnn_input_a_tensor @ ttnn_input_b_tensor
 
-    ttnn_torch_output_tensor = ttnn.to_torch(ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=0))
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=0)
+        )
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.993)
 
 
