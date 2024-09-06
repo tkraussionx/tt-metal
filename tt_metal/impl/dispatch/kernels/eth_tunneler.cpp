@@ -149,7 +149,7 @@ void kernel_main() {
             all_outputs_finished &= output_finished;
         }
 
-        tt_l1_ptr launch_msg_t * const launch_msg = GET_MAILBOX_ADDRESS_DEV(launch);
+        tt_l1_ptr launch_msg_t * const launch_msg = GET_MAILBOX_ADDRESS_DEV(launch[0]);
         if (launch_msg->kernel_config.exit_erisc_kernel) {
             return;
         }

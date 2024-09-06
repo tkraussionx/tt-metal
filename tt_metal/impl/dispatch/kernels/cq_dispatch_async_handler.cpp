@@ -136,7 +136,6 @@ void kernel_main() {
             while (*sync_sem_addr <= num_mcasts_sent);
             num_mcasts_sent++;
             noc_async_write_multicast_one_packet_dispatch_s(data_ptr, dst, cmd->mcast.length, cmd->mcast.num_mcast_dests);
-            // while (!ncrisc_noc_nonposted_writes_flushed(1));
             cmd_ptr += cmd->mcast.length; // Offset cmd_ptr by size of data that was inlined here. cmd_ptr will get offset by command size at the end of the loop.
             DPRINT << "Mcast done" << ENDL();
         }
