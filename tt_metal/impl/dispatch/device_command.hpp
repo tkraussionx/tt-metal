@@ -285,16 +285,13 @@ class DeviceCommand {
         }
     }
 
-    void add_dispatch_s_mcast(uint32_t mcast_grid, uint16_t num_mcast_dests, uint8_t wait_count, void* data, uint32_t data_sizeB, uint32_t write_addr) {
-        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + data_sizeB, 1);
+    void add_dispatch_s_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag) {
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), 1);
         auto initialize_mcast_cmd = [&](CQDispatchCmd *mcast_cmd) {
             *mcast_cmd = {};
-            mcast_cmd->base.cmd_id = CQ_DISPATCH_CMD_INLINE_MCAST;
+            mcast_cmd->base.cmd_id = CQ_DISPATCH_CMD_GO_SIGNAL_MCAST;
             mcast_cmd->mcast.wait_count = wait_count;
-            mcast_cmd->mcast.mcast_grid = mcast_grid;
-            mcast_cmd->mcast.num_mcast_dests = num_mcast_dests;
-            mcast_cmd->mcast.length = data_sizeB;
-            mcast_cmd->mcast.address = write_addr;
+            mcast_cmd->mcast.mcast_flag = mcast_flag;
         };
         CQDispatchCmd *mcast_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
@@ -305,9 +302,7 @@ class DeviceCommand {
         } else {
             initialize_mcast_cmd(mcast_cmd_dst);
         }
-        TT_ASSERT(data != nullptr);
-        uint32_t increment_sizeB = align(data_sizeB, PCIE_ALIGNMENT);
-        this->add_data(data, data_sizeB, increment_sizeB);
+        this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
     }
 
     void add_dispatch_s_sem_update() {
@@ -410,6 +405,26 @@ class DeviceCommand {
         } else {
             initialize_exec_buf_cmd(exec_buf_cmd_dst);
         }
+    }
+    void add_dispatch_set_unicast_only_cores(const std::vector<uint32_t>& noc_encodings) {
+        TT_ASSERT(noc_encodings.size());
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + noc_encodings.size() * sizeof(uint32_t), 1);
+        auto initialize_set_unicast_only_cores_cmd = [&] (CQDispatchCmd *set_unicast_only_cores_cmd) {
+            *set_unicast_only_cores_cmd = {};
+            set_unicast_only_cores_cmd->base.cmd_id = CQ_DISPATCH_SET_UNICAST_ONLY_CORES;
+            set_unicast_only_cores_cmd->set_unicast_only_cores.num_unicast_only_cores = noc_encodings.size();
+        };
+        CQDispatchCmd *set_unicast_only_cores_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
+        if constexpr (hugepage_write) {
+            alignas(MEMCPY_ALIGNMENT) CQDispatchCmd set_unicast_only_cores_cmd;
+            initialize_set_unicast_only_cores_cmd(&set_unicast_only_cores_cmd);
+            this->memcpy(set_unicast_only_cores_cmd_dst, &set_unicast_only_cores_cmd, sizeof(CQDispatchCmd));
+        } else {
+            initialize_set_unicast_only_cores_cmd(set_unicast_only_cores_cmd_dst);
+        }
+        uint32_t data_sizeB = noc_encodings.size() * sizeof(uint32_t);
+        uint32_t increment_sizeB = align(data_sizeB, PCIE_ALIGNMENT);
+        this->add_data(noc_encodings.data(), data_sizeB, increment_sizeB);
     }
 
     void add_dispatch_set_write_offsets(uint32_t write_offset0, uint32_t write_offset1, uint32_t write_offset2) {
