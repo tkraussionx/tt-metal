@@ -33,7 +33,7 @@
 | [LLaMA-3.1-70B (tensor parallel)](./models/demos/t3000/llama3_70b)   | 32 | LoudBox |   | 10.4 | 20 | [v0.51.0-rc36](https://github.com/tenstorrent/tt-metal/tree/v0.51.0-rc36) | 
 | [Falcon40B (tensor parallel)](./models/demos/t3000/falcon40b)        | 32 | LoudBox |  | 5.3 | 36 | [v0.51.0-rc35](https://github.com/tenstorrent/tt-metal/tree/v0.51.0-rc35) |
 | [Mixtral7Bx8 (tensor parallel)](./models/demos/t3000/mixtral8x7b)    | 32 | LoudBox | 0.19 | 15.7 | 33 | [v0.51.0-rc33](https://github.com/tenstorrent/tt-metal/tree/v0.51.0-rc33) | 
-| [Falcon7B (data parallel)](./models/demos/tg/falcon7b)     |1024 | 0.30 | Galaxy | 4.0 | 26 |  [v0.51.0-rc30](https://github.com/tenstorrent/tt-metal/tree/v0.51.0-rc30) | 
+| [Falcon7B (data parallel)](./models/demos/tg/falcon7b)     |1024 | Galaxy | 0.30 | 4.0 | 26 |  [v0.51.0-rc30](https://github.com/tenstorrent/tt-metal/tree/v0.51.0-rc30) | 
 
 ## CNNs
 | Model                                               | Batch | Hardware |fps    | Target fps | Release     |
