@@ -857,7 +857,7 @@ re_run_command:
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
         case CQ_DISPATCH_CMD_WRITE_PACKED_LARGE:
-            DPRINT << "cmd_write_packed_large" << ENDL();
+            // DPRINT << "cmd_write_packed_large" << ENDL();
             process_write_packed_large(l1_cache, block_noc_writes_to_clear, block_next_start_addr);
             break;
 

@@ -67,16 +67,18 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     mailboxes->launch_msg_rd_ptr = 0;
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
-        DPRINT << "Checking if go signal recieved" << ENDL();
         if (mailboxes->go_message.run == RUN_MSG_GO) {
-            DPRINT << "Recieved go signal " << ENDL();
             DeviceZoneScopedMainN("ERISC-FW");
             DeviceZoneSetCounter(mailboxes->launch.kernel_config.host_assigned_id);
 
-            firmware_config_init(mailboxes, ProgrammableCoreType::ACTIVE_ETH, DISPATCH_CLASS_ETH_DM0);
-
+            enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables;
+            if (enables & DISPATCH_CLASS_MASK_ETH_DM0) {
+                firmware_config_init(mailboxes, ProgrammableCoreType::ACTIVE_ETH, DISPATCH_CLASS_ETH_DM0);
+                kernel_init();
+            }
+            mailboxes->go_message.run = RUN_MSG_DONE;
             WAYPOINT("R");
-            kernel_init();
+
         } else {
             internal_::risc_context_switch();
         }

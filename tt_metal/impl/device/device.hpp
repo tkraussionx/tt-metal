@@ -121,6 +121,7 @@ class Device {
     CoreCoord logical_core_from_ethernet_core(const CoreCoord &physical_core) const;
 
     std::vector<CoreCoord> ethernet_cores_from_logical_cores(const std::vector<CoreCoord> &logical_cores) const;
+    std::vector<uint32_t> get_noc_encoding_for_all_etherent_sockets(uint8_t noc_index = 1);
 
     std::unordered_set<chip_id_t> get_ethernet_connected_device_ids() const {
         return tt::Cluster::instance().get_ethernet_connected_device_ids(this->id_);

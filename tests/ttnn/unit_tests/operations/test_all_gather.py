@@ -321,7 +321,7 @@ def run_all_gather_on_t3000_impl_tight_loop(
         # ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("num_iters", [1])  # restore to 500: https://github.com/tenstorrent/tt-metal/issues/9686
+@pytest.mark.parametrize("num_iters", [1000])  # restore to 500: https://github.com/tenstorrent/tt-metal/issues/9686
 @pytest.mark.parametrize("enable_async", [False])
 def test_all_gather_on_t3000_post_commit_looping(
     all_devices,
@@ -383,7 +383,7 @@ def test_all_gather_on_t3000_post_commit_looping(
         ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("num_iters", [1000])  # TODO: restore to 500
+@pytest.mark.parametrize("num_iters", [500])  # TODO: restore to 500
 @pytest.mark.parametrize("enable_async", [True, False])
 def test_all_gather_on_t3000_nightly_commit_looping(
     all_devices,

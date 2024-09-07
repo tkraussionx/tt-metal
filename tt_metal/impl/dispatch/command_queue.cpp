@@ -1075,7 +1075,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                 unicast_go_signals_payload);
         }
         // dispatch_d -> dispatch_s semaphore update and go signal mcast by dispatch_s
-        cmd_sequence_sizeB += align(2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(uint32_t), PCIE_ALIGNMENT);
+        cmd_sequence_sizeB += 2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
         cached_program_command_sequence.program_command_sequence = HostMemDeviceCommand(cmd_sequence_sizeB);
 
@@ -1256,13 +1256,10 @@ void EnqueueProgramCommand::assemble_device_commands(
         if (program.program_transfer_info.num_active_cores > 0) {
             program_command_sequence.add_dispatch_wait(true, DISPATCH_MESSAGE_ADDR, 0, 0, false, false);
         }
-        // Have dispatch_s send the go signal
-        auto mcast_grid = this->device->get_noc_multicast_encoding(
-                        NOC::NOC_1, CoreRange(start_phys, end_phys));
-        uint32_t go = RUN_MSG_GO;
+
         program_command_sequence.add_dispatch_s_sem_update();
-        uint64_t go_signal_addr = 288;
-        program_command_sequence.add_dispatch_s_mcast(mcast_grid, num_mcast_cores, 1, &go, 4, go_signal_addr);
+        program_command_sequence.add_dispatch_s_go_signal_mcast(1, 0x3);
+
     } else {
         uint32_t i = 0;
         ZoneScopedN("program_loaded_on_device");
@@ -1765,6 +1762,16 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id, NOC noc_index) :
     // Set the affinity of the completion queue reader.
     set_device_thread_affinity(this->completion_queue_thread, device->worker_thread_core);
     this->expected_num_workers_completed = 0;
+}
+
+void HWCommandQueue::set_unicast_only_cores_on_dispatch_s(const std::vector<uint32_t>& unicast_only_noc_encodings) {
+    uint32_t cmd_sequence_sizeB = align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + unicast_only_noc_encodings.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
+    void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
+    HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
+    command_sequence.add_dispatch_set_unicast_only_cores(unicast_only_noc_encodings);
+    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
+    this->manager.fetch_queue_reserve_back(this->id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
 }
 
 HWCommandQueue::~HWCommandQueue() {
