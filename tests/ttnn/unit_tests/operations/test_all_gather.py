@@ -970,7 +970,7 @@ def run_all_gather_sharded(
             dim,
             num_links=num_links,
             memory_config=output_mem_config,
-            op_fabric_mode=ttnn.CclFabricMode.PersistentEDM,
+            op_fabric_mode=fabric_mode,
         )
 
     if enable_trace:
@@ -982,7 +982,7 @@ def run_all_gather_sharded(
                 dim,
                 num_links=num_links,
                 memory_config=output_mem_config,
-                op_fabric_mode=ttnn.CclFabricMode.PersistentEDM,
+                op_fabric_mode=fabric_mode,
             )
         ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
         logger.info(f"Running {num_iters} iterations")
