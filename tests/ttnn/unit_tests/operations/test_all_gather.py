@@ -1033,8 +1033,7 @@ def run_all_gather_sharded(
 @pytest.mark.parametrize(
     "input_dtype",
     [
-        ttnn.bfloat16,
-        s  # https://github.com/tenstorrent/tt-metal/issues/9686
+        ttnn.bfloat16,  # https://github.com/tenstorrent/tt-metal/issues/9686
         # ttnn.bfloat8_b,
     ],
 )
