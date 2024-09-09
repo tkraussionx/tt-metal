@@ -117,7 +117,7 @@ def test_softmax_not_multiple_of_32_for_dim_hw(shape_dim, compute_kernel_options
     dev_x = ttnn.Tensor(x, ttnn.bfloat16).pad_to_tile(float("nan")).to(ttnn.TILE_LAYOUT).to(device)
 
     tt_cpu = torch.softmax(x, dim)
-    tt_npu = ttnn.experimental.operations.primary.moreh_softmax(dev_x, dim, compute_kernel_config=compute_kernel_config)
+    tt_npu = ttnn.primary.moreh_softmax(dev_x, dim, compute_kernel_config=compute_kernel_config)
     tt_npu = tt_npu.cpu().to(ttnn.ROW_MAJOR_LAYOUT).unpad_from_tile(shape)
 
     assert list(tt_npu.get_legacy_shape()) == list(tt_cpu.shape)

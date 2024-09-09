@@ -141,6 +141,8 @@ from ttnn.types import (
     BinaryOpType,
     BcastOpMath,
     BcastOpDim,
+    MorehSoftmaxOpParallelizationStrategy,
+    MorehSoftmaxOp,
 )
 
 from ttnn.device import (

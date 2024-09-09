@@ -6,6 +6,7 @@ import dataclasses
 from enum import Enum
 
 import ttnn
+import ttnn._ttnn
 
 DataType = ttnn._ttnn.tensor.DataType
 uint8 = DataType.UINT8
@@ -48,6 +49,9 @@ DeviceComputeKernelConfig = ttnn._ttnn.operations.core.DeviceComputeKernelConfig
 WormholeComputeKernelConfig = ttnn._ttnn.operations.core.WormholeComputeKernelConfig
 BlackholeComputeKernelConfig = WormholeComputeKernelConfig
 GrayskullComputeKernelConfig = ttnn._ttnn.operations.core.GrayskullComputeKernelConfig
+
+MorehSoftmaxOpParallelizationStrategy = ttnn._ttnn.operations.moreh.MorehSoftmaxOpParallelizationStrategy
+MorehSoftmaxOp = ttnn._ttnn.operations.moreh.MorehSoftmaxOpParallelizationStrategy
 
 
 @dataclasses.dataclass
