@@ -12,7 +12,7 @@
 #include "kernels/traffic_gen_test.hpp"
 
 using namespace tt;
-
+using json = nlohmann::json;
 
 int main(int argc, char **argv) {
 
@@ -50,6 +50,8 @@ int main(int argc, char **argv) {
 
     constexpr uint32_t default_num_endpoints = 4;
 
+    constexpr const char* default_output_dir = "/tmp";
+
     std::vector<std::string> input_args(argv, argv + argc);
     if (test_args::has_command_option(input_args, "-h") ||
         test_args::has_command_option(input_args, "--help")) {
@@ -76,8 +78,11 @@ int main(int argc, char **argv) {
         log_info(LogTest, "  --test_results_addr: test results buf address, default = 0x{:x}", default_test_results_addr);
         log_info(LogTest, "  --test_results_size: test results buf size, default = 0x{:x}", default_test_results_size);
         log_info(LogTest, "  --timeout_mcycles: Timeout in MCycles, default = {}", default_timeout_mcycles);
+        log_info(LogTest, "  --check_txrx_timeout: Check if timeout happens during tx & rx (if enabled, timeout_mcycles will also be used)");
         log_info(LogTest, "  --rx_disable_data_check: Disable data check on RX, default = {}", default_rx_disable_data_check);
+        log_info(LogTest, "  --tx_skip_pkt_content_gen: Skip packet content generation during tx");
         log_info(LogTest, "  --num_endpoints: Number of endpoints, default = {}", default_num_endpoints);
+        log_info(LogTest, "  --output_dir: Output directory, default = {}", default_output_dir);
         return 0;
     }
 
@@ -105,6 +110,9 @@ int main(int argc, char **argv) {
     uint32_t timeout_mcycles = test_args::get_command_option_uint32(input_args, "--timeout_mcycles", default_timeout_mcycles);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
     uint32_t num_endpoints = test_args::get_command_option_uint32(input_args, "--num_endpoints", default_num_endpoints);
+    bool tx_skip_pkt_content_gen = test_args::has_command_option(input_args, "--tx_skip_pkt_content_gen");
+    std::string output_dir = test_args::get_command_option(input_args, "--output_dir", std::string(default_output_dir));
+    bool check_txrx_timeout = test_args::has_command_option(input_args, "--check_txrx_timeout");
 
     uint32_t num_src_endpoints = num_endpoints;
     uint32_t num_dest_endpoints = num_endpoints;
@@ -126,6 +134,10 @@ int main(int argc, char **argv) {
 
         CoreCoord demux_core = {demux_x, demux_y};
         CoreCoord demux_phys_core = device->worker_core_from_logical_core(demux_core);
+
+        if (check_txrx_timeout) {
+            defines["CHECK_TIMEOUT"] = "";
+        }
 
         std::vector<CoreCoord> tx_phys_core;
         for (uint32_t i = 0; i < num_src_endpoints; i++) {
@@ -151,6 +163,7 @@ int main(int argc, char **argv) {
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
                     timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
+                    tx_skip_pkt_content_gen, // 18: skip_pkt_content_gen
                 };
 
             log_info(LogTest, "run traffic_gen_tx at x={},y={}", core.x, core.y);
@@ -165,6 +178,50 @@ int main(int argc, char **argv) {
                     .defines = defines,
                 }
             );
+        }
+
+        std::vector<CoreCoord> rx_phys_core;
+        for (uint32_t i = 0; i < num_dest_endpoints; i++) {
+            CoreCoord core = {rx_x+i, rx_y};
+            rx_phys_core.push_back(device->worker_core_from_logical_core(core));
+            std::vector<uint32_t> compile_args =
+                {
+                    dest_endpoint_start_id + i, // 0: dest_endpoint_id
+                    num_src_endpoints, // 1: num_src_endpoints
+                    num_dest_endpoints, // 2: num_dest_endpoints
+                    (rx_queue_start_addr >> 4), // 3: queue_start_addr_words
+                    (rx_queue_size_bytes >> 4), // 4: queue_size_words
+                    (uint32_t)demux_phys_core.x, // 5: remote_tx_x
+                    (uint32_t)demux_phys_core.y, // 6: remote_tx_y
+                    i, // 7: remote_tx_queue_id
+                    (uint32_t)DispatchRemoteNetworkType::NOC0, // 8: rx_rptr_update_network_type
+                    test_results_addr, // 9: test_results_addr
+                    test_results_size, // 10: test_results_size
+                    prng_seed, // 11: prng_seed
+                    0, // 12: reserved
+                    max_packet_size_words, // 13: max_packet_size_words
+                    rx_disable_data_check, // 14: disable data check
+                    src_endpoint_start_id, // 15: src_endpoint_start_id
+                    dest_endpoint_start_id, // 16: dest_endpoint_start_id
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
+                };
+
+            log_info(LogTest, "run traffic_gen_rx at x={},y={}", core.x, core.y);
+            auto kernel = tt_metal::CreateKernel(
+                program,
+                "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_rx.cpp",
+                {core},
+                tt_metal::DataMovementConfig{
+                    .processor = tt_metal::DataMovementProcessor::RISCV_0,
+                    .noc = tt_metal::NOC::RISCV_0_default,
+                    .compile_args = compile_args,
+                    .defines = defines,
+                }
+            );
+        }
+
+        if (check_txrx_timeout) {
+            defines.erase("CHECK_TIMEOUT");
         }
 
         // Mux
@@ -214,46 +271,6 @@ int main(int argc, char **argv) {
                 .defines = defines,
             }
         );
-
-        std::vector<CoreCoord> rx_phys_core;
-        for (uint32_t i = 0; i < num_dest_endpoints; i++) {
-            CoreCoord core = {rx_x+i, rx_y};
-            rx_phys_core.push_back(device->worker_core_from_logical_core(core));
-            std::vector<uint32_t> compile_args =
-                {
-                    dest_endpoint_start_id + i, // 0: dest_endpoint_id
-                    num_src_endpoints, // 1: num_src_endpoints
-                    num_dest_endpoints, // 2: num_dest_endpoints
-                    (rx_queue_start_addr >> 4), // 3: queue_start_addr_words
-                    (rx_queue_size_bytes >> 4), // 4: queue_size_words
-                    (uint32_t)demux_phys_core.x, // 5: remote_tx_x
-                    (uint32_t)demux_phys_core.y, // 6: remote_tx_y
-                    i + 1, // 7: remote_tx_queue_id. +1 since demux input is qid 0. qid 1 - 4 are demux outputs
-                    (uint32_t)DispatchRemoteNetworkType::NOC0, // 8: rx_rptr_update_network_type
-                    test_results_addr, // 9: test_results_addr
-                    test_results_size, // 10: test_results_size
-                    prng_seed, // 11: prng_seed
-                    0, // 12: reserved
-                    max_packet_size_words, // 13: max_packet_size_words
-                    rx_disable_data_check, // 14: disable data check
-                    src_endpoint_start_id, // 15: src_endpoint_start_id
-                    dest_endpoint_start_id, // 16: dest_endpoint_start_id
-                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
-                };
-
-            log_info(LogTest, "run traffic_gen_rx at x={},y={}", core.x, core.y);
-            auto kernel = tt_metal::CreateKernel(
-                program,
-                "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_rx.cpp",
-                {core},
-                tt_metal::DataMovementConfig{
-                    .processor = tt_metal::DataMovementProcessor::RISCV_0,
-                    .noc = tt_metal::NOC::RISCV_0_default,
-                    .compile_args = compile_args,
-                    .defines = defines,
-                }
-            );
-        }
 
         // Demux
         uint32_t dest_map_array[4] = {0, 1, 2, 3};
@@ -356,6 +373,21 @@ int main(int argc, char **argv) {
         pass &= tt_metal::CloseDevice(device);
 
         if (pass) {
+            // output json summary TODO: refactor?
+            json summary, config, stat;
+            config["tx_x"] = tx_x;
+            config["tx_y"] = tx_y;
+            config["rx_x"] = rx_x;
+            config["rx_y"] = rx_y;
+            config["mux_x"] = mux_x;
+            config["mux_y"] = mux_y;
+            config["demux_x"] = demux_x;
+            config["demux_y"] = demux_y;
+            config["num_endpoints"] = num_endpoints;
+            config["rx_disable_data_check"] = rx_disable_data_check;
+            config["tx_skip_pkt_content_gen"] = tx_skip_pkt_content_gen;
+            config["check_txrx_timeout"] = check_txrx_timeout;
+
             double total_tx_bw = 0.0;
             uint64_t total_tx_words_sent = 0;
             uint64_t total_rx_words_checked = 0;
@@ -368,8 +400,12 @@ int main(int argc, char **argv) {
                          "TX {} words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                          i, tx_words_sent, tx_elapsed_cycles, tx_bw);
                 total_tx_bw += tx_bw;
+                stat[fmt::format("tx_words_sent_{}", i)] = tx_words_sent;
+                stat[fmt::format("tx_elapsed_cycles_{}", i)] = tx_elapsed_cycles;
+                stat[fmt::format("tx_bw_{}", i)] = tx_bw;
             }
             log_info(LogTest, "Total TX BW = {:.2f} B/cycle", total_tx_bw);
+            stat["total_tx_bw (B/cycle)"] = total_tx_bw;
             double total_rx_bw = 0.0;
             for (uint32_t i = 0; i < num_dest_endpoints; i++) {
                 uint64_t rx_words_checked = get_64b_result(rx_results[i], PQ_TEST_WORD_CNT_INDEX);
@@ -380,8 +416,12 @@ int main(int argc, char **argv) {
                          "RX {} words checked = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                          i, rx_words_checked, rx_elapsed_cycles, rx_bw);
                 total_rx_bw += rx_bw;
+                stat[fmt::format("rx_words_checked_{}", i)] = rx_words_checked;
+                stat[fmt::format("rx_elapsed_cycles_{}", i)] = rx_elapsed_cycles;
+                stat[fmt::format("rx_bw_{}", i)] = rx_bw;
             }
             log_info(LogTest, "Total RX BW = {:.2f} B/cycle", total_rx_bw);
+            stat["total_rx_bw (B/cycle)"] = total_rx_bw;
             if (total_tx_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "Total TX words sent = {} != Total RX words checked = {}", total_tx_words_sent, total_rx_words_checked);
                 pass = false;
@@ -399,6 +439,10 @@ int main(int argc, char **argv) {
             log_info(LogTest,
                         "MUX iters = {} -> cycles/iter = {:.1f}",
                         mux_iter, mux_cycles_per_iter);
+            stat["mux_words_sent"] = mux_words_sent;
+            stat["mux_elapsed_cycles"] = mux_elapsed_cycles;
+            stat["mux_bw (B/cycle)"] = mux_bw;
+
             if (mux_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "MUX words sent = {} != Total RX words checked = {}", mux_words_sent, total_rx_words_checked);
                 pass = false;
@@ -417,11 +461,25 @@ int main(int argc, char **argv) {
             log_info(LogTest,
                      "DEMUX iters = {} -> cycles/iter = {:.1f}",
                      demux_iter, demux_cycles_per_iter);
+            stat["demux_words_sent"] = demux_words_sent;
+            stat["demux_elapsed_cycles"] = demux_elapsed_cycles;
+            stat["demux_bw (B/cycle)"] = demux_bw;
             if (demux_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "DEMUX words sent = {} != Total RX words checked = {}", demux_words_sent, total_rx_words_checked);
                 pass = false;
             } else {
                 log_info(LogTest, "DEMUX words sent = {} == Total RX words checked = {} -> OK", demux_words_sent, total_rx_words_checked);
+            }
+            if (pass) {
+                summary["config"] = config;
+                summary["stat"] = stat;
+                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_tsg{}_cto{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, tx_skip_pkt_content_gen, check_txrx_timeout));
+                if (out.fail()) {
+                    throw std::runtime_error("output file open failure");
+                }
+                std::string summaries = summary.dump(2);
+                out << summaries << std::endl;
+                out.close();
             }
         }
 
