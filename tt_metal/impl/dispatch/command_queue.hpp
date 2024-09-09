@@ -291,6 +291,7 @@ class EnqueueProgramCommand : public Command {
     uint32_t expected_num_workers_completed;
     uint32_t packed_write_max_unicast_sub_cmds;
     uint32_t launch_message_wptr = 0;
+    uint32_t active_eth_launch_message_wptr = 0;
    public:
     struct CachedProgramCommandSequence {
         HostMemDeviceCommand preamble_command_sequence;
@@ -304,6 +305,8 @@ class EnqueueProgramCommand : public Command {
         uint32_t program_config_buffer_data_size_bytes;
         CQDispatchWriteCmd* empty_launch_msg_mcast_cmd_ptr;
         std::vector<CQDispatchWritePackedCmd*> launch_msg_write_packed_cmd_ptrs;
+        std::vector<CQDispatchWriteCmd*> empty_launch_msg_unicast_cmd_ptrs;
+        std::vector<CQDispatchWritePackedCmd*> unicast_launch_msg_write_packed_cmd_ptrs;
     };
     thread_local static std::unordered_map<uint64_t, CachedProgramCommandSequence> cached_program_command_sequences;
 
@@ -315,7 +318,8 @@ class EnqueueProgramCommand : public Command {
         CoreCoord& dispatch_core,
         SystemMemoryManager& manager,
         uint32_t expected_num_workers_completed,
-        uint32_t launch_message_wptr);
+        uint32_t launch_message_wptr,
+        uint32_t active_eth_launch_message_wptr);
 
     void assemble_preamble_commands(std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(bool prefetch_stall);
@@ -525,6 +529,7 @@ class HWCommandQueue {
                                                          // an entry out of the completion queue
     detail::CompletionReaderQueue issued_completion_q_reads;
     uint32_t launch_message_wptr = 0;
+    uint32_t active_eth_launch_message_wptr = 0;
     Device* device;
 
     std::condition_variable reader_thread_cv;

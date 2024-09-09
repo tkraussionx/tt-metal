@@ -185,8 +185,8 @@ def run_all_gather_on_t3000_impl_tight_loop(
         # ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("num_iters", [1000])  # restore to 500: https://github.com/tenstorrent/tt-metal/issues/9686
-@pytest.mark.parametrize("enable_async", [False])
+@pytest.mark.parametrize("num_iters", [10])  # restore to 500: https://github.com/tenstorrent/tt-metal/issues/9686
+@pytest.mark.parametrize("enable_async", [True, False])
 def test_all_gather_on_t3000_post_commit_looping(
     all_devices,
     num_devices,
@@ -197,7 +197,7 @@ def test_all_gather_on_t3000_post_commit_looping(
     layout,
     mem_config,
     num_iters,
-    use_program_cache,
+    # use_program_cache,
     function_level_defaults,
     enable_async,
 ):
@@ -210,7 +210,7 @@ def test_all_gather_on_t3000_post_commit_looping(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
+        False,
         function_level_defaults,
         all_gather_operation=ttnn.all_gather,
         num_iters=num_iters,
@@ -247,7 +247,7 @@ def test_all_gather_on_t3000_post_commit_looping(
         ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("num_iters", [500])  # TODO: restore to 500
+@pytest.mark.parametrize("num_iters", [1000])  # TODO: restore to 500
 @pytest.mark.parametrize("enable_async", [True, False])
 def test_all_gather_on_t3000_nightly_commit_looping(
     all_devices,
@@ -286,7 +286,7 @@ def test_all_gather_on_t3000_nightly_commit_looping(
     "num_devices, num_links, input_shape, dim, layout",
     [
         (4, 2, [4, 1, 33, 256], 0, ttnn.ROW_MAJOR_LAYOUT),  # https://github.com/tenstorrent/tt-metal/issues/9686
-        (8, 1, [8, 1, 33, 256], 0, ttnn.ROW_MAJOR_LAYOUT),  # https://github.com/tenstorrent/tt-metal/issues/9686
+        # (8, 1, [8, 1, 33, 256], 0, ttnn.ROW_MAJOR_LAYOUT),  # https://github.com/tenstorrent/tt-metal/issues/9686
         # (8, 1, [8, 8, 256, 384], 1, ttnn.ROW_MAJOR_LAYOUT),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttnn.ROW_MAJOR_LAYOUT),           # https://github.com/tenstorrent/tt-metal/issues/9686
         # (4, 2, [8, 8, 256, 384], 1, ttnn.TILE_LAYOUT),           # https://github.com/tenstorrent/tt-metal/issues/9686

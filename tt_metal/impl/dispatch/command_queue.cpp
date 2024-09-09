@@ -318,7 +318,8 @@ EnqueueProgramCommand::EnqueueProgramCommand(
     CoreCoord& dispatch_core,
     SystemMemoryManager& manager,
     uint32_t expected_num_workers_completed,
-    uint32_t launch_message_wptr) :
+    uint32_t launch_message_wptr,
+    uint32_t active_eth_launch_message_wptr) :
     command_queue_id(command_queue_id),
     noc_index(noc_index),
     manager(manager),
@@ -329,6 +330,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
     this->dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
     this->packed_write_max_unicast_sub_cmds = get_packed_write_max_unicast_sub_cmds(this->device);
     this->launch_message_wptr = launch_message_wptr;
+    this->active_eth_launch_message_wptr = active_eth_launch_message_wptr;
 }
 
 void EnqueueProgramCommand::assemble_preamble_commands(std::vector<ConfigBufferEntry>& kernel_config_addrs) {
@@ -994,8 +996,14 @@ void EnqueueProgramCommand::assemble_device_commands(
         constexpr uint32_t go_signal_sizeB = sizeof(launch_msg_t);
         launch_msg_t empty_launch_msg;
         std::memset(&empty_launch_msg, 0, go_signal_sizeB);
-        cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + go_signal_sizeB, PCIE_ALIGNMENT);
-
+        uint32_t num_active_eth_cores = device->get_active_ethernet_cores(true).size();
+        cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + go_signal_sizeB, PCIE_ALIGNMENT); // Mcast empty go signal to tensix workers
+        // Mcast empty go signal to eth workers
+        if (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1 and program.get_kernel_groups(hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH)).size()) {
+            for (uint32_t eth_core_idx = 0; eth_core_idx < num_active_eth_cores; eth_core_idx++) {
+                cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + go_signal_sizeB, PCIE_ALIGNMENT);
+            }
+        }
         constexpr uint32_t aligned_go_signal_sizeB = align(go_signal_sizeB, L1_ALIGNMENT);
         constexpr uint32_t go_signal_size_words = aligned_go_signal_sizeB / sizeof(uint32_t);
 
@@ -1055,7 +1063,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                         for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
                             CoreCoord physical_coord = device->physical_core_from_logical_core(
                                 CoreCoord({x, y}), kernel_group.get_core_type());
-                            std::cout << "Eth Physical Core:" << this->device->id() << " " <<  physical_coord.str() << " " << CoreCoord({x, y}).str() << std::endl;
+                            // std::cout << "Eth Physical Core:" << this->device->id() << " " <<  physical_coord.str() << " " << CoreCoord({x, y}).str() << std::endl;
                             unicast_go_signal_sub_cmds.emplace_back(CQDispatchWritePackedUnicastSubCmd{
                                 .noc_xy_addr =
                                     this->device->get_noc_unicast_encoding(this->noc_index, physical_coord)});
@@ -1195,11 +1203,22 @@ void EnqueueProgramCommand::assemble_device_commands(
         CoreRange full_grid = CoreRange(start_phys, end_phys);
         // Get the address for the slot this launch_message will be written to
         uint32_t launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + this->launch_message_wptr * sizeof(launch_msg_t);
+        uint32_t active_eth_launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + this->active_eth_launch_message_wptr * sizeof(launch_msg_t);
         // Send the empty launch message to all workers
         uint32_t write_linear_offset = program_command_sequence.write_offset_bytes();
         program_command_sequence.add_dispatch_write_linear<true>(true, num_mcast_cores, device->get_noc_multicast_encoding(this->noc_index, full_grid), launch_msg_addr, go_signal_sizeB, &empty_launch_msg);
         cached_program_command_sequence.empty_launch_msg_mcast_cmd_ptr = &((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_linear_offset + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->write_linear;
+        if (unicast_go_signal_sub_cmds.size()) {
+            for (auto& active_eth_core : device->get_noc_encoding_for_all_etherent_sockets(0)) {
+                write_linear_offset = program_command_sequence.write_offset_bytes();
+                program_command_sequence.add_dispatch_write_linear<true>(true, 0, active_eth_core, active_eth_launch_msg_addr, go_signal_sizeB, &empty_launch_msg);
+                cached_program_command_sequence.empty_launch_msg_unicast_cmd_ptrs.push_back( &((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_linear_offset + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->write_linear);
+            }
+        }
+
+        uint8_t go_signal_mcast_flag = 0x0;
         if (multicast_go_signal_sub_cmds.size() > 0) {
+            go_signal_mcast_flag |= 0x1;
             uint32_t curr_sub_cmd_idx = 0;
             for (const auto& [num_sub_cmds_in_cmd, multicast_go_signal_payload_sizeB] : multicast_go_signals_payload) {
                 uint32_t write_offset_bytes = program_command_sequence.write_offset_bytes();
@@ -1227,12 +1246,13 @@ void EnqueueProgramCommand::assemble_device_commands(
         }
 
         if (unicast_go_signal_sub_cmds.size() > 0) {
+            go_signal_mcast_flag |= 0x2;
             uint32_t curr_sub_cmd_idx = 0;
             for (const auto& [num_sub_cmds_in_cmd, unicast_go_signal_payload_sizeB] : unicast_go_signals_payload) {
                 uint32_t write_offset_bytes = program_command_sequence.write_offset_bytes();
                 program_command_sequence.add_dispatch_write_packed<CQDispatchWritePackedUnicastSubCmd>(
                     num_sub_cmds_in_cmd,
-                    hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH),
+                    active_eth_launch_msg_addr,
                     go_signal_sizeB,
                     unicast_go_signal_payload_sizeB,
                     unicast_go_signal_sub_cmds,
@@ -1240,6 +1260,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                     this->packed_write_max_unicast_sub_cmds,
                     curr_sub_cmd_idx);
                 curr_sub_cmd_idx += num_sub_cmds_in_cmd;
+                cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.push_back(&((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->write_packed);
                 uint32_t curr_sub_cmd_data_offset_words =
                     (write_offset_bytes + (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) +
                      align(num_sub_cmds_in_cmd * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT)) /
@@ -1258,7 +1279,7 @@ void EnqueueProgramCommand::assemble_device_commands(
         }
 
         program_command_sequence.add_dispatch_s_sem_update();
-        program_command_sequence.add_dispatch_s_go_signal_mcast(1, 0x3);
+        program_command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag);
 
     } else {
         uint32_t i = 0;
@@ -1297,6 +1318,15 @@ void EnqueueProgramCommand::assemble_device_commands(
         cached_program_command_sequence.empty_launch_msg_mcast_cmd_ptr->addr = launch_msg_addr;
         for (auto launch_msg_cmd_ptr : cached_program_command_sequence.launch_msg_write_packed_cmd_ptrs) {
             launch_msg_cmd_ptr->addr = launch_msg_addr;
+        }
+        if (cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.size()) {
+            uint32_t eth_launch_message_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + this->active_eth_launch_message_wptr * sizeof(launch_msg_t);
+            for (auto empty_launch_msg_cmd_ptr : cached_program_command_sequence.empty_launch_msg_unicast_cmd_ptrs) {
+                empty_launch_msg_cmd_ptr->addr = eth_launch_message_addr;
+            }
+            for (auto launch_msg_cmd_ptr : cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs) {
+                launch_msg_cmd_ptr->addr = eth_launch_message_addr;
+            }
         }
     }
 }
@@ -2194,8 +2224,13 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
         this->physical_enqueue_program_dispatch_core,
         this->manager,
         expected_workers_completed,
-        this->launch_message_wptr);
+        this->launch_message_wptr,
+        this->active_eth_launch_message_wptr);
+    // Update wptrs for tensix and eth launch message
     this->launch_message_wptr = (this->launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
+    if (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1 and program.get_kernel_groups(hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH)).size()) {
+        this->active_eth_launch_message_wptr = (this->active_eth_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
+    }
     this->enqueue_command(command, blocking);
 
     if (program.has_multi_device_dependencies() and not this->device->is_mmio_capable() and
