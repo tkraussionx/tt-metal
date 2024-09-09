@@ -235,7 +235,7 @@ class PrefillDecodeBackend:
         self.prefill_seq_len = None
         self.prefill_batch_size = None
         #
-        self.t3k_device_mesh = None
+        self.t3k_mesh_device = None
         self.cache_root = Path(cache_root)
         if not self.cache_root.exists():
             self.cache_root.mkdir(parents=True, exist_ok=True)
@@ -328,7 +328,6 @@ class PrefillDecodeBackend:
         }
 
         for idx in range(len(context_enc_list)):
-            context_tokens = self.tokenize_prompt(prompt, rag_context)
             self.users[idx] = UserRow(
                 user_id=idx,
                 prompt=None,
