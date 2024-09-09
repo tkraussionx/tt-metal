@@ -135,6 +135,10 @@ void kernel_main() {
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_semaphore_set_multicast(
                 in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores);
+
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
 #endif
 
             cb_push_back(cb_id_in0, in0_block_num_tiles);

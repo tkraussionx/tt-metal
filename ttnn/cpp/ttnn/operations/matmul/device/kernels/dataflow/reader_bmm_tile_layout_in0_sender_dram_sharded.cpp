@@ -100,6 +100,9 @@ void kernel_main() {
             noc_semaphore_set_multicast(
                 in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores);
 
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
             local_read_addr += in0_block_size_bytes;
         }
 
@@ -128,6 +131,9 @@ void kernel_main() {
                 noc_semaphore_set_multicast_loopback_src(
                     in0_mcast_sender_valid_semaphore, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores);
 
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
                 local_read_addr += in0_block_size_bytes;
 
             } else {

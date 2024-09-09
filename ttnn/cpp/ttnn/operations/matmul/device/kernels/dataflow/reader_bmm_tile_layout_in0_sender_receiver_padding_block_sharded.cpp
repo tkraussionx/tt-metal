@@ -234,6 +234,10 @@ void kernel_main() {
                         in0_mcast_receiver_semaphore_noc_addr,
                         in0_mcast_num_cores);
                 }
+
+#ifdef ARCH_BLACKHOLE
+                noc_async_writes_flushed();
+#endif
                 // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc,
                 // same cmd_buf Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 

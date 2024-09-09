@@ -194,6 +194,10 @@ void kernel_main() {
                 in0_mcast_receiver_semaphore_addr,
                 in0_mcast_receiver_semaphore_noc_addr,
                 in0_mcast_num_cores);
+
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
 #endif
 
 #ifndef IN0_SHARDED

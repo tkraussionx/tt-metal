@@ -281,6 +281,10 @@ void kernel_main() {
                 in1_mcast_receiver_semaphore_addr,
                 in1_mcast_receiver_semaphore_noc_addr,
                 in1_mcast_num_cores);
+
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
 #endif
 
 #ifndef IN1_SHARDED
@@ -361,6 +365,10 @@ void kernel_main() {
                 in1_mcast_receiver_semaphore_addr,
                 in1_mcast_receiver_semaphore_noc_addr,
                 in1_mcast_num_cores);
+
+#ifdef ARCH_BLACKHOLE
+            noc_async_writes_flushed();
+#endif
 #endif
 
             cb_push_back(cb_id_in3, in1_block_w);

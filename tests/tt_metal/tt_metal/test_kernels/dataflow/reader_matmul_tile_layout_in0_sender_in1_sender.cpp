@@ -159,6 +159,10 @@ void kernel_main() {
 
         cb_push_back(cb_id_in0, in0_block_num_tiles);
 
+#ifdef ARCH_BLACKHOLE
+        noc_async_writes_flushed();
+#endif
+
         // Operand 1
         cb_reserve_back(cb_id_in1, in1_block_num_tiles);
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);

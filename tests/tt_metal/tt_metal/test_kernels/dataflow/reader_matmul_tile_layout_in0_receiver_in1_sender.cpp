@@ -157,5 +157,9 @@ void kernel_main() {
         noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_dests);
 
         cb_push_back(cb_id_in1, in1_block_num_tiles);
+
+#ifdef ARCH_BLACKHOLE
+        noc_async_writes_flushed();
+#endif
     }
 }

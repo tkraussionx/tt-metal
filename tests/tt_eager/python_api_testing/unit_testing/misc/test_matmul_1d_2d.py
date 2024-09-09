@@ -35,6 +35,165 @@ def find_max_subblock(out_block_h, out_block_w):
 from models.utility_functions import is_wormhole_b0, is_grayskull, is_wormhole_b0, is_blackhole
 
 
+@pytest.mark.skipif(is_wormhole_b0() or is_grayskull(), reason="Unsupported grid on WH and GS")
+@pytest.mark.parametrize("has_bias", [False], ids=["no_bias"])
+@pytest.mark.parametrize(
+    "in1_in_dram, out_sharded, in0_sharded, M, K, N, activation, dtype, fidelity",
+    [
+        (
+            False,
+            True,
+            True,
+            3328,
+            2560,
+            2560,
+            None,
+            ttnn.bfloat8_b,
+            ttnn.MathFidelity.LoFi,
+        ),
+        (
+            False,
+            False,
+            True,
+            3328,
+            2560,
+            2560,
+            None,
+            ttnn.bfloat8_b,
+            ttnn.MathFidelity.LoFi,
+        ),
+        (
+            False,
+            True,
+            False,
+            3328,
+            2560,
+            2560,
+            None,
+            ttnn.bfloat8_b,
+            ttnn.MathFidelity.LoFi,
+        ),
+        (
+            False,
+            False,
+            False,
+            3328,
+            2560,
+            2560,
+            None,
+            ttnn.bfloat8_b,
+            ttnn.MathFidelity.LoFi,
+        ),
+    ],
+)
+def test_matmul_bh(
+    device,
+    dtype,
+    fidelity,
+    in0_sharded,
+    out_sharded,
+    in1_in_dram,
+    has_bias,
+    M,
+    K,
+    N,
+    activation,
+    function_level_defaults,
+):
+    in0_shape = [1, 1, M, K]
+    in1_shape = [1, 1, K, N]
+    bias_shape = [1, 1, N]
+    grid_size = (13, 10)
+
+    in0_block_w = K // grid_size[1] // 32  # 16
+    in0_block_h = M // grid_size[0] // 32
+    out_block_h = M // grid_size[0] // 32
+    out_block_w = N // grid_size[1] // 32
+
+    out_subblock_h, out_subblock_w, _ = find_max_subblock(out_block_h, out_block_w)
+
+    logger.debug("in0 block w h " + str(in0_block_w * 32) + " " + str(in0_block_h * 32))
+    logger.debug("in1 block w h " + str(out_block_w * 32) + " " + str(in0_block_w * 32))
+    logger.debug("out block w h " + str(out_block_w * 32) + " " + str(out_block_h * 32))
+    logger.debug("out subblock w h " + str(out_subblock_w * 32) + " " + str(out_subblock_h * 32))
+
+    interleaved_mem_config_L1 = ttnn.MemoryConfig(
+        memory_layout=ttnn.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.BufferType.L1,
+    )
+    interleaved_mem_config_DRAM = ttnn.MemoryConfig(
+        memory_layout=ttnn.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.BufferType.DRAM,
+    )
+    sharded_mem_config = ttnn.MemoryConfig(
+        memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        buffer_type=ttnn.BufferType.L1,
+    )
+
+    in0 = torch.randn(in0_shape).bfloat16().float()
+    in1 = torch.randn(in1_shape).bfloat16().float()
+    bias = torch.randn(bias_shape).bfloat16().float()
+
+    in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttnn.bfloat8_b)
+
+    in1_t = torch2tt_tensor(in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttnn.bfloat8_b)
+
+    output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config_L1
+    bias_t = pad_by_zero(bias, device, tt_memory_config=interleaved_mem_config_L1, tt_dtype=ttnn.bfloat8_b)[0]
+
+    if in0_sharded:
+        in0_t = ttnn.interleaved_to_sharded(
+            in0_t,
+            grid_size,
+            [M // grid_size[0], K // grid_size[1]],
+            ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+            ttnn.ShardOrientation.COL_MAJOR,
+        )
+
+    program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=True,
+        fused_activation=activation,
+    )
+
+    if has_bias:
+        output_t = ttnn.linear(
+            in0_t,
+            in1_t,
+            bias=bias_t,
+            program_config=program_config,
+            memory_config=output_mem_config,
+        )
+    else:
+        output_t = ttnn.matmul(
+            in0_t,
+            in1_t,
+            program_config=program_config,
+            memory_config=output_mem_config,
+        )
+
+    if out_sharded:
+        output_t = ttnn.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
+
+    pt_out = in0 @ in1
+
+    if has_bias:
+        pt_out = pt_out + bias
+
+    if activation != None:
+        pt_out = torch.nn.functional.gelu(pt_out)
+    tt_out = tt2torch_tensor(output_t)
+
+    passing, output = comp_pcc(pt_out, tt_out)
+    logger.info(output)
+    assert passing
+
+
 @pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="Unsupported on WH and BH")
 @pytest.mark.skipif(is_grayskull(), reason="no llama2 test on GS")
 @pytest.mark.parametrize(
