@@ -274,9 +274,8 @@ void kernel_main() {
         }
         // need to optimize this.
         // context switch to base fw is very costly.
-        if ((iter & 0xFFF) == 0) {
-            internal_::risc_context_switch();
-        }
+        internal_::risc_context_switch();
+
     }
 
     if (!timeout) {

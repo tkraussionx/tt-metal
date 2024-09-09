@@ -214,11 +214,18 @@ constexpr uint32_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
 
 void kernel_main() {
 
-    //noc_init();
-
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
     write_test_results(test_results, PQ_TEST_MISC_INDEX+1, 0xaa000000 | mux_fan_in);
+
+    for (uint32_t i = 0; i < mux_fan_in; i++) {
+        output_queues[i].init(i + mux_fan_in, remote_tx_queue_start_addr_words + i*remote_tx_queue_size_words, remote_tx_queue_size_words,
+                              remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], tx_network_type[i],
+                              &input_queues[i], 1,
+                              output_depacketize[i], output_depacketize_log_page_size[i],
+                              output_depacketize_downstream_sem[i], output_depacketize_local_sem[i],
+                              output_depacketize_remove_header[i]);
+    }
 
     for (uint32_t i = 0; i < mux_fan_in; i++) {
         input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
@@ -228,24 +235,6 @@ void kernel_main() {
                              input_packetize_src_endpoint[i], input_packetize_dest_endpoint[i]);
     }
 
-
-    for (uint32_t i = 0; i < mux_fan_in; i++) {
-        output_queues[i].init(i + mux_fan_in, remote_tx_queue_start_addr_words + i*remote_tx_queue_size_words, remote_tx_queue_size_words,
-                        remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], tx_network_type[i],
-                        &input_queues[i], 1,
-                        output_depacketize[i], output_depacketize_log_page_size[i],
-                        output_depacketize_downstream_sem[i], output_depacketize_local_sem[i],
-                        output_depacketize_remove_header[i]);
-
-    }
-/*
-    output_queue.init(mux_fan_in, remote_tx_queue_start_addr_words, remote_tx_queue_size_words,
-                      remote_tx_x, remote_tx_y, remote_tx_queue_id, tx_network_type,
-                      input_queues, mux_fan_in,
-                      output_depacketize, output_depacketize_log_page_size,
-                      output_depacketize_downstream_sem, output_depacketize_local_sem,
-                      output_depacketize_remove_header);
-*/
     if (!wait_all_src_dest_ready(input_queues, mux_fan_in, output_queues, mux_fan_in, timeout_cycles)) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
@@ -255,24 +244,15 @@ void kernel_main() {
 
     uint32_t curr_input = 0;
     bool timeout = false;
-    bool all_dest_finished = false;
+    bool all_outputs_finished = false;
     uint64_t data_words_sent = 0;
     uint64_t iter = 0;
     uint64_t start_timestamp = get_timestamp();
     uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
     uint32_t heartbeat = 0;
-    uint32_t outputs_finished = 0;
-
-    while (!all_dest_finished && !timeout) {
+    while (!all_outputs_finished && !timeout) {
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         iter++;
-        if (data_words_sent == 0) {
-            //don't record a start timestamp until the very first set of data words have been sent.
-            //This is to eliminate any system and other kernel setup time delays.
-            //We only want to record the time from first data word that flows through mux until all outputs are finished.
-            start_timestamp = get_timestamp();
-            //iter = 0;
-        }
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
@@ -290,8 +270,11 @@ void kernel_main() {
         }
 
         output_queues[curr_input].prev_words_in_flight_check_flush();
-        outputs_finished += output_queues[curr_input].is_remote_finished();
-        all_dest_finished = outputs_finished == mux_fan_in;
+
+        all_outputs_finished = true;
+        for (uint32_t i = 0; i < mux_fan_in; i++) {
+            all_outputs_finished &= output_queues[i].is_remote_finished();
+        }
 
         curr_input++;
         if (curr_input == mux_fan_in) {
@@ -323,9 +306,6 @@ void kernel_main() {
 
     if (timeout) {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
-        // DPRINT << "mux timeout" << ENDL();
-        // input_queues[0].dprint_object();
-        // output_queue.dprint_object();
     } else {
         write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
         write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
