@@ -234,56 +234,58 @@ int main(int argc, char **argv) {
                 (mux_queue_start_addr >> 4), // 1: rx_queue_start_addr_words
                 (mux_queue_size_bytes >> 4), // 2: rx_queue_size_words
                 num_src_endpoints, // 3: mux_fan_in
-                packet_switch_4B_pack((uint32_t)tx_phys_core[0].x,
-                                      (uint32_t)tx_phys_core[0].y,
-                                      1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: src 0 info
-                packet_switch_4B_pack((uint32_t)tx_phys_core[1].x,
-                                      (uint32_t)tx_phys_core[1].y,
-                                      1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: src 1 info
-                packet_switch_4B_pack((uint32_t)tx_phys_core[2].x,
-                                      (uint32_t)tx_phys_core[2].y,
-                                      1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: src 2 info
-                packet_switch_4B_pack((uint32_t)tx_phys_core[3].x,
-                                      (uint32_t)tx_phys_core[3].y,
-                                      1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: src 3 info
-                (tunneler_queue_start_addr >> 4), // 8: remote_tx_queue_start_addr_words
-                (tunneler_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
-                //(uint32_t)tunneler_phys_core.x, // 10: remote_tx_x
-                //(uint32_t)tunneler_phys_core.y, // 11: remote_tx_y
-                //0, // 12: remote_tx_queue_id
-                //(uint32_t)DispatchRemoteNetworkType::NOC0, // 13: tx_network_type
-
                 packet_switch_4B_pack((uint32_t)tunneler_phys_core.x,
                                       (uint32_t)tunneler_phys_core.y,
                                       0,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 10: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: dest 0 info
                 packet_switch_4B_pack((uint32_t)tunneler_phys_core.x,
                                       (uint32_t)tunneler_phys_core.y,
                                       1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 11: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: dest 0 info
                 packet_switch_4B_pack((uint32_t)tunneler_phys_core.x,
                                       (uint32_t)tunneler_phys_core.y,
                                       2,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 12: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: dest 0 info
                 packet_switch_4B_pack((uint32_t)tunneler_phys_core.x,
                                       (uint32_t)tunneler_phys_core.y,
                                       3,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 13: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: dest 0 info
 
-                test_results_addr, // 14: test_results_addr
-                test_results_size, // 15: test_results_size
-                timeout_mcycles * 1000 * 1000 * 4, // 16: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 17-27: packetize/depacketize settings
+                (tunneler_queue_start_addr >> 4), // 8: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + tunneler_queue_size_bytes) >> 4), // 10: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 11: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + 2 * tunneler_queue_size_bytes) >> 4), // 12: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 13: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + 3 * tunneler_queue_size_bytes) >> 4), // 14: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 15: remote_tx_queue_size_words
+                packet_switch_4B_pack((uint32_t)tx_phys_core[0].x,
+                                      (uint32_t)tx_phys_core[0].y,
+                                      1,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 16: src 0 info
+                packet_switch_4B_pack((uint32_t)tx_phys_core[1].x,
+                                      (uint32_t)tx_phys_core[1].y,
+                                      1,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 17: src 1 info
+                packet_switch_4B_pack((uint32_t)tx_phys_core[2].x,
+                                      (uint32_t)tx_phys_core[2].y,
+                                      1,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 18: src 2 info
+                packet_switch_4B_pack((uint32_t)tx_phys_core[3].x,
+                                      (uint32_t)tx_phys_core[3].y,
+                                      1,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 19: src 3 info
+                0, 0, //20, 21
+                test_results_addr, // 22: test_results_addr
+                test_results_size, // 23: test_results_size
+                timeout_mcycles * 1000 * 1000 * 4, // 24: timeout_cycles
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 25-35: packetize/depacketize settings
             };
 
         log_info(LogTest, "run mux at x={},y={}", mux_core.x, mux_core.y);
         auto mux_kernel = tt_metal::CreateKernel(
             program,
-            "tt_metal/impl/dispatch/kernels/vc_packet_mux.cpp",
+            "tt_metal/impl/dispatch/kernels/vc_packet_router.cpp",
             {mux_core},
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
@@ -532,51 +534,56 @@ int main(int argc, char **argv) {
                 4, // 3: mux_fan_in
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
-                                      8,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: src 0 info
-                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
-                                      (uint32_t)r_tunneler_phys_core.y,
-                                      9,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: src 1 info
-                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
-                                      (uint32_t)r_tunneler_phys_core.y,
-                                      10,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: src 2 info
-                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
-                                      (uint32_t)r_tunneler_phys_core.y,
-                                      11,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: src 3 info
-                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 8: remote_tx_queue_start_addr_words
-                (tunneler_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
-
-                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
-                                      (uint32_t)r_tunneler_phys_core.y,
                                       4,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 10: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
                                       5,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 11: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
                                       6,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 12: dest 0 info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
                                       7,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 13: dest 0 info
-
-                test_results_addr, // 14: test_results_addr
-                test_results_size, // 15: test_results_size
-                timeout_mcycles * 1000 * 1000 * 4, // 16: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 17-27: packetize/depacketize settings
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: dest 0 info
+                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 8: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + 5 * tunneler_queue_size_bytes) >> 4), // 10: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 11: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + 6 * tunneler_queue_size_bytes) >> 4), // 12: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 13: remote_tx_queue_size_words
+                ((tunneler_queue_start_addr + 7 * tunneler_queue_size_bytes) >> 4), // 14: remote_tx_queue_start_addr_words
+                (tunneler_queue_size_bytes >> 4), // 15: remote_tx_queue_size_words
+                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
+                                      (uint32_t)r_tunneler_phys_core.y,
+                                      8,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 16: src 0 info
+                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
+                                      (uint32_t)r_tunneler_phys_core.y,
+                                      9,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 17: src 1 info
+                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
+                                      (uint32_t)r_tunneler_phys_core.y,
+                                      10,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 18: src 2 info
+                packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
+                                      (uint32_t)r_tunneler_phys_core.y,
+                                      11,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 19: src 3 info
+                0, 0, // 20, 21
+                test_results_addr, // 22: test_results_addr
+                test_results_size, // 23: test_results_size
+                timeout_mcycles * 1000 * 1000 * 4, // 24: timeout_cycles
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 25-35: packetize/depacketize settings
             };
 
 
         log_info(LogTest, "run loopback mux at x={},y={}", loopback_mux_core.x, loopback_mux_core.y);
         auto loopback_mux_kernel = tt_metal::CreateKernel(
             program_r,
-            "tt_metal/impl/dispatch/kernels/vc_packet_mux.cpp",
+            "tt_metal/impl/dispatch/kernels/vc_packet_router.cpp",
             {loopback_mux_core},
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
@@ -686,7 +693,7 @@ int main(int argc, char **argv) {
                 test_results_addr, // 22: test_results_addr
                 test_results_size, // 23: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 24: timeout_cycles
-                0, 0, 0, 0, 0 // 25-29: packetize/depacketize settings
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 25-35: packetize/depacketize settings
             };
 
         log_info(LogTest, "run demux at x={},y={}", demux_core.x, demux_core.y);
@@ -695,7 +702,7 @@ int main(int argc, char **argv) {
 
         auto demux_kernel = tt_metal::CreateKernel(
             program,
-            "tt_metal/impl/dispatch/kernels/vc_packet_demux.cpp",
+            "tt_metal/impl/dispatch/kernels/vc_packet_router.cpp",
             {demux_core},
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,

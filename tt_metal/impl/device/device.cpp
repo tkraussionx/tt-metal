@@ -615,54 +615,50 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 uint32_t mux_sem = mux_settings.consumer_semaphore_id;
 
                 auto& compile_args = mux_settings.compile_args;
-                compile_args.resize(28);
+                compile_args.resize(36);
                 compile_args[0] = 0; // 0: reserved
                 compile_args[1] = mux_settings.cb_start_address >> 4; // 1: rx_queue_start_addr_words
                 compile_args[2] = mux_settings.cb_size_bytes >> 4; // 2: rx_queue_size_words
-                compile_args[3] = num_prefetchers; // 3: mux_fan_in
+                compile_args[3] = num_prefetchers; // 3: router_lanes
 
-                uint32_t arg_index = 4;
-                for (auto&[core, settings] : device_worker_variants[DispatchWorkerType::PREFETCH]) {
-                    compile_args[arg_index++] = packet_switch_4B_pack((uint32_t)settings.worker_physical_core.x,
-                                                                    (uint32_t)settings.worker_physical_core.y,
-                                                                    1,
-                                                                    (uint32_t)DispatchRemoteNetworkType::NOC0); // 4,5,6,7: src x info
-                }
                 TT_ASSERT(device_worker_variants[DispatchWorkerType::US_TUNNELER_REMOTE].size() == 1, "Unexpected number of ethernet tunnelers.");
                 auto &tunneler_settings = std::get<1>(device_worker_variants[DispatchWorkerType::US_TUNNELER_REMOTE][0]);
                 TT_ASSERT(num_prefetchers == tunneler_settings.vc_count - 1, "Mux did not reserve a VC for each Prefetch H. Needed {}.", num_prefetchers);
 
-                compile_args[8] = tunneler_settings.cb_start_address >> 4; // 8: remote_tx_queue_start_addr_words
-                compile_args[9] = tunneler_settings.cb_size_bytes >> 4; // 9: remote_tx_queue_size_words
-                //compile_args[10] = tunneler_settings.worker_physical_core.x; // 10: remote_tx_x
-                //compile_args[11] = tunneler_settings.worker_physical_core.y; // 11: remote_tx_y
-                //compile_args[12] = 0; // 12: remote_tx_queue_id
-                //compile_args[13] = (uint32_t)DispatchRemoteNetworkType::NOC0; // 13: tx_network_type
-
                 for (int i = 0; i < num_prefetchers; i++) {
-                    compile_args[10 + i] = packet_switch_4B_pack((uint32_t)tunneler_settings.worker_physical_core.x,
+                    compile_args[4 + i] = packet_switch_4B_pack((uint32_t)tunneler_settings.worker_physical_core.x,
                                                                 (uint32_t)tunneler_settings.worker_physical_core.y,
                                                                 i,
-                                                                (uint32_t)DispatchRemoteNetworkType::NOC0); // 10, 11, 12, 13: dest x info
+                                                                (uint32_t)DispatchRemoteNetworkType::NOC0); // 4, 5, 6, 7: dest x info
+                    compile_args[8 + i * 2] = (tunneler_settings.cb_start_address + i * tunneler_settings.cb_size_bytes) >> 4;
+                    compile_args[9 + i * 2] = tunneler_settings.cb_size_bytes >> 4;
                 }
 
-                compile_args[14] = 0; // 14: test_results_addr (disabled)
-                compile_args[15] = 0; // 15: test_results_size (disabled)
-                compile_args[16] = 0; // 16: timeout_cycles
-                compile_args[17] = 0x0; // 17: output_depacketize
-                compile_args[18] = 0x0; // 18: output_depacketize info dest 0
-                compile_args[19] = 0x0; // 19: output_depacketize info dest 1
-                compile_args[20] = 0x0; // 20: output_depacketize info dest 2
-                compile_args[21] = 0x0; // 21: output_depacketize info dest 3
-                arg_index = 22; // 22, 23, 24, 25: input x packetize info:
+                uint32_t arg_index = 16;
+                for (auto&[core, settings] : device_worker_variants[DispatchWorkerType::PREFETCH]) {
+                    compile_args[arg_index++] = packet_switch_4B_pack((uint32_t)settings.worker_physical_core.x,
+                                                                    (uint32_t)settings.worker_physical_core.y,
+                                                                    1,
+                                                                    (uint32_t)DispatchRemoteNetworkType::NOC0); // 16,17,18,19: src x info
+                }
+
+                compile_args[22] = 0; // 14: test_results_addr (disabled)
+                compile_args[23] = 0; // 15: test_results_size (disabled)
+                compile_args[24] = 0; // 16: timeout_cycles
+                compile_args[25] = 0x0; // 17: output_depacketize
+                compile_args[26] = 0x0; // 18: output_depacketize info dest 0
+                compile_args[27] = 0x0; // 19: output_depacketize info dest 1
+                compile_args[28] = 0x0; // 20: output_depacketize info dest 2
+                compile_args[29] = 0x0; // 21: output_depacketize info dest 3
+                arg_index = 30; // 22, 23, 24, 25: input x packetize info:
                 for (auto&[core, settings] : device_worker_variants[DispatchWorkerType::PREFETCH]) {
                     compile_args[arg_index++] = packet_switch_4B_pack(0x1,
                                 dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
                                 settings.producer_semaphore_id,  // upstream sem
                                 mux_sem++); // local sem
                 }
-                compile_args[26] = packet_switch_4B_pack(0xA1, 0xA2, 0xA3, 0xA4); // 26: packetized input src id
-                compile_args[27] = packet_switch_4B_pack(0xB1, 0xB2, 0xB3, 0xB4); // 26: packetized input dest id
+                compile_args[34] = packet_switch_4B_pack(0xA1, 0xA2, 0xA3, 0xA4); // 26: packetized input src id
+                compile_args[35] = packet_switch_4B_pack(0xB1, 0xB2, 0xB3, 0xB4); // 26: packetized input dest id
                 break;
             }
             case DispatchWorkerType::US_TUNNELER_REMOTE:
@@ -911,7 +907,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 uint32_t return_vc = fwd_vc_count;
 
                 auto &compile_args = demux_d_settings.compile_args;
-                compile_args.resize(30);
+                compile_args.resize(36);
 
                 compile_args[0] = 0xB1; // 0: endpoint_id_start_index
                 compile_args[1] = demux_d_settings.cb_start_address >> 4; // 1: rx_queue_start_addr_words
@@ -1241,7 +1237,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.consumer_semaphore_id = 0;
                 tt_cxy_pair mux_location = dispatch_core_manager::instance().mux_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(mux_location.chip, get_physical_core_coordinate(mux_location, dispatch_core_type));
-                settings.kernel_file = "tt_metal/impl/dispatch/kernels/vc_packet_mux.cpp";
+                settings.kernel_file = "tt_metal/impl/dispatch/kernels/vc_packet_router.cpp";
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                 settings.cb_size_bytes = dispatch_constants::get(dispatch_core_type).mux_buffer_size(num_hw_cqs);
 
@@ -1296,7 +1292,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tunnel_core_allocations[MUX_D].push_back(std::make_tuple(mux_d_location, settings));
             tt_cxy_pair demux_d_location = dispatch_core_manager::instance().demux_d_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(demux_d_location.chip, get_physical_core_coordinate(demux_d_location, dispatch_core_type));
-            settings.kernel_file = "tt_metal/impl/dispatch/kernels/vc_packet_demux.cpp";
+            settings.kernel_file = "tt_metal/impl/dispatch/kernels/vc_packet_router.cpp";
             settings.producer_semaphore_id = 0;
             settings.cb_start_address = L1_UNRESERVED_BASE;
             settings.cb_size_bytes = 0x8000;
