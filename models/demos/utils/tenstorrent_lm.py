@@ -84,7 +84,7 @@ class TenstorrentLM(TemplateLM):
         tok_encode gets called by TemplateLM._encode_pair()
         see: https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/api/model.py#L337
         """
-        return self.model_backend.tok_encode(string, **kwargs)
+        return self.model_backend.tokenize_prompt(prompt=string, **kwargs)
 
     def _encode_pair(self, context: str, continuation: str) -> Tuple[List[int], List[int]]:
         n_spaces = len(context) - len(context.rstrip())
