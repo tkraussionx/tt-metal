@@ -77,6 +77,10 @@ class TtLlamaModelForGeneration:
             attn_mask,
             cache_idxs=cache_idxs_tt,
         )
+        tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
+        logits = ttnn.to_torch(logits_rm)
 
         # Capture trace
         trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
@@ -91,11 +95,14 @@ class TtLlamaModelForGeneration:
             attn_mask,
             cache_idxs=cache_idxs_tt,
         )
+        tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
 
         ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
         logger.info("Done Capturing Decode Trace")
 
-        return trace_id, tt_inp, rot_mat, cache_idxs_tt, tt_logits
+        return trace_id, tt_inp, rot_mat, cache_idxs_tt, logits_rm
 
     def delete_trace(self, trace_id):
         ttnn.release_trace(self.mesh_device, trace_id)
@@ -120,9 +127,10 @@ class TtLlamaModelForGeneration:
 
         # Run TT model
         ttnn.execute_trace(self.mesh_device, trace_id, cq_id=0, blocking=False)
-        updated_tt_logits = ttnn.from_device(tt_logits)
-
-        logits = self._process_logits(updated_tt_logits)
+        # updated_tt_logits = ttnn.from_device(tt_logits)
+        logits = ttnn.to_torch(tt_logits)
+        logits = logits[..., : self.params.vocab_size].float()
+        # logits = self._process_logits(updated_tt_logits)
 
         logits = logits.permute(2, 1, 0, 3).squeeze().unsqueeze(1)  # [batch, 1, vocab_size]
         logits = logits[:batch]  # Remove padded users

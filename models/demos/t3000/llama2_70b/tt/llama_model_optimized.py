@@ -97,6 +97,35 @@ class TtLlamaModel_optimized:
         )
         self.load_weights()
 
+        logger.info("preparing first 200 inputs for trace capture")
+
+        self.rot_mat_cache = []
+        self.idxs_cache = []
+        for i in range(200):
+            start_pos = i
+            cache_idxs = torch.tensor([start_pos for _ in range(32)], dtype=torch.int64)
+
+            rot_mat = get_rotation_mat(self.rot_emb, cache_idxs, 1, batch=32)
+            assert rot_mat.size() == (1, 32, self.head_dim, self.head_dim)
+
+            rot_mats = ttnn.as_tensor(
+                rot_mat,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
+            )
+            self.rot_mat_cache.append(rot_mats)
+
+            cache_idxs_tt = ttnn.as_tensor(
+                cache_idxs,
+                dtype=ttnn.int32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
+            )
+            self.idxs_cache.append(cache_idxs_tt)
+
+        logger.info("Done preparing first 200 inputs for trace capture")
+
     def set_model_config(self, model_config):
         self.model_config = model_config
         for layer in self.layers:
@@ -267,38 +296,42 @@ class TtLlamaModel_optimized:
 
             # xs = ttnn.interleaved_to_sharded(xs, self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"])
             # User can provide a single start pos which applies to the whole batch or a list of start positions
-            if isinstance(start_pos, int):
-                cache_idxs = torch.tensor([start_pos for _ in range(batch)], dtype=torch.int64)
-            else:
-                cache_idxs = start_pos
+            # if isinstance(start_pos, int):
+            #     cache_idxs = torch.tensor([start_pos for _ in range(batch)], dtype=torch.int64)
+            # else:
+            #     cache_idxs = start_pos
 
-            rot_mat = get_rotation_mat(self.rot_emb, cache_idxs, seq_len, batch=batch)
-            assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
+            # rot_mat = get_rotation_mat(self.rot_emb, cache_idxs, seq_len, batch=batch)
+            # assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
 
-            rot_mats = ttnn.as_tensor(
-                rot_mat,
-                dtype=ttnn.bfloat16,
-                layout=ttnn.TILE_LAYOUT,
-                # device=self.mesh_device,
-                # cache_file_name=cache_name(f"rot_mat_decode_b{batch}_{start_pos}"),
-                # memory_config=self.model_config["DRAM_MEMCFG"],
-                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
-            )
-            # rot_mats = ttnn.to_device(rot_mats, self.mesh_device)
-            # rot_mats = ttnn.interleaved_to_sharded(rot_mats, self.model_config["ROT_MAT_MM_IN1_MEMCFG"])
-            # rot_mats = ttnn.from_device(rot_mats)
+            # rot_mats = ttnn.as_tensor(
+            #     rot_mat,
+            #     dtype=ttnn.bfloat16,
+            #     layout=ttnn.TILE_LAYOUT,
+            #     # device=self.mesh_device,
+            #     cache_file_name=cache_name(f"rot_mat_decode_b{batch}_{start_pos}"),
+            #     # memory_config=self.model_config["DRAM_MEMCFG"],
+            #     mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
+            # )
+            # # rot_mats = ttnn.to_device(rot_mats, self.mesh_device)
+            # # rot_mats = ttnn.interleaved_to_sharded(rot_mats, self.model_config["ROT_MAT_MM_IN1_MEMCFG"])
+            # # rot_mats = ttnn.from_device(rot_mats)
 
+            # attn_masks = None
+
+            # cache_idxs_tt = ttnn.as_tensor(
+            #     cache_idxs,
+            #     dtype=ttnn.int32,
+            #     layout=ttnn.ROW_MAJOR_LAYOUT,
+            #     # device=self.mesh_device,
+            #     # memory_config=self.model_config["DRAM_MEMCFG"],
+            #     mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
+            #     cache_file_name=cache_name(f"cache_idxs_decode_b{batch}_{start_pos}"),
+            # )
+
+            rot_mats = self.rot_mat_cache[start_pos]
+            cache_idxs_tt = self.idxs_cache[start_pos]
             attn_masks = None
-
-            cache_idxs_tt = ttnn.as_tensor(
-                cache_idxs,
-                dtype=ttnn.int32,
-                layout=ttnn.ROW_MAJOR_LAYOUT,
-                # device=self.mesh_device,
-                # memory_config=self.model_config["DRAM_MEMCFG"],
-                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
-                # cache_file_name=cache_name(f"cache_idxs_decode_b{batch}_{start_pos}"),
-            )
 
         return (xs, start_pos, rot_mats, attn_masks, cache_idxs_tt)
 
