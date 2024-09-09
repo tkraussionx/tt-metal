@@ -105,6 +105,7 @@ void kernel_main() {
 
         bool packet_available = false;
         while (!packet_available) {
+#ifdef CHECK_TIMEOUT
             if (timeout_cycles > 0) {
                 uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
                 if (cycles_since_progress > timeout_cycles) {
@@ -113,6 +114,7 @@ void kernel_main() {
                     break;
                 }
             }
+#endif
             uint32_t num_words_available;
             packet_available = input_queue->input_queue_full_packet_available_to_send(num_words_available);
             if (!packet_available) {
@@ -124,10 +126,12 @@ void kernel_main() {
             }
         }
 
+#ifdef CHECK_TIMEOUT
         if (timeout) {
             break;
         }
-
+#endif
+        // === parse packet header ===
         curr_packet_header_ptr = input_queue->get_curr_packet_header_ptr();
         uint32_t src_endpoint_id = input_queue->get_curr_packet_src();
         uint32_t src_endpoint_index = src_endpoint_id - src_endpoint_start_id;
@@ -159,7 +163,7 @@ void kernel_main() {
                     break;
             }
             src_endpoint_last_packet[src_endpoint_index] = true;
-        } else {
+        } else { // TODO: remove rnd
             src_endpoint_rnd_state = &(src_rnd_state[src_endpoint_index]);
             src_endpoint_rnd_state->next_packet_rnd_to_dest(num_dest_endpoints, endpoint_id, dest_endpoint_start_id,
                                                             max_packet_size_words, UINT64_MAX);
@@ -183,6 +187,7 @@ void kernel_main() {
         input_queue->input_queue_advance_words_cleared(1);
         words_cleared++;
 
+        // === parse packet payload ===
         uint32_t curr_packet_payload_words = curr_packet_size_words-1;
         if (!disable_data_check) {
             uint32_t words_before_wrap = input_queue->get_queue_words_before_rptr_cleared_wrap();

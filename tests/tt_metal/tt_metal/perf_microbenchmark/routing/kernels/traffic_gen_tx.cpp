@@ -53,6 +53,8 @@ constexpr uint32_t dest_endpoint_start_id = get_compile_time_arg_val(16);
 
 constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
+constexpr bool skip_pkt_content_gen = get_compile_time_arg_val(18);
+
 constexpr uint32_t input_queue_id = 0;
 constexpr uint32_t output_queue_id = 1;
 
@@ -64,7 +66,7 @@ constexpr packet_output_queue_state_t* output_queue_ptr = &output_queue;
 
 input_queue_rnd_state_t input_queue_rnd_state;
 
-// generates packets with ranom size and payload on the input side
+// generates packets with random size and payload on the input side
 inline bool input_queue_handler() {
     if (input_queue_rnd_state.all_packets_done()) {
         return true;
@@ -84,7 +86,7 @@ inline bool input_queue_handler() {
     while (words_initialized < words_to_init) {
         if (input_queue_rnd_state.all_packets_done()) {
             break;
-        } else if (!input_queue_rnd_state.packet_active()) {
+        } else if (!input_queue_rnd_state.packet_active()) { // start of a new packet
             input_queue_rnd_state.next_packet_rnd(
                 num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
 
@@ -102,10 +104,12 @@ inline bool input_queue_handler() {
         } else {
             uint32_t words_remaining = words_to_init - words_initialized;
             uint32_t num_words = std::min(words_remaining, input_queue_rnd_state.curr_packet_words_remaining);
-            uint32_t start_val =
+            if (!skip_pkt_content_gen) {
+                uint32_t start_val =
                 (input_queue_rnd_state.packet_rnd_seed & 0xFFFF0000) +
                 (input_queue_rnd_state.curr_packet_size_words - input_queue_rnd_state.curr_packet_words_remaining);
-            fill_packet_data(reinterpret_cast<tt_l1_ptr uint32_t*>(byte_wr_addr), num_words, start_val);
+                fill_packet_data(reinterpret_cast<tt_l1_ptr uint32_t*>(byte_wr_addr), num_words, start_val);
+            }
             words_initialized += num_words;
             input_queue_rnd_state.curr_packet_words_remaining -= num_words;
             byte_wr_addr += num_words * PACKET_WORD_SIZE_BYTES;
@@ -123,7 +127,7 @@ void kernel_main() {
 
     noc_init();
     zero_l1_buf(
-        reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words * PACKET_WORD_SIZE_BYTES), queue_size_words);
+        reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words * PACKET_WORD_SIZE_BYTES), queue_size_words); // TODO: remove
 
     input_queue_rnd_state.init(prng_seed, src_endpoint_id);
 
@@ -164,6 +168,7 @@ void kernel_main() {
 
     while (true) {
         iter++;
+#ifdef CHECK_TIMEOUT
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
@@ -171,13 +176,16 @@ void kernel_main() {
                 break;
             }
         }
+#endif
         bool all_packets_initialized = input_queue_handler();
         if (input_queue_ptr->get_curr_packet_valid()) {
             bool full_packet_sent;
             uint32_t curr_data_words_sent = output_queue_ptr->forward_data_from_input(
                 input_queue_id, full_packet_sent, input_queue.get_end_of_cmd());
             data_words_sent += curr_data_words_sent;
+#ifdef CHECK_TIMEOUT
             progress_timestamp = (curr_data_words_sent > 0) ? get_timestamp_32b() : progress_timestamp;
+#endif
         } else if (all_packets_initialized) {
             break;
         }
