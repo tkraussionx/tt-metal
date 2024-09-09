@@ -148,6 +148,7 @@ void noc_async_write_unicast_one_packet_dispatch_s(std::uint32_t src_local_l1_ad
 
 void kernel_main() {
     DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
+    noc_local_state_init(1);
     uint32_t cmd_ptr = cb_base;
     bool done = false;
     uint32_t unicast_only_cores[16];
@@ -167,7 +168,9 @@ void kernel_main() {
             uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
 
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
+            DPRINT << "Sem update waiting" << ENDL();
             while (*sync_sem_addr <= num_mcasts_sent);
+            DPRINT << "Sem updated" << ENDL();
             num_mcasts_sent++;
             if (cmd->mcast.mcast_flag & send_mcast) {
                 noc_async_write_multicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
@@ -178,7 +181,9 @@ void kernel_main() {
                     noc_async_write_unicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t));
                 }
             }
-            DPRINT << "Mcast done" << ENDL();
+            DPRINT << "Barrier writes" << ENDL();
+            while(!ncrisc_noc_nonposted_writes_flushed(1));
+            DPRINT << "Done barrier writes" << ENDL();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
             DPRINT << "Terminating" << ENDL();

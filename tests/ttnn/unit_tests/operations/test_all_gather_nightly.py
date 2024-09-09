@@ -61,7 +61,7 @@ def test_line_all_gather_on_t3000_nightly(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     run_line_all_gather(
         t3k_mesh_device,
@@ -119,7 +119,7 @@ def test_line_all_gather_on_t3000_nightly_two_link(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     run_line_all_gather_deprecated(
         all_devices,
@@ -150,7 +150,7 @@ def run_line_all_gather_instances(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     if t3k_mesh_device.get_num_devices() != 8:
         pytest.skip("Not T3000!")
@@ -248,7 +248,7 @@ def test_line_all_gather_on_t3000_nightly_instances(
     use_program_cache,
     function_level_defaults,
     enable_async,
-    num_iters=1,
+    num_iters=10,
 ):
     run_line_all_gather_instances(
         t3k_mesh_device,
