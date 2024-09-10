@@ -108,7 +108,7 @@ def run_demo(args):
 
     if not tt_args.decode_only:
         # Run prefill first and pass kv_cache to decode
-        run_prefill(model_args, tt_args, data_args, model, tokenizer, tokenized, prompts)
+        tokenized = run_prefill(model_args, tt_args, data_args, model, tokenizer, tokenized, prompts)
 
     # Run decode
     with torch.no_grad():
@@ -249,7 +249,7 @@ def run_decode(
 
     # prepare inputs
     tokens, input_text_mask, finished_mask = initialize_inputs(tokenizer, prompt_tokens, bsz, total_len)
-    prev_pos = 0
+    prev_pos = min_prompt_len - 1
 
     # some profiling and logging
     latencies = []
@@ -302,17 +302,33 @@ def run_prefill(
     return_logits=False,
     return_full_logits=False,
 ):
+    sampling_func = get_sampling_func(data_args.top_k, data_args.top_p, data_args.temperature)
+
     for i, prompt_tokenized in enumerate(prompt_tokens):
         print(f" User: {i} \nPrompt Length: {len(prompt_tokenized)}")
         # pad prompt to nearest 128 multiple, otherwise  AssertionError at models/demos/tg/llama3_70b/tt/llama_attention_galaxy.py:533:
-        padding_len = 128 - len(prompt_tokenized) % 128
-        prompt_tokenized = prompt_tokenized + [tokenizer.pad_id] * padding_len if padding_len != 128 else 0
+        pad_to_multiple_of = 32
+        prompt_len = len(prompt_tokenized)
+        padding_len = 1
+        if prompt_len % pad_to_multiple_of != 0:
+            padding_len = pad_to_multiple_of - len(prompt_tokenized) % pad_to_multiple_of
+            padding_tensor = [tokenizer.pad_id] * padding_len
+            prompt_tokenized = prompt_tokenized + padding_tensor
         prompt_tokenized = torch.tensor(prompt_tokenized, dtype=torch.long).unsqueeze(0)
-
         # Run prefill forward
-        tt_out = model.forward(prompt_tokenized, 0)
-
+        logits = model.forward(prompt_tokenized, 0)
+        # Pick the last token from logits according to padding
+        next_token = logits[-padding_len, :]  # (seq_len, vocab_size)
         # process logits
+        next_token = sampling_func(next_token)
+        # find 1st occurence of tokenizer.pad_id in prompt_tokenized
+        prompt_tokenized = prompt_tokenized[:, :prompt_len]
+        # add next_token to tensor
+        prompt_tokenized = torch.cat([prompt_tokenized, next_token.unsqueeze(0)], dim=1)
+        # Convert back to list
+        prompt_tokens[i] = prompt_tokenized.squeeze(0).tolist()  # 1, seq_len
+
+    return prompt_tokens
 
 
 def latency_printout(latencies, model_args, generated_len):

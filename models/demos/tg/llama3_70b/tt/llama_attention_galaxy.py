@@ -77,6 +77,7 @@ class TtLlamaAttention_galaxy:
 
     def set_model_config(self, model_config):
         self.model_config = model_config
+        self.get_attn_model_config()
 
     def get_slice_mat(self):
         # Create the slice weight matrices
@@ -530,7 +531,7 @@ class TtLlamaAttention_galaxy:
         rot_mats,
     ):
         assert xs.shape[1] == 1, "batch must be 1"
-        assert xs.shape[2] % 128 == 0 and xs.shape[2] > 0, "Seqlen must be divisible by 128"
+        assert xs.shape[2] % 32 == 0 and xs.shape[2] > 0, "Seqlen must be divisible by 32"
         _, _, seq_len, _ = xs.shape
 
         max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"]

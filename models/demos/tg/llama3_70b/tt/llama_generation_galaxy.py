@@ -97,12 +97,10 @@ class TtLlamaModelForGeneration:
         del tt_inp_emb, rot_mat, attn_mask
 
         logits = self._process_logits(tt_logits)
-
-        logits = logits.permute(2, 1, 0, 3).squeeze()  # [batch, hidden_dim]
-
         del tt_logits
+        logits = logits.permute(2, 1, 0, 3).squeeze()
 
-        return logits  # (vocab_size)
+        return logits
 
     def _process_logits(self, tt_logits):
         logits = ttnn.to_torch(
