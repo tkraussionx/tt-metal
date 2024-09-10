@@ -992,6 +992,9 @@ void EnqueueProgramCommand::assemble_device_commands(
         constexpr uint32_t go_signal_sizeB = sizeof(launch_msg_t);
         launch_msg_t empty_launch_msg;
         std::memset(&empty_launch_msg, 0, go_signal_sizeB);
+        empty_launch_msg.kernel_config.dispatch_core_x = this->dispatch_core.x;
+        empty_launch_msg.kernel_config.dispatch_core_y = this->dispatch_core.y;
+        empty_launch_msg.kernel_config.mode = DISPATCH_MODE_DEV;
         uint32_t num_active_eth_cores = device->get_active_ethernet_cores(true).size();
         cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + go_signal_sizeB, PCIE_ALIGNMENT); // Mcast empty go signal to tensix workers
         // Mcast empty go signal to eth workers
@@ -1339,8 +1342,13 @@ void EnqueueProgramCommand::process() {
     bool stall_first = reservation.first.need_sync;
     // Note: since present implementation always stalls, we always free up to "now"
     this->manager.get_config_buffer_mgr().free(reservation.first.sync_count);
+    uint32_t num_workers = device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+    uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
+    if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
+        num_workers += device->get_active_ethernet_cores(true).size();
+    }
     this->manager.get_config_buffer_mgr().alloc(
-        this->expected_num_workers_completed + program.program_transfer_info.num_active_cores);
+        this->expected_num_workers_completed + num_workers);
 
     std::vector<ConfigBufferEntry>& kernel_config_addrs = reservation.second;
 
@@ -2274,16 +2282,20 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
     uint32_t expected_workers_completed = this->manager.get_bypass_mode() ? this->trace_ctx->num_completion_worker_cores
                                                                           : this->expected_num_workers_completed;
     if (this->manager.get_bypass_mode()) {
-        this->trace_ctx->num_completion_worker_cores += program.program_transfer_info.num_active_cores;
+        this->trace_ctx->num_completion_worker_cores += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
         uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
         // TODO: ugly, can be fixed by looping over indices w/ some work
         this->trace_ctx->num_programs++;
-        uint32_t programmable_core_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
-        if (eth_index != -1 and program.get_kernel_groups(programmable_core_index).size()) {
+        if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
             this->trace_ctx->num_eth_programs++;
+            this->trace_ctx->num_completion_worker_cores += device->get_active_ethernet_cores(true).size();
         }
     } else {
-        this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
+        this->expected_num_workers_completed += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+        uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
+        if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
+            this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
+        }
     }
 
     auto command = EnqueueProgramCommand(
