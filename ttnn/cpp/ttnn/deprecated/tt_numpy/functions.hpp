@@ -253,13 +253,15 @@ static Tensor arange(
 
 template <typename T, bool IS_UPPER>
 static Tensor index_trilu(
+    uint8_t queue_id,
     const Shape& shape,
     const int32_t diag,
     DataType data_type,
     const Layout layout = Layout::ROW_MAJOR,
     Device* device = nullptr,
     const MemoryConfig& output_mem_config = MemoryConfig{
-        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED},
+    std::optional<Tensor> optional_output_tensor = std::nullopt) {
     // Current implementation restrictions
     auto owned_buffer = tt_metal::owned_buffer::create<T>(tt_metal::compute_volume(shape));
 
@@ -283,11 +285,31 @@ static Tensor index_trilu(
         }  // dim Y
         index += offset;
     }
-    auto output = Tensor(OwnedStorage{owned_buffer}, shape, data_type, Layout::ROW_MAJOR).to(layout);
-    if (device != nullptr) {
-        output = output.to(device, output_mem_config);
+    if(!optional_output_tensor.has_value()) {
+        auto output = Tensor(OwnedStorage{owned_buffer}, shape, data_type, Layout::ROW_MAJOR).to(layout);
+        if (device != nullptr) {
+            output = output.to(device, output_mem_config);
+        }
+        return output;
     }
-    return output;
+    else {
+        auto device_buffer = std::get<DeviceStorage>(optional_output_tensor.value().tensor_attributes->storage).get_buffer();
+        bool using_fast_dispatch = (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr);
+
+        if (using_fast_dispatch && device != nullptr) {
+            auto& cmd_queue = device->command_queue(queue_id);
+            if (CommandQueue::default_mode() == CommandQueue::CommandQueueMode::ASYNC) {
+                tt::tt_metal::EnqueueWriteBuffer(cmd_queue, device_buffer, owned_buffer.get_ptr(), false);
+            } else {
+                tt::tt_metal::EnqueueWriteBuffer(cmd_queue, device_buffer, owned_buffer.data(), false);
+            }
+        } else {
+            auto uint32_data = tt::tt_metal::tensor_impl::pack_vec_into_uint32_vec<T>(owned_buffer);
+            tt::tt_metal::detail::WriteToBuffer(*device_buffer, uint32_data);
+        }
+
+        return optional_output_tensor.value();
+    }
 }
 
 template <typename T>
@@ -672,6 +694,20 @@ static Tensor manual_insertion(
 }
 
 template <typename T>
+static Tensor index_tril_impl(
+    uint8_t queue_id,
+    const Shape& shape,
+    const int32_t diag,
+    DataType data_type,
+    const Layout layout = Layout::ROW_MAJOR,
+    Device* device = nullptr,
+    const MemoryConfig& output_mem_config = MemoryConfig{
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED},
+    std::optional<Tensor> optional_output_tensor = std::nullopt) {
+    return index_trilu<T, false>(queue_id, shape, diag, data_type, layout, device, output_mem_config, optional_output_tensor);
+}
+
+template <typename T>
 static Tensor index_tril(
     const Shape& shape,
     const int32_t diag,
@@ -680,7 +716,21 @@ static Tensor index_tril(
     Device* device = nullptr,
     const MemoryConfig& output_mem_config = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
-    return index_trilu<T, false>(shape, diag, data_type, layout, device, output_mem_config);
+    return index_trilu<T, false>(ttnn::DefaultQueueId, shape, diag, data_type, layout, device, output_mem_config, std::nullopt);
+}
+
+template <typename T>
+static Tensor index_triu_impl(
+    uint8_t queue_id,
+    const Shape& shape,
+    const int32_t diag,
+    DataType data_type,
+    const Layout layout = Layout::ROW_MAJOR,
+    Device* device = nullptr,
+    const MemoryConfig& output_mem_config = MemoryConfig{
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED},
+    std::optional<Tensor> optional_output_tensor = std::nullopt) {
+    return index_trilu<T, true>(queue_id, shape, diag, data_type, layout, device, output_mem_config, optional_output_tensor);
 }
 
 template <typename T>
@@ -692,7 +742,7 @@ static Tensor index_triu(
     Device* device = nullptr,
     const MemoryConfig& output_mem_config = MemoryConfig{
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
-    return index_trilu<T, true>(shape, diag, data_type, layout, device, output_mem_config);
+    return index_trilu<T, true>(ttnn::DefaultQueueId, shape, diag, data_type, layout, device, output_mem_config, std::nullopt);
 }
 
 namespace random {
