@@ -1682,23 +1682,65 @@ EnqueueTraceCommand::EnqueueTraceCommand(
     uint32_t command_queue_id,
     Device* device,
     SystemMemoryManager& manager,
+    std::shared_ptr<detail::TraceDescriptor> desc,
     Buffer& buffer,
-    uint32_t& expected_num_workers_completed) :
+    uint32_t& expected_num_workers_completed,
+    uint32_t launch_msg_wptr,
+    uint32_t active_eth_launch_msg_wptr,
+    NOC noc_index,
+    CoreCoord dispatch_core) :
     command_queue_id(command_queue_id),
     buffer(buffer),
     device(device),
     manager(manager),
+    desc(desc),
     expected_num_workers_completed(expected_num_workers_completed),
-    clear_count(true) {}
+    clear_count(true),
+    launch_msg_wptr(launch_msg_wptr),
+    active_eth_launch_msg_wptr(active_eth_launch_msg_wptr),
+    noc_index(noc_index),
+    dispatch_core(dispatch_core) {}
 
 void EnqueueTraceCommand::process() {
     uint32_t cmd_sequence_sizeB =
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE;   // CQ_PREFETCH_CMD_EXEC_BUF
+        CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
+        CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_EXEC_BUF
+        align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(launch_msg_t), PCIE_ALIGNMENT);
 
+    if (desc->num_eth_programs) {
+        for (uint32_t core_idx = 0; core_idx < device->get_active_ethernet_cores(true).size(); core_idx++) {
+            cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + sizeof(launch_msg_t), PCIE_ALIGNMENT);
+        }
+    }
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
+    launch_msg_t reset_rd_ptr_launch_msg;
+    std::memset(&reset_rd_ptr_launch_msg, 0, sizeof(launch_msg_t));
+    reset_rd_ptr_launch_msg.kernel_config.reset_launch_msg_rd_ptr = 1;
+    reset_rd_ptr_launch_msg.kernel_config.dispatch_core_x = dispatch_core.x;
+    reset_rd_ptr_launch_msg.kernel_config.dispatch_core_y = dispatch_core.y;
+
+    std::size_t num_mcast_cols = device->compute_with_storage_grid_size().x;
+    std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
+    uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
+    CoreCoord start_phys = device->physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER);
+    CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(num_mcast_cols - 1, num_mcast_rows - 1), CoreType::WORKER);
+    CoreRange full_grid = CoreRange(start_phys, end_phys);
+
+    command_sequence.add_dispatch_wait(
+        false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, false);
+    uint32_t launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + this->launch_msg_wptr * sizeof(launch_msg_t);
+    uint32_t active_eth_launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + this->active_eth_launch_msg_wptr * sizeof(launch_msg_t);
+    command_sequence.add_dispatch_write_linear<true>(true, num_mcast_cores, device->get_noc_multicast_encoding(this->noc_index, full_grid), launch_msg_addr, sizeof(launch_msg_t), &reset_rd_ptr_launch_msg);
+    this->expected_num_workers_completed += num_mcast_cores;
+    if (desc->num_eth_programs) {
+        for (auto& active_eth_core : device->get_noc_encoding_for_all_etherent_sockets(0)) {
+            command_sequence.add_dispatch_write_linear<true>(true, 0, active_eth_core, active_eth_launch_msg_addr, sizeof(launch_msg_t), &reset_rd_ptr_launch_msg);
+        }
+        this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
+    }
 
     command_sequence.add_dispatch_wait(
         false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
@@ -1799,6 +1841,31 @@ void HWCommandQueue::set_unicast_only_cores_on_dispatch_s(const std::vector<uint
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
     command_sequence.add_dispatch_set_unicast_only_cores(unicast_only_noc_encodings);
+    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
+    this->manager.fetch_queue_reserve_back(this->id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
+}
+
+void HWCommandQueue::clear_launch_msg_buffer() {
+    std::vector<uint32_t> zeros(launch_msg_buffer_num_entries * sizeof(launch_msg_t) / sizeof(uint32_t), 0);
+    std::size_t num_mcast_cols = device->compute_with_storage_grid_size().x;
+    std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
+    uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
+    CoreCoord start_phys = device->physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER);
+    CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(num_mcast_cols - 1, num_mcast_rows - 1), CoreType::WORKER);
+    CoreRange full_grid = CoreRange(start_phys, end_phys);
+    uint32_t launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH);
+    uint32_t active_eth_launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH);
+    uint32_t cmd_sequence_sizeB = align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + zeros.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
+    for (uint32_t core_idx = 0; core_idx < device->get_noc_encoding_for_all_etherent_sockets(0).size(); core_idx++) {
+        cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + zeros.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
+    }
+    void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
+    HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
+    command_sequence.add_dispatch_write_linear<true>(true, num_mcast_cores, device->get_noc_multicast_encoding(this->noc_index, full_grid), launch_msg_addr, zeros.size() * sizeof(uint32_t), zeros.data());
+    for (auto& active_eth_core : device->get_noc_encoding_for_all_etherent_sockets(0)) {
+        command_sequence.add_dispatch_write_linear<true>(true, 0, active_eth_core, active_eth_launch_msg_addr, zeros.size() * sizeof(uint32_t), zeros.data());
+    }
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
     this->manager.fetch_queue_reserve_back(this->id);
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
@@ -2212,6 +2279,13 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
                                                                           : this->expected_num_workers_completed;
     if (this->manager.get_bypass_mode()) {
         this->trace_ctx->num_completion_worker_cores += program.program_transfer_info.num_active_cores;
+        uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
+        // TODO: ugly, can be fixed by looping over indices w/ some work
+        this->trace_ctx->num_programs++;
+        uint32_t programmable_core_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
+        if (eth_index != -1 and program.get_kernel_groups(programmable_core_index).size()) {
+            this->trace_ctx->num_eth_programs++;
+        }
     } else {
         this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
     }
@@ -2303,13 +2377,16 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     auto trace_inst = this->device->get_trace(trace_id);
     auto command = EnqueueTraceCommand(
-        this->id, this->device, this->manager, *trace_inst->buffer, this->expected_num_workers_completed);
+        this->id, this->device, this->manager, trace_inst->desc, *trace_inst->buffer, this->expected_num_workers_completed, this->launch_message_wptr, this->active_eth_launch_message_wptr, this->noc_index, this->physical_enqueue_program_dispatch_core);
 
     this->enqueue_command(command, false);
 
     // Increment the exepected worker cores counter due to trace programs completions
     this->expected_num_workers_completed += trace_inst->desc->num_completion_worker_cores;
-
+    this->launch_message_wptr = trace_inst->desc->num_programs & (launch_msg_buffer_num_entries - 1);
+    if (trace_inst->desc->num_eth_programs) {
+        this->active_eth_launch_message_wptr = trace_inst->desc->num_eth_programs & (launch_msg_buffer_num_entries - 1);
+    }
     if (blocking) {
         this->finish();
     }
@@ -2609,12 +2686,18 @@ void HWCommandQueue::record_begin(const uint32_t tid, std::shared_ptr<detail::Tr
     // Record commands using bypass mode
     this->tid = tid;
     this->trace_ctx = ctx;
+    this->global_launch_message_wptr = this->launch_message_wptr;
+    this->global_active_eth_launch_message_wptr = this->active_eth_launch_message_wptr;
+    this->launch_message_wptr = 0;
+    this->active_eth_launch_message_wptr = 0;
     this->manager.set_bypass_mode(true, true);  // start
 }
 
 void HWCommandQueue::record_end() {
     this->tid = std::nullopt;
     this->trace_ctx = nullptr;
+    this->launch_message_wptr = this->global_launch_message_wptr;
+    this->active_eth_launch_message_wptr = this->global_active_eth_launch_message_wptr;
     this->manager.set_bypass_mode(false, false);  // stop
 }
 

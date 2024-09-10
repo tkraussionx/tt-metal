@@ -2174,6 +2174,7 @@ void Device::init_command_queue_device() {
     for (auto& hw_cq : this->hw_command_queues_) {
         hw_cq->set_unicast_only_cores_on_dispatch_s(this->get_noc_encoding_for_all_etherent_sockets());
     }
+    this->hw_command_queues_[0]->clear_launch_msg_buffer();
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());
 }

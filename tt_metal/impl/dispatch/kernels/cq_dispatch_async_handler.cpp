@@ -147,7 +147,7 @@ void noc_async_write_unicast_one_packet_dispatch_s(std::uint32_t src_local_l1_ad
 }
 
 void kernel_main() {
-    DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
+    // DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
     noc_local_state_init(1);
     uint32_t cmd_ptr = cb_base;
     bool done = false;
@@ -162,15 +162,15 @@ void kernel_main() {
         // DPRINT << "Acquired pages" << ENDL();
         volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
         if (cmd->base.cmd_id == CQ_DISPATCH_CMD_GO_SIGNAL_MCAST) {
-            DPRINT << "Received Mcast Command " << num_worker_cores_to_mcast  << " " << cmd_ptr <<  ENDL();
+            // DPRINT << "Received Mcast Command " << num_worker_cores_to_mcast  << " " << cmd_ptr <<  ENDL();
             volatile tt_l1_ptr uint32_t* sync_sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
             uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
 
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
-            DPRINT << "Sem update waiting" << ENDL();
+            // DPRINT << "Sem update waiting" << ENDL();
             while (*sync_sem_addr <= num_mcasts_sent);
-            DPRINT << "Sem updated" << ENDL();
+            // DPRINT << "Sem updated" << ENDL();
             num_mcasts_sent++;
             if (cmd->mcast.mcast_flag & send_mcast) {
                 noc_async_write_multicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
@@ -181,12 +181,12 @@ void kernel_main() {
                     noc_async_write_unicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t));
                 }
             }
-            DPRINT << "Barrier writes" << ENDL();
+            // DPRINT << "Barrier writes" << ENDL();
             while(!ncrisc_noc_nonposted_writes_flushed(1));
-            DPRINT << "Done barrier writes" << ENDL();
+            // DPRINT << "Done barrier writes" << ENDL();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
-            DPRINT << "Terminating" << ENDL();
+            // DPRINT << "Terminating" << ENDL();
             done = true;
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_SET_UNICAST_ONLY_CORES) {

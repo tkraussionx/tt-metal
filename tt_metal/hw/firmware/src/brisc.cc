@@ -365,7 +365,27 @@ int main() {
         reset_ncrisc_with_iram();
 
         WAYPOINT("GW");
-        while (mailboxes->go_message.run != RUN_MSG_GO);
+        uint32_t count = 0;
+        while (mailboxes->go_message.run != RUN_MSG_GO) {
+            if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr) {
+                uint64_t dispatch_addr =
+                    NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
+                    NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                // Set the rd_ptr on workers to specified value
+                mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
+                mailboxes->launch_msg_rd_ptr = 0;
+                // Notify dispatcher that this has been done
+                DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
+                noc_fast_atomic_increment(
+                    noc_index,
+                    NCRISC_AT_CMD_BUF,
+                    dispatch_addr,
+                    NOC_UNICAST_WRITE_VC,
+                    1,
+                    31 /*wrap*/,
+                    false /*linked*/);
+            }
+        }
         uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         WAYPOINT("GD");
 
