@@ -432,7 +432,7 @@ int main() {
             mailboxes->go_message.run = RUN_MSG_DONE;
 
             // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
-            if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV && run_kernels) {
+            if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_x),
                         NOC_Y(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
