@@ -340,6 +340,7 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
         auto cb_interm = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_interm_config);
     }
     if (eltwise_defines.find("SFPU_OP_INIT_PRE_IN1_0") != eltwise_defines.end()) {
+        std::cout << "SFPU_OP_INIT_PRE_IN1_0 " << max_block_size << std::endl;
         tt_metal::CircularBufferConfig cb_interm2_config =
             tt_metal::CircularBufferConfig(max_block_size * src1_single_tile_size, {{CB::c_intermed1, src1_cb_data_format}})
                 .set_page_size(CB::c_intermed1, src1_single_tile_size);
@@ -392,6 +393,12 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
     bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 ||
                             dst_cb_data_format == tt::DataFormat::Int32 ||
                             dst_cb_data_format == tt::DataFormat::Float32;
+
+    for (auto& entry : eltwise_defines) {
+        // std::cout << "One entry" << std::endl;
+        std::cout << entry.first << " " << entry.second << std::endl;
+    }
+
     auto eltwise_binary_kernel_id = tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",

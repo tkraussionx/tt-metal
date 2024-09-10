@@ -14,6 +14,8 @@
 #include "llk_unpack_A_api.h"
 #endif
 
+#include "debug/dprint.h"
+
 
 
 namespace ckernel {
@@ -197,6 +199,7 @@ ALWI void binary_op_specific_init() // TODO(AP): better naming
         } else if constexpr (eltwise_binary_op_type == ELWSUB) {
             sub_tiles_init_nof();
         } else if constexpr (eltwise_binary_op_type == ELWMUL) {
+            DPRINT << "mul tiles init f" << ENDL();
             mul_tiles_init_f();
         }
     }

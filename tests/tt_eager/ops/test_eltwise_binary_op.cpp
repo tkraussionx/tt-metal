@@ -48,77 +48,95 @@ int main() {
     int device_id = 0;
     auto device = tt::tt_metal::CreateDevice(device_id);
 
-
-
     {
-        Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-        auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
-        TT_FATAL(allclose);
+        Shape shape = {1, 1, 32, 32};
+        // Shape shape = {8, 8, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+        auto input_tensor_a = tt::numpy::random::random(shape, DataType::BFLOAT16);
+        auto input_tensor_b = tt::numpy::random::random(shape, DataType::BFLOAT16);
+
+        input_tensor_a.print();
+
+        input_tensor_b.print();
+
+        // auto host_output = host_function<std::plus<float>>(input_tensor_a, input_tensor_b);
+        auto device_output = ttnn::divide(
+            input_tensor_a.to(Layout::TILE).to(device),
+            input_tensor_b.to(Layout::TILE).to(device)
+            ).cpu().to(Layout::ROW_MAJOR);
+
+        device_output.print();
     }
 
-    {
-        Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-        auto allclose = run_test<host_function<std::minus<float>>>(shape, ttnn::subtract, device);
-        TT_FATAL(allclose);
-    }
 
-    {
-        Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-        auto allclose = run_test<host_function<std::multiplies<float>>>(shape, ttnn::multiply, device, 1e-2f, 1e-3f);
-        TT_FATAL(allclose);
-    }
+    // {
+    //     Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //     auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
+    //     TT_FATAL(allclose);
+    // }
 
-    auto run_binary_ops = [&] {
-        {
-            Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-            auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
-            TT_FATAL(allclose);
-        }
+    // {
+    //     Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //     auto allclose = run_test<host_function<std::minus<float>>>(shape, ttnn::subtract, device);
+    //     TT_FATAL(allclose);
+    // }
 
-        {
-            Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-            auto allclose = run_test<host_function<std::minus<float>>>(shape, ttnn::subtract, device);
-            TT_FATAL(allclose);
-        }
+    // {
+    //     Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //     auto allclose = run_test<host_function<std::multiplies<float>>>(shape, ttnn::multiply, device, 1e-2f, 1e-3f);
+    //     TT_FATAL(allclose);
+    // }
 
-        {
-            Shape shape = {1, 1, tt::constants::TILE_HEIGHT * 2, tt::constants::TILE_WIDTH * 2};
-            auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
-            TT_FATAL(allclose);
-        }
+    // auto run_binary_ops = [&] {
+    //     {
+    //         Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //         auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
+    //         TT_FATAL(allclose);
+    //     }
 
-        {
-            Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
-            auto allclose =
-                run_test<host_function<std::multiplies<float>>>(shape, ttnn::multiply, device, 1e-2f, 1e-3f);
-            TT_FATAL(allclose);
-        }
+    //     {
+    //         Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //         auto allclose = run_test<host_function<std::minus<float>>>(shape, ttnn::subtract, device);
+    //         TT_FATAL(allclose);
+    //     }
 
-        {
-            Shape shape = {1, 1, tt::constants::TILE_HEIGHT * 4, tt::constants::TILE_WIDTH * 4};
-            auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
-            TT_FATAL(allclose);
-        }
-    };
+    //     {
+    //         Shape shape = {1, 1, tt::constants::TILE_HEIGHT * 2, tt::constants::TILE_WIDTH * 2};
+    //         auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
+    //         TT_FATAL(allclose);
+    //     }
 
-    device->enable_program_cache();
+    //     {
+    //         Shape shape = {1, 1, tt::constants::TILE_HEIGHT, tt::constants::TILE_WIDTH};
+    //         auto allclose =
+    //             run_test<host_function<std::multiplies<float>>>(shape, ttnn::multiply, device, 1e-2f, 1e-3f);
+    //         TT_FATAL(allclose);
+    //     }
 
-    run_binary_ops();
-    run_binary_ops();
+    //     {
+    //         Shape shape = {1, 1, tt::constants::TILE_HEIGHT * 4, tt::constants::TILE_WIDTH * 4};
+    //         auto allclose = run_test<host_function<std::plus<float>>>(shape, ttnn::add, device);
+    //         TT_FATAL(allclose);
+    //     }
+    // };
 
-    // Allocate a tensor to show that the addresses aren't cached
-    auto input_tensor =
-        tt::numpy::random::uniform(bfloat16(0.0f), bfloat16(0.0f), {1, 1, 32, 32}).to(Layout::TILE).to(device);
+    // device->enable_program_cache();
 
-    run_binary_ops();
+    // run_binary_ops();
+    // run_binary_ops();
 
-    TT_FATAL(device->num_program_cache_entries() == 3,
-        "There are {} entries",
-        device->num_program_cache_entries());
+    // // Allocate a tensor to show that the addresses aren't cached
+    // auto input_tensor =
+    //     tt::numpy::random::uniform(bfloat16(0.0f), bfloat16(0.0f), {1, 1, 32, 32}).to(Layout::TILE).to(device);
 
-    device->disable_and_clear_program_cache();
+    // run_binary_ops();
 
-    TT_FATAL(device->num_program_cache_entries()== 0);
+    // TT_FATAL(device->num_program_cache_entries() == 3,
+    //     "There are {} entries",
+    //     device->num_program_cache_entries());
+
+    // device->disable_and_clear_program_cache();
+
+    // TT_FATAL(device->num_program_cache_entries()== 0);
 
     TT_FATAL(tt::tt_metal::CloseDevice(device));
 
