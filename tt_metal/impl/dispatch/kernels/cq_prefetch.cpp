@@ -1131,12 +1131,12 @@ bool process_cmd(uint32_t& cmd_ptr,
 
     switch (cmd->base.cmd_id) {
     case CQ_PREFETCH_CMD_RELAY_LINEAR:
-        // DPRINT << "relay linear: " << cmd_ptr << ENDL();
+        DPRINT << "relay linear: " << cmd_ptr << ENDL();
         stride = process_relay_linear_cmd(cmd_ptr, downstream_data_ptr);
         break;
 
     case CQ_PREFETCH_CMD_RELAY_PAGED:
-        // DPRINT << "relay dram page: " << cmd_ptr << ENDL();
+        DPRINT << "relay dram page: " << cmd_ptr << ENDL();
         {
             uint32_t packed_page_flags = cmd->relay_paged.packed_page_flags;
             uint32_t is_dram = packed_page_flags & (1 << CQ_PREFETCH_RELAY_PAGED_IS_DRAM_SHIFT);
@@ -1152,7 +1152,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_RELAY_PAGED_PACKED:
-        // DPRINT << "relay paged packed" << ENDL();
+        DPRINT << "relay paged packed" << ENDL();
         if (exec_buf) {
             stride = process_exec_buf_relay_paged_packed_cmd(cmd_ptr, downstream_data_ptr, l1_cache, exec_buf_state);
         } else {
@@ -1161,7 +1161,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_RELAY_INLINE:
-        // DPRINT << "relay inline" << ENDL();
+        DPRINT << "relay inline" << ENDL();
         if (exec_buf) {
             stride = process_exec_buf_relay_inline_cmd(cmd_ptr, cmd->relay_inline.dispatcher_type ? downstream_data_ptr_s :  downstream_data_ptr, exec_buf_state);
         } else {
@@ -1170,7 +1170,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH:
-        // DPRINT << "inline no flush" << ENDL();
+        DPRINT << "inline no flush" << ENDL();
         if (exec_buf) {
             stride = process_exec_buf_relay_inline_noflush_cmd(cmd_ptr, downstream_data_ptr, exec_buf_state);
         } else {
@@ -1179,7 +1179,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_EXEC_BUF:
-        // DPRINT << "exec buf: " << cmd_ptr << ENDL();
+        DPRINT << "exec buf: " << cmd_ptr << ENDL();
         ASSERT(!exec_buf);
         if (is_h_variant) {
             ASSERT(stall_state == STALLED); // ExecBuf must be preceded by a prefetcher stall
@@ -1189,19 +1189,20 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_EXEC_BUF_END:
-        // DPRINT << "exec buf end: " << cmd_ptr << ENDL();
+        DPRINT << "exec buf end: " << cmd_ptr << ENDL();
         ASSERT(exec_buf);
         stride = process_exec_buf_relay_inline_cmd(cmd_ptr, downstream_data_ptr, exec_buf_state);
         done = true;
         break;
 
     case CQ_PREFETCH_CMD_STALL:
-        // DPRINT << "stall" << ENDL();
+        DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
+        DPRINT << "Done stall" << ENDL();
         break;
 
     case CQ_PREFETCH_CMD_DEBUG:
-        // DPRINT << "debug" << ENDL();
+        DPRINT << "debug" << ENDL();
         // Splitting debug cmds not implemented for exec_bufs (yet)
         if (exec_buf) {
             ASSERT(0);

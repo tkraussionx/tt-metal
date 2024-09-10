@@ -93,7 +93,7 @@ struct kernel_config_msg_t {
     volatile uint8_t dispatch_core_x;
     volatile uint8_t dispatch_core_y;
     volatile uint8_t exit_erisc_kernel;
-    volatile uint8_t pad1;
+    volatile uint8_t reset_launch_msg_rd_ptr;
     volatile uint16_t pad2;
     volatile uint32_t pad3;
     volatile uint32_t pad4;
