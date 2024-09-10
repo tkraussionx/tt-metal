@@ -476,12 +476,18 @@ class PrefillDecodeBackend:
         self.min_prompt_len = min(
             [user.num_prefill_tokens for user in self.get_users()]
         )
+        # limit total length to max_seq_len
+        total_len = min(self.min_prompt_len, self.max_seq_len)
+        if total_len < self.min_prompt_len:
+            logger.warning(
+                f"Truncating input prompt min_prompt_len:={self.min_prompt_len} to max_seq_len:={self.max_seq_len}"
+            )
         # pad inputs, empty users get pad id
         prefill_tokens, input_text_mask, _ = initialize_inputs(
             tokenizer=self.tokenizer,
             prompt_tokens=input_prompts,
             bsz=len(input_prompts),
-            total_len=self.min_prompt_len,
+            total_len=total_len,
         )
         # where does intput_text_mask get used?
         self.input_text_mask = input_text_mask
@@ -535,6 +541,7 @@ class PrefillDecodeBackend:
         """
         self.decode_counter += 1
         self.timer_start("decode")
+        assert self.prev_pos < self.max_seq_len
         logits = self.model.forward(self.decode_ids, self.prev_pos)
         self.timer_stop("decode", log=False)
         next_tokens = batch_top_pk_logits_efficient(
@@ -552,15 +559,24 @@ class PrefillDecodeBackend:
 
             if not user.prefill_complete:
                 user.num_tokens_prefilled_via_decode += 1
-                prefill_via_decode_idx = (
+                tok_pos = (
                     user.num_tokens_prefilled + user.num_tokens_prefilled_via_decode
                 )
-                self.decode_ids[idx][0] = user.prompt_tokens[prefill_via_decode_idx - 1]
-                if prefill_via_decode_idx >= user.num_prefill_tokens:
+                self.decode_ids[idx][0] = user.prompt_tokens[tok_pos - 1]
+                if tok_pos >= user.num_prefill_tokens:
                     user.stop_prefill_via_decode_timer()
                     user.prefill_complete = True
                     # overwrite decode timer for user
                     user.start_decode_timer()
+                # check if user has reached max_seq_len
+                if tok_pos == self.max_seq_len:
+                    logger.warning(
+                        f"user_id:={user.user_id} reached max_seq_len during prefill-via-decode"
+                    )
+                    user.prefill_complete = True
+                    user.start_decode_timer()
+                    user.decode_complete = True
+                    user.stop_decode_timer()
             else:
                 if user.num_tokens_decoded == 0:
                     user.first_decode_time = time.time()
@@ -570,17 +586,14 @@ class PrefillDecodeBackend:
                     user.generated_logits = torch.cat(
                         [user.generated_logits, logits[idx]], dim=0
                     )
+                tok_pos = user.num_tokens_decoded + user.num_tokens_prefilled + user.num_tokens_prefilled_via_decode
                 if user_decode_id in user.stop_tokens:
                     # generated stop token
                     user.decode_complete = True
                 elif user.num_tokens_decoded > user.max_tokens:
                     # request specified max generation
                     user.decode_complete = True
-                elif (
-                    user.num_tokens_decoded
-                    + user.num_tokens_prefilled
-                    + user.num_tokens_prefilled_via_decode
-                ) == self.max_seq_len:
+                elif tok_pos == self.max_seq_len:
                     # reached max context length
                     user.decode_complete = True
                 elif user.stop_sequence is not None:
