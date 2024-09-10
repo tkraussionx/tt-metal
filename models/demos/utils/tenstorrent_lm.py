@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 from enum import Enum, auto
 from collections import defaultdict
+from itertools import islice
 
 from tqdm import tqdm
 import torch
@@ -41,6 +42,12 @@ For example MMLU and accuracy (https://github.com/EleutherAI/lm-evaluation-harne
 class ModelClasses(Enum):
     CausalLM = auto()
     Seq2SeqLM = auto()
+
+
+# backport batched, itertools.batched available in python 3.12
+def batched(iterable, batch_size):
+    iterable = iter(iterable)
+    return iter(lambda: list(islice(iterable, batch_size)), [])
 
 
 @register_model("tt", "tenstorrent")
@@ -270,11 +277,27 @@ class TenstorrentLM(TemplateLM):
             continuation: str
                 The generated continuation.
         """
-        # TODO
         res = []
 
-        # TODO: use model_backend.generate_n
-        # tokens = self.model_backend.generate_n(n_tokens=1, return_logits=False)
+        batched_requests = defaultdict(list)
+        for i, req in enumerate(requests):
+            batched_requests[i // self.batch_size].append(req)
+
+        for req_list in tqdm(batched(requests, self.batch_size), disable=disable_tqdm):
+            do_sample = [req.args[1].get("do_sample", False) for req in req_list]
+            assert all(x == do_sample[0] for x in do_sample), "do_sample must be the same for all requests"
+            do_sample = do_sample[0]
+            max_gen_toks = [req.args[1].get("max_gen_toks", 1) for req in req_list]
+            assert all(x == max_gen_toks[0] for x in max_gen_toks), "max_gen_toks must be the same for all requests"
+            max_gen_toks = max_gen_toks[0]
+            until = req_list[0].args[1].get("until", None)
+            # TODO: add until support with stop tokens
+            assert not until, "until is not supported yet"
+            context_enc_list = [self.tok_encode(req.args[0]) for req in req_list]
+            self.model_backend.add_users_from_context(context_enc_list, do_sample=do_sample)
+            tokens_list = self.model_backend.generate_n(n_tokens=max_gen_toks, return_logits=False)
+            responses = [self.model_backend.tokenizer.decode(tokens) for tokens in tokens_list]
+            res.extend(responses)
 
         return res
 
