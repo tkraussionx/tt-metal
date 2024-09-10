@@ -649,3 +649,54 @@ def test_sd_matmul(device, batch_size, channel_a, channel_b, m_size, k_size, n_s
 
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=pcc)
+
+
+@pytest.mark.skipif(is_grayskull() or is_blackhole(), reason="Unsupported on GS and BH")
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("m_size", [32])
+@pytest.mark.parametrize("k_size", [1024])
+@pytest.mark.parametrize("n_size", [1024])
+def test_matmul_fidelity(device, batch_size, m_size, k_size, n_size):
+    torch.manual_seed(0)
+
+    torch_input_tensor_a = torch.randn((batch_size, m_size, k_size), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.randn((k_size, n_size), dtype=torch.bfloat16)
+    torch_output_tensor = torch_input_tensor_a @ torch_input_tensor_b
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    hifi2 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=False,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    hifi4 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    output_hifi2 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi2,
+        )
+    )
+
+    output_hifi4 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi4,
+        )
+    )
+
+    print(f"Max HiFi4 vs HiFi2 difference: {(output_hifi4 - output_hifi2).abs().max().item():.6f}")
+    assert torch.allclose(
+        output_hifi2, output_hifi4, atol=1e-6
+    )  # HiFi2 and HiFi4 should be mathematically identical for BFLOAT16 as it has a 7-bit mantissa
