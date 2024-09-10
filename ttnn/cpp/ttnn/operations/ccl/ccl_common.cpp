@@ -99,7 +99,7 @@ std::unique_ptr<CclOpTensorConfig> CclOpTensorConfig::build_all_gather_tensor_co
     }
 }
 
-static std::pair<tt_xy_pair, tt_xy_pair> shard_grid_from_shard_spec(const ShardSpec& shard_spec) {
+std::pair<tt_xy_pair, tt_xy_pair> shard_grid_from_shard_spec(const ShardSpec& shard_spec) {
     auto const& core_range = shard_spec.grid.bounding_box();
     log_trace(tt::LogOp, "SHARD CORE_RANGE: start_x:{} start_y:{} end_x:{} end_y:{}", core_range.start_coord.x, core_range.start_coord.y, core_range.end_coord.x, core_range.end_coord.y);
     log_trace(tt::LogOp, "grid_size: {}", shard_spec.grid.num_cores());
@@ -171,7 +171,7 @@ void ShardedAddrGenArgBuilder::log_sharded_tensor_kernel_args(Tensor const& t, s
 
 // non-transposed - always row-major layout
 // vec<logical row -> noc row>, vec<logicacal col -> noc col>
-static std::pair<std::vector<uint32_t>,std::vector<uint32_t>> shard_noc_cores_from_shard_spec(Device const* d, const ShardSpec& shard_spec) {
+std::pair<std::vector<uint32_t>,std::vector<uint32_t>> shard_noc_cores_from_shard_spec(Device const* d, const ShardSpec& shard_spec) {
     TT_ASSERT(d != nullptr);
     auto const& core_range = shard_spec.grid.bounding_box();
     std::vector<uint32_t> logical_to_noc_row_map;

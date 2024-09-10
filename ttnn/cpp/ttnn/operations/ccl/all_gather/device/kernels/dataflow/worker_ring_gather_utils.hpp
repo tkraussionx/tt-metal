@@ -8,6 +8,7 @@
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_edm_utils.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_edm_adapters.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
 
 
 using ttnn::ccl::ShardType;
@@ -22,7 +23,7 @@ FORCE_INLINE void write_and_send_chunk_write_to_tensor_segment(
     uint32_t& col_idx,
     uint32_t& row_idx,
     const uint32_t& cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t num_cols,
     const uint32_t num_rows,
     const uint32_t& col_offset,
@@ -87,7 +88,7 @@ FORCE_INLINE void write_and_send_chunk(
     uint32_t& col_idx,
     uint32_t& row_idx,
     const uint32_t& cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t num_cols,
     const uint32_t num_rows,
     const uint32_t& col_offset,
@@ -121,7 +122,7 @@ FORCE_INLINE void write_and_send_chunk(
     uint32_t& col_idx,
     uint32_t& row_idx,
     const uint32_t& cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t num_cols,
     const uint32_t num_rows,
     const uint32_t& col_offset,
@@ -156,7 +157,7 @@ FORCE_INLINE void write_chunk(
     uint32_t& col_idx,
     uint32_t& row_idx,
     const uint32_t& cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t& num_cols,
     const uint32_t& num_rows,
     const uint32_t& col_offset,
@@ -219,7 +220,7 @@ template <typename AddrGen>
 FORCE_INLINE void read_chunk_from_input_tensor(
     uint32_t& input_page_idx,
     const uint32_t& cb_id,
-    const AddrGen& s,
+    AddrGen& s,
     const uint32_t& num_pages,
     const uint32_t& page_size) {
     const uint32_t end_read_idx = input_page_idx + num_pages;
@@ -238,9 +239,12 @@ FORCE_INLINE void read_chunk_from_input_tensor(
         noc_async_read_tile(input_page_idx, s, local_l1_read_addr);
     #elif defined SHARDED_MEM_LAYOUT
         // TODO: Make d.get_noc_addr work on host + device
-        auto const&[noc_yx, page_offset, contig_pages_] = s.get_page_location_with_contiguous_pages_in_row_in_bank(input_page_idx);
-        contig_pages = std::min<int32_t>(pages_remaining, contig_pages_);
-        uint64_t src_noc_addr = get_noc_addr(static_cast<uint32_t>(noc_yx.noc_x), static_cast<uint32_t>(noc_yx.noc_y), s.bank_base_address + (page_offset * s.page_size) + 0);
+        ttnn::ccl::addrgen::test_shard_location_with_contig_t const& loc = s.get_page_location_with_contiguous_pages_in_row_in_bank(input_page_idx);
+        uint64_t src_noc_addr = get_noc_addr(static_cast<uint32_t>(loc.core_location.noc_x), static_cast<uint32_t>(loc.core_location.noc_y), s.bank_base_address + (loc.page_offset * s.page_size) + 0);
+        // uint64_t src_noc_addr = get_noc_addr(static_cast<uint32_t>(loc.core_location.noc_x), static_cast<uint32_t>(loc.core_location.noc_y), s.get_bank_base_address() + (loc.page_offset * s.page_size) + 0);
+        // DPRINT << "\tsrc_noc_addr: " << (uint32_t)(src_noc_addr & 0xFFFFFFFF) << ", page_offset: " << (uint32_t)loc.page_offset << ", contig_pages: " << (uint32_t)loc.contig_pages_in_row << "\n";
+        contig_pages = std::min<int32_t>(pages_remaining, loc.contig_pages_in_row);
+        // DPRINT << "\tcontig_pages after: " << (uint32_t)(contig_pages) << "\n";
         noc_async_read(src_noc_addr, local_l1_read_addr, page_size * contig_pages);
     #endif
 #endif
@@ -258,7 +262,7 @@ FORCE_INLINE void read_chunk_from_output_tensor(
     uint32_t& col_idx,
     uint32_t& row_idx,
     const uint32_t& cb_id,
-    const AddrGen& s,
+    AddrGen& s,
     const uint32_t& num_cols,
     const uint32_t& num_rows,
     const uint32_t& col_offset,
@@ -383,7 +387,7 @@ FORCE_INLINE void write_chunk_v2(
     // In tiles for tile layout
     const ttnn::ccl::coord_t& tensor_shape,
     uint32_t cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t num_pages,
     const uint32_t page_size,
     bool& last_page_of_worker) {
@@ -499,7 +503,7 @@ FORCE_INLINE void write_wrapped_chunk(
     const  ttnn::ccl::coord_t& tensor_shape,
     const  ttnn::ccl::coord_t& tensor_slice_shape,
     uint32_t cb_id,
-    const AddrGen& d,
+    AddrGen& d,
     const uint32_t num_pages,
     const uint32_t page_size,
     bool& last_page_of_worker) {

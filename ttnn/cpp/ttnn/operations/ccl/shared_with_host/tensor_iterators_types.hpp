@@ -8,7 +8,6 @@
 #include <span>
 
 #include <type_traits>
-
 namespace ttnn {
 
 // TODO: Promote this to a common namespace as this is generally applicable.
@@ -102,11 +101,15 @@ constexpr test_shard_location_with_contig_t read_precomputed_location_impl(uint3
     } else if (interpret_mode == InterpretMode::CONTIGUOUS_PAGES_PER_LOCATION) {
         constexpr std::size_t n_words_per_entry = get_num_mem_words_per_precomputed_location(InterpretMode::CONTIGUOUS_PAGES_PER_LOCATION);
         static_assert(n_words_per_entry == 3);
+        // DPRINT << "kernel_args_location_span[0]: " << (uint32_t)kernel_args_location_span[0] << "\n";
+        // DPRINT << "kernel_args_location_span[1]: " << (uint32_t)kernel_args_location_span[1] << "\n";
+        // DPRINT << "kernel_args_location_span[2]: " << (uint32_t)kernel_args_location_span[2] << "\n";
         return test_shard_location_with_contig_t{
-            device_core_location_t{static_cast<noc_grid_index_t>(kernel_args_location_span[0] >> 16), static_cast<noc_grid_index_t>(kernel_args_location_span[0] & 0xFFFF)},
+            device_core_location_t{
+                static_cast<noc_grid_index_t>(kernel_args_location_span[0] >> 16),
+                static_cast<noc_grid_index_t>(kernel_args_location_span[0] & 0xFFFF)},
             kernel_args_location_span[1],
-            kernel_args_location_span[2]
-        };
+            kernel_args_location_span[2]};
     }
 }
 
@@ -115,8 +118,10 @@ constexpr test_shard_location_with_contig_t read_precomputed_location_impl(uint3
 // constexpr test_shard_location_with_contig_t read_precomputed_location(std::span<uint32_t, Extent> kernel_args_location_span, InterpretMode interpret_mode) {
 constexpr test_shard_location_with_contig_t read_precomputed_location(uint32_t* kernel_args_location_span, InterpretMode interpret_mode) {
     if (interpret_mode == InterpretMode::SINGLE_PAGE_LOCATION) {
+        // DPRINT << "single page loc interp\n";
         return read_precomputed_location_impl<InterpretMode::SINGLE_PAGE_LOCATION/*, Extent*/>(kernel_args_location_span);
     } else {
+        // DPRINT << "contig loc interp\n";
         return read_precomputed_location_impl<InterpretMode::CONTIGUOUS_PAGES_PER_LOCATION/*, Extent*/>(kernel_args_location_span);
     }
 }

@@ -22,7 +22,7 @@
 
 #include "ttnn/operations/ccl/ccl_op_fusion.hpp"
 #include "ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
-
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/sharded_tensor_addr_gen.hpp"
 
 using namespace tt::constants;
 
@@ -379,8 +379,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
     auto sender_worker_reader_semaphore_id = CreateSemaphore(program, all_sender_workers, 0);
 
     // Sender Reader
-    // static constexpr ttnn::ccl::addrgen::PrecomputeType send_reader_input_tensor_page_addrgen_precompute_type = ttnn::ccl::addrgen::PrecomputeType::FIXED_PRECOMPUTE_ONLY;
-    static constexpr ttnn::ccl::addrgen::PrecomputeType send_reader_input_tensor_page_addrgen_precompute_type = ttnn::ccl::addrgen::PrecomputeType::NO_PRECOMPUTE;
+    const ttnn::ccl::addrgen::PrecomputeType send_reader_input_tensor_page_addrgen_precompute_type = (is_sharded && input_tensor.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED) ?
+        ttnn::ccl::addrgen::PrecomputeType::FIXED_PRECOMPUTE_ONLY :
+        ttnn::ccl::addrgen::PrecomputeType::NO_PRECOMPUTE;
     auto build_worker_send_reader_ct_args = [&]() {
         std::vector<uint32_t> worker_reader_sender_ct_args = {
             static_cast<uint32_t>(all_gather_config.is_input_dram()),
@@ -824,7 +825,57 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
                             emit_sharded_tensor_kernel_rt_args(device, output_tensor, args);
                         }
                         if (send_reader_input_tensor_page_addrgen_precompute_type == ttnn::ccl::addrgen::PrecomputeType::FIXED_PRECOMPUTE_ONLY) {
-                            args.push_back(0);
+                            uint32_t num_pages_precomputed_total = num_full_chunks_per_worker[b] * pages_per_eth_l1_buffer[b] + rem_pages_per_worker[b];
+                            std::size_t num_locations_precomputed = std::min<uint32_t>(32, num_pages_precomputed_total);
+                            std::size_t page_idx = tensor_slicer.input_start_page_idx;
+
+                            constexpr TensorMemoryLayout input_tensor_memory_layout = TensorMemoryLayout::WIDTH_SHARDED;
+                            // Taken from ShardedAddrGenArgBuilder
+                            auto const& [row_map, col_map] = ttnn::ccl::shard_noc_cores_from_shard_spec(device, input_tensor.shard_spec().value());
+                            auto const& [pages_per_shard_y, pages_per_shard_x] = input_tensor.buffer()->shard_spec().shape_in_pages();
+                            auto const& [shard_grid_start, shard_grid_end] = ttnn::ccl::shard_grid_from_shard_spec(input_tensor.shard_spec().value());
+                            auto addr_gen = tt::tt_metal::address_generators::build_sharded_addr_gen<input_tensor_memory_layout>(
+                                tt::tt_metal::address_generators::HarvestedWormholeWorkerToNocLookup(row_map.size(), row_map.data(), col_map.size(), col_map.data()),
+                                tt::tt_metal::address_generators::DeviceShardSpecTypeGetter<input_tensor_memory_layout>::type(
+                                    pages_per_shard_y,
+                                    pages_per_shard_x,
+                                    shard_grid_end.y - shard_grid_start.y + 1,
+                                    shard_grid_end.x - shard_grid_start.x + 1,
+                                    shard_grid_start.y,
+                                    shard_grid_start.x,
+                                    shard_grid_is_transposed(input_tensor)
+                                ),
+                                input_page_size,
+                                input_tensor.buffer()->address()
+                            );
+                            std::size_t pages_left_in_chunk = pages_per_eth_l1_buffer[b];
+                            std::size_t pages_precomputed = 0;
+                            std::vector<ttnn::ccl::addrgen::test_shard_location_with_contig_t> precomputed = {};
+                            // log_info(tt::LogOp, "Precomputing page locations");
+                            for (std::size_t location = 0; location < num_locations_precomputed && pages_precomputed < num_pages_precomputed_total; location++) {
+                                auto result = addr_gen.get_page_location_with_contiguous_pages_in_row_in_bank(page_idx);
+                                std::size_t contig_pages_read = std::min<std::size_t>(pages_left_in_chunk, result.contig_pages_in_row);
+                                // log_info(tt::LogOp, "\tnoc (y|x): {}, page_offset: {}, contig_pages: {}", (uint32_t)((result.core_location.noc_y << 16) | result.core_location.noc_x), result.page_offset, result.contig_pages_in_row);
+                                precomputed.push_back(result);
+
+                                page_idx += contig_pages_read;
+                                pages_left_in_chunk -= contig_pages_read;
+                                pages_precomputed += contig_pages_read;
+                                if (pages_left_in_chunk == 0) {
+                                    pages_left_in_chunk = std::min<std::size_t>(pages_per_eth_l1_buffer[b], num_pages_precomputed_total - pages_precomputed);
+                                }
+
+                            }
+                            // std::ranges::copy(, std::back_inserter(args));
+
+                            args.push_back(static_cast<uint32_t>(precomputed.size()));
+                            args.push_back(static_cast<uint32_t>(ttnn::ccl::addrgen::InterpretMode::CONTIGUOUS_PAGES_PER_LOCATION));
+                            for (auto const location : precomputed) {
+                                args.push_back((location.core_location.noc_y << 16) | location.core_location.noc_x);
+                                args.push_back(location.page_offset);
+                                args.push_back(location.contig_pages_in_row);
+                            }
+                            // log_info(tt::LogOp,"here");
                         }
 
                         log_trace(tt::LogOp, "Worker {} SR RT args", b);

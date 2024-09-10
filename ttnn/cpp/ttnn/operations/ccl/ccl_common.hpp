@@ -427,6 +427,9 @@ class InterleavedRingAllGatherTensorSlicer : public LegacyCclTensorSlicer {
     }
 };
 
+
+std::pair<tt_xy_pair, tt_xy_pair> shard_grid_from_shard_spec(const ShardSpec& shard_spec);
+std::pair<std::vector<uint32_t>,std::vector<uint32_t>> shard_noc_cores_from_shard_spec(Device const* d, const ShardSpec& shard_spec);
 struct ShardedAddrGenArgBuilder {
     static bool shard_grid_is_transposed(Tensor const& t);
     static std::vector<uint32_t> emit_ct_args(Tensor const& t);

@@ -8,7 +8,7 @@
 #include <array>
 #include <bit>
 #include "tt_metal/impl/buffers/buffer_constants.hpp"
-#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators.hpp"
 
 /*
  *    ------   ATTENTION  ATTENTION  ATTENTION  ATTENTION  ATTENTION   ------
@@ -175,14 +175,36 @@ constexpr std::pair<T,T> flat_index_to_2d(std::uint32_t index, T inner_dim_size)
  * Doesn't assume anything about padding and only operates on whole page boundaries.
  */
 template <typename worker_to_noc_lookup_t, typename DEVICE_SHARD_SPEC_T>
-struct WidthShardedAddressGenerator {
+struct WidthShardedAddressGenerator : public ttnn::ccl::addrgen::PageToLocationLookupInterface<WidthShardedAddressGenerator<worker_to_noc_lookup_t,DEVICE_SHARD_SPEC_T>> {
     worker_to_noc_lookup_t worker_to_noc_lookup;
     DEVICE_SHARD_SPEC_T tensor_shard_spec;
-    uint32_t page_size;
-    uint32_t bank_base_address;
+    // uint32_t page_size;
+    // uint32_t bank_base_address;
 
-   public:
-    constexpr WidthShardedAddressGenerator(worker_to_noc_lookup_t lookup, DEVICE_SHARD_SPEC_T const& tensor_shard_spec, uint32_t page_size, uint32_t base_address) : worker_to_noc_lookup(lookup), tensor_shard_spec(tensor_shard_spec), page_size(page_size), bank_base_address(base_address) {}
+
+    constexpr WidthShardedAddressGenerator(
+        worker_to_noc_lookup_t lookup,
+        DEVICE_SHARD_SPEC_T const& tensor_shard_spec,
+        std::size_t page_size,
+        std::size_t base_address) :
+        ttnn::ccl::addrgen::PageToLocationLookupInterface<WidthShardedAddressGenerator<worker_to_noc_lookup_t,DEVICE_SHARD_SPEC_T>>(base_address, page_size),
+        worker_to_noc_lookup(lookup),
+        tensor_shard_spec(tensor_shard_spec)//,
+        // page_size(page_size),
+        // bank_base_address(base_address)
+        {}
+
+    // constexpr WidthShardedAddressGenerator(
+    //     worker_to_noc_lookup_t lookup,
+    //     DEVICE_SHARD_SPEC_T const& tensor_shard_spec,
+    //     std::size_t page_size,
+    //     std::size_t base_address) :
+    //     ttnn::ccl::addrgen::PageToLocationLookupInterface<WidthShardedAddressGenerator<worker_to_noc_lookup_t,DEVICE_SHARD_SPEC_T>>(base_address, page_size),
+    //     worker_to_noc_lookup(lookup),
+    //     tensor_shard_spec(tensor_shard_spec)//,
+    //     // page_size(page_size),
+    //     // bank_base_address(base_address)
+    //     {}
 
     /*
      * This function is an alternative API that allows the caller to implement a more efficient traversal/iteration of their tensor
@@ -205,7 +227,8 @@ struct WidthShardedAddressGenerator {
      *     ◄───►
      *     3 contiguous pages until end of row
      */
-    test_shard_location_with_contig_t get_page_location_with_contiguous_pages_in_row_in_bank(std::uint32_t global_page_id) const {
+    test_shard_location_with_contig_t get_page_location_with_contiguous_pages_in_row_in_bank_impl(std::uint32_t global_page_id) const {
+        // DeviceZoneScopedN("WidthShardAddrGen::get");
         // With width sharding, the tensor is fractured along width, but can be mapped onto a 2D grid, in such a case
         // the logical tensor is still fractured only along 1 dimension but the placement/allocation snakes through the
         // grid.
@@ -243,7 +266,7 @@ struct WidthShardedAddressGenerator {
      * iterating through the tensor in a row-major order.
      */
     test_shard_location_t get_page_location(std::uint32_t global_page_id) const {
-        auto const& result = get_page_location_with_contiguous_pages_in_row_in_bank(global_page_id);
+        auto const& result = get_page_location_with_contiguous_pages_in_row_in_bank_impl(global_page_id);
         return test_shard_location_t{result.core_location, result.page_offset};
     }
 

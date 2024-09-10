@@ -7,6 +7,7 @@
 #include "ttnn/cpp/ttnn/operations/ccl/all_gather/device/kernels/dataflow/worker_ring_gather_utils.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/sharded_tensor_addr_gen.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/precomputed_addresses_tensor_iterators.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
 
 using InterpretMode = ttnn::ccl::addrgen::InterpretMode;
@@ -17,22 +18,22 @@ using PrecomputeType = ttnn::ccl::addrgen::PrecomputeType;
 template <typename PAGE_ADDR_GEN_T, PrecomputeType precompute_type = PrecomputeType::NO_PRECOMPUTE>
 auto build_precomputed_page_addr_gen(
     std::size_t &args_idx,
-    PAGE_ADDR_GEN_T const&& addrgen_base) -> ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<precompute_type, PAGE_ADDR_GEN_T> {
+    PAGE_ADDR_GEN_T && addrgen_base) -> ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PAGE_ADDR_GEN_T, precompute_type> {
     if constexpr (precompute_type == PrecomputeType::NO_PRECOMPUTE) {
-        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PrecomputeType::NO_PRECOMPUTE, PAGE_ADDR_GEN_T>(std::move(addrgen_base));
+        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PAGE_ADDR_GEN_T, PrecomputeType::NO_PRECOMPUTE>(std::move(addrgen_base));
     } else if constexpr (precompute_type == PrecomputeType::FIXED_PRECOMPUTE_ONLY) {
 
-        const std::size_t num_precomputed_locations = get_arg_val<std::size_t>(args_idx++);
-        std::size_t precomputed_location_read_index = get_arg_val<std::size_t>(args_idx++);
-        InterpretMode interpret_mode = get_arg_val<InterpretMode>(args_idx++);
+        const std::size_t num_precomputed_locations = get_arg_val<uint32_t>(args_idx++);
+        InterpretMode interpret_mode = static_cast<InterpretMode>(get_arg_val<uint32_t>(args_idx++));
         uint32_t *precomputed_locations_base_ptr = reinterpret_cast<uint32_t*>(get_arg_addr(args_idx));
-        args_idx += num_precomputed_locations;
+        std::size_t num_precomputed_mem_words = get_num_mem_words_per_precomputed_location(interpret_mode);
 
-        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PrecomputeType::FIXED_PRECOMPUTE_ONLY, PAGE_ADDR_GEN_T>(
-            precomputed_locations_base_ptr,
+        args_idx += num_precomputed_locations * num_precomputed_mem_words;
+
+        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PAGE_ADDR_GEN_T, PrecomputeType::FIXED_PRECOMPUTE_ONLY>(
             num_precomputed_locations,
-            precomputed_location_read_index,
             interpret_mode,
+            precomputed_locations_base_ptr,
             std::move(addrgen_base));
     }
 }
@@ -200,6 +201,7 @@ void kernel_main() {
     #endif
 
     auto s = build_precomputed_page_addr_gen<decltype(s_no_precompute),input_tensor_page_location_precompute_type>(arg_idx, std::move(s_no_precompute));
+    // DPRINT << "HERE\n";
     volatile tt_l1_ptr uint32_t* sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sem_addr);
 
     uint32_t input_ring_idx = input_start_ring_idx;
@@ -209,6 +211,10 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
 
+    // DPRINT << "Read from input tensor\n";
+    // DPRINT << "\tnum_full_chunks: " << (uint32_t)num_full_chunks << "\n";
+    // DPRINT << "\tnum_pages: " << (uint32_t)num_pages << "\n";
+    // DPRINT << "\trem_num_pages: " << (uint32_t)rem_num_pages << "\n";
     if (num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
             read_chunk_from_input_tensor(input_page_idx, cb_id_in0, s, num_pages, page_size);
@@ -220,6 +226,7 @@ void kernel_main() {
         ASSERT(half_cb_n_pages > rem_num_pages);
         push_filler_pages_to_cb(cb_id_in0, half_cb_n_pages - rem_num_pages);
     }
+    // DPRINT << "Read from input tensor done \n";
 
     uint32_t sem_idx = 1;
 
