@@ -5,6 +5,7 @@
 #pragma once
 
 #include "debug/dprint.h"
+#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_setting.hpp"
 
 inline uint32_t prng_next(uint32_t n) {
     uint32_t x = n;
@@ -22,14 +23,10 @@ inline uint32_t packet_rnd_seed_to_size(uint32_t rnd_seed, uint32_t max_packet_s
     return packet_size;
 }
 
-// Structure used for randomizing packet sequences based on a starting random seed.
-// Used on the TX generator side to generate traffic and on the RX side to verify
-// the correcntess of received packets.
 typedef struct {
 
     uint64_t data_words_input;
     uint64_t num_packets;
-    uint32_t packet_rnd_seed;
     uint32_t curr_packet_size_words;
     uint32_t curr_packet_words_remaining;
     uint32_t curr_packet_dest;
@@ -38,8 +35,7 @@ typedef struct {
     bool data_packets_done;
     bool data_and_last_packets_done;
 
-    void init(uint32_t prng_seed, uint32_t endpoint_id) {
-        this->packet_rnd_seed = prng_seed ^ endpoint_id;
+    void init() {
         this->curr_packet_words_remaining = 0;
         this->data_packets_done = false;
         this->data_and_last_packets_done = false;
@@ -48,12 +44,12 @@ typedef struct {
         this->num_dests_sent_last_packet = 0;
     }
 
-    inline void rnd_packet_update(uint32_t num_dest_endpoints,
+    inline void packet_update(uint32_t num_dest_endpoints,
                                   uint32_t dest_endpoint_start_id,
                                   uint32_t max_packet_size_words,
                                   uint64_t total_data_words) {
-        this->curr_packet_dest = ((this->packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
-        this->curr_packet_size_words = packet_rnd_seed_to_size(this->packet_rnd_seed, max_packet_size_words);
+        // this->curr_packet_dest = ((this->packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
+        // this->curr_packet_size_words = packet_rnd_seed_to_size(this->packet_rnd_seed, max_packet_size_words);
         this->curr_packet_flags = 0;
         this->curr_packet_words_remaining = this->curr_packet_size_words;
         this->data_words_input += this->curr_packet_size_words;
@@ -61,44 +57,46 @@ typedef struct {
         this->num_packets++;
     }
 
-    inline void next_packet_rnd(uint32_t num_dest_endpoints,
+    inline void gen_last_pkt(uint32_t num_dest_endpoints,
                                 uint32_t dest_endpoint_start_id,
                                 uint32_t max_packet_size_words,
                                 uint64_t total_data_words) {
-        if (!this->data_packets_done) {
-            this->packet_rnd_seed = prng_next(this->packet_rnd_seed);
-            this->rnd_packet_update(num_dest_endpoints, dest_endpoint_start_id,
-                                    max_packet_size_words, total_data_words);
-        } else {
-            this->packet_rnd_seed = 0xffffffff;
-            this->curr_packet_dest = this->num_dests_sent_last_packet + dest_endpoint_start_id;
-            this->curr_packet_flags = DispatchPacketFlag::PACKET_TEST_LAST;
-            this->curr_packet_size_words = 2;
-            this->curr_packet_words_remaining = this->curr_packet_size_words;
-            this->data_words_input += 2;
-            this->num_packets++;
-            this->num_dests_sent_last_packet++;
-            if (this->num_dests_sent_last_packet == num_dest_endpoints) {
-                this->data_and_last_packets_done = true;
-            }
+        // this->packet_rnd_seed = 0xffffffff;
+        this->curr_packet_dest = this->num_dests_sent_last_packet + dest_endpoint_start_id;
+        this->curr_packet_flags = DispatchPacketFlag::PACKET_TEST_LAST;
+        this->curr_packet_size_words = 2;
+        this->curr_packet_words_remaining = this->curr_packet_size_words;
+        this->data_words_input += 2;
+        this->num_packets++;
+        this->num_dests_sent_last_packet++;
+        if (this->num_dests_sent_last_packet == num_dest_endpoints) {
+            this->data_and_last_packets_done = true;
         }
+
+        // if (!this->data_packets_done) {
+        //     this->packet_rnd_seed = prng_next(this->packet_rnd_seed);
+        //     this->rnd_packet_update(num_dest_endpoints, dest_endpoint_start_id,
+        //                             max_packet_size_words, total_data_words);
+        // } else {
+
+        // }
     }
 
-    inline void next_packet_rnd_to_dest(uint32_t num_dest_endpoints,
-                                        uint32_t dest_endpoint_id,
-                                        uint32_t dest_endpoint_start_id,
-                                        uint32_t max_packet_size_words,
-                                        uint64_t total_data_words) {
-        uint32_t rnd = this->packet_rnd_seed;
-        uint32_t dest;
-        do {
-            rnd = prng_next(rnd);
-            dest = (rnd >> 16) & (num_dest_endpoints-1);
-        } while (dest != (dest_endpoint_id - dest_endpoint_start_id));
-        this->packet_rnd_seed = rnd;
-        this->rnd_packet_update(num_dest_endpoints, dest_endpoint_start_id,
-                                max_packet_size_words, total_data_words);
-    }
+    // inline void next_packet_rnd_to_dest(uint32_t num_dest_endpoints,
+    //                                     uint32_t dest_endpoint_id,
+    //                                     uint32_t dest_endpoint_start_id,
+    //                                     uint32_t max_packet_size_words,
+    //                                     uint64_t total_data_words) {
+    //     uint32_t rnd = this->packet_rnd_seed;
+    //     uint32_t dest;
+    //     do {
+    //         rnd = prng_next(rnd);
+    //         dest = (rnd >> 16) & (num_dest_endpoints-1);
+    //     } while (dest != (dest_endpoint_id - dest_endpoint_start_id));
+    //     this->packet_rnd_seed = rnd;
+    //     this->rnd_packet_update(num_dest_endpoints, dest_endpoint_start_id,
+    //                             max_packet_size_words, total_data_words);
+    // }
 
     inline bool start_of_packet() {
         return this->curr_packet_words_remaining == this->curr_packet_size_words;
@@ -120,7 +118,151 @@ typedef struct {
         return this->num_packets;
     }
 
+} input_queue_raw_state_t;
+
+typedef struct {
+    input_queue_raw_state_t input_queue_raw_state;
+    void init(uint32_t pkt_size_words) {
+        input_queue_raw_state.init();
+        input_queue_raw_state.curr_packet_dest = 0;
+        input_queue_raw_state.curr_packet_size_words = pkt_size_words;
+    }
+    inline void packet_update(uint32_t num_dest_endpoints,
+                                  uint32_t dest_endpoint_start_id,
+                                  uint32_t max_packet_size_words, // TODO: may remove it
+                                  uint64_t total_data_words) {
+        input_queue_raw_state.curr_packet_dest = (input_queue_raw_state.curr_packet_dest + 1) & (num_dest_endpoints - 1);
+        input_queue_raw_state.packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
+    }
+    inline void next_packet(uint32_t num_dest_endpoints,
+                                uint32_t dest_endpoint_start_id,
+                                uint32_t max_packet_size_words,
+                                uint64_t total_data_words) {
+        if (!input_queue_raw_state.data_packets_done) {
+            this->packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
+        } else {
+            input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
+        }
+    }
+} input_queue_same_start_rndrobin_fix_size_state_t;
+
+
+
+// Structure used for randomizing packet sequences based on a starting random seed.
+// Used on the TX generator side to generate traffic and on the RX side to verify
+// the correcntess of received packets.
+typedef struct {
+
+    // uint64_t data_words_input;
+    // uint64_t num_packets;
+    uint32_t packet_rnd_seed;
+    // uint32_t curr_packet_size_words;
+    // uint32_t curr_packet_words_remaining;
+    // uint32_t curr_packet_dest;
+    // uint32_t curr_packet_flags;
+    // uint32_t num_dests_sent_last_packet;
+    // bool data_packets_done;
+    // bool data_and_last_packets_done;
+
+    input_queue_raw_state_t input_queue_raw_state;
+
+    void init(uint32_t endpoint_id, uint32_t prng_seed) {
+        this->packet_rnd_seed = prng_seed ^ endpoint_id;
+        input_queue_raw_state.init();
+        // this->curr_packet_words_remaining = 0;
+        // this->data_packets_done = false;
+        // this->data_and_last_packets_done = false;
+        // this->num_packets = 0;
+        // this->data_words_input = 0;
+        // this->num_dests_sent_last_packet = 0;
+    }
+
+    inline void packet_update(uint32_t num_dest_endpoints,
+                                  uint32_t dest_endpoint_start_id,
+                                  uint32_t max_packet_size_words,
+                                  uint64_t total_data_words) {
+        input_queue_raw_state.curr_packet_dest = ((this->packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
+        input_queue_raw_state.curr_packet_size_words = packet_rnd_seed_to_size(this->packet_rnd_seed, max_packet_size_words);
+        input_queue_raw_state.packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
+        // this->curr_packet_flags = 0;
+        // this->curr_packet_words_remaining = this->curr_packet_size_words;
+        // this->data_words_input += this->curr_packet_size_words;
+        // this->data_packets_done = this->data_words_input >= total_data_words;
+        // this->num_packets++;
+    }
+
+    inline void next_packet(uint32_t num_dest_endpoints,
+                                uint32_t dest_endpoint_start_id,
+                                uint32_t max_packet_size_words,
+                                uint64_t total_data_words) {
+        if (!input_queue_raw_state.data_packets_done) {
+            this->packet_rnd_seed = prng_next(this->packet_rnd_seed);
+            this->packet_update(num_dest_endpoints, dest_endpoint_start_id,
+                                    max_packet_size_words, total_data_words);// TODO: args
+        } else {
+            this->packet_rnd_seed = 0xffffffff;
+            input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
+            // this->curr_packet_dest = this->num_dests_sent_last_packet + dest_endpoint_start_id;
+            // this->curr_packet_flags = DispatchPacketFlag::PACKET_TEST_LAST;
+            // this->curr_packet_size_words = 2;
+            // this->curr_packet_words_remaining = this->curr_packet_size_words;
+            // this->data_words_input += 2;
+            // this->num_packets++;
+            // this->num_dests_sent_last_packet++;
+            // if (this->num_dests_sent_last_packet == num_dest_endpoints) {
+            //     this->data_and_last_packets_done = true;
+            // }
+        }
+    }
+
+    inline void next_packet_rnd_to_dest(uint32_t num_dest_endpoints,
+                                        uint32_t dest_endpoint_id,
+                                        uint32_t dest_endpoint_start_id,
+                                        uint32_t max_packet_size_words,
+                                        uint64_t total_data_words) {
+        uint32_t rnd = this->packet_rnd_seed;
+        uint32_t dest;
+        do {
+            rnd = prng_next(rnd);
+            dest = (rnd >> 16) & (num_dest_endpoints-1);
+        } while (dest != (dest_endpoint_id - dest_endpoint_start_id));
+        this->packet_rnd_seed = rnd;
+        this->packet_update(num_dest_endpoints, dest_endpoint_start_id,
+                                max_packet_size_words, total_data_words);
+    }
+
+    // inline bool start_of_packet() {
+    //     return this->curr_packet_words_remaining == this->curr_packet_size_words;
+    // }
+
+    // inline bool packet_active() {
+    //     return this->curr_packet_words_remaining != 0;
+    // }
+
+    // inline bool all_packets_done() {
+    //     return this->data_and_last_packets_done && !this->packet_active();
+    // }
+
+    // inline uint64_t get_data_words_input() {
+    //     return this->data_words_input;
+    // }
+
+    // inline uint64_t get_num_packets() {
+    //     return this->num_packets;
+    // }
+
 } input_queue_rnd_state_t;
+
+template <pkt_dest_size_choices_t which_t>
+constexpr auto select_input_queue() {
+    if constexpr (which_t == pkt_dest_size_choices_t::RANDOM) {
+        return input_queue_rnd_state_t{};
+    } else if constexpr (which_t == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE) {
+        return input_queue_same_start_rndrobin_fix_size_state_t{};
+    } else {
+        return input_queue_rnd_state_t{}; // default
+    }
+}
 
 
 inline void fill_packet_data(tt_l1_ptr uint32_t* start_addr, uint32_t num_words, uint32_t start_val) {
