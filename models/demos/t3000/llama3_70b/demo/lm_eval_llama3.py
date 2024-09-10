@@ -123,6 +123,12 @@ def main():
     mock_model = False   # use random logits model for testing
     num_fewshot = None  # number of fewshot samples (task dependent)
     # -----------------------------------
+    if "ifeval" in tasks:
+        import nltk
+        def check_punkt_downloaded():
+            nltk.data.find('tokenizers/punkt')
+        check_punkt_downloaded()
+
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
     model_backend, tokenizer = get_model_backend(mock_model=mock_model)
     # pretrained must be the hugginface pretrained model name
