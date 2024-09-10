@@ -8,6 +8,7 @@
 #include <array>
 #include <bit>
 #include "tt_metal/impl/buffers/buffer_constants.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
 
 /*
  *    ------   ATTENTION  ATTENTION  ATTENTION  ATTENTION  ATTENTION   ------
@@ -23,13 +24,16 @@
  * invocations and program creation.
  */
 
-using noc_grid_index_t = std::uint8_t;
 
 namespace tt {
 namespace tt_metal {
 
 namespace address_generators {
 
+using ttnn::ccl::addrgen::noc_grid_index_t;
+using ttnn::ccl::addrgen::device_core_location_t;
+using ttnn::ccl::addrgen::test_shard_location_t;
+using ttnn::ccl::addrgen::test_shard_location_with_contig_t;
 
 template <typename ArchSpecificWorkerToNocLookup>
 struct WorkerToNocCoordLookup {
@@ -71,19 +75,7 @@ struct HarvestedWormholeWorkerToNocLookup : WorkerToNocCoordLookup<HarvestedWorm
 };
 
 
-struct device_core_location_t {
-    noc_grid_index_t noc_y;
-    noc_grid_index_t noc_x;
-};
-struct test_shard_location_t {
-    device_core_location_t core_location;
-    std::uint32_t page_offset;
-};
-struct test_shard_location_with_contig_t {
-    device_core_location_t core_location;
-    std::uint32_t page_offset;
-    std::uint32_t contig_pages_in_row;
-};
+
 
 /* Similar to interleaved address generators found in dataflow API, this acts
  * as a somewhat standardized interface to generate addresses for sharded tensors

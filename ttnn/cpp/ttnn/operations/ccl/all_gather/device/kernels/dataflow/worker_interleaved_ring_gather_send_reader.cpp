@@ -6,10 +6,40 @@
 #include "dataflow_api.h"
 #include "ttnn/cpp/ttnn/operations/ccl/all_gather/device/kernels/dataflow/worker_ring_gather_utils.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/sharded_tensor_addr_gen.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
+
+using InterpretMode = ttnn::ccl::addrgen::InterpretMode;
+using PrecomputeType = ttnn::ccl::addrgen::PrecomputeType;
+
+
+
+template <typename PAGE_ADDR_GEN_T, PrecomputeType precompute_type = PrecomputeType::NO_PRECOMPUTE>
+auto build_precomputed_page_addr_gen(
+    std::size_t &args_idx,
+    PAGE_ADDR_GEN_T const&& addrgen_base) -> ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<precompute_type, PAGE_ADDR_GEN_T> {
+    if constexpr (precompute_type == PrecomputeType::NO_PRECOMPUTE) {
+        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PrecomputeType::NO_PRECOMPUTE, PAGE_ADDR_GEN_T>(std::move(addrgen_base));
+    } else if constexpr (precompute_type == PrecomputeType::FIXED_PRECOMPUTE_ONLY) {
+
+        const std::size_t num_precomputed_locations = get_arg_val<std::size_t>(args_idx++);
+        std::size_t precomputed_location_read_index = get_arg_val<std::size_t>(args_idx++);
+        InterpretMode interpret_mode = get_arg_val<InterpretMode>(args_idx++);
+        uint32_t *precomputed_locations_base_ptr = reinterpret_cast<uint32_t*>(get_arg_addr(args_idx));
+        args_idx += num_precomputed_locations;
+
+        return ttnn::ccl::addrgen::PageAddrGenWithPrecomputedLocations<PrecomputeType::FIXED_PRECOMPUTE_ONLY, PAGE_ADDR_GEN_T>(
+            precomputed_locations_base_ptr,
+            num_precomputed_locations,
+            precomputed_location_read_index,
+            interpret_mode,
+            std::move(addrgen_base));
+    }
+}
 
 
 void kernel_main() {
-    uint32_t arg_idx = 0;
+    std::size_t arg_idx = 0;
     const uint32_t src_addr = get_arg_val<uint32_t>(arg_idx++);
     const uint32_t dst_addr = get_arg_val<uint32_t>(arg_idx++);
     const uint32_t num_transfers = get_arg_val<uint32_t>(arg_idx++);
@@ -55,25 +85,29 @@ void kernel_main() {
     uint32_t sem_addr = get_semaphore(get_compile_time_arg_val(5));
     constexpr uint32_t half_cb_n_pages = get_compile_time_arg_val(6);
     constexpr uint32_t ring_size = get_compile_time_arg_val(7);
-    #ifdef SHARDED_MEM_LAYOUT
 
-    constexpr tt::tt_metal::TensorMemoryLayout input_tensor_memory_layout = static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(8));
-    constexpr uint32_t input_tensor_shard_grid_height = get_compile_time_arg_val(9);
-    constexpr uint32_t input_tensor_shard_grid_width = get_compile_time_arg_val(10);
-    constexpr uint32_t input_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(11);
-    constexpr uint32_t input_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(12);
-    constexpr uint32_t input_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(13);
-    constexpr uint32_t input_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(14);
-    constexpr bool input_tensor_shard_grid_transposed = get_compile_time_arg_val(15) != 0;
+    static constexpr PrecomputeType input_tensor_page_location_precompute_type =
+        static_cast<PrecomputeType>(get_compile_time_arg_val(8));
 
-    constexpr tt::tt_metal::TensorMemoryLayout output_tensor_memory_layout = static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(16));
-    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(17);
-    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(18);
-    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(19);
-    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(20);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(21);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(22);
-    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(23) != 0;
+#ifdef SHARDED_MEM_LAYOUT
+
+    constexpr tt::tt_metal::TensorMemoryLayout input_tensor_memory_layout = static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(9));
+    constexpr uint32_t input_tensor_shard_grid_height = get_compile_time_arg_val(10);
+    constexpr uint32_t input_tensor_shard_grid_width = get_compile_time_arg_val(11);
+    constexpr uint32_t input_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(12);
+    constexpr uint32_t input_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(13);
+    constexpr uint32_t input_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(14);
+    constexpr uint32_t input_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(15);
+    constexpr bool input_tensor_shard_grid_transposed = get_compile_time_arg_val(16) != 0;
+
+    constexpr tt::tt_metal::TensorMemoryLayout output_tensor_memory_layout = static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(17));
+    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(18);
+    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(19);
+    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(20);
+    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(21);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(22);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(23);
+    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(24) != 0;
     #endif
 
     ASSERT(half_cb_n_pages > rem_num_pages);
@@ -88,7 +122,7 @@ void kernel_main() {
         .bank_base_address = dst_addr + output_start_addr_offset, .page_size = output_page_size};
         #elif defined SHARDED_MEM_LAYOUT
 
-            auto s = tt::tt_metal::address_generators::build_sharded_addr_gen<input_tensor_memory_layout>(
+            auto s_no_precompute = tt::tt_metal::address_generators::build_sharded_addr_gen<input_tensor_memory_layout>(
                 tt::tt_metal::address_generators::HarvestedWormholeWorkerToNocLookup(input_shard_grid_nrows, input_shard_grid_row_map, input_shard_grid_ncols, input_shard_grid_col_map),
                 tt::tt_metal::address_generators::DeviceShardSpecTypeGetter<input_tensor_memory_layout>::type(
                     input_tensor_shard_pages_per_shard_y,
@@ -133,7 +167,7 @@ void kernel_main() {
             .data_format = in0_df
         };
         #elif defined SHARDED_MEM_LAYOUT
-            auto s = tt::tt_metal::address_generators::build_sharded_addr_gen<input_tensor_memory_layout>(
+            auto s_no_precompute = tt::tt_metal::address_generators::build_sharded_addr_gen<input_tensor_memory_layout>(
                 tt::tt_metal::address_generators::HarvestedWormholeWorkerToNocLookup(input_shard_grid_nrows, input_shard_grid_row_map, input_shard_grid_ncols, input_shard_grid_col_map),
                 tt::tt_metal::address_generators::DeviceShardSpecTypeGetter<input_tensor_memory_layout>::type(
                     input_tensor_shard_pages_per_shard_y,
@@ -164,6 +198,8 @@ void kernel_main() {
             );
         #endif
     #endif
+
+    auto s = build_precomputed_page_addr_gen<decltype(s_no_precompute),input_tensor_page_location_precompute_type>(arg_idx, std::move(s_no_precompute));
     volatile tt_l1_ptr uint32_t* sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(sem_addr);
 
     uint32_t input_ring_idx = input_start_ring_idx;

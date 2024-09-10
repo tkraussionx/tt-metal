@@ -5,6 +5,9 @@
 #include <cstddef>
 #include "gtest/gtest.h"
 #include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/sharded_tensor_addr_gen.hpp"
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
+
+using ttnn::ccl::addrgen::noc_grid_index_t;
 
 static constexpr std::array<noc_grid_index_t, 8> worker_to_routing_x_wormhole = {
     1,2,3,4,6,7,8,9

@@ -21,6 +21,7 @@
 #include <type_traits>
 
 #include "ttnn/operations/ccl/ccl_op_fusion.hpp"
+#include "ttnn/operations/ccl/shared_with_host/tensor_iterators_types.hpp"
 
 
 using namespace tt::constants;
@@ -378,6 +379,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
     auto sender_worker_reader_semaphore_id = CreateSemaphore(program, all_sender_workers, 0);
 
     // Sender Reader
+    // static constexpr ttnn::ccl::addrgen::PrecomputeType send_reader_input_tensor_page_addrgen_precompute_type = ttnn::ccl::addrgen::PrecomputeType::FIXED_PRECOMPUTE_ONLY;
+    static constexpr ttnn::ccl::addrgen::PrecomputeType send_reader_input_tensor_page_addrgen_precompute_type = ttnn::ccl::addrgen::PrecomputeType::NO_PRECOMPUTE;
     auto build_worker_send_reader_ct_args = [&]() {
         std::vector<uint32_t> worker_reader_sender_ct_args = {
             static_cast<uint32_t>(all_gather_config.is_input_dram()),
@@ -387,7 +390,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
             static_cast<uint32_t>(ring_index),
             static_cast<uint32_t>(sender_worker_reader_semaphore_id),
             static_cast<uint32_t>(cb_num_pages / 2),
-            static_cast<uint32_t>(ring_size)
+            static_cast<uint32_t>(ring_size),
+            static_cast<uint32_t>(send_reader_input_tensor_page_addrgen_precompute_type)
         };
         if (is_sharded) {
             emit_sharded_tensor_kernel_ct_args(device, input_tensor, worker_reader_sender_ct_args, input_pages_per_shard_y, input_pages_per_shard_x);
@@ -818,6 +822,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
                         if (is_sharded) {
                             emit_sharded_tensor_kernel_rt_args(device, input_tensor, args);
                             emit_sharded_tensor_kernel_rt_args(device, output_tensor, args);
+                        }
+                        if (send_reader_input_tensor_page_addrgen_precompute_type == ttnn::ccl::addrgen::PrecomputeType::FIXED_PRECOMPUTE_ONLY) {
+                            args.push_back(0);
                         }
 
                         log_trace(tt::LogOp, "Worker {} SR RT args", b);
