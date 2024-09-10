@@ -10,6 +10,7 @@
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 #include "kernels/traffic_gen_test.hpp"
+#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_setting.hpp"
 
 using namespace tt;
 using json = nlohmann::json;
@@ -44,11 +45,14 @@ int main(int argc, char **argv) {
 
     constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
+    constexpr uint32_t default_rx_disable_header_check = 0;
 
     constexpr uint32_t src_endpoint_start_id = 0xaa;
     constexpr uint32_t dest_endpoint_start_id = 0xbb;
 
     constexpr uint32_t default_num_endpoints = 4;
+
+    constexpr uint8_t default_tx_pkt_dest_size_choice = 0; // pkt_dest_size_choices_t
 
     constexpr const char* default_output_dir = "/tmp";
 
@@ -80,8 +84,10 @@ int main(int argc, char **argv) {
         log_info(LogTest, "  --timeout_mcycles: Timeout in MCycles, default = {}", default_timeout_mcycles);
         log_info(LogTest, "  --check_txrx_timeout: Check if timeout happens during tx & rx (if enabled, timeout_mcycles will also be used)");
         log_info(LogTest, "  --rx_disable_data_check: Disable data check on RX, default = {}", default_rx_disable_data_check);
+        log_info(LogTest, "  --rx_disable_header_check: Disable header check on RX, default = {}", default_rx_disable_header_check);
         log_info(LogTest, "  --tx_skip_pkt_content_gen: Skip packet content generation during tx");
         log_info(LogTest, "  --num_endpoints: Number of endpoints, default = {}", default_num_endpoints);
+        log_info(LogTest, "  --tx_pkt_dest_size_choice: choice for how packet destination and packet size are generated, default = {}", default_tx_pkt_dest_size_choice); // pkt_dest_size_choices_t
         log_info(LogTest, "  --output_dir: Output directory, default = {}", default_output_dir);
         return 0;
     }
@@ -109,10 +115,15 @@ int main(int argc, char **argv) {
     uint32_t test_results_size = test_args::get_command_option_uint32(input_args, "--test_results_size", default_test_results_size);
     uint32_t timeout_mcycles = test_args::get_command_option_uint32(input_args, "--timeout_mcycles", default_timeout_mcycles);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
+    uint32_t rx_disable_header_check = test_args::get_command_option_uint32(input_args, "--rx_disable_header_check", default_rx_disable_header_check);
     uint32_t num_endpoints = test_args::get_command_option_uint32(input_args, "--num_endpoints", default_num_endpoints);
     bool tx_skip_pkt_content_gen = test_args::has_command_option(input_args, "--tx_skip_pkt_content_gen");
     std::string output_dir = test_args::get_command_option(input_args, "--output_dir", std::string(default_output_dir));
     bool check_txrx_timeout = test_args::has_command_option(input_args, "--check_txrx_timeout");
+    uint8_t tx_pkt_dest_size_choice = (uint8_t) test_args::get_command_option_uint32(input_args, "--tx_pkt_dest_size_choice", default_tx_pkt_dest_size_choice);
+
+    // TODO: support
+    assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
 
     uint32_t num_src_endpoints = num_endpoints;
     uint32_t num_dest_endpoints = num_endpoints;
@@ -164,6 +175,7 @@ int main(int argc, char **argv) {
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
                     timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                     tx_skip_pkt_content_gen, // 18: skip_pkt_content_gen
+                    tx_pkt_dest_size_choice, // 19: pkt_dest_size_choice
                 };
 
             log_info(LogTest, "run traffic_gen_tx at x={},y={}", core.x, core.y);
@@ -204,6 +216,7 @@ int main(int argc, char **argv) {
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
                     timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
+                    rx_disable_header_check // 18: disable_header_check
                 };
 
             log_info(LogTest, "run traffic_gen_rx at x={},y={}", core.x, core.y);
@@ -385,8 +398,10 @@ int main(int argc, char **argv) {
             config["demux_y"] = demux_y;
             config["num_endpoints"] = num_endpoints;
             config["rx_disable_data_check"] = rx_disable_data_check;
+            config["rx_disable_header_check"] = rx_disable_header_check;
             config["tx_skip_pkt_content_gen"] = tx_skip_pkt_content_gen;
             config["check_txrx_timeout"] = check_txrx_timeout;
+            config["default_tx_pkt_dest_size_choice"] = tx_pkt_dest_size_choice;
 
             double total_tx_bw = 0.0;
             uint64_t total_tx_words_sent = 0;
@@ -473,7 +488,7 @@ int main(int argc, char **argv) {
             if (pass) {
                 summary["config"] = config;
                 summary["stat"] = stat;
-                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_tsg{}_cto{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, tx_skip_pkt_content_gen, check_txrx_timeout));
+                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, tx_skip_pkt_content_gen, check_txrx_timeout, tx_pkt_dest_size_choice));
                 if (out.fail()) {
                     throw std::runtime_error("output file open failure");
                 }
