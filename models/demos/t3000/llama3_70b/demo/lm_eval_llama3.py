@@ -116,7 +116,10 @@ def main():
     # configuration:
     # -----------------------------------
     # tasks = ["mmlu_econometrics", "mmlu_high_school_statistics"]
-    tasks = ["ifeval"]
+    # tasks = ["mmlu"]
+    # tasks = ["gpqa_main_cot_zeroshot"]
+    # tasks = ["ifeval"]
+    tasks = ["ifeval", "gpqa_main_cot_zeroshot"]
     eval_output_fpath = "eval_output"
     limit = None        # limit the number of samples per task
     log_samples = True  # log samples and outputs to file
@@ -124,10 +127,12 @@ def main():
     num_fewshot = None  # number of fewshot samples (task dependent)
     # -----------------------------------
     if "ifeval" in tasks:
+        # download nltk punkt tokenizer if not available
         import nltk
-        def check_punkt_downloaded():
+        try:
             nltk.data.find('tokenizers/punkt')
-        check_punkt_downloaded()
+        except LookupError:
+            nltk.download('punkt')
 
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
     model_backend, tokenizer = get_model_backend(mock_model=mock_model)
