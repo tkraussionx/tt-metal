@@ -51,6 +51,9 @@ def mock_build_generator(model_args, tt_args):
             batch, seq_len = tokens.shape
             assert seq_len == 1
             logits = torch.rand((batch, seq_len, self.vocab_size))
+            # send the EOT token after 128 tokens for testing
+            if start_pos == 128:
+                logits[:, :, 128009] = 100.0
             return logits
 
         def prefill_forward(self, tokens: torch.Tensor, start_pos: int):
@@ -109,10 +112,19 @@ def get_model_backend(mock_model=False):
 
 
 def main():
+    # -----------------------------------
+    # configuration:
+    # -----------------------------------
+    # tasks = ["mmlu_econometrics", "mmlu_high_school_statistics"]
+    tasks = ["ifeval"]
     eval_output_fpath = "eval_output"
+    limit = None        # limit the number of samples per task
+    log_samples = True  # log samples and outputs to file
+    mock_model = False   # use random logits model for testing
+    num_fewshot = None  # number of fewshot samples (task dependent)
+    # -----------------------------------
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
-    model_backend, tokenizer = get_model_backend(mock_model=False)
-    tasks = ["mmlu_econometrics", "mmlu_high_school_statistics"]
+    model_backend, tokenizer = get_model_backend(mock_model=mock_model)
     # pretrained must be the hugginface pretrained model name
     # see: https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct
     pretrained = "meta-llama/Meta-Llama-3.1-70B-Instruct"
@@ -124,23 +136,11 @@ def main():
         eot_token_id=128009,
         write_out=True,
     )
-    """
-    :param model: Union[str, LM]
-        Name of model or LM object, see lm_eval.models.get_model
-    :param model_args: Optional[str, dict]
-        String or dict arguments for each model class, see LM.create_from_arg_string and LM.create_from_arg_object.
-        Ignored if `model` argument is a LM object.
-    :param tasks: list[Union[str, dict, Task]]
-        List of task names or Task objects. Task objects will be taken to have name task.EVAL_HARNESS_NAME if defined and type(task).__name__ otherwise.
-    :param batch_size: int or str, optional
-        Batch size for model
-    """
-    log_samples = True
     results = evaluator.simple_evaluate(
         model=lm,
         tasks=tasks,
-        num_fewshot=5,
-        limit=None,
+        num_fewshot=num_fewshot,
+        limit=limit,
         bootstrap_iters=0,
         batch_size=32,
         write_out=False,

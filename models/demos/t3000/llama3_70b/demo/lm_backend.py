@@ -101,6 +101,7 @@ class UserRow:
         self.num_tokens_prefilled_via_decode = 0
         self.num_tokens_prefilled = 0
         self.num_prefill_tokens = len(self.prompt_tokens)
+        self.num_generated_chars = 0
         self.generation_params = params
         self.max_tokens = params["max_tokens"]
         self.return_prompt = params["return_prompt"]
@@ -299,12 +300,13 @@ class PrefillDecodeBackend:
         self.t3k_mesh_device = t3k_mesh_device
         logger.info("init_tt_metal_device finished.")
 
-    def add_users_from_context(self, context_enc_list):
+    def add_users_from_context(self, context_enc_list, do_sample=True):
         """
         Add users from the given context_enc_list.
 
         Parameters:
         - context_enc_list (list): A list of encoded context tokens for each user.
+        - do_sample (bool): True for top_k/top_p sampling, False for greedy decoding.
 
         Raises:
         - AssertionError: If the length of context_enc_list exceeds the maximum number of users.
@@ -321,7 +323,7 @@ class PrefillDecodeBackend:
 
         params={
             "top_p": self.default_top_p,
-            "top_k": self.default_top_k,
+            "top_k": self.default_top_k if do_sample else 1,
             "temperature": self.default_temperature,
             "max_tokens": self.max_seq_len,
             "return_prompt": False,
@@ -722,7 +724,7 @@ class PrefillDecodeBackend:
         self.batch_preprocessing()
         self.prefill()
         self.start_decode_loop()
-        while not all([user.num_tokens_decoded >= n_tokens for user in self.get_users()]):
+        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
             self.decode(return_logits=return_logits)
         self.get_batch_stats(log=True)
         if return_logits:
