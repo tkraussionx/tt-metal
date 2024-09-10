@@ -108,9 +108,7 @@ def run_demo(args):
 
     if not tt_args.decode_only:
         # Run prefill first and pass kv_cache to decode
-        for prompt in range(len(prompts)):
-            # Call prefill
-            pass
+        run_prefill(model_args, tt_args, data_args, model, tokenizer, tokenized, prompts)
 
     # Run decode
     with torch.no_grad():
@@ -304,10 +302,12 @@ def run_prefill(
     return_logits=False,
     return_full_logits=False,
 ):
-    for prompt_tokenized in prompt_tokens:
-        # pad prompt to nearest 32 multiple
-        padding_len = nearest_32(len(prompt_tokenized)) - len(prompt_tokenized)
-        prompt_tokenized = prompt_tokenized + [tokenizer.pad_id] * padding_len
+    for i, prompt_tokenized in enumerate(prompt_tokens):
+        print(f" User: {i} \nPrompt Length: {len(prompt_tokenized)}")
+        # pad prompt to nearest 128 multiple, otherwise  AssertionError at models/demos/tg/llama3_70b/tt/llama_attention_galaxy.py:533:
+        padding_len = 128 - len(prompt_tokenized) % 128
+        prompt_tokenized = prompt_tokenized + [tokenizer.pad_id] * padding_len if padding_len != 128 else 0
+        prompt_tokenized = torch.tensor(prompt_tokenized, dtype=torch.long).unsqueeze(0)
 
         # Run prefill forward
         tt_out = model.forward(prompt_tokenized, 0)
