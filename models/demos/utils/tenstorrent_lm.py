@@ -289,7 +289,7 @@ class TenstorrentLM(TemplateLM):
             do_sample = do_sample[0]
             max_gen_toks = [req.args[1].get("max_gen_toks", 1) for req in req_list]
             assert all(x == max_gen_toks[0] for x in max_gen_toks), "max_gen_toks must be the same for all requests"
-            max_gen_toks = max_gen_toks[0] if max_gen_toks[0] > 1 else 512
+            max_gen_toks = max_gen_toks[0] if max_gen_toks[0] > 1 else self.model_backend.max_seq_len
             until = req_list[0].args[1].get("until", None)
             # TODO: add until support with stop tokens
             if until is not None:
