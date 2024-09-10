@@ -135,16 +135,14 @@ struct ExecuteUnaryBackwardStringDefault {
     }
 };
 
-template <UnaryBackwardOpType unary_backward_op_type>
+// template <UnaryBackwardOpType unary_backward_op_type>
 struct ExecuteUnaryBackwardShape {
     static std::vector<Tensor> invoke(
         const Tensor &grad_tensor_arg,
         const Tensor &input_tensor_arg,
         const tt::tt_metal::Shape &parameter_a,
-        const std::optional<MemoryConfig> &memory_config = std::nullopt) {
-        auto output_memory_config = memory_config.value_or(input_tensor_arg.memory_config());
-        return OpHandler<unary_backward_op_type>::handle(grad_tensor_arg, input_tensor_arg, parameter_a, output_memory_config);
-    }
+        const std::optional<MemoryConfig> &memory_config = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt);
 };
 
 template <UnaryBackwardOpType unary_backward_op_type>
@@ -515,8 +513,7 @@ constexpr auto gelu_bw = ttnn::register_operation<
 
 constexpr auto repeat_bw = ttnn::register_operation<
     "ttnn::repeat_bw",
-    operations::unary_backward::ExecuteUnaryBackwardShape<
-        operations::unary_backward::UnaryBackwardOpType::REPEAT_BW>>();
+    operations::unary_backward::ExecuteUnaryBackwardShape>();
 
 constexpr auto pow_bw = ttnn::register_operation<
     "ttnn::pow_bw",

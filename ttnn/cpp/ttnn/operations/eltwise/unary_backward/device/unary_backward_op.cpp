@@ -1387,14 +1387,19 @@ std::vector<Tensor> _gelu_bw(
     return grad_tensor;
 }
 
-std::vector<Tensor> _repeat_bw(
-    const Tensor& grad, const Tensor& input, const tt::tt_metal::Shape& shape, const std::optional<MemoryConfig>& output_mem_config) {
+std::vector<Tensor> ExecuteUnaryBackwardShape::invoke(
+    const Tensor& grad,
+    const Tensor& input,
+    const tt::tt_metal::Shape& shape,
+    const std::optional<MemoryConfig>& output_mem_config,
+    std::optional<Tensor> output_tensor) {
     std::vector<Tensor> grad_tensor;
     auto output_memory_config = output_mem_config.value_or(input.memory_config()); //TODO: Remove after ternary forward ops migration is completed
 
     auto shape_wh = input.get_legacy_shape();
     TT_FATAL(shape_wh[0] == 1 && "input shape[0] should be 1");
     auto ttnn_device = input.device();
+
     // input.get_legacy_shape()[0]
     // If repeat shape has 0's, it returns zeros of given input
     if (shape[0] == 0 || shape[1] == 0 || shape[2] == 0 || shape[3] == 0) {
@@ -1406,26 +1411,34 @@ std::vector<Tensor> _repeat_bw(
         TT_FATAL(shape[1] == 1 && shape[2] == 1 && shape[3] == 1 && "repeat[1], [2], [3] should be 1");
         std::array<std::uint32_t, 4> intended_shape_array = {1, shape_wh[1], shape_wh[2], shape_wh[3]};
         const ttnn::Shape required = ttnn::Shape(intended_shape_array);
-        Tensor result = tt::operations::primary::moreh_sum(
+        if(!output_tensor.has_value()){
+            output_tensor = ttnn::zeros(required, input.get_dtype(), input.get_layout(), std::optional<std::reference_wrapper<tt::tt_metal::Device>>(*ttnn_device), output_memory_config);
+        }
+        // Tensor result = tt::operations::primary::moreh_sum(
+        tt::operations::primary::moreh_sum(
             grad,
             dim,
             true,
-            ttnn::zeros(required, input.get_dtype(), input.get_layout(), std::optional<std::reference_wrapper<tt::tt_metal::Device>>(*ttnn_device), output_memory_config),
+            output_tensor,
             output_memory_config);
-        grad_tensor.emplace_back(result);
+        grad_tensor.emplace_back(output_tensor.value());
         return grad_tensor;
     } else if (shape[1] > 1) {
         std::vector<int64_t> dim = {1};
         TT_FATAL(shape[0] == 1 && shape[2] == 1 && shape[3] == 1 && "repeat[0], [2], [3] should be 1");
         std::array<std::uint32_t, 4> intended_shape_array = {shape_wh[0], 1, shape_wh[2], shape_wh[3]};
         const ttnn::Shape required = ttnn::Shape(intended_shape_array);
-        Tensor result = tt::operations::primary::moreh_sum(
+        if(!output_tensor.has_value()){
+            output_tensor = ttnn::zeros(required, input.get_dtype(), input.get_layout(), std::optional<std::reference_wrapper<tt::tt_metal::Device>>(*ttnn_device), output_memory_config);
+        }
+        // Tensor result = tt::operations::primary::moreh_sum(
+        tt::operations::primary::moreh_sum(
             grad,
             dim,
             true,
-            ttnn::zeros(required, input.get_dtype(), input.get_layout(), std::optional<std::reference_wrapper<tt::tt_metal::Device>>(*ttnn_device), output_memory_config),
+            output_tensor,
             output_memory_config);
-        grad_tensor.emplace_back(result);
+        grad_tensor.emplace_back(output_tensor.value());
         return grad_tensor;
     }
     return grad_tensor;

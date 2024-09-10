@@ -662,14 +662,16 @@ void bind_unary_backward_shape(
                const ttnn::Tensor& grad_tensor,
                const ttnn::Tensor& input_tensor,
                const tt::tt_metal::Shape& parameter_a,
-               const std::optional<MemoryConfig>& memory_config) {
-                return self(grad_tensor, input_tensor, parameter_a, memory_config);
+               const std::optional<MemoryConfig>& memory_config,
+               std::optional<Tensor> output_tensor) {
+                return self(grad_tensor, input_tensor, parameter_a, memory_config, output_tensor);
             },
             py::arg("grad_tensor"),
             py::arg("input_tensor"),
             py::arg(parameter_name_a.c_str()),
             py::kw_only(),
-            py::arg("memory_config") = std::nullopt});
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt});
 }
 
 template <typename unary_backward_operation_t>
