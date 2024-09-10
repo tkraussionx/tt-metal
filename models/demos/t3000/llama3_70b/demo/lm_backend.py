@@ -547,7 +547,7 @@ class PrefillDecodeBackend:
         for idx, (user, user_decode_id) in enumerate(
             zip(self.users, self.decode_ids.reshape(self.batch_size).tolist())
         ):
-            if user is None:
+            if user is None or user.decode_complete:
                 continue
 
             if not user.prefill_complete:
@@ -593,7 +593,6 @@ class PrefillDecodeBackend:
                         user.decode_complete = True
                 if user.decode_complete:
                     # user just finished
-                    self.decode_ids[idx][0] = user.eos_token_id
                     user.stop_decode_timer()
                     # user.get_user_stats()
 
