@@ -392,16 +392,25 @@ class EnqueueTraceCommand : public Command {
     Buffer& buffer;
     Device* device;
     SystemMemoryManager& manager;
+    std::shared_ptr<detail::TraceDescriptor> desc;
     uint32_t& expected_num_workers_completed;
     bool clear_count;
-
+    uint32_t launch_msg_wptr = 0;
+    uint32_t active_eth_launch_msg_wptr = 0;
+    NOC noc_index;
+    CoreCoord dispatch_core;
    public:
     EnqueueTraceCommand(
         uint32_t command_queue_id,
         Device* device,
         SystemMemoryManager& manager,
+        std::shared_ptr<detail::TraceDescriptor> desc,
         Buffer& buffer,
-        uint32_t& expected_num_workers_completed);
+        uint32_t& expected_num_workers_completed,
+        uint32_t launch_msg_wptr,
+        uint32_t active_eth_launch_msg_wptr,
+        NOC noc_index,
+        CoreCoord dispatch_core);
 
     void process();
 
@@ -508,6 +517,7 @@ class HWCommandQueue {
     void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
     void set_unicast_only_cores_on_dispatch_s(const std::vector<uint32_t>& unicast_only_noc_encodings);
+    void clear_launch_msg_buffer();
    private:
     uint32_t id;
     uint32_t size_B;
@@ -530,6 +540,8 @@ class HWCommandQueue {
     detail::CompletionReaderQueue issued_completion_q_reads;
     uint32_t launch_message_wptr = 0;
     uint32_t active_eth_launch_message_wptr = 0;
+    uint32_t global_launch_message_wptr = 0;
+    uint32_t global_active_eth_launch_message_wptr = 0;
     Device* device;
 
     std::condition_variable reader_thread_cv;

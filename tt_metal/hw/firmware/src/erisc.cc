@@ -10,6 +10,7 @@
 #include "noc_parameters.h"
 #include "risc_attribs.h"
 #include "tools/profiler/kernel_profiler.hpp"
+#include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "debug/dprint.h"
 // Number of registers to save for early exit
 #define CONTEXT_SIZE (13 * 4)
@@ -90,7 +91,16 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
             mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             DEBUG_STATUS("R");
 
-        } else {
+        } else if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr) {
+            int64_t dispatch_addr =
+                NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
+                NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+            // Set the rd_ptr on workers to specified value
+            mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
+            mailboxes->launch_msg_rd_ptr = 0;
+            internal_::notify_dispatch_core_done(dispatch_addr);
+        }
+        else {
             internal_::risc_context_switch();
         }
     }

@@ -770,6 +770,9 @@ static void process_wait() {
     uint32_t heartbeat = 0;
     if (wait) {
         // DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
+        DPRINT << "wait for: " << count << ENDL();
+        for (volatile int i = 0; i < 100000; i++) {}
+        DPRINT << "got: " << *sem_addr << ENDL();
         do {
             invalidate_l1_cache();
             IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
@@ -809,13 +812,13 @@ re_run_command:
     switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE_LINEAR:
             DEBUG_STATUS("DWB");
-            // DPRINT << "cmd_write\n";
+            DPRINT << "cmd_write\n";
             process_write(block_noc_writes_to_clear, block_next_start_addr);
             DEBUG_STATUS("DWD");
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
-            // DPRINT << "cmd_write_linear_h\n";
+            DPRINT << "cmd_write_linear_h\n";
             if (is_h_variant) {
                 process_write(block_noc_writes_to_clear, block_next_start_addr);
             } else {
@@ -824,7 +827,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
-            // DPRINT << "cmd_write_linear_h_host\n";
+            DPRINT << "cmd_write_linear_h_host\n";
             if (is_h_variant) {
                 process_write_host_h(block_noc_writes_to_clear, block_next_start_addr);
             } else {
@@ -833,7 +836,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PAGED:
-            // DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
+            DPRINT << "cmd_write_paged is_dram: " << (uint32_t)cmd->write_paged.is_dram << ENDL();
             if (cmd->write_paged.is_dram) {
                 process_write_paged<true>(block_noc_writes_to_clear, block_next_start_addr);
             } else {
@@ -842,7 +845,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_WRITE_PACKED: {
-            // DPRINT << "cmd_write_packed" << ENDL();
+            DPRINT << "cmd_write_packed" << ENDL();
             uint32_t flags = cmd->write_packed.flags;
             if (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_MCAST) {
                 process_write_packed<true, CQDispatchWritePackedMulticastSubCmd>(flags, l1_cache, block_noc_writes_to_clear, block_next_start_addr);
@@ -852,23 +855,24 @@ re_run_command:
         } break;
 
         case CQ_DISPATCH_CMD_SEM_UPDATE:
+            DPRINT << "Sem update" << ENDL();
             noc_async_write_barrier();
             noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, get_semaphore<fd_core_type>(dispatch_s_sem_id)), 1);
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
         case CQ_DISPATCH_CMD_WRITE_PACKED_LARGE:
-            // DPRINT << "cmd_write_packed_large" << ENDL();
+            DPRINT << "cmd_write_packed_large" << ENDL();
             process_write_packed_large(l1_cache, block_noc_writes_to_clear, block_next_start_addr);
             break;
 
         case CQ_DISPATCH_CMD_WAIT:
-            // DPRINT << "cmd_wait" << ENDL();
+            DPRINT << "cmd_wait" << ENDL();
             process_wait();
-            // DPRINT << "Wait done" << ENDL();
+            DPRINT << "Wait done" << ENDL();
             break;
 
         case CQ_DISPATCH_CMD_GO:
-            // DPRINT << "cmd_go" << ENDL();
+            DPRINT << "cmd_go" << ENDL();
             break;
 
         case CQ_DISPATCH_CMD_SINK:
@@ -876,18 +880,18 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_DEBUG:
-            // DPRINT << "cmd_debug" << ENDL();
+            DPRINT << "cmd_debug" << ENDL();
             cmd_ptr = process_debug_cmd(cmd_ptr);
             goto re_run_command;
             break;
 
         case CQ_DISPATCH_CMD_DELAY:
-            // DPRINT << "cmd_delay" << ENDL();
+            DPRINT << "cmd_delay" << ENDL();
             process_delay_cmd();
             break;
 
         case CQ_DISPATCH_CMD_EXEC_BUF_END:
-            // DPRINT << "cmd_exec_buf_end\n";
+            DPRINT << "cmd_exec_buf_end\n";
             if (is_h_variant) {
                 process_exec_buf_end_h();
             } else {
@@ -896,7 +900,7 @@ re_run_command:
             break;
 
         case CQ_DISPATCH_CMD_REMOTE_WRITE:
-            // DPRINT << "cmd_remote_write\n";
+            DPRINT << "cmd_remote_write\n";
             if (is_d_variant && !is_h_variant) {
                 // Relay write to dispatch_h, which will issue it on local chip
                 relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd), block_noc_writes_to_clear, block_next_start_addr);
