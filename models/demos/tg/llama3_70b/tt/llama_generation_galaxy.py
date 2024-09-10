@@ -12,6 +12,7 @@ from models.demos.t3000.llama2_70b.tt.llama_common import BASE_URL, ConcatMesh2D
 from models.demos.t3000.llama2_70b.tt.model_config import (
     get_model_config,
 )
+from models.utility_functions import nearest_32
 
 
 class TtLlamaModelForGeneration:
@@ -34,7 +35,7 @@ class TtLlamaModelForGeneration:
             max_batch_size=self.max_batch_size,
             max_context_len=self.max_kv_context_len,
             batch=self.max_batch_size,
-            seq_len=1,
+            seq_len=1 if tt_args.decode_only else 256,
         )
 
         # TT model -------------------------------------------------------------
@@ -56,6 +57,8 @@ class TtLlamaModelForGeneration:
         _, seq_len = tokens.shape
         if seq_len == 1:
             return self.decode_forward(tokens, start_pos)
+        else:
+            return self.prefill_forward(tokens, start_pos)
 
     def decode_forward(self, tokens: torch.Tensor, start_pos: int):
         self._update_model_config("decode", tokens.shape[0], 1)
@@ -80,6 +83,26 @@ class TtLlamaModelForGeneration:
         del tt_logits
 
         return logits
+
+    def prefill_forward(self, tokens: torch.Tensor, start_pos: int):
+        # Prepare inputs
+        tt_inp_emb, start_pos, rot_mat, attn_mask = self.tt_model.prepare_inputs(tokens, 0)
+        # Run prefill forward
+        tt_logits = self.tt_model(
+            tt_inp_emb,
+            rot_mat,
+            start_pos,
+            attn_mask,
+        )
+        del tt_inp_emb, rot_mat, attn_mask
+
+        logits = self._process_logits(tt_logits)
+
+        logits = logits.permute(2, 1, 0, 3).squeeze()  # [batch, hidden_dim]
+
+        del tt_logits
+
+        return logits  # (vocab_size)
 
     def _process_logits(self, tt_logits):
         logits = ttnn.to_torch(

@@ -22,6 +22,7 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
     check_mesh_device,
     string_similarity_score,
 )
+from models.utility_functions import nearest_32
 
 
 @dataclass
@@ -104,6 +105,12 @@ def run_demo(args):
     model, tokenizer = generator.model, generator.tokenizer
 
     tokenized, prompts = load_prompts_file(model_args, data_args, tokenizer)
+
+    if not tt_args.decode_only:
+        # Run prefill first and pass kv_cache to decode
+        for prompt in range(len(prompts)):
+            # Call prefill
+            pass
 
     # Run decode
     with torch.no_grad():
@@ -252,7 +259,7 @@ def run_decode(
 
     for cur_pos in range(min_prompt_len, total_len):
         start = time()
-        input_tokens = tokens[:, prev_pos:cur_pos]
+        input_tokens = tokens[:, prev_pos:cur_pos]  # tokens[:, 0:min(prompt_lens)]
         logits = model.forward(input_tokens, prev_pos)
 
         next_logits = logits[:, -1, :]  # batch, vocab of last token
@@ -284,6 +291,28 @@ def run_decode(
         full_logits = torch.cat(full_logits, dim=1)
         output = (output, full_logits)
     return output
+
+
+def run_prefill(
+    model_args,
+    tt_args,
+    data_args,
+    model,
+    tokenizer,
+    prompt_tokens,
+    prompts,
+    return_logits=False,
+    return_full_logits=False,
+):
+    for prompt_tokenized in prompt_tokens:
+        # pad prompt to nearest 32 multiple
+        padding_len = nearest_32(len(prompt_tokenized)) - len(prompt_tokenized)
+        prompt_tokenized = prompt_tokenized + [tokenizer.pad_id] * padding_len
+
+        # Run prefill forward
+        tt_out = model.forward(prompt_tokenized, 0)
+
+        # process logits
 
 
 def latency_printout(latencies, model_args, generated_len):
@@ -364,7 +393,7 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
     ),
     ids=("chat_completion", "text_completion"),
 )
-@pytest.mark.parametrize("decode_only", (True,), ids=("decode_only",))
+@pytest.mark.parametrize("decode_only", (True, False), ids=("decode_only", "prefill_decode"))
 @pytest.mark.parametrize("num_layers", (1, 2, 10, 80), ids=("1L", "2L", "10L", "80L"))
 @pytest.mark.parametrize(
     "implementation, skip_model_load, n_devices",
@@ -372,12 +401,12 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
         (
             "tt",
             False,
-            8,
+            32,
         ),
         (
             "meta",
             False,
-            8,
+            32,
         ),
     ),
     ids=("tt-70b-glx", "meta-70b"),
@@ -392,7 +421,7 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
 )
 @pytest.mark.parametrize(
     "ground_truth",
-    ("models/demos/t3000/llama2_70b/demo/data/llama2_ground_truth.json", None),
+    ("models/demos/t3000/llama2_70b/demo/data/llama3_ground_truth.json", None),
     ids=("check_enabled", "check_disabled"),
 )
 @pytest.mark.parametrize(

@@ -257,7 +257,7 @@ class TtLlamaModel_galaxy:
 
             attn_masks = None
         elif self.model_config["LLM_MODE"] == "prefill":
-            assert seq_len % 128 == 0 and seq_len > 0, "Prefill mode only supports seq_len > 0 and seq_len % 128"
+            assert seq_len % 32 == 0 and seq_len > 0, "Prefill mode only supports seq_len > 0 and seq_len % 32"
 
             assert xs.shape == (batch, 1, seq_len, self.hidden_size // self.cluster_shape[0])
 
