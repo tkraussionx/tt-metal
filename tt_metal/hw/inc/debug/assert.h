@@ -18,8 +18,8 @@ void assert_and_hang(uint32_t line_num) {
     }
 
     // Update launch msg to show that we've exited.
-    tt_l1_ptr launch_msg_t *launch_msg = GET_MAILBOX_ADDRESS_DEV(launch);
-    launch_msg->go.run = RUN_MSG_DONE;
+    tt_l1_ptr go_msg_t *go_message_ptr = GET_MAILBOX_ADDRESS_DEV(go_message);
+    go_message_ptr->run = RUN_MSG_DONE;
 
     // Hang, or in the case of erisc, early exit.
 #if defined(COMPILE_FOR_ERISC)

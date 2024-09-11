@@ -445,8 +445,8 @@ int main() {
                     1,
                     31 /*wrap*/,
                     false /*linked*/);
+                mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
-            mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
         }
     }
 
