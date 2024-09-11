@@ -1640,6 +1640,12 @@ void configure_for_single_chip(Device *device,
         prefetch_downstream_cb_sem, // prefetch_d only
         dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
         dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
+        true,
+        true,
+        0,
+        0,
+        0,
+        0
     };
 
     constexpr NOC my_noc_index = NOC::NOC_0;
@@ -1889,7 +1895,13 @@ void configure_for_single_chip(Device *device,
          NOC_XY_ENCODING(phys_prefetch_core_g.x, phys_prefetch_core_g.y),
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
-         num_compute_cores // max_write_packed_cores
+         num_compute_cores, // max_write_packed_cores
+         true,
+         true,
+         0,
+         0,
+         0,
+         0
     };
 
     CoreCoord phys_upstream_from_dispatch_core = split_prefetcher_g ? phys_prefetch_d_core : phys_prefetch_core_g;
