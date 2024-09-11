@@ -2161,13 +2161,6 @@ all_unary_ops = [
         "num_repeats": 2,
     },
     {
-        "op": argmax_dim_2,
-        "name": "ttnn.argmax_dim_2",
-        "shape_func": argmax_shape_func,
-        "layout": "ROW_MAJOR",
-        "num_repeats": 2,
-    },
-    {
         "op": argmax_dim_None,
         "name": "ttnn.argmax_dim_None",
         "shape_func": argmax_shape_func,

@@ -20,6 +20,8 @@ void bind_reduction_argmax_operation(py::module& module) {
             Returns the indices of the maximum value of elements in the ``input`` tensor
             If no ``dim`` is provided, it will return the indices of maximum value of all elements in given ``input``
 
+            Currenly this op only support dimension-specific reduction on last dimension.
+
             Input tensor must have BFLOAT16 data type and ROW_MAJOR layout.
 
             Output tensor will have UINT32 data type.
@@ -34,7 +36,7 @@ void bind_reduction_argmax_operation(py::module& module) {
                 * :attr:`input_tensor`: Input Tensor for argmax.
 
             Keyword Args:
-                * :attr:`dim`: the dimension to reduce. If None, the argmax of the flattened input is returned
+                * :attr:`dim`: the dimension to reduce. If None, the argmax of the flattened input is returned. Currenly only supports (dim=-1, dim=3, and dim=None)
                 * :attr:`memory_config`: Memory Config of the output tensor
                 * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
                 * :attr:`queue_id` (Optional[uint8]): command queue id
