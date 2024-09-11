@@ -30,7 +30,7 @@ jobs:
         arch: [grayskull]
     env:
       DOCS_VERSION: ${{ inputs.version }}
-      DOCS_REPO: docs-test
+      DOCS_REPO: tenstorrent.github.io
       ARCH_NAME: ${{ matrix.arch }}
       LOGURU_LEVEL: INFO
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
