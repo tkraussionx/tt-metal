@@ -76,19 +76,27 @@ def run_conv(
             torch_bias_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
         )
 
-    tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+    tt_input_tensor = ttnn.from_torch(
+        torch_input_tensor, ttnn.bfloat16
+    )  # , device=device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    # print("tt_input_tensor memory config: ", tt_input_tensor.memory_config())
+    # tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, ttnn.DRAM_MEMORY_CONFIG)
+    # tt_input_tensor = ttnn.sharded_to_interleaved(tt_input_tensor, ttnn.L1_MEMORY_CONFIG)
 
     conv_config = ttnn.Conv1dConfig(
         dtype=output_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
-        shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-        if use_1d_systolic_array
-        else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        shard_layout=(
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED if use_1d_systolic_array else ttnn.TensorMemoryLayout.BLOCK_SHARDED
+        ),
         input_channels_alignment=(16 if use_shallow_conv_variant else 32),
         deallocate_activation=deallocate_activation,
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,
+        # reshard_if_not_optimal=True,
+        # enable_split_reader=True,
+        # enable_act_double_buffer=True,
     )
     if config_override and "act_block_h" in config_override:
         conv_config.act_block_h_override = config_override["act_block_h"]
@@ -243,6 +251,634 @@ def test_conv1d_mamba(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
 def test_conv1d(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    output_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_length,
+    kernel_size,
+    stride,
+    padding,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+        pytest.skip("OOM")
+    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+        pytest.skip("OOM")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        output_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_length,
+        kernel_size,
+        stride,
+        padding,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        padded_input_channels=None,
+        output_layout=output_layout,
+        groups=groups,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (
+            32,
+            64,
+            3,
+            2500,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv1: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 2500, 1, 1, 0, 1, True, None, False),   # Conv2: Passed
+        (32, 1024, 128, 2500, 1, 1, 0, 1, True, None, False),  # Conv3: Failed with OOM error
+        (
+            32,
+            64,
+            3,
+            2500,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv4: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 2500, 1, 1, 0, 1, True, None, False),   # Conv5: Passed
+        (32, 1024, 128, 2500, 1, 1, 0, 1, True, None, False),  # Conv6: Failed with OOM error
+        (32, 512, 1088, 2500, 1, 1, 0, 1, True, None, False),  # Conv7: Failed with OOM error
+        (32, 256, 512, 2500, 1, 1, 0, 1, True, None, False),  # Conv8: Failed with OOM error
+        # (32, 128, 256, 2500, 1, 1, 0, 1, True, None, False),  # Conv9: Passed when output_dtype is BFLOAT8_B
+        (
+            32,
+            3,
+            128,
+            2500,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv10: Failed with RuntimeError: shape '[32, 2500, 3]' is invalid for input of size 2560000
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "output_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_pointnet_conv1d(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    output_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_length,
+    kernel_size,
+    stride,
+    padding,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+        pytest.skip("OOM")
+    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+        pytest.skip("OOM")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        output_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_length,
+        kernel_size,
+        stride,
+        padding,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        padded_input_channels=None,
+        output_layout=output_layout,
+        groups=groups,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (
+            32,
+            64,
+            3,
+            1024,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv1: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 1024, 1, 1, 0, 1, True, None, False),   # Conv2: Passed
+        (32, 1024, 128, 1024, 1, 1, 0, 1, True, None, False),  # Conv3: Failed with OOM error
+        (
+            32,
+            64,
+            3,
+            1024,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv4: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 1024, 1, 1, 0, 1, True, None, False),   # Conv5: Passed
+        (32, 1024, 128, 1024, 1, 1, 0, 1, True, None, False),  # Conv6: Failed with OOM error
+        (32, 512, 1088, 1024, 1, 1, 0, 1, True, None, False),  # Conv7: Failed with OOM error
+        (32, 256, 512, 1024, 1, 1, 0, 1, True, None, False),  # Conv8: Failed with OOM error
+        # (32, 128, 256, 1024, 1, 1, 0, 1, True, None, False),  # Conv9: Passed
+        (
+            32,
+            3,
+            128,
+            1024,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv10: RuntimeError: shape '[32, 1024, 3]' is invalid for input of size 1048576
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "output_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_pointnet_conv1d_low_res_1024(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    output_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_length,
+    kernel_size,
+    stride,
+    padding,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+        pytest.skip("OOM")
+    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+        pytest.skip("OOM")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        output_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_length,
+        kernel_size,
+        stride,
+        padding,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        padded_input_channels=None,
+        output_layout=output_layout,
+        groups=groups,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (
+            32,
+            64,
+            3,
+            512,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv1: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 512, 1, 1, 0, 1, True, None, False),   # Conv2: Passed
+        (
+            32,
+            1024,
+            128,
+            512,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv3: Fails when output dtype is bfloat16 with RuntimeError: TT_THROW @ ../tt_metal/impl/program/program.cpp:519: tt::exception
+        (
+            32,
+            64,
+            3,
+            512,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv4: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 512, 1, 1, 0, 1, True, None, False),   # Conv5: Passed
+        (
+            32,
+            1024,
+            128,
+            512,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv6: Fails when output dtype is bfloat16 with RuntimeError: TT_THROW @ ../tt_metal/impl/program/program.cpp:519: tt::exception
+        (32, 512, 1088, 512, 1, 1, 0, 1, True, None, False),  # Conv7: Failed with OOM error
+        # (32, 256, 512, 512, 1, 1, 0, 1, True, None, False),  # Conv8: Passed
+        # (32, 128, 256, 512, 1, 1, 0, 1, True, None, False),  # Conv9: Passed
+        (
+            32,
+            3,
+            128,
+            512,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv10: RuntimeError: shape '[32, 512, 3]' is invalid for input of size 524288
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "output_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_pointnet_conv1d_low_res_512(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    output_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_length,
+    kernel_size,
+    stride,
+    padding,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+        pytest.skip("OOM")
+    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+        pytest.skip("OOM")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        output_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_length,
+        kernel_size,
+        stride,
+        padding,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        padded_input_channels=None,
+        output_layout=output_layout,
+        groups=groups,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (
+            32,
+            64,
+            3,
+            256,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv1: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 256, 1, 1, 0, 1, True, None, False),   # Conv2: Passed
+        # (32, 1024, 128, 256, 1, 1, 0, 1, True, None, False),  # Conv3: Passed
+        (
+            32,
+            64,
+            3,
+            256,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv4: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 256, 1, 1, 0, 1, True, None, False),   # Conv5: Passed
+        # (32, 1024, 128, 256, 1, 1, 0, 1, True, None, False),  # Conv6: Passed
+        (
+            32,
+            512,
+            1088,
+            256,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv7: Failed with RuntimeError: TT_THROW @ ../tt_metal/impl/program/program.cpp:519: tt::exception
+        # (32, 256, 512, 256, 1, 1, 0, 1, True, None, False),  # Conv8: Passed
+        # (32, 128, 256, 256, 1, 1, 0, 1, True, None, False),  # Conv9: Passed
+        (
+            32,
+            3,
+            128,
+            256,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv10: RuntimeError: shape '[32, 256, 3]' is invalid for input of size 262144
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "output_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_pointnet_conv1d_low_res_256(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    output_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_length,
+    kernel_size,
+    stride,
+    padding,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+        pytest.skip("OOM")
+    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+        pytest.skip("OOM")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        output_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_length,
+        kernel_size,
+        stride,
+        padding,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        padded_input_channels=None,
+        output_layout=output_layout,
+        groups=groups,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (
+            32,
+            64,
+            3,
+            128,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv1: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 128, 1, 1, 0, 1, True, None, False),   # Conv2: Passed
+        # (32, 1024, 128, 128, 1, 1, 0, 1, True, None, False),  # Conv3: Passed
+        (
+            32,
+            64,
+            3,
+            128,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv4: Failed with RuntimeError: TT_FATAL @ ../ttnn/cpp/ttnn/operations/matmul/device/matmul_op.cpp:959: a_shape[-1] == b_shape[-2]
+        # (32, 128, 64, 128, 1, 1, 0, 1, True, None, False),   # Conv5: Passed
+        # (32, 1024, 128, 128, 1, 1, 0, 1, True, None, False),  # Conv6: Passed
+        (
+            32,
+            512,
+            1088,
+            128,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv7: Failed when weights dtype is bfloat16 with RuntimeError: TT_THROW @ ../tt_metal/impl/program/program.cpp:519: tt::exception
+        # (32, 256, 512, 128, 1, 1, 0, 1, True, None, False),  # Conv8: Passed
+        # (32, 128, 256, 128, 1, 1, 0, 1, True, None, False),  # Conv9: Passed
+        (
+            32,
+            3,
+            128,
+            128,
+            1,
+            1,
+            0,
+            1,
+            True,
+            None,
+            False,
+        ),  # Conv10: RuntimeError: shape '[32, 128, 3]' is invalid for input of size 131072
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "output_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_pointnet_conv1d_low_res_128(
     device,
     use_program_cache,
     math_fidelity,
