@@ -1409,7 +1409,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.push_back(0);// prefetch_d_sync_sem
                 settings.semaphores.push_back(0);// prefetch_d_upstream_cb_sem
                 settings.semaphores.push_back(dispatch_buffer_pages);// prefetch_d_downstream_cb_sem
-                settings.semaphores.push_back(dispatch_buffer_pages); // prefetch_d_dispatch_sync_sem
+                settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_pages()); // prefetch_d_dispatch_sync_sem
                 settings.consumer_semaphore_id = 1;
                 settings.producer_semaphore_id = 2;
                 settings.prefetch_dispatch_s_semaphore_id = 3;
@@ -1598,7 +1598,8 @@ void Device::compile_command_queue_programs() {
                 true,    // is_host_variant
                 dispatch_s_buffer_base,
                 prefetch_dispatch_s_sync_sem,
-                dispatch_s_sem
+                dispatch_s_sem,
+                dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size()
             };
 
             configure_kernel_variant(
@@ -1618,7 +1619,7 @@ void Device::compile_command_queue_programs() {
 
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // sync with dispatch_s
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_pages(), dispatch_core_type); // sync with dispatch_s
 
             std::size_t tensix_num_worker_cols = this->compute_with_storage_grid_size().x;
             std::size_t tensix_num_worker_rows = this->compute_with_storage_grid_size().y;
@@ -1627,7 +1628,10 @@ void Device::compile_command_queue_programs() {
             CoreCoord tensix_worker_end_phys = this->physical_core_from_logical_core(CoreCoord(tensix_num_worker_cols - 1, tensix_num_worker_rows - 1), CoreType::WORKER);
             CoreRange tensix_worker_physical_grid = CoreRange(tensix_worker_start_phys, tensix_worker_end_phys);
             uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
-            uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+            uint32_t eth_worker_go_signal_addr = 0;
+            if (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1) {
+                eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+            }
             std::vector<uint32_t> dispatch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
                 dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
@@ -1658,7 +1662,8 @@ void Device::compile_command_queue_programs() {
                 this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid),
                 tensix_num_worker_cores,
                 tensix_worker_go_signal_addr,
-                eth_worker_go_signal_addr
+                eth_worker_go_signal_addr,
+                dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size()
             };
 
             configure_kernel_variant(
