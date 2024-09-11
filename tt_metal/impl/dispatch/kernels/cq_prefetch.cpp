@@ -337,6 +337,7 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
 
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
     uint8_t dispatcher_type = cmd->relay_inline.dispatcher_type;
+    DPRINT << "Dispatcher type: " << dispatcher_type << ENDL
     uint32_t length = cmd->relay_inline.length;
     uint32_t data_ptr = cmd_ptr + sizeof(CQPrefetchCmd);
 

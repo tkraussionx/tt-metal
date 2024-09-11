@@ -668,7 +668,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     uint32_t downstream_cb_base = mux_settings.cb_start_address + mux_settings.cb_size_bytes * mux_sem;
                     settings.upstream_cores.push_back(tt_cxy_pair(0, 0, 0));
                     settings.downstream_cores.push_back(mux_settings.worker_physical_core);
-                    settings.compile_args.resize(26);
+                    settings.compile_args.resize(27);
                     auto& compile_args = settings.compile_args;
                     compile_args[0]  = downstream_cb_base;
                     compile_args[1]  = dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE;
@@ -696,6 +696,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[23] = 0;
                     compile_args[24] = 0;
                     compile_args[25] = 0;
+                    compile_args[26] = 0;
                 }
                 break;
             }
@@ -1094,7 +1095,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     TT_ASSERT(scratch_db_base + scratch_db_size <= l1_size);
 
                     auto& compile_args = prefetch_d_settings.compile_args;
-                    compile_args.resize(26);
+                    compile_args.resize(27);
                     compile_args[0]  = dispatch_d_settings.cb_start_address;
                     compile_args[1]  = dispatch_d_settings.cb_log_page_size;
                     compile_args[2]  = dispatch_d_settings.cb_pages;
@@ -1121,6 +1122,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[23] = dispatch_s_buffer_base;
                     compile_args[24] = prefetch_d_settings.prefetch_dispatch_s_semaphore_id; // Semaphore on prefetch to handshake with dispatch_s
                     compile_args[25] = dispatch_d_settings.dispatch_s_semaphore_id; // Semaphore on dispatch_s to handshake with prefetch
+                    compile_args[26] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
                     prefetch_d_idx++; // move on to next prefetcher
                 }
                 break;
@@ -1140,7 +1142,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     uint32_t dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
-                    dispatch_d_settings.compile_args.resize(30);
+                    dispatch_d_settings.compile_args.resize(31);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
                     compile_args[1] = dispatch_d_settings.cb_log_page_size;
@@ -1168,6 +1170,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[23] = dispatch_d_settings.dispatch_s_semaphore_id;
                     compile_args[24] = prefetch_d_settings.prefetch_dispatch_s_semaphore_id;
                     compile_args[25] = dispatch_d_settings.dispatch_s_sync_semaphore_id;
+                    compile_args[30] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
                     // compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
                     // compile_args[27] = tensix_num_worker_cores;
                     // compile_args[28] = tensix_worker_go_signal_addr;
