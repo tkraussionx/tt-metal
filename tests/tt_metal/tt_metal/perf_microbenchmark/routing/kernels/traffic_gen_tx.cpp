@@ -65,8 +65,8 @@ packet_output_queue_state_t output_queue;
 constexpr packet_input_queue_state_t* input_queue_ptr = &input_queue;
 constexpr packet_output_queue_state_t* output_queue_ptr = &output_queue;
 
-input_queue_rnd_state_t input_queue_state;
-// auto input_queue_state = select_input_queue<pkt_dest_size_choice>();
+// input_queue_rnd_state_t input_queue_state;
+auto input_queue_state = select_input_queue<pkt_dest_size_choice>();
 
 // generates packets with random size and payload on the input side
 inline bool input_queue_handler() {
@@ -99,16 +99,16 @@ inline bool input_queue_handler() {
             header_ptr->packet_dest = input_queue_state.input_queue_raw_state.curr_packet_dest;
             header_ptr->packet_flags = input_queue_state.input_queue_raw_state.curr_packet_flags;
             header_ptr->num_cmds = 0;
-            header_ptr->tag = input_queue_state.packet_rnd_seed;
+            header_ptr->tag = input_queue_state.input_queue_raw_state.packet_rnd_seed;
             words_initialized++;
             input_queue_state.input_queue_raw_state.curr_packet_words_remaining--;
             byte_wr_addr += PACKET_WORD_SIZE_BYTES;
         } else {
             uint32_t words_remaining = words_to_init - words_initialized;
             uint32_t num_words = std::min(words_remaining, input_queue_state.input_queue_raw_state.curr_packet_words_remaining);
-            if (!skip_pkt_content_gen) {
+            if constexpr (!skip_pkt_content_gen) {
                 uint32_t start_val =
-                (input_queue_state.packet_rnd_seed & 0xFFFF0000) +
+                (input_queue_state.input_queue_raw_state.packet_rnd_seed & 0xFFFF0000) +
                 (input_queue_state.input_queue_raw_state.curr_packet_size_words - input_queue_state.input_queue_raw_state.curr_packet_words_remaining);
                 fill_packet_data(reinterpret_cast<tt_l1_ptr uint32_t*>(byte_wr_addr), num_words, start_val);
             }
@@ -130,15 +130,13 @@ void kernel_main() {
     zero_l1_buf(
         reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words * PACKET_WORD_SIZE_BYTES), queue_size_words); // TODO: remove
 
-    input_queue_state.init(src_endpoint_id, prng_seed);
-    // if constexpr (static_cast<pkt_dest_size_choices_t>(get_compile_time_arg_val(19)) == pkt_dest_size_choices_t::RANDOM) {
-    //     input_queue_state.init(src_endpoint_id, prng_seed);
-    // // } else if constexpr (static_cast<pkt_dest_size_choices_t>(get_compile_time_arg_val(19)) == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE) {
-    // } else if constexpr (get_compile_time_arg_val(19) == 1) {
-    //     input_queue_state.init(max_packet_size_words); // TODO: from parameter
-    // } else {
-    //     input_queue_state.init(src_endpoint_id, prng_seed);
-    // }
+    if constexpr (pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM) {
+        input_queue_state.init(src_endpoint_id, prng_seed);
+    } else if constexpr (pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE) {
+        input_queue_state.init(max_packet_size_words, 0); // TODO: from parameter
+    } else {
+        input_queue_state.init(src_endpoint_id, prng_seed);
+    }
 
     input_queue_ptr->init(
         input_queue_id,
