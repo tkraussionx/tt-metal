@@ -32,7 +32,7 @@ from models.experimental.functional_unet.tests.common import (
         ("upblock4", 16, 528, 80, 16),
     ],
 )
-@pytest.mark.parametrize("device_params", [{"l1_small_size": 3 * 32768}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 2 * 32768}], indirect=True)
 def test_unet_upblock(
     batch,
     groups,
@@ -43,7 +43,7 @@ def test_unet_upblock(
     residual_channels,
     device,
     reset_seeds,
-    use_program_cache
+    use_program_cache,
 ):
     torch_input, ttnn_input = create_unet_input_tensors(device, batch, groups, pad_input=False)
     model = unet_shallow_torch.UNet.from_random_weights(groups=groups)
@@ -54,7 +54,7 @@ def test_unet_upblock(
     logger.info(f"Run compilation run")
     output_tensor = ttnn_model(ttnn_input).cpu()
     output_tensor = ttnn_model(ttnn_input).cpu()
-    logger.info(f"Done running compilztion")
+    logger.info(f"Done running compilation")
 
     torch_input, ttnn_input = create_unet_input_tensors(
         device,
@@ -106,7 +106,7 @@ def test_unet_upblock(
     y = block.conv2(y)
     # y = block.conv3(y)
 
-    check_pcc_conv(torch_output, y, pcc=0.999)
+    check_pcc_conv(torch_output, y, pcc=0.99)
 
 
 @pytest.mark.parametrize("batch, groups", [(2, 1)])

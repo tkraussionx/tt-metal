@@ -186,7 +186,7 @@ class UNetConv2D:
         x, _, _, self.weight, self.bias = ttnn.conv2d(
             input_tensor=x,
             weight_tensor=self.weight,
-            #bias_tensor=self.bias,
+            bias_tensor=self.bias,
             device=self.device,
             in_channels=self.in_channels,
             out_channels=self.out_channels,
