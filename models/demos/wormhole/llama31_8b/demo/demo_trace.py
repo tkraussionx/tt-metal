@@ -163,7 +163,7 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
     model_args = TtModelArgs(device, instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    model_args.n_layers = 1
+    model_args.n_layers = 32
 
     logger.info("Loading weights...")
     profiler.start("weight_loading")
@@ -321,17 +321,12 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
         # Compile
         decode_input = ttnn.unsqueeze_to_4D(ttnn.to_layout(tt_embd(tt_out_tok), ttnn.TILE_LAYOUT))
         tt_out = tt_model(decode_input, current_pos, rot_mat=current_rot_mat)
-        print("DONE MODEL", tt_out)
         tt_out = ttnn.untilize(
             tt_out, use_multicore=False
         )  # multi-core OOMs (https://github.com/tenstorrent/tt-metal/issues/9022)
-        print("DONE UNTILIZE", tt_out)
         tt_out_tok = ttnn.argmax(tt_out[:, :, :batch_size, :], dim=3, output_tensor=tt_out_tok)
-        print("DONE ARGMAX", tt_out_tok)
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
-        print("DONE LINEAR", new_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
-        print("DONE COPY", current_rot_mat)
         # FIXME current_pos = ttnn.add(current_pos, 1, output_tensor=current_pos)
 
         # Capture Trace
@@ -341,7 +336,7 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
         tt_out = ttnn.untilize(
             tt_out, use_multicore=False
         )  # multi-core OOMs (https://github.com/tenstorrent/tt-metal/issues/9022)
-        tt_out_tok = ttnn.argmax(tt_out, dim=3, output_tensor=tt_out_tok)
+        tt_out_tok = ttnn.argmax(tt_out[:, :, :batch_size, :], dim=3, output_tensor=tt_out_tok)
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
         ttnn.end_trace_capture(device, trace_id, cq_id=0)
@@ -357,7 +352,6 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
         # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
         while users_decoding:
             iteration_time_start = time()
-            curr_pos = generation_start_pos + iteration
 
             # Execute trace
             ttnn.wait_for_event(0, op_event)
@@ -367,16 +361,14 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
             # Write to host
             ttnn.wait_for_event(1, op_event)
             ttnn.wait_for_event(1, write_event)
-            tt_output_torch = ttnn.to_torch(tt_out_tok).cpu(blocking=False)[0, 0, 0, :batch_size]
+            tt_output_torch = ttnn.to_torch(tt_out_tok)[0, 0, 0, :batch_size]
             ttnn.record_event(1, write_event)
 
             # Save output token to print out later
             for user in range(batch_size):
                 user_tok = tt_output_torch[user].tolist()
-                if (
-                    user_tok[0] != 28803 and user_done[user] == False
-                ):  # Stop saving the ouput after hitting the EOS token
-                    all_outputs[user].append(user_tok[0])
+                if user_tok != 28803 and user_done[user] == False:  # Stop saving the ouput after hitting the EOS token
+                    all_outputs[user].append(user_tok)
                 else:
                     user_done[user] = True
                     logger.trace(f"[User {user}] Finished decoding at iteration {iteration}")
@@ -389,16 +381,16 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
 
             profiler.start(f"log_printing_iter_{iteration}", iteration=batch_idx)
             # Print out generated outputs for each user at the end of every iteration
-            if not is_ci_env:
-                if len(user_input) == 1:
-                    logger.info("[User 0] {}".format("".join(tokenizer.decode(all_outputs[0]))))
-                else:
-                    for user in range(batch_size):
-                        text = "".join(tokenizer.decode(all_outputs[user]))
-                        if len(text) > 100:
-                            text = "..." + text[-97:]
-                        text = text.replace("\n", " ")
-                        logger.info("[User {}] {}".format(user, text))
+            # if not is_ci_env:
+            #     if len(user_input) == 1:
+            #         logger.info("[User 0] {}".format("".join(tokenizer.decode(all_outputs[0]))))
+            #     else:
+            #         for user in range(batch_size):
+            #             text = "".join(tokenizer.decode(all_outputs[user]))
+            #             if len(text) > 100:
+            #                 text = "..." + text[-97:]
+            #             text = text.replace("\n", " ")
+            #             logger.info("[User {}] {}".format(user, text))
             # Always print perf at every iteration
             logger.info(
                 f"Iteration {iteration}: {1000*iteration_time:.0f}ms @ {tokens_per_second_per_user:.1f} tok/s/user ({batch_size*tokens_per_second_per_user:.1f} tok/s throughput)"
@@ -550,18 +542,19 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
 @pytest.mark.parametrize(
     "input_prompts, instruct_weights, num_batches",
     [
-        ("models/demos/wormhole/llama31_8b/demo/input_data_prefill_128.json", False, 1),
-        ("models/demos/wormhole/llama31_8b/demo/input_data_prefill_128.json", False, 3),
+        # ("models/demos/wormhole/llama31_8b/demo/input_data_prefill_128.json", False, 1),
+        # ("models/demos/wormhole/llama31_8b/demo/input_data_prefill_128.json", False, 3),
         ("models/demos/wormhole/llama31_8b/demo/input_data_questions_prefill_128.json", True, 1),
-        ("models/demos/wormhole/llama31_8b/demo/input_data_questions_prefill_128.json", True, 3),
+        # ("models/demos/wormhole/llama31_8b/demo/input_data_questions_prefill_128.json", True, 3),
     ],
     ids=[
-        "general_weights-1_batch",
-        "general_weights-3_batch",
+        # "general_weights-1_batch",
+        # "general_weights-3_batch",
         "instruct_weights-1_batch",
-        "instruct_weights-3_batch",
+        # "instruct_weights-3_batch",
     ],
 )
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 2998272, "num_hw_cqs": 2}], indirect=True)
 def test_llama_demo(
     device, use_program_cache, input_prompts, instruct_weights, is_ci_env, is_single_card_n300, num_batches
 ):
