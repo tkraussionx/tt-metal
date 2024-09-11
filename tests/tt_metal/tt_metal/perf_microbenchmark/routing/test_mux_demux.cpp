@@ -399,9 +399,9 @@ int main(int argc, char **argv) {
             config["num_endpoints"] = num_endpoints;
             config["rx_disable_data_check"] = rx_disable_data_check;
             config["rx_disable_header_check"] = rx_disable_header_check;
-            config["tx_skip_pkt_content_gen"] = tx_skip_pkt_content_gen;
-            config["check_txrx_timeout"] = check_txrx_timeout;
-            config["default_tx_pkt_dest_size_choice"] = tx_pkt_dest_size_choice;
+            config["tx_skip_pkt_content_gen"] = static_cast<int>(tx_skip_pkt_content_gen);
+            config["check_txrx_timeout"] = static_cast<int>(check_txrx_timeout);
+            config["tx_pkt_dest_size_choice"] = to_string(static_cast<pkt_dest_size_choices_t>(tx_pkt_dest_size_choice));
 
             double total_tx_bw = 0.0;
             uint64_t total_tx_words_sent = 0;
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
             if (pass) {
                 summary["config"] = config;
                 summary["stat"] = stat;
-                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, tx_skip_pkt_content_gen, check_txrx_timeout, tx_pkt_dest_size_choice));
+                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, static_cast<int>(tx_skip_pkt_content_gen), static_cast<int>(check_txrx_timeout), tx_pkt_dest_size_choice));
                 if (out.fail()) {
                     throw std::runtime_error("output file open failure");
                 }
