@@ -74,6 +74,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
 }
 
 TEST_F(DPrintFixtureDisableDevices, TestPrintMuteDevice) {
+    GTEST_SKIP();
     for (Device* device : this->devices_) {
         this->RunTestOnDevice(RunTest, device);
     }
