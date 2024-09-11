@@ -470,7 +470,11 @@ int main(int argc, char **argv) {
              0,    // prefetch_downstream_buffer_pages
              num_compute_cores, // max_write_packed_cores
              true, // is_dram_variant
-             true // is_host_variant
+             true, // is_host_variant
+             0,
+             0,
+             0,
+             0
             };
         std::vector<uint32_t> spoof_prefetch_compile_args =
             {l1_buf_base,
