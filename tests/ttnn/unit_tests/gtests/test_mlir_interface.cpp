@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "common/constants.hpp"
+#include "common/core_coord.h"
 #include "gtest/gtest.h"
 #include "impl/event/event.hpp"
 #include "impl/program/program.hpp"
@@ -29,6 +30,8 @@
 #include "ttnn/operations/eltwise/binary/binary_l1_interface.hpp"
 #include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/operations/eltwise/unary/unary_l1_interface.hpp"
+#include "ttnn/operations/matmul/device/matmul_op.hpp"
+#include "ttnn/operations/matmul/matmul.hpp"
 #include "ttnn/operations/normalization/softmax/softmax.hpp"
 #include "ttnn/operations/normalization/softmax/softmax_l1_interface.hpp"
 #include "ttnn/tensor/tensor.hpp"
@@ -108,6 +111,129 @@ class EltwiseBinaryOpInterfaceTestFixture
 
 class SoftmaxOpInterfaceTestFixture : public TTNNFixtureWithDevice,
                                       public testing::WithParamInterface<std::tuple<InputShapeTestParam, int>> {};
+
+class MatmulOpInterfaceTestFixture
+    : public TTNNFixtureWithDevice,
+      public testing::WithParamInterface<
+          std::tuple<InputShapeTestParam, InputShapeTestParam, ttnn::operations::matmul::MatmulProgramConfig>> {};
+
+TEST_P(MatmulOpInterfaceTestFixture, MlirInterfaceTest) {
+    auto param_combination = GetParam();
+    auto input_a = std::get<0>(param_combination);
+    auto input_b = std::get<1>(param_combination);
+    auto program_config = std::get<2>(param_combination);
+
+    // pad input shapes (this isn't happening automagically)
+    input_a.shape = pad_shape_to_tile(input_a.shape);
+    input_b.shape = pad_shape_to_tile(input_b.shape);
+    std::cout << "OP = matmul(" << input_a.shape << ", " << input_b.shape << ")" << std::endl;
+
+    // TODO: Test constraints
+
+    // Run the test
+    {
+        auto input_tensor_a =
+            ttnn::zeros(input_a.shape, input_a.data_type, input_a.layout, this->getDevice(), input_a.memory_config);
+        auto input_tensor_b =
+            ttnn::zeros(input_b.shape, input_b.data_type, input_b.layout, this->getDevice(), input_b.memory_config);
+
+        auto call = [&] {
+            const auto output_tensor = ttnn::matmul(
+                input_tensor_a,
+                input_tensor_b,
+                false /* transpose_a */,
+                false /* transpose_b */,
+                std::nullopt /* memory_config */,
+                std::nullopt /* dtype */,
+                program_config);
+            return output_tensor;
+        };
+
+        // // get graph trace for ground truth
+        auto json_trace = graph::query_trace(call);
+        tt::log_info("Trace: {}", json_trace.dump(4));
+
+        // L1 interface calls and checks against graph trace
+        {
+            auto l1_input_a = std::make_tuple(input_a.shape, input_a.data_type, input_a.layout, input_a.memory_config);
+            auto l1_input_b = std::make_tuple(input_b.shape, input_b.data_type, input_b.layout, input_b.memory_config);
+            // auto l1_usage = SoftmaxOpL1UsageFactory::Make(l1_input, dim_arg);
+
+            const auto cfg = std::get<matmul::MatmulMultiCoreReuseProgramConfig>(program_config);
+
+            uint32_t M = std::get<ttnn::Shape>(l1_input_a).value[-2] / TILE_HEIGHT;
+            uint32_t K = std::get<ttnn::Shape>(l1_input_a).value[-1] / TILE_WIDTH;
+            uint32_t num_blocks = K / cfg.in0_block_w;
+            uint32_t batch_scale_factor = cfg.per_core_M > M ? cfg.per_core_M / M : 1;
+            uint32_t per_core_M_per_batch = cfg.per_core_M > M ? M : cfg.per_core_M;
+
+            uint32_t in0_CB_tiles = std::get<tt::tt_metal::MemoryConfig>(l1_input_a).is_sharded()
+                                        ? cfg.per_core_M * K
+                                        : 2 * per_core_M_per_batch * cfg.in0_block_w;
+
+            const uint32_t cb_in0_size =
+                in0_CB_tiles * tt::tt_metal::detail::TileSize(tt::tt_metal::datatype_to_dataformat_converter(
+                                   std::get<tt::tt_metal::DataType>(l1_input_a)));
+
+            uint32_t in1_CB_tiles = std::get<tt::tt_metal::MemoryConfig>(l1_input_a).is_sharded()
+                                        ? num_blocks * batch_scale_factor * cfg.per_core_N * cfg.in0_block_w
+                                        : 2 * cfg.per_core_N * cfg.in0_block_w;
+
+            const uint32_t cb_in1_size =
+                in1_CB_tiles * tt::tt_metal::detail::TileSize(tt::tt_metal::datatype_to_dataformat_converter(
+                                   std::get<tt::tt_metal::DataType>(l1_input_b)));
+
+            uint32_t out_block_tiles = cfg.per_core_M * cfg.per_core_N;
+
+            const uint32_t cb_out_size =
+                out_block_tiles * tt::tt_metal::detail::TileSize(tt::tt_metal::datatype_to_dataformat_converter(
+                                      std::get<tt::tt_metal::DataType>(l1_input_a)));
+
+            std::cout << "COMPUTED cb[0] " << cb_in0_size << std::endl;
+            std::cout << "COMPUTED cb[1] " << cb_in1_size << std::endl;
+            std::cout << "COMPUTED cb[2] " << cb_out_size << std::endl;
+
+            auto graph_circular_buffer_allocations = graph::extract_circular_buffer_allocations_per_core(json_trace);
+            for (int i = 0; i < graph_circular_buffer_allocations.size(); i++) {
+                std::cout << "DBG cb[" << i << "]" << (graph_circular_buffer_allocations[i]) << std::endl;
+            }
+
+            std::cout << "==============================================" << std::endl;
+
+            auto graph_l1_buffer_allocations = graph::extract_l1_buffer_allocations(json_trace);
+            for (int i = 0; i < graph_l1_buffer_allocations.size(); i++) {
+                std::cout << "DBG l1[" << i << "]" << (graph_l1_buffer_allocations[i]) << std::endl;
+            }
+
+            // compare_l1_circular_buffer_allocations(l1_usage->get_circular_buffer_l1_allocations_per_core(),
+            // json_trace); compare_l1_tensor_allocations(l1_usage->get_tensor_l1_allocations_per_core(), json_trace);
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    MlirInterfaceTests,            // Prefix for the instantiated test suite
+    MatmulOpInterfaceTestFixture,  // Test suite name
+    ::testing::Combine(
+        ::testing::Values(InputShapeTestParam{
+            .shape = ttnn::Shape(tt::tt_metal::Array4D{3, 1, 4 * 32, 8 * 32}),
+            .memory_config = ttnn::L1_MEMORY_CONFIG,
+        }),
+
+        ::testing::Values(InputShapeTestParam{
+            .shape = ttnn::Shape(tt::tt_metal::Array4D{3, 1, 8 * 32, 4 * 32}),
+            .memory_config = ttnn::L1_MEMORY_CONFIG,
+        }),
+
+        ::testing::Values(ttnn::operations::matmul::MatmulMultiCoreReuseProgramConfig{
+            .compute_with_storage_grid_size = CoreCoord(2, 2),
+            .in0_block_w = 4,
+            .out_subblock_h = 2,
+            .out_subblock_w = 2,
+            .per_core_M = 2,
+            .per_core_N = 4}))
+
+);
 
 TEST_P(SoftmaxOpInterfaceTestFixture, MlirInterfaceTest) {
     auto param_combination = GetParam();
