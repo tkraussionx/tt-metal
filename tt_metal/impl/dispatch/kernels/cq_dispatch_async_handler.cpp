@@ -21,7 +21,8 @@ constexpr uint32_t dispatch_cb_log_page_size = get_compile_time_arg_val(1);
 constexpr uint32_t dispatch_cb_page_size = 1 << dispatch_cb_log_page_size;
 constexpr uint32_t dispatch_cb_pages = get_compile_time_arg_val(2);
 constexpr uint32_t cb_base = get_compile_time_arg_val(22);
-constexpr uint32_t cb_end = cb_base + dispatch_cb_pages * dispatch_cb_page_size;
+constexpr uint32_t cb_size = get_compile_time_arg_val(30);
+constexpr uint32_t cb_end = cb_base + cb_size;
 
 constexpr uint32_t my_dispatch_cb_sem_id = get_compile_time_arg_val(23);
 constexpr uint32_t upstream_dispatch_cb_sem_id = get_compile_time_arg_val(24);
@@ -157,7 +158,7 @@ void kernel_main() {
     uint8_t send_unicast = 0x2;
     while(!done) {
         // These need to use NOC 1 BRISC_AT_CMD_BUF
-        // DPRINT << "Trying to acquire pages" << ENDL();
+        // DPRINT << "Trying to acquire pages: " << cmd_ptr << " " << cb_base << " " << cb_end << ENDL();
         cb_acquire_pages_dispatch_s<my_noc_xy, my_dispatch_cb_sem_id>(1);
         // DPRINT << "Acquired pages" << ENDL();
         volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
@@ -186,7 +187,7 @@ void kernel_main() {
             // DPRINT << "Done barrier writes" << ENDL();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
-            // DPRINT << "Terminating" << ENDL();
+            // DPRINT << "dispatch_s Terminating" << ENDL();
             done = true;
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_SET_UNICAST_ONLY_CORES) {
@@ -199,6 +200,9 @@ void kernel_main() {
                 data_ptr += sizeof(uint32_t);
             }
             cmd_ptr += num_unicast_cores * sizeof(uint32_t);
+        }
+        else {
+            DPRINT << "Got invalid command" << ENDL();
         }
         cmd_ptr += sizeof(CQDispatchCmd);
         cmd_ptr = round_up_pow2(cmd_ptr, dispatch_cb_page_size);

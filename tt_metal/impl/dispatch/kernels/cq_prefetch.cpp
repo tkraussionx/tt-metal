@@ -51,6 +51,7 @@ constexpr uint32_t is_h_variant = get_compile_time_arg_val(22);
 constexpr uint32_t dispatch_s_buffer_base = get_compile_time_arg_val(23);
 constexpr uint32_t my_dispatch_s_cb_sem_id = get_compile_time_arg_val(24);
 constexpr uint32_t downstream_dispatch_s_cb_sem_id = get_compile_time_arg_val(25);
+constexpr uint32_t dispatch_s_buffer_size = get_compile_time_arg_val(26);
 
 constexpr uint8_t my_noc_index = NOC_INDEX;
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
@@ -59,7 +60,7 @@ constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X
 constexpr uint64_t pcie_noc_xy = uint64_t(NOC_XY_PCIE_ENCODING(NOC_0_X(static_cast<uint8_t>(NOC_INDEX), noc_size_x, PCIE_NOC_X), NOC_0_Y(static_cast<uint8_t>(NOC_INDEX), noc_size_y, PCIE_NOC_Y), NOC_INDEX));
 constexpr uint32_t downstream_cb_page_size = 1 << downstream_cb_log_page_size;
 constexpr uint32_t downstream_cb_end = downstream_cb_base + (1 << downstream_cb_log_page_size) * downstream_cb_pages;
-constexpr uint32_t dispatch_s_buffer_end = dispatch_s_buffer_base + (1 << downstream_cb_log_page_size) * downstream_cb_pages;
+constexpr uint32_t dispatch_s_buffer_end = dispatch_s_buffer_base + dispatch_s_buffer_size;
 constexpr uint32_t prefetch_q_end = prefetch_q_base + prefetch_q_size;
 constexpr uint32_t cmddat_q_page_size = 1 << cmddat_q_log_page_size;
 constexpr uint32_t cmddat_q_end = cmddat_q_base + cmddat_q_size;
