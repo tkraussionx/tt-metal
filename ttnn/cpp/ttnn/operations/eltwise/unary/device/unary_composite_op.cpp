@@ -7,7 +7,7 @@
 
 #include <functional>
 #include <optional>
-
+#include "ttnn/operations/core/core.hpp"
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_metal/common/bfloat16.hpp"
 #include "ttnn/operations/data_movement/reshape/reshape.hpp"
@@ -22,7 +22,8 @@
 #include "ttnn/run_operation.hpp"
 #include "ttnn/types.hpp"
 #include "ttnn/operations/data_movement/bcast/bcast.hpp"
-
+#include "ttnn/common/constants.hpp"
+#include "ttnn/operations/eltwise/unary_backward/device/unary_backward_op.hpp"
 namespace ttnn::operations::unary{
 
 Tensor _deg2rad(const Tensor& input_tensor, const std::optional<MemoryConfig>& output_mem_config) {
@@ -600,10 +601,29 @@ Tensor _swiglu(
 }
 
 // tril : select lower triangular region of input matrix
-Tensor _tril(const Tensor& input_a, int32_t diag, const std::optional<MemoryConfig>&  output_mem_config) {
-    Tensor index_l = tt::numpy::index_tril<::bfloat16>(
-        input_a.get_legacy_shape(), diag, DataType::BFLOAT16, Layout::TILE, input_a.device(), output_mem_config.value());
-    return ttnn::multiply(input_a, index_l, std::nullopt, output_mem_config);
+Tensor ExecuteUnaryCompositeTril::invoke(uint8_t queue_id, const Tensor& input_a, int32_t diag, const std::optional<MemoryConfig>&  output_memory_config, std::optional<Tensor> output_tensor) {
+    if(!output_tensor.has_value()){
+        output_tensor = ttnn::zeros_like(input_a);
+    }
+    auto mem_config = output_memory_config.value_or(input_a.memory_config());
+    Tensor index_l = tt::numpy::index_tril_impl<::bfloat16>(queue_id, input_a.get_legacy_shape(), diag, DataType::BFLOAT16, output_tensor.value().get_layout(), input_a.device(), mem_config, output_tensor);
+    Tensor index_m = tt::numpy::index_tril<::bfloat16>(input_a.get_legacy_shape(), diag, DataType::BFLOAT16, output_tensor.value().get_layout(), input_a.device(), mem_config);
+    bool check;
+    // check = (index_l.get_layout() == Layout::TILE);
+    // std::cout << "Inside composite tril " << check ;
+    // Tensor res_host  = index_l.cpu();
+    // if(res_host.storage_type() != StorageType::DEVICE or res_host.storage_type() != StorageType::MULTI_DEVICE) {
+    //         std::cout <<std::endl << "Hitting the function " ;
+    //         res_host = res_host.pad_to_tile(0.0f);
+    //         res_host = res_host.to(Layout::TILE);
+    //         res_host = res_host.to(input_a.device());
+    //     }
+    // return index_m;
+    return ttnn::multiply(queue_id, input_a, index_l, std::nullopt, output_memory_config, output_tensor);
+}
+
+Tensor ExecuteUnaryCompositeTril::invoke(const Tensor& input_a, int32_t diag, const std::optional<MemoryConfig>&  output_mem_config) {
+    return ExecuteUnaryCompositeTril::invoke(DefaultQueueId, input_a, diag, output_mem_config);
 }
 
 // triu : select upper triangular region of input matrix

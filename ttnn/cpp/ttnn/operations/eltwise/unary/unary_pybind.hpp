@@ -1232,6 +1232,54 @@ void bind_unary_operation_with_diag(py::module& module, const unary_operation_t&
             py::arg("queue_id") = 0});
 }
 
+template <typename unary_operation_t>
+void bind_tril(py::module& module, const unary_operation_t& operation, const std::string& parameter_name_a, const std::string& parameter_a_doc, int32_t parameter_a_value, const std::string& description) {
+    auto doc = fmt::format(
+        R"doc({0}(input_tensor: ttnn.Tensor, {2}: int, *, memory_config: ttnn.MemoryConfig) -> std::vector<Tensor>
+
+        {5}
+
+        Args:
+            * :attr:`input_tensor`
+
+        Keyword args:
+            * :attr:`{2}` (float): {3} , Default value = {4}
+            * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): Memory configuration for the operation.
+            * :attr:`output_tensor` (Optional[ttnn.Tensor]): preallocated output tensor
+            * :attr:`queue_id` (Optional[uint8]): command queue id
+
+        Example:
+
+            >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
+            >>> output = {1}(tensor, {2} = {4})
+        )doc",
+        operation.base_name(),
+        operation.python_fully_qualified_name(),
+        parameter_name_a,
+        parameter_a_doc,
+        parameter_a_value,
+        description);
+
+    bind_registered_operation(
+        module,
+        operation,
+        doc,
+        ttnn::pybind_overload_t{
+            [](const unary_operation_t& self,
+               const Tensor& input_tensor,
+               uint32_t diagonal,
+               const std::optional<MemoryConfig>& memory_config,
+               std::optional<ttnn::Tensor> output_tensor,
+               const uint8_t queue_id) -> ttnn::Tensor {
+                return self(queue_id, input_tensor, diagonal, memory_config, output_tensor);
+            },
+            py::arg("input_tensor"),
+            py::kw_only(),
+            py::arg(parameter_name_a.c_str()) = parameter_a_value,
+            py::arg("memory_config") = std::nullopt,
+            py::arg("output_tensor") = std::nullopt,
+            py::arg("queue_id") = ttnn::DefaultQueueId});
+}
 
 }  // namespace detail
 
@@ -1404,7 +1452,7 @@ void py_module(py::module& module) {
         "threshold", "Threshold value",
         "value", "Value value",
         R"doc(Performs threshold function on :attr:`input_tensor`, :attr:`threshold`, :attr:`value`.)doc");
-    detail::bind_unary_composite_int_with_default(
+    detail::bind_tril(
         module,
         ttnn::tril,
         "diagonal", "diagonal value", 0,

@@ -124,6 +124,21 @@ struct ExecuteRdiv {
         std::optional<Tensor> optional_output_tensor = std::nullopt);
 };
 
+struct ExecuteUnaryCompositeTril {
+    static Tensor invoke(
+        uint8_t queue_id,
+        const Tensor &input_tensor,
+        int32_t param1,
+        const std::optional<MemoryConfig> &memory_config = std::nullopt,
+        std::optional<Tensor> optional_output_tensor = std::nullopt);
+
+    static Tensor invoke(
+        const Tensor &input_tensor,
+        int32_t param1,
+        const std::optional<MemoryConfig> &memory_config = std::nullopt);
+
+};
+
 }  // namespace unary
 }  // namespace operations
 
@@ -289,7 +304,7 @@ constexpr auto celu = ttnn::register_operation_with_auto_launch_op<
     operations::unary::ExecuteUnaryCompositeOpWithFloat<operations::unary::UnaryCompositeOpType::CELU>>();
 constexpr auto tril = ttnn::register_operation_with_auto_launch_op<
     "ttnn::tril",
-    operations::unary::ExecuteUnaryCompositeOpWithInt<operations::unary::UnaryCompositeOpType::TRIL>>();
+    operations::unary::ExecuteUnaryCompositeTril>();
 constexpr auto triu = ttnn::register_operation_with_auto_launch_op<
     "ttnn::triu",
     operations::unary::ExecuteUnaryCompositeOpWithInt<operations::unary::UnaryCompositeOpType::TRIU>>();

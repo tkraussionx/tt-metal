@@ -14,6 +14,7 @@
 #include <ttnn/tensor/types.hpp>
 #include <ttnn/tensor/tensor_impl.hpp>
 #include "ttnn/cpp/ttnn/common/constants.hpp"
+#include "ttnn/operations/core/core.hpp"
 
 namespace tt {
 
@@ -307,8 +308,12 @@ static Tensor index_trilu(
             auto uint32_data = tt::tt_metal::tensor_impl::pack_vec_into_uint32_vec<T>(owned_buffer);
             tt::tt_metal::detail::WriteToBuffer(*device_buffer, uint32_data);
         }
-
+        bool check;
+        check = (optional_output_tensor.value().get_layout() == Layout::TILE);
+        std::cout << "Inside numpt tril " << check ;
         return optional_output_tensor.value();
+
+        // return ttnn::to_layout(optional_output_tensor.value(), ttnn::TILE_LAYOUT, std::nullopt, std::nullopt, (Device*)nullptr);
     }
 }
 

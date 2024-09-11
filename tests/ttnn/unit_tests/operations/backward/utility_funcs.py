@@ -87,6 +87,10 @@ def compare_pcc(tt_tensor, golden_tensor, pcc=0.99):
         tt_out_tensor = tt_tensor[i].cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
         pt_out_tensor = golden_tensor[i]
         comp_pass, comp_out = comparison_funcs.comp_pcc(pt_out_tensor, tt_out_tensor, pcc=pcc)
+        torch.set_printoptions(linewidth=200, threshold=10000, precision=5, sci_mode=False, edgeitems=17)
+        print("\nTorch output :", pt_out_tensor)
+        ttnn.set_printoptions(profile="full")
+        print("\noutput :", tt_out_tensor)
         logger.debug(comp_pass)
         logger.debug(comp_out)
         status = status & comp_pass

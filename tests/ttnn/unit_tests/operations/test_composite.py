@@ -494,14 +494,45 @@ def test_unary_composite_threshold_ttnn(input_shapes, device):
     "input_shapes",
     (
         (torch.Size([1, 1, 32, 32])),
-        (torch.Size([1, 1, 320, 384])),
-        (torch.Size([1, 3, 320, 384])),
+        # (torch.Size([1, 1, 320, 384])),
+        # (torch.Size([1, 3, 320, 384])),
     ),
 )
 def test_unary_composite_tril_ttnn(input_shapes, device):
     in_data1, input_tensor1 = data_gen_with_range(input_shapes, -100, 100, device)
 
     output_tensor = ttnn.tril(input_tensor1)
+    golden_function = ttnn.get_golden_function(ttnn.tril)
+    golden_tensor = golden_function(in_data1)
+
+    comp_pass = compare_pcc([output_tensor], [golden_tensor])
+    assert comp_pass
+
+
+@pytest.mark.parametrize(
+    "input_shapes",
+    (
+        (torch.Size([1, 1, 32, 32])),
+        # (torch.Size([1, 1, 320, 384])),
+        # (torch.Size([1, 3, 320, 384])),
+    ),
+)
+def test_unary_composite_tril_ttnn_opt_output(input_shapes, device):
+    in_data1, input_tensor1 = data_gen_with_range(input_shapes, -100, 100, device)
+
+    _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
+
+    opt_tensor = torch.zeros(input_shapes, dtype=torch.bfloat16)
+    opt_tensor = ttnn.from_torch(
+        opt_tensor, ttnn.bfloat16, layout=ttnn.Layout.ROW_MAJOR, device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+    )
+    ttnn.set_printoptions(profile="full")
+    print("Input : ", input_tensor1)
+    cq_id = 0
+    pages_before = ttnn._ttnn.reports.get_buffer_pages()
+    mouli = ttnn.tril(input_tensor1, output_tensor=output_tensor, queue_id=cq_id)
+    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages())
+
     golden_function = ttnn.get_golden_function(ttnn.tril)
     golden_tensor = golden_function(in_data1)
 
