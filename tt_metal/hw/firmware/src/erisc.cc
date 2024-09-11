@@ -84,6 +84,7 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
                     NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
                                 NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
                 internal_::notify_dispatch_core_done(dispatch_addr);
+                mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
             mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             WAYPOINT("R");

@@ -78,7 +78,7 @@ void dirty_stack_memory() {
 void record_stack_usage() {
     // Write the pause flag for this core into the memory mailbox for host to read.
     debug_stack_usage_t tt_l1_ptr *stack_usage_msg = GET_MAILBOX_ADDRESS_DEV(watcher.stack_usage);
-    launch_msg_t tt_l1_ptr *launch_msg = GET_MAILBOX_ADDRESS_DEV(launch);
+    // launch_msg_t tt_l1_ptr *launch_msg = GET_MAILBOX_ADDRESS_DEV(launch);
     uint32_t stack_size = get_stack_size();
 
     uint32_t tt_l1_ptr *stack_ptr = (uint32_t tt_l1_ptr *) get_stack_base();
@@ -90,8 +90,8 @@ void record_stack_usage() {
             if (stack_usage_msg->watcher_kernel_id[debug_get_which_riscv()] == 0 || // No entry recorded
                 stack_usage_msg->max_usage[debug_get_which_riscv()] < stack_usage) {
                 stack_usage_msg->max_usage[debug_get_which_riscv()] = stack_size - stack_offset * sizeof(uint32_t);
-                stack_usage_msg->watcher_kernel_id[debug_get_which_riscv()] =
-                    launch_msg->kernel_config.watcher_kernel_ids[get_dispatch_class()];
+                // stack_usage_msg->watcher_kernel_id[debug_get_which_riscv()] =
+                    // launch_msg->kernel_config.watcher_kernel_ids[get_dispatch_class()];
             }
             return;
         }
