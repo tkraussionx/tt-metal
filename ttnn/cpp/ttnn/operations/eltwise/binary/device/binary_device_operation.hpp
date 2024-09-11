@@ -23,6 +23,7 @@
 #include "ttnn/types.hpp"
 #include "ttnn/operations/eltwise/binary/common/binary_op_types.hpp"
 #include "ttnn/operations/eltwise/binary/common/binary_op_utils.hpp"
+#include "ttnn/operations/eltwise/binary/common/binary_select_kernel_config.hpp"
 #include "ttnn/decorators.hpp"
 
 namespace ttnn::operations::binary {
@@ -35,6 +36,7 @@ struct BinaryDeviceOperation {
         const MemoryConfig memory_config;
         const DataType dtype;
         std::optional<DeviceComputeKernelConfig> compute_kernel_config;
+        std::optional<SelectKernelConfig> select_kernel_config;
     };
     struct tensor_args_t {
         const Tensor& input_tensor_a;
@@ -219,7 +221,8 @@ struct BinaryDeviceOperation {
         const std::optional<MemoryConfig>& memory_config,
         std::optional<Tensor> optional_output_tensor,
         std::optional<unary::FusedActivations> activations,
-        std::optional<unary::UnaryWithParam> input_tensor_a_activation);
+        std::optional<unary::UnaryWithParam> input_tensor_a_activation,
+        std::optional<SelectKernelConfig> select_kernel_config = std::nullopt);
 };
 
 }  // namespace ttnn::operations::binary

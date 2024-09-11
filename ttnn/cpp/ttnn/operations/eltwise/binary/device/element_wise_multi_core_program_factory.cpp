@@ -390,26 +390,59 @@ BinaryDeviceOperation::ElementWiseMultiCore::cached_program_t BinaryDeviceOperat
     bool dst_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t)output_cb_index, (std::uint32_t)dst_is_dram};
 
+    const auto select_kernel_config = operation_attributes.select_kernel_config.value_or(SelectKernelConfig{});
+    std::string reader_file;
+    switch (select_kernel_config.reader) {
+        case ReaderConfig::CONTIGUOUS:
+            reader_file = "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/reader_binary_interleaved_start_id.cpp";
+            break;
+        case ReaderConfig::PERMUTE_A_0312:
+            TT_THROW("not implemented");
+            break;
+        case ReaderConfig::PERMUTE_B_0312:
+            TT_THROW("not implemented");
+            break;
+        case ReaderConfig::PERMUTE_AB_0312:
+            TT_THROW("not implemented");
+            break;
+    }
     KernelHandle binary_reader_kernel_id = tt_metal::CreateKernel(
         program,
-        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/dataflow/reader_binary_interleaved_start_id.cpp",
+        reader_file,
         all_device_cores,
         tt_metal::ReaderDataMovementConfig(reader_compile_time_args, reader_defines));
 
+    std::string writer_file;
+    switch (select_kernel_config.writer) {
+        case WriterConfig::CONTIGUOUS:
+            writer_file = (block_sharded and not out_sharded) ? "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/writer_unary_sharded_blocks_interleaved_start_id.cpp"
+                                                              : "ttnn/cpp/ttnn/operations/eltwise/unary/device/kernels/dataflow/writer_unary_interleaved_start_id.cpp";
+            break;
+        case WriterConfig::PERMUTE_0312:
+            TT_THROW("not implemented");
+            break;
+    }
     KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
         program,
-        (block_sharded and not out_sharded) ? "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/"
-                                              "writer_unary_sharded_blocks_interleaved_start_id.cpp"
-                                            : "ttnn/cpp/ttnn/operations/eltwise/unary/device/kernels/dataflow/writer_unary_interleaved_start_id.cpp",
+        writer_file,
         all_device_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args, writer_defines));
 
     bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 ||
                             dst_cb_data_format == tt::DataFormat::Int32 ||
                             dst_cb_data_format == tt::DataFormat::Float32;
+    std::string compute_file;
+    switch (select_kernel_config.compute) {
+        case ComputeConfig::CONTIGUOUS:
+            compute_file = "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp";
+            break;
+        case ComputeConfig::PERMUTE_0312:
+            TT_THROW("not implemented");
+            break;
+    }
     auto eltwise_binary_kernel_id = tt_metal::CreateKernel(
         program,
-        "ttnn/cpp/ttnn/operations/eltwise/binary/device/kernels/compute/eltwise_binary_kernel.cpp",
+        compute_file,
         all_device_cores,
         tt_metal::ComputeConfig{.fp32_dest_acc_en = fp32_dest_acc_en, .defines = eltwise_defines});
 

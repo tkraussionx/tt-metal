@@ -36,7 +36,8 @@ bool run_test(const Shape& shape, const DeviceFunction& device_function, Device*
     auto input_tensor_b = tt::numpy::random::random(shape, DataType::BFLOAT16);
 
     auto host_output = HostFunction(input_tensor_a, input_tensor_b);
-    auto device_output = device_function(input_tensor_a.to(Layout::TILE).to(device), input_tensor_b.to(Layout::TILE).to(device)).cpu().to(Layout::ROW_MAJOR);
+    ttnn::operations::binary::SelectKernelConfig select_kernel_config{};
+    auto device_output = device_function(input_tensor_a.to(Layout::TILE).to(device), input_tensor_b.to(Layout::TILE).to(device), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, select_kernel_config).cpu().to(Layout::ROW_MAJOR);
 
     return tt::numpy::allclose<bfloat16>(host_output, device_output, args...);
 }

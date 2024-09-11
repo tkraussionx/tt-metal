@@ -8,6 +8,7 @@
 #include "ttnn/decorators.hpp"
 #include "ttnn/operations/eltwise/unary/common/unary_op_types.hpp"
 #include "ttnn/operations/eltwise/binary/common/binary_op_types.hpp"
+#include "ttnn/operations/eltwise/binary/common/binary_select_kernel_config.hpp"
 #include "device/binary_device_operation.hpp"
 
 namespace ttnn {
@@ -28,7 +29,8 @@ struct BinaryOperation {
         const std::optional<MemoryConfig> &memory_config = std::nullopt,
         std::optional<Tensor> optional_output_tensor = std::nullopt,
         std::optional<unary::FusedActivations> activations = std::nullopt,
-        std::optional<unary::UnaryWithParam> input_tensor_a_activation = std::nullopt);
+        std::optional<unary::UnaryWithParam> input_tensor_a_activation = std::nullopt,
+        std::optional<SelectKernelConfig> select_kernel_config = std::nullopt);
 
     static Tensor invoke(
         const Tensor &input_tensor_a_arg,
@@ -37,7 +39,8 @@ struct BinaryOperation {
         const std::optional<MemoryConfig> &memory_config = std::nullopt,
         std::optional<Tensor> optional_output_tensor = std::nullopt,
         std::optional<unary::FusedActivations> activations = std::nullopt,
-        std::optional<unary::UnaryWithParam> input_tensor_a_activation = std::nullopt);
+        std::optional<unary::UnaryWithParam> input_tensor_a_activation = std::nullopt,
+        std::optional<SelectKernelConfig> select_kernel_config = std::nullopt);
 
     // TODO: this case should use BinaryWithScalarProgramConfig and there should be a custom kernel to run this
     // Currently, this is exactly how tt::tt_metal::add_unary works

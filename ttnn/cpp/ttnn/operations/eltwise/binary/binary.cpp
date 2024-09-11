@@ -145,7 +145,8 @@ Tensor BinaryOperation<binary_op_type>::invoke(
     const std::optional<MemoryConfig> &memory_config,
     std::optional<Tensor> optional_output_tensor,
     std::optional<unary::FusedActivations> activations,
-    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation,
+    std::optional<SelectKernelConfig> select_kernel_config) {
 
     auto [input_tensor_a, input_tensor_b] = detail::preprocess_inputs<binary_op_type>(input_tensor_a_arg, input_tensor_b_arg);
 
@@ -158,7 +159,8 @@ Tensor BinaryOperation<binary_op_type>::invoke(
         memory_config,
         optional_output_tensor,
         activations,
-        input_tensor_a_activation);
+        input_tensor_a_activation,
+        select_kernel_config);
 }
 
 template <BinaryOpType binary_op_type>
@@ -169,7 +171,8 @@ Tensor BinaryOperation<binary_op_type>::invoke(
     const std::optional<MemoryConfig> &memory_config,
     std::optional<Tensor> optional_output_tensor,
     std::optional<unary::FusedActivations> activations,
-    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation,
+    std::optional<SelectKernelConfig> select_kernel_config) {
     return invoke(
         DefaultQueueId,
         input_tensor_a_arg,
@@ -178,7 +181,8 @@ Tensor BinaryOperation<binary_op_type>::invoke(
         memory_config,
         optional_output_tensor,
         activations,
-        input_tensor_a_activation);
+        input_tensor_a_activation,
+        select_kernel_config);
 }
 
 // TODO: this case should use BinaryWithScalarProgramConfig and there should be a custom kernel to run this

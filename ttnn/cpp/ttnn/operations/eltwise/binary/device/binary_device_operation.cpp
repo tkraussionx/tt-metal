@@ -297,7 +297,8 @@ std::tuple<BinaryDeviceOperation::operation_attributes_t, BinaryDeviceOperation:
     const std::optional<MemoryConfig> &memory_config,
     std::optional<Tensor> optional_output_tensor,
     std::optional<unary::FusedActivations> activations,
-    std::optional<unary::UnaryWithParam> input_tensor_a_activation) {
+    std::optional<unary::UnaryWithParam> input_tensor_a_activation,
+    std::optional<SelectKernelConfig> select_kernel_config) {
     if (output_dtype.has_value() && optional_output_tensor.has_value()) {
         TT_FATAL(
             output_dtype.value() == optional_output_tensor.value().get_dtype(),
@@ -311,7 +312,8 @@ std::tuple<BinaryDeviceOperation::operation_attributes_t, BinaryDeviceOperation:
             input_tensor_a_activation,
             memory_config.value_or(input_tensor_a_arg.memory_config()),
             output_dtype.value_or(input_tensor_a_arg.get_dtype()),
-            std::nullopt},
+            std::nullopt,
+            select_kernel_config},
         tensor_args_t{input_tensor_a_arg, input_tensor_b_arg, optional_output_tensor}};
     }
 
