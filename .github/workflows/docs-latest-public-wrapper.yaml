@@ -18,5 +18,5 @@ jobs:
     needs: build-artifact
     uses: ./.github/workflows/docs-release.yaml
     with:
-      version: v0.51.0
+      version: v0.50.0
     secrets: inherit
