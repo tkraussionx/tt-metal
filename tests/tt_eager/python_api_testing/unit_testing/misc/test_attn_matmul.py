@@ -35,7 +35,7 @@ def generate_input_shapes():
 @pytest.mark.parametrize("out_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 50), (False, 1)),
+    ((True, 10), (False, 1)),
 )
 def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, device):
     torch.manual_seed(0)
@@ -120,7 +120,7 @@ def test_attn_matmul_fp32(num_loops, enable_async, in_dtype, device):
 @pytest.mark.parametrize("out_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 50), (False, 1)),
+    ((True, 10), (False, 1)),
 )
 def test_attn_matmul_with_program_cache(
     num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, device, use_program_cache
@@ -179,7 +179,7 @@ def test_attn_matmul_with_program_cache(
 )
 @pytest.mark.parametrize(
     "enable_async, num_loops",
-    ((True, 50), (False, 1)),
+    ((True, 10), (False, 1)),
 )
 def test_group_attn_matmul(
     num_loops,

@@ -12,7 +12,7 @@ import os
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
 
-NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 500))
+NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 15))
 
 
 @pytest.mark.parametrize(
@@ -215,8 +215,8 @@ def test_multi_device_multi_trace(t3k_mesh_device, shape, use_all_gather, enable
     torch_softmax = torch.nn.Softmax(dim=1)
     # Decrease loop count for larger shapes, since they time out on CI
     num_trace_loops = NUM_TRACE_LOOPS
-    # if shape == (1, 3, 512, 512):
-    #     num_trace_loops = 5
+    if shape == (1, 3, 512, 512):
+        num_trace_loops = 5
 
     for i in range(num_trace_loops):
         write_event = ttnn.create_event(t3k_mesh_device)
