@@ -35,6 +35,10 @@ typedef struct {
     bool data_packets_done;
     bool data_and_last_packets_done;
 
+    uint32_t packet_dest_diff; // difference from curr_packet_dest to dest_endpoint_start_id
+
+    uint32_t packet_rnd_seed;
+
     void init() {
         this->curr_packet_words_remaining = 0;
         this->data_packets_done = false;
@@ -122,16 +126,18 @@ typedef struct {
 
 typedef struct {
     input_queue_raw_state_t input_queue_raw_state;
-    void init(uint32_t pkt_size_words) {
+
+    void init(uint32_t pkt_size_words, uint32_t) { // same args as the input_queue_rnd_state_t
         input_queue_raw_state.init();
-        input_queue_raw_state.curr_packet_dest = 0;
+        input_queue_raw_state.packet_dest_diff = 0;
         input_queue_raw_state.curr_packet_size_words = pkt_size_words;
     }
     inline void packet_update(uint32_t num_dest_endpoints,
-                                  uint32_t dest_endpoint_start_id,
+                                  uint32_t dest_endpoint_start_id, // TODO: remove it...? efficient?
                                   uint32_t max_packet_size_words, // TODO: may remove it
                                   uint64_t total_data_words) {
-        input_queue_raw_state.curr_packet_dest = (input_queue_raw_state.curr_packet_dest + 1) & (num_dest_endpoints - 1);
+        input_queue_raw_state.curr_packet_dest = input_queue_raw_state.packet_dest_diff + dest_endpoint_start_id;
+        input_queue_raw_state.packet_dest_diff = (input_queue_raw_state.packet_dest_diff + 1) & (num_dest_endpoints - 1);
         input_queue_raw_state.packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
     }
     inline void next_packet(uint32_t num_dest_endpoints,
@@ -141,6 +147,7 @@ typedef struct {
         if (!input_queue_raw_state.data_packets_done) {
             this->packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
         } else {
+            input_queue_raw_state.packet_rnd_seed = 0xffffffff; // used as tag... TODO: refactor it...
             input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
         }
     }
@@ -155,7 +162,7 @@ typedef struct {
 
     // uint64_t data_words_input;
     // uint64_t num_packets;
-    uint32_t packet_rnd_seed;
+    // uint32_t packet_rnd_seed;
     // uint32_t curr_packet_size_words;
     // uint32_t curr_packet_words_remaining;
     // uint32_t curr_packet_dest;
@@ -167,7 +174,7 @@ typedef struct {
     input_queue_raw_state_t input_queue_raw_state;
 
     void init(uint32_t endpoint_id, uint32_t prng_seed) {
-        this->packet_rnd_seed = prng_seed ^ endpoint_id;
+        input_queue_raw_state.packet_rnd_seed = prng_seed ^ endpoint_id;
         input_queue_raw_state.init();
         // this->curr_packet_words_remaining = 0;
         // this->data_packets_done = false;
@@ -181,8 +188,8 @@ typedef struct {
                                   uint32_t dest_endpoint_start_id,
                                   uint32_t max_packet_size_words,
                                   uint64_t total_data_words) {
-        input_queue_raw_state.curr_packet_dest = ((this->packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
-        input_queue_raw_state.curr_packet_size_words = packet_rnd_seed_to_size(this->packet_rnd_seed, max_packet_size_words);
+        input_queue_raw_state.curr_packet_dest = ((input_queue_raw_state.packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
+        input_queue_raw_state.curr_packet_size_words = packet_rnd_seed_to_size(input_queue_raw_state.packet_rnd_seed, max_packet_size_words);
         input_queue_raw_state.packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
         // this->curr_packet_flags = 0;
         // this->curr_packet_words_remaining = this->curr_packet_size_words;
@@ -196,11 +203,11 @@ typedef struct {
                                 uint32_t max_packet_size_words,
                                 uint64_t total_data_words) {
         if (!input_queue_raw_state.data_packets_done) {
-            this->packet_rnd_seed = prng_next(this->packet_rnd_seed);
+            input_queue_raw_state.packet_rnd_seed = prng_next(input_queue_raw_state.packet_rnd_seed);
             this->packet_update(num_dest_endpoints, dest_endpoint_start_id,
                                     max_packet_size_words, total_data_words);// TODO: args
         } else {
-            this->packet_rnd_seed = 0xffffffff;
+            input_queue_raw_state.packet_rnd_seed = 0xffffffff;
             input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);// TODO: args
             // this->curr_packet_dest = this->num_dests_sent_last_packet + dest_endpoint_start_id;
             // this->curr_packet_flags = DispatchPacketFlag::PACKET_TEST_LAST;
@@ -220,13 +227,13 @@ typedef struct {
                                         uint32_t dest_endpoint_start_id,
                                         uint32_t max_packet_size_words,
                                         uint64_t total_data_words) {
-        uint32_t rnd = this->packet_rnd_seed;
+        uint32_t rnd = input_queue_raw_state.packet_rnd_seed;
         uint32_t dest;
         do {
             rnd = prng_next(rnd);
             dest = (rnd >> 16) & (num_dest_endpoints-1);
         } while (dest != (dest_endpoint_id - dest_endpoint_start_id));
-        this->packet_rnd_seed = rnd;
+        input_queue_raw_state.packet_rnd_seed = rnd;
         this->packet_update(num_dest_endpoints, dest_endpoint_start_id,
                                 max_packet_size_words, total_data_words);
     }
