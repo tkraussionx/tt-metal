@@ -323,17 +323,17 @@ def prepare_inputs_ttnn_prefill(x_bsh, device):
     x_1BSH = x_bsh.unsqueeze(0)
 
     # Attention mask
-    attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
-    attn_mask_torch = torch.triu(attn_mask, diagonal=1)
-    attn_mask = attn_mask_torch.view(1, 1, seq_len, seq_len).expand(8, 1, seq_len, seq_len)
+    # attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
+    # attn_mask_torch = torch.triu(attn_mask, diagonal=1)
+    # attn_mask = attn_mask_torch.view(1, 1, seq_len, seq_len).expand(8, 1, seq_len, seq_len)
 
-    attn_mask = ttnn.from_torch(
-        attn_mask,
-        device=device,
-        dtype=ttnn.bfloat16,
-        layout=ttnn.TILE_LAYOUT,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
-    )
+    # attn_mask = ttnn.from_torch(
+    #     attn_mask,
+    #     device=device,
+    #     dtype=ttnn.bfloat16,
+    #     layout=ttnn.TILE_LAYOUT,
+    #     memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    # )
 
     # input goes to L1
     xs_1BSH = ttnn.from_torch(
@@ -343,7 +343,7 @@ def prepare_inputs_ttnn_prefill(x_bsh, device):
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
-    return xs_1BSH, attn_mask, attn_mask_torch
+    return xs_1BSH
 
 
 def get_single_rot_mat(dhead, device, start_pos=0, theta: float = 500000.0, use_scaled=True):
