@@ -14,6 +14,7 @@ on:
           - ccl.line_all_gather
           - ccl.all_gather_t3k_sharded
           - ccl.all_gather_t3k_non_sharded
+          - ccl.all_gather_t3k_non_sharded_multi_instances
           - logical_and_
           - matmul.full.matmul_default_block_sharded
           - matmul.full.matmul_default_height_sharded
