@@ -45,6 +45,7 @@ constexpr uint32_t packed_write_max_unicast_sub_cmds = get_compile_time_arg_val(
 constexpr uint32_t is_d_variant = get_compile_time_arg_val(20);
 constexpr uint32_t is_h_variant = get_compile_time_arg_val(21);
 constexpr uint32_t dispatch_s_sem_id = get_compile_time_arg_val(25);
+constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(31); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
 
 constexpr uint8_t upstream_noc_index = UPSTREAM_NOC_INDEX;
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
@@ -854,7 +855,7 @@ re_run_command:
         case CQ_DISPATCH_CMD_SEM_UPDATE:
             // DPRINT << "Sem update" << ENDL();
             noc_async_write_barrier();
-            noc_semaphore_inc(get_noc_addr_helper(my_noc_xy, get_semaphore<fd_core_type>(dispatch_s_sem_id)), 1);
+            noc_semaphore_inc(get_noc_addr_helper(dispatch_s_noc_xy, get_semaphore<fd_core_type>(dispatch_s_sem_id)), 1);
             cmd_ptr += sizeof(CQDispatchCmd);
             break;
         case CQ_DISPATCH_CMD_WRITE_PACKED_LARGE:

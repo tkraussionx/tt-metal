@@ -32,7 +32,10 @@ constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(27);
 constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(28);
 constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(29);
 
-constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
+// Get dispatch_s coords from RTA. TODO: When dispatch_s is separated out, get this from CTAs.
+// Upstream coords will need to explicitly be programmed in CTA as well
+// dispatch_d and prefetch_hd need to have specific CTA for dispatch_s coords
+constexpr uint32_t my_noc_xy = get_compile_time_arg_val(31); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 
 static uint32_t num_pages_acquired = 0;

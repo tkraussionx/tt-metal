@@ -63,6 +63,8 @@ struct dispatch_worker_build_settings_t{
     uint32_t prefetch_dispatch_s_semaphore_id;
     uint32_t dispatch_s_semaphore_id;
     uint32_t dispatch_s_sync_semaphore_id;
+    tt_cxy_pair dispatch_s_logical_core;
+    tt_cxy_pair dispatch_s_physical_core;
     uint32_t cb_start_address;
     uint32_t cb_size_bytes;
     uint32_t cb_log_page_size;
@@ -83,6 +85,7 @@ struct dispatch_core_placement_t {
     std::optional<tt_cxy_pair> tunneler = std::nullopt; // ethernet tunneler
     std::optional<tt_cxy_pair> prefetcher_d = std::nullopt;
     std::optional<tt_cxy_pair> dispatcher_d = std::nullopt;
+    std::optional<tt_cxy_pair> dispatcher_s = std::nullopt;
     std::optional<tt_cxy_pair> mux_d = std::nullopt; // Mux
     std::optional<tt_cxy_pair> demux_d = std::nullopt; // Demux
     std::optional<tt_cxy_pair> tunneler_d = std::nullopt; // ethernet tunneler
@@ -361,6 +364,28 @@ class dispatch_core_manager {
         assignment.dispatcher_d = tt_cxy_pair(device_id, dispatcher_d_coord.x, dispatcher_d_coord.y);
         log_debug(tt::LogMetal, "Allocated Dispatcher D Core: {} for Device {}", assignment.dispatcher_d.value().str(), device_id);
         return assignment.dispatcher_d.value();
+    }
+
+    const tt_cxy_pair &dispatcher_s_core(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
+        dispatch_core_placement_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        if (assignment.dispatcher_s.has_value()) {
+            return assignment.dispatcher_s.value();
+        }
+        CoreCoord dispatcher_s_coord;
+        if (this->get_dispatch_core_type(device_id) == CoreType::WORKER) {
+            chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
+            if (mmio_device_id == device_id) {
+                // dispatch_s is on the same tensix core as dispatch_hd
+                dispatcher_s_coord = this->dispatcher_core(device_id, channel, cq_id);
+            } else {
+                // dispatch_s is on the same tensix as dispatch_d
+                dispatcher_s_coord = this->dispatcher_d_core(device_id, channel, cq_id);
+            }
+        } else {
+            dispatcher_s_coord = this->get_next_available_dispatch_core(device_id);
+        }
+        assignment.dispatcher_s = tt_cxy_pair(device_id, dispatcher_s_coord.x, dispatcher_s_coord.y);
+        return assignment.dispatcher_s.value();
     }
 
     CoreType get_dispatch_core_type(chip_id_t device_id) {
