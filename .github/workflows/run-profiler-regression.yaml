@@ -44,6 +44,10 @@ jobs:
           run_args: |
             WHEEL_FILENAME=$(ls -1 *.whl)
             pip3 install --user $WHEEL_FILENAME
+            echo "The value of ARCH_NAME is" $ARCH_NAME
+            echo $ARCH_NAME
+
+            export ARCH_NAME
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
