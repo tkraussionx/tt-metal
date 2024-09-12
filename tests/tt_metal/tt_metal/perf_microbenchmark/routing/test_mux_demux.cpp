@@ -425,6 +425,7 @@ int main(int argc, char **argv) {
                 double tx_bw = ((double)tx_words_sent) * PACKET_WORD_SIZE_BYTES / tx_elapsed_cycles;
                 total_tx_bw += tx_bw;
                 uint64_t iter = get_64b_result(tx_results[i], PQ_TEST_ITER_INDEX);
+                uint64_t zero_data_sent_iter = get_64b_result(tx_results[i], TX_TEST_IDX_ZERO_DATA_WORDS_SENT_ITER);
                 uint64_t few_data_sent_iter = get_64b_result(tx_results[i], TX_TEST_IDX_FEW_DATA_WORDS_SENT_ITER);
                 uint64_t many_data_sent_iter = get_64b_result(tx_results[i], TX_TEST_IDX_MANY_DATA_WORDS_SENT_ITER);
                 uint64_t num_packets = get_64b_result(tx_results[i], TX_TEST_IDX_NPKT);
@@ -433,12 +434,13 @@ int main(int argc, char **argv) {
                 log_info(LogTest,
                          "TX {} words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                          i, tx_words_sent, tx_elapsed_cycles, tx_bw);
-                log_info(LogTest, "TX {} packets sent = {}, bytes/packet = {:.2f}, total iter = {}, few data sent iter = {}, many data sent iter = {}", i, num_packets, bytes_per_pkt, iter, few_data_sent_iter, many_data_sent_iter);
+                log_info(LogTest, "TX {} packets sent = {}, bytes/packet = {:.2f}, total iter = {}, zero data sent iter = {}, few data sent iter = {}, many data sent iter = {}", i, num_packets, bytes_per_pkt, iter, zero_data_sent_iter, few_data_sent_iter, many_data_sent_iter);
                 stat[fmt::format("tx_words_sent_{}", i)] = tx_words_sent;
                 stat[fmt::format("tx_elapsed_cycles_{}", i)] = tx_elapsed_cycles;
                 stat[fmt::format("tx_bw_{}", i)] = tx_bw;
                 stat[fmt::format("tx_bytes_per_pkt_{}", i)] = bytes_per_pkt;
                 stat[fmt::format("tx_total_iter_{}", i)] = iter;
+                stat[fmt::format("tx_zero_data_sent_iter_{}", i)] = zero_data_sent_iter;
                 stat[fmt::format("tx_few_data_sent_iter_{}", i)] = few_data_sent_iter;
                 stat[fmt::format("tx_many_data_sent_iter_{}", i)] = many_data_sent_iter;
             }
