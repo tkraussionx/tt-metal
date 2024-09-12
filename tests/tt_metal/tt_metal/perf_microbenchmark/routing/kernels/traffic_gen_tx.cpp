@@ -132,12 +132,12 @@ void kernel_main() {
 
     noc_init();
     zero_l1_buf(
-        reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words * PACKET_WORD_SIZE_BYTES), queue_size_words); // TODO: remove
+        reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words * PACKET_WORD_SIZE_BYTES), queue_size_words);
 
     if constexpr (pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM) {
         input_queue_state.init(src_endpoint_id, prng_seed);
     } else if constexpr (pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE) {
-        input_queue_state.init(max_packet_size_words, 0); // TODO: from parameter
+        input_queue_state.init(max_packet_size_words, 0);
     } else {
         input_queue_state.init(src_endpoint_id, prng_seed);
     }
