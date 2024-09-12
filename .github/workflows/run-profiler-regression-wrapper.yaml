@@ -11,7 +11,7 @@ jobs:
       tracy: true
     secrets: inherit
   build-and-test-wheels:
-    needs: build-artifact
+    needs: build-artifact-profiler
     uses: ./.github/workflows/_build-and-test-wheels-impl.yaml
     with:
       from-precompiled: true
