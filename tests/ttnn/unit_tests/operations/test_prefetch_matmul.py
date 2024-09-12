@@ -12,7 +12,14 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_
 from models.utility_functions import skip_for_grayskull, skip_for_wormhole_b0
 from models.utility_functions import nearest_32
 
-
+shard_spec_32_cores_grid = ttnn.CoreRangeSet(
+    {
+        ttnn.CoreRange(
+            ttnn.CoreCoord(0, 0),
+            ttnn.CoreCoord(7, 3),
+        ),
+    }
+)
 shard_spec_8_cores_grid = ttnn.CoreRangeSet(
     {
         ttnn.CoreRange(
@@ -92,6 +99,8 @@ def run_prefetch_matmul_on_t3000_impl(
         mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.DRAM, shard_spec)
 
         mem_config_weights = mem_config
+    elif mem_config_weights == "dram":
+        mem_config_weights = ttnn.DRAM_MEMORY_CONFIG
     else:
         raise ValueError(f"Unsupported mem_config_weights: {mem_config_weights}")
 
@@ -135,6 +144,18 @@ def run_prefetch_matmul_on_t3000_impl(
             per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
             per_core_N=N // 8 // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
             fused_activation=None,
+        )
+    elif matmul_config == "matmul_qkv":
+        program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 5),
+            in0_block_w=2,
+            out_subblock_h=1,
+            out_subblock_w=1,
+            per_core_M=1,
+            per_core_N=1,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
         )
     elif matmul_config == "matmul_2d":
         program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -265,8 +286,31 @@ def run_prefetch_matmul_on_t3000_impl(
             "dram_sharded_ff2",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
         ),
+        (  # QKV Decode
+            "matmul_qkv",
+            [1, 1, 32, hidden_size],
+            1024 * 10 // 8,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_32_cores_grid,
+                    [
+                        shard_height,
+                        8192 // 32 // 4,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        ),
     ],
-    ids=["ff1_decode", "ff2_decode"],
+    ids=["ff1_decode", "ff2_decode", "qkv_decode"],
 )
 @pytest.mark.parametrize(
     "input_dtype, matmul_weights_dtype",
