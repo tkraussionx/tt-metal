@@ -163,8 +163,8 @@ void kernel_main() {
                     break;
             }
             src_endpoint_last_packet[src_endpoint_index] = true;
-        } else { // TODO: remove rnd
-            if constexpr (!disable_header_check) {
+        } else {
+            if constexpr (!disable_header_check) { // disabled when src pkt header is not randomly generated
                 src_endpoint_rnd_state = &(src_rnd_state[src_endpoint_index]);
                 src_endpoint_rnd_state->next_packet_rnd_to_dest(num_dest_endpoints, endpoint_id, dest_endpoint_start_id,
                                                                 max_packet_size_words, UINT64_MAX);
