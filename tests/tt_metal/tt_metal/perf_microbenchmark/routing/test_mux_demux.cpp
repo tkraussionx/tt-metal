@@ -105,6 +105,7 @@ int main(int argc, char **argv) {
     uint32_t mux_y = test_args::get_command_option_uint32(input_args, "--mux_y", default_mux_y);
     uint32_t demux_x = test_args::get_command_option_uint32(input_args, "--demux_x", default_demux_x);
     uint32_t demux_y = test_args::get_command_option_uint32(input_args, "--demux_y", default_demux_y);
+    uint32_t num_endpoints = test_args::get_command_option_uint32(input_args, "--num_endpoints", default_num_endpoints);
     uint32_t prng_seed = test_args::get_command_option_uint32(input_args, "--prng_seed", default_prng_seed);
     uint32_t data_kb_per_tx = test_args::get_command_option_uint32(input_args, "--data_kb_per_tx", default_data_kb_per_tx);
     uint32_t max_packet_size_words = test_args::get_command_option_uint32(input_args, "--max_packet_size_words", default_max_packet_size_words);
@@ -121,7 +122,6 @@ int main(int argc, char **argv) {
     uint32_t timeout_mcycles = test_args::get_command_option_uint32(input_args, "--timeout_mcycles", default_timeout_mcycles);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
     uint32_t rx_disable_header_check = test_args::get_command_option_uint32(input_args, "--rx_disable_header_check", default_rx_disable_header_check);
-    uint32_t num_endpoints = test_args::get_command_option_uint32(input_args, "--num_endpoints", default_num_endpoints);
     bool tx_skip_pkt_content_gen = test_args::has_command_option(input_args, "--tx_skip_pkt_content_gen");
     std::string output_dir = test_args::get_command_option(input_args, "--output_dir", std::string(default_output_dir));
     bool check_txrx_timeout = test_args::has_command_option(input_args, "--check_txrx_timeout");
@@ -129,7 +129,6 @@ int main(int argc, char **argv) {
     uint32_t tx_data_sent_per_iter_low = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_low", default_tx_data_sent_per_iter_low);
     uint32_t tx_data_sent_per_iter_high = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_high", default_tx_data_sent_per_iter_high);
 
-    // TODO: support
     assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
 
     uint32_t num_src_endpoints = num_endpoints;
@@ -395,7 +394,6 @@ int main(int argc, char **argv) {
         pass &= tt_metal::CloseDevice(device);
 
         if (pass) {
-            // output json summary TODO: refactor?
             json summary, config, stat;
             config["tx_x"] = tx_x;
             config["tx_y"] = tx_y;
@@ -406,12 +404,22 @@ int main(int argc, char **argv) {
             config["demux_x"] = demux_x;
             config["demux_y"] = demux_y;
             config["num_endpoints"] = num_endpoints;
+            config["prng_seed"] = prng_seed;
+            config["data_kb_per_tx"] = data_kb_per_tx;
+            config["max_packet_size_words"] = max_packet_size_words;
+            config["tx_queue_start_addr"] = tx_queue_start_addr;
+            config["tx_queue_size_bytes"] = tx_queue_size_bytes;
+            config["rx_queue_start_addr"] = rx_queue_start_addr;
+            config["rx_queue_size_bytes"] = rx_queue_size_bytes;
+            config["mux_queue_start_addr"] = mux_queue_start_addr;
+            config["mux_queue_size_bytes"] = mux_queue_size_bytes;
+            config["demux_queue_start_addr"] = demux_queue_start_addr;
+            config["demux_queue_size_bytes"] = demux_queue_size_bytes;
             config["rx_disable_data_check"] = rx_disable_data_check;
             config["rx_disable_header_check"] = rx_disable_header_check;
             config["tx_skip_pkt_content_gen"] = static_cast<int>(tx_skip_pkt_content_gen);
             config["check_txrx_timeout"] = static_cast<int>(check_txrx_timeout);
             config["tx_pkt_dest_size_choice"] = to_string(static_cast<pkt_dest_size_choices_t>(tx_pkt_dest_size_choice));
-            config["max_packet_size_words"] = max_packet_size_words;
             config["tx_data_sent_per_iter_low"] = tx_data_sent_per_iter_low;
             config["tx_data_sent_per_iter_high"] = tx_data_sent_per_iter_high;
 
