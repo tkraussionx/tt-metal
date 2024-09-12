@@ -52,6 +52,7 @@ constexpr uint32_t dispatch_s_buffer_base = get_compile_time_arg_val(23);
 constexpr uint32_t my_dispatch_s_cb_sem_id = get_compile_time_arg_val(24);
 constexpr uint32_t downstream_dispatch_s_cb_sem_id = get_compile_time_arg_val(25);
 constexpr uint32_t dispatch_s_buffer_size = get_compile_time_arg_val(26);
+constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(27); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
 
 constexpr uint8_t my_noc_index = NOC_INDEX;
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
@@ -116,12 +117,13 @@ FORCE_INLINE
 void write_downstream(uint32_t& data_ptr,
                       uint32_t& local_downstream_data_ptr,
                       uint32_t length,
-                      uint32_t downstream_end) {
+                      uint32_t downstream_end,
+                      uint32_t downstream_noc_encoding = downstream_noc_xy) {
 
     uint32_t remaining = downstream_end - local_downstream_data_ptr;
     if (length > remaining) {
         if (remaining > 0) {
-            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, local_downstream_data_ptr), remaining);
+            noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_encoding, local_downstream_data_ptr), remaining);
             data_ptr += remaining;
             length -= remaining;
         }
@@ -132,7 +134,7 @@ void write_downstream(uint32_t& data_ptr,
         }
     }
 
-    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, local_downstream_data_ptr), length);
+    noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_encoding, local_downstream_data_ptr), length);
     local_downstream_data_ptr += length;
 }
 
@@ -354,12 +356,12 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
     // Each dispatcher has a separate CB. Determine which one needs to be written to
     if (cmddat_wrap_enable && length > remaining) {
         // wrap cmddat
-        write_downstream(data_ptr, local_downstream_data_ptr, remaining, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end);
+        write_downstream(data_ptr, local_downstream_data_ptr, remaining, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end, dispatcher_type ? dispatch_s_noc_xy : downstream_noc_xy);
         length -= remaining;
         data_ptr = cmddat_q_base;
     }
 
-    write_downstream(data_ptr, local_downstream_data_ptr, length, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end);
+    write_downstream(data_ptr, local_downstream_data_ptr, length, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end, dispatcher_type ? dispatch_s_noc_xy : downstream_noc_xy);
 
     // Round to nearest page
     local_downstream_data_ptr = round_up_pow2(local_downstream_data_ptr, downstream_cb_page_size);
@@ -369,7 +371,7 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
     if (!dispatcher_type) {
         cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
     } else {
-        cb_release_pages<my_noc_index, downstream_noc_xy, downstream_dispatch_s_cb_sem_id>(npages);
+        cb_release_pages<my_noc_index, dispatch_s_noc_xy, downstream_dispatch_s_cb_sem_id>(npages);
     }
 
     return cmd->relay_inline.stride;
@@ -959,7 +961,7 @@ static uint32_t process_exec_buf_relay_inline_cmd(uint32_t& cmd_ptr,
     uint32_t remaining = exec_buf_state.length - sizeof(CQPrefetchCmd);
     while (length > remaining) {
         // wrap cmddat
-        write_downstream(data_ptr, local_downstream_data_ptr, remaining, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end);
+        write_downstream(data_ptr, local_downstream_data_ptr, remaining, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end, dispatcher_type ? dispatch_s_noc_xy : downstream_noc_xy);
         length -= remaining;
         stride -= remaining_stride;
         exec_buf_state.length = 0;
@@ -974,7 +976,7 @@ static uint32_t process_exec_buf_relay_inline_cmd(uint32_t& cmd_ptr,
         remaining_stride = exec_buf_state.length;
     }
 
-    write_downstream(data_ptr, local_downstream_data_ptr, length, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end);
+    write_downstream(data_ptr, local_downstream_data_ptr, length, dispatcher_type ? dispatch_s_buffer_end : downstream_cb_end, dispatcher_type ? dispatch_s_noc_xy : downstream_noc_xy);
 
     // Round to nearest page
     local_downstream_data_ptr = round_up_pow2(local_downstream_data_ptr, downstream_cb_page_size);
@@ -984,7 +986,7 @@ static uint32_t process_exec_buf_relay_inline_cmd(uint32_t& cmd_ptr,
     if (!dispatcher_type) {
         cb_release_pages<my_noc_index, downstream_noc_xy, downstream_cb_sem_id>(npages);
     } else {
-        cb_release_pages<my_noc_index, downstream_noc_xy, downstream_dispatch_s_cb_sem_id>(npages);
+        cb_release_pages<my_noc_index, dispatch_s_noc_xy, downstream_dispatch_s_cb_sem_id>(npages);
     }
 
     return stride;
