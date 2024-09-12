@@ -192,7 +192,7 @@ void kernel_main() {
 
         // === parse packet payload ===
         uint32_t curr_packet_payload_words = curr_packet_size_words-1;
-        if (!disable_data_check) {
+        if constexpr (!disable_data_check) {
             uint32_t words_before_wrap = input_queue->get_queue_words_before_rptr_cleared_wrap();
             uint32_t words_after_wrap = 0;
             if (words_before_wrap < curr_packet_payload_words) {
