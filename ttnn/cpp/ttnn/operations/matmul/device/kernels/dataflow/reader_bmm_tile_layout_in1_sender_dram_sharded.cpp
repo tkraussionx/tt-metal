@@ -90,17 +90,17 @@ void kernel_main() {
     uint32_t l1_write_addr_in1_start = get_write_ptr(cb_id_in1);
     l1_write_addr_in1 = l1_write_addr_in1_start;
     for (uint32_t block = 0; block < num_blocks; ++block) {
-        noc_async_read_tile_dram_sharded_set_trid(curr_block_trid);
+        // noc_async_read_tile_dram_sharded_set_trid(curr_block_trid);
 
         for (uint32_t h = 0; h < in1_num_pages; ++h) {
-            noc_async_read_tile_dram_sharded_with_state_with_trid(
-                in1_base_addr, l1_read_addr_in1, l1_write_addr_in1, curr_block_trid);
+            // noc_async_read_tile_dram_sharded_with_state_with_trid(
+            //     in1_base_addr, l1_read_addr_in1, l1_write_addr_in1, curr_block_trid);
             l1_read_addr_in1 += in1_page_size;
             l1_write_addr_in1 += in1_page_size;
         }
 
         if (num_free_blocks_in_buffer == 2) {
-            noc_async_read_barrier_with_trid(block_trid_to_wait);
+            // noc_async_read_barrier_with_trid(block_trid_to_wait);
             cb_push_back(cb_id_in1, in1_block_num_tiles);
             // wait for next block trid
             block_trid_to_wait = block_trid_to_wait == 3 ? 1 : (block_trid_to_wait + 1);
@@ -120,7 +120,7 @@ void kernel_main() {
         l1_write_addr_in1 = l1_write_addr_in1_start + l1_write_addr_in1_offset;
     }
     // last block to wait
-    noc_async_read_barrier_with_trid(block_trid_to_wait);
+    // noc_async_read_barrier_with_trid(block_trid_to_wait);
     cb_push_back(cb_id_in1, in1_block_num_tiles);
 #endif
 
