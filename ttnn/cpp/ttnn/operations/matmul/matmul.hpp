@@ -66,6 +66,6 @@ struct LinearOperation {
 
 }  // namespace matmul
 }  // namespace operations
-constexpr auto matmul = ttnn::register_operation<"ttnn::matmul", operations::matmul::MatmulOperation>();
-constexpr auto linear = ttnn::register_operation<"ttnn::linear", operations::matmul::LinearOperation>();
+constexpr auto matmul = ttnn::register_operation_with_auto_launch_op<"ttnn::matmul", operations::matmul::MatmulOperation>();
+constexpr auto linear = ttnn::register_operation_with_auto_launch_op<"ttnn::linear", operations::matmul::LinearOperation>();
 }  // namespace ttnn

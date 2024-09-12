@@ -21,6 +21,14 @@ from models.perf.perf_utils import prep_perf_report
 from transformers import DistilBertForQuestionAnswering, AutoTokenizer
 from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
 from models.utility_functions import is_grayskull, is_wormhole_b0
+from models.demos.distilbert.tt.distilbert_preprocessing import (
+    preprocess_linear_weight,
+    preprocess_linear_bias,
+    preprocess_layernorm_parameter,
+    preprocess_embedding_weight,
+    preprocess_attn_weight,
+    preprocess_attn_bias,
+)
 
 
 @pytest.mark.models_performance_bare_metal
@@ -35,14 +43,17 @@ def test_performance_distilbert_for_qa(
     seq_len,
     expected_inference_time,
     expected_compile_time,
-    device,
+    mesh_device,
 ):
-    hugging_face_reference_model = DistilBertForQuestionAnswering.from_pretrained(model_name)
-    hugging_face_reference_model.eval()
-
+    inputs_mesh_mapper = ttnn.ShardTensorToMesh(mesh_device, dim=0)
+    weights_mesh_mapper = ttnn.ReplicateTensorToMesh(mesh_device)
+    output_mesh_composer = ttnn.ConcatMeshToTensor(mesh_device, dim=0)
+    HF_model = DistilBertForQuestionAnswering.from_pretrained(model_name)
+    HF_model.eval()
+    print(len(mesh_device.get_device_ids()))
     # set up tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    config = hugging_face_reference_model.config
+    config = HF_model.config
 
     disable_persistent_kernel_cache()
 
@@ -61,14 +72,54 @@ def test_performance_distilbert_for_qa(
         return_attention_mask=True,
         return_tensors="pt",
     )
-
+    parameters = {}
+    attn_weight = []
     profiler.start(f"preprocessing_parameter")
-    parameters = preprocess_model_parameters(
-        model_name=f"ttnn_{model_name}_optimized",
-        initialize_model=lambda: DistilBertForQuestionAnswering.from_pretrained(model_name, torchscript=False).eval(),
-        custom_preprocessor=ttnn_optimized_distilbert.custom_preprocessor,
-        device=device,
-    )
+    for name, parameter in HF_model.state_dict().items():
+        if "_embeddings.weight" in name:
+            parameters[name] = preprocess_embedding_weight(parameter, weights_mesh_mapper, mesh_device)
+        elif "LayerNorm" in name or "_layer_norm" in name:
+            parameters[name] = preprocess_layernorm_parameter(parameter, weights_mesh_mapper, mesh_device)
+        elif "q_lin" in name or "k_lin" in name or "v_lin" in name or "LayerNorm" in name:
+            attn_weight.append(name)
+        elif "out_lin" in name or "lin1" in name or "lin2" in name or "qa_outputs" in name:
+            if "weight" in name:
+                parameters[name] = preprocess_linear_weight(parameter, weights_mesh_mapper, mesh_device)
+            elif "bias" in name:
+                parameters[name] = preprocess_linear_bias(parameter, weights_mesh_mapper, mesh_device)
+        else:
+            parameters[name] = ttnn.from_torch(
+                parameter,
+                dtype=ttnn.bfloat16,
+                layout=ttnn.TILE_LAYOUT,
+                mesh_mapper=weights_mesh_mapper,
+                device=mesh_device,
+            )
+    for i in range(6):
+        parameters[
+            "distilbert.transformer.layer." + str(i) + ".attention.query_key_value.weight"
+        ] = preprocess_attn_weight(
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.q_lin.weight"],
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.k_lin.weight"],
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.v_lin.weight"],
+            weights_mesh_mapper,
+            mesh_device,
+        )
+        print(
+            "Weight :", parameters["distilbert.transformer.layer." + str(i) + ".attention.query_key_value.weight"].shape
+        )
+
+        parameters["distilbert.transformer.layer." + str(i) + ".attention.query_key_value.bias"] = preprocess_attn_bias(
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.q_lin.bias"],
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.k_lin.bias"],
+            HF_model.state_dict()["distilbert.transformer.layer." + str(i) + ".attention.v_lin.bias"],
+            weights_mesh_mapper,
+            mesh_device,
+        )
+        print(
+            "weight :", parameters["distilbert.transformer.layer." + str(i) + ".attention.query_key_value.bias"].shape
+        )
+
     profiler.end(f"preprocessing_parameter")
 
     mask_reshp = (batch_size, 1, 1, inputs["attention_mask"].shape[1])
@@ -80,12 +131,20 @@ def test_performance_distilbert_for_qa(
 
     negative_val = torch.zeros(score_shape)
     negative_val_tensor = negative_val.masked_fill(mask, -1)
-    min_val_tensor = ttnn.from_torch(min_val_tensor, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-    negative_val_tensor = ttnn.from_torch(negative_val_tensor, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+    min_val_tensor = ttnn.from_torch(
+        min_val_tensor, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, mesh_mapper=inputs_mesh_mapper, device=mesh_device
+    )
+    negative_val_tensor = ttnn.from_torch(
+        negative_val_tensor,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        mesh_mapper=inputs_mesh_mapper,
+        device=mesh_device,
+    )
 
     with torch.no_grad():
         profiler.start(cpu_key)
-        torch_out = hugging_face_reference_model(**inputs)
+        torch_out = HF_model(**inputs)
         profiler.end(cpu_key)
 
         durations = []
@@ -96,7 +155,8 @@ def test_performance_distilbert_for_qa(
                 inputs["input_ids"],
                 position_ids,
                 inputs["attention_mask"],
-                device=device,
+                device=mesh_device,
+                mesh_mapper=inputs_mesh_mapper,
             )
             profiler.end(f"preprocessing_input")
 
