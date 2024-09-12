@@ -173,7 +173,7 @@ def run_prefetch_matmul_on_t3000_impl(
         raise ValueError(f"Unsupported matmul_config: {matmul_config}")
 
     compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_fidelity=ttnn.MathFidelity.LoFi,
         math_approx_mode=True,
         fp32_dest_acc_en=True,
         packer_l1_acc=True,
@@ -184,13 +184,22 @@ def run_prefetch_matmul_on_t3000_impl(
 
     ##### Perform the TT ops #####
     def run_op():
-        return ttnn.matmul(
-            tt_input_tensor,
-            weight_tt,
-            memory_config=mem_config_mm,
-            program_config=program_config,
-            compute_kernel_config=compute_kernel_config,
-        )
+        if core_grid is None:
+            return ttnn.matmul(
+                tt_input_tensor,
+                weight_tt,
+                memory_config=mem_config_mm,
+                program_config=program_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            return ttnn.matmul(
+                tt_input_tensor,
+                weight_tt,
+                core_grid=core_grid,
+                memory_config=mem_config_mm,
+                compute_kernel_config=compute_kernel_config,
+            )
 
     if enable_trace:
         # Compile the op
@@ -238,14 +247,14 @@ def run_prefetch_matmul_on_t3000_impl(
     ],
 )
 @pytest.mark.parametrize(
-    "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm",
+    "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm, input_dtype, matmul_weights_dtype",
     [
         (  # FF1/3 Decode
             "matmul_dram_sharded_ff1",
             [1, 1, 32, hidden_size],
             3584,  # Round up to 32k/8 from 28k/8
             3,
-            ttnn.CoreGrid(y=1, x=8),
+            None,
             4,
             ttnn.MemoryConfig(
                 ttnn.TensorMemoryLayout.WIDTH_SHARDED,
@@ -262,13 +271,15 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
         ),
         (  # FF2 Decode
             "matmul_dram_sharded_ff2",
             [1, 1, 32, 1024 * 28 // 8],
             hidden_size,
             3,
-            ttnn.CoreGrid(y=1, x=8),
+            None,
             4,
             ttnn.MemoryConfig(
                 ttnn.TensorMemoryLayout.WIDTH_SHARDED,
@@ -285,6 +296,8 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff2",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat8_b,
         ),
         (  # QKV Decode
             "matmul_qkv",
@@ -308,18 +321,24 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat8_b,
+        ),
+        (  # DO Decode
+            "matmul_qkv",
+            [1, 1, 32, hidden_size],
+            8192 // 8,
+            3,
+            ttnn.CoreGrid(y=4, x=8),
+            4,
+            ttnn.DRAM_MEMORY_CONFIG,
+            "dram",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat8_b,
         ),
     ],
-    ids=["ff1_decode", "ff2_decode", "qkv_decode"],
-)
-@pytest.mark.parametrize(
-    "input_dtype, matmul_weights_dtype",
-    [
-        (
-            ttnn.bfloat16,
-            ttnn.bfloat16,
-        )
-    ],
+    ids=["ff1_decode", "ff2_decode", "qkv_decode", "do_decode"],
 )
 @pytest.mark.parametrize(
     "enable_async",
