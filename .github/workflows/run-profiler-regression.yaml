@@ -19,7 +19,6 @@ jobs:
           {arch: wormhole_b0, runs-on: ["cloud-virtual-machine", "N300", "in-service"], name: N300},
         ]
     env:
-      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ matrix.runner-info.arch }}
       LOGURU_LEVEL: INFO
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
@@ -30,16 +29,21 @@ jobs:
       - name: Set up dynamic env vars for build
         run: |
           echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
       - uses: actions/download-artifact@v4
         with:
-          name: TTMetal_build_${{ matrix.runner-info.arch }}_profiler
-      - name: Extract files
-        run: tar -xvf ttm_${{ matrix.runner-info.arch }}.tar
-      - uses: ./.github/actions/install-python-deps
-      - name: Run profiler regression tests
-        timeout-minutes: 30
-        run: |
-          ./tests/scripts/run_profiler_regressions.sh
+          name: eager-dist-${{ matrix.os }}-${{ inputs.arch }}
+      - name: ${{ matrix.test-group.name }} tests
+        timeout-minutes: ${{ inputs.timeout }}
+        uses: ./.github/actions/docker-run
+        with:
+          docker_username: ${{ github.actor }} #TODO: Move to Action file
+          docker_password: ${{ secrets.GITHUB_TOKEN }}
+          docker_image_arch: ${{ inputs.arch }}
+          run_args: |
+            WHEEL_FILENAME=$(ls -1 *.whl)
+            pip3 install --user $WHEEL_FILENAME
+            ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
         with:

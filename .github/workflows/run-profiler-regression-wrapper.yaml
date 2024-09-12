@@ -10,7 +10,13 @@ jobs:
     with:
       tracy: true
     secrets: inherit
+  build-and-test-wheels:
+    needs: build-artifact
+    uses: ./.github/workflows/_build-and-test-wheels-impl.yaml
+    with:
+      from-precompiled: true
+    secrets: inherit
   run-profiler-regression:
-    needs: build-artifact-profiler
+    needs: build-and-test-wheels
     uses: ./.github/workflows/run-profiler-regression.yaml
     secrets: inherit
