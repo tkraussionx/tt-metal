@@ -33,4 +33,4 @@ class TtLlamaEmbedding(torch.nn.Module):
         )
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        return ttnn.embedding(x, self.weights)
+        return ttnn.embedding(x, self.weights, layout=ttnn.TILE_LAYOUT)

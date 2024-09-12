@@ -202,7 +202,7 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
 
     profiler.end("loading_weights_to_device")
     logger.info("Finished loading weights to device. Starting inference...")
-    max_generated_tokens = 128  # Maximum number of tokens to generate per user
+    max_generated_tokens = 12  # Maximum number of tokens to generate per user
     num_tokens_generated_decode = []
     for batch_idx, input_prompts in enumerate(batch_prompts):
         logger.info(f"Processing batch {batch_idx}")
@@ -292,7 +292,10 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
         pt_out_batched = torch.stack(pt_out, dim=-2)
         pt_out_batched = torch.argmax(pt_out_batched, dim=-1)
         tt_out_tok = ttnn.from_torch(
-            pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0), device=device, dtype=ttnn.uint32
+            torch.nn.functional.pad(pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0), (0, 31), "constant", 0),
+            # pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0),
+            device=device,
+            dtype=ttnn.uint32,
         )
 
         # Keep track of generated outputs to print out every iteration
@@ -319,24 +322,28 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
         current_pos = ttnn.from_torch(torch.tensor(decoding_pos, dtype=torch.int32), device=device, dtype=ttnn.int32)
 
         # Compile
-        decode_input = ttnn.unsqueeze_to_4D(ttnn.to_layout(tt_embd(tt_out_tok), ttnn.TILE_LAYOUT))
+        # tt_out_tok = ttnn.pad(tt_out_tok, padding=((0, 0), (0, 0), (0, 0), (0, 32-tt_out_tok.shape[3])), value=0)
+        # decode_input = ttnn.unsqueeze_to_4D(ttnn.tilize_with_val_padding(tt_embd(tt_out_tok), use_multicore=True, output_tensor_shape=ttnn.Shape([ 1, 32, 4096]), pad_value=0.0))
+        decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
         tt_out = tt_model(decode_input, current_pos, rot_mat=current_rot_mat)
-        tt_out = ttnn.untilize(
+        tt_out_rm = ttnn.untilize(
             tt_out, use_multicore=False
         )  # multi-core OOMs (https://github.com/tenstorrent/tt-metal/issues/9022)
-        tt_out_tok = ttnn.argmax(tt_out[:, :, :batch_size, :], dim=3, output_tensor=tt_out_tok)
+        tt_out_tok_rm = ttnn.argmax(tt_out_rm, dim=3)
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
         # FIXME current_pos = ttnn.add(current_pos, 1, output_tensor=current_pos)
 
         # Capture Trace
         trace_id = ttnn.begin_trace_capture(device, cq_id=0)
-        decode_input = ttnn.unsqueeze_to_4D(ttnn.to_layout(tt_embd(tt_out_tok), ttnn.TILE_LAYOUT))
+        # tt_out_tok = ttnn.pad(tt_out_tok, padding=((0, 0), (0, 0), (0, 0), (0, 32-tt_out_tok.shape[3])), value=0)
+        # decode_input = ttnn.unsqueeze_to_4D(ttnn.tilize_with_val_padding(tt_embd(tt_out_tok), use_multicore=True, output_tensor_shape=ttnn.Shape([ 1, 32, 4096]), pad_value=0.0))
+        decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
         tt_out = tt_model(decode_input, current_pos, rot_mat=current_rot_mat)
-        tt_out = ttnn.untilize(
+        tt_out_rm = ttnn.untilize(
             tt_out, use_multicore=False
         )  # multi-core OOMs (https://github.com/tenstorrent/tt-metal/issues/9022)
-        tt_out_tok = ttnn.argmax(tt_out[:, :, :batch_size, :], dim=3, output_tensor=tt_out_tok)
+        tt_out_tok_rm = ttnn.argmax(tt_out_rm, dim=3)
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
         ttnn.end_trace_capture(device, trace_id, cq_id=0)
@@ -347,33 +354,32 @@ def run_llama_demo(user_input, batch_size, device, instruct_mode, is_ci_env, num
 
         # FIXME current_pos = ttnn.sub(current_pos, 2, output_tensor=current_pos)
 
-        ttnn.record_event(0, op_event)
-        ttnn.record_event(1, write_event)
-        # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
+        # ttnn.record_event(0, op_event)
+        # ttnn.record_event(1, write_event)
         while users_decoding:
             iteration_time_start = time()
 
             # Execute trace
-            ttnn.wait_for_event(0, op_event)
-            ttnn.execute_trace(device, trace_id, cq_id=0, blocking=False)
-            ttnn.record_event(0, op_event)
+            # ttnn.wait_for_event(0, op_event)
+            ttnn.execute_trace(device, trace_id, cq_id=0, blocking=True)
+            # ttnn.record_event(0, op_event)
 
             # Write to host
-            ttnn.wait_for_event(1, op_event)
-            ttnn.wait_for_event(1, write_event)
-            tt_output_torch = ttnn.to_torch(tt_out_tok)[0, 0, 0, :batch_size]
-            ttnn.record_event(1, write_event)
+            # ttnn.wait_for_event(1, op_event)
+            # ttnn.wait_for_event(1, write_event)
+            # tt_output_torch = ttnn.to_torch(tt_out_tok.cpu(blocking=False, cq_id=1))[0, 0, 0, :batch_size]
+            # ttnn.record_event(1, write_event)
 
             # Save output token to print out later
-            for user in range(batch_size):
-                user_tok = tt_output_torch[user].tolist()
-                if user_tok != 28803 and user_done[user] == False:  # Stop saving the ouput after hitting the EOS token
-                    all_outputs[user].append(user_tok)
-                else:
-                    user_done[user] = True
-                    logger.trace(f"[User {user}] Finished decoding at iteration {iteration}")
-                    if all(user_done):
-                        users_decoding = False
+            # for user in range(batch_size):
+            #     user_tok = tt_output_torch[user].tolist()
+            #     if user_tok != 28803 and user_done[user] == False:  # Stop saving the ouput after hitting the EOS token
+            #         all_outputs[user].append(user_tok)
+            #     else:
+            #         user_done[user] = True
+            #         logger.trace(f"[User {user}] Finished decoding at iteration {iteration}")
+            #         if all(user_done):
+            #             users_decoding = False
 
             # Print out generated outputs for each user at the end of every iteration
             iteration_time = time() - iteration_time_start
