@@ -94,4 +94,5 @@ Get started with [simple kernels](https://docs.tenstorrent.com/tt-metalium/lates
 - [Saturating DRAM Bandwidth](./tech_reports/Saturating_DRAM_bandwidth/Saturating_DRAM_bandwidth.md) (updated Sept 6th)
 - [Flash Attention on Wormhole](./tech_reports/FlashAttention/FlashAttention.md) (updated Sept 6th)
 - [CNNs on TT Architectures](./tech_reports/CNNs/ttcnn.md) (updated Sept 6th)
-- [Ethernet and Multichip Basics](./tech_reports/CCL/CclDeveloperGuide.md) (Updated Sept 6th)
+- [Ethernet and Multichip Basics](./tech_reports/CCL/CclDeveloperGuide.md) (Updated Sept 12th)
+- [Blackhole Bring-Up Prgramming Guide](./tech_reports/Blackhole/BlackholeBringUpProgrammingGuide.md) (Updated Sept 12th)
