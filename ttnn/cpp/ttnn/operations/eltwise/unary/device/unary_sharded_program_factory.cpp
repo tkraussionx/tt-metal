@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "tt_metal/common/logger.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
@@ -78,6 +79,10 @@ UnaryShardedProgramFactory::cached_program_t UnaryShardedProgramFactory::create(
                                           .set_globally_allocated_address(*input.buffer());
     auto cb_src0 = tt::tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
 
+    if (cb_src0_config.globally_allocated_address().value_or(-1) == input.buffer()->address()) {
+        tt::log_info("CB In0 has the same address as the sharded input 0");
+    }
+
     // output sharded CB
     uint32_t out_cb_id = tt::CB::c_out0;
     tt::tt_metal::CircularBufferConfig out_cb_config = tt::tt_metal::CircularBufferConfig(
@@ -86,6 +91,10 @@ UnaryShardedProgramFactory::cached_program_t UnaryShardedProgramFactory::create(
                                           .set_page_size(out_cb_id, in_cb_pagesize)
                                           .set_globally_allocated_address(*output.buffer());
     auto out_cb = tt::tt_metal::CreateCircularBuffer(program, all_cores, out_cb_config);
+
+    if (out_cb_config.globally_allocated_address().value_or(-1) == output.buffer()->address()) {
+        tt::log_info("CB Out0 has the same address as the sharded output 0");
+    }
 
     log_debug(tt::LogOp, "input_cb: {}, npages: {}, pagesize: {}", in_cb_id, in_cb_npages, in_cb_pagesize);
     log_debug(tt::LogOp, "input_tile_size: {}", input_tile_size);
