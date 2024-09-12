@@ -171,6 +171,7 @@ void kernel_main() {
 
     uint64_t data_words_sent = 0;
     uint64_t iter = 0;
+    uint64_t zero_data_sent_iter = 0;
     uint64_t few_data_sent_iter = 0;
     uint64_t many_data_sent_iter = 0;
     uint64_t words_flushed = 0;
@@ -195,8 +196,11 @@ void kernel_main() {
             uint32_t curr_data_words_sent = output_queue_ptr->forward_data_from_input(
                 input_queue_id, full_packet_sent, input_queue.get_end_of_cmd());
             data_words_sent += curr_data_words_sent;
-            few_data_sent_iter += static_cast<uint64_t>(curr_data_words_sent <= data_sent_per_iter_low);
-            many_data_sent_iter += static_cast<uint64_t>(curr_data_words_sent >= data_sent_per_iter_high);
+            if constexpr (!(data_sent_per_iter_low == 0 && data_sent_per_iter_high == 0)) {
+                zero_data_sent_iter += static_cast<uint64_t>(curr_data_words_sent <= 0);
+                few_data_sent_iter += static_cast<uint64_t>(curr_data_words_sent <= data_sent_per_iter_low);
+                many_data_sent_iter += static_cast<uint64_t>(curr_data_words_sent >= data_sent_per_iter_high);
+            }
 #ifdef CHECK_TIMEOUT
             progress_timestamp = (curr_data_words_sent > 0) ? get_timestamp_32b() : progress_timestamp;
 #endif
@@ -235,6 +239,7 @@ void kernel_main() {
     set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
     set_64b_result(test_results, total_data_words, TX_TEST_IDX_TOT_DATA_WORDS);
     set_64b_result(test_results, num_packets, TX_TEST_IDX_NPKT);
+    set_64b_result(test_results, zero_data_sent_iter, TX_TEST_IDX_ZERO_DATA_WORDS_SENT_ITER);
     set_64b_result(test_results, few_data_sent_iter, TX_TEST_IDX_FEW_DATA_WORDS_SENT_ITER);
     set_64b_result(test_results, many_data_sent_iter, TX_TEST_IDX_MANY_DATA_WORDS_SENT_ITER);
 
