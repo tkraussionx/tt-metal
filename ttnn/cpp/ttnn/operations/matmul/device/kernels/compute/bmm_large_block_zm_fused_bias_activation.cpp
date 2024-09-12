@@ -12,6 +12,8 @@
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
 #endif
+// #define SKIP_OVERHEAD 1
+// #define SKIP_COMPUTE 1
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
@@ -108,7 +110,9 @@ void MAIN {
 
     constexpr uint32_t out_block_w = out_subblock_w * in1_num_subblocks;
 
-    constexpr uint32_t in0_cb_id = tt::CB::c_in0;
+    constexpr bool full_in0_available = true;
+
+    constexpr uint32_t in0_cb_id = full_in0_available ? tt::CB::c_in2 : tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
@@ -149,17 +153,22 @@ void MAIN {
 // Configure packer once for pack out without Bias
 #if not defined FUSE_BIAS and defined PACK_RELU
             if (last_out) {
+                #ifndef SKIP_OVERHEAD
                 // if last block we pack the final result with relu enabled
                 PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
+                #endif
             }
 #endif
-
+            #ifndef SKIP_OVERHEAD
             cb_wait_front(in0_cb_id, in0_block_num_tiles);
             cb_wait_front(in1_cb_id, in1_block_num_tiles);
+            #endif
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
+
+                    #ifndef SKIP_OVERHEAD
                     tile_regs_acquire();
                     if (enable_reload) {
                         reload_from_cb_to_dst(
@@ -171,6 +180,7 @@ void MAIN {
                             out_subblock_h,
                             in0_block_w);
                     }
+                    #endif
 
 #ifndef SKIP_COMPUTE
                     // Compute output sub-block
@@ -199,6 +209,7 @@ void MAIN {
 #endif  // SKIP_COMPUTE
 
                     if (last_out) {
+                        #ifndef SKIP_OVERHEAD
 // If we fuse bias, we will pack out and run bias + optional sfpu in a separate loop
 #if not defined FUSE_BIAS and defined SFPU_OP_INIT_ACTIVATION
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
@@ -231,9 +242,11 @@ void MAIN {
                         matmul_pack_tile(start_dst_index, mm_out_cb_id, out_subblock_num_tiles);
 
                         tile_regs_release();
+                        #endif
                         cb_push_back(mm_out_cb_id, out_subblock_num_tiles);
 
                     } else {
+                        #ifndef SKIP_OVERHEAD
                         tile_regs_commit();
                         // Wait for tiles in output buffer to be written out since interm and output share memory
                         if (block == 0) {
@@ -256,6 +269,7 @@ void MAIN {
                         matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
 
                         tile_regs_release();
+                        #endif
                         cb_push_back(mm_partials_cb_id, out_subblock_num_tiles);
                     }
 

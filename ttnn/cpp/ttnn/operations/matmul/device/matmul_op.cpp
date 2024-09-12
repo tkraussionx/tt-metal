@@ -956,7 +956,7 @@ void Matmul::validate(
         (input_tensor_a.get_layout() == Layout::TILE && input_tensor_b.get_layout() == Layout::TILE),
         "Inputs to matmul must be tilized");
     TT_FATAL(
-        a_shape[-1] == b_shape[-2],
+        a_shape[-1] / 24 == b_shape[-2],
         "The width of the first tensor must be equal to the height of the second tensor. Mismatch: width={} height={}",
         a_shape[-1],
         b_shape[-2]);

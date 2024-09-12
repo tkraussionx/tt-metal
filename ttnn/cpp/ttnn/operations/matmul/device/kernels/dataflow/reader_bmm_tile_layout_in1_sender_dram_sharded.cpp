@@ -7,7 +7,10 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+// #define SKIP_DRAM 1
+
 void kernel_main() {
+    // DeviceZoneScopedN("dram_sharded_in1_sender");
     // RUNTIME ARGS
     const bool is_worker_core = get_arg_val<uint32_t>(0) == 1;
     // if not worker core, skip
@@ -67,6 +70,7 @@ void kernel_main() {
     for (uint32_t block = 0; block < num_blocks; ++block) {
         // Operand 1
         cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+        #ifndef SKIP_DRAM
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
         for (uint32_t h = 0; h < in1_num_pages; ++h) {
@@ -76,6 +80,7 @@ void kernel_main() {
         }
 
         noc_async_read_barrier();
+        #endif
         cb_push_back(cb_id_in1, in1_block_num_tiles);
     }
 #else
@@ -90,6 +95,8 @@ void kernel_main() {
     uint32_t l1_write_addr_in1_start = get_write_ptr(cb_id_in1);
     l1_write_addr_in1 = l1_write_addr_in1_start;
     for (uint32_t block = 0; block < num_blocks; ++block) {
+        // DeviceZoneScopedN("dram_sharded_in1_sender_loop");
+    #ifndef SKIP_DRAM
         noc_async_read_tile_dram_sharded_set_trid(curr_block_trid);
 
         for (uint32_t h = 0; h < in1_num_pages; ++h) {
@@ -98,9 +105,12 @@ void kernel_main() {
             l1_read_addr_in1 += in1_page_size;
             l1_write_addr_in1 += in1_page_size;
         }
+    #endif
 
         if (num_free_blocks_in_buffer == 2) {
+            #ifndef SKIP_DRAM
             noc_async_read_barrier_with_trid(block_trid_to_wait);
+            #endif
             cb_push_back(cb_id_in1, in1_block_num_tiles);
             // wait for next block trid
             block_trid_to_wait = block_trid_to_wait == 3 ? 1 : (block_trid_to_wait + 1);
@@ -109,7 +119,7 @@ void kernel_main() {
         } else {
             num_free_blocks_in_buffer -= 1;
         }
-
+        #ifndef SKIP_DRAM
         if (curr_block_trid == total_num_blocks_in_buffer) {
             l1_write_addr_in1_offset = 0;
             curr_block_trid = 1;
@@ -118,9 +128,12 @@ void kernel_main() {
             curr_block_trid += 1;
         }
         l1_write_addr_in1 = l1_write_addr_in1_start + l1_write_addr_in1_offset;
+        #endif
     }
     // last block to wait
+    #ifndef SKIP_DRAM
     noc_async_read_barrier_with_trid(block_trid_to_wait);
+    #endif
     cb_push_back(cb_id_in1, in1_block_num_tiles);
 #endif
 
@@ -132,7 +145,7 @@ void kernel_main() {
 
     uint32_t in3_base_addr =
         noc_async_read_tile_dram_sharded_set_state<in3_page_size, true>(in3_tensor_addr, dram_bank_id, vc);
-
+    #ifndef SKIP_DRAM
     for (uint32_t h = 0; h < in3_num_pages; ++h) {
         noc_async_read_tile_dram_sharded_with_state(in3_base_addr, l1_read_addr_in3, l1_write_addr_in3);
         l1_read_addr_in3 += in3_page_size;
@@ -141,6 +154,7 @@ void kernel_main() {
 
     // Barrier! make sure the reads are done
     noc_async_read_barrier();
+    #endif
     cb_push_back(cb_id_in3, in1_block_w);
 #endif
 
@@ -148,6 +162,7 @@ void kernel_main() {
     cb_wait_front(cb_id_out, out_block_num_tiles);
 
 #ifndef SKIP_WRITE_BACK
+    #ifndef SKIP_DRAM
     uint32_t index_offset = 0;
     uint32_t l1_read_addr_out_offset = 0;
 
@@ -172,5 +187,6 @@ void kernel_main() {
         index_offset += 3;
     }
     noc_async_write_barrier();
+    #endif
 #endif
 }

@@ -7,7 +7,9 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+// #define SKIP 1
 void kernel_main() {
+    // DeviceZoneScopedN("dram_sharded_in0_sender");
     // COMPILE TIME ARGS
     // in0 block args
     constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(0);
@@ -73,7 +75,9 @@ void kernel_main() {
 
     if (worker_core_type == 1) {  // mcast sender + no compute
 
+        #ifndef SKIP
         for (uint32_t i = 0; i < num_blocks_per_shard; ++i) {
+            // DeviceZoneScopedN("dram_sharded_in0_sender_for_loop");
             const uint32_t block_id = sender_block_id + i;
 
             // Operand 0
@@ -102,14 +106,17 @@ void kernel_main() {
 
             local_read_addr += in0_block_size_bytes;
         }
+        #endif
 
     } else if (worker_core_type == 2) {  // mcast sender + compute
 
         for (uint32_t block = 0; block < num_blocks; ++block) {
+            // DeviceZoneScopedN("dram_sharded_in0_sender_for_loop_sender_compute");
             const uint32_t block_id = block / num_blocks_per_shard;
 
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
             // Set in0 semaphore value to INVALID
+            #ifndef SKIP
             noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             if (block_id == sender_id) {
@@ -141,11 +148,14 @@ void kernel_main() {
             }
 
             noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+            #endif
             cb_push_back(cb_id_in0, in0_block_num_tiles);
         }
     } else {  // mcast receiver + compute
 
         for (uint32_t block = 0; block < num_blocks; ++block) {
+            // DeviceZoneScopedN("dram_sharded_in0_sender_for_loop_sender_compute");
+
             const uint32_t block_id = block / num_blocks_per_shard;
 
             // get the mcast sender noc
@@ -154,7 +164,7 @@ void kernel_main() {
 
             // Operand 0
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-
+            #ifndef SKIP
             // Set in0 semaphore value to INVALID
             noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
 
@@ -163,6 +173,7 @@ void kernel_main() {
 
             // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+            #endif
 
             cb_push_back(cb_id_in0, in0_block_num_tiles);
         }

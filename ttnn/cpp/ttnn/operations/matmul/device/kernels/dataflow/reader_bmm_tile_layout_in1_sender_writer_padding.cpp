@@ -8,7 +8,9 @@
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 
+#define SKIP_DRAM 1
 void kernel_main() {
+    // DeviceZoneScopedN("in1_sender");
     // READER
     uint32_t rt_args_idx = 0;
     // in1 tensor args
@@ -184,6 +186,7 @@ void kernel_main() {
 #endif
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
         for (uint32_t block = 0; block < num_blocks; ++block) {
+            // DeviceZoneScopedN("in1_sender_block_loop");
             if constexpr(fuse_op) {
                 fused_op_receiver.update_current_block_start_tile_id(
                     block,
@@ -234,7 +237,12 @@ void kernel_main() {
 #else
 #ifndef IN1_SHARDED
             // Operand 1
+            // {
+            //     DeviceZoneScopedN("reserve");
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+            // }
+
+            #ifndef SKIP_DRAM
             l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
             uint64_t in1_start_address = l1_write_addr_in1;  // copy start address of block, to be used for mcasting
@@ -256,6 +264,7 @@ void kernel_main() {
 
             // Barrier! make sure the reads are done
             noc_async_read_barrier();
+            #endif
 #endif
 #endif  // IN1_DRAM_SHARDED
 
@@ -284,7 +293,10 @@ void kernel_main() {
 #endif
 
 #ifndef IN1_SHARDED
+{
+        // DeviceZoneScopedN("push_back");
             cb_push_back(cb_id_in1, in1_block_num_tiles);
+}
 #endif
         }
 #ifdef FUSE_BIAS
@@ -329,14 +341,18 @@ void kernel_main() {
             uint32_t in3_tensor_tile_id = in3_tensor_start_tile_id;
             for (uint32_t w = 0; w < in1_block_w; ++w) {
                 if (w < last_block_w) {
+                    #ifndef SKIP_DRAM
                     noc_async_read_tile(in3_tensor_tile_id, s3, l1_write_addr_in3);
+                    #endif
                 }
                 l1_write_addr_in3 += bias_single_tile_size_bytes;
                 in3_tensor_tile_id += in3_tensor_stride_w;
                 in3_block_size_bytes += bias_single_tile_size_bytes;
             }
             // Barrier! make sure the reads are done
+            #ifndef SKIP_DRAM
             noc_async_read_barrier();
+            #endif
 #endif
 
 #ifndef SKIP_MCAST
@@ -423,8 +439,11 @@ void kernel_main() {
     }
 
 #if OUT_SHARDED
+{
+    // DeviceZoneScopedN("OUT_SHARDED_WAIT");
     cb_wait_front(
         cb_id_out0,
         batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
+}
 #endif
 }
