@@ -10,6 +10,7 @@ jobs:
       # so we try not to get hanging machines
       fail-fast: false
       matrix:
+        os: [ubuntu-20.04]
         runner-info: [
           # E150
           {arch: grayskull, runs-on: ["cloud-virtual-machine", "E150", "in-service"], name: E150},
@@ -32,7 +33,7 @@ jobs:
           echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
       - uses: actions/download-artifact@v4
         with:
-          name: eager-dist-ubuntu-20.04-${{ matrix.runner-info.arch }}
+          name: eager-dist-${{ matrix.os }}-${{ matrix.runner-info.arch }}
       - name: ${{ matrix.test-group.name }} tests
         timeout-minutes: ${{ inputs.timeout }}
         uses: ./.github/actions/docker-run
