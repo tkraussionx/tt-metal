@@ -166,6 +166,7 @@ class UNetConv2D:
             enable_subblock_padding=False,
             activation=activation,
             output_layout=ttnn.TILE_LAYOUT,
+            input_channels_alignment=conv.input_channels_alignment if "input_channels_alignment" in conv else 32,
         )
         config_override = conv.conv_blocking_and_parallelization_config_override
         if config_override and "act_block_h" in config_override:
@@ -237,13 +238,7 @@ class UNetDownblock:
         should_reshard=False,
         mesh_mapper=None,
     ):
-        self.conv1 = UNetConv2D(
-            conv1,
-            bn=bn1,
-            device=device,
-            cache=conv_cache,
-            mesh_mapper=mesh_mapper,
-        )
+        self.conv1 = UNetConv2D(conv1, bn=bn1, device=device, cache=conv_cache, mesh_mapper=mesh_mapper)
         self.conv2 = UNetConv2D(
             conv2,
             bn=bn2,
@@ -321,7 +316,7 @@ class UNetUpblock:
                     1,
                     1,
                     self.conv1.input_width * self.conv1.input_height * self.conv1.batch_size,
-                    nearest_32(self.conv1.in_channels),
+                    self.conv1.in_channels,
                 ],
                 parallel_config=parallel_config,
                 tile_size=32 if conv1.dtype == ttnn.bfloat8_b else 1,
@@ -366,7 +361,10 @@ class UNetUpblock:
         ttnn.deallocate(residual)
 
         if self.should_reshard:
-            y = ttnn.to_memory_config(y, self.sharded_memory_config)
+            if y.is_sharded():
+                y = ttnn.reshard(y, self.sharded_memory_config)
+            else:
+                y = ttnn.interleaved_to_sharded(y, self.sharded_memory_config)
 
         y = self.conv1(y)
         y = self.conv2(y)
@@ -458,7 +456,7 @@ class UNet:
             parameters.b5_3,
             device,
             conv_cache=self.conv_cache,
-            should_reshard=False,
+            should_reshard=True,
             mesh_mapper=mesh_mapper,
         )
         self.upblock2 = UNetUpblock(
@@ -470,7 +468,7 @@ class UNet:
             parameters.b6_3,
             device,
             conv_cache=self.conv_cache,
-            should_reshard=False,
+            should_reshard=True,
             mesh_mapper=mesh_mapper,
         )
         self.upblock3 = UNetUpblock(
@@ -494,7 +492,7 @@ class UNet:
             parameters.b8_3,
             device,
             conv_cache=self.conv_cache,
-            should_reshard=False,
+            should_reshard=True,
             mesh_mapper=mesh_mapper,
         )
 
