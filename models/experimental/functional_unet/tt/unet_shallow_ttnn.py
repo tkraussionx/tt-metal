@@ -385,7 +385,7 @@ class UNet:
             parameters.p1,
             device,
             conv_cache=self.conv_cache,
-            should_reshard=True,
+            should_reshard=False,
             mesh_mapper=mesh_mapper,
         )
         self.downblock2 = UNetDownblock(
@@ -516,7 +516,12 @@ class UNet:
     def __call__(self, x):
         assert len(x.shape) == 4, f"Expected UNet input tensors to be rank 4 (was {len(x.shape)})"
 
-        x = x.to(self.device, ttnn.L1_MEMORY_CONFIG)
+        # breakpoint()
+        # x = ttnn.to_device(x, self.device)
+        # input_sharded_memory_config = ttnn.create_sharded_memory_config(
+        # x.shape, core_grid=ttnn.CoreGrid(x=8, y=8), strategy=ttnn.ShardStrategy.HEIGHT
+        # )
+        # x = ttnn.to_device(x, self.device, input_sharded_memory_config)
 
         x, c1_residual = self.downblock1(x)
         x, c2_residual = self.downblock2(x)

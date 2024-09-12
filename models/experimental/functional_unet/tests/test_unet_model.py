@@ -19,7 +19,7 @@ from models.experimental.functional_unet.tt import unet_shallow_ttnn
 @pytest.mark.parametrize("groups", [1])
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 64768}], indirect=True)
 def test_unet_model(batch, groups, device, use_program_cache, reset_seeds):
-    torch_input, ttnn_input = create_unet_input_tensors(device, batch, groups, pad_input=True)
+    torch_input, ttnn_input = create_unet_input_tensors(device, batch, groups, pad_input=False)
     model = unet_shallow_torch.UNet.from_random_weights(groups=1)
 
     parameters = create_unet_model_parameters(model, torch_input, groups=groups, device=device)
