@@ -51,9 +51,6 @@ run_profiling_test(){
 
     echo "Make sure this test runs in a build with cmake option ENABLE_TRACY=ON"
 
-    source python_env/bin/activate
-    export PYTHONPATH=$TT_METAL_HOME
-
     run_additional_T3000_test
 
     run_async_mode_T3000_test
@@ -81,22 +78,14 @@ run_profiling_no_reset_test(){
 
     echo "Make sure this test runs in a build with cmake option ENABLE_TRACY=ON"
 
-    source python_env/bin/activate
-    export PYTHONPATH=$TT_METAL_HOME
-
     TT_METAL_DEVICE_PROFILER=1 pytest $PROFILER_TEST_SCRIPTS_ROOT/test_device_profiler_gs_no_reset.py
 
     remove_default_log_locations
 }
 
 run_post_proc_test(){
-    source python_env/bin/activate
-    export PYTHONPATH=$TT_METAL_HOME
-
     pytest $PROFILER_TEST_SCRIPTS_ROOT/test_device_logs.py -vvv
 }
-
-cd $TT_METAL_HOME
 
 #
 TTNN_CONFIG_OVERRIDES='{"enable_fast_runtime_mode": false}'
