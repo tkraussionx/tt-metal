@@ -273,7 +273,11 @@ void device_module(py::module &m_device) {
         | prefix           | Dumped report filename prefix    | str                   |             | No       |
         +------------------+----------------------------------+-----------------------+-------------+----------+
     )doc");
-
+    m_device.def("SyncWorkers",
+        [] (Device* device) {
+            device->synchronize();
+        }
+    );
     m_device.def("Synchronize",
         [] (Device* device, const std::optional<uint8_t> cq_id) {
             // Send finish command to issue queue through worker thread

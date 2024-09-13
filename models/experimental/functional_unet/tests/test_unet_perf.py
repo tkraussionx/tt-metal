@@ -141,7 +141,14 @@ def test_unet_perf_e2e(
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 68864}], indirect=True)
 @pytest.mark.parametrize(
     "batch, groups, iterations, expected_compile_time, expected_inference_time_ms",
-    ((2, 1, 16, 25.0, 61.0),),
+    ((2, 1, 1000, 25.0, 61.0),),
+)
+@pytest.mark.parametrize(
+    "mesh_device",
+    [
+        2,
+    ],
+    indirect=True,
 )
 def test_unet_data_parallel_perf_e2e(
     batch: int,

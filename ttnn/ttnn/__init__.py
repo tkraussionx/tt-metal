@@ -181,6 +181,7 @@ from ttnn.multi_device import (
     get_device_ids,
     create_mesh_device,
     synchronize_devices,
+    synchronize_workers,
     TensorToMesh,
     ShardTensorToMesh,
     ShardTensor2dMesh,

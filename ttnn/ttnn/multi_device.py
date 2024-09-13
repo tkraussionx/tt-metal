@@ -194,6 +194,11 @@ def create_mesh_device(
         close_mesh_device(mesh_device)
 
 
+def synchronize_workers(devices: Union["ttnn.Device", "ttnn.MeshDevice"]):
+    for device in devices.get_device_ids():
+        ttnn._ttnn.device.SyncWorkers(devices.get_device(device))
+
+
 def synchronize_devices(devices: Union["ttnn.Device", "ttnn.MeshDevice"], queue_id: Optional[int] = None) -> None:
     """
     synchronize_devices(devices: Union[ttnn.Device, ttnn.MeshDevice], queue_id: Optional[int] = None) -> None:
