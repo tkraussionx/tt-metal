@@ -29,3 +29,31 @@ def test_mean(device, batch_size, h, w, dim):
     output_tensor = ttnn.mean(input_tensor, dim=dim)
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor)
+
+
+# mean_input_tensor:  torch.Size([1, 256, 56, 56])
+# mean_input_tensor:  torch.Size([1, 512, 28, 28])
+# mean_input_tensor:  torch.Size([1, 768, 14, 14])
+# mean_input_tensor:  torch.Size([1, 1024, 7, 7])
+
+
+@pytest.mark.parametrize(
+    "input_shape, dim",
+    [
+        ((1, 256, 64, 64), (2, 3)),
+        ((1, 512, 32, 32), (2, 3)),
+        ((1, 768, 16, 16), (2, 3)),
+    ],
+)
+def test_mean_vovnet(device, input_shape, dim):
+    torch.manual_seed(0)
+
+    torch_input_tensor = torch.randn(input_shape, dtype=torch.bfloat16)
+    torch_output_tensor = torch.mean(torch_input_tensor, dim=dim, keepdim=True, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+
+    output_tensor = ttnn.mean(input_tensor, dim=dim)
+    output_tensor = ttnn.to_torch(output_tensor)
+    print(output_tensor)
+    assert_with_pcc(torch_output_tensor, output_tensor)
