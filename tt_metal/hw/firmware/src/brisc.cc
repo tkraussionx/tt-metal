@@ -366,18 +366,16 @@ int main() {
 
         WAYPOINT("GW");
         uint32_t count = 0;
-        DPRINT << "Waiting for go signal" << ENDL();
         while ((mailboxes->go_message.run & 0xFF) != RUN_MSG_GO) {
             if ((mailboxes->go_message.run & 0xFF) == RUN_MSG_RESET_READ_PTR) {
-                DPRINT << "Got go signal" << ENDL();
+                // Set the rd_ptr on workers to specified value
+                mailboxes->launch_msg_rd_ptr = 0;
                 uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
                 uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(dispatch_core_x),
                     NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
-                // Set the rd_ptr on workers to specified value
-                mailboxes->launch_msg_rd_ptr = 0;
-                mailboxes->go_message.run= RUN_MSG_DONE;
+                mailboxes->go_message.run = RUN_MSG_DONE;
                 // Notify dispatcher that this has been done
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(
@@ -434,11 +432,12 @@ int main() {
 
             uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
             uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
-            DPRINT << "Done running kernels: " << +dispatch_core_x << " " << +dispatch_core_y << ENDL();
             mailboxes->go_message.run = RUN_MSG_DONE;
 
             // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
             if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
+                // Set launch message to invalid, so that the next time this slot is encountered, kernels are only run if a valid launch message is sent.
+                mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables = 0;
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(dispatch_core_x),
                         NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
@@ -451,8 +450,6 @@ int main() {
                     1,
                     31 /*wrap*/,
                     false /*linked*/);
-                // Set launch message to invalid, so that the next time this slot is encountered, kernels are only run if a valid launch message is sent.
-                mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables = 0;
                 mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
         }
