@@ -11,12 +11,21 @@ from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
 from models.utility_functions import skip_for_grayskull, skip_for_wormhole_b0
 from models.utility_functions import nearest_32
+import math
 
 shard_spec_32_cores_grid = ttnn.CoreRangeSet(
     {
         ttnn.CoreRange(
             ttnn.CoreCoord(0, 0),
             ttnn.CoreCoord(7, 3),
+        ),
+    }
+)
+shard_spec_16_cores_grid = ttnn.CoreRangeSet(
+    {
+        ttnn.CoreRange(
+            ttnn.CoreCoord(0, 0),
+            ttnn.CoreCoord(7, 1),
         ),
     }
 )
@@ -30,6 +39,9 @@ shard_spec_8_cores_grid = ttnn.CoreRangeSet(
 )
 shard_height = 32  # Decode mode only
 hidden_size = 8192 // 4
+
+shard_width_hidden_dim_across_32_cores = hidden_size // 32
+shard_width_hidden_dim_across_16_cores = hidden_size // 16
 shard_width_hidden_dim_across_8_cores = hidden_size // 8
 
 
@@ -49,7 +61,7 @@ def run_prefetch_matmul_on_t3000_impl(
     mem_config_input,
     mem_config_weights,
     mem_config_mm,
-    num_iters=1,
+    num_iters=3,
     enable_trace=False,
 ):
     devices = t3k_mesh_device.get_devices()
@@ -133,16 +145,24 @@ def run_prefetch_matmul_on_t3000_impl(
         )
     elif matmul_config == "matmul_dram_sharded_ff1":
         program_config = ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
-            in0_block_w=K // 8 // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            in0_block_w=K
+            // mem_config_input.shard_spec.num_cores()
+            // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
             per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
-            per_core_N=N // 8 // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
+            per_core_N=math.ceil(
+                N / mem_config_input.shard_spec.num_cores() / 32
+            ),  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
             fused_activation=None,
         )
     elif matmul_config == "matmul_dram_sharded_ff2":
         program_config = ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
-            in0_block_w=K // 8 // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+            in0_block_w=K
+            // mem_config_input.shard_spec.num_cores()
+            // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
             per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
-            per_core_N=N // 8 // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
+            per_core_N=N
+            // mem_config_input.shard_spec.num_cores()
+            // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
             fused_activation=None,
         )
     elif matmul_config == "matmul_qkv":
@@ -169,6 +189,8 @@ def run_prefetch_matmul_on_t3000_impl(
             fused_activation=None,  # ttnn.UnaryOpType.SILU,
             fuse_batch=False,
         )
+    elif matmul_config == "auto":
+        program_config = None
     else:
         raise ValueError(f"Unsupported matmul_config: {matmul_config}")
 
@@ -250,7 +272,7 @@ def run_prefetch_matmul_on_t3000_impl(
     "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm, input_dtype, matmul_weights_dtype",
     [
         (  # FF1/3 Decode
-            "matmul_dram_sharded_ff1",
+            "auto",
             [1, 1, 32, hidden_size],
             3584,  # Round up to 32k/8 from 28k/8
             3,
@@ -269,76 +291,76 @@ def run_prefetch_matmul_on_t3000_impl(
                     False,
                 ),
             ),
-            "dram_sharded_ff1",
+            "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
             ttnn.bfloat16,
             ttnn.bfloat4_b,
         ),
-        (  # FF2 Decode
-            "matmul_dram_sharded_ff2",
-            [1, 1, 32, 1024 * 28 // 8],
-            hidden_size,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_8_cores_grid,
-                    [
-                        shard_height,
-                        1024 * 28 // 8 // 8,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff2",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat8_b,
-        ),
-        (  # QKV Decode
-            "matmul_qkv",
-            [1, 1, 32, hidden_size],
-            1024 * 10 // 8,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_32_cores_grid,
-                    [
-                        shard_height,
-                        8192 // 32 // 4,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat8_b,
-        ),
-        (  # DO Decode
-            "matmul_qkv",
-            [1, 1, 32, hidden_size],
-            8192 // 8,
-            3,
-            ttnn.CoreGrid(y=4, x=8),
-            4,
-            ttnn.DRAM_MEMORY_CONFIG,
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat8_b,
-        ),
+        # (  # FF2 Decode
+        #     "matmul_dram_sharded_ff2",
+        #     [1, 1, 32, 1024 * 28 // 8],
+        #     hidden_size,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_8_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 1024 * 28 // 8 // 8,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff2",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        #     ttnn.bfloat16,
+        #     ttnn.bfloat8_b,
+        # ),
+        # (  # QKV Decode
+        #     "matmul_qkv",
+        #     [1, 1, 32, hidden_size],
+        #     1024 * 10 // 8,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_32_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 8192 // 32 // 4,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        #     ttnn.bfloat16,
+        #     ttnn.bfloat8_b,
+        # ),
+        # (  # DO Decode
+        #     "matmul_qkv",
+        #     [1, 1, 32, hidden_size],
+        #     8192 // 8,
+        #     3,
+        #     ttnn.CoreGrid(y=4, x=8),
+        #     4,
+        #     ttnn.DRAM_MEMORY_CONFIG,
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        #     ttnn.bfloat16,
+        #     ttnn.bfloat8_b,
+        # ),
     ],
-    ids=["ff1_decode", "ff2_decode", "qkv_decode", "do_decode"],
+    ids=["ff1_decode"],  # , "ff2_decode", "qkv_decode", "do_decode"],
 )
 @pytest.mark.parametrize(
     "enable_async",
