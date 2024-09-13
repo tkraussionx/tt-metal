@@ -5,6 +5,7 @@
 import pytest
 import torch
 import ttnn
+import os
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_grayskull, is_wormhole_b0, is_grayskull, is_blackhole
@@ -651,21 +652,41 @@ def test_sd_matmul(device, batch_size, channel_a, channel_b, m_size, k_size, n_s
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=pcc)
 
 
-@pytest.mark.skipif(is_grayskull(), reason="Unsupported on GS and BH")
-@pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("m_size", [32])
-@pytest.mark.parametrize("k_size", [1024])
-@pytest.mark.parametrize("n_size", [1024])
-def test_matmul_fidelity(device, batch_size, m_size, k_size, n_size):
-    # torch.manual_seed(0)
-    scalar = 1.0078125
-    # torch_input_tensor_a = torch.rand((batch_size, m_size, k_size), dtype=torch.bfloat16)
-    torch_input_tensor_a = torch.full((batch_size, m_size, k_size), scalar, dtype=torch.bfloat16)
-    # torch_input_tensor_b = torch.rand((k_size, n_size), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.full((k_size, n_size), scalar, dtype=torch.bfloat16)
-    # torch_input_tensor_b = torch.eye(k_size, dtype=torch.float32).unsqueeze(0).repeat(batch_size, 1, 1).to(torch.bfloat16)
-    torch_output_tensor = torch_input_tensor_a @ torch_input_tensor_b
+# ------------------------ GH ISSUE #12453 ------------------------------------
+# The following tests are an interactive explanation of the
+# issue raised by GH#12453 which questions the resulsts of HiFi2/HiFi4
+# -----------------------------------------------------------------------------
 
+
+# This test creates 2 constant input vecotors and performs a matmul
+# in HiFi2/HiFi4 and then compares the results.
+@pytest.mark.skipif(is_grayskull(), reason="Unsupported on GS")
+@pytest.mark.parametrize("batch_size", [int(os.getenv("BATCH_SIZE", 1))])
+# Let's keep this dimension fixed when testing, it's easier to understand what's
+# going on
+@pytest.mark.parametrize("m_size", [int(os.getenv("M_SIZE", 32))])
+# The inner dimension dictates the size of the difference between HiFi2/HiFi4
+# k_size = 1024, diff = 8
+# k_size = 512, diff = 4
+# k_size = 128, diff = 1
+@pytest.mark.parametrize("k_size", [int(os.getenv("K_SIZE", 1024))])
+# This dimension dictates whether or not the error will be visible. It is due to
+# nature of bfloat16 data storage - operands are brought to common exponent so
+# small value + big value =~ big value. If we make this 512 or smaller, the
+# difference between HiFi2 and HiFi4 will not be visible
+@pytest.mark.parametrize("n_size", [int(os.getenv("N_SIZE", 1024))])
+# Considering the k_size, this will be the difference between HiFi2 and HiFi4
+# We want atol_th to be the same or larger than the difference for test to pass.
+# If you play around and make this just a bit less than the actuall difference,
+# the test will fail
+@pytest.mark.parametrize("atol_th", [int(os.getenv("ATOL", 8))])
+# This is number ensures that the least significant bit of the mantissa is '1'.
+# If you make this a really small number, e.g. 0.0001, you can't see the difference
+# even for really large tensors because both fidelities errors will be the same.
+@pytest.mark.parametrize("scalar", [float(os.getenv("SCALAR", 1.0078125))])
+def test_matmul_fidelity_constant_tensors(device, batch_size, m_size, k_size, n_size, atol_th, scalar):
+    torch_input_tensor_a = torch.full((batch_size, m_size, k_size), scalar, dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.full((k_size, n_size), scalar, dtype=torch.bfloat16)
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
 
@@ -701,16 +722,211 @@ def test_matmul_fidelity(device, batch_size, m_size, k_size, n_size):
 
     print(f"Max HiFi4 vs HiFi2 difference: {(output_hifi4.abs() - output_hifi2.abs()).abs().max().item():.8f}")
     count = 0
-    my_atol = 0.01
-    maximum = float("-inf")
 
     for hf4, hf2 in zip(output_hifi4.flatten(), output_hifi2.flatten()):
-        # if abs(abs(hf4.item()) - abs(hf2.item())) >= my_atol and count < 50:
-        if count < 20:
+        if abs(abs(hf4.item()) - abs(hf2.item())) >= atol_th and count < 10:
             count = count + 1
-            maximum = max((hf4.abs() - hf2.abs()).abs(), maximum)
             print(f"HiFi2 value is {hf2.item():.8f} and HiFi4 value is {hf4.item():.8f}")
 
-    assert torch.allclose(
-        output_hifi2, output_hifi4, atol=my_atol
-    )  # HiFi2 and HiFi4 should be mathematically identical for BFLOAT16 as it has a 7-bit mantissa
+    assert torch.allclose(output_hifi2, output_hifi4, atol=atol_th)
+
+
+# This test creates 2 input vecotors with uniformly distributed values and performs
+# a matmul in HiFi2/HiFi4 and then compares the results.
+@pytest.mark.skipif(is_grayskull(), reason="Unsupported on GS")
+@pytest.mark.parametrize("batch_size", [int(os.getenv("BATCH_SIZE", 1))])
+# Let's keep this dimension fixed when testing, it's easier to understand what's
+# going on
+@pytest.mark.parametrize("m_size", [int(os.getenv("M_SIZE", 32))])
+# The inner dimension dictates the size of the difference between HiFi2/HiFi4
+# This time around, it's a bit harder to predict the differnce
+@pytest.mark.parametrize("k_size", [int(os.getenv("K_SIZE", 1024))])
+# This dimension dictates whether or not the error will be visible. It is due to
+# nature of bfloat16 data storage - operands are brought to common exponent so
+# small value + big value =~ big value. If we make this 512 or smaller, the
+# difference between HiFi2 and HiFi4 will not be visible
+@pytest.mark.parametrize("n_size", [int(os.getenv("N_SIZE", 1024))])
+# Note that now atol_th can be smaller for test to pass compared to the previous example.
+# This is because the values are from 0 to 1 now, so overall the difference is smaller.
+@pytest.mark.parametrize("atol_th", [int(os.getenv("ATOL", 2))])
+def test_matmul_fidelity_uniform_tensors(device, batch_size, m_size, k_size, n_size, atol_th):
+    torch_input_tensor_a = torch.rand((batch_size, m_size, k_size), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((k_size, n_size), dtype=torch.bfloat16)
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    hifi2 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    hifi4 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    output_hifi2 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi2,
+        )
+    )
+
+    output_hifi4 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi4,
+        )
+    )
+
+    print(f"Max HiFi4 vs HiFi2 difference: {(output_hifi4.abs() - output_hifi2.abs()).abs().max().item():.8f}")
+    count = 0
+
+    for hf4, hf2 in zip(output_hifi4.flatten(), output_hifi2.flatten()):
+        if abs(abs(hf4.item()) - abs(hf2.item())) >= atol_th and count < 10:
+            count = count + 1
+            print(f"HiFi2 value is {hf2.item():.8f} and HiFi4 value is {hf4.item():.8f}")
+
+    assert torch.allclose(output_hifi2, output_hifi4, atol=atol_th)
+
+
+# This test creates 2 input vecotors with standard normal distribution of values and
+# performs a matmul in HiFi2/HiFi4 and then compares the results.
+@pytest.mark.skipif(is_grayskull(), reason="Unsupported on GS")
+@pytest.mark.parametrize("batch_size", [int(os.getenv("BATCH_SIZE", 1))])
+# Let's keep this dimension fixed when testing, it's easier to understand what's
+# going on
+@pytest.mark.parametrize("m_size", [int(os.getenv("M_SIZE", 32))])
+# The inner dimension dictates the size of the difference between HiFi2/HiFi4
+# This time around, it's a bit harder to predict the differnce
+@pytest.mark.parametrize("k_size", [int(os.getenv("K_SIZE", 1024))])
+# This dimension dictates whether or not the error will be visible. It is due to
+# nature of bfloat16 data storage - operands are brought to common exponent so
+# small value + big value =~ big value. If we make this 512 or smaller, the
+# difference between HiFi2 and HiFi4 will not be visible
+@pytest.mark.parametrize("n_size", [int(os.getenv("N_SIZE", 1024))])
+# This is the original example - atol can be even smaller because the biggest differences
+# in fidelity calculations are around plus/minus 2/3. This is because these two numbers need 2
+# bits to represent the whole part of the number, so less space is left for mantissa. However,
+# the distribution is bipolar, so the differences largely cancel each other out, leading to
+# the smallest atol_th among this and previous two tests.
+@pytest.mark.parametrize("atol_th", [int(os.getenv("ATOL", 1))])
+def test_matmul_fidelity_std_norm_tensors(device, batch_size, m_size, k_size, n_size, atol_th):
+    torch_input_tensor_a = torch.randn((batch_size, m_size, k_size), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.randn((k_size, n_size), dtype=torch.bfloat16)
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    hifi2 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    hifi4 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    output_hifi2 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi2,
+        )
+    )
+
+    output_hifi4 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi4,
+        )
+    )
+
+    print(f"Max HiFi4 vs HiFi2 difference: {(output_hifi4.abs() - output_hifi2.abs()).abs().max().item():.8f}")
+    count = 0
+
+    for hf4, hf2 in zip(output_hifi4.flatten(), output_hifi2.flatten()):
+        if abs(abs(hf4.item()) - abs(hf2.item())) >= atol_th and count < 10:
+            count = count + 1
+            print(f"HiFi2 value is {hf2.item():.8f} and HiFi4 value is {hf4.item():.8f}")
+
+    assert torch.allclose(output_hifi2, output_hifi4, atol=atol_th)
+
+
+# This test creates an input vecotor with constant value and performs a
+# matmul in HiFi2/HiFi4 with unary tensor and then compares the results.
+@pytest.mark.skipif(is_grayskull(), reason="Unsupported on GS")
+@pytest.mark.parametrize("batch_size", [int(os.getenv("BATCH_SIZE", 1))])
+# Let's keep this dimension fixed when testing, it's easier to understand what's
+# going on
+@pytest.mark.parametrize("m_size", [int(os.getenv("M_SIZE", 32))])
+# Here the inner dimension doesn't influence the size of the error because there's
+# no accumulation, or there is but only with zeroes. Note that because we're multiplying
+# with a unary tensor, n_size is equal to k_size
+@pytest.mark.parametrize("k_size", [int(os.getenv("K_SIZE", 4096))])
+# Now here we get to the smallest difference, i.e. only the last bit of the second
+# operand will not be included, meaning that the error has to be 0.0000001 binary,
+# or 0.0078125 decimal. Run the test and watch what happens
+@pytest.mark.parametrize("atol_th", [float(os.getenv("ATOL", 0.0078125))])
+# This is number ensures that the least significant bit of the mantissa is '1'.
+# If you make this a really small number, e.g. 0.0001, you can't see the difference
+# even for really large tensors because both fidelities errors will be the same.
+@pytest.mark.parametrize("scalar", [float(os.getenv("SCALAR", 1.0078125))])
+def test_matmul_fidelity_const_unary_tensors(device, batch_size, m_size, k_size, atol_th, scalar):
+    torch_input_tensor_a = torch.full((batch_size, m_size, k_size), scalar, dtype=torch.bfloat16)
+    torch_input_tensor_b = (
+        torch.eye(k_size, dtype=torch.float32).unsqueeze(0).repeat(batch_size, 1, 1).to(torch.bfloat16)
+    )
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    hifi2 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    hifi4 = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+
+    output_hifi2 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi2,
+        )
+    )
+
+    output_hifi4 = ttnn.to_torch(
+        ttnn.matmul(
+            input_tensor_a,
+            input_tensor_b,
+            compute_kernel_config=hifi4,
+        )
+    )
+
+    print(f"Max HiFi4 vs HiFi2 difference: {(output_hifi4.abs() - output_hifi2.abs()).abs().max().item():.8f}")
+    count = 0
+
+    for hf4, hf2 in zip(output_hifi4.flatten(), output_hifi2.flatten()):
+        if abs(abs(hf4.item()) - abs(hf2.item())) >= atol_th and count < 10:
+            count = count + 1
+            print(f"HiFi2 value is {hf2.item():.8f} and HiFi4 value is {hf4.item():.8f}")
+
+    assert torch.allclose(output_hifi2, output_hifi4, atol=atol_th)
