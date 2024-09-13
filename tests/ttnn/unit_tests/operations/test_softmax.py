@@ -94,3 +94,15 @@ def test_specific_tensor_combination(device):
     assert len(output.shape) == len(torch_output_tensor.shape)
     assert output.shape == torch_output_tensor.shape
     assert_with_pcc(torch_output_tensor, output, 0.9999)
+
+
+def test_softmax_convnet_mnist(device, reset_seeds):
+    torch_tensor = torch.load("tests/ttnn/unit_tests/operations/softmax_input.pt")
+    torch_output = torch.softmax(torch_tensor, dim=-1)
+
+    ttnn_tensor = ttnn.from_torch(torch_tensor, layout=ttnn.TILE_LAYOUT, device=device, dtype=ttnn.bfloat16)
+    ttnn_tensor = ttnn.softmax(ttnn_tensor, dim=-1)
+
+    ttnn_tensor = ttnn.to_torch(ttnn_tensor)
+
+    assert_with_pcc(torch_output, ttnn_tensor)
