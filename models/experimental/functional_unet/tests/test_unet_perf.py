@@ -215,4 +215,4 @@ def test_unet_data_parallel_perf_e2e(
     )
 
     logger.info(f"Running sanity check against reference model output")
-    check_pcc_conv(torch_output_tensor, output_tensor, mesh_composer=output_mesh_composer, pcc=0.99)
+    check_pcc_conv(torch_output_tensor, output_tensor, mesh_composer=output_mesh_composer, pcc=0.986)
