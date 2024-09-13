@@ -28,6 +28,12 @@ from models.utility_functions import (
 )
 
 
+def synchronize_devices(device):
+    devices = device.get_devices()
+    for device in devices:
+        ttnn.synchronize_device(device)
+
+
 @skip_for_grayskull("UNet not currently supported on GS")
 @pytest.mark.models_device_performance_bare_metal
 @pytest.mark.parametrize(
@@ -131,6 +137,7 @@ def test_unet_perf_e2e(
 
 @skip_for_grayskull("UNet not currently supported on GS")
 @pytest.mark.models_performance_bare_metal
+@pytest.mark.parametrize("enable_async_mode", (True,), indirect=True)
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 68864}], indirect=True)
 @pytest.mark.parametrize(
     "batch, groups, iterations, expected_compile_time, expected_inference_time_ms",
@@ -145,6 +152,7 @@ def test_unet_data_parallel_perf_e2e(
     mesh_device,
     use_program_cache,
     reset_seeds,
+    enable_async_mode,
 ):
     if not is_n300_with_eth_dispatch_cores(mesh_device):
         pytest.skip("Test is only valid for N300")
@@ -180,7 +188,7 @@ def test_unet_data_parallel_perf_e2e(
 
     logger.info(f"Compiling model with warmup run")
     profiler.start(f"inference_and_compile_time")
-    output_tensor = ttnn_model(ttnn_input).cpu()
+    output_tensor = ttnn.from_device(ttnn_model(ttnn_input), blocking=True)
     profiler.end(f"inference_and_compile_time")
 
     inference_and_compile_time = profiler.get("inference_and_compile_time")
@@ -190,9 +198,12 @@ def test_unet_data_parallel_perf_e2e(
     for idx in range(iterations):
         profiler.start("inference_time")
         profiler.start(f"inference_time_{idx}")
-        output_tensor = ttnn_model(ttnn_input).cpu()
+        logger.info(f"running iter {idx}")
+        output_tensor = ttnn.from_device(ttnn_model(ttnn_input), blocking=True)
+        logger.info(f"done running iter {idx}")
         profiler.end(f"inference_time_{idx}")
         profiler.end("inference_time")
+    synchronize_devices(mesh_device)
 
     mean_inference_time = profiler.get("inference_time")
     inference_time = profiler.get(f"inference_time_{iterations - 1}")
