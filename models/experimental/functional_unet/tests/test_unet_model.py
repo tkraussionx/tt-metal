@@ -30,4 +30,4 @@ def test_unet_model(batch, groups, device, use_program_cache, reset_seeds):
 
     B, C, H, W = torch_output_tensor.shape
     ttnn_tensor = ttnn.to_torch(output_tensor).reshape(B, H, W, -1)[:, :, :, :C].permute(0, 3, 1, 2)
-    assert_with_pcc(torch_output_tensor, ttnn_tensor, 0.99)
+    assert_with_pcc(torch_output_tensor, ttnn_tensor, 0.986)

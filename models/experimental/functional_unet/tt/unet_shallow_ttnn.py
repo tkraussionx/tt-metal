@@ -516,13 +516,6 @@ class UNet:
     def __call__(self, x):
         assert len(x.shape) == 4, f"Expected UNet input tensors to be rank 4 (was {len(x.shape)})"
 
-        # breakpoint()
-        # x = ttnn.to_device(x, self.device)
-        # input_sharded_memory_config = ttnn.create_sharded_memory_config(
-        # x.shape, core_grid=ttnn.CoreGrid(x=8, y=8), strategy=ttnn.ShardStrategy.HEIGHT
-        # )
-        # x = ttnn.to_device(x, self.device, input_sharded_memory_config)
-
         x, c1_residual = self.downblock1(x)
         x, c2_residual = self.downblock2(x)
         x, c3_residual = self.downblock3(x)
@@ -540,7 +533,5 @@ class UNet:
         ttnn.deallocate(c1_residual)
 
         x = self.output_layer(x)
-
-        x = ttnn.from_device(x)
 
         return x
