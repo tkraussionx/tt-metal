@@ -366,14 +366,18 @@ int main() {
 
         WAYPOINT("GW");
         uint32_t count = 0;
-        while (mailboxes->go_message.run != RUN_MSG_GO) {
-            if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr) {
+        DPRINT << "Waiting for go signal" << ENDL();
+        while ((mailboxes->go_message.run & 0xFF) != RUN_MSG_GO) {
+            if ((mailboxes->go_message.run & 0xFF) == RUN_MSG_RESET_READ_PTR) {
+                DPRINT << "Got go signal" << ENDL();
+                uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
+                uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
                 uint64_t dispatch_addr =
-                    NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-                    NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                    NOC_XY_ADDR(NOC_X(dispatch_core_x),
+                    NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
                 // Set the rd_ptr on workers to specified value
-                mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
                 mailboxes->launch_msg_rd_ptr = 0;
+                mailboxes->go_message.run= RUN_MSG_DONE;
                 // Notify dispatcher that this has been done
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(
@@ -386,6 +390,7 @@ int main() {
                     false /*linked*/);
             }
         }
+        DPRINT << "Done Waiting for go signal: " << (mailboxes->go_message.run & 0xFF)  << ENDL();
         uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         WAYPOINT("GD");
 
@@ -401,8 +406,7 @@ int main() {
             cfg_regs[RISCV_IC_INVALIDATE_InvalidateAll_ADDR32] = RISCV_IC_BRISC_MASK | RISCV_IC_TRISC_ALL_MASK | RISCV_IC_NCRISC_MASK;
 
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables;
-            // true if the launch_msg encodes that this tensix core is running DM or compute kernels. If false, this go signal is basically ignored.
-            bool run_kernels = enables & (DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM1 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_DM0 | DISPATCH_CLASS_MASK_TENSIX_ENABLE_COMPUTE);
+
             run_triscs(enables);
 
             noc_index = mailboxes->launch[launch_msg_rd_ptr].kernel_config.brisc_noc_id;
@@ -428,13 +432,16 @@ int main() {
 
             wait_ncrisc_trisc();
 
+            uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
+            uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
+            DPRINT << "Done running kernels: " << +dispatch_core_x << " " << +dispatch_core_y << ENDL();
             mailboxes->go_message.run = RUN_MSG_DONE;
 
             // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
             if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
                 uint64_t dispatch_addr =
-                    NOC_XY_ADDR(NOC_X(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-                        NOC_Y(mailboxes->launch[launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                    NOC_XY_ADDR(NOC_X(dispatch_core_x),
+                        NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(
                     noc_index,
@@ -444,6 +451,8 @@ int main() {
                     1,
                     31 /*wrap*/,
                     false /*linked*/);
+                // Set launch message to invalid, so that the next time this slot is encountered, kernels are only run if a valid launch message is sent.
+                mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables = 0;
                 mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
         }

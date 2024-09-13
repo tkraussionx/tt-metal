@@ -271,8 +271,8 @@ struct CQDispatchSetUnicastOnlyCoresCmd {
 } __attribute__ ((packed));
 
 struct CQDispatchGoSignalMcastCmd {
+    uint32_t go_signal;
     uint8_t mcast_flag; // mcast or unicast or both
-    uint16_t pad1;
     uint32_t wait_count;
 } __attribute__((packed));
 

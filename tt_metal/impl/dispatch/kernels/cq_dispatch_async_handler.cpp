@@ -176,18 +176,19 @@ void kernel_main() {
             while (*sync_sem_addr <= num_mcasts_sent);
             // DPRINT << "Sem updated" << ENDL();
             num_mcasts_sent++;
+            aligned_go_signal = cmd->mcast.go_signal;
             if (cmd->mcast.mcast_flag & send_mcast) {
+                DPRINT << " Go Signal " << (cmd->mcast.go_signal & 0xFF) << " " <<  (cmd->mcast.go_signal & 0xFF00) << " " << (cmd->mcast.go_signal & 0xFF0000) << ENDL();
                 noc_async_write_multicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
             }
             if (cmd->mcast.mcast_flag & send_unicast) {
                 for (int core_idx = 0; core_idx < num_unicast_cores; core_idx++) {
                     uint64_t dst = get_noc_addr_helper(unicast_only_cores[core_idx], unicast_go_signal_addr);
-                    noc_async_write_unicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t));
+                    noc_async_write_unicast_one_packet_dispatch_s((uint32_t)(&(cmd->mcast.go_signal)), dst, sizeof(uint32_t));
                 }
             }
-            // DPRINT << "Barrier writes" << ENDL();
             while(!ncrisc_noc_nonposted_writes_flushed(1));
-            // DPRINT << "Done barrier writes" << ENDL();
+            DPRINT << "Done write" << ENDL();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
             // DPRINT << "dispatch_s Terminating" << ENDL();

@@ -329,7 +329,7 @@ void Device::reset_cores() {
     ZoneScoped;
 
     auto kernel_still_running = [](launch_msg_t* launch_msg, go_msg_t *go_signal) {
-        return go_signal->run == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
+        return (go_signal->run & 0xFF) == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
     };
 
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
@@ -1994,7 +1994,6 @@ void Device::compile_command_queue_programs() {
             CoreRange tensix_worker_physical_grid = CoreRange(tensix_worker_start_phys, tensix_worker_end_phys);
             uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
             uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
-            std::cout << "R chip compile args: " << this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid)  << " " << tensix_num_worker_cores << " " << tensix_worker_go_signal_addr << " " << eth_worker_go_signal_addr << std::endl;
             dispatch_d_settings.compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
             dispatch_d_settings.compile_args[27] = tensix_num_worker_cores;
             dispatch_d_settings.compile_args[28] = tensix_worker_go_signal_addr;
