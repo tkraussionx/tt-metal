@@ -79,7 +79,7 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     mailboxes->launch_msg_rd_ptr = 0;
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
-        if (mailboxes->go_message.run == RUN_MSG_GO) {
+        if ((mailboxes->go_message.run & 0xFF) == RUN_MSG_GO) {
             DeviceZoneScopedMainN("ERISC-FW");
             DeviceZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id);
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables;
@@ -87,25 +87,30 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
                 firmware_config_init(mailboxes, ProgrammableCoreType::ACTIVE_ETH, DISPATCH_CLASS_ETH_DM0);
                 kernel_init();
             }
+            uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
+            uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
             mailboxes->go_message.run = RUN_MSG_DONE;
 
             if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
-                // uint64_t dispatch_addr =
-                //     NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-                //                 NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
-                // internal_::notify_dispatch_core_done(dispatch_addr);
+                mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables = 0;
+                uint64_t dispatch_addr =
+                    NOC_XY_ADDR(NOC_X(dispatch_core_x),
+                                NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                internal_::notify_dispatch_core_done(dispatch_addr);
                 mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
-            mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             WAYPOINT("R");
-        } else if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr) {
-            // int64_t dispatch_addr =
-            //     NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-            //     NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
-            // // Set the rd_ptr on workers to specified value
-            // mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
-            // mailboxes->launch_msg_rd_ptr = 0;
-            // internal_::notify_dispatch_core_done(dispatch_addr);
+
+        } else if ((mailboxes->go_message.run & 0xFF) == RUN_MSG_RESET_READ_PTR) {
+            // Set the rd_ptr on workers to specified value
+            mailboxes->launch_msg_rd_ptr = 0;
+            uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
+            uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
+            int64_t dispatch_addr =
+                NOC_XY_ADDR(NOC_X(dispatch_core_x),
+                NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+            mailboxes->go_message.run = RUN_MSG_DONE;
+            internal_::notify_dispatch_core_done(dispatch_addr);
         }
         else {
             internal_::risc_context_switch();
