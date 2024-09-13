@@ -54,7 +54,15 @@ class MatmulInterfaceTestFixture : public TTNNFixtureWithDevice,
                                        InputShapeTestParam,
                                        tt::tt_metal::IGraphProcessor::RunMode>> {};
 
+class MatmulInterfaceTestFixture1D : public TTNNFixtureWithDevice,
+                                   public testing::WithParamInterface<std::tuple<
+                                       InputShapeTestParam,
+                                       InputShapeTestParam,
+                                       InputShapeTestParam,
+                                       tt::tt_metal::IGraphProcessor::RunMode>> {};
+
 TEST_P(MatmulInterfaceTestFixture, MatmulInterfaceTest) {
+    std::cout << "GGGG" << std::endl;
     auto param_combination = GetParam();
     auto input_a = std::get<0>(param_combination);
     auto input_b = std::get<1>(param_combination);
@@ -80,6 +88,7 @@ TEST_P(MatmulInterfaceTestFixture, MatmulInterfaceTest) {
     };
     input_a.shape = pad_shape_to_tile(input_a.shape);
     input_b.shape = pad_shape_to_tile(input_b.shape);
+    std::cout << "I AM HERE" << std::endl;
     ttnn::operations::matmul::MatmulMultiCoreReuseMultiCastProgramConfig matmul_program_config =
         ttnn::operations::matmul::MatmulMultiCoreReuseMultiCastProgramConfig{
             .compute_with_storage_grid_size = CoreCoord(8, 8),
@@ -142,7 +151,110 @@ TEST_P(MatmulInterfaceTestFixture, MatmulInterfaceTest) {
                     };
 
                     auto json_trace = graph::query_trace(call);
-                    tt::log_info("Trace: {}", json_trace.dump(4));
+                    //tt::log_info("Trace: {}", json_trace.dump(4));
+                }
+            }
+        } else {
+            std::cout << "builder is nullptr" << std::endl;
+            GTEST_SKIP();
+        }
+    } catch (const std::exception& e) {
+        std::cout << e.what() << std::endl;
+        GTEST_FAIL();
+    }
+}
+
+TEST_P(MatmulInterfaceTestFixture1D, MatmulInterfaceTest1D)
+{
+    std::cout << "HHHHHH" << std::endl;
+    auto param_combination = GetParam();
+    auto input_a = std::get<0>(param_combination);
+    auto input_b = std::get<1>(param_combination);
+    auto input_o = std::get<2>(param_combination);
+    auto run_mode = std::get<3>(param_combination);
+
+    // pad input shapes (this isn't happening automagically)
+    auto pad_shape_to_tile = [](const ttnn::Shape& shape) {
+        std::vector<uint32_t> shape_og;
+        std::vector<uint32_t> shape_padded;
+
+        auto rank = shape.rank();
+        for (auto i = 0; i < rank; i++) {
+            shape_og.push_back(shape[i]);
+
+            if (i >= rank - 2) {
+                shape_padded.push_back((shape[i] + 31) / 32 * 32);
+            } else {
+                shape_padded.push_back(shape[i]);
+            }
+        }
+        return ttnn::Shape(shape_og, shape_padded);
+    };
+    input_a.shape = pad_shape_to_tile(input_a.shape);
+    input_b.shape = pad_shape_to_tile(input_b.shape);
+    ttnn::operations::matmul::MatmulMultiCoreReuseMultiCast1DProgramConfig matmul_program_config =
+        ttnn::operations::matmul::MatmulMultiCoreReuseMultiCast1DProgramConfig{
+            .compute_with_storage_grid_size = CoreCoord(8, 8),
+            .in0_block_w = 1,
+            .out_subblock_h = 1,
+            .out_subblock_w = 1,
+            .per_core_M = 5,
+            .per_core_N = 5,
+            .fuse_batch = true,
+            .mcast_in0 = false};
+    std::cout << "OP = " << input_a.shape << " + " << input_b.shape << std::endl;
+
+    // Check input params against op constraints
+    try {
+        std::unique_ptr<MatmulOpConstraintsBuilder> builder = MatmulOpConstraintsFactory::Make(
+            input_a.shape,
+            input_a.memory_config,
+            input_b.shape,
+            input_b.memory_config,
+            input_o.memory_config,
+            matmul_program_config);
+        if (builder) {
+            const auto op_constraints =
+                (*builder)
+                    .setDataTypeA(input_a.data_type)
+                    .setDataTypeB(input_b.data_type)
+                    .setDataTypeO(input_a.data_type)  // assuming output data type is the same as input_a
+                    .build_constraints();
+            std::cout << "size(op_contraints) =  " << op_constraints.size() << std::endl;
+
+            if (op_constraints.size() == 0) {
+                std::cout << "op_constraints is empty" << std::endl;
+                GTEST_SKIP();
+            }
+            // Run the test
+            {
+                for (const auto& op_constraint : op_constraints) {
+                    auto call = [&] {
+                        auto input_tensor_a = ttnn::zeros(
+                            input_a.shape,
+                            op_constraint.getDataTypeA().value(),
+                            op_constraint.getTileLayoutA().value(),
+                            this->getDevice(),
+                            input_a.memory_config);
+                        auto input_tensor_b = ttnn::zeros(
+                            input_b.shape,
+                            op_constraint.getDataTypeB().value(),
+                            op_constraint.getTileLayoutB().value(),
+                            this->getDevice(),
+                            input_b.memory_config);
+                        const auto output_tensor = ttnn::matmul(
+                            input_tensor_a,
+                            input_tensor_b,
+                            false /* transpose_a */,
+                            false /* transpose_b */,
+                            std::nullopt /* memory_config */,
+                            std::nullopt /* dtype */,
+                            matmul_program_config);
+                        return output_tensor;
+                    };
+
+                    auto json_trace = graph::query_trace(call);
+                    //tt::log_info("Trace: {}", json_trace.dump(4));
                 }
             }
         } else {
@@ -158,6 +270,83 @@ TEST_P(MatmulInterfaceTestFixture, MatmulInterfaceTest) {
 INSTANTIATE_TEST_SUITE_P(
     MatmulInterfaceTests,        // Prefix for the instantiated test suite
     MatmulInterfaceTestFixture,  // Test suite name
+    ::testing::Combine(
+        ::testing::Values(
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32 * 32, 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{0, 7}}}},
+                             {160, 32},
+                             ShardOrientation::COL_MAJOR}},
+            },
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32, 32 * 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{0, 7}}}},
+                             {32, 160},
+                             ShardOrientation::COL_MAJOR}},
+            }),
+
+        ::testing::Values(
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32 * 32, 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{7, 0}}}},
+                             {160, 32},
+                             ShardOrientation::COL_MAJOR}},
+            },
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32, 32 * 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{7, 0}}}},
+                             {32, 160},
+                             ShardOrientation::COL_MAJOR}},
+            }),
+        ::testing::Values(
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32, 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::BLOCK_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{7, 7}}}},
+                             {160, 32},
+                             ShardOrientation::COL_MAJOR}},
+            },
+            InputShapeTestParam{
+                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32 * 32, 32 * 32}),
+                .memory_config =
+                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::BLOCK_SHARDED,
+                     .buffer_type = tt::tt_metal::BufferType::L1,
+                     .shard_spec =
+                         tt::tt_metal::ShardSpec{
+                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{7, 7}}}},
+                             {32, 160},
+                             ShardOrientation::COL_MAJOR}},
+            }),
+
+        ::testing::Values(tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH)));
+
+INSTANTIATE_TEST_SUITE_P(
+    MatmulInterfaceTests1D,        // Prefix for the instantiated test suite
+    MatmulInterfaceTestFixture1D,    // Test suite name
     ::testing::Combine(
         ::testing::Values(
             InputShapeTestParam{

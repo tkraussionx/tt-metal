@@ -195,6 +195,7 @@ MatmulOpTypes MatmulOpConstraintsFactory::GetMatmulOpType(
                         }
                     }
                 } else {
+                    std::cout << "UUUUU" << std::endl;
                     if (memory_config_a.is_sharded()) {
                         if (!program_config.fuse_batch) {
                             return;

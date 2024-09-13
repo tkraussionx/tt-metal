@@ -90,7 +90,7 @@ TEST_P(BinaryInterfaceTestFixture, BinaryInterfaceTest) {
                 (*builder)
                     .setDataTypeA(input_a.data_type)
                     .setDataTypeB(input_b.data_type)
-                    .setDataTypeO(input_a.data_type)  // assuming output data type is the same as input_a
+                    .setDataTypeO(input_o.data_type)  // assuming output data type is the same as input_a
                     .build_constraints();
             std::cout << "size(op_contraints) =  " << op_constraints.size() << std::endl;
 
