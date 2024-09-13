@@ -474,6 +474,12 @@ int main(int argc, char **argv) {
              0,
              0,
              0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
              0
             };
         std::vector<uint32_t> spoof_prefetch_compile_args =

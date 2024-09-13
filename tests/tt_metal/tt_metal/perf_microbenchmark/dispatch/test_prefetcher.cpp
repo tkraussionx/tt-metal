@@ -1645,6 +1645,7 @@ void configure_for_single_chip(Device *device,
         0,
         0,
         0,
+        0,
         0
     };
 
@@ -1900,6 +1901,12 @@ void configure_for_single_chip(Device *device,
          num_compute_cores, // max_write_packed_cores
          true,
          true,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
          0,
          0,
          0,

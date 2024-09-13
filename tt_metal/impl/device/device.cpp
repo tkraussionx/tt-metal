@@ -329,7 +329,7 @@ void Device::reset_cores() {
     ZoneScoped;
 
     auto kernel_still_running = [](launch_msg_t* launch_msg, go_msg_t *go_signal) {
-        return (go_signal->run & 0xFF) == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
+        return (go_signal->signal) == RUN_MSG_GO && launch_msg->kernel_config.exit_erisc_kernel == 0;
     };
 
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
@@ -431,7 +431,7 @@ void Device::initialize_and_launch_firmware() {
     go_msg_t go_msg;
     std::memset(&launch_msg, 0, sizeof(launch_msg_t));
     launch_msg.kernel_config.mode = DISPATCH_MODE_HOST;
-    go_msg.run = RUN_MSG_INIT;
+    go_msg.signal = RUN_MSG_INIT;
 
     // Populate core info, which will be written to device
     vector<uint32_t> core_info_vec(sizeof(core_info_msg_t) / sizeof(uint32_t));

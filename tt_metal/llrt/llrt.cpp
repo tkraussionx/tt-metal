@@ -273,15 +273,14 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
 
     tt_metal::HalProgrammableCoreType dispatch_core_type =  is_active_eth_core ? tt_metal::HalProgrammableCoreType::ACTIVE_ETH :
         is_inactive_eth_core ? tt_metal::HalProgrammableCoreType::IDLE_ETH : tt_metal::HalProgrammableCoreType::TENSIX;
-    uint64_t run_mailbox_addr = tt_metal::hal.get_dev_addr(dispatch_core_type, tt_metal::HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
-    // uint64_t run_mailbox_addr = reinterpret_cast<uint64_t>(&tt_metal::hal.get_dev_addr<launch_msg_t *>(dispatch_core_type, tt_metal::HalMemAddrType::LAUNCH)->go.run);
+    uint64_t go_msg_addr = tt_metal::hal.get_dev_addr(dispatch_core_type, tt_metal::HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
 
-    auto get_mailbox_is_done = [&](uint64_t run_mailbox_address) {
+    auto get_mailbox_is_done = [&](uint64_t go_msg_addr) {
         constexpr int RUN_MAILBOX_BOGUS = 3;
         std::vector<uint32_t> run_mailbox_read_val = {RUN_MAILBOX_BOGUS};
-        // read a single uint32_t even though launch.run is smaller than that
-        run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
-        uint8_t run = run_mailbox_read_val[0] & 0xFF;
+        run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, go_msg_addr & ~0x3, sizeof(uint32_t));
+        go_msg_t* core_status = (go_msg_t*)(run_mailbox_read_val.data());
+        uint8_t run = core_status->signal;
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
                 stderr,
@@ -296,8 +295,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
 
         return run == RUN_MSG_DONE;
     };
-
-    return get_mailbox_is_done(run_mailbox_addr);
+    return get_mailbox_is_done(go_msg_addr);
 }
 
 void wait_until_cores_done(

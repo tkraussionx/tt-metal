@@ -195,7 +195,7 @@ KernelGroup::KernelGroup(
 
     this->launch_msg.kernel_config.exit_erisc_kernel = false;
     this->launch_msg.kernel_config.max_cb_index = last_cb_index + 1;
-    this->go_msg.run = RUN_MSG_GO;
+    this->go_msg.signal = RUN_MSG_GO;
 }
 
 CoreType KernelGroup::get_core_type() const {
