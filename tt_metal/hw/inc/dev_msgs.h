@@ -102,7 +102,10 @@ struct kernel_config_msg_t {
 } __attribute__((packed));
 
 struct go_msg_t {
-    volatile uint32_t run;  // must be in last cacheline of this msg
+    volatile uint8_t pad;
+    volatile uint8_t master_x;
+    volatile uint8_t master_y;
+    volatile uint8_t signal; // INIT, GO, DONE, RESET_RD_PTR
 } __attribute__((packed));
 
 struct launch_msg_t {  // must be cacheline aligned

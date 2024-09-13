@@ -1249,7 +1249,12 @@ void EnqueueProgramCommand::assemble_device_commands(
         }
 
         program_command_sequence.add_dispatch_s_sem_update();
-        program_command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, (((uint8_t) this->dispatch_core.y) << 16) | (((uint8_t)this->dispatch_core.x) << 8) | (RUN_MSG_GO));
+        go_msg_t run_program_go_signal;
+        run_program_go_signal.signal = RUN_MSG_GO;
+        run_program_go_signal.master_x = (uint8_t)this->dispatch_core.x;
+        run_program_go_signal.master_y = (uint8_t)this->dispatch_core.y;
+
+        program_command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&run_program_go_signal));
 
     } else {
         uint32_t i = 0;
@@ -1692,7 +1697,11 @@ void EnqueueTraceCommand::process() {
     command_sequence.add_dispatch_wait(
         false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, false);
     command_sequence.add_dispatch_s_sem_update();
-    command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, (((uint8_t) this->dispatch_core.y) << 16) | (((uint8_t)this->dispatch_core.x) << 8) | RUN_MSG_RESET_READ_PTR);
+    go_msg_t reset_launch_message_read_ptr_go_signal;
+    reset_launch_message_read_ptr_go_signal.signal = RUN_MSG_RESET_READ_PTR;
+    reset_launch_message_read_ptr_go_signal.master_x = (uint8_t)this->dispatch_core.x;
+    reset_launch_message_read_ptr_go_signal.master_y = (uint8_t)this->dispatch_core.y;
+    command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal));
     this->expected_num_workers_completed += num_mcast_cores;
     if (desc->num_eth_programs) {
         this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();

@@ -106,7 +106,7 @@ int main() {
     //device_setup();
     noc_init();
 
-    mailboxes->go_message.run = RUN_MSG_DONE;
+    mailboxes->go_message.signal = RUN_MSG_DONE;
     mailboxes->launch_msg_rd_ptr = 0;
     // Cleanup profiler buffer incase we never get the go message
     while (1) {
@@ -114,7 +114,7 @@ int main() {
         init_sync_registers();
         // Wait...
         WAYPOINT("GW");
-        while ((mailboxes->go_message.run & 0xFF) != RUN_MSG_GO)
+        while (mailboxes->go_message.signal != RUN_MSG_GO)
         {
             RISC_POST_HEARTBEAT(heartbeat);
         };
@@ -138,16 +138,14 @@ int main() {
             kernel_init();
             RECORD_STACK_USAGE();
             WAYPOINT("D");
-            uint8_t dispatch_core_x = (mailboxes->go_message.run & 0xFF00) >> 8;
-            uint8_t dispatch_core_y = (mailboxes->go_message.run & 0xFF0000) >> 16;
-            mailboxes->go_message.run = RUN_MSG_DONE;
+            mailboxes->go_message.signal = RUN_MSG_DONE;
 
             // Notify dispatcher core that it has completed
             if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
                 mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables = 0;
                 uint64_t dispatch_addr =
-                    NOC_XY_ADDR(NOC_X(dispatch_core_x),
-                        NOC_Y(dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                    NOC_XY_ADDR(NOC_X(mailboxes->go_message.master_x),
+                        NOC_Y(mailboxes->go_message.master_x), DISPATCH_MESSAGE_ADDR);
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
                 mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
