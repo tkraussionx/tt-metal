@@ -155,7 +155,7 @@ void kernel_main() {
         in0_mcast_dest_noc_start_y,
         in0_mcast_receiver_semaphore_addr);
         // num_dests must not include source, since we are NOT really doing a local copy!
-        noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_dests);
+        noc_semaphore_set_multicast<true>(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_dests);
 
         cb_push_back(cb_id_in0, in0_block_num_tiles);
 
@@ -210,7 +210,7 @@ void kernel_main() {
         in1_mcast_dest_noc_start_y,
         in1_mcast_receiver_semaphore_addr);
         // num_dests must not include source, since we are NOT really doing a local copy!
-        noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_dests);
+        noc_semaphore_set_multicast<true>(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_dests);
 
         cb_push_back(cb_id_in1, in1_block_num_tiles);
     }

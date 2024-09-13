@@ -1282,14 +1282,21 @@ void noc_async_write_multicast(
  * | dst_noc_addr_multicast | Encoding of the destinations nodes (x_start,y_start,x_end,y_end)+address | uint64_t | DOX-TODO(insert a reference to what constitutes valid coords) | True     |
  * | num_dests              | Number of destinations that the multicast source is targetting | uint32_t | 0..119                                                    | True     |
  */
+template<bool use_mcast_cmd_buf=false>
 inline
 void noc_semaphore_set_multicast(
     std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests, bool linked = false, bool multicast_path_reserve = true) {
     WAYPOINT("NSMW");
     DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(noc_index, dst_noc_addr_multicast, src_local_l1_addr, 4);
+    uint32_t cmd_buf;
+    if constexpr (use_mcast_cmd_buf) {
+        cmd_buf = NCRISC_WR_CMD_BUF;
+    } else {
+        cmd_buf = NCRISC_WR_REG_CMD_BUF;
+    }
     ncrisc_noc_fast_write_any_len(
         noc_index,
-        NCRISC_WR_REG_CMD_BUF,
+        cmd_buf,
         src_local_l1_addr,
         dst_noc_addr_multicast,
         4 /*size in bytes*/,
