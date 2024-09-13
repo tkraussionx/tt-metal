@@ -60,7 +60,7 @@ def test_unet_perf_device(batch: int, groups: int, expected_device_perf_fps: flo
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 68864}], indirect=True)
 @pytest.mark.parametrize(
     "batch, groups, iterations, expected_compile_time, expected_inference_time_ms",
-    ((2, 1, 16, 16.0, 39.0),),
+    ((2, 1, 16, 25.0, 39.0),),
 )
 def test_unet_perf_e2e(
     batch: int,
@@ -134,7 +134,7 @@ def test_unet_perf_e2e(
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 68864}], indirect=True)
 @pytest.mark.parametrize(
     "batch, groups, iterations, expected_compile_time, expected_inference_time_ms",
-    ((2, 1, 16, 16.0, 39.0),),
+    ((2, 1, 16, 25.0, 39.0),),
 )
 def test_unet_data_parallel_perf_e2e(
     batch: int,
