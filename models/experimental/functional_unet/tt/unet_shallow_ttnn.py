@@ -107,14 +107,19 @@ class UNetPointwiseConv2D:
         self.bias = ttnn.to_layout(self.bias, ttnn.TILE_LAYOUT).to(device)
 
     def __call__(self, x):
-        x = ttnn.to_layout(x, ttnn.TILE_LAYOUT)
         x = ttnn.linear(
             x,
             self.weight,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=x.memory_config(),
             bias=self.bias,
             dtype=self.activation_dtype,
             core_grid=ttnn.CoreGrid(y=8, x=8),
+            compute_kernel_config=ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi2,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=False,
+            ),
         )
         return x
 

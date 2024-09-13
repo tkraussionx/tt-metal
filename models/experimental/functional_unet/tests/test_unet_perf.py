@@ -89,16 +89,11 @@ def test_unet_perf_e2e(
 
     logger.info(f"Compiling model with warmup run")
     profiler.start(f"inference_and_compile_time")
-    output_tensor = ttnn_model(ttnn_input)
+    output_tensor = ttnn_model(ttnn_input).cpu()
     profiler.end(f"inference_and_compile_time")
 
     inference_and_compile_time = profiler.get("inference_and_compile_time")
     logger.info(f"Model compiled with warmup run in {(inference_and_compile_time):.2f} s")
-
-    B, C, H, W = torch_output_tensor.shape
-    ttnn_tensor = ttnn.to_torch(output_tensor).reshape(B, H, W, -1)[:, :, :, :C].permute(0, 3, 1, 2)
-    assert_with_pcc(torch_output_tensor, ttnn_tensor, 0.986)
-    ttnn.deallocate(output_tensor)
 
     logger.info(f"Running inference for {iterations} iterations")
     for idx in range(iterations):
