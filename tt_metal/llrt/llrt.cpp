@@ -289,7 +289,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
         std::vector<uint32_t> run_mailbox_read_val = {RUN_MAILBOX_BOGUS};
         // read a single uint32_t even though launch.run is smaller than that
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
-        uint8_t run = run_mailbox_read_val[0]; // >> (8 * (offsetof(launch_msg_t, go.run) & 3));
+        uint8_t run = run_mailbox_read_val[0] & 0xFF;
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
                 stderr,
@@ -298,7 +298,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
                 run_state,
                 RUN_MSG_DONE);
             TT_FATAL(
-                run_mailbox_read_val[0] == run_state || run_mailbox_read_val[0] == RUN_MSG_DONE,
+                run == run_state || run == RUN_MSG_DONE,
                 "Read unexpected run_mailbox value");
         }
 

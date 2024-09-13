@@ -90,22 +90,22 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
             mailboxes->go_message.run = RUN_MSG_DONE;
 
             if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.mode == DISPATCH_MODE_DEV) {
-                uint64_t dispatch_addr =
-                    NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-                                NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
-                internal_::notify_dispatch_core_done(dispatch_addr);
+                // uint64_t dispatch_addr =
+                //     NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
+                //                 NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                // internal_::notify_dispatch_core_done(dispatch_addr);
                 mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             }
             mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
             WAYPOINT("R");
         } else if (mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr) {
-            int64_t dispatch_addr =
-                NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
-                NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
-            // Set the rd_ptr on workers to specified value
-            mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
-            mailboxes->launch_msg_rd_ptr = 0;
-            internal_::notify_dispatch_core_done(dispatch_addr);
+            // int64_t dispatch_addr =
+            //     NOC_XY_ADDR(NOC_X(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_x),
+            //     NOC_Y(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+            // // Set the rd_ptr on workers to specified value
+            // mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.reset_launch_msg_rd_ptr = 0;
+            // mailboxes->launch_msg_rd_ptr = 0;
+            // internal_::notify_dispatch_core_done(dispatch_addr);
         }
         else {
             internal_::risc_context_switch();

@@ -770,11 +770,15 @@ static void process_wait() {
     volatile tt_l1_ptr uint32_t *sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(addr);
     uint32_t heartbeat = 0;
     if (wait) {
-        // DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count << ENDL();
+        for (volatile int i = 0; i < 100000; i++) {
+
+        }
+        DPRINT << " DISPATCH WAIT " << HEX() << addr << DEC() << " count " << count  << " got " << *sem_addr << ENDL();
         do {
             invalidate_l1_cache();
             IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         } while (!wrap_ge(*sem_addr, count));
+        DPRINT << "Done wait" << ENDL();
     }
     WAYPOINT("PWD");
 

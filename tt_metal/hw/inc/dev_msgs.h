@@ -27,6 +27,7 @@
 // Messages for host to tell brisc to go
 constexpr uint32_t RUN_MSG_INIT = 0x40;
 constexpr uint32_t RUN_MSG_GO = 0x80;
+constexpr uint32_t RUN_MSG_RESET_READ_PTR = 0xc0;
 constexpr uint32_t RUN_MSG_DONE = 0;
 
 // 0x80808000 is a micro-optimization, calculated with 1 riscv insn
@@ -90,8 +91,8 @@ struct kernel_config_msg_t {
     volatile uint8_t brisc_noc_id;
     volatile uint8_t enables;
     volatile uint8_t max_cb_index;
-    volatile uint8_t dispatch_core_x;
-    volatile uint8_t dispatch_core_y;
+    volatile uint8_t pad0;
+    volatile uint8_t pad1;
     volatile uint8_t exit_erisc_kernel;
     volatile uint8_t reset_launch_msg_rd_ptr;
     volatile uint16_t pad2;
