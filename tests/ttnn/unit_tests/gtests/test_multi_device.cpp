@@ -45,4 +45,8 @@ TEST_F(T3kMultiDeviceFixture, TestGetDistributedTensorConfigFromMultiDeviceStora
     EXPECT_TRUE(std::holds_alternative<ReplicateTensor>(distributed_tensor_config));
 }
 
+TEST_F(T3kMultiDeviceFixture, TestDeviceMeshRingAPI) {
+    auto mesh_device = this->mesh_device_.get();
+}
+
 }  // namespace ttnn::multi_device::test

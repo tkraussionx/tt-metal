@@ -66,7 +66,7 @@ def mesh_device_fixture():
     import tt_lib as ttl
 
     assert ttnn.get_num_devices() >= 8, "Not T3000!"
-    device_ids = [0, 4, 5, 1, 2, 6, 7, 3]
+    device_ids = ttnn.get_t3k_physical_device_ids_ring()
     num_devices_requested = len(device_ids)
     mesh_device = ttnn.open_mesh_device(ttnn.MeshShape(1, num_devices_requested), device_ids[:num_devices_requested])
     print("ALL GATHER: Opened device mesh")

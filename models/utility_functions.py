@@ -971,9 +971,7 @@ def get_devices_for_t3000(all_devices, num_devices):
     if num_devices <= 4:
         return all_devices[:num_devices]
     elif num_devices == 8:
-        # TODO: Generalize this for different arch
-        hamiltonian_ring_indices = [0, 4, 5, 1, 2, 6, 7, 3]
-        return [all_devices[i] for i in hamiltonian_ring_indices]
+        return ttnn.get_t3k_physical_device_ids_ring()
     else:
         raise NotImplementedError("Only supports 1, 2, 3, 4, and 8 chip configurations!")
 
