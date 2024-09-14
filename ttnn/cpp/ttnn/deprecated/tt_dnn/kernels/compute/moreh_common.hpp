@@ -23,9 +23,11 @@
 #include "compute_kernel_api/eltwise_unary/negative.h"
 #include "compute_kernel_api/eltwise_unary/exp.h"
 #include "compute_kernel_api/eltwise_unary/recip.h"
+#include "compute_kernel_api/eltwise_unary/moreh_sub.h"
 #include "compute_kernel_api/mask.h"
 #include "compute_kernel_api/reduce.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "debug/dprint.h"
 
 
 // Deprecated
@@ -1282,6 +1284,106 @@ ALWI void pack_tile_from_dst(uint32_t ocb, uint32_t dst = 0) {
     pack_reconfig_data_format(ocb);
     pack_tile(dst, ocb);
     cb_push_back(ocb, onetile);
+}
+
+ALWI void sub_tiles_to_cb_sfpu(
+    uint32_t icb0,
+    uint32_t icb1,
+    uint32_t ocb,
+    uint32_t itile0 = 0,
+    uint32_t itile1 = 0,
+    uint32_t pop0 = 1,
+    uint32_t pop1 = 1) {
+    constexpr uint32_t onetile = 1;
+    constexpr int dst0 = 0;
+    constexpr int dst1 = 1;
+
+    cb_reserve_back(ocb, onetile);
+    cb_wait_front(icb0, itile0 + 1);
+    cb_wait_front(icb1, itile1 + 1);
+
+    tile_regs_acquire();
+    copy_tile_init_with_dt(icb0, false);
+    copy_tile(icb0, itile0, dst0);
+    copy_tile_init_with_dt(icb1, false);
+    copy_tile(icb1, itile1, dst1);
+    moreh_sub(dst0);
+    //  sub_tiles_init_with_dt(icb0, icb1);
+    // sub_tiles(icb0, icb1, itile0, itile1, dst0);
+    tile_regs_commit();
+
+    tile_regs_wait();
+    pack_tile_with_dt(dst0, ocb);
+    tile_regs_release();
+
+    if (pop0)
+        cb_pop_front(icb0, pop0);
+    if (pop1)
+        cb_pop_front(icb1, pop1);
+
+    cb_push_back(ocb, onetile);
+}
+
+enum class RISCV { PACK, UNPACK };
+enum class DTYPE { BF16, FP32 };
+
+template <RISCV riscv, DTYPE dtype>
+auto get_l1_ptr(uint32_t cb_id) {
+    uint32_t ptr_bytes = 0;
+    if constexpr (riscv == RISCV::UNPACK) {
+        ptr_bytes = cb_interface[cb_id].fifo_rd_ptr << 4;
+    } else {
+        ptr_bytes = cb_interface[cb_id].fifo_wr_ptr << 4;
+    }
+
+    if constexpr (dtype == DTYPE::BF16) {
+        return reinterpret_cast<uint16_t*>(ptr_bytes);
+    } else {
+        return reinterpret_cast<float*>(ptr_bytes);
+    }
+}
+
+template <DTYPE dtype, typename T>
+auto convert_data(T data) {
+    if constexpr (dtype == DTYPE::BF16) {
+        return BF16(data);
+    } else {
+        return F32(data);
+    }
+}
+
+template <RISCV riscv = RISCV::UNPACK, DTYPE dtype = DTYPE::BF16>
+void print_cb(const char* c, uint32_t cb_print) {
+    auto print_lambda = [=](){
+        auto l1_ptr = get_l1_ptr<riscv, dtype>(cb_print);
+        DPRINT << c << ENDL();
+
+        for (int i = 0; i < 16; ++i) {
+            DPRINT << convert_data<dtype>(l1_ptr[i]) << " ";
+        }
+        for (int i = 0; i < 16; ++i) {
+            DPRINT << convert_data<dtype>(l1_ptr[256 + i]) << " ";
+        }
+        DPRINT << ENDL();
+
+        l1_ptr = get_l1_ptr<riscv, dtype>(cb_print);
+        for (int i = 0; i < 16; ++i) {
+            DPRINT << convert_data<dtype>(l1_ptr[i]) << " ";
+        }
+        for (int i = 0; i < 16; ++i) {
+            DPRINT << convert_data<dtype>(l1_ptr[256 + i]) << " ";
+        }
+    };
+
+    if constexpr (riscv == RISCV::PACK) {
+#ifdef TRISC_PACK
+        print_lambda();
+#endif
+    } else {
+#ifdef TRISC_UNPACK
+        print_lambda();
+#endif
+    }
 }
 
 }  // namespace ckernel

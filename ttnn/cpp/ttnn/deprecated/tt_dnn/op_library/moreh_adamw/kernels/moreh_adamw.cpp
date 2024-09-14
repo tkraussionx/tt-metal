@@ -4,13 +4,14 @@
 
 #include <cstdint>
 
-#include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
 #include "compute_kernel_api.h"
 #include "compute_kernel_api/eltwise_binary.h"
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/eltwise_unary/recip.h"
 #include "compute_kernel_api/eltwise_unary/sqrt.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "debug/dprint.h"
+#include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
 
 namespace NAMESPACE {
 void MAIN {
@@ -116,7 +117,8 @@ void MAIN {
         mul_tiles_to_cb(cb_tmp1, cb_tmp2, cb_tmp1, first_tile, first_tile);
 
         // tmp_cb_exp_avg_sq = cb_exp_avg_sq_in * beta2
-        mul_tiles_to_cb(cb_exp_avg_sq_in, cb_scalar_args, tmp_cb_exp_avg_sq, first_tile, beta2_tile, /*pop0=*/0, /*pop1=*/0);
+        mul_tiles_to_cb(
+            cb_exp_avg_sq_in, cb_scalar_args, tmp_cb_exp_avg_sq, first_tile, beta2_tile, /*pop0=*/0, /*pop1=*/0);
 
         // tmp_cb_exp_avg_sq = tmp_cb_exp_avg_sq + cb_tmp1
         add_tiles_to_cb(tmp_cb_exp_avg_sq, cb_tmp1, tmp_cb_exp_avg_sq, first_tile, first_tile);
@@ -262,7 +264,7 @@ void MAIN {
         mul_tiles_to_cb(cb_tmp1, cb_tmp2, cb_tmp1, first_tile, first_tile);
 
         // param = tmp_cb_param - cb_tmp1;
-        sub_tiles_to_cb(tmp_cb_param, cb_tmp1, cb_param_out, first_tile, first_tile);
+        sub_tiles_to_cb_sfpu(tmp_cb_param, cb_tmp1, cb_param_out, first_tile, first_tile);
 
         cb_pop_front(cb_param_in, onetile);
         cb_pop_front(cb_grad_in, onetile);

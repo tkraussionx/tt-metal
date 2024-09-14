@@ -11,8 +11,8 @@ void MAIN {
     uint32_t NC = get_compile_time_arg_val(2);
     constexpr uint32_t origin_W = get_compile_time_arg_val(3);
 
-
     auto cb_input = tt::CB::c_in0;
+    constexpr auto cb_zeros = tt::CB::c_in1;
     constexpr auto cb_scaler = tt::CB::c_in2;
     constexpr auto cb_mask_w = tt::CB::c_in3;
     constexpr auto cb_accum_dst = tt::CB::c_intermed0;
@@ -44,22 +44,20 @@ void MAIN {
                 tile_regs_acquire();
                 for (uint32_t wt = 0; wt < Wt - 1; ++wt) {
                     cb_wait_front(cb_input, onetile);
-
-                    #if defined FP32_DEST_ACC_EN
-                        unpack_reconfig_data_format(cb_input, cb_scaler);
-                    #endif
-                    reduce_init_delta<false>();
-                    reduce_tile(cb_input, cb_scaler, 0, 0, reduce_dst_idx);
-                    reduce_revert_delta();
+#if defined FP32_DEST_ACC_EN
+                    unpack_reconfig_data_format(cb_input, cb_scaler);
+#endif
+                    add_tiles_init(cb_input, cb_zeros, true);
+                    add_tiles(cb_input, cb_zeros, 0, 0, reduce_dst_idx);
 
                     cb_pop_front(cb_input, onetile);
                 }
                 tile_regs_commit();
                 cb_reserve_back(cb_accum_dst, onetile);
                 tile_regs_wait();
-                #if defined FP32_DEST_ACC_EN
-                    pack_reconfig_data_format(cb_accum_dst);
-                #endif
+#if defined FP32_DEST_ACC_EN
+                pack_reconfig_data_format(cb_accum_dst);
+#endif
                 pack_tile(reduce_dst_idx, cb_accum_dst);
                 tile_regs_release();
                 cb_push_back(cb_accum_dst, onetile);
@@ -68,9 +66,9 @@ void MAIN {
             if (do_mask_w) {
                 tile_regs_acquire();
                 cb_wait_front(cb_input, onetile);
-                #if defined FP32_DEST_ACC_EN
-                    unpack_reconfig_data_format_srca(cb_input);
-                #endif
+#if defined FP32_DEST_ACC_EN
+                unpack_reconfig_data_format_srca(cb_input);
+#endif
                 copy_tile_to_dst_init_short(cb_input);
                 copy_tile(cb_input, 0, reduce_dst_idx);
                 copy_tile(cb_mask_w, 0, mask_dst_idx);
@@ -80,9 +78,9 @@ void MAIN {
 
                 cb_reserve_back(cb_masked_input, onetile);
                 tile_regs_wait();
-                #if defined FP32_DEST_ACC_EN
-                    pack_reconfig_data_format(cb_masked_input);
-                #endif
+#if defined FP32_DEST_ACC_EN
+                pack_reconfig_data_format(cb_masked_input);
+#endif
                 pack_tile(reduce_dst_idx, cb_masked_input);
                 tile_regs_release();
                 cb_push_back(cb_masked_input, onetile);
@@ -94,28 +92,45 @@ void MAIN {
             tile_regs_acquire();
             cb_wait_front(cb_input, onetile);
             if (!is_w_single_tile) {
-                #if defined FP32_DEST_ACC_EN
-                    unpack_reconfig_data_format_srca(cb_accum_dst);
-                #endif
+#if defined FP32_DEST_ACC_EN
+                unpack_reconfig_data_format_srca(cb_accum_dst);
+#endif
                 cb_wait_front(cb_accum_dst, onetile);
                 copy_tile_to_dst_init_short(cb_accum_dst);
                 copy_tile(cb_accum_dst, 0, reduce_dst_idx);
             }
 
-            #if defined FP32_DEST_ACC_EN
-                unpack_reconfig_data_format(cb_input, cb_scaler);
-            #endif
+#if defined FP32_DEST_ACC_EN
+            unpack_reconfig_data_format(cb_input, cb_scaler);
+#endif
+
+            add_tiles_init(cb_input, cb_zeros, true);
+            add_tiles(cb_input, cb_zeros, 0, 0, reduce_dst_idx);
+            tile_regs_commit();
+
+            tile_regs_wait();
+            cb_reserve_back(cb_accum_dst, onetile);
+            pack_reconfig_data_format(cb_accum_dst);
+            pack_tile(reduce_dst_idx, cb_accum_dst);
+            cb_push_back(cb_accum_dst, onetile);
+            tile_regs_release();
+
+            tile_regs_acquire();
+            cb_wait_front(cb_accum_dst, onetile);
+            unpack_reconfig_data_format(cb_accum_dst, cb_scaler);
             reduce_init_delta<false>();
-            reduce_tile(cb_input, cb_scaler, 0, 0, reduce_dst_idx);
+            reduce_tile(cb_accum_dst, cb_scaler, 0, 0, reduce_dst_idx);
             reduce_revert_delta();
             tile_regs_commit();
 
+
             cb_reserve_back(cb_out, onetile);
             tile_regs_wait();
-            #if defined FP32_DEST_ACC_EN
-                pack_reconfig_data_format(cb_out);
-            #endif
+#if defined FP32_DEST_ACC_EN
+            pack_reconfig_data_format(cb_out);
+#endif
             pack_tile(reduce_dst_idx, cb_out);
+            print_cb<RISCV::PACK, DTYPE::BF16>("sumed tile", cb_out);
             tile_regs_release();
             cb_push_back(cb_out, onetile);
 
