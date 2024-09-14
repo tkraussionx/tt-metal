@@ -26,22 +26,46 @@ namespace detail {
 
     std::vector<Tensor> split_last_dim_two_chunks_tiled(const Tensor &input_tensor, const MemoryConfig &mem_config) {
         const auto shape = input_tensor.get_legacy_shape();
-        const bool pre_post_reshape = shape[0] > 1;
 
-        if (!pre_post_reshape) {
+        const bool add_batch_dim_required = shape.size() < 4;
+        const bool batch_reshape_required = shape[0] > 1;
+
+        if (!(add_batch_dim_required || batch_reshape_required)) {
             return impl_split_last_dim_two_chunks_tiled(input_tensor, mem_config);
         }
 
-        const int W = 1, Z = shape[0] * shape[1], Y = shape[2], X = shape[3];
-        const Tensor &reshaped_tensor = ttnn::reshape_on_device(input_tensor, 1, -1, Y, X, mem_config);
+        if (batch_reshape_required) {
+            const int W = 1, Z = shape[0] * shape[1], Y = shape[2], X = shape[3];
+            const Tensor &reshaped_tensor = ttnn::reshape_on_device(input_tensor, 1, -1, Y, X, mem_config);
 
-        auto part_reshaped = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, mem_config);
+            auto part_reshaped = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, mem_config);
 
-        std::vector<Tensor> results;
-        results.reserve(part_reshaped.size());
-        for (auto &part : part_reshaped) results.emplace_back(ttnn::reshape_on_device(part, -1, shape[1], Y, X / 2, mem_config));
+            std::vector<Tensor> results;
+            results.reserve(part_reshaped.size());
+            for (auto &part : part_reshaped) results.emplace_back(ttnn::reshape_on_device(part, -1, shape[1], Y, X / 2, mem_config));
 
-        return results;
+            return results;
+        }
+
+        if (add_batch_dim_required) {
+            const int N = 1, C = shape[0], H = shape[2], W = shape[3];
+            const Tensor &reshaped_tensor = ttnn::reshape_on_device(input_tensor, N, C, H, W, mem_config);
+
+            std::vector<Tensor> splits = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, mem_config);
+
+            std::vector<Tensor> results;
+            results.reserve(splits.size());
+
+            for (auto &s : splits) {
+                auto s_shape = s.get_shape();
+                const int N = 0, C = s_shape[1], H = s_shape[2], W = s_shape[3];
+
+                auto sans_batch_dim = ttnn::reshape_on_device(s, N, C, H, W, mem_config);
+                results.push_back(sans_batch_dim);
+            }
+
+            return results;
+        }
     }
 
 
