@@ -1,0 +1,11 @@
+
+CPMAddPackage(
+    NAME libsndfile
+    GITHUB_REPOSITORY libsndfile/libsndfile
+    GIT_TAG 1.2.2
+    OPTIONS
+        "BUILD_TESTING OFF"
+        "BUILD_EXAMPLES OFF"
+        "CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR}"
+        "CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR}"
+)
