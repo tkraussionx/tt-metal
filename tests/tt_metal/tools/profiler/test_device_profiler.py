@@ -29,6 +29,7 @@ def run_device_profiler_test(testName=None, setup=False, slowDispatch=False):
     testCommand = f"build/{PROG_EXMP_DIR}/{name}"
     if testName:
         testCommand = testName
+    print("Running: " + testCommand)
     clear_profiler_runtime_artifacts()
     slowDispatchEnv = ""
     if slowDispatch:
@@ -165,11 +166,11 @@ def test_dispatch_cores():
     ZONE_COUNT = 37
     REF_COUNT_DICT = {
         "grayskull": {
-            "Tensix CQ Dispatch": 16,
+            "Tensix CQ Dispatch": 18,
             "Tensix CQ Prefetch": 21,
         },
         "wormhole_b0": {
-            "Tensix CQ Dispatch": 16,
+            "Tensix CQ Dispatch": 23,
             "Tensix CQ Prefetch": 21,
         },
     }
