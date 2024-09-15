@@ -291,7 +291,7 @@ void WatcherDeviceReader::DumpCore(CoreDescriptor &logical_core, bool is_active_
     mailboxes_t *mbox_data = (mailboxes_t *)(&data[0]);
 
     // Validate these first since they are used in diagnostic messages below.
-    ValidateKernelIDs(core, &mbox_data->launch);
+    ValidateKernelIDs(core, &mbox_data->launch[0]);
 
     // Whether or not watcher data is available depends on a flag set on the device.
     bool enabled = (mbox_data->watcher.enable == WatcherEnabled);
@@ -303,7 +303,7 @@ void WatcherDeviceReader::DumpCore(CoreDescriptor &logical_core, bool is_active_
         // Ethernet cores have firmware that starts at address 0, so no need to check it for a
         // magic value.
         if (!is_eth_core)
-            DumpL1Status(core, &mbox_data->launch);
+            DumpL1Status(core, &mbox_data->launch[0]);
         if (!tt::llrt::OptionsG.watcher_noc_sanitize_disabled()) {
             for (uint32_t noc = 0; noc < NUM_NOCS; noc++) {
                 DumpNocSanitizeStatus(core, core_str, mbox_data, noc);
@@ -326,20 +326,20 @@ void WatcherDeviceReader::DumpCore(CoreDescriptor &logical_core, bool is_active_
         }
     } else {
         fprintf(f, "rmsg:");
-        DumpRunState(core, &mbox_data->launch, mbox_data->launch.go.run);
+        DumpRunState(core, &mbox_data->launch[0], mbox_data->go_message.signal);
         fprintf(f, " ");
     }
 
     // Eth core only reports erisc kernel id, uses the brisc field
     if (is_eth_core) {
-        fprintf(f, "k_id:%d", mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_ETH_DM0]);
+        fprintf(f, "k_id:%d", mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_ETH_DM0]);
     } else {
         fprintf(
             f,
             "k_ids:%d|%d|%d",
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM0],
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM1],
-            mbox_data->launch.kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_COMPUTE]);
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM0],
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_DM1],
+            mbox_data->launch[0].kernel_config.watcher_kernel_ids[DISPATCH_CLASS_TENSIX_COMPUTE]);
     }
 
     // Ring buffer at the end because it can print a bunch of data, same for stack usage
@@ -367,7 +367,7 @@ void WatcherDeviceReader::DumpL1Status(CoreDescriptor &core, const launch_msg_t 
 
 void WatcherDeviceReader::DumpNocSanitizeStatus(
     CoreDescriptor &core, const string &core_str, const mailboxes_t *mbox_data, int noc) {
-    const launch_msg_t *launch_msg = &mbox_data->launch;
+    const launch_msg_t *launch_msg = &mbox_data->launch[0];
     const debug_sanitize_noc_addr_msg_t *san = &mbox_data->watcher.sanitize_noc[noc];
     string error_msg;
     string error_reason = "Watcher detected NOC error and stopped device: ";
@@ -431,7 +431,7 @@ void WatcherDeviceReader::DumpNocSanitizeStatus(
 }
 
 void WatcherDeviceReader::DumpAssertStatus(CoreDescriptor &core, const string &core_str, const mailboxes_t *mbox_data) {
-    const launch_msg_t *launch_msg = &mbox_data->launch;
+    const launch_msg_t *launch_msg = &mbox_data->launch[0];
     const debug_assert_msg_t *assert_status = &mbox_data->watcher.assert_status;
     switch (assert_status->tripped) {
         case DebugAssertTripped: {
@@ -487,7 +487,7 @@ void WatcherDeviceReader::DumpPauseStatus(CoreDescriptor &core, const string &co
             log_warning("{}: {}", core_str, error_reason);
             DumpWaypoints(core, mbox_data, true);
             DumpRingBuffer(core, mbox_data, true);
-            LogRunningKernels(core, &mbox_data->launch);
+            LogRunningKernels(core, &mbox_data->launch[0]);
             // Save the error string for checking later in unit tests.
             set_watcher_exception_message(fmt::format("{}: {}", core_str, error_reason));
             TT_THROW("{}", error_reason);
@@ -555,7 +555,7 @@ void WatcherDeviceReader::DumpRunState(CoreDescriptor &core, const launch_msg_t 
 }
 
 void WatcherDeviceReader::DumpLaunchMessage(CoreDescriptor &core, const mailboxes_t *mbox_data) {
-    const launch_msg_t *launch_msg = &mbox_data->launch;
+    const launch_msg_t *launch_msg = &mbox_data->launch[0];
     const slave_sync_msg_t *slave_sync = &mbox_data->slave_sync;
     fprintf(f, "rmsg:");
 
@@ -583,7 +583,7 @@ void WatcherDeviceReader::DumpLaunchMessage(CoreDescriptor &core, const mailboxe
             launch_msg->kernel_config.brisc_noc_id);
     }
 
-    DumpRunState(core, launch_msg, launch_msg->go.run);
+    DumpRunState(core, launch_msg, mbox_data->go_message.signal);
 
     fprintf(f, "|");
 
@@ -627,7 +627,7 @@ void WatcherDeviceReader::DumpLaunchMessage(CoreDescriptor &core, const mailboxe
 }
 
 void WatcherDeviceReader::DumpWaypoints(CoreDescriptor &core, const mailboxes_t *mbox_data, bool to_stdout) {
-    const launch_msg_t *launch_msg = &mbox_data->launch;
+    const launch_msg_t *launch_msg = &mbox_data->launch[0];
     const debug_waypoint_msg_t *debug_waypoint = mbox_data->watcher.debug_waypoint;
     string out;
 
