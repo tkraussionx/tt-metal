@@ -50,11 +50,11 @@ void dispatch_s_noc_semaphore_inc(uint64_t addr, uint32_t incr, uint8_t noc_id =
     [REFER TO grayskull/noc/noc.h for the documentation of noc_atomic_increment()]
     Generic increment with 32-bit wrap.
   */
-    DEBUG_STATUS("NSIW");
+    WAYPOINT("NSIW");
     DEBUG_SANITIZE_NOC_ADDR(noc_id, addr, 4);
     DEBUG_INSERT_DELAY(TransactionAtomic);
     noc_fast_atomic_increment(noc_id, BRISC_AT_CMD_BUF, addr, NOC_UNICAST_WRITE_VC, incr, 31 /*wrap*/, false /*linked*/, false /*posted*/);
-    DEBUG_STATUS("NSID");
+    WAYPOINT("NSID");
 }
 
 FORCE_INLINE
@@ -70,7 +70,7 @@ void cb_acquire_pages_dispatch_s(uint32_t n) {
     volatile tt_l1_ptr uint32_t* sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(sem_id));
 
-    DEBUG_STATUS("DAPW");
+    WAYPOINT("DAPW");
     // Use a wrapping compare here to compare distance
     // Required for trace which steals downstream credits and may make the value negative
     uint32_t heartbeat = 0;
@@ -79,7 +79,7 @@ void cb_acquire_pages_dispatch_s(uint32_t n) {
     while (wrapped_distance(*sem_addr, num_pages_acquired) < n) {
         IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
     }
-    DEBUG_STATUS("DAPD");
+    WAYPOINT("DAPD");
     num_pages_acquired += n;
 }
 
@@ -97,10 +97,10 @@ void noc_async_write_multicast_one_packet_dispatch_s(
     std::uint32_t num_dests,
     bool linked = false,
     bool multicast_path_reserve = true) {
-    DEBUG_STATUS("NMPW");
+    WAYPOINT("NMPW");
     DEBUG_SANITIZE_NOC_MULTI_WRITE_TRANSACTION(1, dst_noc_addr_multicast, src_local_l1_addr, size);
     while (!noc_cmd_buf_ready(1, NCRISC_WR_CMD_BUF));
-    DEBUG_STATUS("NWPD");
+    WAYPOINT("NWPD");
 
     uint32_t noc_cmd_field =
                             NOC_CMD_CPY | NOC_CMD_WR |
@@ -126,10 +126,10 @@ void noc_async_write_multicast_one_packet_dispatch_s(
 
 FORCE_INLINE
 void noc_async_write_unicast_one_packet_dispatch_s(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
-    DEBUG_STATUS("NWPW");
+    WAYPOINT("NWPW");
     DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(1, dst_noc_addr, src_local_l1_addr, size);
     while (!noc_cmd_buf_ready(1, NCRISC_WR_CMD_BUF));
-    DEBUG_STATUS("NWPD");
+    WAYPOINT("NWPD");
 
     uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
