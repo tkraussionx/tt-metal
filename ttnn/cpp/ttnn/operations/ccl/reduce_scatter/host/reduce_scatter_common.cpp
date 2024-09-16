@@ -19,8 +19,8 @@ WorkerTransferInfo::WorkerTransferInfo(
     num_links(num_links),
     num_workers(num_workers) {}
 
-uint32_t WorkerTransferInfo::get_num_pages_per_full_chunk(uint32_t link, uint32_t worker_idx) const {
-    std::size_t index = link * num_workers + worker_idx;
+uint32_t WorkerTransferInfo::get_num_pages_per_full_chunk(WorkerAttributes const& worker_attrs) const {
+    std::size_t index = worker_attrs.link * num_workers + worker_attrs.channel;
     TT_ASSERT(index < pages_per_full_chunk_per_worker.size(), "Index {} out of bounds for pages_per_full_chunk_per_worker of size {}", index, pages_per_full_chunk_per_worker.size());
     return pages_per_full_chunk_per_worker.at(index);
 }

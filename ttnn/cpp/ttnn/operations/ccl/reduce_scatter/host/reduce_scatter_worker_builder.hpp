@@ -9,7 +9,6 @@
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_common.hpp"
 
 #include <cstdint>
-#include <ranges>
 
 namespace tt {
 namespace tt_metal {
@@ -34,17 +33,19 @@ struct ReduceScatterWorkerArgBuilder {
         ttnn::ccl::InterleavedTensorWorkerSlice const& worker_input_slice,
         WorkerTransferInfo const& worker_transfer_info,
         ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode,
-        uint32_t worker_idx,
-        uint32_t link,
-        uint32_t cb_num_pages_per_packet,
+        std::size_t scatter_dim,
+        std::size_t cb_num_pages_per_packet,
         uint32_t worker_sender_semaphore_id,
         uint32_t worker_receiver_semaphore_id,
-        uint32_t num_buffers_per_channel,
-        std::optional<uint32_t> receiver_worker_partial_ready_semaphore_id);
+        std::optional<uint32_t> receiver_worker_partial_ready_semaphore_id,
+        std::size_t num_buffers_per_channel
+        );
+
+    std::size_t get_total_num_math_pages(WorkerAttributes const& worker_attrs) const;
 
     std::vector<uint32_t> generate_reduce_op_kernel_ct_args() const;
 
-    std::vector<uint32_t> generate_reduce_op_kernel_rt_args() const;
+    std::vector<uint32_t> generate_reduce_op_kernel_rt_args(WorkerAttributes const& worker_attrs, std::size_t ring_size) const;
 
     std::vector<uint32_t> generate_receiver_kernel_ct_args() const;
 
@@ -52,24 +53,19 @@ struct ReduceScatterWorkerArgBuilder {
         ttnn::ccl::WorkerXY const& edm_core,
         uint32_t edm_core_semaphore_address,
         uint32_t edm_core_buffer_address,
-        uint32_t link,
-        uint32_t worker_index,
-        bool is_in_clockwise_direction) const;
+        WorkerAttributes const& worker_attrs) const;
 
     std::vector<uint32_t> generate_sender_kernel_ct_args() const;
 
     std::vector<uint32_t> generate_sender_kernel_rt_args(
         WorkerEdmInterfaceArgs const& edm_interface,
-        uint32_t link,
-        uint32_t worker_index,
-        std::unordered_map<std::size_t, CoreCoord> const& worker_association_map,
-        bool is_clockwise) const;
+        WorkerAttributes const& worker_attrs) const;
+
 
     std::vector<uint32_t> generate_line_start_sender_kernel_rt_args(
-        WorkerEdmInterfaceArgs const& edm_interface_args,
+        WorkerEdmInterfaceArgs const& edm_interface,
         std::size_t scatter_dim,
-        std::size_t link,
-        std::size_t worker_index) const;
+        WorkerAttributes const& worker_attrs) const;
 
     std::vector<uint32_t> generate_line_start_sender_kernel_ct_args() const;
 
@@ -85,7 +81,7 @@ struct ReduceScatterWorkerArgBuilder {
     uint32_t num_buffers_per_channel;
     std::optional<uint32_t> receiver_worker_partial_ready_semaphore_id;
 
-    uint32_t total_num_math_pages;
+    std::size_t scatter_dim;
     bool src_is_dram;
     bool dst_is_dram;
 };

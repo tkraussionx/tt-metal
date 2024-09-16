@@ -14,6 +14,7 @@
  */
 
 #include <cstdint>
+#include <cstddef>
 
 namespace ttnn {
 namespace ccl {

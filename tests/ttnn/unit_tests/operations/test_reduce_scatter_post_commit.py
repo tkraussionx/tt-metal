@@ -238,7 +238,7 @@ def test_ring_reduce_scatter_post_commit(
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
 @pytest.mark.parametrize("enable_async", [True])
 def test_line_reduce_scatter_post_commit(
-    t3k_device_mesh,
+    t3k_mesh_device,
     num_devices,
     per_chip_output_shape,
     scatter_dim,

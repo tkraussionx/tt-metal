@@ -4,11 +4,9 @@
 ///
 
 #include "common/core_coord.h"
-#include "eth_l1_address_map.h"
 #include "impl/buffers/buffer.hpp"
-#include "impl/kernels/data_types.hpp"
 #include "ttnn/operations/ccl/common/types/ccl_types.hpp"
-#include "ttnn/tensor/tensor_impl.hpp"
+#include "ttnn/cpp/ttnn/operation.hpp"
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "ttnn/operations/ccl/ccl_common.hpp"
@@ -27,7 +25,6 @@
 #include <limits>
 #include <vector>
 #include <algorithm>
-#include <ranges>
 
 using namespace tt::constants;
 
@@ -76,7 +73,8 @@ static void add_worker_config_to_edm_builders(
     RingReduceScatterWrappedTensorSlicer& tensor_slicer,  // TODO: Update to Generic ReduceScatterSlicer when it is implemented
     ccl::CCLOpConfig const& op_config,
     std::vector<CoreCoord> const& worker_cores,
-    uint32_t num_channels_per_edm,
+    std::size_t num_channels_per_edm,
+    std::size_t num_buffers_per_channel,
 
     std::vector<ttnn::ccl::EriscDatamoverBuilder>& clockwise_edm_builders,
     std::vector<ttnn::ccl::EriscDatamoverBuilder>& counter_clockwise_edm_builders,
@@ -111,7 +109,8 @@ static void add_worker_config_to_edm_builders(
         uint32_t global_worker_idx = c + num_channels_per_edm * link;
         log_trace(tt::LogOp, "get_worker_slice_size_bytes");
         std::size_t worker_tensor_slice_index = !is_linear ? global_worker_idx : (c / 2) + (num_channels_per_edm / 2) * link;
-        uint32_t expected_message_size_bytes = tensor_slicer.get_worker_slice_size_bytes(worker_tensor_slice_index);
+        uint32_t expected_message_size_bytes = (num_buffers_per_channel == 1) ? tensor_slicer.get_worker_slice_size_bytes(global_worker_idx)
+                                                                           : clockwise_edm_builders.at(link).get_eth_buffer_size_bytes();
 
         bool is_in_clockwise_direction = is_buffer_in_clockwise_direction_fn(c);
         bool is_first_device_in_line = is_linear && ((is_in_clockwise_direction && ring_index == 0) ||
@@ -186,6 +185,13 @@ static std::tuple<KernelHandle, KernelHandle> build_reduce_scatter_worker(
         // "ttnn/cpp/ttnn/operations/ccl/reduce_scatter/device/kernels/worker_line_reduce_scatter_reader.cpp" :
         "ttnn/cpp/ttnn/operations/ccl/reduce_scatter/device/kernels/worker_interleaved_ring_reduce_scatter_reader.cpp";
 
+    // Need to be able to split up the workers so that on the end of the lines, some of the cores are for send/receive and
+    // others are for CCL send only
+    bool is_first_chip_in_line_clockwise = topology_config.ring_index == 0;
+    bool is_first_chip_in_line_counter_clockwise = topology_config.ring_index == topology_config.ring_size - 1;
+    bool is_last_chip_in_line_clockwise = is_first_chip_in_line_counter_clockwise;
+    bool is_last_chip_in_line_counter_clockwise = is_first_chip_in_line_clockwise;
+
     // This will be configurable by sharded/non-sharded but present the same arg builder
     KernelHandle worker_receiver_kernel_id, worker_sender_kernel_id;
     bool is_in_clockwise_direction = is_buffer_in_clockwise_direction_fn(worker_index);
@@ -198,8 +204,9 @@ static std::tuple<KernelHandle, KernelHandle> build_reduce_scatter_worker(
         ((is_in_clockwise_direction && topology_config.ring_index == 0) || (!is_in_clockwise_direction && topology_config.ring_index == topology_config.ring_size - 1));
     bool is_last_device_in_line =
         topology_config.is_linear &&
-        ((is_in_clockwise_direction && topology_config.ring_index == topology_config.ring_size - 1) || (!is_in_clockwise_direction && topology_config.ring_index == topology_config.ring_size - 1));
+        ((is_in_clockwise_direction && topology_config.ring_index == topology_config.ring_size - 1) || (!is_in_clockwise_direction && topology_config.ring_index == 0));
 
+    // If we are at the end of the line, we need to split the worker core range
 
     log_trace(tt::LogOp, "hh");
     if (!topology_config.is_first_device_in_line(is_in_clockwise_direction)) {
@@ -285,7 +292,7 @@ static std::tuple<KernelHandle, KernelHandle> build_reduce_scatter_worker(
             program,
             worker_reduce_kernel_id,
             worker_core,
-            worker_arg_builder.generate_reduce_op_kernel_rt_args());
+            worker_arg_builder.generate_reduce_op_kernel_rt_args(link, worker_index, topology_config.ring_size));
     }
     log_trace(tt::LogOp, "hh3");
 
@@ -353,14 +360,43 @@ static std::tuple<KernelHandle, KernelHandle> build_reduce_scatter_worker(
     return {worker_receiver_kernel_id, worker_sender_kernel_id};
 }
 
-static CoreRangeSet select_worker_cores(
-    ttnn::ccl::CCLOpConfig const& op_config, std::size_t num_links, std::size_t num_edm_channels) {
+
+/*
+ * Core range sets for line topology
+ */
+static std::pair<CoreRangeSet, std::optional<CoreRangeSet>> select_worker_cores_for_line_topology(ttnn::ccl::RingTopology const& topology_config, ttnn::ccl::CCLOpConfig const& op_config, std::size_t num_links, std::size_t num_edm_channels) {
+    static constexpr std::size_t num_directions_per_line = 2;
+
+    TT_ASSERT(num_edm_channels % 2 == 0, "For line topologies, we expect a multiple of 2 number of channels for the algorithm and worker kernels to work.");
+    const std::size_t workers_per_direction = num_edm_channels / num_directions_per_line;
+    auto const& lower_half_of_cores = CoreRangeSet({CoreRange(CoreCoord(0, 0), CoreCoord(workers_per_direction - 1, num_links - 1))});
+    auto const& upper_half_of_cores = CoreRangeSet({CoreRange(CoreCoord(workers_per_direction, 0), CoreCoord(num_edm_channels - 1, num_links - 1))});
+    if (topology_config.ring_index == 0) {
+        return {lower_half_of_cores, upper_half_of_cores};
+    } else if (topology_config.ring_index == topology_config.ring_size - 1) {
+        // Flip them for the other end because the send will be for the "second" core range set (conceptually, the other direction)
+        // of the line flows in the second half of all workers, for each chip.
+        return {upper_half_of_cores, lower_half_of_cores};
+    } else {
+        return {CoreRangeSet({CoreRange(CoreCoord(0, 0), CoreCoord(num_edm_channels - 1, num_links - 1))}), std::nullopt};
+    }
+}
+
+/*
+ * Returns 1 or 2 core range sets. Typically returns only one but in the case of a line reduce scatter where we are at the end of the line,
+ * then we must split the core range in half (and return 2), one for each direction where half the cores will invoke the ccl::send kernel
+ * to implement the start of the line and the others will invoke the typical reduce scatter worker kernels.
+ */
+static std::pair<CoreRangeSet, std::optional<CoreRangeSet>> select_worker_cores(
+    ttnn::ccl::RingTopology const& topology_config, ttnn::ccl::CCLOpConfig const& op_config, std::size_t num_links, std::size_t num_edm_channels) {
     switch (op_config.get_topology()) {
         case ttnn::ccl::Topology::Linear:
-            return CoreRangeSet({CoreRange(CoreCoord(0, 0), CoreCoord(num_edm_channels - 1, num_links - 1))});
+            return select_worker_cores_for_line_topology(topology_config, op_config, num_links, num_edm_channels);
+
         case ttnn::ccl::Topology::Ring:
-            return CoreRangeSet({CoreRange(CoreCoord(0, 0), CoreCoord(num_edm_channels - 1, num_links - 1))});
-        default: TT_ASSERT(false, "Unsupported topology"); return CoreRangeSet({});
+            return {CoreRangeSet({CoreRange(CoreCoord(0, 0), CoreCoord(num_edm_channels - 1, num_links - 1))}), std::nullopt};
+
+        default: TT_ASSERT(false, "Unsupported topology"); return {CoreRangeSet({}), std::nullopt};
     };
 }
 
@@ -690,6 +726,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
             op_config,
             worker_cores,
             num_edm_channels_per_link,
+            num_buffers_per_channel,
 
             cw_per_link_edm_builders,
             ccw_per_link_edm_builders,
@@ -706,9 +743,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
 
 
 
-    // build the worker kernels
-    std::size_t num_duplicate_directions = 1;//is_linear ? 2 : 1;
-    for (std::size_t direction = 0; direction < num_duplicate_directions; direction++) {
+
         for (std::size_t link = 0; link < num_links; link++) {
             log_trace(tt::LogOp, "==============================================");
             log_trace(tt::LogOp, "------------------ Link: {} ------------------", link);
@@ -734,7 +769,8 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
                     cb_num_pages_per_packet,
                     worker_sender_semaphore_id,
                     worker_receiver_semaphore_id,
-                    receiver_worker_partial_ready_semaphore_id);
+                    receiver_worker_partial_ready_semaphore_id,
+                    num_buffers_per_channel);
 
                 log_trace(tt::LogOp, "worker_cores.at(global_worker_index): {}", worker_cores.at(global_worker_index));
                 auto [receiver_kernel_id, sender_kernel_id] = build_reduce_scatter_worker(
@@ -763,7 +799,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
                     cb_num_pages,
                     cb_num_pages,
                     cw_per_link_edm_builders.at(0).get_eth_buffer_size_bytes(),
-                    op_config.get_page_size()));
+                    op_config.get_page_size()), "Internal error: reduce scatter implementation generated a program that will deadlock due to insufficient buffering based on the tensor slice sizes the op chose to use.");
             }
         }
     }

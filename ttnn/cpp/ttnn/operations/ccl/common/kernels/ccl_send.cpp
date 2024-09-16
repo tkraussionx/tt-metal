@@ -192,13 +192,6 @@ void kernel_main() {
     address_t tensor_address = get_arg_val<address_t>(arg_idx++);
     address_t num_commands = get_arg_val<address_t>(arg_idx++);
 
-    // Tensor Iterator Setup
-    const shape_t input_tensor_shape = ttnn::ccl::build_from_args<shape_t>(arg_idx); // Should be made full CT (common for all workers)
-    // const shape_t tensor_window_shape = ttnn::ccl::build_from_args<shape_t>(arg_idx); // Should be made full CT (common for all workers)
-    // constexpr shape_t tensor_slice_shape = build_from_args<shape_t>(arg_idx); // Should be made full CT (common for all workers)
-    // Tensor iterator setup (custom to wrapped tensor iterator)
-
-
     // EDM Interface Parameters
     const ttnn::ccl::WorkerEdmInterfaceArgs edm_args = ttnn::ccl::build_from_args<ttnn::ccl::WorkerEdmInterfaceArgs>(arg_idx);
     // static_assert(tt_metal::is_compile_time_evaluated(edm_args.num_buffers_per_channel), "Number of buffers per channel was expected to resolve as compile time variable.");
@@ -231,48 +224,55 @@ void kernel_main() {
     DPRINT << "CCL Send to EDM my_edm_worker_semaphore_ptr=" << (uint32_t)my_edm_worker_semaphore_ptr << "\n";
 
     DPRINT << "CCL Send: Running commands: " << (uint32_t)num_commands << "\n";
+
+    ttnn::ccl::cmd::CclCommandTensor command_tensor;
+
     for (std::size_t i = 0; i < num_commands; ++i) {
         // Generalized would be to get the command header info and then dispatch accordingly - if the command type is singular
         //
         // TODO: Turn this into a command iterator that initializes itself with the current arg_idx and then after that,
         //       the arg_idx never needs to be accessed again
-        auto ccl_command = ttnn::ccl::cmd::get_command(arg_idx);
+        std::size_t old_arg_idx = arg_idx;
+        ttnn::ccl::cmd::update_command_tensor(arg_idx, command_tensor);
+        DPRINT << "Consumed " << (uint32_t)(arg_idx - old_arg_idx) << " total kernel args for command " << i << " (incl hdrs)\n";
+        std::size_t new_arg_idx = arg_idx;
+
         {
             DPRINT << "cmd[" << (uint32_t)i << "]:\n";
-            DPRINT << "\ttensor_slice_shape.w: " << (uint32_t)ccl_command.tensor_slice_shape.w << "\n";
-            DPRINT << "\ttensor_slice_shape.z: " << (uint32_t)ccl_command.tensor_slice_shape.z << "\n";
-            DPRINT << "\ttensor_slice_shape.y: " << (uint32_t)ccl_command.tensor_slice_shape.y << "\n";
-            DPRINT << "\ttensor_slice_shape.x: " << (uint32_t)ccl_command.tensor_slice_shape.x << "\n";
-            DPRINT << "\tensor_slice_offset.w: " << (uint32_t)ccl_command.tensor_slice_offset.w << "\n";
-            DPRINT << "\tensor_slice_offset.z: " << (uint32_t)ccl_command.tensor_slice_offset.z << "\n";
-            DPRINT << "\tensor_slice_offset.y: " << (uint32_t)ccl_command.tensor_slice_offset.y << "\n";
-            DPRINT << "\tensor_slice_offset.x: " << (uint32_t)ccl_command.tensor_slice_offset.x << "\n";
-            DPRINT << "\tworker_start_offset_in_slice.w: " << (uint32_t)ccl_command.worker_start_offset_in_slice.w << "\n";
-            DPRINT << "\tworker_start_offset_in_slice.z: " << (uint32_t)ccl_command.worker_start_offset_in_slice.z << "\n";
-            DPRINT << "\tworker_start_offset_in_slice.y: " << (uint32_t)ccl_command.worker_start_offset_in_slice.y << "\n";
-            DPRINT << "\tworker_start_offset_in_slice.x: " << (uint32_t)ccl_command.worker_start_offset_in_slice.x << "\n";
-            DPRINT << "\tworker_pages_per_slice: " << (uint32_t)ccl_command.worker_pages_per_slice << "\n";
+            DPRINT << "\ttensor_slice_shape.w: " << (uint32_t)command_tensor.tensor_slice_shape.w << "\n";
+            DPRINT << "\ttensor_slice_shape.z: " << (uint32_t)command_tensor.tensor_slice_shape.z << "\n";
+            DPRINT << "\ttensor_slice_shape.y: " << (uint32_t)command_tensor.tensor_slice_shape.y << "\n";
+            DPRINT << "\ttensor_slice_shape.x: " << (uint32_t)command_tensor.tensor_slice_shape.x << "\n";
+            DPRINT << "\tensor_slice_offset.w: " << (uint32_t)command_tensor.tensor_slice_offset.w << "\n";
+            DPRINT << "\tensor_slice_offset.z: " << (uint32_t)command_tensor.tensor_slice_offset.z << "\n";
+            DPRINT << "\tensor_slice_offset.y: " << (uint32_t)command_tensor.tensor_slice_offset.y << "\n";
+            DPRINT << "\tensor_slice_offset.x: " << (uint32_t)command_tensor.tensor_slice_offset.x << "\n";
+            DPRINT << "\tworker_start_offset_in_slice.w: " << (uint32_t)command_tensor.worker_start_offset_in_slice.w << "\n";
+            DPRINT << "\tworker_start_offset_in_slice.z: " << (uint32_t)command_tensor.worker_start_offset_in_slice.z << "\n";
+            DPRINT << "\tworker_start_offset_in_slice.y: " << (uint32_t)command_tensor.worker_start_offset_in_slice.y << "\n";
+            DPRINT << "\tworker_start_offset_in_slice.x: " << (uint32_t)command_tensor.worker_start_offset_in_slice.x << "\n";
+            DPRINT << "\tworker_pages_per_slice: " << (uint32_t)command_tensor.worker_pages_per_slice << "\n";
             ASSERT(ccl_command.worker_pages_per_slice > 0);
 
             // CURRENTLY ONLY SUPPORTS WRAPPED TENSOR ITERATION COMMANDS
             // Implemented really inefficiently for now - in the future we can do more efficient packing and also change
             // the tensor read API to require the information in a more efficient way (less intermediate calculations)
             // const shape_t tensor_slice_start_offset = ttnn::ccl::build_from_args<shape_t>(arg_idx); // Should be RT
-            shape_t valid_worker_slice_shape = build_wrapped_row_tensor_slice(ccl_command.worker_pages_per_slice); // Parametrizable by ct arg
+            shape_t valid_worker_slice_shape = build_wrapped_row_tensor_slice(command_tensor.worker_pages_per_slice); // Parametrizable by ct arg
 
-            shape_t global_offset = ccl_command.tensor_slice_offset + ccl_command.worker_start_offset_in_slice;
-            uint32_t curr_tile_id = get_flat_index_from_shape(input_tensor_shape, global_offset);
+            shape_t global_offset = command_tensor.tensor_slice_offset + command_tensor.worker_start_offset_in_slice;
+            uint32_t curr_tile_id = get_flat_index_from_shape(command_tensor.tensor_shape, global_offset);
 
             uint32_t offset_into_worker_slice = 0;
             bool last_page_of_worker = false;
-            for (uint32_t p = 0; p < ccl_command.worker_pages_per_slice; p += packet_size_in_pages) {
-                uint32_t n_pages = std::min(packet_size_in_pages, ccl_command.worker_pages_per_slice - p);
+            for (uint32_t p = 0; p < command_tensor.worker_pages_per_slice; p += packet_size_in_pages) {
+                uint32_t n_pages = std::min(packet_size_in_pages, command_tensor.worker_pages_per_slice - p);
                 ASSERT(ccl_command.worker_start_offset_in_slice.w == 1);
                 ASSERT(ccl_command.worker_start_offset_in_slice.z == 1);
                 ASSERT(valid_worker_slice_shape.w == 1);
                 ASSERT(valid_worker_slice_shape.z == 1);
-                ASSERT(input_tensor_shape.w == 1);
-                ASSERT(input_tensor_shape.z == 1);
+                ASSERT(command_tensor.tensor_shape.w == 1);
+                ASSERT(command_tensor.tensor_shape.z == 1);
                 ASSERT(ccl_command.tensor_slice_shape.w == 1);
                 ASSERT(ccl_command.tensor_slice_shape.z == 1);
                 DPRINT << "CCL send: reading in packet from tensor\n";
@@ -280,11 +280,11 @@ void kernel_main() {
                 read_wrapped_chunk_from_output_tensor(
                     curr_tile_id,
                     offset_into_worker_slice,
-                    ttnn::ccl::coord_t(ccl_command.worker_start_offset_in_slice.x, ccl_command.worker_start_offset_in_slice.y), // Offset into tensor slice
+                    ttnn::ccl::coord_t(command_tensor.worker_start_offset_in_slice.x, command_tensor.worker_start_offset_in_slice.y), // Offset into tensor slice
                     ttnn::ccl::coord_t(valid_worker_slice_shape.x, valid_worker_slice_shape.y),
                     // In tiles for tile layout
-                    ttnn::ccl::coord_t(input_tensor_shape.x, input_tensor_shape.y),
-                    ttnn::ccl::coord_t(ccl_command.tensor_slice_shape.x, ccl_command.tensor_slice_shape.y),
+                    ttnn::ccl::coord_t(command_tensor.tensor_shape.x, command_tensor.tensor_shape.y),
+                    ttnn::ccl::coord_t(command_tensor.tensor_slice_shape.x, command_tensor.tensor_slice_shape.y),
                     cb_id,
                     tensor_addrgen,
                     n_pages,

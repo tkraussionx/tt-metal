@@ -144,7 +144,7 @@ std::vector<TensorSlice> generate_slice_sequence_on_dim(
 
     auto incr = start_slice_index < end_slice_index_exclusive ? 1 : -1;
     log_info(tt::LogOp, "slice_size_on_dim {}", slice_size_on_dim);
-    auto worker_slice_start_offset = TensorSlice::ords_t{0, worker_index * worker_slice_shape.x};
+    auto worker_slice_start_offset = fracture_dim == 0 ? TensorSlice::ords_t{0, worker_index * worker_slice_shape.y} : TensorSlice::ords_t{worker_index * worker_slice_shape.x, 0};
 
     auto generate_slice = [&slices, &tensor_shape, &slice_shape, &worker_slice_shape, &tensor_slice_offset, &worker_slice_start_offset, fracture_dim, dim_start_offset, slice_size_on_dim](std::size_t i){
         if (fracture_dim == 0) {

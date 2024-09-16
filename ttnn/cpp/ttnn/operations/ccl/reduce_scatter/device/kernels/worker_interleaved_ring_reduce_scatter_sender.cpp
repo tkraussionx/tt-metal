@@ -59,7 +59,7 @@ void kernel_main() {
      * Indicates to another reader core that we have written out a unit of data to the output tensor and
      * that unit of data can be readback for accumulation with the outputs from the opposite line directoin
      */
-    constexpr bool signal_reader_on_output_tensor_write = get_compile_time_arg_val(5) != 0;
+    constexpr bool signal_reader_on_output_tensor_write = get_compile_time_arg_val(4) != 0;
 
     #ifdef SHARDED_MEM_LAYOUT
     constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(5);
@@ -91,7 +91,7 @@ void kernel_main() {
 
     uint32_t total_eltwise_kernel_num_pages = get_arg_val<uint32_t>(arg_idx++);
 
-    auto readback_accumulation_signaler = reader_signaler<is_linear>::build(arg_idx);
+    auto readback_accumulation_signaler = reader_signaler<signal_reader_on_output_tensor_write>::build(arg_idx);
     arg_idx += readback_accumulation_signaler.get_args_consumed();
 
     #ifdef SHARDED_MEM_LAYOUT

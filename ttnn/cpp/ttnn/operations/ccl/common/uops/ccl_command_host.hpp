@@ -14,7 +14,7 @@ namespace ccl {
 namespace cmd {
 
 
-std::vector<uint32_t> add_ccl_command_to_args(CclCommand const& cmd);
+// std::vector<uint32_t> add_ccl_command_to_args(CclCommand const& cmd);
 
 
 
