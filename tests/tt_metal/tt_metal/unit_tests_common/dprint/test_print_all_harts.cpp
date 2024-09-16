@@ -178,7 +178,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
 }
 
 TEST_F(DPrintFixture, TestPrintFromAllHarts) {
-    GTEST_SKIP();
+    // GTEST_SKIP();
     for (Device* device : this->devices_) {
         this->RunTestOnDevice(RunTest, device);
     }
