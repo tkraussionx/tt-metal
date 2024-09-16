@@ -114,6 +114,7 @@ def run_conv(
         )
 
     tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+    print("tt_input_tensor shape: ", tt_input_tensor.shape)
 
     if shard_layout is None:
         shard_layout = (
@@ -165,6 +166,7 @@ def run_conv(
         debug=debug,
         groups=groups,
     )
+    print("tt_output_tensor_on_device shape: ", tt_output_tensor_on_device.shape)
 
     tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
     torch_output_tensor = ttnn.to_torch(tt_output_tensor)
@@ -253,9 +255,9 @@ def run_conv_with_split(
         dtype=activations_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
-        shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-        if use_1d_systolic_array
-        else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        shard_layout=(
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED if use_1d_systolic_array else ttnn.TensorMemoryLayout.BLOCK_SHARDED
+        ),
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,
         # input_channels_alignment=(16 if use_shallow_conv_variant else 32),
@@ -2000,4 +2002,118 @@ def test_model_k_256x256(
         use_1d_systolic_array,
         None,
         dilation=dilation_h,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, dilation_h, dilation_w, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 32, 3, 640, 640, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Failed with OOM
+        # (1, 64, 32, 640, 640, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, {"act_block_h":32}, False), # Passed
+        # (1, 64, 64, 320, 320, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, {"act_block_h":32}, False), # Passed
+        # (1, 128, 64, 320, 320, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 64, 128, 160, 160, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 64, 64, 160, 160, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 256, 256, 160, 160, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 128, 256, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 128, 256, 160, 160, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 128, 128, 160, 160, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 128, 128, 80, 80, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 512, 512, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 512, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 256, 512, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False), # Passed
+        # (1, 256, 256, 80, 80, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 256, 256, 40, 40, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False), # Passed
+        # (1, 1024, 1024, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 1024, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 1024, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 512, 40, 40, 3, 3, 2, 2, 1, 1, 1, 1, 1, False, None, False),  # Passed
+        # (1, 256, 1024, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 256, 20, 20, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 1024, 1024, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 512, 20, 20, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 512, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 2048, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 512, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 1024, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 256, 40, 40, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 128, 40, 40, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 256, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 512, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 64, 128, 80, 80, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 64, 64, 80, 80, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 128, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 128, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 128, 128, 80, 80, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 256, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 256, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 256, 40, 40, 3, 3, 2, 2, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 512, 20, 20, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 128, 80, 80, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 256, 128, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 256, 40, 40, 3, 3, 1, 1, 1, 1, 1, 1, 1, True, None, False),  # Passed
+        # (1, 512, 256, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 1024, 512, 20, 20, 3, 3, 1, 1, 1, 1, 1, 1, 1, False, None, False),  # Passed
+        # (1, 1024, 512, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 255, 256, 80, 80, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 255, 512, 40, 40, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False),  # Passed
+        # (1, 255, 1024, 20, 20, 1, 1, 1, 1, 0, 0, 1, 1, 1, True, None, False)  # Passed
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_yolov7_640x640(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    dilation_h,
+    dilation_w,
+    groups,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        dilation=dilation_h,
+        groups=groups,
     )
