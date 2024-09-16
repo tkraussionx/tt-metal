@@ -329,6 +329,7 @@ static void set_reduce_scatter_worker_rt(
         TT_ASSERT(!use_line_start_kernel || optional_line_start_ccl_send_kernel.has_value());
         auto sender_kernel_id = use_line_start_kernel ? optional_line_start_ccl_send_kernel.value(): worker_sender_kernel_id;
 
+        log_trace(tt::LogOp, "{} rt_args for sender kernel", rt_args.size());
         tt::tt_metal::SetRuntimeArgs(
             program,
             sender_kernel_id,
