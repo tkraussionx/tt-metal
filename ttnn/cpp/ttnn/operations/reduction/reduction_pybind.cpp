@@ -12,6 +12,8 @@
 #include "ttnn/operations/reduction/topk/topk_pybind.hpp"
 #include "ttnn/operations/reduction/moe/moe_pybind.hpp"
 #include "ttnn/operations/reduction/prod/prod_pybind.hpp"
+#include "ttnn/operations/reduction/plusone/plusone_pybind.hpp"
+
 
 namespace ttnn::operations::reduction {
 
@@ -31,6 +33,7 @@ void py_module(py::module& module) {
     detail::bind_reduction_topk_operation(module);
     detail::bind_reduction_moe_operation(module);
     detail::bind_reduction_prod_operation(module, ttnn::prod);
+    detail::bind_reduction_plusone_operation(module);
 }
 
 }  // namespace ttnn::operations::reduction

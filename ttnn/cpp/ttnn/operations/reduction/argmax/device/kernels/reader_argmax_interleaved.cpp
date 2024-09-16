@@ -65,7 +65,7 @@ void kernel_main() {
     constexpr uint32_t out_stick_size = get_compile_time_arg_val(5);
     constexpr uint32_t B = get_compile_time_arg_val(6);
     constexpr uint32_t C = get_compile_time_arg_val(7);
-    constexpr uint32_t H = get_compile_time_arg_val(8);
+    constexpr uint32_t H_old = get_compile_time_arg_val(8);
     constexpr uint32_t W = get_compile_time_arg_val(9);
     constexpr uint32_t dim = get_compile_time_arg_val(10);
     constexpr uint32_t all = get_compile_time_arg_val(11);
@@ -86,6 +86,7 @@ void kernel_main() {
     uint32_t max_val = 0;
     uint32_t index_counter = 0;
 
+    constexpr uint32_t H = 1;
     for(uint32_t l = 0; l < B; l ++) {
         for(uint32_t k = 0; k < C; k++) {
             for(uint32_t j = 0; j < H; j++) {
@@ -96,14 +97,31 @@ void kernel_main() {
                     max_index = 0;
                     max_val = stick[0];
                 }
-                for(uint32_t i = 0; i < W; i++) {
-                    uint16_t val = stick[i];
-                    if(bfloat16_greater(val, max_val)) {
+                for(uint32_t i = 0; i < W; i+=4) { // Unroll loop by 2
+                    uint16_t val1 = stick[i];
+                    uint16_t val2 = stick[i+1];
+                    uint16_t val3 = stick[i+2];
+                    uint16_t val4 = stick[i+3];
+                    if(val1 > max_val) {
                         max_index = index_counter;
-                        max_val = val;
+                        max_val = val1;
                     }
                     index_counter++;
-
+                    if(val2 > max_val) {
+                        max_index = index_counter;
+                        max_val = val2;
+                    }
+                    index_counter++;
+                    if(val3 > max_val) {
+                        max_index = index_counter;
+                        max_val = val3;
+                    }
+                    index_counter++;
+                    if(val4 > max_val) {
+                        max_index = index_counter;
+                        max_val = val4;
+                    }
+                    index_counter++;
                 }
                 if (dim == 3) {
                     max_vals[l*C*H + k*H + j] = max_index;
