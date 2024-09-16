@@ -9,7 +9,9 @@
 #include "ttnn/cpp/ttnn/operations/data_movement/reshape/reshape.hpp"
 #include "ttnn/operations/data_movement/transpose/transpose.hpp"
 #include "ttnn/operations/data_movement/split/split.hpp"
-
+#include "ttnn/cpp/ttnn/operations/core/core.hpp"
+#include <algorithm>
+#include <format>
 
 namespace ttnn::operations::data_movement {
 
@@ -30,9 +32,7 @@ namespace detail {
         const bool add_batch_dim_required = shape.size() < 4;
         const bool batch_reshape_required = shape[0] > 1;
 
-        if (!(add_batch_dim_required || batch_reshape_required)) {
-            return impl_split_last_dim_two_chunks_tiled(input_tensor, mem_config);
-        }
+        tt::log_info("add_batch_dim_required {}", add_batch_dim_required);
 
         if (batch_reshape_required) {
             const int W = 1, Z = shape[0] * shape[1], Y = shape[2], X = shape[3];
@@ -47,41 +47,54 @@ namespace detail {
             return results;
         }
 
-        if (add_batch_dim_required) {
-            const int N = 1, C = shape[0], H = shape[2], W = shape[3];
-            const Tensor &reshaped_tensor = ttnn::reshape_on_device(input_tensor, N, C, H, W, mem_config);
-
-            std::vector<Tensor> splits = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, mem_config);
-
-            std::vector<Tensor> results;
-            results.reserve(splits.size());
-
-            for (auto &s : splits) {
-                auto s_shape = s.get_shape();
-                const int N = 0, C = s_shape[1], H = s_shape[2], W = s_shape[3];
-
-                auto sans_batch_dim = ttnn::reshape_on_device(s, N, C, H, W, mem_config);
-                results.push_back(sans_batch_dim);
-            }
-
-            return results;
-        }
+        return impl_split_last_dim_two_chunks_tiled(input_tensor, mem_config);
     }
 
 
 std::vector<Tensor> split_dim_two_chunks_tiled(
     const Tensor &input_tensor, int dim /* = 3 */, const MemoryConfig &mem_config /* = default */) {
-    if (dim == 3) {
-        return split_last_dim_two_chunks_tiled(input_tensor, mem_config);
-    }
-    Tensor ref_input_tensor = ttnn::transpose(input_tensor, dim, 3, mem_config);
-    auto transposed_result = split_last_dim_two_chunks_tiled(ref_input_tensor, mem_config);
+    auto input_shape = input_tensor.get_legacy_shape();
     std::vector<Tensor> results;
-    results.reserve(transposed_result.size());
-    for (Tensor &t : transposed_result) {
-        results.emplace_back(ttnn::transpose(t, dim, 3, mem_config));
+    results.reserve(2); // two chunks
+
+    Tensor preprocessed_tensor = Tensor(input_tensor);
+
+    if (input_shape.size() < 4) {
+        const int C = input_shape[0], H = input_shape[1], W = input_shape[2];
+        std::cout << "Adding batch dim" << std::endl;
+        preprocessed_tensor = ttnn::operations::core::reshape<4>(input_tensor, {1, C, H, W});
+        dim += 1; // since we added added a dim to the front
     }
-    return results;
+
+    if (dim != 3) {
+        preprocessed_tensor = ttnn::transpose(preprocessed_tensor, dim, 3, mem_config);
+    }
+
+    std::vector<Tensor> splits = split_last_dim_two_chunks_tiled(preprocessed_tensor, mem_config);
+
+    auto post_proc = [&dim,
+                      &mem_config,
+                      &input_shape](const Tensor &split) {
+        Tensor res = Tensor(split);
+
+        if (dim != 3) {
+            res = ttnn::transpose(res, dim, 3, mem_config);
+        }
+
+        if (input_shape.size() < 4) {
+            auto s_shape = split.get_shape();
+            const int C = s_shape[1], H = s_shape[2], W = s_shape[3];
+
+            auto sans_batch_dim = ttnn::operations::core::reshape<3>(split, {C, H, W});
+            res = sans_batch_dim;
+        }
+
+        return res;
+    };
+
+    std::transform(splits.begin(), splits.end(), splits.begin(), post_proc);
+
+    return splits;
 }
 
 }
