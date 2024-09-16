@@ -274,6 +274,7 @@ struct CQDispatchGoSignalMcastCmd {
     uint32_t go_signal;
     uint8_t mcast_flag; // mcast or unicast or both
     uint32_t wait_count;
+    uint32_t wait_addr;
 } __attribute__((packed));
 
 struct CQDispatchSemUpdate {

@@ -1230,7 +1230,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                     this->packed_write_max_unicast_sub_cmds,
                     curr_sub_cmd_idx);
                 curr_sub_cmd_idx += num_sub_cmds_in_cmd;
-                cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.push_back(&((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->write_packed);
+                cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.push_back(&((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)) )->write_packed);
                 uint32_t curr_sub_cmd_data_offset_words =
                     (write_offset_bytes + (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) +
                      align(num_sub_cmds_in_cmd * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT)) /
@@ -1253,9 +1253,9 @@ void EnqueueProgramCommand::assemble_device_commands(
         run_program_go_signal.signal = RUN_MSG_GO;
         run_program_go_signal.master_x = (uint8_t)this->dispatch_core.x;
         run_program_go_signal.master_y = (uint8_t)this->dispatch_core.y;
-
-        program_command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&run_program_go_signal));
-
+        uint32_t write_offset_bytes = program_command_sequence.write_offset_bytes();
+        program_command_sequence.add_dispatch_s_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&run_program_go_signal), DISPATCH_MESSAGE_ADDR);
+        cached_program_command_sequence.mcast_go_signal_cmd_ptr = &((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->mcast;
     } else {
         uint32_t i = 0;
         ZoneScopedN("program_loaded_on_device");
@@ -1297,6 +1297,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                 launch_msg_cmd_ptr->addr = eth_launch_message_addr;
             }
         }
+        cached_program_command_sequence.mcast_go_signal_cmd_ptr->wait_count = this->expected_num_workers_completed;
     }
 }
 
@@ -1681,10 +1682,10 @@ EnqueueTraceCommand::EnqueueTraceCommand(
 
 void EnqueueTraceCommand::process() {
     uint32_t cmd_sequence_sizeB =
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
+        // CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_EXEC_BUF
-        2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE; // sem update + dispatch_s go signal
 
     uint8_t go_signal_mcast_flag = 0x1;
     if (desc->num_eth_programs) {
@@ -1698,20 +1699,21 @@ void EnqueueTraceCommand::process() {
     std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
     uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
 
-    command_sequence.add_dispatch_wait(
-        false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, false);
     command_sequence.add_dispatch_s_sem_update();
     go_msg_t reset_launch_message_read_ptr_go_signal;
     reset_launch_message_read_ptr_go_signal.signal = RUN_MSG_RESET_READ_PTR;
     reset_launch_message_read_ptr_go_signal.master_x = (uint8_t)this->dispatch_core.x;
     reset_launch_message_read_ptr_go_signal.master_y = (uint8_t)this->dispatch_core.y;
-    command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal));
+    // Wait to ensure that all kernels have completed. Then send the reset_rd_ptr go_signal.
+    command_sequence.add_dispatch_s_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal), DISPATCH_MESSAGE_ADDR);
     // This needs to be updated to account for tensix cores only if trace runs on tensix
     this->expected_num_workers_completed += num_mcast_cores;
     if (desc->num_eth_programs) {
         this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
     }
-
+    // Wait to ensure that all workers have reset their read_ptr. dispatch_d will stall until all workers have completed this step, before sending kernel config data to workers
+    // or notifying dispatch_s that its safe to send the go_signal.
+    // Clear the dispatch <--> worker semaphore, since trace starts at 0.
     command_sequence.add_dispatch_wait(
         false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
 

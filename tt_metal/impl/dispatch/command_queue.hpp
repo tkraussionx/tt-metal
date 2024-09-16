@@ -303,10 +303,9 @@ class EnqueueProgramCommand : public Command {
         std::vector<std::vector<std::shared_ptr<CircularBuffer>>> circular_buffers_on_core_ranges;
         std::vector<launch_msg_t*> go_signals;
         uint32_t program_config_buffer_data_size_bytes;
-        CQDispatchWriteCmd* empty_launch_msg_mcast_cmd_ptr;
         std::vector<CQDispatchWritePackedCmd*> launch_msg_write_packed_cmd_ptrs;
-        std::vector<CQDispatchWriteCmd*> empty_launch_msg_unicast_cmd_ptrs;
         std::vector<CQDispatchWritePackedCmd*> unicast_launch_msg_write_packed_cmd_ptrs;
+        CQDispatchGoSignalMcastCmd* mcast_go_signal_cmd_ptr;
     };
     thread_local static std::unordered_map<uint64_t, CachedProgramCommandSequence> cached_program_command_sequences;
 
