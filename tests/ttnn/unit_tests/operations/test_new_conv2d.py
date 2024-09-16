@@ -2001,3 +2001,241 @@ def test_model_k_256x256(
         None,
         dilation=dilation_h,
     )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 3, 32, 225, 225, 3, 3, 2, 2, 0, 0, 1, True, None, False),
+        (1, 32, 32, 114, 114, 3, 3, 1, 1, 0, 0, 32, True, None, False),
+        (1, 32, 8, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 32, 16, 112, 112, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 96, 96, 113, 113, 3, 3, 2, 2, 0, 0, 96, True, None, False),
+        (1, 96, 4, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 96, 24, 56, 56, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 144, 144, 58, 58, 3, 3, 1, 1, 0, 0, 144, True, None, False),
+        (1, 144, 144, 59, 59, 5, 5, 2, 2, 0, 0, 144, True, None, False),
+        (1, 240, 240, 32, 32, 5, 5, 1, 1, 0, 0, 240, True, None, False),
+        (1, 240, 240, 29, 29, 3, 3, 2, 2, 0, 0, 240, True, None, False),
+        (1, 480, 20, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 480, 80, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 480, 112, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 672, 28, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 672, 112, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 672, 192, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 192, 1152, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 1152, 48, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 1152, 192, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 1152, 320, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 320, 1280, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 480, 480, 16, 16, 3, 3, 1, 1, 0, 0, 480, False, None, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_conv_efficientnet(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    groups,
+    output_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        groups=groups,
+        output_layout=output_layout,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 8, 32, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 16, 96, 112, 112, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 4, 96, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 24, 144, 56, 56, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 144, 6, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 6, 144, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 144, 24, 56, 56, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 144, 40, 28, 28, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 40, 240, 28, 28, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 240, 10, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 10, 240, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 240, 40, 28, 28, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 240, 80, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 80, 480, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 20, 480, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 112, 672, 14, 14, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 28, 672, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+        (1, 48, 1152, 1, 1, 1, 1, 1, 1, 0, 0, 1, True, None, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_conv_efficientnet_shape_mismatch(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    groups,
+    output_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        groups=groups,
+        output_layout=output_layout,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, groups, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 480, 480, 18, 18, 5, 5, 1, 1, 0, 0, 480, True, None, False),
+        (1, 672, 672, 18, 18, 5, 5, 1, 1, 0, 0, 672, True, None, False),
+        (1, 672, 672, 17, 17, 5, 5, 2, 2, 0, 0, 672, True, None, False),
+        (1, 1152, 1152, 9, 9, 3, 3, 1, 1, 0, 0, 1152, True, None, False),
+        (1, 1152, 1152, 11, 11, 5, 5, 1, 1, 0, 0, 1152, True, None, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_depth_wise_conv_efficientnet(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    groups,
+    output_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        groups=groups,
+        output_layout=output_layout,
+    )
