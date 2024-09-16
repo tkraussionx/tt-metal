@@ -1312,7 +1312,11 @@ void EnqueueProgramCommand::process() {
     bool stall_first = reservation.first.need_sync;
     // Note: since present implementation always stalls, we always free up to "now"
     this->manager.get_config_buffer_mgr().free(reservation.first.sync_count);
-    uint32_t num_workers = device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+    uint32_t num_workers = 0;
+    uint32_t tensix_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX);
+    if (tensix_index != -1 and program.get_kernel_groups(tensix_index).size()) {
+        num_workers += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+    }
     uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
     if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
         num_workers += device->get_active_ethernet_cores(true).size();
@@ -1702,6 +1706,7 @@ void EnqueueTraceCommand::process() {
     reset_launch_message_read_ptr_go_signal.master_x = (uint8_t)this->dispatch_core.x;
     reset_launch_message_read_ptr_go_signal.master_y = (uint8_t)this->dispatch_core.y;
     command_sequence.add_dispatch_s_go_signal_mcast(1, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal));
+    // This needs to be updated to account for tensix cores only if trace runs on tensix
     this->expected_num_workers_completed += num_mcast_cores;
     if (desc->num_eth_programs) {
         this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
@@ -2255,7 +2260,10 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
             this->trace_ctx->num_completion_worker_cores += device->get_active_ethernet_cores(true).size();
         }
     } else {
-        this->expected_num_workers_completed += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+         uint32_t tensix_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX);
+        if (tensix_index != -1 and program.get_kernel_groups(tensix_index).size()) {
+            this->expected_num_workers_completed += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+        }
         uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
         if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
             this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
