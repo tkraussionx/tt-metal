@@ -169,12 +169,14 @@ void kernel_main() {
             // DPRINT << "Received Mcast Command " << num_worker_cores_to_mcast  << " " << cmd_ptr <<  ENDL();
             volatile tt_l1_ptr uint32_t* sync_sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
+            volatile tt_l1_ptr uint32_t* worker_sem_addr =
+                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
             uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
 
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
-            // DPRINT << "Sem update waiting" << ENDL();
             while (*sync_sem_addr <= num_mcasts_sent);
-            // DPRINT << "Sem updated" << ENDL();
+            // Wait until workers have completed before sending go signal
+            while (*worker_sem_addr < cmd->mcast.wait_count);
             num_mcasts_sent++;
             aligned_go_signal = cmd->mcast.go_signal;
             if (cmd->mcast.mcast_flag & send_mcast) {

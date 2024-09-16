@@ -285,7 +285,7 @@ class DeviceCommand {
         }
     }
 
-    void add_dispatch_s_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal) {
+    void add_dispatch_s_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal, uint32_t wait_addr) {
         this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), 1);
         auto initialize_mcast_cmd = [&](CQDispatchCmd *mcast_cmd) {
             *mcast_cmd = {};
@@ -293,6 +293,7 @@ class DeviceCommand {
             mcast_cmd->mcast.go_signal = go_signal;
             mcast_cmd->mcast.wait_count = wait_count;
             mcast_cmd->mcast.mcast_flag = mcast_flag;
+            mcast_cmd->mcast.wait_addr = wait_addr;
         };
         CQDispatchCmd *mcast_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
 
