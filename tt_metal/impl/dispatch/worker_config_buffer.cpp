@@ -61,6 +61,7 @@ const std::pair<ConfigBufferSync, std::vector<ConfigBufferEntry>&> WorkerConfigB
                 this->reservation_[idx].addr = addr;
                 break;
             }
+            log_info(tt::LogAlways, "size: {}, idx: {}, end_addr: {}, base_addr: {}", size, idx, this->end_addrs_[idx], this->base_addrs_[idx]);
             TT_ASSERT(size <= this->end_addrs_[idx] - this->base_addrs_[idx]);
 
             // alloc_index may be ahead or behind free_index

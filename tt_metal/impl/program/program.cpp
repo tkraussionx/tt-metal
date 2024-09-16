@@ -943,11 +943,23 @@ void Program::finalize() {
 
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
         uint32_t offset = 0;
+        if (index == 1) {
+            log_info(tt::LogAlways, "Eth kernel offset = 0");
+        }
         offset = finalize_rt_args(index, offset);
+        if (index == 1) {
+            log_info(tt::LogAlways, "Offset after RT args: {}", offset);
+        }
         TT_ASSERT(offset == align(offset, L1_ALIGNMENT));
         offset = finalize_sems(index, offset);
+        if (index == 1) {
+            log_info(tt::LogAlways, "Offset after sems: {}", offset);
+        }
         TT_ASSERT(offset == align(offset, L1_ALIGNMENT));
         offset = finalize_cbs(index, offset);
+        if (index == 1) {
+            log_info(tt::LogAlways, "Offset after CBs: {}", offset);
+        }
         TT_ASSERT(offset == align(offset, L1_ALIGNMENT));
         this->get_program_config_size(index) = offset;
     }
