@@ -388,7 +388,7 @@ int main() {
                     false /*linked*/);
             }
         }
-        DPRINT << "Done Waiting for go signal: " << (mailboxes->go_message.signal)  << ENDL();
+        // DPRINT << "Done Waiting for go signal: " << (mailboxes->go_message.signal)  << ENDL();
         uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         WAYPOINT("GD");
 
