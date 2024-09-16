@@ -31,9 +31,12 @@ jobs:
         run: |
           echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
           echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
-      - uses: actions/download-artifact@v4
-        with:
-          name: eager-dist-${{ matrix.os }}-${{ matrix.runner-info.arch }}
+
+       - uses: actions/download-artifact@v4
+         with:
+          name: TTMetal_build_${{ matrix.runner-info.arch }}_profiler
+      - name: Extract files
+        run: tar -xvf ttm_${{ matrix.runner-info.arch }}.tar
       - name: ${{ matrix.test-group.name }} tests
         timeout-minutes: ${{ inputs.timeout }}
         uses: ./.github/actions/docker-run
@@ -42,12 +45,6 @@ jobs:
           docker_password: ${{ secrets.GITHUB_TOKEN }}
           docker_image_arch: ${{ inputs.arch }}
           run_args: |
-            WHEEL_FILENAME=$(ls -1 *.whl)
-            pip3 install --user $WHEEL_FILENAME
-            echo "The value of ARCH_NAME is" $ARCH_NAME
-            echo $ARCH_NAME
-
-            export ARCH_NAME
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
