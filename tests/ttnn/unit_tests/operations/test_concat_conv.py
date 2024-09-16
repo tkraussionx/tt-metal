@@ -128,8 +128,8 @@ def run_conv_concat(
         groups=groups,
     )
 
-    tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
-    torch_output_tensor = ttnn.to_torch(tt_output_tensor)
+    torch_output_tensor = torch.Tensor(ttnn.to_torch(tt_output_tensor_on_device))
+    torch_output_tensor = torch_output_tensor[:, :, : out_height * out_width * batch_size, :]
 
     # torch_output_tensor is in row major layout and NHWC shape
     # NHWC to NCHW
@@ -194,6 +194,7 @@ def test_concat_conv_yolov4(
     torch_input_nhwc = torch.permute(torch_input, (0, 2, 3, 1))
     torch_input_nhwc = torch.reshape(torch_input_nhwc, (1, 1, 400, 256))
     ttnn_input = ttnn.from_torch(torch_input_nhwc, dtype=ttnn.bfloat16, device=device)
+    ttnn_input = ttnn.concat([ttnn_input, ttnn_input], dim=3)
 
     output_sharded_memory_config = ttnn.create_sharded_memory_config(
         [32, 512],
@@ -201,12 +202,11 @@ def test_concat_conv_yolov4(
         strategy=ttnn.ShardStrategy.HEIGHT,
         use_height_and_width_as_shard_shape=True,
     )
-    ttnn_input = ttnn.to_layout(ttnn_input, layout=ttnn.TILE_LAYOUT)
-    output_tensor = ttnn.concat([ttnn_input, ttnn_input], dim=3, memory_config=output_sharded_memory_config)
+    ttnn_input = ttnn.interleaved_to_sharded(ttnn_input, output_sharded_memory_config)
 
     run_conv_concat(
         device,
-        output_tensor,
+        ttnn_input,
         concat_out,
         math_fidelity,
         activations_dtype,
