@@ -35,8 +35,6 @@ struct CclCommandTensor {
     uint32_t worker_pages_per_slice;
 };
 
-
-
 template <CclCommandArgCode code>  struct command_arg_field                                         {  using type = std::nullptr_t; };
 template <> struct command_arg_field<CclCommandArgCode::SET_TENSOR_SHAPE_IN_PAGES>                  {  using type = Shape4D<uint32_t>; };
 template <> struct command_arg_field<CclCommandArgCode::SET_TENSOR_SLICE_SHAPE_IN_PAGES>            {  using type = Shape4D<uint32_t>; };
@@ -155,7 +153,7 @@ struct CclCommandArg<CclCommandArgCode::SET_WORKER_PAGES_PER_SLICE> : public Ccl
 
     static void pack_to(args_elem_t* args, CclCommandTensor const& out) { args[0] = out.worker_pages_per_slice; }
     static void pack_to(args_elem_t* args, field_type const& out) { args[0] = out; }
-    void pack_to(args_elem_t* args) const { args[1] = this->value; }
+    void pack_to(args_elem_t* args) const { args[0] = this->value; }
 
     static void unpack(volatile args_elem_t const* args, CclCommandTensor& out) { out.worker_pages_per_slice = args[0]; }
     static void unpack(volatile args_elem_t const* args, field_type& out) { out = args[0]; }
@@ -171,7 +169,12 @@ struct CclCommandArg<CclCommandArgCode::SET_FULL_TENSOR_SLICE_SPEC_IN_PAGES>
     // so I can have tests that make sure I don't go OoB so I can make sure `size_in_words`
     // is correct
     static void pack_to(args_elem_t* args, field_type const& command_tensor) {
-        std::size_t i = 1;
+        std::size_t i = 0;
+
+        args[i++] = command_tensor.tensor_shape.w;
+        args[i++] = command_tensor.tensor_shape.z;
+        args[i++] = command_tensor.tensor_shape.y;
+        args[i++] = command_tensor.tensor_shape.x;
 
         args[i++] = command_tensor.tensor_slice_shape.w;
         args[i++] = command_tensor.tensor_slice_shape.z;
@@ -197,7 +200,7 @@ struct CclCommandArg<CclCommandArgCode::SET_FULL_TENSOR_SLICE_SPEC_IN_PAGES>
 
     // TODO: when kernels get c++20, use std::span
     static void unpack(volatile args_elem_t const* args, CclCommandTensor& out) {
-        std::size_t i = 1;
+        std::size_t i = 0;
         CclCommandArg<CclCommandArgCode::SET_TENSOR_SHAPE_IN_PAGES>::unpack(&args[i], out.tensor_shape);
         i += CclCommandArg<CclCommandArgCode::SET_TENSOR_SHAPE_IN_PAGES>::size_in_words();
 
@@ -218,6 +221,15 @@ struct CclCommandArg<CclCommandArgCode::SET_FULL_TENSOR_SLICE_SPEC_IN_PAGES>
         CclCommandArg<CclCommandArgCode::SET_FULL_TENSOR_SLICE_SPEC_IN_PAGES>::unpack(args, this->value);
     }
 };
+
+
+// Convenience type aliases
+using tensor_shape_command_arg_t = CclCommandArg<CclCommandArgCode::SET_TENSOR_SHAPE_IN_PAGES>;
+using tensor_slice_shape_command_arg_t = CclCommandArg<CclCommandArgCode::SET_TENSOR_SLICE_SHAPE_IN_PAGES>;
+using tensor_slice_offset_command_arg_t = CclCommandArg<CclCommandArgCode::SET_TENSOR_SLICE_OFFSET_IN_PAGES>;
+using worker_start_offset_command_arg_t = CclCommandArg<CclCommandArgCode::SET_WORKER_START_OFFSET_IN_SLICE_IN_PAGES>;
+using worker_pages_command_arg_t = CclCommandArg<CclCommandArgCode::SET_WORKER_PAGES_PER_SLICE>;
+using full_tensor_command_arg_t = CclCommandArg<CclCommandArgCode::SET_FULL_TENSOR_SLICE_SPEC_IN_PAGES>;
 
 // Layout:
 // single word entry:
