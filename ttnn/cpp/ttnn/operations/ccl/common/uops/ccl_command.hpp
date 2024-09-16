@@ -56,6 +56,7 @@ struct CclCommandArgBase {
     // Let the user override
     using field_type = typename command_arg_field<CODE>::type;  // Ensure T::type is accessible
     static constexpr std::size_t size_in_words() { return (sizeof(T) + sizeof(uint32_t) - 1) / sizeof(uint32_t); }
+    static constexpr std::size_t size_with_header_in_words() { return ((sizeof(T) + sizeof(uint32_t) - 1) / sizeof(uint32_t)) + 1; }
 
     static void pack_to(args_elem_t* args, CclCommandTensor const& command_tensor) { T::pack_to(args, command_tensor); }
     static void pack_to(args_elem_t* args, T const& arg) { T::pack_to(args, arg); }
