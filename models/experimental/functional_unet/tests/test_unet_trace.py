@@ -16,15 +16,8 @@ from models.experimental.functional_unet.tt.model_preprocessing import (
 )
 from models.experimental.functional_unet.tt import unet_shallow_torch
 from models.experimental.functional_unet.tt import unet_shallow_ttnn
-from models.experimental.functional_unet.tests.common import (
-    check_pcc_conv,
-    is_n300_with_eth_dispatch_cores,
-    is_t3k_with_eth_dispatch_cores,
-)
 
-from models.perf.perf_utils import prep_perf_report
-from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
-from models.utility_functions import profiler, skip_for_grayskull, divup
+from models.utility_functions import skip_for_grayskull, divup
 
 
 @skip_for_grayskull("UNet not currently supported on GS")
@@ -82,7 +75,6 @@ def test_unet_trace(
     assert_with_pcc(torch_output_tensor, ttnn_tensor, 0.986)
 
 
-# @pytest.mark.skip()
 @skip_for_grayskull("UNet not currently supported on GS")
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
@@ -175,9 +167,7 @@ def test_unet_trace_2cq(
         ttnn.record_event(1, write_event)
         ttnn.wait_for_event(0, write_event)
 
-        l1_input_tensor = ttnn.reshard(
-            input_tensor, ttnn_model.input_sharded_memory_config, l1_input_tensor
-        )  # maybe reshard?
+        l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config, l1_input_tensor)
         ttnn.record_event(0, op_event)
 
         ttnn.execute_trace(device, tid, cq_id=0, blocking=False)
