@@ -9,8 +9,6 @@
 
 void kernel_main() {
     const uint32_t dst_addr = get_arg_val<uint32_t>(0);
-    const ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode =
-        static_cast<ttnn::ccl::EriscDataMoverPacketSizingMode>(get_arg_val<uint32_t>(1));
 
     constexpr bool dst_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr uint32_t num_pages_total = get_compile_time_arg_val(1);
@@ -28,11 +26,7 @@ void kernel_main() {
 
         for (uint32_t i = 0; i < num_pages_to_send; ++i) {
             uint64_t dst_noc_addr = get_noc_addr(p + i, dest_addr_generator);
-            if (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE) {
-                noc_async_write(l1_read_addr, dst_noc_addr, page_size);
-            } else {
-                noc_async_write(dst_noc_addr, l1_read_addr, page_size + 16);
-            }
+            noc_async_write(l1_read_addr, dst_noc_addr, page_size);
             l1_read_addr += page_size;
         }
         noc_async_write_barrier();

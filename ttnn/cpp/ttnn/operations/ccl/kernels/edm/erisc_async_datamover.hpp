@@ -215,12 +215,12 @@ class ChannelBuffer final {
         return this->eth_transaction_channel;
     }
     [[nodiscard]] FORCE_INLINE std::size_t get_size_in_bytes() const { return this->size_in_bytes; }
-    }
+
     [[nodiscard]] FORCE_INLINE std::size_t get_current_payload_size() const {
         if (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE) {
             return this->get_size_in_bytes();
         } else {
-            return *reinterpret_cast<volatile uint32_t const*>(this->get_buffer_address());
+            return *reinterpret_cast<volatile uint32_t const*>(this->get_buffer_address()) + sizeof(eth_channel_sync_t);
         }
     }
 
@@ -500,12 +500,18 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer<EDM_CONFIG> &sende
             *sender_buffer_channel.get_channel_bytes_sent_address() = sender_buffer_channel.get_current_payload_size();
             *sender_buffer_channel.get_channel_bytes_acked_address() = 0;
 
+            DPRINT << "EDMS sending " << (uint32_t)sender_buffer_channel.get_current_payload_size() << "B\n";
+
             eth_send_bytes_over_channel_payload_only(
                 sender_buffer_channel.get_buffer_address(),
                 sender_buffer_channel.get_remote_eth_buffer_address(),
                 sender_buffer_channel.get_current_payload_size(),
                 sender_buffer_channel.get_current_payload_size(),
                 sender_buffer_channel.get_current_payload_size() >> ETH_BYTES_TO_WORDS_SHIFT);
+
+            if (sender_buffer_channel.get_current_payload_size() < sender_buffer_channel.size_in_bytes) {
+                // If we sent a smaller packet - we need to try sending the separate channel sync packet
+            }
 
             sender_buffer_channel.advance_buffer_index();
             sender_buffer_channel.goto_state(ChannelBuffer<EDM_CONFIG>::SENDER_WAITING_FOR_ETH);

@@ -344,6 +344,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
             edm_sem_addrs_per_link.at(link),
             edm_buffer_addrs_per_link.at(link),
             ccl::EriscDataMoverBufferSharingMode::NOT_SHARED,
+            ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE,
             ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
             all_gather_config.get_num_buffers_per_channel(),
             input_tensor.device()->id());
@@ -353,6 +354,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
             edm_sem_addrs_per_link.at(link),
             edm_buffer_addrs_per_link.at(link),
             ccl::EriscDataMoverBufferSharingMode::NOT_SHARED,
+            ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE,
             ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
             all_gather_config.get_num_buffers_per_channel(),
             input_tensor.device()->id());

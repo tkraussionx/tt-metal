@@ -4,6 +4,7 @@
 
 
 #include "ttnn/cpp/ttnn/tensor/tensor_impl.hpp"
+#include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
 
 namespace ttnn {
@@ -31,12 +32,21 @@ uint32_t EriscDatamoverConfig::get_buffers_base_address(std::size_t num_edm_chan
     TT_ASSERT(base_address % eth_word_size_bytes == 0);
     return base_address;
 }
-uint32_t EriscDatamoverConfig::compute_buffer_size(std::size_t num_edm_channels, std::size_t num_buffers_per_channel, uint32_t page_size) {
+std::size_t EriscDatamoverConfig::compute_overheads_per_channel_buffer(ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode) {
+    std::size_t per_buffer_overhead = 0;
+    per_buffer_overhead += (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::VARIABLE_SIZE) * packet_header_size_bytes;
+    per_buffer_overhead += (enable_merged_payload_and_channel_sync * eth_channel_sync_size_bytes);
+    return per_buffer_overhead;
+}
+
+uint32_t EriscDatamoverConfig::compute_buffer_size(std::size_t num_edm_channels, std::size_t num_buffers_per_channel, uint32_t page_size, ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode) {
     page_size = std::max<uint32_t>(page_size, eth_word_size_bytes);
+
+    std::size_t per_buffer_overhead = compute_overheads_per_channel_buffer(packet_sizing_mode);
+
     TT_ASSERT(num_edm_channels > 0);
-        std::size_t channel_sync_bytes_overhead = (enable_merged_payload_and_channel_sync * 16);
     std::size_t total_usable_space = total_l1_buffer_space - get_buffers_region_start_offset(num_edm_channels);
-    std::size_t l1_per_buffer_region = (total_usable_space / (num_edm_channels * num_buffers_per_channel)) - channel_sync_bytes_overhead;
+    std::size_t l1_per_buffer_region = (total_usable_space / (num_edm_channels * num_buffers_per_channel)) - per_buffer_overhead;
     uint32_t buffer_size = tt::round_down(l1_per_buffer_region, page_size);
     log_trace(tt::LogOp, "total_l1_buffer_space: {}", total_l1_buffer_space);
     log_trace(

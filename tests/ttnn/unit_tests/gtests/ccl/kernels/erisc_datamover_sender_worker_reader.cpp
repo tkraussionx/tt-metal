@@ -16,8 +16,6 @@ void kernel_main() {
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
-    const ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode =
-        static_cast<ttnn::ccl::EriscDataMoverPacketSizingMode>(get_arg_val<uint32_t>(1));
 
     const InterleavedAddrGen<src_is_dram> source_address_generator = {
         .bank_base_address = src_addr, .page_size = page_size};

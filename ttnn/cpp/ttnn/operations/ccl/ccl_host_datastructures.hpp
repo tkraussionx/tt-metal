@@ -29,6 +29,9 @@ struct EriscDatamoverConfig {
     // avoid the race
     static constexpr std::size_t edm_receiver_first_level_ack_source_word_size = 16;  // ethernet word size
     static constexpr std::size_t eth_channel_sync_size_bytes = 16;
+
+    // If packet_sizing_mode == VARIABLE_SIZE
+    static constexpr std::size_t packet_header_size_bytes = 16;
     static constexpr std::size_t eth_word_size_bytes = 16;
     static constexpr bool enable_merged_payload_and_channel_sync = true;
     static std::size_t get_eth_channel_sync_size_bytes();
@@ -39,8 +42,8 @@ struct EriscDatamoverConfig {
     static uint32_t get_buffers_region_start_offset(std::size_t num_edm_channels);
     static std::size_t get_eth_word_size();
     static uint32_t get_buffers_base_address(std::size_t num_edm_channels);
-    static uint32_t compute_buffer_size(std::size_t num_edm_channels, std::size_t num_buffers_per_channel = 1, uint32_t page_size = eth_word_size_bytes);
-
+    static uint32_t compute_buffer_size(std::size_t num_edm_channels, std::size_t num_buffers_per_channel, uint32_t page_size, ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode);
+    static std::size_t compute_overheads_per_channel_buffer(ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode);
 };
 
 struct CCLOpConfig {

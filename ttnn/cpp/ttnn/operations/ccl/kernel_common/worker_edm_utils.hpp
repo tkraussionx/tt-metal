@@ -25,6 +25,8 @@ enum EDM_IO_BLOCKING_MODE {
     NON_BLOCKING
 };
 
+static constexpr std::size_t edm_packet_header_size = 16;
+
 }  // namespace ccl
 }  // namespace ttnn
 
@@ -55,6 +57,18 @@ FORCE_INLINE void send_chunk(
     cb_wait_front(cb_id, num_pages);
     uint32_t l1_read_addr = get_read_ptr(cb_id);
     noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages);
+    if constexpr (blocking_mode == ttnn::ccl::EDM_IO_BLOCKING_MODE::BLOCKING) {
+        noc_async_write_barrier();
+        cb_pop_front(cb_id, num_pages);
+    }
+}
+
+template<ttnn::ccl::EDM_IO_BLOCKING_MODE blocking_mode = ttnn::ccl::EDM_IO_BLOCKING_MODE::BLOCKING>
+FORCE_INLINE void send_chunk_with_packet_header(
+    const uint32_t& cb_id, const uint32_t& num_pages, const uint32_t& page_size, uint64_t remote_l1_write_addr) {
+    cb_wait_front(cb_id, num_pages);
+    uint32_t l1_read_addr = get_read_ptr(cb_id);
+    noc_async_write(l1_read_addr, remote_l1_write_addr, page_size * num_pages + ttnn::ccl::edm_packet_header_size);
     if constexpr (blocking_mode == ttnn::ccl::EDM_IO_BLOCKING_MODE::BLOCKING) {
         noc_async_write_barrier();
         cb_pop_front(cb_id, num_pages);

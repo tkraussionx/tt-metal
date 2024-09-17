@@ -124,8 +124,16 @@ void generate_receiver_worker_kernels(
     uint32_t worker_semaphore_address,
     uint32_t dram_output_buffer_base_addr, // remote_output_buffers.at(i)->address();
     bool dest_is_dram,
-    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode
+    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode,
+    ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode
 ) {
+    // For variable sized packets, we arbitrarily cut down the size of pages per send
+    // by 1. In the future, we will make the sender decide on a number of pages to send
+    // per send
+    // if (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::VARIABLE_SIZE) {
+    //     num_pages_per_edm_buffer -= 1;
+    //     TT_ASSERT(num_pages_per_edm_buffer > 0);
+    // }
     // Just want a dummy DF
     uint32_t src0_cb_index = CB::c_in0;
     tt::DataFormat df = page_size == 1024 ? tt::DataFormat::Bfp8 :
@@ -155,7 +163,8 @@ void generate_receiver_worker_kernels(
         edm_channel.eth_buffer_l1_address,
         edm_channel.eth_semaphore_l1_address,
         num_buffers_per_edm_channel,
-        edm_termination_mode
+        edm_termination_mode,
+        packet_sizing_mode
     };
     std::vector<uint32_t> receiver_worker_receiver_runtime_args{
         num_pages_per_edm_buffer,
@@ -219,14 +228,21 @@ void generate_sender_worker_kernels(
     ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode,
     ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode
 ) {
+    // For variable sized packets, we arbitrarily cut down the size of pages per send
+    // by 1. In the future, we will make the sender decide on a number of pages to send
+    // per send
+    // if (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::VARIABLE_SIZE) {
+    //     num_pages_per_edm_buffer -= 1;
+    //     TT_ASSERT(num_pages_per_edm_buffer > 0);
+    // }
+
     std::vector<uint32_t> sender_worker_reader_compile_args{
         src_is_dram,  //
         num_pages_total,     //
         page_size,
         num_pages_per_edm_buffer};
     std::vector<uint32_t> sender_worker_reader_runtime_args{
-        dram_output_buffer_base_addr,
-        packet_sizing_mode
+        dram_output_buffer_base_addr
     };
 
     log_info(tt::LogTest, "\tSenderReader CT Args");
@@ -243,7 +259,8 @@ void generate_sender_worker_kernels(
         num_pages_total,
         page_size,
         num_buffers_per_edm_channel,
-        edm_termination_mode
+        edm_termination_mode,
+        static_cast<uint32_t>(packet_sizing_mode)
     };
     std::vector<uint32_t> sender_worker_writer_runtime_args{
         edm_channel.eth_buffer_l1_address,
@@ -320,7 +337,8 @@ bool RunWriteBWTest(
     bool src_is_dram,
     bool dest_is_dram,
 
-    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode
+    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode,
+    ttnn::ccl::EriscDataMoverPacketSizingMode edm_packet_sizing_mode
 ) {
 
     std::size_t tensor_size_bytes = num_pages_total * page_size;
@@ -419,7 +437,6 @@ bool RunWriteBWTest(
     ////////////////////////////////////////////////////////////////////////////
 
     ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode = ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED;
-    ttnn::ccl::EriscDataMoverPacketSizingMode edm_packet_sizing_mode = ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE;
 
     const std::size_t num_edm_channels = num_local_sender_channels + num_remote_sender_channels;
     // TODO: Allow an override of EDM buffer size
@@ -505,7 +522,8 @@ bool RunWriteBWTest(
             local_worker_semaphore_addresses.at(i),
             local_input_buffer_addresses.at(i),
             src_is_dram,
-            edm_termination_mode
+            edm_termination_mode,
+            edm_packet_sizing_mode
         );
         generate_receiver_worker_kernels(
             receiver_program,
@@ -520,7 +538,8 @@ bool RunWriteBWTest(
             remote_worker_semaphore_addresses.at(i),
             remote_output_buffers.at(i)->address(),
             dest_is_dram,
-            edm_termination_mode
+            edm_termination_mode,
+            edm_packet_sizing_mode
         );
 
     }
@@ -541,7 +560,8 @@ bool RunWriteBWTest(
             remote_worker_semaphore_addresses.at(i + num_local_sender_channels),
             remote_input_buffer_addresses.at(i),
             src_is_dram,
-            edm_termination_mode
+            edm_termination_mode,
+            edm_packet_sizing_mode
         );
 
         generate_receiver_worker_kernels(
@@ -557,7 +577,8 @@ bool RunWriteBWTest(
             local_worker_semaphore_addresses.at(i + num_local_sender_channels),
             local_output_buffers.at(i)->address(),
             dest_is_dram,
-            edm_termination_mode
+            edm_termination_mode,
+            edm_packet_sizing_mode
         );
     }
 
@@ -681,7 +702,8 @@ int TestEntrypoint(
     const uint32_t num_pages_total,
     const bool src_is_dram,
     const bool dest_is_dram,
-    ttnn::ccl::EriscDataMoverTerminationMode termination_mode
+    ttnn::ccl::EriscDataMoverTerminationMode termination_mode,
+    ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode
 ) {
     // argv[0]: program
     // argv[1]: buffer_size_bytes
@@ -736,7 +758,8 @@ int TestEntrypoint(
             src_is_dram,
             dest_is_dram,
 
-            termination_mode);
+            termination_mode,
+            packet_sizing_mode);
     } catch (std::exception& e) {
         log_error("Caught exception: {}", e.what());
         test_fixture.TearDown();
@@ -775,7 +798,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -803,7 +827,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_1Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -831,7 +856,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_0ChannelForward_1Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -859,7 +885,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -888,7 +915,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_1Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -917,7 +945,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -945,7 +974,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_2ChannelForward_2Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -974,7 +1004,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_4ChannelForward_4Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1002,7 +1033,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_4ChannelForward_4Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1036,7 +1068,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1064,7 +1097,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_1Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1092,7 +1126,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1120,7 +1155,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_0Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1148,7 +1184,8 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_1ChannelForward_1Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
     );
     ASSERT_EQ(result, 0);
 }
@@ -1176,7 +1213,37 @@ TEST(WorkerEdmDatapath, DISABLED_MergedPayloadAndSignal_4ChannelForward_4Channel
         num_pages_total,
         src_is_dram,
         dest_is_dram,
-        termination_mode
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE
+    );
+    ASSERT_EQ(result, 0);
+}
+
+TEST(WorkerEdmDatapath, MergedPayloadAndSignal_4ChannelForward_4ChannelsReverse_2BufferPerChannel_2048PageSize_100kPages_WorkerInitiatedTermination_VariablePacketSize) {
+    const uint32_t num_local_sender_channels = 4;
+    const uint32_t num_remote_sender_channels = 4;
+    const uint32_t num_buffers_per_edm_channel = 2;
+    const uint32_t page_size = 2048;
+    const uint32_t num_pages_total = 100000;
+    const bool src_is_dram = true;
+    const bool dest_is_dram = true;
+    const bool merge_message_and_signal = true;
+    auto termination_mode = ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED;
+
+    auto result = TestEntrypoint(
+        num_local_sender_channels,
+        num_remote_sender_channels,
+        // default is 1.
+        // 2 means channel is double buffered
+        // 3 means channel is triple buffered
+        // ... and so on
+        num_buffers_per_edm_channel,
+        page_size,
+        num_pages_total,
+        src_is_dram,
+        dest_is_dram,
+        termination_mode,
+        ttnn::ccl::EriscDataMoverPacketSizingMode::VARIABLE_SIZE
     );
     ASSERT_EQ(result, 0);
 }

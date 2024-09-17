@@ -309,14 +309,15 @@ ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     uint32_t edm_buffer_addr = ccl::EriscDatamoverConfig::get_buffers_base_address(num_channels);
     TT_ASSERT(edm_sem_addr > 0);
     TT_ASSERT(edm_buffer_addr > 0);
-    const uint32_t channel_buffer_size = ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, num_buffers_per_channel, page_size);
+    const uint32_t channel_buffer_size = ccl::EriscDatamoverConfig::compute_buffer_size(num_channels, num_buffers_per_channel, page_size, packet_sizing_mode);
+    const std::size_t per_channel_buffer_overhead_size_bytes = ccl::EriscDatamoverConfig::compute_overheads_per_channel_buffer(packet_sizing_mode);
     for (std::size_t c = 0; c < num_channels; ++c) {
         edm_sem_addresses.at(c) = edm_sem_addr;
         edm_sem_addr += ccl::EriscDatamoverConfig::semaphore_size;
         TT_ASSERT(edm_buffer_addr % EriscDatamoverConfig::get_eth_word_size() == 0);
         edm_buffer_addresses.at(c) = edm_buffer_addr;
         log_trace(tt::LogOp, " edm_buffer_addresses({}) = {}", c, edm_buffer_addr);
-        edm_buffer_addr += num_buffers_per_channel * (channel_buffer_size + (ccl::EriscDatamoverConfig::enable_merged_payload_and_channel_sync ? ccl::EriscDatamoverConfig::get_eth_channel_sync_size_bytes() : 0));
+        edm_buffer_addr += num_buffers_per_channel * (channel_buffer_size + per_channel_buffer_overhead_size_bytes);
         TT_ASSERT((c == 0) || (edm_buffer_addresses.back() != edm_buffer_addresses.front()));
         TT_ASSERT((c == 0) || (edm_sem_addresses.back() != edm_sem_addresses.front()));
     }

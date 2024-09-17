@@ -271,6 +271,11 @@ void kernel_main() {
                 did_something_sender = erisc::datamover::sender_eth_send_data_sequence(current_sender);
                     break;
 
+                // case ChannelBufferT::STATE::SENDER_SEND_PAYLOAD_SYNC:
+                // did_something_sender = erisc::datamover::sender_eth_send_separate_channel_sync(current_sender);
+
+                //     break;
+
                 case ChannelBufferT::STATE::SENDER_SIGNALING_WORKER:
                 did_something_sender = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
                                     current_sender, num_senders_complete);
