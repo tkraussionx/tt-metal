@@ -42,13 +42,9 @@ jobs:
         with:
           docker_username: ${{ github.actor }} #TODO: Move to Action file
           docker_password: ${{ secrets.GITHUB_TOKEN }}
-          docker_image_arch: ${{ inputs.arch }}
+          docker_image_arch: ${{ matrix.runner-info.arch }}
           run_args: |
-            echo $ARCH_NAME
-            echo $TT_METAL_HOME
-            echo ${{ env.TT_METAL_HOME }}
-            echo ${{ inputs.arch }}
-            TT_METAL_HOME=${{ env.TT_METAL_HOME }} ARCH_NAME=${{ inputs.arch }} ./tests/scripts/run_profiler_regressions.sh
+            ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
         with:
