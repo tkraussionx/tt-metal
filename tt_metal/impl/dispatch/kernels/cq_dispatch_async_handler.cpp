@@ -36,6 +36,8 @@ constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(29);
 // Upstream coords will need to explicitly be programmed in CTA as well
 // dispatch_d and prefetch_hd need to have specific CTA for dispatch_s coords
 constexpr uint32_t my_noc_xy = get_compile_time_arg_val(31); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
+constexpr uint32_t dispatch_d_noc_xy = get_compile_time_arg_val(32);
+constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(33);
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 
 static uint32_t num_pages_acquired = 0;
@@ -150,6 +152,48 @@ void noc_async_write_unicast_one_packet_dispatch_s(std::uint32_t src_local_l1_ad
     noc_nonposted_writes_acked[1] += 1;  // num_dests
 }
 
+FORCE_INLINE
+void noc_async_read_one_packet_dispatch_s(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
+    WAYPOINT("RPW");
+    while (!noc_cmd_buf_ready(1, NCRISC_RD_CMD_BUF));
+    WAYPOINT("RPD");
+
+    WAYPOINT("NARW");
+    DEBUG_SANITIZE_NOC_READ_TRANSACTION(1, src_noc_addr, dst_local_l1_addr, size);
+
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);
+
+    #ifdef ARCH_BLACKHOLE
+    // Handles reading from PCIe
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(src_noc_addr >> 32) & 0x1000000F);
+#endif
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_COORDINATE, (uint32_t)(src_noc_addr >> NOC_ADDR_COORD_SHIFT) & NOC_COORDINATE_MASK);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
+    NOC_CMD_BUF_WRITE_REG(1, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_reads_num_issued[1] += 1;
+
+    WAYPOINT("NARD");
+}
+
+FORCE_INLINE
+void wait_for_workers(volatile CQDispatchCmd tt_l1_ptr *cmd) {
+    volatile tt_l1_ptr uint32_t* worker_sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
+    DPRINT << "Wait on workers to complete: " << (*worker_sem_addr) << " " << cmd->mcast.wait_count << ENDL();
+    if (distributed_dispatcher) {
+        uint64_t dispatch_d_worker_sem_addr = get_noc_addr_helper(dispatch_d_noc_xy, cmd->mcast.wait_addr);
+        noc_async_read_one_packet_dispatch_s(dispatch_d_worker_sem_addr, cmd->mcast.wait_addr, 4);
+        while (!ncrisc_noc_reads_flushed(1));
+        while (*worker_sem_addr < cmd->mcast.wait_count) {
+            noc_async_read_one_packet_dispatch_s(dispatch_d_worker_sem_addr, cmd->mcast.wait_addr, 4);
+            while (!ncrisc_noc_reads_flushed(1));
+        }
+    } else {
+        while (*worker_sem_addr < cmd->mcast.wait_count);
+    }
+    DPRINT << "Done Wait on workers to complete" << ENDL();
+}
+
 void kernel_main() {
     // DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
     noc_local_state_init(1);
@@ -175,9 +219,9 @@ void kernel_main() {
 
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
             while (*sync_sem_addr <= num_mcasts_sent);
-            // Wait until workers have completed before sending go signal
-            while (*worker_sem_addr < cmd->mcast.wait_count);
             num_mcasts_sent++;
+            // Wait until workers have completed before sending go signal
+            wait_for_workers(cmd);
             aligned_go_signal = cmd->mcast.go_signal;
             if (cmd->mcast.mcast_flag & send_mcast) {
                 // DPRINT << " Go Signal " << (cmd->mcast.go_signal & 0xFF) << " " <<  (cmd->mcast.go_signal & 0xFF00) << " " << (cmd->mcast.go_signal & 0xFF0000) << ENDL();

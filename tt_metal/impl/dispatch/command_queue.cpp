@@ -1230,7 +1230,7 @@ void EnqueueProgramCommand::assemble_device_commands(
                     this->packed_write_max_unicast_sub_cmds,
                     curr_sub_cmd_idx);
                 curr_sub_cmd_idx += num_sub_cmds_in_cmd;
-                cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.push_back(&((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)) )->write_packed);
+                cached_program_command_sequence.unicast_launch_msg_write_packed_cmd_ptrs.push_back(&((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->write_packed);
                 uint32_t curr_sub_cmd_data_offset_words =
                     (write_offset_bytes + (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) +
                      align(num_sub_cmds_in_cmd * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT)) /

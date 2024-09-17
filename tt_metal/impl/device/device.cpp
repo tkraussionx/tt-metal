@@ -1162,7 +1162,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     }
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
-                    dispatch_d_settings.compile_args.resize(32);
+                    dispatch_d_settings.compile_args.resize(34);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
                     compile_args[1] = dispatch_d_settings.cb_log_page_size;
@@ -1192,6 +1192,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[25] = dispatch_d_settings.dispatch_s_sync_semaphore_id;
                     compile_args[30] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
                     compile_args[31] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_d_settings.dispatch_s_physical_core);
+                    compile_args[32] = this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_d_settings.worker_physical_core);
+                    compile_args[33] = (dispatch_core_type == CoreType::ETH);
                     // compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
                     // compile_args[27] = tensix_num_worker_cores;
                     // compile_args[28] = tensix_worker_go_signal_addr;
@@ -1719,7 +1721,9 @@ void Device::compile_command_queue_programs() {
                 tensix_worker_go_signal_addr,
                 eth_worker_go_signal_addr,
                 dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size(),
-                this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core)
+                this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core),
+                this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_physical_core),
+                dispatch_core_type == CoreType::ETH
             };
 
             configure_kernel_variant(
