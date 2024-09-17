@@ -37,7 +37,7 @@ jobs:
       - name: Extract files
         run: tar -xvf ttm_${{ matrix.runner-info.arch }}.tar
       - name: ${{ matrix.test-group.name }} tests
-        timeout-minutes: ${{ inputs.timeout }}
+        timeout-minutes: 30
         uses: ./.github/actions/docker-run
         with:
           docker_username: ${{ github.actor }} #TODO: Move to Action file
@@ -46,8 +46,8 @@ jobs:
           run_args: |
             echo $ARCH_NAME
             echo $TT_METAL_HOME
-            echo "${{ env.TT_METAL_HOME }}"
-            echo "${{ inputs.arch }}""
+            echo ${{ env.TT_METAL_HOME }}
+            echo ${{ inputs.arch }}
             TT_METAL_HOME=${{ env.TT_METAL_HOME }} ARCH_NAME=${{ inputs.arch }} ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
