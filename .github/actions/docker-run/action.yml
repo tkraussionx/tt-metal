@@ -9,12 +9,10 @@ inputs:
     description: 'Docker image to run commands in'
     required: false
     default: tt-metalium/ubuntu-20.04-amd64
-  docker_image_arch:
-    description: 'Is this a wormhole.b0, grayskull, or blackhole image'
-    required: true
   docker_username:
     description: docker login username
     required: true
+    default: ${{ github.actor }}
   docker_password:
     description: docker login password
     required: true
@@ -28,6 +26,11 @@ inputs:
     default: |
       -v /dev/hugepages-1G:/dev/hugepages-1G
       --device /dev/tenstorrent
+  install_wheel:
+    description: "Install the wheel that contains all of the Python environment. The artifact needs to be present."
+    type: boolean
+    required: false
+    default: false
 runs:
   using: "composite"
   steps:
@@ -65,4 +68,8 @@ runs:
           cp -r /github_workspace/* /usr/app/
           cd /usr/app/
           rm -rf tt_metal tt_eager
+          if [ ${{ inputs.install_wheel }} ]; then
+            WHEEL_FILENAME=$(ls -1 *.whl)
+            pip3 install --user $WHEEL_FILENAME
+          fi
           ${{ inputs.run_args }}
