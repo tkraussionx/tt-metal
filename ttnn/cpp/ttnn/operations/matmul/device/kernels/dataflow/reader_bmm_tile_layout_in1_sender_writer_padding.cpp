@@ -235,27 +235,27 @@ void kernel_main() {
 #ifndef IN1_SHARDED
             // Operand 1
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
-            // l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+            l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
-            // uint64_t in1_start_address = l1_write_addr_in1;  // copy start address of block, to be used for mcasting
+            uint64_t in1_start_address = l1_write_addr_in1;  // copy start address of block, to be used for mcasting
 
-            // // Copy in1 block into CB, as the default kernel
-            // uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
-            // for (uint32_t h = 0; h < in1_block_h; ++h) {
-            //     uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
-            //     for (uint32_t w = 0; w < in1_block_w; ++w) {
-            //         if (w < last_block_w) {
-            //             // noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
-            //         }
-            //         l1_write_addr_in1 += in1_single_tile_size_bytes;
-            //         in1_tensor_tile_id += in1_tensor_stride_w;
-            //     }
-            //     in1_tensor_row_start_tile_id += in1_tensor_stride_h;
-            // }
+            // Copy in1 block into CB, as the default kernel
+            uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
+            for (uint32_t h = 0; h < in1_block_h; ++h) {
+                uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
+                for (uint32_t w = 0; w < in1_block_w; ++w) {
+                    if (w < last_block_w) {
+                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                    }
+                    l1_write_addr_in1 += in1_single_tile_size_bytes;
+                    in1_tensor_tile_id += in1_tensor_stride_w;
+                }
+                in1_tensor_row_start_tile_id += in1_tensor_stride_h;
+            }
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            // noc_async_read_barrier();
+            noc_async_read_barrier();
 #endif
 #endif  // IN1_DRAM_SHARDED
 
