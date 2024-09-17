@@ -126,6 +126,8 @@ class RunTimeOptions {
 
     tt_metal::DispatchCoreType dispatch_core_type = tt_metal::DispatchCoreType::WORKER;
 
+    bool disable_bh_cmd_buffer_fifos = false;
+
    public:
     RunTimeOptions();
 
@@ -268,6 +270,8 @@ class RunTimeOptions {
     inline void set_dispatch_data_collection_enabled(bool enable) { enable_dispatch_data_collection = enable; }
 
     inline tt_metal::DispatchCoreType get_dispatch_core_type() { return dispatch_core_type; }
+
+    inline bool get_disable_command_buffer_fifos() { return disable_bh_cmd_buffer_fifos; }
 
    private:
     // Helper functions to parse feature-specific environment vaiables.

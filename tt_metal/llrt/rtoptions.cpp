@@ -113,6 +113,10 @@ RunTimeOptions::RunTimeOptions() {
     if (getenv("TT_METAL_SKIP_LOADING_FW")) {
         this->skip_loading_fw = true;
     }
+
+    if (getenv("TT_METAL_DISABLE_CMD_BUFFER_FIFOS")) {
+        this->disable_bh_cmd_buffer_fifos = true;
+    }
 }
 
 const std::string &RunTimeOptions::get_root_dir() {

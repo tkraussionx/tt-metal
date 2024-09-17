@@ -116,6 +116,10 @@ void JitBuildEnv::init(uint32_t build_key, tt::ARCH arch) {
         this->defines_ += "-DWATCHER_DEBUG_DELAY=" + to_string(tt::llrt::OptionsG.get_watcher_debug_delay()) + " ";
     }
 
+    if (tt::llrt::OptionsG.get_disable_command_buffer_fifos()) {
+        this->defines_ += "-DDISABLE_CMD_BUFFER_FIFOS ";
+    }
+
     // Includes
     // TODO(pgk) this list is insane
     this->includes_ = string("") + "-I. " + "-I.. " + "-I" + this->root_ + " " + "-I" + this->root_ + "tt_metal " +
