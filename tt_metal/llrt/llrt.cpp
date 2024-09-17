@@ -147,7 +147,7 @@ void write_launch_msg_to_core(chip_id_t chip, const CoreCoord core, launch_msg_t
     msg->kernel_config.mode = DISPATCH_MODE_HOST;
 
     uint64_t launch_addr = base_addr + offsetof(launch_msg_t, kernel_config);
-    uint64_t go_addr = base_addr + sizeof(launch_msg_t) * launch_msg_buffer_num_entries; // offsetof(launch_msg_t, go);
+    uint64_t go_addr = base_addr + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
 
     tt::Cluster::instance().write_core((void *)&msg->kernel_config, sizeof(kernel_config_msg_t), tt_cxy_pair(chip, core), launch_addr);
     tt_driver_atomics::sfence();

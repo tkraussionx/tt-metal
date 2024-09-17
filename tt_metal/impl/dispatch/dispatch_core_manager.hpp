@@ -400,6 +400,9 @@ class dispatch_core_manager {
         }
     }
 
+    std::vector<CoreCoord> get_all_logical_dispatch_cores(chip_id_t device_id) {
+        return tt::get_logical_dispatch_cores(device_id, MAX_NUM_HW_CQS, this->dispatch_core_type_by_device[device_id]);
+    }
    private:
     /// @brief dispatch_core_manager constructor initializes a list of cores per device that are designated for any dispatch functionality
     ///         This list contains dispatch cores that have not been assigned to a particular dispatch function

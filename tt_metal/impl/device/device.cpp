@@ -292,6 +292,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
                 llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
             }
             llrt::launch_erisc_app_fw_on_core(this->id(), phys_core);
+            launch_msg->kernel_config.mode = this->using_slow_dispatch() ? DISPATCH_MODE_HOST :  DISPATCH_MODE_DEV;
         } else {
             tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), phys_core));
             if (not llrt::OptionsG.get_skip_loading_fw()) {
@@ -302,6 +303,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
                 llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
             }
             llrt::program_risc_startup_addr(this->id(), phys_core);
+            launch_msg->kernel_config.mode = DISPATCH_MODE_HOST;
         }
     } else {
         llrt::program_risc_startup_addr(this->id(), phys_core);
@@ -317,12 +319,33 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
                 llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
             }
         }
+        if (this->using_slow_dispatch()) {
+            launch_msg->kernel_config.mode = DISPATCH_MODE_HOST;
+        } else {
+            std::vector<CoreCoord> physical_dispatch_cores = {};
+            if (dispatch_core_manager::instance().get_dispatch_core_type(this->id()) == CoreType::WORKER) {
+                physical_dispatch_cores = this->worker_cores_from_logical_cores(dispatch_core_manager::instance().get_all_logical_dispatch_cores(this->id()));
+            }
+            if (std::find(physical_dispatch_cores.begin(), physical_dispatch_cores.end(), phys_core) != physical_dispatch_cores.end()) {
+                launch_msg->kernel_config.mode = DISPATCH_MODE_HOST;
+            } else {
+                launch_msg->kernel_config.mode = DISPATCH_MODE_DEV;
+            }
+        }
     }
-    //This is an initialization launch message.
-    //Clears launch message fields to 0 in target core L1.
-    //Sets launch.run to RUN_MSG_INIT.
-    llrt::write_launch_msg_to_core(this->id(), phys_core, launch_msg, go_msg,
-        this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+    // Initialize each entry in the launch_msg ring buffer with the correct dispatch mode - Cores that don't get a valid launch_message need to at least have the correct dispatch mode.
+    // When using Fast Dispatch on Tensix:
+        // dispatch cores (Tensix) configured with DISPATCH_MODE_HOST
+        // worker cores (Tensix and active eth) configured with DISPATCH_MODE_DEV
+        // Idle Eth cores configured with DISPATCH_MODE_HOST but not used
+    // When using Fast Dispatch on Idle Eth:
+        // dispatch cores (Idle Eth) configured with DISPATCH_MODE_HOST
+        // worker cores (Tensix and active eth) configured with DISPATCH_MODE_DEV
+    // When using Slow Dispatch, all cores initialized with DISPATCH_MODE_HOST
+    std::vector<launch_msg_t> init_launch_msg_data(launch_msg_buffer_num_entries, *launch_msg);
+    tt::Cluster::instance().write_core(init_launch_msg_data.data(), launch_msg_buffer_num_entries * sizeof(launch_msg_t), tt_cxy_pair(this->id(), phys_core), this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+    uint64_t go_addr = this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+    tt::Cluster::instance().write_core(go_msg, sizeof(go_msg_t), tt_cxy_pair(this->id(), phys_core), go_addr);
 }
 
 void Device::reset_cores() {
@@ -430,7 +453,6 @@ void Device::initialize_and_launch_firmware() {
     launch_msg_t launch_msg;
     go_msg_t go_msg;
     std::memset(&launch_msg, 0, sizeof(launch_msg_t));
-    launch_msg.kernel_config.mode = DISPATCH_MODE_HOST;
     go_msg.signal = RUN_MSG_INIT;
 
     // Populate core info, which will be written to device
@@ -2242,7 +2264,6 @@ void Device::init_command_queue_device() {
     for (auto& hw_cq : this->hw_command_queues_) {
         hw_cq->set_unicast_only_cores_on_dispatch_s(this->get_noc_encoding_for_all_etherent_sockets());
     }
-    this->hw_command_queues_[0]->clear_launch_msg_buffer();
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());
 }

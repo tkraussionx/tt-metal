@@ -1818,34 +1818,6 @@ void HWCommandQueue::set_unicast_only_cores_on_dispatch_s(const std::vector<uint
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
 }
 
-void HWCommandQueue::clear_launch_msg_buffer() {
-    std::vector<uint32_t> zeros(launch_msg_buffer_num_entries * sizeof(launch_msg_t) / sizeof(uint32_t), 0);
-    std::size_t num_mcast_cols = device->compute_with_storage_grid_size().x;
-    std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
-    uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
-    CoreCoord start_phys = device->physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER);
-    CoreCoord end_phys = device->physical_core_from_logical_core(CoreCoord(num_mcast_cols - 1, num_mcast_rows - 1), CoreType::WORKER);
-    CoreRange full_grid = CoreRange(start_phys, end_phys);
-    uint32_t launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH);
-    uint32_t active_eth_launch_msg_addr = 0;
-    if (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1) {
-        active_eth_launch_msg_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH);
-    }
-    uint32_t cmd_sequence_sizeB = align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + zeros.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
-    for (uint32_t core_idx = 0; core_idx < device->get_noc_encoding_for_all_etherent_sockets(0).size(); core_idx++) {
-        cmd_sequence_sizeB += align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + zeros.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
-    }
-    void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
-    HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
-    command_sequence.add_dispatch_write_linear<true>(true, num_mcast_cores, device->get_noc_multicast_encoding(this->noc_index, full_grid), launch_msg_addr, zeros.size() * sizeof(uint32_t), zeros.data());
-    for (auto& active_eth_core : device->get_noc_encoding_for_all_etherent_sockets(0)) {
-        command_sequence.add_dispatch_write_linear<true>(true, 0, active_eth_core, active_eth_launch_msg_addr, zeros.size() * sizeof(uint32_t), zeros.data());
-    }
-    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
-    this->manager.fetch_queue_reserve_back(this->id);
-    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
-}
-
 HWCommandQueue::~HWCommandQueue() {
     ZoneScopedN("HWCommandQueue_destructor");
     if (this->exit_condition) {
