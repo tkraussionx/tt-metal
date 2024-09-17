@@ -122,6 +122,7 @@ class EriscDatamoverBuilder {
     uint32_t handshake_addr;
     uint32_t const num_channel_buffers;
     ccl::EriscDataMoverBufferSharingMode const buffer_sharing_mode;
+    ccl::EriscDataMoverPacketSizingMode const packet_sizing_mode;
     ccl::EriscDataMoverTerminationMode const termination_mode;
     uint32_t num_senders;
     uint32_t num_receivers;
@@ -144,6 +145,7 @@ class EriscDatamoverBuilder {
         std::vector<uint32_t> const& local_semaphore_addresses,
         std::vector<uint32_t> const& local_buffer_addresses,
         ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
+        ccl::EriscDataMoverPacketSizingMode packet_sizing_mode,
         ccl::EriscDataMoverTerminationMode termination_mode = ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED,
         std::size_t num_buffers_per_channel = 1,
         chip_id_t chip_id = -1) :
@@ -153,6 +155,7 @@ class EriscDatamoverBuilder {
         handshake_addr(handshake_addr),
         num_channel_buffers(local_buffer_addresses.size()),
         buffer_sharing_mode(buffer_sharing_mode),
+        packet_sizing_mode(packet_sizing_mode),
         num_buffers_per_channel(num_buffers_per_channel),
         termination_mode(termination_mode),
         enable_sender(false),
@@ -255,6 +258,7 @@ class EriscDatamoverBuilder {
 
         // Handshake address
         args.push_back(handshake_addr);
+        args.push_back(this->packet_sizing_mode);
 
         bool senders_below_receivers = active_channels.size() == 0 || this->active_channels.front().is_sender;
 

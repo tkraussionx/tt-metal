@@ -12,10 +12,11 @@ TEST(CclHelpers, CreateEriscDatamoverBuilder_Chan4_PageSize2048_RRBufferSharingM
     std::size_t num_channels = 4;
     uint32_t page_size = 2048;
     ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode = ttnn::ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN;
+    ttnn::ccl::EriscDataMoverPacketSizingMode edm_packet_sizing_mode = ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE;
     ttnn::ccl::EriscDataMoverTerminationMode termination_mode = ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED;
 
     std::size_t num_buffers_per_channel = 1;
-    auto edm_builder = create_erisc_datamover_builder(num_channels, page_size, num_buffers_per_channel, buffer_sharing_mode, termination_mode);
+    auto edm_builder = create_erisc_datamover_builder(num_channels, page_size, num_buffers_per_channel, buffer_sharing_mode, edm_packet_sizing_mode, termination_mode);
     std::vector<uint32_t> worker_semaphore_ids = {0, 1, 2, 3};
     std::vector<uint32_t> message_counts = {256, 512, 24, 1};
     std::vector<std::vector<ttnn::ccl::WorkerXY>> const& worker_coords = {

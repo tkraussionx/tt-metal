@@ -457,6 +457,7 @@ ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     uint32_t page_size,
     std::size_t num_buffers_per_channel,
     ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
+    ccl::EriscDataMoverPacketSizingMode packet_sizing_mode,
     EriscDataMoverTerminationMode termination_mode);
 
 }  // namespace ccl

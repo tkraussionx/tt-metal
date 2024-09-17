@@ -143,6 +143,8 @@ void kernel_main() {
     // SENDER ARGS
     uint32_t args_offset = 0;
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
+    ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode =
+        static_cast<ttnn::ccl::EriscDataMoverPacketSizingMode>(get_arg_val<uint32_t>(args_offset++));
 
     bool is_done_as_rx_handshaker = is_handshake_sender;
     if constexpr (is_handshake_sender) {
@@ -170,6 +172,7 @@ void kernel_main() {
             receiver_channels_start + channel,
             receiver_buffers_base_address,
             receiver_channel_size,
+            packet_sizing_mode,
             worker_semaphore_address,
             receiver_num_workers,
             receiver_num_messages_to_send,
@@ -212,6 +215,7 @@ void kernel_main() {
             sender_channels_start + channel,
             sender_buffer_address,
             sender_channel_size,
+            packet_sizing_mode,
             worker_semaphore_address,
             sender_num_workers,
             sender_num_messages_to_send,

@@ -96,7 +96,8 @@ class ChannelBuffer final {
     ChannelBuffer(
         uint32_t eth_transaction_channel,
         size_t address,
-        size_t payload_size_in_bytes,
+        size_t payload_size_in_bytes, // We must keep this, even with VARIABLE_SIZE packets - should be renamed to max packet size
+        ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode,
         uint32_t worker_semaphore_l1_address,
         uint32_t num_workers,
         uint32_t total_num_messages_to_move,
@@ -107,6 +108,7 @@ class ChannelBuffer final {
         local_semaphore_address(local_semaphore_address),
         worker_coords(worker_coords),
         size_in_bytes(payload_size_in_bytes + sizeof(eth_channel_sync_t)),
+        packet_sizing_mode(packet_sizing_mode),
         worker_semaphore_l1_address(worker_semaphore_l1_address),
         num_workers(num_workers),
         num_messages_moved(0),
@@ -213,7 +215,15 @@ class ChannelBuffer final {
         return this->eth_transaction_channel;
     }
     [[nodiscard]] FORCE_INLINE std::size_t get_size_in_bytes() const { return this->size_in_bytes; }
-    [[nodiscard]] FORCE_INLINE std::size_t get_current_payload_size() const { return this->get_size_in_bytes(); }
+    }
+    [[nodiscard]] FORCE_INLINE std::size_t get_current_payload_size() const {
+        if (packet_sizing_mode == ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE) {
+            return this->get_size_in_bytes();
+        } else {
+            return *reinterpret_cast<volatile uint32_t const*>(this->get_buffer_address());
+        }
+    }
+
 
     [[nodiscard]] FORCE_INLINE std::size_t get_buffer_address() const {
         return this->addresses[buffer_index]; }
@@ -297,6 +307,7 @@ class ChannelBuffer final {
     WorkerXY const *const worker_coords;
     std::array<std::size_t, EDM_CONFIG::NUM_BUFFERS_PER_CHANNEL> addresses;
     std::size_t const size_in_bytes;
+    ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode;
     // Even for multiple workers, this address will be the same
     std::size_t const worker_semaphore_l1_address;
     uint32_t const num_workers;

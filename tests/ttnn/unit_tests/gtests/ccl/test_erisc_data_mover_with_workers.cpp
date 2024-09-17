@@ -25,6 +25,7 @@
 
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_common.hpp"
+#include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 
 // #include "impl/kernels/kernel_types.hpp"
 
@@ -215,14 +216,18 @@ void generate_sender_worker_kernels(
     uint32_t worker_semaphore_address,
     uint32_t dram_output_buffer_base_addr, // remote_output_buffers.at(i)->address();
     bool src_is_dram,
-    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode
+    ttnn::ccl::EriscDataMoverTerminationMode edm_termination_mode,
+    ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode
 ) {
     std::vector<uint32_t> sender_worker_reader_compile_args{
         src_is_dram,  //
         num_pages_total,     //
         page_size,
         num_pages_per_edm_buffer};
-    std::vector<uint32_t> sender_worker_reader_runtime_args{dram_output_buffer_base_addr};
+    std::vector<uint32_t> sender_worker_reader_runtime_args{
+        dram_output_buffer_base_addr,
+        packet_sizing_mode
+    };
 
     log_info(tt::LogTest, "\tSenderReader CT Args");
     for (auto const& arg : sender_worker_reader_compile_args) {
@@ -414,13 +419,14 @@ bool RunWriteBWTest(
     ////////////////////////////////////////////////////////////////////////////
 
     ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode = ttnn::ccl::EriscDataMoverBufferSharingMode::NOT_SHARED;
+    ttnn::ccl::EriscDataMoverPacketSizingMode edm_packet_sizing_mode = ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE;
 
     const std::size_t num_edm_channels = num_local_sender_channels + num_remote_sender_channels;
     // TODO: Allow an override of EDM buffer size
     auto local_chip_edm_builder = ttnn::ccl::create_erisc_datamover_builder(
-        num_edm_channels, page_size, num_buffers_per_edm_channel, buffer_sharing_mode, edm_termination_mode);
+        num_edm_channels, page_size, num_buffers_per_edm_channel, buffer_sharing_mode, edm_packet_sizing_mode, edm_termination_mode);
     auto remote_chip_edm_builder = ttnn::ccl::create_erisc_datamover_builder(
-        num_edm_channels, page_size, num_buffers_per_edm_channel, buffer_sharing_mode, edm_termination_mode);
+        num_edm_channels, page_size, num_buffers_per_edm_channel, buffer_sharing_mode, edm_packet_sizing_mode, edm_termination_mode);
 
     const uint32_t num_bytes_per_send = local_chip_edm_builder.get_eth_buffer_size_bytes();
     const uint32_t pages_per_send = num_bytes_per_send / page_size;

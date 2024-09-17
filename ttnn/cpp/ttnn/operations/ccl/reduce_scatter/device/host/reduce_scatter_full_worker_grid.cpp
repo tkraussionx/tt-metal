@@ -739,6 +739,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
     std::vector<Tensor> input_tensors = {input_tensor};
     std::vector<Tensor> output_tensors = {output_tensor};
     ttnn::ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode =ttnn::ccl::EriscDataMoverBufferSharingMode::ROUND_ROBIN;
+    ttnn::ccl::EriscDataMoverPacketSizingMode edm_packet_sizing_mode =ttnn::ccl::EriscDataMoverPacketSizingMode::FIXED_SIZE;
     auto const& op_config =ttnn::ccl::CCLOpConfig(input_tensors, output_tensors, topology);
     std::unique_ptr<ttnn::ccl::CclOpTensorConfig> input_tensor_config =
         ttnn::ccl::CclOpTensorConfig::build_all_gather_tensor_config(input_tensor);
@@ -758,7 +759,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
 
     constexpr std::size_t num_buffers_per_channel = 2; // enable double buffering later
     auto const& edm_builder = create_erisc_datamover_builder(
-        num_edm_channels, op_config.get_page_size(), num_buffers_per_channel, buffer_sharing_mode, edm_termination_mode);
+        num_edm_channels, op_config.get_page_size(), num_buffers_per_channel, buffer_sharing_mode, edm_packet_sizing_mode, edm_termination_mode);
     TT_ASSERT(num_edm_channels > 0);
 
     Tensor const& local_chip_tensor = input_tensor;

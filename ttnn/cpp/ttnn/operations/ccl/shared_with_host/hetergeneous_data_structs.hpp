@@ -26,6 +26,14 @@
 namespace ttnn {
 namespace ccl {
 
+enum EriscDataMoverPacketSizingMode : uint32_t {
+    // packet transmission size is fixed for the channel
+    FIXED_SIZE = 0,
+
+    // get the packet size from the header on a per packet basis
+    VARIABLE_SIZE = 1
+};
+
 enum EriscDataMoverBufferSharingMode : uint32_t {
     NOT_SHARED = 0,
     ROUND_ROBIN = 1,

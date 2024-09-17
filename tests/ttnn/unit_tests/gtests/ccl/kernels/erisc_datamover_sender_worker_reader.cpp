@@ -6,6 +6,8 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
+#include "ttnn/cpp/ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
+
 void kernel_main() {
     constexpr bool src_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr uint32_t num_pages_to_read_total = get_compile_time_arg_val(1);
@@ -14,6 +16,8 @@ void kernel_main() {
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
+    const ttnn::ccl::EriscDataMoverPacketSizingMode packet_sizing_mode =
+        static_cast<ttnn::ccl::EriscDataMoverPacketSizingMode>(get_arg_val<uint32_t>(1));
 
     const InterleavedAddrGen<src_is_dram> source_address_generator = {
         .bank_base_address = src_addr, .page_size = page_size};

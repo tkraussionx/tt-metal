@@ -299,6 +299,7 @@ ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
     uint32_t page_size,
     std::size_t num_buffers_per_channel,
     ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
+    ccl::EriscDataMoverPacketSizingMode packet_sizing_mode,
     ccl::EriscDataMoverTerminationMode termination_mode) {
     TT_ASSERT(num_channels > 0);
     std::vector<uint32_t> edm_sem_addresses(num_channels, 0);
@@ -326,6 +327,7 @@ ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
         edm_sem_addresses,
         edm_buffer_addresses,
         buffer_sharing_mode,
+        packet_sizing_mode,
         termination_mode,
         num_buffers_per_channel);
 }
