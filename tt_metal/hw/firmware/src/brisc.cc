@@ -367,8 +367,7 @@ int main() {
 
         WAYPOINT("GW");
         uint32_t count = 0;
-        // while (mailboxes->go_message.signal != RUN_MSG_GO and mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables == 0) {
-        while (mailboxes->go_message.signal != RUN_MSG_GO) {
+        while (mailboxes->go_message.signal != RUN_MSG_GO and mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables == 0) {
             if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
                 // Set the rd_ptr on workers to specified value
                 mailboxes->launch_msg_rd_ptr = 0;
@@ -388,6 +387,8 @@ int main() {
                     false /*linked*/);
             }
         }
+        // If this loop is added, FW initialization without the go-signal will work
+
         // for (volatile int i = 0; i < 1000000; i++) {
 
         // }
@@ -416,7 +417,8 @@ int main() {
             uint32_t tt_l1_ptr *cb_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
                 mailboxes->launch[launch_msg_rd_ptr].kernel_config.cb_offset);
             setup_cb_read_write_interfaces(cb_l1_base, 0, num_cbs_to_early_init, true, true, false);
-            // while (mailboxes->go_message.signal != RUN_MSG_GO);
+            // Run NCRISC and BRISC once the go-signal is seen. TRISCS will stall until the data-movers start running
+            while (mailboxes->go_message.signal != RUN_MSG_GO);
             finish_ncrisc_copy_and_run(enables);
 
             // Run the BRISC kernel
