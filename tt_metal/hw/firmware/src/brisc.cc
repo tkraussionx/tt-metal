@@ -366,7 +366,7 @@ int main() {
 
         WAYPOINT("GW");
         uint32_t count = 0;
-        // while (mailboxes->go_signal != RUN_MSG_GO or mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables == 0) {
+        // while (mailboxes->go_message.signal != RUN_MSG_GO and mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables == 0) {
         while (mailboxes->go_message.signal != RUN_MSG_GO) {
             if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
                 // Set the rd_ptr on workers to specified value
@@ -387,15 +387,17 @@ int main() {
                     false /*linked*/);
             }
         }
+        // for (volatile int i = 0; i < 1000000; i++) {
+
+        // }
+
         // DPRINT << "Done Waiting for go signal: " << (mailboxes->go_message.signal)  << ENDL();
         uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         WAYPOINT("GD");
 
         {
-            DeviceZoneScopedMainN("BRISC-FW");
-            if (mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables) {
-                DeviceZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id);
-            }
+            DeviceConditionalZoneScopedMainN("BRISC-FW", mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
+            DeviceConditionalZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
             // Copies from L1 to IRAM on chips where NCRISC has IRAM
             l1_to_ncrisc_iram_copy(mailboxes->launch[launch_msg_rd_ptr].kernel_config.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
 
@@ -413,7 +415,7 @@ int main() {
             uint32_t tt_l1_ptr *cb_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
                 mailboxes->launch[launch_msg_rd_ptr].kernel_config.cb_offset);
             setup_cb_read_write_interfaces(cb_l1_base, 0, num_cbs_to_early_init, true, true, false);
-
+            // while (mailboxes->go_message.signal != RUN_MSG_GO);
             finish_ncrisc_copy_and_run(enables);
 
             // Run the BRISC kernel
