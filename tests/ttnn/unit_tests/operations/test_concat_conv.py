@@ -194,7 +194,6 @@ def test_concat_conv_yolov4(
     torch_input_nhwc = torch.permute(torch_input, (0, 2, 3, 1))
     torch_input_nhwc = torch.reshape(torch_input_nhwc, (1, 1, 400, 256))
     ttnn_input = ttnn.from_torch(torch_input_nhwc, dtype=ttnn.bfloat16, device=device)
-    ttnn_input = ttnn.concat([ttnn_input, ttnn_input], dim=3)
 
     output_sharded_memory_config = ttnn.create_sharded_memory_config(
         [32, 512],
@@ -202,11 +201,13 @@ def test_concat_conv_yolov4(
         strategy=ttnn.ShardStrategy.HEIGHT,
         use_height_and_width_as_shard_shape=True,
     )
-    ttnn_input = ttnn.interleaved_to_sharded(ttnn_input, output_sharded_memory_config)
+    ttnn_input = ttnn.to_layout(ttnn_input, layout=ttnn.TILE_LAYOUT)
+    output_tensor = ttnn.concat([ttnn_input, ttnn_input], dim=3)
+    output_tensor = ttnn.to_memory_config(output_tensor, output_sharded_memory_config)
 
     run_conv_concat(
         device,
-        ttnn_input,
+        output_tensor,
         concat_out,
         math_fidelity,
         activations_dtype,
@@ -229,3 +230,29 @@ def test_concat_conv_yolov4(
         padded_input_channels=16 if input_channels == 3 else None,
         output_layout=ttnn.TILE_LAYOUT,
     )
+
+
+@pytest.mark.parametrize("should_fail", [False, True])
+def test_concat(device, should_fail):
+    torch_input = torch.randn(1, 1, 400, 256, dtype=torch.bfloat16).float()
+    goldern_concat = torch.cat((torch_input, torch_input), dim=3)
+
+    ttnn_input = ttnn.from_torch(torch_input, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+    output_sharded_memory_config = ttnn.create_sharded_memory_config(
+        [32, 512],
+        core_grid=ttnn.CoreRangeSet({ttnn.CoreRange((0, 0), (7, 0)), ttnn.CoreRange((0, 1), (4, 1))}),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    if should_fail:
+        ttnn_concat_result = ttnn.concat([ttnn_input, ttnn_input], dim=3, memory_config=output_sharded_memory_config)
+    else:
+        ttnn_concat_result = ttnn.concat([ttnn_input, ttnn_input], dim=3)
+        ttnn_concat_result = ttnn.to_memory_config(ttnn_concat_result, output_sharded_memory_config)
+    ttnn_output_as_torch = ttnn.to_torch(ttnn_concat_result)
+
+    pcc = 0.99
+    passing, pcc_msg = check_with_pcc(goldern_concat, ttnn_output_as_torch, pcc=pcc)
+    logger.info(f"PCC = {pcc_msg}. Threshold = {pcc}")
+    assert passing
