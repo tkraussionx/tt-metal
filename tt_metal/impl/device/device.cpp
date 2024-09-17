@@ -1292,6 +1292,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.num_compute_cores = uint32_t(compute_grid_size.x * compute_grid_size.y);
                 tunnel_core_allocations[DISPATCH].push_back(std::make_tuple(dispatch_location, settings));
                 settings.semaphores.clear();
+                std::cout << "Dispatch_h: " << dispatch_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 log_debug(LogMetal, "Device {} Channel {} : Dispatch: Issue Q Start Addr: {} - Completion Q Start Addr: {}",  device_id, channel, settings.issue_queue_start_addr, settings.completion_queue_start_addr);
             }
             uint32_t cq_id = 0;  // 1 mux, demux, local tunneler and remote tunneler per chip. Set cq_id to 0.
@@ -1314,6 +1315,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 tt_cxy_pair demux_location = dispatch_core_manager::instance().demux_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(demux_location.chip, get_physical_core_coordinate(demux_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_demux.cpp";
+                std::cout << "MUX: " << demux_location.str() << " " << settings.worker_physical_core.str() << std::endl;
                 settings.cb_start_address = L1_UNRESERVED_BASE;
                 settings.cb_size_bytes = 0x10000;
                 tunnel_core_allocations[DEMUX].push_back(std::make_tuple(demux_location, settings));
@@ -1352,6 +1354,7 @@ void Device::setup_tunnel_for_remote_devices() {
             tt_cxy_pair mux_d_location = dispatch_core_manager::instance().mux_d_core(device_id, channel, cq_id);
             settings.worker_physical_core = tt_cxy_pair(mux_d_location.chip, get_physical_core_coordinate(mux_d_location, dispatch_core_type));
             settings.kernel_file = "tt_metal/impl/dispatch/kernels/packet_mux.cpp";
+            std::cout << "Mux_d: " << mux_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             settings.semaphores = std::vector<uint32_t>(num_hw_cqs);
             settings.consumer_semaphore_id = 0;
             settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;

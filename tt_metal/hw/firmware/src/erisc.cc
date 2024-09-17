@@ -80,8 +80,8 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
         if (mailboxes->go_message.signal == RUN_MSG_GO) {
-            DeviceZoneScopedMainN("ERISC-FW");
-            DeviceZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id);
+            DeviceConditionalZoneScopedMainN("ERISC-FW",  mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
+            DeviceConditionalZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables;
             if (enables & DISPATCH_CLASS_MASK_ETH_DM0) {
                 firmware_config_init(mailboxes, ProgrammableCoreType::ACTIVE_ETH, DISPATCH_CLASS_ETH_DM0);
