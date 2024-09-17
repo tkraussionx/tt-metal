@@ -44,6 +44,7 @@ jobs:
           docker_password: ${{ secrets.GITHUB_TOKEN }}
           docker_image_arch: ${{ inputs.arch }}
           run_args: |
+            echo $ARCH_NAME
             ARCH_NAME=${{ inputs.arch }} ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
