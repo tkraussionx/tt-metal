@@ -298,7 +298,7 @@ std::vector<uint32_t> get_runtime_args_for_given_ranges(
     return runtime_args;
 }
 
-operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& input, Tensor& output) {
+operation::ProgramWithCallbacks reshard_multi_core_same_width_reader(const Tensor& input, Tensor& output) {
     auto device = input.device();
 
     tt::tt_metal::Program program{};
@@ -306,9 +306,9 @@ operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& inpu
     const auto input_shard_spec = input.shard_spec().value();
     const auto output_shard_spec = output.shard_spec().value();
     const auto& all_cores = output_shard_spec.grid;
-    auto grid = input.buffer()->buffer_type() == BufferType::DRAM ? device->dram_grid_size()
-                                                                  : device->compute_with_storage_grid_size();
+
     auto input_core_type = input.buffer()->core_type();
+    auto output_core_type = output.buffer()->core_type();
     constexpr uint32_t dst_cb_index = tt::CB::c_in0;
     auto input_cores = corerange_to_cores(
         input_shard_spec.grid, std::nullopt, input_shard_spec.orientation == ShardOrientation::ROW_MAJOR);
@@ -318,7 +318,7 @@ operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& inpu
     uint32_t total_size, unit_size, input_units_per_shard, output_units_per_shard;
     auto data_format = tt::tt_metal::datatype_to_dataformat_converter(input.get_dtype());
 
-    uint32_t num_output_units = input.buffer()->num_pages();
+    uint32_t num_units = input.buffer()->num_pages();
     if (input.get_layout() == Layout::TILE) {
         unit_size = tt::tt_metal::detail::TileSize(data_format);
         input_units_per_shard = input_shard_spec.numel() / TILE_HW;
@@ -358,7 +358,7 @@ operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& inpu
     auto input_core = device->physical_core_from_logical_core(input_cores[input_core_idx], input_core_type);
 
     std::array<tt::tt_metal::KernelHandle, 2> kernels = {kernel_id_0, kernel_id_1};
-    uint32_t output_units_left = num_output_units;
+    uint32_t output_units_left = num_units;
     for (const auto& core : output_cores) {
         uint32_t output_units_per_core = std::min(output_units_left, output_units_per_shard);
         output_units_left -= output_units_per_core;
@@ -399,7 +399,7 @@ operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& inpu
         }
     }
 
-    auto override_runtime_arguments_callback = [kernel_id_0, kernel_id_1, cb_dst0, grid, output_cores](
+    auto override_runtime_arguments_callback = [kernel_id_0, kernel_id_1, cb_dst0, output_cores](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,
@@ -421,6 +421,132 @@ operation::ProgramWithCallbacks reshard_multi_core_same_width(const Tensor& inpu
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
+
+
+operation::ProgramWithCallbacks reshard_multi_core_same_width_writer(const Tensor& input, Tensor& output) {
+    auto device = input.device();
+
+    tt::tt_metal::Program program{};
+
+    const auto input_shard_spec = input.shard_spec().value();
+    const auto output_shard_spec = output.shard_spec().value();
+    const auto& all_cores = input_shard_spec.grid;
+
+    auto input_core_type = input.buffer()->core_type();
+    auto output_core_type = output.buffer()->core_type();
+    constexpr uint32_t src_cb_index = tt::CB::c_in0;
+    auto input_cores = corerange_to_cores(
+        input_shard_spec.grid, std::nullopt, input_shard_spec.orientation == ShardOrientation::ROW_MAJOR);
+    auto output_cores =
+        corerange_to_cores(output_shard_spec.grid, std::nullopt, output_shard_spec.orientation == ShardOrientation::ROW_MAJOR);
+
+    uint32_t total_size, unit_size, input_units_per_shard, output_units_per_shard;
+    auto data_format = tt::tt_metal::datatype_to_dataformat_converter(input.get_dtype());
+
+    uint32_t num_units = input.buffer()->num_pages();
+    if (input.get_layout() == Layout::TILE) {
+        unit_size = tt::tt_metal::detail::TileSize(data_format);
+        input_units_per_shard = input_shard_spec.numel() / TILE_HW;
+        output_units_per_shard = output_shard_spec.numel() / TILE_HW;
+        total_size = output_units_per_shard * unit_size;
+    } else {
+        unit_size = output_shard_spec.shape[1] * output.element_size();
+        input_units_per_shard = input_shard_spec.shape[0];
+        output_units_per_shard = output_shard_spec.shape[0];
+        total_size = output_units_per_shard * unit_size;
+    }
+
+    tt::tt_metal::KernelHandle kernel_id_0 = tt::tt_metal::CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/reshard_same_width_writer.cpp",
+        all_cores,
+        tt::tt_metal::ReaderDataMovementConfig({src_cb_index}));
+
+    tt::tt_metal::KernelHandle kernel_id_1 = tt::tt_metal::CreateKernel(
+        program,
+        "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/reshard_same_width_writer.cpp",
+        all_cores,
+        tt::tt_metal::WriterDataMovementConfig({src_cb_index}));
+
+    tt::tt_metal::CircularBufferConfig cb_src_config =
+        tt::tt_metal::CircularBufferConfig(total_size, {{src_cb_index, data_format}})
+            .set_page_size(src_cb_index, unit_size)
+            .set_globally_allocated_address(*input.buffer());
+    auto cb_src0 = tt::tt_metal::CreateCircularBuffer(program, all_cores, cb_src_config);
+
+    uint32_t output_core_idx = 0;
+    uint32_t output_core_units_rem = output_units_per_shard;
+    uint32_t output_address = output.buffer()->address();
+    auto output_buffer_type = output.buffer()->buffer_type();
+    auto bank_id = device->bank_ids_from_logical_core(output_buffer_type, output_cores[output_core_idx])[0];
+    uint32_t bank_offset = device->bank_offset(output_buffer_type, bank_id);
+    auto output_core = device->physical_core_from_logical_core(output_cores[output_core_idx], output_core_type);
+
+    std::array<tt::tt_metal::KernelHandle, 2> kernels = {kernel_id_0, kernel_id_1};
+    uint32_t input_units_left = num_units;
+    for (const auto& core : input_cores) {
+        uint32_t input_units_per_core = std::min(input_units_left, input_units_per_shard);
+        input_units_left -= input_units_per_core;
+        uint32_t input_units_per_kernel = tt::div_up(input_units_per_core, kernels.size());
+        uint32_t input_start_offset = 0;
+        for (const auto& kernel_id : kernels) {
+            std::vector<uint32_t> kernel_args = {output_address, 0, 0};
+            uint32_t input_units_to_write = std::min(input_units_per_core, input_units_per_kernel);
+            if (input_units_to_write != 0) {
+                uint32_t num_writes = 0;
+                kernel_args[1] = input_start_offset;
+                input_start_offset += input_units_to_write * unit_size;
+                while (input_units_to_write > 0) {
+                    if (output_core_units_rem == 0) {
+                        output_core_idx++;
+                        output_core_units_rem = output_units_per_shard;
+                        bank_id = device->bank_ids_from_logical_core(output_buffer_type, output_cores[output_core_idx])[0];
+                        bank_offset = device->bank_offset(output_buffer_type, bank_id);
+                        output_core = device->physical_core_from_logical_core(output_cores[output_core_idx], output_core_type);
+                    }
+                    uint32_t units_to_write = std::min(output_core_units_rem, input_units_to_write);
+                    auto output_core =
+                        device->physical_core_from_logical_core(output_cores[output_core_idx], output_core_type);
+                    kernel_args.insert(
+                        kernel_args.end(),
+                        {static_cast<uint32_t>(output_core.x),
+                         static_cast<uint32_t>(output_core.y),
+                         (output_units_per_shard - output_core_units_rem) * unit_size + bank_offset,
+                         units_to_write * unit_size});
+                    input_units_per_core -= units_to_write;
+                    input_units_to_write -= units_to_write;
+                    output_core_units_rem -= units_to_write;
+                    num_writes++;
+                }
+                kernel_args[2] = num_writes;
+            }
+            SetRuntimeArgs(program, kernel_id, core, kernel_args);
+        }
+    }
+
+    auto override_runtime_arguments_callback = [kernel_id_0, kernel_id_1, cb_src0, input_cores](
+                                                   const void* operation,
+                                                   Program& program,
+                                                   const std::vector<Tensor>& input_tensors,
+                                                   const std::vector<std::optional<const Tensor>>&,
+                                                   const std::vector<Tensor>& output_tensors) {
+        const auto& input = input_tensors.at(0);
+        const auto& output = output_tensors.at(0);
+        uint32_t output_addr = output.buffer()->address();
+        auto& runtime_args_0_by_core = GetRuntimeArgs(program, kernel_id_0);
+        auto& runtime_args_1_by_core = GetRuntimeArgs(program, kernel_id_1);
+        for (auto core : input_cores) {
+            auto& runtime_args_0 = runtime_args_0_by_core[core.x][core.y];
+            auto& runtime_args_1 = runtime_args_1_by_core[core.x][core.y];
+            runtime_args_0[0] = output_addr;
+            runtime_args_1[0] = output_addr;
+        }
+        UpdateDynamicCircularBufferAddress(program, cb_src0, *input.buffer());
+    };
+
+    return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
+}
+
 
 operation::ProgramWithCallbacks reshard_multi_core_generic(const Tensor& input, Tensor& output) {
     auto device = input.device();
@@ -532,7 +658,11 @@ operation::ProgramWithCallbacks reshard_multi_core_generic(const Tensor& input, 
 operation::ProgramWithCallbacks reshard_multi_core(const Tensor& input, Tensor& output) {
     if (input.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED &&
         output.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
-        return reshard_multi_core_same_width(input, output);
+        if (output.memory_config().buffer_type == BufferType::L1) {
+            return reshard_multi_core_same_width_reader(input, output);
+        } else {
+            return reshard_multi_core_same_width_writer(input, output);
+        }
     } else {
         return reshard_multi_core_generic(input, output);
     }
