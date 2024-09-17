@@ -2,9 +2,14 @@
 
 set -eo pipefail
 
-PROFILER_SCRIPTS_ROOT=./tt_metal/tools/profiler
-PROFILER_TEST_SCRIPTS_ROOT=./tests/tt_metal/tools/profiler
-PROFILER_ARTIFACTS_DIR=./generated/profiler
+if [[ -z "$TT_METAL_HOME" ]]; then
+  echo "Must provide TT_METAL_HOME in environment" 1>&2
+  exit 1
+fi
+
+PROFILER_SCRIPTS_ROOT=$TT_METAL_HOME/tt_metal/tools/profiler
+PROFILER_TEST_SCRIPTS_ROOT=$TT_METAL_HOME/tests/tt_metal/tools/profiler
+PROFILER_ARTIFACTS_DIR=$TT_METAL_HOME/generated/profiler
 PROFILER_OUTPUT_DIR=$PROFILER_ARTIFACTS_DIR/reports
 
 remove_default_log_locations(){
