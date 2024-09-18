@@ -192,17 +192,15 @@ class TenstorrentLM(TemplateLM):
             batch_size = len(req_group)
             context_enc_list = [self.tok_encode(req_list[0].args[0]) for req_list in req_group]
             continuation_enc_list = [
-                [self.tok_encode(req.args[1], add_special_tokens=False)[0]
-                for req in req_list
-                ]
-                for req_list in req_group 
+                [self.tok_encode(req.args[1], add_special_tokens=False)[0] for req in req_list]
+                for req_list in req_group
             ]
             cond_ids = torch.tensor(continuation_enc_list)
             self.model_backend.add_users_from_context(context_enc_list)
             logits = self.model_backend.generate_n(n_tokens=1, return_logits=True)
             # select 1st token in logits
             logits = logits[:, -1, :]
-            targets = [req_list[0].doc['answer'] for req_list in req_group]
+            targets = [req_list[0].doc["answer"] for req_list in req_group]
             target_ids = cond_ids[torch.arange(len(cond_ids)), targets]
             # next: set target indexes high for testing
             # logits[torch.arange(0, len(target_ids)), target_ids] = 1000.0
@@ -212,7 +210,7 @@ class TenstorrentLM(TemplateLM):
             cond_probs = torch.gather(probs, 1, cond_ids)
             ll_list = torch.log(cond_probs).tolist()
             # set return values for each request by doc_id-choice
-            for cond, ll, gid in zip(cond_ids , ll_list, greedy_ids):
+            for cond, ll, gid in zip(cond_ids, ll_list, greedy_ids):
                 is_greedy = (greedy_ids == target_ids).tolist()
                 output = list(zip(ll, is_greedy))
                 res.extend(output)
@@ -277,12 +275,27 @@ class TenstorrentLM(TemplateLM):
             continuation: str
                 The generated continuation.
         """
+        if self.model_backend.continuous_batching:
+            res = self.generate_until_continuous(requests, disable_tqdm)
+        else:
+            res = self.generate_until_batched(requests, disable_tqdm)
+        return res
+
+    def generate_until_continuous(self, requests, disable_tqdm: bool = False):
         res = []
+        # for req in tqdm(requests, disable=disable_tqdm):
+        do_sample = req.args[1].get("do_sample", False)
+        max_gen_toks = req.args[1].get("max_gen_toks", 1)
+        until = req.args[1].get("until", None)
+        # TODO: add until support with stop tokens
+        if until is not None:
+            eval_logger.warning(f"until={until} not supported for this model, ignoring.")
+        context_list = [req.args[0] for req in req_list]
+        res = self.model_backend.generate_until(context_list=context_list, n_tokens=max_gen_toks, return_logits=False)
+        return res
 
-        batched_requests = defaultdict(list)
-        for i, req in enumerate(requests):
-            batched_requests[i // self.batch_size].append(req)
-
+    def generate_until_batched(self, requests, disable_tqdm: bool = False):
+        res = []
         for req_list in tqdm(batched(requests, self.batch_size), disable=disable_tqdm):
             do_sample = [req.args[1].get("do_sample", False) for req in req_list]
             assert all(x == do_sample[0] for x in do_sample), "do_sample must be the same for all requests"
@@ -296,7 +309,7 @@ class TenstorrentLM(TemplateLM):
                 eval_logger.warning(f"until={until} not supported for this model, ignoring.")
             context_enc_list = [self.tok_encode(req.args[0]) for req in req_list]
             self.model_backend.add_users_from_context(context_enc_list, do_sample=do_sample)
-            tokens_list = self.model_backend.generate_n(n_tokens=max_gen_toks, return_logits=False)
+            tokens_list = self.model_backend.generate_(n_tokens=max_gen_toks, return_logits=False)
             responses = [self.model_backend.tokenizer.decode(tokens) for tokens in tokens_list]
             res.extend(responses)
 
