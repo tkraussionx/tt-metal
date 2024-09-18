@@ -206,7 +206,7 @@ def buffer_address(tensor):
 )
 @pytest.mark.parametrize(
     "batch, groups, iterations",
-    ((2, 1, 16),),
+    ((2, 1, 8),),
 )
 def test_unet_trace_2cq_multi_device(
     batch: int, groups: int, iterations: int, mesh_device, use_program_cache, reset_seeds, enable_async_mode
@@ -238,7 +238,11 @@ def test_unet_trace_2cq_multi_device(
 
     torch_output_tensor = model(torch_input)
 
-    op_event = ttnn.create_event(mesh_device)
+    first_op_event = ttnn.create_event(mesh_device)
+    write_event = ttnn.create_event(mesh_device)
+    last_op_event = ttnn.create_event(mesh_device)
+    read_event = ttnn.create_event(mesh_device)
+
     write_event = ttnn.create_event(mesh_device)
 
     dram_grid_size = mesh_device.dram_grid_size()
@@ -256,30 +260,47 @@ def test_unet_trace_2cq_multi_device(
     dram_memory_config = ttnn.MemoryConfig(
         ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.DRAM, dram_shard_spec
     )
-
     input_tensor = ttnn.allocate_tensor_on_device(
         ttnn_input.shape, ttnn.bfloat16, ttnn.ROW_MAJOR_LAYOUT, mesh_device, dram_memory_config
     )
-    ttnn.record_event(0, op_event)
+
+    ttnn.record_event(1, first_op_event)
+    ttnn.record_event(1, read_event)
 
     logger.info(f"Compiling model with warmup run")
+    ttnn.wait_for_event(0, first_op_event)
     ttnn.copy_host_to_device_tensor(ttnn_input, input_tensor, cq_id=1)
-
     ttnn.record_event(1, write_event)
     ttnn.wait_for_event(0, write_event)
-
     l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config)
-    ttnn.record_event(0, op_event)
+    ttnn.record_event(0, first_op_event)
     output_tensor = ttnn_model(l1_input_tensor, move_input_tensor_to_device=False)
+    ttnn.wait_for_event(0, read_event)
+    dram_shard_spec = ttnn.ShardSpec(
+        ttnn.CoreRangeSet(
+            {ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(dram_grid_size.x - 1, dram_grid_size.y - 1))}
+        ),
+        [
+            divup(output_tensor.volume() // output_tensor.get_legacy_shape()[-1], dram_grid_size.x),
+            output_tensor.get_legacy_shape()[-1],
+        ],
+        ttnn.ShardOrientation.ROW_MAJOR,
+        False,
+    )
+    dram_memory_config = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.DRAM, dram_shard_spec
+    )
+    dram_output_tensor = ttnn.reshard(output_tensor, dram_memory_config)
+    ttnn.record_event(0, last_op_event)
     logger.info(f"Done compile run")
 
     logger.info(f"Capturing trace")
-    ttnn.wait_for_event(1, op_event)
+    ttnn.wait_for_event(1, first_op_event)
     ttnn.copy_host_to_device_tensor(ttnn_input, input_tensor, cq_id=1)
     ttnn.record_event(1, write_event)
     ttnn.wait_for_event(0, write_event)
     l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config)
-    ttnn.record_event(0, op_event)
+    ttnn.record_event(0, first_op_event)
 
     input_trace_addr = buffer_address(l1_input_tensor)
     shape = l1_input_tensor.shape
@@ -297,22 +318,40 @@ def test_unet_trace_2cq_multi_device(
     assert input_trace_addr == buffer_address(l1_input_tensor)
     ttnn.end_trace_capture(mesh_device, tid, cq_id=0)
 
-    outputs = []
-    start = time.time()
-    for _ in range(iterations):
-        ttnn.wait_for_event(1, op_event)
-        ttnn.copy_host_to_device_tensor(ttnn_input, input_tensor, cq_id=1)
-        ttnn.record_event(1, write_event)
-        ttnn.wait_for_event(0, write_event)
-
-        l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config, l1_input_tensor)
-        ttnn.record_event(0, op_event)
-
-        ttnn.execute_trace(mesh_device, tid, cq_id=0, blocking=False)
-        outputs.append(output_tensor.cpu(blocking=False))
-
     ttnn.synchronize_devices(mesh_device)
 
+    outputs = []
+    start = time.time()
+    ttnn.wait_for_event(1, first_op_event)
+    ttnn.copy_host_to_device_tensor(ttnn_input, input_tensor, cq_id=1)
+    ttnn.record_event(1, write_event)
+    for _ in range(iterations - 1):
+        ttnn.wait_for_event(0, write_event)
+        l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config, l1_input_tensor)
+        ttnn.record_event(0, first_op_event)
+        ttnn.execute_trace(mesh_device, tid, cq_id=0, blocking=False)
+        ttnn.wait_for_event(0, read_event)
+        dram_output_tensor = ttnn.reshard(output_tensor, dram_memory_config, dram_output_tensor)
+        ttnn.record_event(0, last_op_event)
+
+        ttnn.wait_for_event(1, first_op_event)
+        ttnn.copy_host_to_device_tensor(ttnn_input, input_tensor, cq_id=1)
+        ttnn.record_event(1, write_event)
+
+        ttnn.wait_for_event(1, last_op_event)
+        outputs.append(dram_output_tensor.cpu(blocking=False, cq_id=1))
+        ttnn.record_event(1, read_event)
+
+    ttnn.wait_for_event(0, write_event)
+    l1_input_tensor = ttnn.reshard(input_tensor, ttnn_model.input_sharded_memory_config, l1_input_tensor)
+    ttnn.record_event(0, first_op_event)
+    ttnn.execute_trace(mesh_device, tid, cq_id=0, blocking=False)
+    ttnn.wait_for_event(0, read_event)
+    dram_output_tensor = ttnn.reshard(output_tensor, dram_memory_config, dram_output_tensor)
+    ttnn.record_event(0, last_op_event)
+    ttnn.wait_for_event(1, last_op_event)
+    outputs.append(dram_output_tensor.cpu(blocking=False, cq_id=1))
+    ttnn.synchronize_devices(mesh_device)
     end = time.time()
     logger.info(f"Average model performance={iterations * total_batch / (end-start) : .2f} fps")
 
