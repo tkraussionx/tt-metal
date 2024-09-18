@@ -19,7 +19,7 @@
 namespace ttnn::operations::data_movement {
 
 std::vector<Tensor> fold_with_transpose_(
-    uint8_t queue_id, const Tensor& input, const std::optional<const tt::tt_metal::Shape>& output_shape, uint32_t stride_h, uint32_t stride_w, uint32_t pad_c, uint32_t pad_h, uint32_t pad_w) {
+    uint8_t queue_id, const Tensor& input, const std::optional<const tt::tt_metal::LegacyShape>& output_shape, uint32_t stride_h, uint32_t stride_w, uint32_t pad_c, uint32_t pad_h, uint32_t pad_w) {
 
     using namespace tt::constants;
     Device * device;
@@ -131,7 +131,7 @@ ttnn::MemoryConfig create_sharded_memory_config(ttnn::Shape tensor_shape, CoreCo
 }
 
 std::vector<Tensor> fold_with_transpose_sharded_(
-    uint8_t queue_id, const Tensor& input, const std::optional<const tt::tt_metal::Shape>& output_shape, uint32_t stride_h, uint32_t stride_w, uint32_t pad_c, uint32_t pad_h, uint32_t pad_w, CoreCoord grid_size, const std::optional<MemoryConfig> override_memory_config) {
+    uint8_t queue_id, const Tensor& input, const std::optional<const tt::tt_metal::LegacyShape>& output_shape, uint32_t stride_h, uint32_t stride_w, uint32_t pad_c, uint32_t pad_h, uint32_t pad_w, CoreCoord grid_size, const std::optional<MemoryConfig> override_memory_config) {
 
     using namespace tt::constants;
     Device * device;
@@ -285,7 +285,7 @@ Tensor FoldOperation::invoke(uint8_t queue_id,
                                  uint32_t stride_h,
                                  uint32_t stride_w,
                                  bool use_transpose_as_fold,
-                                 const std::optional<const tt::tt_metal::Shape> &output_shape,
+                                 const std::optional<const tt::tt_metal::LegacyShape> &output_shape,
                                  uint32_t pad_c,
                                  uint32_t pad_h,
                                  uint32_t pad_w,
@@ -296,7 +296,7 @@ Tensor FoldOperation::invoke(uint8_t queue_id,
             if (input_tensor.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
                 return fold_with_transpose_sharded_(queue_id, input_tensor, output_shape, stride_h, stride_w, pad_c, pad_h, pad_w, grid_size.value_or(CoreCoord(1,1)), override_memory_config).at(0);
             } else {
-                TT_FATAL("fold op does not support non height-sharding!");
+                TT_THROW("fold op does not support non height-sharding!");
             }
         } else {
             return fold_with_transpose_(queue_id, input_tensor, output_shape, stride_h, stride_w, pad_c, pad_h, pad_w).at(0);
@@ -309,7 +309,7 @@ Tensor FoldOperation::invoke(const ttnn::Tensor &input_tensor,
                                  uint32_t stride_h,
                                  uint32_t stride_w,
                                  bool use_transpose_as_fold,
-                                 const std::optional<const tt::tt_metal::Shape> &output_shape,
+                                 const std::optional<const tt::tt_metal::LegacyShape> &output_shape,
                                  uint32_t pad_c,
                                  uint32_t pad_h,
                                  uint32_t pad_w,

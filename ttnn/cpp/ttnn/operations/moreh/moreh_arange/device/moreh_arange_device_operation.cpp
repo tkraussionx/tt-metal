@@ -28,13 +28,13 @@ void MorehArangeOperation::validate_inputs(
     TT_FATAL(
         output_dtype == output_tensor->get_dtype(),
         "If output_tensor is provided as input, its dtype should match the output_dtype parameter.");
-    TT_FATAL(output_tensor->memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
+    TT_FATAL(output_tensor->memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED, "Error");
 
     auto output_layout = output_tensor->get_layout();
     if (operation_attributes.untilize_out) {
-        TT_FATAL(output_layout == Layout::ROW_MAJOR);
+        TT_FATAL(output_layout == Layout::ROW_MAJOR, "Error");
     } else {
-        TT_FATAL(output_layout == Layout::TILE);
+        TT_FATAL(output_layout == Layout::TILE, "Error");
     }
 }
 
@@ -59,7 +59,7 @@ MorehArangeOperation::shape_return_value_t MorehArangeOperation::compute_output_
         ceil((operation_attributes.end - operation_attributes.start) / operation_attributes.step));
 
     if (operation_attributes.untilize_out)
-        return ttnn::Shape(tt::tt_metal::Shape({num_elems}));
+        return ttnn::Shape(tt::tt_metal::LegacyShape({num_elems}));
 
     std::vector<uint32_t> output_size_vec = {
         tt::constants::TILE_HEIGHT, tt::round_up(num_elems, tt::constants::TILE_WIDTH)};
@@ -70,7 +70,7 @@ MorehArangeOperation::shape_return_value_t MorehArangeOperation::compute_output_
         Padding::PadDimension{.front = 0, .back = tt::round_up(num_elems, tt::constants::TILE_WIDTH) - num_elems});
     const auto padding = Padding(dimensions_pads, Padding::PadValue::Any);
 
-    return ttnn::Shape{tt::tt_metal::Shape(output_size_vec, padding)};
+    return ttnn::Shape{tt::tt_metal::LegacyShape(output_size_vec, padding)};
 };
 
 MorehArangeOperation::tensor_return_value_t MorehArangeOperation::create_output_tensors(

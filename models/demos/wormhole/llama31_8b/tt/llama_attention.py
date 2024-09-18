@@ -48,7 +48,10 @@ class TtLlamaAttention(nn.Module):
         self.compute_kernel_config = configuration.get_compute_kernel_config()
 
         layer_name = f"layers.{layer_num}.attention"
-        cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
+        if configuration.dummy_weights:
+            cache_name = lambda _: None
+        else:
+            cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
 
         wq_str = f"{layer_name}.wq.weight"
         wk_str = f"{layer_name}.wk.weight"
