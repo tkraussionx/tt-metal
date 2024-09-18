@@ -162,7 +162,7 @@ std::vector<tt::tt_metal::LegacyShape> LayerNorm::compute_output_shapes(const st
         output_shape[3] = num_tiles_w * TILE_WIDTH;
         padding[3] = Padding::PadDimension{0, 31};
 
-        return {tt::tt_metal::Shape(output_shape, padding)};
+        return {tt::tt_metal::LegacyShape(output_shape, padding)};
     }
     else
     {
