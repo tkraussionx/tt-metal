@@ -15,7 +15,7 @@ void PrefixScan::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& a = input_tensors[0];
     const auto& bx = input_tensors[1];
     TT_FATAL(a.dtype() == bx.dtype(), "Expected input tensors to have the same data type");
-    TT_FATAL(a.layout() == Layout::TILE && bx.layout() == Layout::TILE, "Expected input tensors to be tile layout");
+    TT_FATAL(a.layout() == tt::tt_metal::Layout::TILE && bx.layout() == tt::tt_metal::Layout::TILE, "Expected input tensors to be tile layout");
     TT_FATAL(a.get_legacy_shape() == bx.get_legacy_shape(), "Expected input tensors to have the same shape");
 
     const auto& shape = a.get_legacy_shape();
@@ -24,21 +24,21 @@ void PrefixScan::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL(shape[2] >= tt::constants::TILE_HEIGHT && shape[2] % tt::constants::TILE_HEIGHT == 0, "Sequence length should be a multiple of 32");
 
     const auto& h = input_tensors.at(2);
-    TT_FATAL(h.dtype() == DataType::BFLOAT16, "Expected initial hidden state to be bfloat16");
-    TT_FATAL(h.layout() == Layout::ROW_MAJOR, "Expected initial hidden state to be row-major");
+    TT_FATAL(h.dtype() == tt::tt_metal::DataType::BFLOAT16, "Expected initial hidden state to be bfloat16");
+    TT_FATAL(h.layout() == tt::tt_metal::Layout::ROW_MAJOR, "Expected initial hidden state to be row-major");
 
     TT_FATAL(a.is_sharded() && bx.is_sharded() && h.is_sharded(), "Expected input tensors to be sharded");
     TT_FATAL(
         a.shard_spec().has_value() && bx.shard_spec().has_value() && h.shard_spec().has_value(),
         "Expected input tensors to be sharded");
     TT_FATAL(
-        a.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR,
+        a.shard_spec().value().orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR,
         "Expected A tensor to be row major orientation");
     TT_FATAL(
-        bx.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR,
+        bx.shard_spec().value().orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR,
         "Expected Bx tensor to be row major orientation");
     TT_FATAL(
-        h.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR,
+        h.shard_spec().value().orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR,
         "Expected h tensor to be row major orientation");
 }
 
@@ -48,11 +48,11 @@ std::vector<tt::tt_metal::LegacyShape> PrefixScan::compute_output_shapes(const s
 }
 
 std::vector<Tensor> PrefixScan::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
-    return operation::generic_create_output_tensors(
-        *this, input_tensors, this->dtype, Layout::TILE, this->memory_config);
+    return tt::tt_metal::operation::generic_create_output_tensors(
+        *this, input_tensors, this->dtype, tt::tt_metal::Layout::TILE, this->memory_config);
 }
 
-operation::ProgramWithCallbacks PrefixScan::create_program(
+tt::tt_metal::operation::ProgramWithCallbacks PrefixScan::create_program(
     const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
     const auto& a = input_tensors.at(0);
     const auto& bx = input_tensors.at(1);

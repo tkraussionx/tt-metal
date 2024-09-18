@@ -174,11 +174,11 @@ std::vector<Tensor> AllGather::create_output_tensors(const std::vector<Tensor> &
             this->output_mem_config
             )};
     } else {
-        return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), input_tensor.get_layout(), this->output_mem_config);
+        return generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), input_tensor.get_layout(), this->output_mem_config);
     }
 }
 
-operation::ProgramWithCallbacks AllGather::create_program(const std::vector<Tensor> & input_tensors, std::vector<Tensor> &output_tensors) const {
+ProgramWithCallbacks AllGather::create_program(const std::vector<Tensor> & input_tensors, std::vector<Tensor> &output_tensors) const {
     return all_gather_multi_core_with_workers(input_tensors[0], output_tensors[0], this->dim, this->num_links, this->ring_size, this->ring_index, this->receiver_device_id, this->sender_device_id, this->topology, this->user_defined_num_workers, this->user_defined_num_buffers_per_channel);
 }
 
@@ -191,8 +191,8 @@ Tensor all_gather(
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "This op is only supported for Fast Dispatch");
 
     auto devices = input_tensor.get_workers();
-    std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
-    operation::launch_op(
+    std::vector<Tensor> output_tensors = {Tensor(get_workers_for_op_output({input_tensor}))};
+    launch_op(
         [dim, num_links, memory_config, user_defined_num_workers, user_defined_num_buffers_per_channel, devices](
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
@@ -200,7 +200,7 @@ Tensor all_gather(
 
             const auto& input_tensor = input_tensors.at(0);
 
-            return operation::run(
+            return run(
                 create_all_gather_struct(input_tensor, dim, num_links, memory_config, user_defined_num_workers, user_defined_num_buffers_per_channel, devices),
                 {input_tensor});
         },

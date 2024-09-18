@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cmath>
 
+#include "ttnn/types.hpp"
 #include "ccl_host_datastructures.hpp"
 
 namespace ttnn {
@@ -213,8 +214,8 @@ void generate_edm_kernels_for_ring_or_linear_topology(
     std::vector<ccl::EriscDatamoverBuilder> const& counter_clockwise_edm_builders,
     std::optional<uint32_t> receiver_device_id,
     std::optional<uint32_t> sender_device_id) {
-    auto sender_noc = detail::GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch());
-    auto receiver_noc = detail::GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch());
+    auto sender_noc = GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch());
+    auto receiver_noc = GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch());
     uint32_t sender_socket_idx = 0;
     uint32_t receiver_socket_idx = 0;
     if (receiver_device_id == sender_device_id) {

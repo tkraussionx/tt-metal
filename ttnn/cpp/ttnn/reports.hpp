@@ -6,7 +6,10 @@
 #include <filesystem>
 #include <optional>
 
+#include "ttnn/types.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
+#include "tt_metal/common/core_descriptor.hpp"
+#include "tt_metal/impl/dispatch/dispatch_core_manager.hpp"
 
 namespace ttnn {
 

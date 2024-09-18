@@ -10,7 +10,7 @@ namespace ttnn::operations::experimental::ssm::detail {
 
 using namespace tt::constants;
 
-operation::ProgramWithCallbacks multi_core_ssm_prefix_scan(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_ssm_prefix_scan(
     const Tensor& a,
     const Tensor& bx,
     const Tensor& h,
@@ -37,8 +37,8 @@ operation::ProgramWithCallbacks multi_core_ssm_prefix_scan(
                                             uint32_t num_tiles,
                                             uint32_t tile_size,
                                             const tt::DataFormat& format,
-                                            Buffer* buffer = nullptr) -> tt::tt_metal::CBHandle {
-        auto config = CircularBufferConfig(num_tiles * tile_size, {{index, format}}).set_page_size(index, tile_size);
+                                            tt::tt_metal::Buffer* buffer = nullptr) -> tt::tt_metal::CBHandle {
+        auto config = tt::tt_metal::CircularBufferConfig(num_tiles * tile_size, {{index, format}}).set_page_size(index, tile_size);
         if (buffer != nullptr) {
             config = config.set_globally_allocated_address(*buffer);
         }
@@ -150,7 +150,7 @@ operation::ProgramWithCallbacks multi_core_ssm_prefix_scan(
          cb_a_in,
          cb_bx_in,
          cb_h_in,
-         cb_out](Program& program, const Tensor& a, const Tensor& bx, const Tensor& h, const Tensor& output) {
+         cb_out](tt::tt_metal::Program& program, const Tensor& a, const Tensor& bx, const Tensor& h, const Tensor& output) {
             tt::tt_metal::Buffer* a_buffer = a.buffer();
             tt::tt_metal::Buffer* bx_buffer = bx.buffer();
             tt::tt_metal::Buffer* h_buffer = h.buffer();
@@ -192,7 +192,7 @@ operation::ProgramWithCallbacks multi_core_ssm_prefix_scan(
 
     auto override_runtime_arguments_callback = [set_runtime_args](
                                                    const void* operation,
-                                                   Program& program,
+                                                   tt::tt_metal::Program& program,
                                                    const std::vector<Tensor>& input_tensors,
                                                    const std::vector<std::optional<const Tensor>>&,
                                                    const std::vector<Tensor>& output_tensors) {

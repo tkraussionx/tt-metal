@@ -27,7 +27,7 @@ namespace tt {
 
 namespace tt_metal {
 
-void ::detail::ProgramDeleter::operator()(Program *p) {
+void detail::ProgramDeleter::operator()(Program *p) {
     delete p;
 }
 

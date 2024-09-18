@@ -5,6 +5,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/program/program.hpp"
 #include "ttnn/operations/ccl/ccl_op_fusion.hpp"
+#include "ttnn/types.hpp"
 
 namespace ttnn {
 namespace experimental {

@@ -266,7 +266,7 @@ inline void read_data_from_device_buffer(
 template <typename T>
 inline void read_data_from_device_buffer(DeviceBuffer device_buffer, vector<T>& host_buffer) {
     std::vector<uint32_t> host_buffer_uint32;
-    ::detail::ReadFromBuffer(device_buffer, host_buffer_uint32);
+    tt::tt_metal::detail::ReadFromBuffer(device_buffer, host_buffer_uint32);
     host_buffer = unpack_uint32_vec<T>(host_buffer_uint32);
 }
 

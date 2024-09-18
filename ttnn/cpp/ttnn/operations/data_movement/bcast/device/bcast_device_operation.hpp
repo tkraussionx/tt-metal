@@ -7,6 +7,7 @@
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/operation.hpp"
 #include "ttnn/operations/data_movement/bcast/bcast_types.hpp"
+#include "ttnn/types.hpp"
 
 namespace ttnn::operations::data_movement {
 
@@ -31,11 +32,11 @@ struct EltwiseBinaryBroadcast {
     void validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const;
     std::vector<tt::tt_metal::LegacyShape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const;
-    operation::ProgramWithCallbacks create_program(
+    ProgramWithCallbacks create_program(
         const std::vector<Tensor> &input_tensors, std::vector<Tensor> &output_tensors) const;
     BcastOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
 
-    const operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
+    const Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
 };
 
 } // ttnn::operations::data_movement

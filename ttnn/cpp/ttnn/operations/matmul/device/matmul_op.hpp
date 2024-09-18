@@ -11,6 +11,7 @@
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/tensor/tensor_utils.hpp"
 #include "ttnn/types.hpp"
+#include "ttnn/operation.hpp"
 
 #include "ttnn/operations/ccl/ccl_op_fusion.hpp"
 

@@ -27,10 +27,10 @@ ttnn::Tensor ExecuteScaledDotProductAttention::invoke(
     auto kernel_config_val = init_device_compute_kernel_config(
         input_tensor_q.device()->arch(), compute_kernel_config, MathFidelity::HiFi2, true, false, false);
 
-    return operation::run(
+    return run(
                ScaledDotProductAttention{
                    .scale = scale,
-                   .output_mem_config = memory_config.value_or(operation::DEFAULT_OUTPUT_MEMORY_CONFIG),
+                   .output_mem_config = memory_config.value_or(DEFAULT_OUTPUT_MEMORY_CONFIG),
                    .program_config = program_config,
                    .is_causal = is_causal,
                    .compute_kernel_config = kernel_config_val,

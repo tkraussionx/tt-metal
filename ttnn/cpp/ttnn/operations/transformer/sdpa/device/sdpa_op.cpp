@@ -141,11 +141,11 @@ std::vector<tt::tt_metal::LegacyShape> ScaledDotProductAttention::compute_output
 }
 
 std::vector<Tensor> ScaledDotProductAttention::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
-    return operation::generic_create_output_tensors(
+    return generic_create_output_tensors(
         *this, input_tensors, input_tensors.at(0).get_dtype(), Layout::TILE, this->output_mem_config);
 }
 
-operation::ProgramWithCallbacks ScaledDotProductAttention::create_program(
+ProgramWithCallbacks ScaledDotProductAttention::create_program(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     std::vector<Tensor>& output_tensors) const {

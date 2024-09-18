@@ -4,6 +4,7 @@
 
 #include "sliding_window.hpp"
 #include <vector>
+#include "ttnn/tensor/types.hpp"
 
 namespace ttnn::operations::sliding_window{
 std::size_t SlidingWindowConfig::get_hash() const {
@@ -160,7 +161,7 @@ uint32_t generate_max_out_nsticks_per_core(const std::vector<std::pair<uint32_pa
     return max_out_nsticks_per_core;
 }
 
-std::tuple<std::vector<std::vector<uint16_t>>, std::vector<std::vector<uint16_t>>, std::vector<std::vector<uint16_t>>> generate_halo_kernel_config_tensors(const std::vector<std::pair<bool, uint32_pair_t>>& tensor_metadata, const std::vector<std::pair<uint32_pair_t, uint32_pair_t>>& shard_boundaries, bool is_block_sharded, bool transpose_mcast, bool remote_read, Device* device) {
+std::tuple<std::vector<std::vector<uint16_t>>, std::vector<std::vector<uint16_t>>, std::vector<std::vector<uint16_t>>> generate_halo_kernel_config_tensors(const std::vector<std::pair<bool, uint32_pair_t>>& tensor_metadata, const std::vector<std::pair<uint32_pair_t, uint32_pair_t>>& shard_boundaries, bool is_block_sharded, bool transpose_mcast, bool remote_read, tt::tt_metal::Device* device) {
     auto core_id_to_noc_coords = [is_block_sharded, transpose_mcast, device](uint32_t core_id) -> CoreCoord {
         auto num_cores_x = device->compute_with_storage_grid_size().x;
         auto core_coord = is_block_sharded ? (transpose_mcast ? CoreCoord(core_id, 0) : CoreCoord(0, core_id)) : CoreCoord(core_id % num_cores_x, core_id / num_cores_x);
@@ -422,30 +423,30 @@ Tensor construct_on_host_config_tensor(const std::vector<std::vector<uint16_t>>&
     extend_with_zeroes = extend_with_zeroes > 0 ? 2 - extend_with_zeroes : 0;
     Shape config_shape = Shape(std::vector<uint32_t>{(uint32_t) config.size(), (uint32_t) config[0].size() + extend_with_zeroes});
     std::vector<uint16_t> config_vector = flatten(config, extend_with_zeroes);
-    if (p_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED) {
-        auto config_buffer = owned_buffer::create<uint16_t>(std::move(config_vector));
+    if (p_config.shard_scheme == tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED) {
+        auto config_buffer = tt::tt_metal::owned_buffer::create<uint16_t>(std::move(config_vector));
         log_debug(tt::LogOp, "config_shape: ({}, {})", config_shape[0], config_shape[1]);
-        return Tensor(OwnedStorage{config_buffer}, config_shape, DataType::UINT16, Layout::ROW_MAJOR);
-    } else if(p_config.shard_scheme == TensorMemoryLayout::WIDTH_SHARDED) {
+        return Tensor(tt::tt_metal::OwnedStorage{config_buffer}, config_shape, tt::tt_metal::DataType::UINT16, tt::tt_metal::Layout::ROW_MAJOR);
+    } else if(p_config.shard_scheme == tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED) {
             uint32_t repeat_factor = p_config.grid.num_cores();
             std::vector<uint16_t> repeat_config;
             for (uint32_t i = 0; i < repeat_factor; ++ i) {
                 repeat_config.insert(repeat_config.end(), config_vector.begin(), config_vector.end());
             }
-            auto config_buffer = owned_buffer::create<uint16_t>(std::move(repeat_config));
+            auto config_buffer = tt::tt_metal::owned_buffer::create<uint16_t>(std::move(repeat_config));
             config_shape = Shape(std::vector<uint32_t>{config_shape[0] * repeat_factor, config_shape[1]});
-            return Tensor(OwnedStorage{config_buffer}, config_shape, DataType::UINT16, Layout::ROW_MAJOR);
-    } else if (p_config.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED) {
+            return Tensor(tt::tt_metal::OwnedStorage{config_buffer}, config_shape, tt::tt_metal::DataType::UINT16, tt::tt_metal::Layout::ROW_MAJOR);
+    } else if (p_config.shard_scheme == tt::tt_metal::TensorMemoryLayout::BLOCK_SHARDED) {
         TT_ASSERT(p_config.grid.ranges().size() == 1, "BLOCK_SHARDED should have just a single core range");
         // NOTE: it is assumed that the range start is always (0, 0)
         uint32_t ncores_y = p_config.grid.ranges().begin()->end_coord.y + 1;
         uint32_t ncores_x = p_config.grid.ranges().begin()->end_coord.x + 1;
         std::vector<uint16_t> repeat_config;
         uint32_t repeat_factor = 0;
-        if (p_config.shard_orientation == ShardOrientation::ROW_MAJOR) {
+        if (p_config.shard_orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR) {
             TT_ASSERT(config.size() == ncores_y, "Invalid config size {} (!= {}) for BLOCK_SHARDED ROW_MAJOR", config.size(), ncores_y);
             repeat_factor = ncores_x;
-        } else if (p_config.shard_orientation == ShardOrientation::COL_MAJOR) {
+        } else if (p_config.shard_orientation == tt::tt_metal::ShardOrientation::COL_MAJOR) {
             TT_ASSERT(config.size() == ncores_x, "Invalid config size {} (!= {}) for BLOCK_SHARDED COL_MAJOR", config.size(), ncores_x);
             repeat_factor = ncores_y;
         } else {
@@ -454,21 +455,21 @@ Tensor construct_on_host_config_tensor(const std::vector<std::vector<uint16_t>>&
         for (uint32_t i = 0; i < repeat_factor; ++ i) {
             repeat_config.insert(repeat_config.end(), config_vector.begin(), config_vector.end());
         }
-        auto config_buffer = owned_buffer::create<uint16_t>(std::move(repeat_config));
+        auto config_buffer = tt::tt_metal::owned_buffer::create<uint16_t>(std::move(repeat_config));
         config_shape = Shape(std::vector<uint32_t>{config_shape[0] * repeat_factor, config_shape[1]});
-        return Tensor(OwnedStorage{config_buffer}, config_shape, DataType::UINT16, Layout::ROW_MAJOR);
+        return Tensor(tt::tt_metal::OwnedStorage{config_buffer}, config_shape, tt::tt_metal::DataType::UINT16, tt::tt_metal::Layout::ROW_MAJOR);
     } else {
         TT_ASSERT(false, "Unsupported shard scheme");
         return Tensor();
     }
 }
 
-Tensor move_config_tensor_to_device(const Tensor& config_tensor, const ParallelConfig& p_config, bool is_block_sharded, Device* device) {
+Tensor move_config_tensor_to_device(const Tensor& config_tensor, const ParallelConfig& p_config, bool is_block_sharded, tt::tt_metal::Device* device) {
     auto shard_shape = std::array<uint32_t, 2>({1, (uint32_t) config_tensor.get_shape()[-1]});
     log_debug(tt::LogOp, "shard_shape: ({}, {})", shard_shape[0], shard_shape[1]);
-    auto config_shard_orientation = is_block_sharded ? (p_config.shard_orientation == ShardOrientation::COL_MAJOR ? ShardOrientation::ROW_MAJOR : ShardOrientation::COL_MAJOR) : ShardOrientation::ROW_MAJOR;
-    ShardSpec shard_spec(p_config.grid, shard_shape, config_shard_orientation, false);
-    MemoryConfig memory_config{TensorMemoryLayout::HEIGHT_SHARDED, BufferType::L1_SMALL, shard_spec};
+    auto config_shard_orientation = is_block_sharded ? (p_config.shard_orientation == tt::tt_metal::ShardOrientation::COL_MAJOR ? tt::tt_metal::ShardOrientation::ROW_MAJOR : tt::tt_metal::ShardOrientation::COL_MAJOR) : tt::tt_metal::ShardOrientation::ROW_MAJOR;
+    tt::tt_metal::ShardSpec shard_spec(p_config.grid, shard_shape, config_shard_orientation, false);
+    tt::tt_metal::MemoryConfig memory_config{tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED, tt::tt_metal::BufferType::L1_SMALL, shard_spec};
     return config_tensor.to(device, memory_config);
 }
 
@@ -487,19 +488,19 @@ std::string SlidingWindowConfig::to_string() const {
 
 auto fmt::formatter<ttnn::operations::sliding_window::ParallelConfig>::format(const ttnn::operations::sliding_window::ParallelConfig& t, format_context& ctx) const -> format_context::iterator {
         std::string shard_scheme_str = "";
-        if(t.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED) {
+        if(t.shard_scheme == tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED) {
             shard_scheme_str = "HEIGHT_SHARDED";
-        } else if(t.shard_scheme == TensorMemoryLayout::BLOCK_SHARDED) {
+        } else if(t.shard_scheme == tt::tt_metal::TensorMemoryLayout::BLOCK_SHARDED) {
             shard_scheme_str = "BLOCK_SHARDED";
-        } else if(t.shard_scheme == TensorMemoryLayout::WIDTH_SHARDED) {
+        } else if(t.shard_scheme == tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED) {
             shard_scheme_str = "WIDTH_SHARDED";
         } else {
             shard_scheme_str = "NOT_SHARDED";
         }
         std::string shard_orientation_str = "";
-        if(t.shard_orientation == ShardOrientation::COL_MAJOR){
+        if(t.shard_orientation == tt::tt_metal::ShardOrientation::COL_MAJOR){
             shard_orientation_str="COL_MAJOR";
-        } else if(t.shard_orientation == ShardOrientation::ROW_MAJOR){
+        } else if(t.shard_orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR){
             shard_orientation_str="ROW_MAJOR";
         } else {
             shard_orientation_str="INVALID";

@@ -10,14 +10,14 @@
 namespace ttnn::operations::experimental::ssm {
 
 struct PrefixScan {
-    MemoryConfig memory_config;
-    DataType dtype;
+    tt::tt_metal::MemoryConfig memory_config;
+    tt::tt_metal::DataType dtype;
     MathFidelity math_fidelity;
 
     void validate(const std::vector<Tensor>& input_tensors) const;
     std::vector<tt::tt_metal::LegacyShape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
-    operation::ProgramWithCallbacks create_program(
+    tt::tt_metal::operation::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const;
 };
 

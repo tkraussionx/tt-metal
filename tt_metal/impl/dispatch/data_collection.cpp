@@ -116,18 +116,18 @@ public:
         inst = nullptr;
     };
 
-    void RecordData(Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv);
-    void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup> &kernel_groups);
-    void RecordProgramRun(Program &program);
+    void RecordData(tt_metal::Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv);
+    void RecordKernelGroups(tt_metal::Program &program, CoreType core_type, vector<tt_metal::KernelGroup> &kernel_groups);
+    void RecordProgramRun(tt_metal::Program &program);
     void DumpData();
 
 private:
     map<uint64_t, vector<DispatchData>> program_id_to_dispatch_data;
-    map<uint64_t, map<CoreType, vector<pair<kernel_id_array_t, CoreRangeSet>>>> program_id_to_kernel_groups;
+    map<uint64_t, map<CoreType, vector<pair<tt_metal::kernel_id_array_t, CoreRangeSet>>>> program_id_to_kernel_groups;
     map<uint64_t, int> program_id_to_call_count;
 };
 
-void DataCollector::RecordData(Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv) {
+void DataCollector::RecordData(tt_metal::Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv) {
     uint64_t program_id = program.get_id();
     if (program_id_to_dispatch_data.count(program_id) == 0) {
         // If no existing data for this program, initialize starting values.
@@ -142,11 +142,11 @@ void DataCollector::RecordData(Program &program, data_collector_t type, uint32_t
     program_id_to_dispatch_data[program_id].at(type).Update(transaction_size, riscv);
 }
 
-void DataCollector::RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup> &kernel_groups) {
+void DataCollector::RecordKernelGroups(tt_metal::Program &program, CoreType core_type, vector<tt_metal::KernelGroup> &kernel_groups) {
     uint64_t program_id = program.get_id();
     // Make a copy of relevant info, since user may destroy program before we dump.
-    for (KernelGroup &kernel_group : kernel_groups) {
-        kernel_id_array_t watcher_kernel_ids;
+    for (tt_metal::KernelGroup &kernel_group : kernel_groups) {
+        tt_metal::kernel_id_array_t watcher_kernel_ids;
         for (int idx = 0; idx < kernel_group.kernel_ids.size(); idx++) {
             if (kernel_group.kernel_ids[idx]) {
                 watcher_kernel_ids[idx] = program.get_kernel(*kernel_group.kernel_ids[idx])->get_watcher_kernel_id();
@@ -156,7 +156,7 @@ void DataCollector::RecordKernelGroups(Program &program, CoreType core_type, vec
     }
 }
 
-void DataCollector::RecordProgramRun(Program &program) {
+void DataCollector::RecordProgramRun(tt_metal::Program &program) {
     uint64_t program_id = program.get_id();
     program_id_to_call_count[program_id]++;
 }
@@ -202,7 +202,7 @@ void DataCollector::DumpData() {
         // Dump kernel ids for each kernel group in this program
         for (auto &core_type_and_kernel_groups : program_id_to_kernel_groups[program_id]) {
             CoreType core_type = core_type_and_kernel_groups.first;
-            vector<pair<kernel_id_array_t, CoreRangeSet>> &kernel_groups = core_type_and_kernel_groups.second;
+            vector<pair<tt_metal::kernel_id_array_t, CoreRangeSet>> &kernel_groups = core_type_and_kernel_groups.second;
             outfile << fmt::format("\t{} Kernel Groups: {}\n", core_type, kernel_groups.size());
             for (auto &ids_and_ranges : kernel_groups) {
                 // Dump kernel ids in this group
@@ -257,7 +257,7 @@ void InitDataCollector() {
 
 namespace tt {
 
-void RecordDispatchData(Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv) {
+void RecordDispatchData(tt_metal::Program &program, data_collector_t type, uint32_t transaction_size, RISCV riscv) {
     // Do nothing if we're not enabling data collection.
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;
@@ -266,7 +266,7 @@ void RecordDispatchData(Program &program, data_collector_t type, uint32_t transa
     DataCollector::inst->RecordData(program, type, transaction_size, riscv);
 }
 
-void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup> &kernel_groups) {
+void RecordKernelGroups(tt_metal::Program &program, CoreType core_type, vector<tt_metal::KernelGroup> &kernel_groups) {
     // Do nothing if we're not enabling data collection.
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;
@@ -275,7 +275,7 @@ void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup
     DataCollector::inst->RecordKernelGroups(program, core_type, kernel_groups);
 }
 
-void RecordProgramRun(Program &program) {
+void RecordProgramRun(tt_metal::Program &program) {
     // Do nothing if we're not enabling data collection.
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;

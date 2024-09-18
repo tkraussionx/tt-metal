@@ -20,7 +20,7 @@ using tt::tt_metal::Tensor;
 namespace ttnn::operations::sliding_window {
 
 // Calculate Convolution on padded input buffer.
-owned_buffer::Buffer<bfloat16> ref_conv_op(
+tt::tt_metal::owned_buffer::Buffer<bfloat16> ref_conv_op(
     const Tensor &input_padded_tensor,
     const Shape &input_nchw_shape,
     uint32_t stride_h,
@@ -30,8 +30,8 @@ owned_buffer::Buffer<bfloat16> ref_conv_op(
     const Shape &out_golden_pyt_tensor_shape);
 
 // Calculate convolution using op_trace_metadata on padded input buffer.
-owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const vector<float> &filter_vector,
     const std::vector<uint32_t> &op_trace_metadata,
     uint32_t stride_h,
@@ -42,8 +42,8 @@ owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
     uint32_t out_tensor_size);
 
 // Calculate convolution using shards on padded input buffer.
-owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const vector<float> &filter_vector,
     const vector<std::pair<uint32_pair_t, uint32_pair_t>> &shard_boundaries,
     uint32_t stride_h,
@@ -57,8 +57,8 @@ owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
     uint32_t out_tensor_size);
 
 // Calculate convolution using sliding window op configs on padded input buffer.
-owned_buffer::Buffer<bfloat16> conv_using_sliding_window_op_config(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_sliding_window_op_config(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const vector<float> &filter_vector,
     const std::vector<uint32_t> &op_trace_metadata,
     const vector<std::pair<uint32_pair_t, uint32_pair_t>> &shard_boundaries,

@@ -5,6 +5,7 @@
 
 #include "ttnn/cpp/ttnn/tensor/tensor_impl.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/ccl_host_datastructures.hpp"
+#include "ttnn/types.hpp"
 
 namespace ttnn {
 namespace ccl {

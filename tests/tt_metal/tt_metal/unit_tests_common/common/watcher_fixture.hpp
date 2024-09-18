@@ -8,6 +8,8 @@
 #include "impl/debug/watcher_server.hpp"
 #include "llrt/rtoptions.hpp"
 
+using namespace tt::tt_metal;
+
 // A version of CommonFixture with watcher enabled
 class WatcherFixture: public CommonFixture {
 public:

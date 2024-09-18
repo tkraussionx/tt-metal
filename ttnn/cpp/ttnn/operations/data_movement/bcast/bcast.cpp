@@ -8,6 +8,8 @@
 #include "ttnn/operations/eltwise/binary/binary.hpp"
 #include "ttnn/operations/eltwise/unary/unary.hpp"
 
+using namespace tt::tt_metal;
+
 namespace ttnn::operations::data_movement {
 
 // Does a broadcast

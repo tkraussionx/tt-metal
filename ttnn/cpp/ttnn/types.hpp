@@ -5,19 +5,46 @@
 #pragma once
 
 
+#include "impl/buffers/buffer.hpp"
+#include "impl/buffers/buffer_constants.hpp"
+#include "impl/buffers/circular_buffer_types.hpp"
+#include "impl/dispatch/command_queue.hpp"
+#include "impl/dispatch/dispatch_core_manager.hpp"
+#include "impl/event/event.hpp"
+#include "impl/kernels/data_types.hpp"
+#include "impl/kernels/kernel_types.hpp"
+#include "impl/program/program.hpp"
+#include "pybind11/attr.h"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/tensor/types.hpp"
+#include "ttnn/operation.hpp"
 
 namespace ttnn {
 namespace types {
 
 using Device = tt::tt_metal::Device;
+using MeshDevice = tt::tt_metal::MeshDevice;
 using MeshShape = tt::tt_metal::MeshShape;
 using DeviceIds = tt::tt_metal::DeviceIds;
-using MeshDevice = tt::tt_metal::MeshDevice;
-using MeshDeviceView = tt::tt_metal::MeshDeviceView;
+using DataMovementConfig = tt::tt_metal::DataMovementConfig;
+using DataMovementProcessor = tt::tt_metal::DataMovementProcessor;
+using ComputeConfig = tt::tt_metal::ComputeConfig;
+using CircularBufferConfig = tt::tt_metal::CircularBufferConfig;
+using KernelHandle = tt::tt_metal::KernelHandle;
+using Program = tt::tt_metal::Program;
+using CBHandle = tt::tt_metal::CBHandle;
+using ShardOrientation = tt::tt_metal::ShardOrientation;
+using Padding = tt::tt_metal::Padding;
+using ShardSpec = tt::tt_metal::ShardSpec;
+using ShardSpecBuffer = tt::tt_metal::ShardSpecBuffer;
+using CommandQueue = tt::tt_metal::CommandQueue;
+using Event = tt::tt_metal::Event;
+using NOC = tt::tt_metal::NOC;
+using dispatch_core_manager = tt::tt_metal::dispatch_core_manager;
+using OwnedBuffer = tt::tt_metal::OwnedBuffer;
+using BorrowedBuffer = tt::tt_metal::BorrowedBuffer;
 
 constexpr auto TILE_SIZE = 32;
 
@@ -32,6 +59,7 @@ static constexpr auto bfloat8_b = DataType::BFLOAT8_B;
 static constexpr auto bfloat4_b = DataType::BFLOAT4_B;
 
 using tt::tt_metal::BufferType;
+using tt::tt_metal::DispatchCoreType;
 using tt::tt_metal::MemoryConfig;
 using tt::tt_metal::TensorMemoryLayout;
 
@@ -142,6 +170,8 @@ static std::ostream &operator<<(std::ostream &os, const CoreGrid &core_grid) {
 
 }  // namespace types
 
+using namespace tt::tt_metal::operation;
 using namespace types;
+using namespace tt::tt_metal::owned_buffer;
 
 }  // namespace ttnn

@@ -7,7 +7,9 @@
 #include "tt_metal/common/core_coord.h"
 #include "eth_l1_address_map.h"
 #include "impl/buffers/buffer.hpp"
+#include "ttnn/types.hpp"
 #include "ttnn/tensor/tensor_impl.hpp"
+#include "ttnn/operation.hpp"
 #include "ttnn/operations/ccl/all_gather/device/all_gather_op.hpp"
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"
@@ -209,14 +211,14 @@ static void log_sharded_tensor_kernel_args(Tensor const& tensor, std::size_t pag
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
 //   (in other words, disable the "bidirectional" send flag)
-operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology, const std::optional<size_t> user_defined_num_workers, const std::optional<size_t> user_defined_num_buffers_per_channel) {
+ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const std::optional<chip_id_t> receiver_device_id, const std::optional<chip_id_t> sender_device_id, all_gather_op::Topology topology, const std::optional<size_t> user_defined_num_workers, const std::optional<size_t> user_defined_num_buffers_per_channel) {
 
     tt::tt_metal::Program program{};
     std::optional<experimental::ccl::AllGatherFusedOpSignaler> empty_fused_op_signaler;
     return all_gather_multi_core_with_workers_helper(program, input_tensor, output_tensor, dim, num_links, ring_size, ring_index, receiver_device_id, sender_device_id, topology, user_defined_num_workers, user_defined_num_buffers_per_channel, empty_fused_op_signaler);
 }
 
-operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
+ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
     tt::tt_metal::Program& program,
     const Tensor& input_tensor,
     Tensor& output_tensor,

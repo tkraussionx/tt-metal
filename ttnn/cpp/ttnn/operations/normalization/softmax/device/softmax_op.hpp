@@ -29,18 +29,18 @@ struct Softmax {
     void validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
     std::vector<tt::tt_metal::LegacyShape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors) const;
-    operation::ProgramWithCallbacks create_program(
+    tt::tt_metal::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         std::vector<Tensor> &output_tensors
     ) const;
 
-    const operation::Hash compute_program_hash(
+    const tt::tt_metal::Hash compute_program_hash(
         const std::vector<Tensor> &input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
 };
 
-operation::ProgramWithCallbacks scale_mask_softmax_multi_core(
+tt::tt_metal::ProgramWithCallbacks scale_mask_softmax_multi_core(
     const Tensor &input_tensor,
     const Tensor &output_tensor,
     const std::optional<const Tensor> mask,
@@ -51,7 +51,7 @@ operation::ProgramWithCallbacks scale_mask_softmax_multi_core(
 
 // hw_dims_only_causal_mask - represents if the causal mask is of shape [1, 1, h, w]
 // valid only if causal_mask == true, and is interleaved
-operation::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
+tt::tt_metal::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
     const Tensor &input_tensor,
     const Tensor &output_tensor,
     const std::optional<const Tensor> mask,

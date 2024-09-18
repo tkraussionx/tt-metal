@@ -9,7 +9,7 @@ namespace ttnn {
 
 namespace device {
 
-Device &open_device(int device_id, size_t l1_small_size, size_t trace_region_size, tt::tt_metal::DispatchCoreType dispatch_core_type) {
+Device &open_device(int device_id, size_t l1_small_size, size_t trace_region_size, DispatchCoreType dispatch_core_type) {
     tt::DevicePool::initialize({device_id}, 1, l1_small_size, trace_region_size, dispatch_core_type, {});
     return *(tt::DevicePool::instance().get_active_device(device_id));
 }

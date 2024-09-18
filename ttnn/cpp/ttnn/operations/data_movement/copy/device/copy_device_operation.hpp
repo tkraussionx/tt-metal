@@ -11,6 +11,7 @@
 #include "tt_metal/detail/util.hpp"
 
 #include "ttnn/run_operation.hpp"
+#include "ttnn/types.hpp"
 
 namespace ttnn::operations::data_movement {
 
@@ -26,10 +27,10 @@ struct CopyDeviceOperation {
     std::vector<tt::tt_metal::LegacyShape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
 
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>> &output_tensors) const;
-    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
     CopyOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
 };
 
-operation::ProgramWithCallbacks copy_multi_core(const Tensor &input, const Tensor &output, bool backwards = false);
+ProgramWithCallbacks copy_multi_core(const Tensor &input, const Tensor &output, bool backwards = false);
 
 }  // namespace tt_metal

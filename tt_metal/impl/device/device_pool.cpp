@@ -112,7 +112,7 @@ void DevicePool::initialize(
     const uint8_t num_hw_cqs,
     size_t l1_small_size,
     size_t trace_region_size,
-    DispatchCoreType dispatch_core_type,
+    tt_metal::DispatchCoreType dispatch_core_type,
     const std::vector<uint32_t> &l1_bank_remap) noexcept {
     log_debug(tt::LogMetal, "DevicePool initialize");
     tt::tt_metal::dispatch_core_manager::initialize(dispatch_core_type);
@@ -145,16 +145,16 @@ void DevicePool::initialize(
 }
 
 void DevicePool::initialize_device(Device* dev) const {
-    detail::ClearProfilerControlBuffer(dev);
+    tt_metal::detail::ClearProfilerControlBuffer(dev);
 
     // Create system memory writer for this device to have an associated interface to hardware command queue (i.e.
     // hugepage). Need to do this before FW init so we know what dispatch cores to reset.
     bool using_fast_dispatch = (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr);
     if (using_fast_dispatch) {
-        detail::DispatchStateCheck(true);
+        tt_metal::detail::DispatchStateCheck(true);
         dev->init_command_queue_host();
     } else {
-        detail::DispatchStateCheck(false);
+        tt_metal::detail::DispatchStateCheck(false);
         dev->initialize_synchronous_sw_cmd_queue();
         TT_ASSERT(dev->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
     }
@@ -171,7 +171,7 @@ void DevicePool::initialize_device(Device* dev) const {
     // Set up HW command queues on device for FD
     if (using_fast_dispatch)
         dev->init_command_queue_device();
-    detail::InitDeviceProfiler(dev);
+    tt_metal::detail::InitDeviceProfiler(dev);
 }
 
 void DevicePool::activate_device(chip_id_t id) {

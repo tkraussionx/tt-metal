@@ -32,17 +32,17 @@ std::string demangle(const char* name) {
     return ret_val;
 }
 
-std::string tensorMemoryLayoutToString(TensorMemoryLayout layout) {
+std::string tensorMemoryLayoutToString(tt::tt_metal::TensorMemoryLayout layout) {
     switch (layout) {
-        case TensorMemoryLayout::INTERLEAVED:
+        case tt::tt_metal::TensorMemoryLayout::INTERLEAVED:
             return "INTERLEAVED";
-        case TensorMemoryLayout::SINGLE_BANK:
+        case tt::tt_metal::TensorMemoryLayout::SINGLE_BANK:
             return "SINGLE_BANK";
-        case TensorMemoryLayout::HEIGHT_SHARDED:
+        case tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED:
             return "HEIGHT_SHARDED";
-        case TensorMemoryLayout::WIDTH_SHARDED:
+        case tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED:
             return "WIDTH_SHARDED";
-        case TensorMemoryLayout::BLOCK_SHARDED:
+        case tt::tt_metal::TensorMemoryLayout::BLOCK_SHARDED:
             return "BLOCK_SHARDED";
         default:
             return "UNKNOWN"; // Handle unexpected values
@@ -266,7 +266,7 @@ int GraphProcessor::add_tensor(const Tensor& t) {
     auto buffer = std::visit(
         [&t](auto&& storage) -> tt::tt_metal::Buffer* {
             using T = std::decay_t<decltype(storage)>;
-            if constexpr (std::is_same_v<T, DeviceStorage>) {
+            if constexpr (std::is_same_v<T, tt::tt_metal::DeviceStorage>) {
                 return t.buffer();
             } else {
                 return nullptr;

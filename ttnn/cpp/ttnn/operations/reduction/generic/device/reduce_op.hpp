@@ -51,6 +51,6 @@ Tensor reduce(
 
 namespace reduce_op_utils {
 
-std::map<string, string> get_defines(ReduceOpMath reduce_op, ReduceOpDim reduce_dim);
+std::map<string, string> get_defines(tt::tt_metal::ReduceOpMath reduce_op, tt::tt_metal::ReduceOpDim reduce_dim);
 
 } // namespace reduce_op_utils

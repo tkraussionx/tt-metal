@@ -3074,26 +3074,26 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
 
 }  // namespace tt::tt_metal
 
-std::ostream& operator<<(std::ostream& os, EnqueueCommandType const& type) {
+std::ostream& operator<<(std::ostream& os, tt::tt_metal::EnqueueCommandType const& type) {
     switch (type) {
-        case EnqueueCommandType::ENQUEUE_READ_BUFFER: os << "ENQUEUE_READ_BUFFER"; break;
-        case EnqueueCommandType::ENQUEUE_WRITE_BUFFER: os << "ENQUEUE_WRITE_BUFFER"; break;
-        case EnqueueCommandType::ENQUEUE_PROGRAM: os << "ENQUEUE_PROGRAM"; break;
-        case EnqueueCommandType::ENQUEUE_TRACE: os << "ENQUEUE_TRACE"; break;
-        case EnqueueCommandType::ENQUEUE_RECORD_EVENT: os << "ENQUEUE_RECORD_EVENT"; break;
-        case EnqueueCommandType::ENQUEUE_WAIT_FOR_EVENT: os << "ENQUEUE_WAIT_FOR_EVENT"; break;
-        case EnqueueCommandType::FINISH: os << "FINISH"; break;
-        case EnqueueCommandType::FLUSH: os << "FLUSH"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_READ_BUFFER: os << "ENQUEUE_READ_BUFFER"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_WRITE_BUFFER: os << "ENQUEUE_WRITE_BUFFER"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_PROGRAM: os << "ENQUEUE_PROGRAM"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_TRACE: os << "ENQUEUE_TRACE"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_RECORD_EVENT: os << "ENQUEUE_RECORD_EVENT"; break;
+        case tt::tt_metal::EnqueueCommandType::ENQUEUE_WAIT_FOR_EVENT: os << "ENQUEUE_WAIT_FOR_EVENT"; break;
+        case tt::tt_metal::EnqueueCommandType::FINISH: os << "FINISH"; break;
+        case tt::tt_metal::EnqueueCommandType::FLUSH: os << "FLUSH"; break;
         default: TT_THROW("Invalid command type!");
     }
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, CommandQueue::CommandQueueMode const& type) {
+std::ostream& operator<<(std::ostream& os, tt::tt_metal::CommandQueue::CommandQueueMode const& type) {
     switch (type) {
-        case CommandQueue::CommandQueueMode::PASSTHROUGH: os << "PASSTHROUGH"; break;
-        case CommandQueue::CommandQueueMode::ASYNC: os << "ASYNC"; break;
-        case CommandQueue::CommandQueueMode::TRACE: os << "TRACE"; break;
+        case tt::tt_metal::CommandQueue::CommandQueueMode::PASSTHROUGH: os << "PASSTHROUGH"; break;
+        case tt::tt_metal::CommandQueue::CommandQueueMode::ASYNC: os << "ASYNC"; break;
+        case tt::tt_metal::CommandQueue::CommandQueueMode::TRACE: os << "TRACE"; break;
         default: TT_THROW("Invalid CommandQueueMode type!");
     }
     return os;

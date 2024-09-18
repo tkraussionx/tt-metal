@@ -714,7 +714,7 @@ Tensor to_host_sharded(const Tensor& tensor) {
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         TT_THROW("FAST_DISPATCH is not supported for to_host_sharded!");
     }
-    ::detail::ReadFromBuffer(*device_buffer, device_data, true);
+    tt::tt_metal::detail::ReadFromBuffer(*device_buffer, device_data, true);
     auto data_vec = unpack_uint32_vec<T>(device_data);
     auto output_buffer = owned_buffer::create<T>(std::move(data_vec));
     return Tensor(OwnedStorage{output_buffer}, tensor.get_legacy_shape(), tensor.get_dtype(), tensor.get_layout());
@@ -774,7 +774,7 @@ void write_data_to_device_buffer(const BufferType<T>& host_buffer, Buffer& devic
     // And effectively get rid of any additional allocation
 
     auto uint32_data = pack_vec_into_uint32_vec<T>(host_buffer);
-    ::detail::WriteToBuffer(device_buffer, uint32_data);
+    tt::tt_metal::detail::WriteToBuffer(device_buffer, uint32_data);
 }
 
 template <typename T, template <typename> typename BufferType>
@@ -1341,7 +1341,7 @@ Tensor extract_shard(const Tensor& tensor, const uint32_t& core_id) {
     std::array<uint32_t, 4> shard_shape_array = {1, 1, buffer_shard_shape[0], buffer_shard_shape[1]};
     tt::tt_metal::LegacyShape shard_shape(shard_shape_array);
     std::vector<uint32_t> device_data;
-    ::detail::ReadShard(*buffer, device_data, core_id);
+    tt::tt_metal::detail::ReadShard(*buffer, device_data, core_id);
 
     auto unpacked_data = tensor_impl::unpack_uint32_vec<T>(device_data);
     auto output_buffer = owned_buffer::create<T>(std::move(unpacked_data));

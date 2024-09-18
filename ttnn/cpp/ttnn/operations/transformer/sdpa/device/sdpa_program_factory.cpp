@@ -12,14 +12,14 @@
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/math.hpp"
-#include "ttnn/operation.hpp"
+#include "ttnn/types.hpp"
 
 using namespace tt::constants;
 
 namespace ttnn::operations::transformer::detail {
 
 // implementation of softmax with optional scale/mask (see the header for input_tensor more detailed description)
-operation::ProgramWithCallbacks sdpa_multi_core(
+ProgramWithCallbacks sdpa_multi_core(
     const Tensor& input_tensor_q,
     const Tensor& input_tensor_k,
     const Tensor& input_tensor_v,

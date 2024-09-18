@@ -84,7 +84,7 @@ MorehSumOperation::shape_return_value_t MorehSumOperation::compute_output_shapes
         if (is_tile_dim) {
             // e.g. (2, 64, 64) with dim 1 to be (2, 1[32], 64)
             shape[operation_attributes.dim] = tt::constants::TILE_HEIGHT;
-            padding[operation_attributes.dim] = Padding::PadDimension{0, 31};
+            padding[operation_attributes.dim] = tt::tt_metal::Padding::PadDimension{0, 31};
         } else {
             // e.g. (2, 64, 64) with dim 0 to be (1, 64, 64)
             shape[operation_attributes.dim] = 1;
@@ -93,7 +93,7 @@ MorehSumOperation::shape_return_value_t MorehSumOperation::compute_output_shapes
         output_shape = ttnn::Shape{tt::tt_metal::LegacyShape(shape, padding)};
     } else {
         std::vector<uint32_t> shape;
-        std::vector<Padding::PadDimension> pad_dimensions;
+        std::vector<tt::tt_metal::Padding::PadDimension> pad_dimensions;
         const std::size_t output_rank = (is_tile_dim) ? (input_rank) : (input_rank - 1);
         auto input_padding = input_shape.value.padding();
 
@@ -106,10 +106,10 @@ MorehSumOperation::shape_return_value_t MorehSumOperation::compute_output_shapes
 
             shape.push_back((is_reduced_dim && is_tile_dim) ? (tt::constants::TILE_HEIGHT) : (input_shape.value[i]));
             pad_dimensions.push_back(
-                (is_reduced_dim && is_tile_dim) ? (Padding::PadDimension{0, 31}) : (input_padding[i]));
+                (is_reduced_dim && is_tile_dim) ? (tt::tt_metal::Padding::PadDimension{0, 31}) : (input_padding[i]));
         }
 
-        auto padding = Padding(pad_dimensions, input_padding.pad_value());
+        auto padding = tt::tt_metal::Padding(pad_dimensions, input_padding.pad_value());
         output_shape = ttnn::Shape{tt::tt_metal::LegacyShape(shape, padding)};
     }
 

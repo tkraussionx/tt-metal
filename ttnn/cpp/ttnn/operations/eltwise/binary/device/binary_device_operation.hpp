@@ -206,7 +206,7 @@ struct BinaryDeviceOperation {
     static tt::stl::hash::hash_t compute_program_hash(
         const operation_attributes_t&, const tensor_args_t&);
 
-    static operation::OpPerformanceModel create_op_performance_model(
+    static tt::tt_metal::operation::OpPerformanceModel create_op_performance_model(
         const operation_attributes_t& attributes,
         const tensor_args_t& tensor_args,
         tensor_return_value_t& tensor_return_value);

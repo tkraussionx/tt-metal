@@ -24,13 +24,13 @@ struct HaloDeviceOperation {
     bool transpose_mcast_;
     uint32_t reshard_num_cores_nhw_;
     uint32_t max_out_nsticks_per_core_;
-    MemoryConfig output_memory_config_;
+    tt::tt_metal::MemoryConfig output_memory_config_;
     bool is_out_tiled_;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
     std::vector<tt::tt_metal::LegacyShape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors) const;
-    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    tt::tt_metal::operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
     // const operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
 
     static constexpr auto attribute_names =
@@ -57,7 +57,7 @@ Tensor halo_op(const Tensor& input_tensor,
                 bool remote_read = false,
                 bool transpose_mcast = true,
                 uint32_t reshard_num_cores_nhw = 0,
-                MemoryConfig output_memory_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+                tt::tt_metal::MemoryConfig output_memory_config = tt::tt_metal::operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
                 bool is_out_tiled = true);
 
 } // namespace halo

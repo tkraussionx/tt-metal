@@ -22,6 +22,8 @@
 #include <vector>
 #include <algorithm>
 
+using namespace tt::tt_metal;
+
 namespace ttnn {
 
 enum AllGatherBidirectionalMode {

@@ -36,7 +36,7 @@ const uint32_t out0_cb = CB::c_out0;
 const uint32_t temp_sum_cb = CB::c_intermed3;
 
 
-operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
+ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     tt_metal::Program& program,
     const Tensor& a,
     const Tensor& b,

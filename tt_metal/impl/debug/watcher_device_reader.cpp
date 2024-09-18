@@ -50,8 +50,8 @@ static uint32_t get_riscv_stack_size(const CoreDescriptor &core, uint32_t type) 
 }
 
 // Helper function to get string rep of noc target.
-static string get_noc_target_str(Device *device, CoreDescriptor &core, int noc, const debug_sanitize_noc_addr_msg_t *san) {
-    auto get_core_and_mem_type = [](Device *device, CoreCoord &noc_coord, int noc) -> std::pair<string, string> {
+static string get_noc_target_str(tt_metal::Device *device, CoreDescriptor &core, int noc, const debug_sanitize_noc_addr_msg_t *san) {
+    auto get_core_and_mem_type = [](tt_metal::Device *device, CoreCoord &noc_coord, int noc) -> std::pair<string, string> {
         // Get the physical coord from the noc coord
         const metal_SocDescriptor &soc_d = tt::Cluster::instance().get_soc_desc(device->id());
         CoreCoord phys_core = {

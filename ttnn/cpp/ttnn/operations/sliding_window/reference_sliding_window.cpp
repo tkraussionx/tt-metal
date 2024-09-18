@@ -14,7 +14,7 @@
 
 namespace ttnn::operations::sliding_window {
 
-owned_buffer::Buffer<bfloat16> ref_conv_op(
+tt::tt_metal::owned_buffer::Buffer<bfloat16> ref_conv_op(
     const Tensor &input_padded_tensor,
     const Shape &input_nchw_shape,
     uint32_t stride_h,
@@ -26,13 +26,13 @@ owned_buffer::Buffer<bfloat16> ref_conv_op(
     uint32_t filter_h, filter_w;
     uint32_t output_n, output_h, output_w;
     uint32_t out_idx = 0;
-    auto input_padded_tensor_buf = owned_buffer::get_as<bfloat16>(input_padded_tensor);
+    auto input_padded_tensor_buf = tt::tt_metal::owned_buffer::get_as<bfloat16>(input_padded_tensor);
 
     std::tie(output_n, output_h, output_w) =
         std::forward_as_tuple(out_golden_pyt_tensor_shape[0], out_golden_pyt_tensor_shape[1], out_golden_pyt_tensor_shape[2]);
     std::tie(filter_h, filter_w) = std::forward_as_tuple(filter_pyt_tensor_shape[0], filter_pyt_tensor_shape[1]);
     std::tie(input_n, input_h, input_w) = std::forward_as_tuple(input_nchw_shape[0], input_nchw_shape[1], input_nchw_shape[2]);
-    auto out_golden_pyt_tensor = owned_buffer::create<bfloat16>(output_n * output_h * output_w);
+    auto out_golden_pyt_tensor = tt::tt_metal::owned_buffer::create<bfloat16>(output_n * output_h * output_w);
 
     std::vector<float> input_window;
     for (int i = 0; i < output_n; i++) {
@@ -60,8 +60,8 @@ owned_buffer::Buffer<bfloat16> ref_conv_op(
     return out_golden_pyt_tensor;
 }
 
-owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const std::vector<float> &filter_vector,
     const std::vector<uint32_t> &op_trace_metadata,
     uint32_t stride_h,
@@ -70,7 +70,7 @@ owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
     uint32_t filter_w,
     uint32_t padded_input_w,
     uint32_t out_tensor_size) {
-    auto conv_tensor_buf = owned_buffer::create<bfloat16>(out_tensor_size);
+    auto conv_tensor_buf = tt::tt_metal::owned_buffer::create<bfloat16>(out_tensor_size);
     vector<float> input_window;
     uint32_t out_idx = 0;
     for (auto anchor : op_trace_metadata) {
@@ -91,8 +91,8 @@ owned_buffer::Buffer<bfloat16> conv_using_op_trace_metadata(
     return conv_tensor_buf;
 }
 
-owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const std::vector<float> &filter_vector,
     const std::vector<std::pair<uint32_pair_t, uint32_pair_t>> &shard_boundaries,
     uint32_t stride_h,
@@ -104,7 +104,7 @@ owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
     uint32_t output_h,
     uint32_t output_w,
     uint32_t out_tensor_size) {
-    auto conv_tensor_buf = owned_buffer::create<bfloat16>(out_tensor_size);
+    auto conv_tensor_buf = tt::tt_metal::owned_buffer::create<bfloat16>(out_tensor_size);
     std::vector<float> input_window;
 
     uint32_t output_hw = output_h * output_w;
@@ -133,8 +133,8 @@ owned_buffer::Buffer<bfloat16> conv_using_shard_boundaries(
     return conv_tensor_buf;
 }
 
-owned_buffer::Buffer<bfloat16> conv_using_sliding_window_op_config(
-    const owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
+tt::tt_metal::owned_buffer::Buffer<bfloat16> conv_using_sliding_window_op_config(
+    const tt::tt_metal::owned_buffer::Buffer<bfloat16> &input_padded_tensor_buf,
     const vector<float> &filter_vector,
     const std::vector<uint32_t> &op_trace_metadata,
     const vector<std::pair<uint32_pair_t, uint32_pair_t>> &shard_boundaries,
@@ -147,7 +147,7 @@ owned_buffer::Buffer<bfloat16> conv_using_sliding_window_op_config(
     uint32_t filter_h,
     uint32_t filter_w,
     uint32_t out_tensor_size) {
-    auto conv_tensor_buf = owned_buffer::create<bfloat16>(out_tensor_size);
+    auto conv_tensor_buf = tt::tt_metal::owned_buffer::create<bfloat16>(out_tensor_size);
 
     vector<float> input_window;
     uint32_t out_idx = 0;

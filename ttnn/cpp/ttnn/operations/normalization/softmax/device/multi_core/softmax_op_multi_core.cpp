@@ -18,6 +18,7 @@
 #include <optional>
 
 using namespace tt::constants;
+using namespace tt::tt_metal;
 namespace ttnn::operations::normalization {
 
 inline bool is_dram(const Tensor& input_tensor) { return input_tensor.memory_config().buffer_type == BufferType::DRAM; }

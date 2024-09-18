@@ -13,6 +13,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/program/program.hpp"
 #include "ttnn/tensor/types.hpp"
+#include "ttnn/types.hpp"
 
 namespace ttnn {
 namespace ccl {
@@ -430,21 +431,21 @@ class InterleavedRingAllGatherTensorSlicer : public LegacyCclTensorSlicer {
 struct ShardedAddrGenArgBuilder {
     static bool shard_grid_is_transposed(Tensor const& t);
     static std::vector<uint32_t> emit_ct_args(Tensor const& t);
-    static std::vector<uint32_t> emit_rt_args(Device const* d, Tensor const& t);
+    static std::vector<uint32_t> emit_rt_args(tt::tt_metal::Device const* d, Tensor const& t);
     static void log_sharded_tensor_kernel_args(Tensor const& t, std::string const& prefix);
 };
 
 
 
 KernelHandle generate_edm_kernel(
-   tt::tt_metal::Program& program,
+    Program& program,
     Device const* device,
     ccl::EriscDatamoverBuilder const& edm_builder,
     CoreCoord const& eth_core,
-    NOC noc_id);
+    tt::tt_metal::NOC noc_id);
 
 void generate_edm_kernels_for_ring_or_linear_topology(
-   tt::tt_metal::Program& program,
+    Program& program,
     Device const* device,
     RingTopology const& topology_config,
     std::vector<ccl::EriscDatamoverBuilder> const& clockwise_edm_builders,

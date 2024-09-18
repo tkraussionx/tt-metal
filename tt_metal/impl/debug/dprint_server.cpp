@@ -49,7 +49,7 @@ static inline float bfloat16_to_float(uint16_t bfloat_val) {
 
 static inline uint64_t GetBaseAddr(Device *device, const CoreCoord &phys_core, int hart_id) {
 
-    dprint_buf_msg_t *buf = device->get_dev_addr<dprint_buf_msg_t *>(phys_core, HalMemAddrType::DPRINT);
+    dprint_buf_msg_t *buf = device->get_dev_addr<dprint_buf_msg_t *>(phys_core, tt::tt_metal::HalMemAddrType::DPRINT);
 
     return reinterpret_cast<uint64_t>(buf->data[hart_id]);
 }
@@ -87,7 +87,7 @@ static map<CoreType, set<CoreCoord>> get_all_physical_printable_cores(Device *de
 static map<CoreType, set<CoreCoord>> get_dispatch_physical_printable_cores(Device* device) {
     map<CoreType, set<CoreCoord>> physical_printable_dispatch_cores;
     unsigned num_cqs = tt::llrt::OptionsG.get_num_hw_cqs();
-    CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
+    CoreType dispatch_core_type = tt::tt_metal::dispatch_core_manager::instance().get_dispatch_core_type(device->id());
     for (auto logical_core : tt::get_logical_dispatch_cores(device->id(), num_cqs, dispatch_core_type)) {
         CoreCoord physical_core = device->physical_core_from_logical_core(logical_core, dispatch_core_type);
         physical_printable_dispatch_cores[dispatch_core_type].insert(physical_core);

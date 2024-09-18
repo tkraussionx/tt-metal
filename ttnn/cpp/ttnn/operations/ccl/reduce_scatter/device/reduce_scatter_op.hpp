@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "ttnn/operation.hpp"
 #include "ttnn/run_operation.hpp"
 #include "ttnn/operations/ccl/ccl_common.hpp"
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"

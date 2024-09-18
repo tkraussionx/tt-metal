@@ -22,7 +22,7 @@
 
 
 namespace{
-    inline void SynchronizeWorkerThreads(const std::vector<Device*>& workers) {
+    inline void SynchronizeWorkerThreads(const std::vector<tt::tt_metal::Device*>& workers) {
         // Push empty work to threads and ensure its been picked up
         static auto empty_work = std::make_shared<std::function<void()>>([](){});
         for (auto target_device : workers) {

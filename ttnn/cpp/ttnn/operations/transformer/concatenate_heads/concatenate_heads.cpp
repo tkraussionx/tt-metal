@@ -64,7 +64,7 @@ struct ConcatenateHeads : public ttnn::operations::experimental::transformer::NL
                 input_tensor.device(),
                 mem_config)};
         } else {
-            return operation::generic_create_output_tensors(
+            return generic_create_output_tensors(
                 *this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
         }
     }
@@ -72,7 +72,7 @@ struct ConcatenateHeads : public ttnn::operations::experimental::transformer::NL
 
 
 ttnn::Tensor ExecuteConcatenateHeads::invoke(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config) {
-    return operation::run(
+    return run(
         ConcatenateHeads{memory_config.value_or(input_tensor.memory_config())},
         {input_tensor}).at(0);
 }

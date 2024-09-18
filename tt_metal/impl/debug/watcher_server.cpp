@@ -27,19 +27,19 @@ namespace tt {
 namespace watcher {
 
 #define GET_WATCHER_TENSIX_DEV_ADDR()                                   \
-    hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::WATCHER)
+    tt_metal::hal.get_dev_addr(tt_metal::HalProgrammableCoreType::TENSIX, tt_metal::HalMemAddrType::WATCHER)
 
 #define GET_WATCHER_ERISC_DEV_ADDR()                                    \
-    hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::WATCHER)
+    tt_metal::hal.get_dev_addr(tt_metal::HalProgrammableCoreType::ACTIVE_ETH, tt_metal::HalMemAddrType::WATCHER)
 
 #define GET_WATCHER_IERISC_DEV_ADDR()                                   \
-    hal.get_dev_addr(HalProgrammableCoreType::IDLE_ETH, HalMemAddrType::WATCHER)
+    tt_metal::hal.get_dev_addr(tt_metal::HalProgrammableCoreType::IDLE_ETH, tt_metal::HalMemAddrType::WATCHER)
 
 static std::atomic<bool> enabled = false;
 static std::atomic<bool> server_running = false;
 static std::atomic<int> dump_count = 0;
 static std::mutex watch_mutex;
-static std::map<Device *, watcher::WatcherDeviceReader> devices;
+static std::map<tt_metal::Device *, watcher::WatcherDeviceReader> devices;
 static string logfile_path = "generated/watcher/";
 static string logfile_name = "watcher.log";
 static FILE *logfile = nullptr;
@@ -205,7 +205,7 @@ static void watcher_loop(int sleep_usecs) {
 
 }  // namespace watcher
 
-void watcher_init(Device *device) {
+void watcher_init(tt_metal::Device *device) {
     std::vector<uint32_t> watcher_init_val;
     watcher_init_val.resize(sizeof(watcher_msg_t) / sizeof(uint32_t), 0);
     watcher_msg_t *data = reinterpret_cast<watcher_msg_t *>(&(watcher_init_val[0]));
@@ -370,7 +370,7 @@ void watcher_init(Device *device) {
     log_debug(LogLLRuntime, "Watcher initialized device {}", device->id());
 }
 
-void watcher_attach(Device *device) {
+void watcher_attach(tt_metal::Device *device) {
     const std::lock_guard<std::mutex> lock(watcher::watch_mutex);
 
     if (!watcher::enabled && tt::llrt::OptionsG.get_watcher_enabled()) {
@@ -404,7 +404,7 @@ void watcher_attach(Device *device) {
             watcher::logfile, device, watcher::kernel_names, &watcher::set_watcher_exception_message));
 }
 
-void watcher_detach(Device *old) {
+void watcher_detach(tt_metal::Device *old) {
     {
         const std::lock_guard<std::mutex> lock(watcher::watch_mutex);
 

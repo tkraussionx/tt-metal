@@ -6,6 +6,8 @@
 #include "impl/debug/dprint_server.hpp"
 #include "tt_metal/common/core_descriptor.hpp"
 
+using namespace tt::tt_metal;
+
 // A version of CommonFixture with DPrint enabled on all cores.
 class DPrintFixture: public CommonFixture {
 public:

@@ -9,6 +9,7 @@
 #include "tt_metal/host_api.hpp"
 
 #include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operation.hpp"
 
 
 namespace ttnn {
