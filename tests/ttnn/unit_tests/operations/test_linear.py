@@ -9,6 +9,8 @@ import ttnn
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import torch_random, is_wormhole_b0
 
+from ttnn.model_preprocessing import preprocess_linear_weight, preprocess_linear_bias
+
 
 @pytest.mark.parametrize("batch_sizes", [(1,)])
 @pytest.mark.parametrize("m_size", [384])
@@ -262,3 +264,63 @@ def test_bloom_ff2_linear(device):
     )
 
     assert ttnn.pearson_correlation_coefficient(torch_output, output) >= 0.9992
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "input_channels, input_height, input_width, filter_height, filter_width, has_bias ",
+    (
+        (100, 49, 96, 96, 96, True),
+        (100, 49, 96, 96, 96, True),
+        (100, 49, 96, 96, 96, True),
+        (100, 49, 96, 96, 96, False),
+        (1, 4096, 96, 384, 96, True),
+        (1, 4096, 384, 96, 384, True),
+        (100, 49, 96, 96, 96, True),
+        (100, 49, 96, 96, 96, False),
+        (100, 49, 96, 96, 96, True),
+        (100, 49, 96, 96, 96, True),
+        (1, 4096, 96, 384, 96, True),
+        (1, 4096, 384, 96, 384, False),
+        (1, 1024, 384, 192, 384, True),
+        (25, 49, 192, 192, 192, True),
+        (25, 49, 192, 192, 192, True),
+    ),
+)
+def test_swin_s_linear(device, input_channels, input_height, input_width, filter_height, filter_width, has_bias):
+    input_shape = [input_channels, input_height, input_width]
+    weights_shape = [filter_height, filter_width]
+    linear_bias = None
+    if has_bias:
+        bias_shape = [384]
+        torch_bias_tensor = torch.randn(bias_shape, dtype=torch.bfloat16).float()
+        linear_bias = preprocess_linear_bias(torch_bias_tensor, dtype=ttnn.bfloat16)
+        linear_bias = ttnn.to_device(linear_bias, device)
+
+    torch_input_tensor = torch.randn(input_shape, dtype=torch.bfloat16).float()
+    torch_weights_tensor = torch.randn(weights_shape, dtype=torch.bfloat16).float()
+
+    tt_input_tensor = ttnn.from_torch(torch_input_tensor, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+    tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, ttnn.L1_MEMORY_CONFIG)
+
+    linear_weight = preprocess_linear_weight(torch_weights_tensor, dtype=ttnn.bfloat16)
+    linear_weight = ttnn.to_device(linear_weight, device)
+
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    linear_weight = ttnn.to_memory_config(linear_weight, ttnn.L1_MEMORY_CONFIG)
+
+    tt_output_tensor = ttnn.linear(
+        tt_input_tensor,
+        linear_weight,
+        bias=linear_bias,
+        dtype=ttnn.bfloat8_b,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+        compute_kernel_config=compute_kernel_config,
+    )

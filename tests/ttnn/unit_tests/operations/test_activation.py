@@ -359,3 +359,18 @@ def run_activation_test_threshold(device, h, w, scalar1, scalar2, ttnn_function,
 @pytest.mark.parametrize("w", [128])
 def test_threshold(device, h, w, value, threshold):
     run_activation_test_threshold(device, h, w, value, threshold, ttnn.threshold)
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "h, w ",
+    (
+        (1024, 768),
+        (256, 1536),
+        (4096, 384),
+        (64, 3072),
+    ),
+)
+def test_gelu_swin_t(device, h, w):
+    run_activation_unary_test(device, h, w, ttnn.gelu)
