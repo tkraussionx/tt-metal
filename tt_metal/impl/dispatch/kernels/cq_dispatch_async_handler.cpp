@@ -206,6 +206,8 @@ void kernel_main() {
     while(!done) {
         // These need to use NOC 1 BRISC_AT_CMD_BUF
         // DPRINT << "Trying to acquire pages: " << cmd_ptr << " " << cb_base << " " << cb_end << ENDL();
+        // Send go signal here (idling). This is okay for now, since dispatch_s can only proceed once dispatch_d sees workers as completed
+        // Need a clear count signal (that needs to wait)
         cb_acquire_pages_dispatch_s<my_noc_xy, my_dispatch_cb_sem_id>(1);
         // DPRINT << "Acquired pages" << ENDL();
         volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
@@ -221,6 +223,7 @@ void kernel_main() {
             num_mcasts_sent++;
             // Wait until workers have completed before sending go signal
             wait_for_workers(cmd);
+            // send go signal update here
             if (cmd->mcast.mcast_flag & send_mcast) {
                 // DPRINT << " Go Signal " << (cmd->mcast.go_signal & 0xFF) << " " <<  (cmd->mcast.go_signal & 0xFF00) << " " << (cmd->mcast.go_signal & 0xFF0000) << ENDL();
                 uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);

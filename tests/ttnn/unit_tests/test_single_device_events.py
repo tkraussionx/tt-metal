@@ -15,10 +15,8 @@ from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, L
 
 @pytest.mark.parametrize("shape", [(3, 1, 512, 512)])
 @pytest.mark.parametrize("device_params", [{"num_command_queues": 2}], indirect=True)
-def test_multi_device_events(device, shape):
-    # if device.get_num_devices() <= 1:
-    #     pytest.skip("This test requires multiple devices")
-
+def test_single_device_events(device, shape):
+    pytest.skip("Needs Eth dispatch to run on WH")
     # Enable Program Cache and Async Mode
     # for device_id in device.get_device_ids():
     device.enable_async(True)
