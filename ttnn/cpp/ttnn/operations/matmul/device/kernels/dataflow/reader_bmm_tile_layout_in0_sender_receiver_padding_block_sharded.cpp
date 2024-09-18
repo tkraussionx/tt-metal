@@ -8,7 +8,11 @@
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 
+// #define SKIP 1
+
 void kernel_main() {
+    // DeviceZoneScopedN("in0_sender");
+
     constexpr bool core_has_output_block_work = (bool)get_compile_time_arg_val(0);
     constexpr bool core_in_in0_receiver_mcast_grid = (bool)get_compile_time_arg_val(1);
 
@@ -126,13 +130,17 @@ void kernel_main() {
 
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
+            // DeviceZoneScopedN("in0_sender_block_loop");
             uint32_t block_id = block / num_blocks_per_shard;
             if constexpr (fuse_op) { // If used fused op, make block_id conform to ordering of tensor slices from all gather
                 block_id = fused_op_receiver.align_to_slice_and_sync(block, sender_id);
             }
 
+{
+    // DeviceZoneScopedN("reserve");
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-
+}
+            #ifndef SKIP
             // All cores in receiver grid need to participate in receiving regardless if they produce output work or
             // not. Otherwise, data corruption since we mcast from and to the same CB (eg. extract_shard_sub_blocks). If
             // we only ever mcast with loopback src (ie. always to a different CB), we can have just the cores that
@@ -248,8 +256,12 @@ void kernel_main() {
                 // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
                 noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             }
+            #endif
 
+{
+            // DeviceZoneScopedN("push_back");
             cb_push_back(cb_id_in0, in0_block_num_tiles);
+}
 
             // If core does not produce output block work, free cb_id_in0 immediately.
             // This is necessary since mcast is in lockstep; this ensures write ptr addresses are synced properly for
