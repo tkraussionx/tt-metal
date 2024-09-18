@@ -67,8 +67,8 @@ runs:
         run: |
           cp -r /github_workspace/* /usr/app/
           cd /usr/app/
-          rm -rf tt_metal tt_eager
           if [ ${{ inputs.install_wheel }} ]; then
+            rm -rf tt_metal tt_eager
             WHEEL_FILENAME=$(ls -1 *.whl)
             pip3 install --user $WHEEL_FILENAME
           fi
