@@ -37,6 +37,7 @@ class TtNeck:
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
             reshard=True,
+            height_sharding=False,
         )
 
         self.conv4 = Conv(
@@ -181,6 +182,7 @@ class TtNeck:
         output_tensor = self.conv3(device, output_tensor)
         output_tensor = ttnn.leaky_relu(output_tensor, slope=0.1)
 
+        print("output_tensor", output_tensor.shape)
         pool_1 = ttnn.max_pool2d(
             input_tensor=output_tensor,
             batch_size=1,
