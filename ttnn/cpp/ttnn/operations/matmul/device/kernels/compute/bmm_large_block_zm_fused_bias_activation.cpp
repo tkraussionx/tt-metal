@@ -14,6 +14,7 @@
 #endif
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "debug/dprint.h"
 
 // Please update
 // tests/tt_metal/tt_metal/perf_microbenchmark/1_compute_mm/kernels/bmm_large_block_zm_fused_bias_activation_copy.cpp
@@ -124,6 +125,13 @@ void MAIN {
 
 #ifdef SFPU_OP_INIT_ACTIVATION
     SFPU_OP_INIT_ACTIVATION
+#endif
+
+#ifdef MM_RAMP
+    // DIDT args
+    constexpr uint32_t mm_ramp_all_active_start = get_compile_time_arg_val(14);
+    constexpr uint32_t mm_ramp_all_active_end = get_compile_time_arg_val(15);
+    constexpr uint32_t cb_ramp_group_sync = tt::CB::c_intermed7;
 #endif
 
     constexpr bool spill = num_blocks > 1;
@@ -287,6 +295,14 @@ void MAIN {
 #else
             if constexpr (spill) {
                 enable_reload = true;
+            }
+#endif
+
+#ifdef MM_RAMP
+            if (block < mm_ramp_all_active_start or block >= mm_ramp_all_active_end) {
+                // DIDT: Let reader know compute is done
+                cb_reserve_back(cb_ramp_group_sync, 1);
+                cb_push_back(cb_ramp_group_sync, 1);
             }
 #endif
 

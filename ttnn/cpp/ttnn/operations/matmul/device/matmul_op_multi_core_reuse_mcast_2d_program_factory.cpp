@@ -263,6 +263,25 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
              (std::size_t)start_core_y + num_cores_with_work_r - 1}};
     }
 
+    // DIDT args
+    bool mm_enable_ramp;
+    uint32_t mm_ramp_group_size;
+    uint32_t mm_ramp_multiple;
+    uint32_t mm_ramp_all_active_start;
+    uint32_t mm_ramp_all_active_end;
+    std::tie(mm_enable_ramp, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end) = bmm_op_utils::get_mm_ramp_parameters(num_cores_with_work_c * num_cores_with_work_r, num_blocks);
+    // TODO: Only block sharded in0 is supported now
+    mm_enable_ramp &= in0_block_sharded;
+
+    uint32_t ramp_group_sync_semaphore;
+    std::cout << "before mm enable ramp!\n";
+    if (mm_enable_ramp) {
+        std::cout << "inside mm enable ramp!\n";
+        ramp_group_sync_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+
+        std::cout << "ramp_group_sync_semaphore: " << ramp_group_sync_semaphore << std::endl;
+    }
+
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
@@ -318,6 +337,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             // batch args
             (std::uint32_t)B  // batch
         };
+        // DIDT args
+        if (mm_enable_ramp) {
+            in0_sender_compile_time_args.push_back(ramp_group_sync_semaphore);
+            in0_sender_compile_time_args.push_back(mm_ramp_group_size);
+            in0_sender_compile_time_args.push_back(mm_ramp_multiple);
+            in0_sender_compile_time_args.push_back(mm_ramp_all_active_start);
+            in0_sender_compile_time_args.push_back(mm_ramp_all_active_end);
+        }
     } else {
         in0_sender_compile_time_args = {
             // interleaved accessor args
@@ -473,6 +500,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     }
 
     bmm_op_utils::add_stagger_defines_if_needed(device->arch(), cores.size(), mm_kernel_defines);
+
+   // DIDT args
+    if (mm_enable_ramp) {
+        mm_kernel_defines["MM_RAMP"] = "1";
+        mm_kernel_in0_sender_sharded_defines["MM_RAMP"] = "1";
+    }
 
     if (in0_receiver_interleaved.num_cores() == 0) {
         mm_kernel_in0_sender_interleaved_defines["SKIP_MCAST"] = "1";
@@ -641,6 +674,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         out_block_tiles,         // out_block_num_tiles
 
         untilize_out};
+    // DIDT args
+    if (mm_enable_ramp) {
+        compute_kernel_args.push_back(mm_ramp_all_active_start);
+        compute_kernel_args.push_back(mm_ramp_all_active_end);
+    }
 
     // Create compute kernel
     // bool fp32_dest_acc_en = true;
@@ -779,6 +817,15 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             in3_CB_size);
     }
 
+    // DIDT args
+    if (mm_enable_ramp) {
+        uint32_t cb_ramp_group_sync_index = 31; // Last intermed CB
+        // 16 bytes is the minimum page size for CB synchronization
+        CircularBufferConfig cb_ramp_group_sync_config =
+            CircularBufferConfig(16, {{cb_ramp_group_sync_index, tt::DataFormat::UInt32}}).set_page_size(cb_ramp_group_sync_index, 16);
+        auto cb_ramp_group_sync = tt_metal::CreateCircularBuffer(program, all_cores, cb_ramp_group_sync_config);
+    }
+
     // Parameters for last row, col, or block
     uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
     uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
@@ -822,6 +869,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             true);
     }
 
+    // DIDT args
+    std::vector<uint32_t> mm_ramp_cores_noc_x;
+    std::vector<uint32_t> mm_ramp_cores_noc_y;
+    if (mm_enable_ramp) {
+        for (const auto& core : cores) {
+            auto core_physical = device->worker_core_from_logical_core(core);
+            mm_ramp_cores_noc_x.push_back(core_physical.x);
+            mm_ramp_cores_noc_y.push_back(core_physical.y);
+        }
+    }
+
+    uint32_t i = 0;
     for (const auto& core : cores) {
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
@@ -886,6 +945,24 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
                 mm_in0_sender_args.push_back(in0_mcast_receiver_grid_same_coord);
             }
+
+            // DIDT args
+            if (mm_enable_ramp) {
+                uint32_t mm_ramp_group_initial_state = INVALID;
+                if (i % mm_ramp_group_size == 0) {
+                    mm_ramp_group_initial_state = VALID;
+                }
+
+                const uint32_t mm_ramp_cores_vec_offset = (i / mm_ramp_group_size) * mm_ramp_group_size; // rounds down by casting to uint
+                mm_in0_sender_args.reserve(2 + 2 * mm_ramp_group_size);
+                mm_in0_sender_args.push_back(i % mm_ramp_group_size);
+                mm_in0_sender_args.push_back(mm_ramp_group_initial_state);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
+
+                i++;
+            }
+
             if (in1_idx < num_blocks_x) {
                 tt_metal::SetRuntimeArgs(
                     program, mm_kernel_in0_sender_id, core, mm_in0_sender_args);  // RISCV_0_default
