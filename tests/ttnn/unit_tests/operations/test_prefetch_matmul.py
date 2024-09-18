@@ -360,7 +360,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (8, 1),
             4,
@@ -385,7 +385,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_12_pad],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (6, 2),
             4,
@@ -410,7 +410,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (8, 2),
             4,
@@ -435,7 +435,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_24_pad],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (8, 3),
             4,
@@ -460,7 +460,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (8, 4),
             4,
@@ -485,7 +485,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (6, 6),
             4,
@@ -510,7 +510,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
-            3584,  # Round up to 32k/8 from 28k/8
+            3584,
             3,
             (8, 6),
             4,
@@ -532,10 +532,135 @@ def run_prefetch_matmul_on_t3000_impl(
             ttnn.bfloat16,
             ttnn.bfloat4_b,
         ),
-        # (  # FF1/3 dram sharded 24
+        (  # FF1/3 dram sharded
+            "matmul_dram_sharded_ff1",
+            [1, 1, 32, hidden_size_tg],
+            3584,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_8_cores_grid,
+                    [
+                        shard_height,
+                        shard_width_hidden_dim_across_8_cores,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram_sharded_ff1",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
+        ),
+        (  # FF1/3 dram sharded
+            "matmul_dram_sharded_ff1",
+            [1, 1, 32, hidden_size_12_pad],
+            3584,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_12_cores_grid,
+                    [
+                        shard_height,
+                        shard_width_hidden_dim_across_12_cores,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram_sharded_ff1",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
+        ),
+        (  # FF1/3 dram sharded
+            "matmul_dram_sharded_ff1",
+            [1, 1, 32, hidden_size_tg],
+            3584,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_16_cores_grid,
+                    [
+                        shard_height,
+                        shard_width_hidden_dim_across_16_cores,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram_sharded_ff1",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
+        ),
+        (  # FF1/3 dram sharded
+            "matmul_dram_sharded_ff1",
+            [1, 1, 32, hidden_size_24_pad],
+            3584,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_24_cores_grid,
+                    [
+                        shard_height,
+                        shard_width_hidden_dim_across_24_cores,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram_sharded_ff1",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
+        ),
+        (  # FF1/3 dram sharded
+            "matmul_dram_sharded_ff1",
+            [1, 1, 32, hidden_size_tg],
+            3584,
+            3,
+            None,
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_32_cores_grid,
+                    [
+                        shard_height,
+                        shard_width_hidden_dim_across_32_cores,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram_sharded_ff1",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.bfloat4_b,
+        ),
+        # (  # FF1/3 dram sharded
         #     "matmul_dram_sharded_ff1",
-        #     [1, 1, 32, hidden_size_24_pad],
-        #     3584 + (32 * 24 // 3),  # Round up to 32k/8 from 28k/8
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
         #     3,
         #     None,
         #     4,
@@ -543,10 +668,10 @@ def run_prefetch_matmul_on_t3000_impl(
         #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
         #         ttnn.BufferType.L1,
         #         ttnn.ShardSpec(
-        #             shard_spec_24_cores_grid,
+        #             shard_spec_36_cores_grid,
         #             [
         #                 shard_height,
-        #                 shard_width_hidden_dim_across_24_cores,
+        #                 shard_width_hidden_dim_across_36_cores,
         #             ],
         #             ttnn.ShardOrientation.ROW_MAJOR,
         #             False,
@@ -560,7 +685,7 @@ def run_prefetch_matmul_on_t3000_impl(
         # (  # FF1/3 dram sharded
         #     "matmul_dram_sharded_ff1",
         #     [1, 1, 32, hidden_size_tg],
-        #     3584,  # Round up to 32k/8 from 28k/8
+        #     3584,
         #     3,
         #     None,
         #     4,
@@ -568,10 +693,10 @@ def run_prefetch_matmul_on_t3000_impl(
         #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
         #         ttnn.BufferType.L1,
         #         ttnn.ShardSpec(
-        #             shard_spec_8_cores_grid,
+        #             shard_spec_48_cores_grid,
         #             [
         #                 shard_height,
-        #                 shard_width_hidden_dim_across_8_cores,
+        #                 shard_width_hidden_dim_across_48_cores,
         #             ],
         #             ttnn.ShardOrientation.ROW_MAJOR,
         #             False,
@@ -654,8 +779,13 @@ def run_prefetch_matmul_on_t3000_impl(
         "ff1_matmul1d_32",
         "ff1_matmul1d_36",
         "ff1_matmul1d_48",
-        # "ff1_dram_sharded_24",
-        # "ff1_dram_sharded",
+        "ff1_dram_sharded_8",
+        "ff1_dram_sharded_12",
+        "ff1_dram_sharded_16",
+        "ff1_dram_sharded_24",
+        "ff1_dram_sharded_32",
+        # "ff1_dram_sharded_36",
+        # "ff1_dram_sharded_48",
         # "ff2_dram_sharded",
         # "qkv_dram_sharded",
         # "do_matmul_1d",
