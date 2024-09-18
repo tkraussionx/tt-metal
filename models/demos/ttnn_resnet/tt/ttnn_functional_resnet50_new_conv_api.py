@@ -112,7 +112,9 @@ def permute_conv_weights(weight, bias):
 class resnet50Bottleneck:
     expansion: int = 4
 
-    def __init__(self, parameters, downsample, stride, model_config) -> None:
+    def __init__(self, parameters, downsample, stride, model_config, layer=0, module=0) -> None:
+        self.layer = layer
+        self.module = module
         # init is just to pre-process pytorch weights and bias tensors
         self.conv1_weight_tensor = parameters.conv1.weight
         self.conv1_bias_tensor = parameters.conv1.bias
@@ -216,11 +218,8 @@ class resnet50Bottleneck:
         enable_split_reader=False,
         enable_subblock_padding=False,
     ):
-        logger.debug(
-            f"==== Running {batch_size}, {input_height}, {input_width}, {self.conv1_input_channels}, {self.conv1_output_channels}"
-        )
-
         # conv1 is 1x1 conv
+        logger.debug(f"Layer: {self.layer}, module: {self.module}")
         logger.debug(f"Running conv1")
         module_input_height = input_height
         out, input_height, input_width, self.conv1_weight_tensor, self.conv1_bias_tensor = ttnn.conv2d(
@@ -338,10 +337,6 @@ class resnet50Bottleneck:
             conv_op_cache=conv_op_cache,
         )
 
-        logger.debug(
-            f"{batch_size} and {input_height} and {self.conv1_input_channels} and {self.conv1_output_channels}"
-        )
-
         if (
             is_wormhole_b0()
             and batch_size == 20
@@ -349,7 +344,6 @@ class resnet50Bottleneck:
             and self.conv1_input_channels == 256
             and self.conv1_output_channels == 128
         ):
-            logger.info(f"==== Reallocating conv2 output")
             out = ttnn.reallocate(out)
 
         # conv3 is 1x1 conv
@@ -487,6 +481,7 @@ class resnet50:
             blocks=layers[0],
             stride=1,
             model_config=model_config,
+            layer=1,
         )
         self.layer2 = self._make_layer(
             parameters=parameters.layer2,
@@ -494,6 +489,7 @@ class resnet50:
             blocks=layers[1],
             stride=2,
             model_config=model_config,
+            layer=2,
         )
         self.layer3 = self._make_layer(
             parameters=parameters.layer3,
@@ -501,6 +497,7 @@ class resnet50:
             blocks=layers[2],
             stride=2,
             model_config=model_config,
+            layer=3,
         )
         self.layer4 = self._make_layer(
             parameters=parameters.layer4,
@@ -508,6 +505,7 @@ class resnet50:
             blocks=layers[3],
             stride=2,
             model_config=model_config,
+            layer=4,
         )
 
         # All modules in RN50 are unrolled here. One variable for each module. Only specific number of modules supported - layers MUST equal to [3, 4, 6, 3]
@@ -649,6 +647,7 @@ class resnet50:
         blocks: int,
         stride: int,
         model_config=None,
+        layer=0,
     ) -> List[resnet50Bottleneck]:
         layers = []
         layers.append(
@@ -657,6 +656,8 @@ class resnet50:
                 downsample=stride != 1 or self.inplanes != planes * resnet50Bottleneck.expansion,
                 stride=stride,
                 model_config=model_config,
+                layer=layer,
+                module=0,
             )
         )
         self.inplanes = planes * resnet50Bottleneck.expansion
@@ -667,6 +668,8 @@ class resnet50:
                     downsample=False,
                     stride=1,
                     model_config=model_config,
+                    layer=layer,
+                    module=block_num,
                 )
             )
         return layers
@@ -688,8 +691,6 @@ class resnet50:
         else:
             logger.debug(f"==== Optimized run")
 
-        logger.debug(f"==== fold on device")
-
         # run fold
         fold_output_tensor = ttnn.fold(
             input_tensor,
@@ -707,7 +708,7 @@ class resnet50:
 
         ttnn.deallocate(input_tensor)
 
-        logger.debug(f"==== first conv")
+        logger.debug(f"==== Resnet head")
 
         # first conv
         x, x_height, x_width, self.conv1_weight_tensor, self.conv1_bias_tensor = ttnn.conv2d(
@@ -762,7 +763,6 @@ class resnet50:
         if self.batch_size == 20 and not is_wormhole_b0():
             x = ttnn.reallocate(x)
 
-        logger.debug(f"==== Running layer 1 module 1")
         layer1_module1_input_shape = ttnn.Shape(x.get_legacy_shape())
 
         reshard = False
@@ -801,7 +801,6 @@ class resnet50:
                 tile_layout=True,
             )
 
-        logger.debug(f"==== Running layer 1 module 2")
         x, x_height, x_width = self.layer1_module2(
             x,
             device,
@@ -815,7 +814,6 @@ class resnet50:
             enable_subblock_padding=True if whb0_and_b16 else False,
         )
 
-        logger.debug(f"==== Running layer 1 module 3")
         x, x_height, x_width = self.layer1_module3(
             x,
             device,
@@ -843,7 +841,6 @@ class resnet50:
             else:
                 x = ttnn.to_memory_config(x, ops_parallel_config["layer2_module1_input"])
 
-        logger.debug(f"==== Running layer 2 module 1")
         x, x_height, x_width = self.layer2_module1(
             x,
             device,
@@ -869,7 +866,6 @@ class resnet50:
                 tile_layout=True,
             )
 
-        logger.debug(f"==== Running layer 2 module 2")
         x, x_height, x_width = self.layer2_module2(
             x,
             device,
@@ -883,7 +879,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 2 module 3")
         x, x_height, x_width = self.layer2_module3(
             x,
             device,
@@ -897,7 +892,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 2 module 4")
         x, x_height, x_width = self.layer2_module4(
             x,
             device,
@@ -921,7 +915,6 @@ class resnet50:
         else:
             x = ttnn.to_memory_config(x, ops_parallel_config["layer3_module1_input"])
 
-        logger.debug(f"==== Running layer 3 module 1")
         x, x_height, x_width = self.layer3_module1(
             x,
             device,
@@ -947,7 +940,6 @@ class resnet50:
                 tile_layout=True,
             )
 
-        logger.debug(f"==== Running layer 3 module 2")
         x, x_height, x_width = self.layer3_module2(
             x,
             device,
@@ -961,7 +953,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 3 module 3")
         x, x_height, x_width = self.layer3_module3(
             x,
             device,
@@ -975,7 +966,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 3 module 4")
         x, x_height, x_width = self.layer3_module4(
             x,
             device,
@@ -989,7 +979,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 3 module 5")
         x, x_height, x_width = self.layer3_module5(
             x,
             device,
@@ -1003,7 +992,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 3 module 6")
         x, x_height, x_width = self.layer3_module6(
             x,
             device,
@@ -1042,7 +1030,6 @@ class resnet50:
             else:
                 x = ttnn.to_memory_config(x, ops_parallel_config["layer4_module1_input"])
 
-        logger.debug(f"==== Running layer 4 module 1")
         x, x_height, x_width = self.layer4_module1(
             x,
             device,
@@ -1068,7 +1055,6 @@ class resnet50:
                 tile_layout=True,
             )
 
-        logger.debug(f"==== Running layer 4 module 2")
         x, x_height, x_width = self.layer4_module2(
             x,
             device,
@@ -1082,7 +1068,6 @@ class resnet50:
             enable_subblock_padding=False,
         )
 
-        logger.debug(f"==== Running layer 4 module 3")
         x, x_height, x_width = self.layer4_module3(
             x,
             device,
@@ -1095,6 +1080,8 @@ class resnet50:
             enable_split_reader=False,
             enable_subblock_padding=False,
         )
+
+        logger.debug(f"==== Resnet tail")
 
         grid_size = (8, 4)
         shard_grid = ttnn.CoreRangeSet(
@@ -1144,25 +1131,25 @@ class resnet50:
             _nearest_32(unpadded_shape[2]),
             _nearest_32(unpadded_shape[3]),
         ]
-        x = ttnn.tilize_with_val_padding(
-            x,
-            padded_shape,
-            0,
-            memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            dtype=self.model_config["ACTIVATIONS_DTYPE"],
-        )
+        # x = ttnn.tilize_with_val_padding(
+        #     x,
+        #     padded_shape,
+        #     0,
+        #     memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        #     dtype=self.model_config["ACTIVATIONS_DTYPE"],
+        # )
 
         x = self.avgpool(x, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG)
 
-        unpadded_shape_end = [
-            x.get_legacy_shape()[0] - 1,
-            x.get_legacy_shape()[1] - 1,
-            1 - 1,
-            x.get_legacy_shape()[3] - 1,
-        ]
-        x = ttnn.untilize_with_unpadding(
-            x, output_tensor_end=unpadded_shape_end, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG
-        )
+        # unpadded_shape_end = [
+        #     x.get_legacy_shape()[0] - 1,
+        #     x.get_legacy_shape()[1] - 1,
+        #     1 - 1,
+        #     x.get_legacy_shape()[3] - 1,
+        # ]
+        # x = ttnn.untilize_with_unpadding(
+        #     x, output_tensor_end=unpadded_shape_end, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG
+        # )
 
         x = ttnn.reshape(
             x, (1, x.get_legacy_shape()[1], self.batch_size * x.get_legacy_shape()[2], x.get_legacy_shape()[3])
@@ -1176,13 +1163,13 @@ class resnet50:
             _nearest_32(unpadded_shape[3]),
         ]
 
-        x = ttnn.tilize_with_val_padding(
-            x,
-            padded_shape,
-            0,
-            memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            dtype=self.model_config["ACTIVATIONS_DTYPE"],
-        )
+        # x = ttnn.tilize_with_val_padding(
+        #     x,
+        #     padded_shape,
+        #     0,
+        #     memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        #     dtype=self.model_config["ACTIVATIONS_DTYPE"],
+        # )
 
         x = self.fc(x)
         desired_shape = list(x.shape_without_padding())

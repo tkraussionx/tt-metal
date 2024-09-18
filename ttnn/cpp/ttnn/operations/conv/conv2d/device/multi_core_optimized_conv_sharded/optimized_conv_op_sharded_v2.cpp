@@ -866,7 +866,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t bias_ntiles_per_core = bias_ntiles / num_weight_slices_width;
 
     CoreRange all_cores(CoreCoord(0, 0), CoreCoord(num_cores_x - 1, num_cores_y - 1));
-    TT_FATAL(total_active_num_cores >= num_cores_x, "Error");
+    TT_FATAL(total_active_num_cores >= num_cores_x, "total_active_num_cores {} should be greater than or equal to num_cores_x {}", total_active_num_cores, num_cores_x);
     uint32_t num_active_cores_x = num_cores_x;
     uint32_t num_active_cores_y_with_full_x = total_active_num_cores / num_cores_x;
     uint32_t num_active_cores_x_last_y = total_active_num_cores % num_cores_x;
