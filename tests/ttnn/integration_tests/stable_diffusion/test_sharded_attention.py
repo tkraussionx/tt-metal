@@ -12,7 +12,7 @@ from models.utility_functions import (
     comp_pcc,
     tt2torch_tensor,
     torch2tt_tensor,
-    skip_for_wormhole_b0,
+    is_wormhole_b0,
     skip_for_grayskull,
 )
 from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
@@ -928,7 +928,7 @@ def test_q_and_kv(
         in_1,
         program_config=program_config,
         memory_config=block_sharded_memory_config,
-        dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+        dtype=ttnn.bfloat8_b,
         compute_kernel_config=compute_kernel_config,
     )
     in_0_sharded.deallocate()

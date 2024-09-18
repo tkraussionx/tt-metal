@@ -23,7 +23,7 @@ from models.demos.t3000.llama2_70b.reference.llama.llama.tokenizer3 import (
     Message,
 )
 from models.demos.t3000.llama2_70b.tt.llama_common import (
-    check_device_mesh,
+    check_mesh_device,
     setup_llama_env,
 )
 
@@ -37,35 +37,34 @@ from models.demos.t3000.llama2_70b.demo.demo import (
 )
 from conftest import get_dispatch_core_type
 
-# from model_weights_handler import get_model_weights_and_tt_cache_paths
 from models.demos.t3000.llama3_70b.demo.inference_config import inference_config
-# from inference_logger import get_logger
 
 logger = logging.getLogger(__name__)
 logger.info(f"importing {__name__}")
 
 
-def get_t3k_device_mesh(num_devices_requested):
-    logger.info("get_t3k_device_mesh ...")
+def get_t3k_mesh_device(num_devices_requested):
+    logger.info("get_t3k_mesh_device ...")
     assert ttnn.get_num_devices() == 8
     device_ids = [0, 4, 5, 1, 2, 6, 7, 3]
     # device_params is empty dict in llama3 70B demo pytest execution
     device_params = {}
-    device_mesh = ttnn.open_device_mesh(
-        ttnn.DeviceGrid(1, num_devices_requested),
+    mesh_device = ttnn.open_mesh_device(
+        ttnn.MeshShape(1, num_devices_requested),
         device_ids[:num_devices_requested],
         dispatch_core_type=get_dispatch_core_type(),
         **device_params,
     )
-    logger.info(f"multidevice with {device_mesh.get_num_devices()} devices is created")
-    return device_mesh
+    logger.debug(f"multidevice with {mesh_device.get_num_devices()} devices is created")
+    return mesh_device
 
 
-def close_t3k_device_mesh(device_mesh):
-    for device in device_mesh.get_devices():
-        ttl.device.DumpDeviceProfiler(device)
-    ttnn.close_device_mesh(device_mesh)
-    del device_mesh
+def close_t3k_mesh_device(mesh_device):
+    for device in mesh_device.get_devices():
+        device.disable_and_clear_program_cache()
+        ttnn.DumpDeviceProfiler(device)
+    ttnn.close_mesh_device(mesh_device)
+    del mesh_device
 
 
 def initialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
@@ -82,15 +81,27 @@ def initialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
 
 
 class UserRow:
-    def __init__(self, user_id, prompt, rag_context, position_id, params, tokenizer, formatter=None, prompt_tokens=None):
+    def __init__(
+        self,
+        user_id,
+        prompt,
+        rag_context,
+        context_tokens,
+        params,
+        tokenizer,
+    ):
         self.user_id = user_id
         self.prompt = prompt
-        self.position_id = position_id
+        self.rag_context = rag_context
+        self.prompt_tokens = context_tokens
+        self.position_id = 0
         self.generated_tokens = []
         self.generated_logits = torch.tensor([])
         self.num_tokens_decoded = 0
         self.num_tokens_prefilled_via_decode = 0
         self.num_tokens_prefilled = 0
+        self.num_prefill_tokens = len(self.prompt_tokens)
+        self.num_generated_chars = 0
         self.generation_params = params
         self.max_tokens = params["max_tokens"]
         self.return_prompt = params["return_prompt"]
@@ -98,7 +109,6 @@ class UserRow:
         self.prefill_complete = False
         self.decode_complete = False
         self.sent_stop = False
-        self.chat_format = False
         # timer
         self.prefill_start_time = None
         self.prefill_stop_time = None
@@ -116,31 +126,6 @@ class UserRow:
             self.stop_sequence = tokenizer.encode(
                 params.get("stop_sequence"), bos=False, eos=False
             )
-        # tokenize input here
-        if not prompt_tokens:
-            if self.chat_format and inference_config.model_config.llama_version == "llama3":
-                if rag_context:
-                    rag_context = f"Please use the following context to answer the question:\n{rag_context}"
-                    dialog = [
-                        {"role": "system", "content": rag_context},
-                        {"role": "user", "content": prompt}
-                    ]
-                else:
-                    dialog = [
-                        {"role": "user", "content": prompt}
-                    ]
-                self.prompt_tokens = formatter.encode_dialog_prompt(dialog)
-            else:
-                if rag_context:
-                    prompt = f"Please use the following context:\n{rag_context}\n\nUser Query:{prompt}"
-                self.prompt_tokens = tokenizer.encode(prompt, bos=True, eos=False)
-            # strip eos token from prompt
-            self.prompt_tokens = [
-                tok for tok in self.prompt_tokens if tok not in self.stop_tokens
-            ]
-        else:
-            self.prompt_tokens = prompt_tokens
-        self.num_prefill_tokens = len(self.prompt_tokens)
 
     def timer_start(self, name):
         self.timestamps_start[name] = time.time()
@@ -251,8 +236,7 @@ class PrefillDecodeBackend:
         self.prefill_seq_len = None
         self.prefill_batch_size = None
         #
-        self.t3k_device_mesh = None
-        self.device = None
+        self.t3k_mesh_device = None
         self.cache_root = Path(cache_root)
         if not self.cache_root.exists():
             self.cache_root.mkdir(parents=True, exist_ok=True)
@@ -283,38 +267,46 @@ class PrefillDecodeBackend:
             if log or self.enable_profile_logging:
                 logger.info(f"timedelta: {name}: {timedelta} seconds")
 
-    def tok_encode(self, string: str, add_special_tokens=True, **kwargs) -> List[int]:
+    def tokenize_prompt(self, prompt: str, rag_context: str=None, add_special_tokens: bool=True, **kwargs) -> List[int]:
         if self.chat and add_special_tokens:
-            # encode as a single turn of dialog
-            messages = [Message(role="user", content=string)]
-            return self.formatter.encode_dialog_prompt(messages)
+            if rag_context:
+                messages = [
+                    Message(role="system", content=f"Please use the following context to answer the question:\n{rag_context}"),
+                    Message(role="user", content=prompt)
+                ]
+                return self.formatter.encode_dialog_prompt(messages)
+            else:
+                # encode as a single turn of dialog
+                messages = [Message(role="user", content=prompt)]
+                return self.formatter.encode_dialog_prompt(messages)
         else:
-            return self.tokenizer.encode(string, bos=add_special_tokens, eos=False)
+            return self.tokenizer.encode(prompt, bos=add_special_tokens, eos=False)
 
     def teardown(self):
         logger.info("teardown ...")
-        if self.t3k_device_mesh is not None:
-            close_t3k_device_mesh(self.t3k_device_mesh)
+        if self.t3k_mesh_device is not None:
+            close_t3k_mesh_device(self.t3k_mesh_device)
 
     def init_tt_metal_device(self):
         logger.info("init_tt_metal_device ...")
-        t3k_device_mesh = get_t3k_device_mesh(
+        t3k_mesh_device = get_t3k_mesh_device(
             num_devices_requested=inference_config.n_devices
         )
-        for i in t3k_device_mesh.get_device_ids():
-            device = t3k_device_mesh.get_device(i)
+        check_mesh_device(t3k_mesh_device, self.model_config)
+        for i in t3k_mesh_device.get_device_ids():
+            device = t3k_mesh_device.get_device(i)
             device.enable_async(True)
             device.enable_program_cache()
-        self.t3k_device_mesh = t3k_device_mesh
-        check_device_mesh(self.t3k_device_mesh, self.model_config)
+        self.t3k_mesh_device = t3k_mesh_device
         logger.info("init_tt_metal_device finished.")
 
-    def add_users_from_context(self, context_enc_list):
+    def add_users_from_context(self, context_enc_list, do_sample=True):
         """
         Add users from the given context_enc_list.
 
         Parameters:
         - context_enc_list (list): A list of encoded context tokens for each user.
+        - do_sample (bool): True for top_k/top_p sampling, False for greedy decoding.
 
         Raises:
         - AssertionError: If the length of context_enc_list exceeds the maximum number of users.
@@ -331,7 +323,7 @@ class PrefillDecodeBackend:
 
         params={
             "top_p": self.default_top_p,
-            "top_k": self.default_top_k,
+            "top_k": self.default_top_k if do_sample else 1,
             "temperature": self.default_temperature,
             "max_tokens": self.max_seq_len,
             "return_prompt": False,
@@ -339,7 +331,12 @@ class PrefillDecodeBackend:
 
         for idx in range(len(context_enc_list)):
             self.users[idx] = UserRow(
-                user_id=0, prompt=None, rag_context=None, position_id=0, params=params, tokenizer=self.tokenizer, formatter=None, prompt_tokens=context_enc_list[idx]
+                user_id=idx,
+                prompt=None,
+                rag_context=None,
+                context_tokens=context_enc_list[idx],
+                params=params,
+                tokenizer=self.tokenizer,
             )
 
     def init_model(self):
@@ -358,14 +355,16 @@ class PrefillDecodeBackend:
             tokenizer_path=tokenizer_path,
             skip_model_load=False,
             num_layers=self.num_layers,
-            num_tokens=None,
+            max_batch_size=self.batch_size,
+            max_kv_context_len=self.max_seq_len,
+            max_output_tokens=self.max_seq_len,
             prompts_file=None,
             output_at_end=None,
             top_p=None,
             top_k=None,
             temperature=None,
             chat=inference_config.model_config.chat,
-            device_mesh=self.t3k_device_mesh,
+            mesh_device=self.t3k_mesh_device,
             n_devices=inference_config.n_devices,
             cache_path=cache_path,
             decode_only=self.decode_only,
@@ -417,8 +416,14 @@ class PrefillDecodeBackend:
             ):
                 logger.warning(f"Ignoring duplicate input from user {user_id}")
                 continue
+            context_tokens = self.tokenize_prompt(prompt, rag_context)
             user = UserRow(
-                user_id, prompt, rag_context, 0, params, self.tokenizer, formatter=self.formatter
+                user_id=user_id,
+                prompt=prompt,
+                rag_context=rag_context,
+                context_tokens=context_tokens,
+                params=params,
+                tokenizer=self.tokenizer,
             )
             idx = self._find_free_user_slot()
             self.users[idx] = user
@@ -471,12 +476,18 @@ class PrefillDecodeBackend:
         self.min_prompt_len = min(
             [user.num_prefill_tokens for user in self.get_users()]
         )
+        # limit total length to max_seq_len
+        total_len = min(self.min_prompt_len, self.max_seq_len)
+        if total_len < self.min_prompt_len:
+            logger.warning(
+                f"Truncating input prompt min_prompt_len:={self.min_prompt_len} to max_seq_len:={self.max_seq_len}"
+            )
         # pad inputs, empty users get pad id
         prefill_tokens, input_text_mask, _ = initialize_inputs(
             tokenizer=self.tokenizer,
             prompt_tokens=input_prompts,
             bsz=len(input_prompts),
-            total_len=self.min_prompt_len,
+            total_len=total_len,
         )
         # where does intput_text_mask get used?
         self.input_text_mask = input_text_mask
@@ -530,6 +541,7 @@ class PrefillDecodeBackend:
         """
         self.decode_counter += 1
         self.timer_start("decode")
+        assert self.prev_pos < self.max_seq_len
         logits = self.model.forward(self.decode_ids, self.prev_pos)
         self.timer_stop("decode", log=False)
         next_tokens = batch_top_pk_logits_efficient(
@@ -542,38 +554,46 @@ class PrefillDecodeBackend:
         for idx, (user, user_decode_id) in enumerate(
             zip(self.users, self.decode_ids.reshape(self.batch_size).tolist())
         ):
-            if user is None:
+            if user is None or user.decode_complete:
                 continue
 
             if not user.prefill_complete:
                 user.num_tokens_prefilled_via_decode += 1
-                prefill_via_decode_idx = (
+                tok_pos = (
                     user.num_tokens_prefilled + user.num_tokens_prefilled_via_decode
                 )
-                self.decode_ids[idx][0] = user.prompt_tokens[prefill_via_decode_idx - 1]
-                if prefill_via_decode_idx >= user.num_prefill_tokens:
+                self.decode_ids[idx][0] = user.prompt_tokens[tok_pos - 1]
+                if tok_pos >= user.num_prefill_tokens:
                     user.stop_prefill_via_decode_timer()
                     user.prefill_complete = True
                     # overwrite decode timer for user
                     user.start_decode_timer()
+                # check if user has reached max_seq_len
+                if tok_pos == self.max_seq_len:
+                    logger.warning(
+                        f"user_id:={user.user_id} reached max_seq_len during prefill-via-decode"
+                    )
+                    user.prefill_complete = True
+                    user.start_decode_timer()
+                    user.decode_complete = True
+                    user.stop_decode_timer()
             else:
+                if user.num_tokens_decoded == 0:
+                    user.first_decode_time = time.time()
                 user.num_tokens_decoded += 1
                 user.generated_tokens.append(user_decode_id)
                 if return_logits:
                     user.generated_logits = torch.cat(
                         [user.generated_logits, logits[idx]], dim=0
                     )
-                if user.num_tokens_decoded == 1:
-                    user.first_decode_time = time.time()
+                tok_pos = user.num_tokens_decoded + user.num_tokens_prefilled + user.num_tokens_prefilled_via_decode
                 if user_decode_id in user.stop_tokens:
                     # generated stop token
                     user.decode_complete = True
                 elif user.num_tokens_decoded > user.max_tokens:
                     # request specified max generation
                     user.decode_complete = True
-                elif (
-                    user.num_tokens_decoded + user.num_tokens_prefilled
-                ) == self.max_seq_len:
+                elif tok_pos == self.max_seq_len:
                     # reached max context length
                     user.decode_complete = True
                 elif user.stop_sequence is not None:
@@ -586,7 +606,6 @@ class PrefillDecodeBackend:
                         user.decode_complete = True
                 if user.decode_complete:
                     # user just finished
-                    self.decode_ids[idx][0] = user.eos_token_id
                     user.stop_decode_timer()
                     # user.get_user_stats()
 
@@ -704,6 +723,7 @@ class PrefillDecodeBackend:
                 prompt_q.qsize(),
                 self._get_num_of_users(),
                 [user.user_id for user in self.users if user is not None],
+                self.cur_pos,
             )
             status_q.put(cur_status)
             # udpate cur time
@@ -716,7 +736,7 @@ class PrefillDecodeBackend:
         self.batch_preprocessing()
         self.prefill()
         self.start_decode_loop()
-        while not all([user.num_tokens_decoded >= n_tokens for user in self.get_users()]):
+        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
             self.decode(return_logits=return_logits)
         self.get_batch_stats(log=True)
         if return_logits:
