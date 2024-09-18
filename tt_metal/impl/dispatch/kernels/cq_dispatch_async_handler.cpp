@@ -215,16 +215,15 @@ void kernel_main() {
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
             volatile tt_l1_ptr uint32_t* worker_sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
-            uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
-
+            aligned_go_signal = cmd->mcast.go_signal;
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
             while (*sync_sem_addr <= num_mcasts_sent);
             num_mcasts_sent++;
             // Wait until workers have completed before sending go signal
             wait_for_workers(cmd);
-            aligned_go_signal = cmd->mcast.go_signal;
             if (cmd->mcast.mcast_flag & send_mcast) {
                 // DPRINT << " Go Signal " << (cmd->mcast.go_signal & 0xFF) << " " <<  (cmd->mcast.go_signal & 0xFF00) << " " << (cmd->mcast.go_signal & 0xFF0000) << ENDL();
+                uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
                 noc_async_write_multicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
             }
             if (cmd->mcast.mcast_flag & send_unicast) {

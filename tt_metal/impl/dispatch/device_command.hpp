@@ -285,8 +285,8 @@ class DeviceCommand {
         }
     }
 
-    void add_dispatch_s_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal, uint32_t wait_addr) {
-        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), 1);
+    void add_dispatch_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal, uint32_t wait_addr, uint8_t dispatcher_type) {
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), dispatcher_type);
         auto initialize_mcast_cmd = [&](CQDispatchCmd *mcast_cmd) {
             *mcast_cmd = {};
             mcast_cmd->base.cmd_id = CQ_DISPATCH_CMD_GO_SIGNAL_MCAST;
@@ -408,9 +408,9 @@ class DeviceCommand {
             initialize_exec_buf_cmd(exec_buf_cmd_dst);
         }
     }
-    void add_dispatch_set_unicast_only_cores(const std::vector<uint32_t>& noc_encodings) {
+    void add_dispatch_set_unicast_only_cores(const std::vector<uint32_t>& noc_encodings, uint8_t dispatcher_type) {
         TT_ASSERT(noc_encodings.size());
-        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + noc_encodings.size() * sizeof(uint32_t), 1);
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + noc_encodings.size() * sizeof(uint32_t), dispatcher_type);
         auto initialize_set_unicast_only_cores_cmd = [&] (CQDispatchCmd *set_unicast_only_cores_cmd) {
             *set_unicast_only_cores_cmd = {};
             set_unicast_only_cores_cmd->base.cmd_id = CQ_DISPATCH_SET_UNICAST_ONLY_CORES;

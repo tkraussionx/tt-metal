@@ -515,7 +515,7 @@ class HWCommandQueue {
 
     void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
-    void set_unicast_only_cores_on_dispatch_s(const std::vector<uint32_t>& unicast_only_noc_encodings);
+    void set_unicast_only_cores_on_dispatch(const std::vector<uint32_t>& unicast_only_noc_encodings);
    private:
     uint32_t id;
     uint32_t size_B;

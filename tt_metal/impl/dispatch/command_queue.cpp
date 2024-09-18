@@ -1049,7 +1049,6 @@ void EnqueueProgramCommand::assemble_device_commands(
                         for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
                             CoreCoord physical_coord = device->physical_core_from_logical_core(
                                 CoreCoord({x, y}), kernel_group.get_core_type());
-                            // std::cout << "Eth Physical Core:" << this->device->id() << " " <<  physical_coord.str() << " " << CoreCoord({x, y}).str() << std::endl;
                             unicast_go_signal_sub_cmds.emplace_back(CQDispatchWritePackedUnicastSubCmd{
                                 .noc_xy_addr =
                                     this->device->get_noc_unicast_encoding(this->noc_index, physical_coord)});
@@ -1069,7 +1068,8 @@ void EnqueueProgramCommand::assemble_device_commands(
                 unicast_go_signals_payload);
         }
         // dispatch_d -> dispatch_s semaphore update and go signal mcast by dispatch_s
-        cmd_sequence_sizeB += 2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE +
+            (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) * CQ_PREFETCH_CMD_BARE_MIN_SIZE;
 
         cached_program_command_sequence.program_command_sequence = HostMemDeviceCommand(cmd_sequence_sizeB);
 
@@ -1247,14 +1247,17 @@ void EnqueueProgramCommand::assemble_device_commands(
         if (program.program_transfer_info.num_active_cores > 0) {
             program_command_sequence.add_dispatch_wait(true, DISPATCH_MESSAGE_ADDR, 0, 0, false, false);
         }
-
-        program_command_sequence.add_dispatch_s_sem_update();
+        uint8_t send_go_signal_through_dispatch_s = 0;
+        if (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) {
+            program_command_sequence.add_dispatch_s_sem_update();
+            send_go_signal_through_dispatch_s = 1;
+        }
         go_msg_t run_program_go_signal;
         run_program_go_signal.signal = RUN_MSG_GO;
         run_program_go_signal.master_x = (uint8_t)this->dispatch_core.x;
         run_program_go_signal.master_y = (uint8_t)this->dispatch_core.y;
         uint32_t write_offset_bytes = program_command_sequence.write_offset_bytes();
-        program_command_sequence.add_dispatch_s_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&run_program_go_signal), DISPATCH_MESSAGE_ADDR);
+        program_command_sequence.add_dispatch_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&run_program_go_signal), DISPATCH_MESSAGE_ADDR, send_go_signal_through_dispatch_s);
         cached_program_command_sequence.mcast_go_signal_cmd_ptr = &((CQDispatchCmd*) ((uint32_t*)program_command_sequence.data() + (write_offset_bytes + sizeof(CQPrefetchCmd)) / sizeof(uint32_t)))->mcast;
     } else {
         uint32_t i = 0;
@@ -1297,6 +1300,12 @@ void EnqueueProgramCommand::assemble_device_commands(
                 launch_msg_cmd_ptr->addr = eth_launch_message_addr;
             }
         }
+        go_msg_t run_program_go_signal;
+        // std::cout << "Program Cached: " << this->dispatch_core.x << " " << this->dispatch_core.y << std::endl;
+        run_program_go_signal.signal = RUN_MSG_GO;
+        run_program_go_signal.master_x = (uint8_t)this->dispatch_core.x;
+        run_program_go_signal.master_y = (uint8_t)this->dispatch_core.y;
+        cached_program_command_sequence.mcast_go_signal_cmd_ptr->go_signal =  *reinterpret_cast<uint32_t*>(&run_program_go_signal);
         cached_program_command_sequence.mcast_go_signal_cmd_ptr->wait_count = this->expected_num_workers_completed;
     }
 }
@@ -1685,7 +1694,8 @@ void EnqueueTraceCommand::process() {
         // CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_EXEC_BUF
-        2 * CQ_PREFETCH_CMD_BARE_MIN_SIZE; // sem update + dispatch_s go signal
+        CQ_PREFETCH_CMD_BARE_MIN_SIZE +
+        (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) * CQ_PREFETCH_CMD_BARE_MIN_SIZE;; // sem update + dispatch_s go signal
 
     uint8_t go_signal_mcast_flag = 0x1;
     if (desc->num_eth_programs) {
@@ -1698,14 +1708,17 @@ void EnqueueTraceCommand::process() {
     std::size_t num_mcast_cols = device->compute_with_storage_grid_size().x;
     std::size_t num_mcast_rows = device->compute_with_storage_grid_size().y;
     uint32_t num_mcast_cores = num_mcast_cols * num_mcast_rows;
-
-    command_sequence.add_dispatch_s_sem_update();
+    uint8_t send_go_signal_through_dispatch_s = 0;
+    if (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) {
+        command_sequence.add_dispatch_s_sem_update();
+        send_go_signal_through_dispatch_s = 1;
+    }
     go_msg_t reset_launch_message_read_ptr_go_signal;
     reset_launch_message_read_ptr_go_signal.signal = RUN_MSG_RESET_READ_PTR;
     reset_launch_message_read_ptr_go_signal.master_x = (uint8_t)this->dispatch_core.x;
     reset_launch_message_read_ptr_go_signal.master_y = (uint8_t)this->dispatch_core.y;
     // Wait to ensure that all kernels have completed. Then send the reset_rd_ptr go_signal.
-    command_sequence.add_dispatch_s_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal), DISPATCH_MESSAGE_ADDR);
+    command_sequence.add_dispatch_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal), DISPATCH_MESSAGE_ADDR, send_go_signal_through_dispatch_s);
     // This needs to be updated to account for tensix cores only if trace runs on tensix
     this->expected_num_workers_completed += num_mcast_cores;
     if (desc->num_eth_programs) {
@@ -1808,11 +1821,15 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id, NOC noc_index) :
     this->expected_num_workers_completed = 0;
 }
 
-void HWCommandQueue::set_unicast_only_cores_on_dispatch_s(const std::vector<uint32_t>& unicast_only_noc_encodings) {
+void HWCommandQueue::set_unicast_only_cores_on_dispatch(const std::vector<uint32_t>& unicast_only_noc_encodings) {
     uint32_t cmd_sequence_sizeB = align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + unicast_only_noc_encodings.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
     HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
-    command_sequence.add_dispatch_set_unicast_only_cores(unicast_only_noc_encodings);
+    uint8_t set_unicast_cores_on_dispatch_s = 0;
+    if (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) {
+        set_unicast_cores_on_dispatch_s = 1;
+    }
+    command_sequence.add_dispatch_set_unicast_only_cores(unicast_only_noc_encodings, set_unicast_cores_on_dispatch_s);
     this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
     this->manager.fetch_queue_reserve_back(this->id);
     this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);

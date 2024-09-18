@@ -20,8 +20,8 @@ NUM_TRACE_LOOPS = int(os.getenv("NUM_TRACE_LOOPS", 15))
 )
 @pytest.mark.parametrize("use_all_gather", [True])
 @pytest.mark.parametrize("enable_async", [True])
-@pytest.mark.parametrize("enable_multi_cq", [False])
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 60000, "num_command_queues": 1}], indirect=True)
+@pytest.mark.parametrize("enable_multi_cq", [True])
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 60000, "num_command_queues": 2}], indirect=True)
 def test_multi_device_single_trace(t3k_mesh_device, shape, use_all_gather, enable_async, enable_multi_cq):
     if t3k_mesh_device.get_num_devices() <= 1:
         pytest.skip("This test requires multiple devices")
@@ -134,8 +134,8 @@ def test_multi_device_single_trace(t3k_mesh_device, shape, use_all_gather, enabl
 )
 @pytest.mark.parametrize("use_all_gather", [True])
 @pytest.mark.parametrize("enable_async", [True])
-@pytest.mark.parametrize("enable_multi_cq", [False])
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 200000}], indirect=True)
+@pytest.mark.parametrize("enable_multi_cq", [True])
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 200000, "num_command_queues": 2}], indirect=True)
 def test_multi_device_multi_trace(t3k_mesh_device, shape, use_all_gather, enable_async, enable_multi_cq):
     torch.manual_seed(0)
     if t3k_mesh_device.get_num_devices() <= 1:

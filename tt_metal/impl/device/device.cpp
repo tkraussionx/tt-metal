@@ -1498,11 +1498,15 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
                 tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
-                tt_cxy_pair dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
+                tt_cxy_pair dispatch_s_location = tt_cxy_pair(0xff, 0xff, 0xff);
+                settings.dispatch_s_physical_core = tt_cxy_pair(0xff, 0xff, 0xff);
+                if (num_hw_cqs == 1 or dispatch_core_type == CoreType::WORKER) {
+                    dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
+                    settings.dispatch_s_physical_core = tt_cxy_pair(dispatch_s_location.chip, get_physical_core_coordinate(dispatch_s_location, dispatch_core_type));
+                }
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
                 settings.dispatch_s_kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp";
-                settings.dispatch_s_physical_core = tt_cxy_pair(dispatch_s_location.chip, get_physical_core_coordinate(dispatch_s_location, dispatch_core_type));
                 settings.dispatch_s_logical_core = dispatch_s_location;
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
                 settings.semaphores.clear();
@@ -1618,11 +1622,17 @@ void Device::compile_command_queue_programs() {
             CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device_id);
             tt_cxy_pair prefetch_core = dispatch_core_manager::instance().prefetcher_core(device_id, channel, cq_id);
             tt_cxy_pair dispatch_core = dispatch_core_manager::instance().dispatcher_core(device_id, channel, cq_id);
-            tt_cxy_pair dispatch_s_core = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
-
+            tt_cxy_pair dispatch_s_core = tt_cxy_pair(0xff, 0xff, 0xff);
+            CoreCoord dispatch_s_physical_core = {0xff, 0xff};
+            bool enable_dispatch_s = false;
+            if (num_hw_cqs == 1 or dispatch_core_type == CoreType::WORKER) {
+                // Skip allocating dispatch_s for multi-CQ configurations with ethernet dispatch
+                dispatch_s_core = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
+                dispatch_s_physical_core = get_physical_core_coordinate(dispatch_s_core, dispatch_core_type);
+                enable_dispatch_s = true;
+            }
             CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_core, dispatch_core_type);
             CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
-            CoreCoord dispatch_s_physical_core = get_physical_core_coordinate(dispatch_s_core, dispatch_core_type);
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
             log_info(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_core.str(), prefetch_physical_core.str());
@@ -1738,7 +1748,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_s_sem,
                 prefetch_dispatch_s_sync_sem,
                 dispatch_s_sync_sem_id,
-                this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid),
+                this->get_noc_multicast_encoding(enable_dispatch_s ? NOC::NOC_1 : NOC::NOC_0, tensix_worker_physical_grid),
                 tensix_num_worker_cores,
                 tensix_worker_go_signal_addr,
                 eth_worker_go_signal_addr,
@@ -1762,26 +1772,29 @@ void Device::compile_command_queue_programs() {
                 dispatch_upstream_noc_index,
                 my_noc_index
             );
-
-            configure_kernel_variant(
-                *command_queue_program_ptr,
-                "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp",
-                dispatch_compile_args,
-                dispatch_s_core,
-                dispatch_s_physical_core,
-                dispatch_core_type,
-                prefetch_physical_core,
-                CoreCoord{0, 0},
-                std::map<string, string> {},
-                dispatch_upstream_noc_index,
-                dispatch_upstream_noc_index,
-                dispatch_upstream_noc_index,
-                false,
-                true
-            );
+            if (enable_dispatch_s) {
+                configure_kernel_variant(
+                    *command_queue_program_ptr,
+                    "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp",
+                    dispatch_compile_args,
+                    dispatch_s_core,
+                    dispatch_s_physical_core,
+                    dispatch_core_type,
+                    prefetch_physical_core,
+                    CoreCoord{0, 0},
+                    std::map<string, string> {},
+                    dispatch_upstream_noc_index,
+                    dispatch_upstream_noc_index,
+                    dispatch_upstream_noc_index,
+                    false,
+                    true
+                );
+            }
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_d to signal that dispatch_s can send go signal
+            if (enable_dispatch_s) {
+                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
+                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_d to signal that dispatch_s can send go signal
+            }
         }
         detail::CompileProgram(this, *command_queue_program_ptr, /*fd_bootloader_mode=*/true);
         this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
@@ -2015,6 +2028,10 @@ void Device::compile_command_queue_programs() {
         }
         cq_id = 0;
         for (auto [dispatch_d_core, dispatch_d_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_D]) {
+            bool enable_dispatch_s = false;
+            if (num_hw_cqs == 1 or dispatch_d_settings.dispatch_core_type == CoreType::WORKER) {
+                enable_dispatch_s = true;
+            }
             std::size_t tensix_num_worker_cols = this->compute_with_storage_grid_size().x;
             std::size_t tensix_num_worker_rows = this->compute_with_storage_grid_size().y;
             uint32_t tensix_num_worker_cores = tensix_num_worker_cols * tensix_num_worker_rows;
@@ -2023,7 +2040,7 @@ void Device::compile_command_queue_programs() {
             CoreRange tensix_worker_physical_grid = CoreRange(tensix_worker_start_phys, tensix_worker_end_phys);
             uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
             uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
-            dispatch_d_settings.compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
+            dispatch_d_settings.compile_args[26] = this->get_noc_multicast_encoding(enable_dispatch_s ? NOC::NOC_1 : NOC::NOC_0, tensix_worker_physical_grid);
             dispatch_d_settings.compile_args[27] = tensix_num_worker_cores;
             dispatch_d_settings.compile_args[28] = tensix_worker_go_signal_addr;
             dispatch_d_settings.compile_args[29] = eth_worker_go_signal_addr;
@@ -2032,10 +2049,6 @@ void Device::compile_command_queue_programs() {
                 //size of semaphores vector is number of needed semaphores on the core.
                 //Value of each vector entry is the initialization value for the semaphore.
                 tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_d_core, sem, dispatch_d_settings.dispatch_core_type);
-            }
-            // Update this once dispatch_s has its own compile time args
-            for (int i = 0; i < 2; i++) {
-                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_d_settings.dispatch_s_logical_core, 0, dispatch_d_settings.dispatch_core_type);
             }
             configure_kernel_variant(
                 *command_queue_program_ptr,
@@ -2051,22 +2064,28 @@ void Device::compile_command_queue_programs() {
                 dispatch_upstream_noc_index,
                 my_noc_index
             );
-            configure_kernel_variant(
-                *command_queue_program_ptr,
-                dispatch_d_settings.dispatch_s_kernel_file,
-                dispatch_d_settings.compile_args,
-                dispatch_d_settings.dispatch_s_logical_core,
-                dispatch_d_settings.dispatch_s_physical_core,
-                dispatch_d_settings.dispatch_core_type,
-                dispatch_d_settings.upstream_cores[0],
-                dispatch_d_settings.downstream_cores[0],
-                std::map<string, string> {},
-                my_noc_index,
-                dispatch_upstream_noc_index,
-                my_noc_index,
-                false,
-                true
-            );
+            if (enable_dispatch_s) {
+                // Update this once dispatch_s has its own compile time args
+                for (int i = 0; i < 2; i++) {
+                    tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_d_settings.dispatch_s_logical_core, 0, dispatch_d_settings.dispatch_core_type);
+                }
+                configure_kernel_variant(
+                    *command_queue_program_ptr,
+                    dispatch_d_settings.dispatch_s_kernel_file,
+                    dispatch_d_settings.compile_args,
+                    dispatch_d_settings.dispatch_s_logical_core,
+                    dispatch_d_settings.dispatch_s_physical_core,
+                    dispatch_d_settings.dispatch_core_type,
+                    dispatch_d_settings.upstream_cores[0],
+                    dispatch_d_settings.downstream_cores[0],
+                    std::map<string, string> {},
+                    my_noc_index,
+                    dispatch_upstream_noc_index,
+                    my_noc_index,
+                    false,
+                    true
+                );
+            }
             cq_id = (cq_id + 1) % num_hw_cqs;
         }
 
@@ -2261,8 +2280,9 @@ void Device::init_command_queue_device() {
             }
         }
     }
+    bool enable_dispatch_s = (this->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->id()) == CoreType::WORKER);
     for (auto& hw_cq : this->hw_command_queues_) {
-        hw_cq->set_unicast_only_cores_on_dispatch_s(this->get_noc_encoding_for_all_etherent_sockets());
+        hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_all_etherent_sockets(enable_dispatch_s ? 1 : 0));
     }
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());
