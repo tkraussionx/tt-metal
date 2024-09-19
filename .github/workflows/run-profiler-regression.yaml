@@ -45,6 +45,7 @@ jobs:
           docker_image_arch: ${{ matrix.runner-info.arch }}
           docker_opts: |
             -e TT_METAL_HOME=/usr/app
+            -e ARCH_NAME=${{ matrix.runner-info.arch }}
           run_args: |
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
