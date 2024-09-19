@@ -7,7 +7,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-// #define SKIP_DRAM 1
+#define SKIP_DRAM 1
 
 void kernel_main() {
     // DeviceZoneScopedN("dram_sharded_in1_sender");
