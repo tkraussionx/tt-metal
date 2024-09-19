@@ -291,7 +291,7 @@ class TenstorrentLM(TemplateLM):
             user_id = idx
             prompt = req.args[0]
             if last_args != req.args[1]:
-                eval_logger.error(f"new args[1]: {req.args[1]}")
+                eval_logger.info(f"new args[1]: {req.args[1]}")
                 last_args = req.args[1]
 
             do_sample = req.args[1].get("do_sample", False)
