@@ -1,6 +1,7 @@
 import random
 import copy
 import os
+from queue import Queue
 from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
@@ -282,16 +283,62 @@ class TenstorrentLM(TemplateLM):
         return res
 
     def generate_until_continuous(self, requests, disable_tqdm: bool = False):
-        res = []
-        # for req in tqdm(requests, disable=disable_tqdm):
-        do_sample = req.args[1].get("do_sample", False)
-        max_gen_toks = req.args[1].get("max_gen_toks", 1)
-        until = req.args[1].get("until", None)
-        # TODO: add until support with stop tokens
-        if until is not None:
-            eval_logger.warning(f"until={until} not supported for this model, ignoring.")
-        context_list = [req.args[0] for req in req_list]
-        res = self.model_backend.generate_until(context_list=context_list, n_tokens=max_gen_toks, return_logits=False)
+        prompt_q = Queue()
+        output_q = Queue()
+        # fill prompt_q with requests
+        last_args = None
+        for idx, req in tqdm(enumerate(requests), disable=disable_tqdm):
+            user_id = idx
+            prompt = req.args[0]
+            if last_args != req.args[1]:
+                eval_logger.error(f"new args[1]: {req.args[1]}")
+                last_args = req.args[1]
+
+            do_sample = req.args[1].get("do_sample", False)
+            until = req.args[1].get("until", None)
+            temperature = req.args[1].get("temperature", 1.0)
+            n_tokens = req.args[1].get("n_tokens", 2048)
+            if do_sample:
+                eval_logger.error(
+                    f"do_sample={do_sample} not supported, find where sampling params are. Defaulting to greedy."
+                )
+                # TODO: where are eval specific sampling param values?
+                temperature = temperature
+                top_p = 1.0
+                top_k = 1
+            else:
+                # turn off sampling, use greedy
+                temperature = 1.0
+                top_p = 1.0
+                top_k = 1
+
+            if until is not None:
+                if until == ["</s>"] or not until:
+                    # supposed to map to stop token, bad practice
+                    until = None
+                else:
+                    eval_logger.warning(f"until={until}, does this look like a stop token?")
+            rag_context = None
+            params = {
+                "max_tokens": n_tokens,
+                "return_prompt": False,
+                "top_p": top_p,
+                "top_k": top_k,
+                "temperature": temperature,
+                "stop_sequence": until,
+            }
+            prompt_q.put((user_id, prompt, rag_context, params))
+
+        self.model_backend.run_queue(prompt_q, output_q, return_logits=False)
+        # get output
+        res_dict = defaultdict(list)
+        while not output_q.empty():
+            user_id, out_token = output_q.get()
+            res_dict[user_id].append(out_token)
+
+        # Convert the defaultdict to a list of strings sorted by user_id
+        res = [ ''.join(res_dict[user_id]) for user_id in sorted(res_dict.keys()) ]
+
         return res
 
     def generate_until_batched(self, requests, disable_tqdm: bool = False):
@@ -345,6 +392,4 @@ class TenstorrentLM(TemplateLM):
         Should return the structure of the chat template applied to user/assistant messages.
         This is used only to save in the experiment results for reproducibility.
         """
-        raise NotImplementedError(
-            "To use this model with chat templates, please implement the 'chat_template' property."
-        )
+        return self.model_backend.chat_template

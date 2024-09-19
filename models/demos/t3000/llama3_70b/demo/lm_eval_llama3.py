@@ -1,7 +1,7 @@
-from unittest.mock import patch
 import json
-
+import time
 import torch
+from unittest.mock import patch
 
 import lm_eval.evaluator as evaluator
 import lm_eval.tasks as tasks
@@ -31,7 +31,7 @@ TenstorrentLM
 """
 
 
-def mock_build_generator(model_args, tt_args):
+def mock_build_generator(model_args, tt_args, *args, **kwargs):
     class MockModel:
         # mock implementation in TtLlamaModelForGeneration
         # see: tt-metal/models/demos/t3000/llama2_70b/tt/llama_generation.py
@@ -40,34 +40,40 @@ def mock_build_generator(model_args, tt_args):
             self.vocab_size = vocab_size
             self.max_seq_len = max_seq_len
 
-        def forward(self, tokens: torch.Tensor, start_pos: int):
-            _, seq_len = tokens.shape
-            if seq_len == 1:
-                return self.decode_forward(tokens, start_pos)
-            else:
-                return self.prefill_forward(tokens, start_pos)
+        def prefill_forward_single_user(
+            self, prompt_tokens, position_id, batch_idx, page_table
+        ):
+            return self.decode_forward(
+                tokens_tensor=prompt_tokens, indices_tensor=None, page_table=page_table
+            )
 
-        def decode_forward(self, tokens: torch.Tensor, start_pos: int):
-            batch, seq_len = tokens.shape
-            assert seq_len == 1
-            logits = torch.rand((batch, seq_len, self.vocab_size))
-            # send the EOT token after 128 tokens for testing
-            if start_pos == 128:
-                logits[:, :, 128009] = 100.0
+        def decode_forward(
+            self, tokens_tensor, indices_tensor, page_table, *args, **kwargs
+        ):
+            assert len(tokens_tensor.shape) == 2
+            batch, seqlen = tokens_tensor.shape
+            forward_start = time.time()
+            simulated_tps = 10000.0
+            simulated_duration = 1.0 / simulated_tps
+            # update the new tokens generated to the input id
+            # vocab_size = tokenizer.nwords
+            # logits: [batch, seqlen, vocab_size]
+            logits = torch.randn((batch, seqlen, 128256))
+            # send a token every period loops
+            EOT_ID = 128009
+            EOS_ID = 128001
+            send_index = 200
+            send_token = EOT_ID
+            if indices_tensor is not None:
+                send_token_mask = indices_tensor > send_index
+                batch_indices = torch.nonzero(send_token_mask).squeeze()
+                logits[batch_indices, 0, send_token] = 100.0
+
+            actual_duration = time.time() - forward_start
+            # simulate forward latency
+            time.sleep(max(simulated_duration - actual_duration, 0))
             return logits
 
-        def prefill_forward(self, tokens: torch.Tensor, start_pos: int):
-            batch, seq_len = tokens.shape
-            assert seq_len <= 2048, f"Only prefill up to 2048 tokens is supported, got {seq_len}"
-
-            prefill_seq_len = 128 if seq_len <= 128 else 2048
-
-            batch, seq_len = tokens.shape
-            output_logits = torch.zeros(batch, seq_len, self.vocab_size)
-            padded_seq_len = 128 if seq_len <= 128 else 2048
-            # pad tokens to 128 or 2048
-            prefill_ids = torch.cat([tokens, torch.zeros(batch, padded_seq_len - seq_len).long()], dim=-1)
-            return output_logits
 
     class MockGenerator:
         def __init__(self, tokenizer, model_args):
@@ -89,16 +95,17 @@ def get_model_backend(mock_model=False):
     )
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
-            with patch(
-                "models.demos.t3000.llama3_70b.demo.lm_backend.build_generator", new=mock_build_generator
-            ):
-                model_backend = PrefillDecodeBackend(
-                    model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
-                    batch_size=32,
-                    num_layers=80,
-                    max_seq_len=2048,
-                    cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
-                )
+            with patch.object(PrefillDecodeBackend, "init_paged_attention", return_value=None):
+                with patch(
+                    "models.demos.t3000.llama3_70b.demo.lm_backend.build_generator", new=mock_build_generator
+                ):
+                    model_backend = PrefillDecodeBackend(
+                        model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
+                        batch_size=32,
+                        num_layers=80,
+                        max_seq_len=2048,
+                        cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
+                    )
     else:
         model_backend = PrefillDecodeBackend(
             model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",

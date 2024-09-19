@@ -2,6 +2,7 @@ import os
 import time
 import traceback
 import threading
+import logging
 from queue import Queue
 from functools import partial
 from pathlib import Path
@@ -37,11 +38,9 @@ from models.demos.t3000.llama2_70b.demo.demo_continuous_batching_paged_attention
 )
 from conftest import get_dispatch_core_type
 
-from model_weights_handler import get_model_weights_and_tt_cache_paths
-from inference_config import inference_config
-from inference_logger import get_logger
+from models.demos.t3000.llama3_70b.demo.inference_config import inference_config
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 logger.info(f"importing {__name__}")
 
 
@@ -79,6 +78,7 @@ class UserRow:
         context_tokens,
         params,
         tokenizer,
+        max_context=inference_config.model_config.max_seq_len,
     ):
         self.user_id = user_id
         self.user_index = user_index
@@ -112,6 +112,12 @@ class UserRow:
         self.eos_token_id = tokenizer.eos_id
         self.stop_tokens = tokenizer.stop_tokens
         self.stop_sequence = None
+        self.return_logits = False
+        if self.num_prefill_tokens > max_context:
+            logger.error(
+                f"Truncating prompt: user_id:={user_id} has prompt_len:= {self.num_prefill_tokens} > max_context:= {max_context}"
+            )
+            self.prompt_tokens = self.prompt_tokens[:max_context]
         if params.get("stop_sequence"):
             self.stop_sequence = tokenizer.encode(params.get("stop_sequence"), bos=False, eos=False)
 
@@ -176,7 +182,6 @@ class PrefillDecodeBackend:
         Maintain a cur_prompts for decode.
         """
         self.max_users = 32
-        self.num_users = None
         self.users = [None for _ in range(self.max_users)]
         self.use_cache = True
         # # inputs to model
@@ -278,22 +283,12 @@ class PrefillDecodeBackend:
     def init_model(self):
         # set up variables for model init
         # set weights using:
-        # MODEL_WEIGHTS_ID
-        # MODEL_WEIGHTS_PATH
-        weights_path, tt_cache_path = get_model_weights_and_tt_cache_paths()
-        tokenizer_path = weights_path.joinpath("tokenizer.model")
-        logger.info(f"tokenizer_path=:{tokenizer_path}")
         logger.info("init_model ...")
-        model_config, _, _, _ = setup_llama_env(
+        model_config, ckpt_dir, tokenizer_path, cache_path = setup_llama_env(
             llama_version=inference_config.model_config.llama_version,
         )
         self.model_config = model_config
-        # override for tt-studio
-        ckpt_dir = weights_path.as_posix()
-        tokenizer_path = tokenizer_path.as_posix()
-        cache_path = tt_cache_path
         self.init_tt_metal_device()
-
         # set unused vars to None to obviously break any code using them
         args = construct_arg(
             implementation="tt",
@@ -324,7 +319,9 @@ class PrefillDecodeBackend:
         self.model = generator.model
         self.tokenizer = generator.tokenizer
         self.formatter = ChatFormat(self.tokenizer)
+        self.init_paged_attention(paged_attention_config)
 
+    def init_paged_attention(self, paged_attention_config):
         """
         Paged Attention
 
@@ -347,6 +344,9 @@ class PrefillDecodeBackend:
         self.page_table_tt = ttnn.to_device(
             page_table_tt, self.model.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG
         )
+
+    def chat_template(self, *args, **kwargs):
+        return ""
 
     def _get_user_by_id(self, user_id):
         for user in self.users:
@@ -445,7 +445,7 @@ class PrefillDecodeBackend:
             # TODO: better way to handle more prefill users changing decode time
             user.start_decode_timer()
 
-    def decode(self, return_):
+    def decode(self):
         """
         self.cur_pos is the batch level position
         each user has a generation_pos
@@ -567,39 +567,16 @@ class PrefillDecodeBackend:
             if loop_once:
                 break
 
-    def generate_until(self, context_list, until: str = None, n_tokens: int = None, return_logits: bool = False):
-        prompt_q = Queue()
-        output_q = Queue()
-        # make user prompts
-        user_id = "test_user"
-        for idx, context in enumerate(context_list):
-            user_id = idx
-            prompt = context
-            rag_context = None
-            params = {
-                "max_tokens": n_tokens if n_tokens is not None else 2048,
-                "return_prompt": False,
-                "top_p": 1.0,
-                "top_k": 1,
-                "temperature": 1.0,
-                "stop_sequence": until,
-            }
-            prompt_q.put(user_id, prompt, rag_context, params)
+    def run_queue(self, prompt_q, output_q, return_logits: bool = False):
+        """ """
+        self.return_logits = return_logits
         # run inference
-        while prompt_q.qsize() > 0:
-            self.pick_prompts(prompt_q)  # we update to self.users
+        while prompt_q.qsize() > 0 or len(self.get_users()) > 0:
+            self.pick_prompts(prompt_q)
             self.prefill()
             self.decode()
             self.push_outputs(output_q)
             self.update_users()
-        # get output
-        res = []
-        while not q.empty():
-            res.append(q.get())
-
-        res_sorted = sorted(res, key=lambda x: x[0])
-        res = [r[1] for r in res_sorted]
-        return res
 
 
 def batch_top_pk_logits_efficient_multi_params(
@@ -627,6 +604,7 @@ def batch_top_pk_logits_efficient_multi_params(
 
 
 def batch_top_pk_logits_efficient_same_params(logits, p=0.9, k=40, temperature=1.0):
+    assert temperature > 0, "Temperature must be greater than 0"
     # do not keep the entire vocab size after top k. Instead, keep the k size tensor and record the associated indices
     top_k_values, top_k_indices = torch.topk(logits, k=k)
     # replace any nans with 0's
