@@ -94,7 +94,6 @@ class UserRow:
         self.num_generated_chars = 0
         self.num_tokens_decoded = 0
         self.num_tokens_prefilled = 0
-        self.num_tokens_prefilled_padded = 0
         self.num_prefill_tokens = len(self.prompt_tokens)
         self.generation_params = params
         self.max_tokens = params["max_tokens"]
@@ -117,11 +116,13 @@ class UserRow:
         self.stop_tokens = tokenizer.stop_tokens
         self.stop_sequence = None
         self.return_logits = False
-        if self.num_prefill_tokens > max_context:
+        # include prefill offset to account for prefill gen token and 1st token in decode
+        PREFILL_OFFSET = 2
+        if self.num_prefill_tokens > (max_context - PREFILL_OFFSET):
             logger.error(
                 f"Truncating prompt: user_id:={user_id} has prompt_len:= {self.num_prefill_tokens} > max_context:= {max_context}"
             )
-            self.prompt_tokens = self.prompt_tokens[:max_context]
+            self.prompt_tokens = self.prompt_tokens[:(max_context - PREFILL_OFFSET)]
             self.num_prefill_tokens = len(self.prompt_tokens)
         if params.get("stop_sequence"):
             self.stop_sequence = tokenizer.encode(params.get("stop_sequence"), bos=False, eos=False)
@@ -422,8 +423,8 @@ class PrefillDecodeBackend:
                 kv_cache=None,
             )
             # Since we give unpadded_seq_len, only the tile containing the last token is returned
-            output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
-            next_logits = output_logits[:, 0, :]  # 1, seq_len, vocab -> 1, vocab
+            # output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
+            next_logits = logits[:, seq_len - 1, :]  # 1, seq_len, vocab -> 1, vocab
             # TODO: add params
             next_token = batch_top_pk_logits_efficient_same_params(
                 next_logits,
@@ -435,11 +436,11 @@ class PrefillDecodeBackend:
             user.generated_tokens.append(next_token)
             user.num_tokens_decoded += 1
             # only record actual prefill tokens for metrics, not padded tokens
-            user.num_tokens_prefilled = user.num_prefill_tokens
-            user.num_tokens_prefilled_padded = prefill_seq_len
+            user.num_tokens_prefilled = seq_len
             user.prefill_complete = True
             self.batch_token_inputs[user.user_index] = next_token
-            self.batch_token_indices[user.user_index] = prefill_seq_len
+            # start index at the end of the actual prefill tokens, not including padding
+            self.batch_token_indices[user.user_index] = seq_len
             # TODO: better way to handle more prefill users changing decode time
             user.start_decode_timer()
 
@@ -482,7 +483,7 @@ class PrefillDecodeBackend:
             elif user.num_tokens_decoded > user.max_tokens:
                 # request specified max generation
                 user.decode_complete = True
-            elif (user.num_tokens_decoded + user.num_tokens_prefilled_padded) >= self.max_seq_len:
+            elif (user.num_tokens_decoded + user.num_tokens_prefilled) >= self.max_seq_len:
                 # reached max context length
                 user.decode_complete = True
             elif user.stop_sequence is not None:
