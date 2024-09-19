@@ -1,6 +1,6 @@
 from unittest.mock import patch
 import json
-
+import os
 import torch
 
 import lm_eval.evaluator as evaluator
@@ -84,7 +84,6 @@ def get_model_backend(mock_model=False):
         num_layers=32,
         max_seq_len=4096,
         cache_root=get_env_var("CACHE_ROOT", msg="Base path for all data caches."),
-        verbose=verbose,
     )
 
     return model_backend, model_backend.tokenizer
@@ -100,18 +99,19 @@ def main():
     # tasks = ["ifeval"]
     tasks = ["ifeval", "gpqa_main_cot_zeroshot"]
     eval_output_fpath = "eval_output"
-    limit = None        # limit the number of samples per task
+    limit = None  # limit the number of samples per task
     log_samples = True  # log samples and outputs to file
-    mock_model = False   # use random logits model for testing
+    mock_model = False  # use random logits model for testing
     num_fewshot = None  # number of fewshot samples (task dependent)
     # -----------------------------------
     if "ifeval" in tasks:
         # download nltk punkt tokenizer if not available
         import nltk
+
         try:
-            nltk.data.find('tokenizers/punkt')
+            nltk.data.find("tokenizers/punkt")
         except LookupError:
-            nltk.download('punkt')
+            nltk.download("punkt")
 
     evaluation_tracker = EvaluationTracker(output_path=eval_output_fpath)
     model_backend, tokenizer = get_model_backend(mock_model=mock_model)
@@ -124,7 +124,7 @@ def main():
         model_backend=model_backend,
         pretrained=pretrained,
         tokenizer=tokenizer,
-        eot_token_id=tokenizer.eos_id(),
+        eot_token_id=tokenizer.eos_id,
         write_out=True,
     )
     results = evaluator.simple_evaluate(
@@ -143,18 +143,12 @@ def main():
     if results is not None:
         if log_samples:
             samples = results.pop("samples")
-        dumped = json.dumps(
-            results, indent=2, default=handle_non_serializable, ensure_ascii=False
-        )
+        dumped = json.dumps(results, indent=2, default=handle_non_serializable, ensure_ascii=False)
         # print(dumped)
-        evaluation_tracker.save_results_aggregated(
-            results=results, samples=samples if log_samples else None
-        )
+        evaluation_tracker.save_results_aggregated(results=results, samples=samples if log_samples else None)
         if log_samples:
             for task_name, config in results["configs"].items():
-                evaluation_tracker.save_results_samples(
-                    task_name=task_name, samples=samples[task_name]
-                )
+                evaluation_tracker.save_results_samples(task_name=task_name, samples=samples[task_name])
 
 
 if __name__ == "__main__":

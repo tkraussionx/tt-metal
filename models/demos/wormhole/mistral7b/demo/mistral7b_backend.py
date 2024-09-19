@@ -30,12 +30,12 @@ from models.demos.wormhole.mistral7b.demo.demo_with_prefill import Emb, preproce
 from models.demos.wormhole.mistral7b.demo.demo import preprocess_inputs
 
 
+# from inference_config import inference_config
+import logging
 
-from inference_config import inference_config
-from inference_logger import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 logger.info(f"importing {__name__}")
+
 
 class UserInfo:
     def __init__(self, user_id, prompt, position_id, params, tokenizer):
@@ -60,7 +60,6 @@ class UserInfo:
         self.generated_tokens = []
         self.num_generated_chars = 0
         self.max_generated_tokens = 120
-
 
 
 class PrefillDecodeBackend:
@@ -90,9 +89,9 @@ class PrefillDecodeBackend:
         self.batch_size = batch_size
         self.num_layers = num_layers
         self.max_seq_len = max_seq_len
-        self.default_top_p = inference_config.model_config.default_top_p
-        self.default_top_k = inference_config.model_config.default_top_k
-        self.default_temperature = inference_config.model_config.default_temperature
+        self.default_top_p = 0.9
+        self.default_top_k = 40
+        self.default_temperature = 1.0
         self.timestamps_start = {}
         self.timestamps_stop = {}
         self.enable_profile_logging = True
@@ -106,20 +105,17 @@ class PrefillDecodeBackend:
         self.init_tt_metal()
         self.iteration = 0
         self.rot_emb_matrix_list = []
-        self.batch_idx = 0 # keep track of what batch you are on to clear the kv cache 
-        # embed_on_device not currently supported, set to False to run embedding layer on CPU vs on TT device 
-        self.embed_on_device = False 
-        self.prefill_seq_len = 0 # 0 is default if there is no prefill 
+        self.batch_idx = 0  # keep track of what batch you are on to clear the kv cache
+        # embed_on_device not currently supported, set to False to run embedding layer on CPU vs on TT device
+        self.embed_on_device = False
+        self.prefill_seq_len = 0  # 0 is default if there is no prefill
         self.max_generated_tokens = 120
 
     def get_users(self):
         return [u for u in self.users if u]
 
     def get_user_param(self, param):
-        return [
-            user.generation_params[param] if user is not None else None
-            for user in self.users
-        ]
+        return [user.generation_params[param] if user is not None else None for user in self.users]
 
     def timer_start(self, name):
         self.timestamps_start[name] = time.time()
@@ -142,9 +138,6 @@ class PrefillDecodeBackend:
         tt_cache_path.mkdir(parents=True, exist_ok=True)
         return tt_cache_path
 
-    def tokenize_prompt(self, prompt: str, rag_context: str=None, add_special_tokens: bool=True, **kwargs) -> List[int]:
-        return self.tokenizer.encode(prompt, bos=add_special_tokens, eos=False)
-
     def teardown(self):
         logger.info("teardown ...")
         if not os.environ.get("MOCK_MODEL"):
@@ -154,10 +147,10 @@ class PrefillDecodeBackend:
         logger.info("teardown_tt_metal_device ...")
         import tt_lib as ttl
 
-        ttl.device.DumpDeviceProfiler(self.device, True)
-        ttl.device.DeallocateBuffers(self.device)
-        ttl.device.Synchronize(self.device)
-        ttl.device.CloseDevice(self.device)
+        ttnn.DumpDeviceProfiler(self.device, True)
+        ttnn.DeallocateBuffers(self.device)
+        ttnn.Synchronize(self.device)
+        ttnn.CloseDevice(self.device)
 
     def init_tt_metal_device(self):
         import tt_lib as ttl
@@ -165,19 +158,17 @@ class PrefillDecodeBackend:
         logger.info("init_tt_metal_device ...")
         device_ids = ttnn.get_device_ids()
         device_id = device_ids[0]
-        num_devices = ttl.device.GetNumPCIeDevices()
+        num_devices = ttnn.GetNumPCIeDevices()
         assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
-        self.device = ttl.device.CreateDevice(device_id)
-        ttl.device.SetDefaultDevice(self.device)
+        self.device = ttnn.CreateDevice(device_id)
+        ttnn.SetDefaultDevice(self.device)
         self.device.enable_program_cache()
 
     def init_tt_metal(self):
         self.init_tt_metal_device()
 
         logger.info("init_tt_metal model ...")
-        self.model_args = TtModelArgs(
-            self.device, instruct=self.instruct_mode
-        )
+        self.model_args = TtModelArgs(self.device, instruct=self.instruct_mode)
 
         self.tokenizer = Tokenizer(self.model_args.tokenizer_path)
 
@@ -201,23 +192,18 @@ class PrefillDecodeBackend:
         compile_prompts = ["COMPILE_PROMPT"] * self.batch_size
 
         (
-        _,
-        _,
-        _,
-        _,
-        self.rot_emb_matrix_list,
-        self.prefill_seq_len,
-        _,
+            _,
+            _,
+            _,
+            _,
+            self.rot_emb_matrix_list,
+            self.prefill_seq_len,
+            _,
         ) = preprocess_inputs_prefill(
-            compile_prompts, 
-            self.tokenizer, 
-            self.model_args, 
-            self.dtype, 
-            self.embd, 
-            self.instruct_mode, 
-            self.device)
+            compile_prompts, self.tokenizer, self.model_args, self.dtype, self.embd, self.instruct_mode, self.device
+        )
 
-        self.generation_start_pos = self.prefill_seq_len 
+        self.generation_start_pos = self.prefill_seq_len
 
         logger.info("Caching attention ops...")
         cache_attention(self.device, state_dict, self.model_args, self.rot_emb_matrix_list, self.dtype, 120)
@@ -232,9 +218,7 @@ class PrefillDecodeBackend:
             device=self.device,
             dtype=self.dtype,
             state_dict=state_dict,
-            weight_cache_path=self.model_args.weight_cache_path(
-                self.dtype
-            ),
+            weight_cache_path=self.model_args.weight_cache_path(self.dtype),
             layers=list(range(self.model_args.n_layers)),
             rot_mat=self.rot_emb_matrix_list,
             start_pos=self.generation_start_pos,
@@ -242,9 +226,7 @@ class PrefillDecodeBackend:
         self.tt_embd = TtMistralEmbedding(
             device=self.device,
             args=self.model_args,
-            weight_cache_path=self.model_args.weight_cache_path(
-                self.dtype
-            ),
+            weight_cache_path=self.model_args.weight_cache_path(self.dtype),
             state_dict=state_dict,
             dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
         )
@@ -274,10 +256,7 @@ class PrefillDecodeBackend:
 
             # Cancel on special stop token
             if prompt == "<|stop|>":
-                if any(
-                    (user is not None) and (user_id == user.user_id)
-                    for user in self.users
-                ):
+                if any((user is not None) and (user_id == user.user_id) for user in self.users):
                     logger.info(f"Cancelling input from user {user_id}")
                     self._get_user_by_id(user_id).cancel = True
                 else:
@@ -285,9 +264,7 @@ class PrefillDecodeBackend:
                 continue
 
             # Don't accept a prompt from a user that's already being procesed
-            if any(
-                (user is not None) and (user_id == user.user_id) for user in self.users
-            ):
+            if any((user is not None) and (user_id == user.user_id) for user in self.users):
                 logger.warning(f"Ignoring duplicate input from user {user_id}")
                 continue
 
@@ -295,9 +272,7 @@ class PrefillDecodeBackend:
             idx = self._find_free_user_slot()
             self.users[idx] = user_info
             if self.verbose:
-                logger.debug(
-                    f"Added user {user_id} to slot {idx} with prompt: {prompt}"
-                )
+                logger.debug(f"Added user {user_id} to slot {idx} with prompt: {prompt}")
 
     def pick_prompts(self, prompt_q: Queue):
         if self._get_num_of_users() == self.max_users:
@@ -326,10 +301,7 @@ class PrefillDecodeBackend:
     def prepare_inputs(self):
         # input_prompts = [user_info.prompt for user_info in self.users if user_info]
         # note: current implementation assumes full 32 prompts input always
-        input_prompts = [
-            user_info.prompt if user_info is not None else ""
-            for user_info in self.users
-        ]
+        input_prompts = [user_info.prompt if user_info is not None else "" for user_info in self.users]
         logger.info("INPUT PROMPTS: ", input_prompts)
         self.timer_start("preprocess_inputs")
         (
@@ -339,8 +311,7 @@ class PrefillDecodeBackend:
             self.input_mask,
             self.rot_emb_matrix_list,
             self.prefill_seq_len,
-            _
-
+            _,
         ) = preprocess_inputs_prefill(
             input_prompts,
             self.tokenizer,
@@ -365,7 +336,7 @@ class PrefillDecodeBackend:
         self.iteration = 0
 
     def prefill(self):
-        if self.prefill_seq_len> 0: 
+        if self.prefill_seq_len > 0:
             logger.info(f"Starting prefill [{self.prefill_seq_len} tokens]...")
             rot_mats_prefill = get_prefill_rot_mat(
                 self.model_args.head_dim, self.model_args.max_seq_len, self.device, seq_len=self.prefill_seq_len
@@ -395,9 +366,8 @@ class PrefillDecodeBackend:
                 )
 
             logger.info(f"Prefill finished [{self.prefill_seq_len} tokens]!")
-        
 
-    def decode(self):        
+    def decode(self):
         curr_pos = self.generation_start_pos + self.iteration
         self.timer_stop("all_but_decode")
         self.timer_start("decode_preprocessing")
@@ -416,9 +386,7 @@ class PrefillDecodeBackend:
         self.timer_stop("decode")
         self.timer_start("decode_get_logits")
 
-        tt_output_torch = (
-                ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)[: self.model_args.max_batch_size, :, :]
-            )
+        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)[: self.model_args.max_batch_size, :, :]
         self.timer_stop("decode_get_logits")
         self.timer_start("token_selection")
 
@@ -430,7 +398,7 @@ class PrefillDecodeBackend:
         # Typecast from bf16 to uint32 for embedding
         # tt_out_tok = ttnn.clone(tt_out_argmax, ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.uint32)
         # tt_out_tok = ttnn.experimental.tensor.typecast(tt_out_tok, dtype=ttnn.uint32)
-        
+
         out_tok = self.select_tokens(
             logits=tt_output_torch,
             skip_token=self.tokenizer.eos_id,
@@ -444,10 +412,10 @@ class PrefillDecodeBackend:
         if self.iteration < self.input_mask.shape[1]:  # If prefill
             # If token is pad token, start generating new token, otherwise, push the next prompt token to the model
             out_tok = torch.where(
-                self.input_mask[:,self.iteration], self.tt_decode_input[:, self.iteration], out_tok[:, 0]
+                self.input_mask[:, self.iteration], self.tt_decode_input[:, self.iteration], out_tok[:, 0]
             ).unsqueeze(1)
 
-        # embed_on_device not currently working 
+        # embed_on_device not currently working
         if self.embed_on_device:
             tt_out_tok = ttnn.from_torch(out_tok, device=self.device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
             self.pt_encoded_input = self.tt_embd(tt_out_tok)
@@ -474,14 +442,10 @@ class PrefillDecodeBackend:
                     user.generated_tokens.append(token.item())
                     user.num_tokens_generated += 1
                 # TODO: better way of counting prefill that handles input mask being non-contiguous
-                if self.iteration == (
-                    torch.count_nonzero(self.input_mask[idx]).item() - 1
-                ):
+                if self.iteration == (torch.count_nonzero(self.input_mask[idx]).item() - 1):
                     user.prefill_complete = True
             elif user.decode_complete:
-                logger.error(
-                    f"user.decode_complete={user.decode_complete}, and is still generating. Should be None"
-                )
+                logger.error(f"user.decode_complete={user.decode_complete}, and is still generating. Should be None")
             else:
                 token = top_pk_logits_efficient(
                     logits[idx],
@@ -511,19 +475,21 @@ class PrefillDecodeBackend:
                 continue
             if user.generated_tokens[-1] == self.tokenizer.eos_id:
                 # must pass end_of_sequence_str to frontend to close response
-                out_text = inference_config.end_of_sequence_str
+                out_text = "<|endoftext|>"
             else:
                 full_text = self.tokenizer.decode(user.generated_tokens)
                 out_text = full_text[user.num_generated_chars :]
                 user.num_generated_chars = len(full_text)
             out = (user.user_id, out_text)
             output_q.put(out)
-            if (
-                user.decode_complete
-                and out_text != inference_config.end_of_sequence_str
-            ):
+            if (user.decode_complete and out_text != "<|endoftext|>",):
                 # send eos str to frontend in all cases
-                output_q.put((user.user_id, inference_config.end_of_sequence_str))
+                output_q.put(
+                    (
+                        user.user_id,
+                        "<|endoftext|>",
+                    )
+                )
             if self.verbose:
                 logger.debug(f"user_id:{user.user_id}, {out_text}")
 
@@ -542,17 +508,13 @@ class PrefillDecodeBackend:
             token_id = user.generated_tokens[-1]
             if (token_id == self.tokenizer.eos_id) or user.decode_complete:
                 if not user.decode_complete:
-                    logger.error(
-                        f"user_id: {user.user_id} from index {idx} had EOS token but decode_complete=False."
-                    )
+                    logger.error(f"user_id: {user.user_id} from index {idx} had EOS token but decode_complete=False.")
                 if not (token_id == self.tokenizer.eos_id):
                     logger.error(
                         f"user_id: {user.user_id} from index {idx} did not have EOS token but decode_complete=True."
                     )
                 if self.verbose:
-                    logger.debug(
-                        f"Evicted user_id: {user.user_id} from index {idx} in user list"
-                    )
+                    logger.debug(f"Evicted user_id: {user.user_id} from index {idx} in user list")
                 self.reset_user_memory(idx, user)
                 self.log_user_stats(idx, user)
                 self.users[idx] = None
@@ -569,7 +531,7 @@ class PrefillDecodeBackend:
             # udpate cur time
             self.time_last_status = time.time()
 
-    def run_generate(self, prompt_q, output_q, status_q,run_once=False):
+    def run_generate(self, prompt_q, output_q, status_q, run_once=False):
         """
         Continuously pop prompt from prompt_q and push generated tokens to output_q
         while running decode. Automatically swap users from prompt_q
@@ -608,9 +570,7 @@ def top_pk_logits_efficient(
     # do not keep the entire vocab size after top k. Instead, keep the k size tensor and record the associated indices
     top_k_values, top_k_indices = torch.topk(logits, k=k)
     # replace any nans with 0's
-    top_k_values = torch.where(
-        torch.isnan(top_k_values), torch.zeros_like(top_k_values), top_k_values
-    )
+    top_k_values = torch.where(torch.isnan(top_k_values), torch.zeros_like(top_k_values), top_k_values)
     top_p_values = top_k_top_p_filtering(top_k_values, top_p=p)
     probs = F.softmax(top_p_values / temperature, dim=-1)
     top_k_id = torch.multinomial(probs, num_samples=1).squeeze(-1)
@@ -618,26 +578,26 @@ def top_pk_logits_efficient(
     return token
 
 
-def run_backend(prompt_q, output_q, status_q, verbose=True, run_once=False):
-    logger.info("starting run_backend ...")
-    with torch.no_grad():
-        backend = PrefillDecodeBackend(
-            model_version=inference_config.model_config.model_version,
-            batch_size=inference_config.model_config.batch_size,
-            num_layers=inference_config.model_config.num_layers,
-            max_seq_len=inference_config.model_config.max_seq_len,
-            cache_root=inference_config.cache_root,
-            verbose=verbose,
-        )
-        try:
-            # run generate
-            backend.run_generate(prompt_q, output_q, status_q, run_once)
-        except Exception as e:
-            logger.error(e)
-            # Capture the stack trace
-            stack_trace = traceback.format_exc()
-            logger.error(stack_trace)
-            # Re-raise the exception if you want the process to exit with an error
-            raise e
-        finally:
-            backend.teardown()
+# def run_backend(prompt_q, output_q, status_q, verbose=True, run_once=False):
+#     logger.info("starting run_backend ...")
+#     with torch.no_grad():
+#         backend = PrefillDecodeBackend(
+#             model_version=inference_config.model_config.model_version,
+#             batch_size=inference_config.model_config.batch_size,
+#             num_layers=inference_config.model_config.num_layers,
+#             max_seq_len=inference_config.model_config.max_seq_len,
+#             cache_root=inference_config.cache_root,
+#             verbose=verbose,
+#         )
+#         try:
+#             # run generate
+#             backend.run_generate(prompt_q, output_q, status_q, run_once)
+#         except Exception as e:
+#             logger.error(e)
+#             # Capture the stack trace
+#             stack_trace = traceback.format_exc()
+#             logger.error(stack_trace)
+#             # Re-raise the exception if you want the process to exit with an error
+#             raise e
+#         finally:
+#             backend.teardown()

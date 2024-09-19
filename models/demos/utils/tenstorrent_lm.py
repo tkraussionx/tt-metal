@@ -30,10 +30,10 @@ from lm_eval.models.utils import (
 eval_logger = utils.eval_logger
 
 """
-This script follows the lm-evaluation-harness guide for adding a new model 
+This script follows the lm-evaluation-harness guide for adding a new model
 (see: https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/model_guide.md)
 and adds an interface for Language Models (LM) evaluation using standard datasets
-and evaluation metrics 
+and evaluation metrics
 (see full list at https://github.com/EleutherAI/lm-evaluation-harness/tree/main/lm_eval/tasks).
 For example MMLU and accuracy (https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/mmlu/default/_mmlu.yaml).
 """
@@ -124,7 +124,7 @@ class TenstorrentLM(TemplateLM):
         left_truncate_len: int = None,
         truncation: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-    pass
+        pass
         # encode a batch of strings. converts to tensors and pads automatically, unlike tok_encode.
         old_padding_side = self.tokenizer.padding_side
         self.tokenizer.padding_side = padding_side
@@ -195,17 +195,15 @@ class TenstorrentLM(TemplateLM):
             batch_size = len(req_group)
             context_enc_list = [self.tok_encode(req_list[0].args[0]) for req_list in req_group]
             continuation_enc_list = [
-                [self.tok_encode(req.args[1], add_special_tokens=False)[0]
-                for req in req_list
-                ]
-                for req_list in req_group 
+                [self.tok_encode(req.args[1], add_special_tokens=False)[0] for req in req_list]
+                for req_list in req_group
             ]
             cond_ids = torch.tensor(continuation_enc_list)
             self.model_backend.add_users_from_context(context_enc_list)
             logits = self.model_backend.generate_n(n_tokens=1, return_logits=True)
             # select 1st token in logits
             logits = logits[:, -1, :]
-            targets = [req_list[0].doc['answer'] for req_list in req_group]
+            targets = [req_list[0].doc["answer"] for req_list in req_group]
             target_ids = cond_ids[torch.arange(len(cond_ids)), targets]
             # next: set target indexes high for testing
             # logits[torch.arange(0, len(target_ids)), target_ids] = 1000.0
@@ -215,7 +213,7 @@ class TenstorrentLM(TemplateLM):
             cond_probs = torch.gather(probs, 1, cond_ids)
             ll_list = torch.log(cond_probs).tolist()
             # set return values for each request by doc_id-choice
-            for cond, ll, gid in zip(cond_ids , ll_list, greedy_ids):
+            for cond, ll, gid in zip(cond_ids, ll_list, greedy_ids):
                 is_greedy = (greedy_ids == target_ids).tolist()
                 output = list(zip(ll, is_greedy))
                 res.extend(output)
