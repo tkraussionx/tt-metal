@@ -85,6 +85,14 @@ shard_spec_8_cores_grid = ttnn.CoreRangeSet(
         ),
     }
 )
+shard_spec_1_cores_grid = ttnn.CoreRangeSet(
+    {
+        ttnn.CoreRange(
+            ttnn.CoreCoord(0, 0),
+            ttnn.CoreCoord(0, 0),
+        ),
+    }
+)
 
 TILE_SIZE = 32
 shard_height = TILE_SIZE  # Decode mode only
@@ -117,6 +125,7 @@ def run_prefetch_matmul_on_t3000_impl(
     matmul_config,
     matmul_weights_dtype,
     max_in0_block_w,
+    math_fidelity,
     # Memory configs
     mem_config_input,
     mem_config_weights,
@@ -207,7 +216,7 @@ def run_prefetch_matmul_on_t3000_impl(
         program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=core_grid,
             in0_block_w=max(
-                1, math.ceil(K / 32 / (core_grid[0] * core_grid[1]))
+                1, math.ceil(K / 32 / mem_config_input.shard_spec.num_cores())
             ),  # how much inner dim you take each time
             out_subblock_h=1,  # Must be divisible by per_core_M
             out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
@@ -281,7 +290,7 @@ def run_prefetch_matmul_on_t3000_impl(
         raise ValueError(f"Unsupported matmul_config: {matmul_config}")
 
     compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.MathFidelity.LoFi,
+        math_fidelity=math_fidelity,
         math_approx_mode=True,
         fp32_dest_acc_en=True,
         packer_l1_acc=True,
@@ -355,8 +364,44 @@ def run_prefetch_matmul_on_t3000_impl(
     ],
 )
 @pytest.mark.parametrize(
-    "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm, input_dtype, matmul_weights_dtype",
+    "input_dtype, matmul_weights_dtype, math_fidelity",
     [
+        (ttnn.bfloat16, ttnn.bfloat4_b, ttnn.MathFidelity.LoFi),
+        # (ttnn.bfloat16, ttnn.bfloat4_b, ttnn.MathFidelity.HiFi2),
+        # (ttnn.bfloat16, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
+        # (ttnn.bfloat16, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
+        # (ttnn.bfloat8_b, ttnn.bfloat4_b, ttnn.MathFidelity.LoFi),
+        # (ttnn.bfloat8_b, ttnn.bfloat4_b, ttnn.MathFidelity.HiFi2),
+        # (ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),
+        # (ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.HiFi2),
+    ],
+)
+@pytest.mark.parametrize(
+    "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm",
+    [
+        (  # FF1/3 matmul1d
+            "matmul_1d_ff1",
+            [1, 1, 32, hidden_size_tg],
+            3584,
+            3,
+            (8, 1),
+            4,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    shard_spec_1_cores_grid,
+                    [
+                        shard_height,
+                        hidden_size_tg,
+                    ],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+            "dram",
+            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_tg],
@@ -379,8 +424,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -404,8 +447,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -429,8 +470,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -454,8 +493,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -479,8 +516,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -504,8 +539,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
@@ -529,8 +562,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 dram sharded
             "matmul_dram_sharded_ff1",
@@ -554,8 +585,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 dram sharded
             "matmul_dram_sharded_ff1",
@@ -579,8 +608,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 dram sharded
             "matmul_dram_sharded_ff1",
@@ -604,8 +631,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 dram sharded
             "matmul_dram_sharded_ff1",
@@ -629,8 +654,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         (  # FF1/3 dram sharded
             "matmul_dram_sharded_ff1",
@@ -654,8 +677,6 @@ def run_prefetch_matmul_on_t3000_impl(
             ),
             "dram_sharded_ff1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-            ttnn.bfloat16,
-            ttnn.bfloat4_b,
         ),
         # (  # FF1/3 dram sharded
         #     "matmul_dram_sharded_ff1",
@@ -772,6 +793,7 @@ def run_prefetch_matmul_on_t3000_impl(
         # ),
     ],
     ids=[
+        "ff1_matmul1d_1",
         "ff1_matmul1d_8",
         "ff1_matmul1d_12",
         "ff1_matmul1d_16",
@@ -810,6 +832,7 @@ def test_prefetch_matmul_on_t3000(
     matmul_config,
     matmul_weights_dtype,
     max_in0_block_w,
+    math_fidelity,
     mem_config_input,
     mem_config_weights,
     mem_config_mm,
@@ -828,6 +851,7 @@ def test_prefetch_matmul_on_t3000(
         matmul_config,
         matmul_weights_dtype,
         max_in0_block_w,
+        math_fidelity,
         mem_config_input,
         mem_config_weights,
         mem_config_mm,
