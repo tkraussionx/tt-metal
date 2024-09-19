@@ -47,6 +47,7 @@ jobs:
             -e TT_METAL_HOME=/usr/app
             -e ARCH_NAME=${{ matrix.runner-info.arch }}
           run_args: |
+            python3 -m pip install -e .
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
