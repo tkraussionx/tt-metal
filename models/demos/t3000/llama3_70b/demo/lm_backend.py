@@ -423,8 +423,8 @@ class PrefillDecodeBackend:
                 kv_cache=None,
             )
             # Since we give unpadded_seq_len, only the tile containing the last token is returned
-            # output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
-            next_logits = logits[:, seq_len - 1, :]  # 1, seq_len, vocab -> 1, vocab
+            output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
+            next_logits = output_logits[:, -1, :]  # 1, seq_len, vocab -> 1, vocab
             # TODO: add params
             next_token = batch_top_pk_logits_efficient_same_params(
                 next_logits,
