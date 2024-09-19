@@ -121,6 +121,7 @@ class UserRow:
                 f"Truncating prompt: user_id:={user_id} has prompt_len:= {self.num_prefill_tokens} > max_context:= {max_context}"
             )
             self.prompt_tokens = self.prompt_tokens[:max_context]
+            self.num_prefill_tokens = len(self.prompt_tokens)
         if params.get("stop_sequence"):
             self.stop_sequence = tokenizer.encode(params.get("stop_sequence"), bos=False, eos=False)
 
@@ -431,11 +432,12 @@ class PrefillDecodeBackend:
             ).item()  # shape = (1,)
             user.prefill_stop_time = time.time()
             user.generated_tokens.append(next_token)
-            self.batch_token_inputs[user.user_index] = next_token
-            self.batch_token_indices[user.user_index] = prefill_seq_len
+            user.num_tokens_decoded += 1
             # only record actual prefill tokens for metrics, not padded tokens
             user.num_tokens_prefilled = user.num_prefill_tokens
             user.prefill_complete = True
+            self.batch_token_inputs[user.user_index] = next_token
+            self.batch_token_indices[user.user_index] = prefill_seq_len
             # TODO: better way to handle more prefill users changing decode time
             user.start_decode_timer()
 
@@ -465,7 +467,9 @@ class PrefillDecodeBackend:
             if user is None:
                 continue
 
-            if user.num_tokens_decoded == 0:
+            if user.num_tokens_decoded == 1:
+                # tokens decoded starts at 1 because we are using the
+                # decoded token from the prefill
                 user.first_decode_time = time.time()
             user.num_tokens_decoded += 1
             user.generated_tokens.append(user_decode_id)
@@ -496,9 +500,6 @@ class PrefillDecodeBackend:
         # then push new chars to output queue
         for user, user_decode_id in zip(self.users, self.batch_token_indices):
             if user is None:
-                continue
-            elif user.num_tokens_decoded < 1:
-                # still prefilling via decode
                 continue
             full_text = self.tokenizer.decode(user.generated_tokens)
             return_text = full_text[user.num_generated_chars :]
