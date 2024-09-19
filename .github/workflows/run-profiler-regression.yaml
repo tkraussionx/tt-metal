@@ -43,6 +43,8 @@ jobs:
           docker_username: ${{ github.actor }} #TODO: Move to Action file
           docker_password: ${{ secrets.GITHUB_TOKEN }}
           docker_image_arch: ${{ matrix.runner-info.arch }}
+          docker_opts: |
+            -e TT_METAL_HOME=/usr/app
           run_args: |
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
