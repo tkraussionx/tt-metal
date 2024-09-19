@@ -4,6 +4,7 @@
 
 from loguru import logger
 
+import math
 import torch
 import pytest
 from models.utility_functions import (
@@ -19,9 +20,15 @@ from models.utility_functions import (
 from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc, check_with_pcc_without_tensor_printout
 import ttnn
 
+from ttnn.operations.conv2d import determine_parallel_config, create_sharded_memory_config_from_parallel_config
+
 
 def _nearest_32(x):
     return math.ceil(x / 32) * 32
+
+
+def _nearest_16(x):
+    return math.ceil(x / 16) * 16
 
 
 from tests.ttnn.ttnn_utility_fuction import get_shard_grid_from_num_cores
@@ -113,7 +120,35 @@ def run_conv(
             torch_bias_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
         )
 
+    torch_input_tensor = torch.reshape(
+        torch_input_tensor, (1, 1, batch_size * input_height * input_width, input_channels)
+    )
     tt_input_tensor = ttnn.from_torch(torch_input_tensor, ttnn.bfloat16)
+
+    pre_shard = False
+    if pre_shard:
+        out_h = math.floor((input_height + 2 * pad_h - (dilation * filter_height - 1) - 1) / stride_h) + 1
+        out_w = math.floor((input_width + 2 * pad_w - (dilation * filter_width - 1) - 1) / stride_w) + 1
+        input_shape_nhwc = [1, 1, batch_size * input_height * input_width, input_channels]
+        parallel_config = determine_parallel_config(
+            is_1d_systolic=use_1d_systolic_array,
+            batch_size=batch_size,
+            input_channels=input_channels,
+            output_height=out_h,
+            output_width=out_w,
+            output_channels=output_channels,
+            device=device,
+            is_out_tiled=True,
+        )
+        padded_shape = input_shape_nhwc
+        padded_shape[-1] = _nearest_16(padded_shape[-1])
+        sharded_memory_config = create_sharded_memory_config_from_parallel_config(
+            tensor_shape=padded_shape,
+            parallel_config=parallel_config,
+            tile_size=1,
+        )
+        tt_input_tensor = ttnn.pad(tt_input_tensor, padded_shape, [0, 0, 0, 0], 0)
+        tt_input_tensor = ttnn.to_device(tt_input_tensor, device, sharded_memory_config)
 
     if shard_layout is None:
         shard_layout = (
