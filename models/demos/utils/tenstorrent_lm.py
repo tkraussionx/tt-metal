@@ -303,36 +303,36 @@ class TenstorrentLM(TemplateLM):
 
         return res
 
-    def apply_chat_template(self, chat_history: List[Dict[str, str]]) -> str:
-        """
-        Defines how to transform few-shot examples provided as chat history into a format that can be used as input to the LM.
+    # def apply_chat_template(self, chat_history: List[Dict[str, str]]) -> str:
+    #     """
+    #     Defines how to transform few-shot examples provided as chat history into a format that can be used as input to the LM.
 
-        :param chat_history: list[dict[str, str]]
-            A list of dictionaries with keys 'role' and 'content'.
-            Values are strings representing the role name and the content of the message, respectively.
-        :return: str
-            A string representing the chat history in a format that can be used as input to the LM.
-        """
-        raise NotImplementedError(
-            "To use this model with chat templates, please implement the 'apply_chat_template' method for your model type."
-        )
+    #     :param chat_history: list[dict[str, str]]
+    #         A list of dictionaries with keys 'role' and 'content'.
+    #         Values are strings representing the role name and the content of the message, respectively.
+    #     :return: str
+    #         A string representing the chat history in a format that can be used as input to the LM.
+    #     """
+    #     raise NotImplementedError(
+    #         "To use this model with chat templates, please implement the 'apply_chat_template' method for your model type."
+    #     )
 
-    @property
-    def tokenizer_name(self) -> str:
-        """Must be defined for LM subclasses which implement Chat Templating.
-        Should return the name of the tokenizer or chat template used.
-        Used only to properly fingerprint caches when requests are being cached with `--cache_requests`, otherwise not used.
-        """
-        raise NotImplementedError(
-            "To use this model with chat templates, please implement the 'tokenizer_name' property."
-        )
+    # @property
+    # def tokenizer_name(self) -> str:
+    #     """Must be defined for LM subclasses which implement Chat Templating.
+    #     Should return the name of the tokenizer or chat template used.
+    #     Used only to properly fingerprint caches when requests are being cached with `--cache_requests`, otherwise not used.
+    #     """
+    #     raise NotImplementedError(
+    #         "To use this model with chat templates, please implement the 'tokenizer_name' property."
+    #     )
 
-    @property
-    def chat_template(self) -> str:
-        """Must be defined for LM subclasses that implement Chat Templating.
-        Should return the structure of the chat template applied to user/assistant messages.
-        This is used only to save in the experiment results for reproducibility.
-        """
-        raise NotImplementedError(
-            "To use this model with chat templates, please implement the 'chat_template' property."
-        )
+    # @property
+    # def chat_template(self) -> str:
+    #     """Must be defined for LM subclasses that implement Chat Templating.
+    #     Should return the structure of the chat template applied to user/assistant messages.
+    #     This is used only to save in the experiment results for reproducibility.
+    #     """
+    #     raise NotImplementedError(
+    #         "To use this model with chat templates, please implement the 'chat_template' property."
+    #     )

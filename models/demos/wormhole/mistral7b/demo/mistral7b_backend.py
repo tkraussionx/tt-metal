@@ -131,6 +131,9 @@ class PrefillDecodeBackend:
         self.embed_on_device = False
         self.prefill_seq_len = 0  # 0 is default if there is no prefill
         self.max_generated_tokens = 120
+        self.batch_counter = 0
+        self.decode_counter = 1
+        self.prev_decode_counter = 0
 
     def get_users(self):
         return [u for u in self.users if u]
@@ -244,7 +247,7 @@ class PrefillDecodeBackend:
         # TODO: investigate changing when continous batching supported
         # note: the cur_pos index if shared between all users
         # this may change for the continuous batching implementation
-        # self.batch_start_time = time.time()
+        self.batch_start_time = time.time()
         self.prepare_batch_inputs()
         self.prev_pos = 0
         self.cur_pos = self.prev_pos + 1
@@ -541,6 +544,7 @@ class PrefillDecodeBackend:
             logger.info(f"Prefill finished [{self.prefill_seq_len} tokens]!")
 
     def decode(self, return_logits=False):
+        self.decode_counter += 1
         curr_pos = self.generation_start_pos + self.iteration
         self.timer_stop("all_but_decode")
         self.timer_start("decode_preprocessing")
