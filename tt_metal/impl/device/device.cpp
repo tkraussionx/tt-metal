@@ -1184,7 +1184,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     }
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
-                    dispatch_d_settings.compile_args.resize(34);
+                    dispatch_d_settings.compile_args.resize(35);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
                     compile_args[1] = dispatch_d_settings.cb_log_page_size;
@@ -1216,6 +1216,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[31] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_d_settings.dispatch_s_physical_core);
                     compile_args[32] = this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_d_settings.worker_physical_core);
                     compile_args[33] = (dispatch_core_type == CoreType::ETH);
+                    compile_args[34] = DISPATCH_MESSAGE_ADDR;
                     // compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
                     // compile_args[27] = tensix_num_worker_cores;
                     // compile_args[28] = tensix_worker_go_signal_addr;
@@ -1755,7 +1756,8 @@ void Device::compile_command_queue_programs() {
                 dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size(),
                 this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core),
                 this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_physical_core),
-                dispatch_core_type == CoreType::ETH
+                dispatch_core_type == CoreType::ETH,
+                DISPATCH_MESSAGE_ADDR
             };
 
             configure_kernel_variant(
@@ -2185,8 +2187,13 @@ void Device::configure_command_queue_programs() {
         detail::WriteToDeviceL1(mmio_device, completion_q_writer_location, CQ0_COMPLETION_LAST_EVENT, zero, dispatch_core_type);
         detail::WriteToDeviceL1(mmio_device, completion_q_writer_location, CQ1_COMPLETION_LAST_EVENT, zero, dispatch_core_type);
 
-        // Initialize address where workers signal to completion to dispatch core
+        // Initialize address where workers signal to completion to dispatch core.
         // This value is always increasing
+        if (num_hw_cqs == 1 and dispatch_core_type == CoreType::ETH) {
+            // Ethernet dispatch with a single CQ. dispatch_s and dispatch_d are on different cores. Initialize counter for both to zero.
+            tt_cxy_pair dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
+            detail::WriteToDeviceL1(this, dispatch_s_location, DISPATCH_MESSAGE_ADDR, zero, dispatch_core_type);
+        }
         detail::WriteToDeviceL1(mmio_device, dispatch_location, DISPATCH_MESSAGE_ADDR, zero, dispatch_core_type);
         if (device_id != mmio_device_id) {
             tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);

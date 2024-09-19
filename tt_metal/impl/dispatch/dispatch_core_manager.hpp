@@ -101,7 +101,7 @@ class dispatch_core_manager {
 
     //TODO: this should probably be in command_queue_interface.hpp, but it's here for now due to circular dependency
     static constexpr uint8_t MAX_NUM_HW_CQS = 2;
-    static void initialize(DispatchCoreType dispatch_core_type) noexcept {
+    static void initialize(DispatchCoreType dispatch_core_type, uint8_t num_hw_cqs) noexcept {
         log_debug(tt::LogMetal, "DevicePool initialize");
         const std::unordered_map<DispatchCoreType, CoreType> dispatch_core_type_map = {
             {DispatchCoreType::WORKER, CoreType::WORKER},
@@ -109,10 +109,10 @@ class dispatch_core_manager {
         };
         auto internal_core_type = dispatch_core_type_map.at(dispatch_core_type);
         if (_inst == nullptr) {
-            static dispatch_core_manager dispatch_core_manager(internal_core_type);
+            static dispatch_core_manager dispatch_core_manager(internal_core_type, num_hw_cqs);
             _inst = &dispatch_core_manager;
-        } else if (_inst->dispatch_core_type_by_device[0] != internal_core_type) {
-            _inst->reset_dispatch_core_manager(internal_core_type);
+        } else if (_inst->dispatch_core_type_by_device[0] != internal_core_type or num_hw_cqs != _inst->num_hw_cqs) {
+            _inst->reset_dispatch_core_manager(internal_core_type, num_hw_cqs);
         }
     }
 
@@ -408,14 +408,14 @@ class dispatch_core_manager {
     ///         This list contains dispatch cores that have not been assigned to a particular dispatch function
     /// @param num_hw_cqs is used to get the correct collection of dispatch cores for a particular device
     /// @param dispatch_core_type specfies the core type that is designated for dispatch functionality
-    dispatch_core_manager(CoreType dispatch_core_type) {
-        this->reset_dispatch_core_manager(dispatch_core_type);
+    dispatch_core_manager(CoreType dispatch_core_type, uint8_t num_hw_cqs) {
+        this->reset_dispatch_core_manager(dispatch_core_type, num_hw_cqs);
     }
 
 
     /// @brief reset_dispatch_core_manager initializes vector of cores per device for dispatch kernels
     /// @param dispatch_core_type specfies the core type for dispatch kernels
-    void reset_dispatch_core_manager(CoreType dispatch_core_type) {
+    void reset_dispatch_core_manager(CoreType dispatch_core_type, uint8_t num_hw_cqs) {
         this->dispatch_core_assignments.clear();
         this->available_dispatch_cores_by_device.clear();
         this->dispatch_core_type_by_device.clear();
@@ -427,6 +427,7 @@ class dispatch_core_manager {
             }
 
             this->dispatch_core_type_by_device[device_id] = dispatch_core_type;
+            this->num_hw_cqs = num_hw_cqs;
         }
     }
 
@@ -451,6 +452,7 @@ class dispatch_core_manager {
     std::unordered_map<chip_id_t, std::unordered_map<uint16_t, std::unordered_map<uint8_t, dispatch_core_placement_t>>> dispatch_core_assignments;
     std::unordered_map<chip_id_t, std::list<CoreCoord>> available_dispatch_cores_by_device;
     std::unordered_map<chip_id_t, CoreType> dispatch_core_type_by_device;  //TODO: dispatch_core_type_by_device should probably be for all devices, not per device
+    uint8_t num_hw_cqs = 0;
     static dispatch_core_manager *_inst;
 
 };

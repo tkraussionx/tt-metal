@@ -132,7 +132,7 @@ def test_multi_device_single_trace(t3k_mesh_device, shape, use_all_gather, enabl
     "shape",
     [(1, 1, 256, 256), (1, 1, 512, 512), (1, 1, 32, 32), (1, 3, 512, 512), (1, 3, 32, 32)],
 )
-@pytest.mark.parametrize("use_all_gather", [True])
+@pytest.mark.parametrize("use_all_gather", [True, False])
 @pytest.mark.parametrize("enable_async", [True])
 @pytest.mark.parametrize("enable_multi_cq", [True])
 @pytest.mark.parametrize("device_params", [{"trace_region_size": 200000, "num_command_queues": 2}], indirect=True)

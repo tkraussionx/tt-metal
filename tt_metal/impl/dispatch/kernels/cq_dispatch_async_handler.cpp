@@ -37,11 +37,13 @@ constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(29);
 // dispatch_d and prefetch_hd need to have specific CTA for dispatch_s coords
 constexpr uint32_t my_noc_xy = get_compile_time_arg_val(31); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint32_t dispatch_d_noc_xy = get_compile_time_arg_val(32);
-constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(33);
+constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(33); // dispatch_s and dispatch_d running on different cores
+constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(34); // workers update the semaphore at this location to signal completion
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 
 static uint32_t num_pages_acquired = 0;
 static uint32_t num_mcasts_sent = 0;
+static uint32_t curr_num_workers_completed = 0;
 
 // Initialize the go_signal data that will be sent to workers over NOC1 in L1
 uint32_t aligned_go_signal __attribute__((aligned(16))) __attribute__((section("l1_data"))) __attribute__((used)) = RUN_MSG_GO;
@@ -63,26 +65,6 @@ FORCE_INLINE
 uint32_t wrapped_distance(uint32_t num_pages_released, uint32_t num_pages_acquired) {
     // num_pages_released >= num_pages_acquired at all times
     return (num_pages_released > num_pages_acquired) ? (num_pages_released - num_pages_acquired) : (UINT32_MAX - num_pages_acquired + num_pages_released + 1);
-}
-
-template<uint32_t noc_xy, uint32_t sem_id>
-FORCE_INLINE
-void cb_acquire_pages_dispatch_s(uint32_t n) {
-
-    volatile tt_l1_ptr uint32_t* sem_addr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(sem_id));
-
-    WAYPOINT("DAPW");
-    // Use a wrapping compare here to compare distance
-    // Required for trace which steals downstream credits and may make the value negative
-    uint32_t heartbeat = 0;
-    // DPRINT << " Num Pages acquired: " << num_pages_acquired << ENDL();
-    // DPRINT <<  "Num pages release: " << *sem_addr << ENDL();
-    while (wrapped_distance(*sem_addr, num_pages_acquired) < n) {
-        IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
-    }
-    WAYPOINT("DAPD");
-    num_pages_acquired += n;
 }
 
 template<uint32_t noc_xy, uint32_t sem_id>
@@ -178,20 +160,41 @@ void noc_async_read_one_packet_dispatch_s(std::uint64_t src_noc_addr, std::uint3
 
 FORCE_INLINE
 void wait_for_workers(volatile CQDispatchCmd tt_l1_ptr *cmd) {
-    volatile tt_l1_ptr uint32_t* worker_sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
-    DPRINT << "Wait on workers to complete: " << (*worker_sem_addr) << " " << cmd->mcast.wait_count << ENDL();
-    if (distributed_dispatcher) {
-        uint64_t dispatch_d_worker_sem_addr = get_noc_addr_helper(dispatch_d_noc_xy, cmd->mcast.wait_addr);
-        noc_async_read_one_packet_dispatch_s(dispatch_d_worker_sem_addr, cmd->mcast.wait_addr, 4);
-        while (!ncrisc_noc_reads_flushed(1));
-        while (*worker_sem_addr < cmd->mcast.wait_count) {
-            noc_async_read_one_packet_dispatch_s(dispatch_d_worker_sem_addr, cmd->mcast.wait_addr, 4);
-            while (!ncrisc_noc_reads_flushed(1));
+    volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
+    while (*worker_sem < cmd->mcast.wait_count);
+}
+
+FORCE_INLINE
+void update_worker_completion_count_on_dispatch_d() {
+    if constexpr(distributed_dispatcher) {
+        uint32_t num_workers_signalling_completion = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
+        if (num_workers_signalling_completion != curr_num_workers_completed) {
+            num_workers_signalling_completion = curr_num_workers_completed;
+            uint64_t dispatch_d_dst = get_noc_addr_helper(dispatch_d_noc_xy, worker_sem_addr);
+            noc_async_write_unicast_one_packet_dispatch_s(worker_sem_addr, dispatch_d_dst, sizeof(uint32_t));
         }
-    } else {
-        while (*worker_sem_addr < cmd->mcast.wait_count);
     }
-    DPRINT << "Done Wait on workers to complete" << ENDL();
+}
+
+template<uint32_t noc_xy, uint32_t sem_id>
+FORCE_INLINE
+void cb_acquire_pages_dispatch_s(uint32_t n) {
+
+    volatile tt_l1_ptr uint32_t* sem_addr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(sem_id));
+
+    WAYPOINT("DAPW");
+    // Use a wrapping compare here to compare distance
+    // Required for trace which steals downstream credits and may make the value negative
+    uint32_t heartbeat = 0;
+    // DPRINT << " Num Pages acquired: " << num_pages_acquired << ENDL();
+    // DPRINT <<  "Num pages release: " << *sem_addr << ENDL();
+    while (wrapped_distance(*sem_addr, num_pages_acquired) < n) {
+        update_worker_completion_count_on_dispatch_d();
+        IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
+    }
+    WAYPOINT("DAPD");
+    num_pages_acquired += n;
 }
 
 void kernel_main() {
@@ -209,17 +212,17 @@ void kernel_main() {
         // Send go signal here (idling). This is okay for now, since dispatch_s can only proceed once dispatch_d sees workers as completed
         // Need a clear count signal (that needs to wait)
         cb_acquire_pages_dispatch_s<my_noc_xy, my_dispatch_cb_sem_id>(1);
-        // DPRINT << "Acquired pages" << ENDL();
+
         volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
         if (cmd->base.cmd_id == CQ_DISPATCH_CMD_GO_SIGNAL_MCAST) {
-            // DPRINT << "Received Mcast Command " << num_worker_cores_to_mcast  << " " << cmd_ptr <<  ENDL();
             volatile tt_l1_ptr uint32_t* sync_sem_addr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
-            volatile tt_l1_ptr uint32_t* worker_sem_addr =
-                reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
             aligned_go_signal = cmd->mcast.go_signal;
             // Wait for notification from dispatch_d, signalling that its safe to send the go signal
-            while (*sync_sem_addr <= num_mcasts_sent);
+            while (*sync_sem_addr <= num_mcasts_sent) {
+                // Update dispatch_d with the latest num_workers
+                update_worker_completion_count_on_dispatch_d();
+            }
             num_mcasts_sent++;
             // Wait until workers have completed before sending go signal
             wait_for_workers(cmd);
@@ -235,8 +238,7 @@ void kernel_main() {
                     noc_async_write_unicast_one_packet_dispatch_s((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t));
                 }
             }
-            while(!ncrisc_noc_nonposted_writes_flushed(1));
-            // DPRINT << "Done write" << ENDL();
+            update_worker_completion_count_on_dispatch_d();
         }
         else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_TERMINATE) {
             // DPRINT << "dispatch_s Terminating" << ENDL();
@@ -252,6 +254,16 @@ void kernel_main() {
                 data_ptr += sizeof(uint32_t);
             }
             cmd_ptr += num_unicast_cores * sizeof(uint32_t);
+        } else if (cmd->base.cmd_id == CQ_DISPATCH_CMD_WAIT) {
+            ASSERT(cmd->wait.clear_count);
+            ASSERT(cmd->wait.addr == worker_sem_addr);
+            volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
+            while (*worker_sem < cmd->wait.count);
+            // Send updated count to dispatch_d
+            update_worker_completion_count_on_dispatch_d();
+            while(!ncrisc_noc_nonposted_writes_flushed(1));
+            // Clear the counter. dispatch_d will clear its own counter
+            *worker_sem = 0;
         }
         else {
             DPRINT << "Got invalid command" << ENDL();

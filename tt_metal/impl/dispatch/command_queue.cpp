@@ -1691,11 +1691,11 @@ EnqueueTraceCommand::EnqueueTraceCommand(
 
 void EnqueueTraceCommand::process() {
     uint32_t cmd_sequence_sizeB =
-        // CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
+        (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) * CQ_PREFETCH_CMD_BARE_MIN_SIZE + // sem update. Send only if dispatch_s is running (only true for tensix dispatch or single CQ Eth dispatch)
+        CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // dispatch_s go signal
         CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_EXEC_BUF
-        CQ_PREFETCH_CMD_BARE_MIN_SIZE +
-        (this->device->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::WORKER) * CQ_PREFETCH_CMD_BARE_MIN_SIZE;; // sem update + dispatch_s go signal
+        (this->device->num_hw_cqs() == 1 and dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::ETH) * CQ_PREFETCH_CMD_BARE_MIN_SIZE +  // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_S_CMD_WAIT. Send only if dispatch_s and dispatch_d are on different cores (true for single CQ Eth dispatch)
+        CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_EXEC_BUF
 
     uint8_t go_signal_mcast_flag = 0x1;
     if (desc->num_eth_programs) {
@@ -1727,6 +1727,10 @@ void EnqueueTraceCommand::process() {
     // Wait to ensure that all workers have reset their read_ptr. dispatch_d will stall until all workers have completed this step, before sending kernel config data to workers
     // or notifying dispatch_s that its safe to send the go_signal.
     // Clear the dispatch <--> worker semaphore, since trace starts at 0.
+    if (this->device->num_hw_cqs() == 1 and dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::ETH) {
+        command_sequence.add_dispatch_wait(
+            false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count, false, true, 1);
+    }
     command_sequence.add_dispatch_wait(
         false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, this->clear_count);
 
@@ -1799,12 +1803,18 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id, NOC noc_index) :
     }
 
     CoreCoord enqueue_program_dispatch_core;
-    if (device->is_mmio_capable()) {
-        enqueue_program_dispatch_core = dispatch_core_manager::instance().dispatcher_core(device->id(), channel, id);
-    } else {
-        enqueue_program_dispatch_core = dispatch_core_manager::instance().dispatcher_d_core(device->id(), channel, id);
-    }
     CoreType core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
+    if (this->device->num_hw_cqs() == 1 or core_type == CoreType::WORKER) {
+        // dispatch_s exists with this configuration. Workers write to dispatch_s
+        enqueue_program_dispatch_core = dispatch_core_manager::instance().dispatcher_s_core(device->id(), channel, id);
+    }
+    else {
+        if (device->is_mmio_capable()) {
+            enqueue_program_dispatch_core = dispatch_core_manager::instance().dispatcher_core(device->id(), channel, id);
+        } else {
+            enqueue_program_dispatch_core = dispatch_core_manager::instance().dispatcher_d_core(device->id(), channel, id);
+        }
+    }
     this->physical_enqueue_program_dispatch_core =
         device->physical_core_from_logical_core(enqueue_program_dispatch_core, core_type);
 
@@ -2652,8 +2662,25 @@ volatile bool HWCommandQueue::is_noc_hung() { return illegal_noc_txn_hang; }
 
 void HWCommandQueue::record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx) {
     // Issue event as a barrier and a counter reset
-    std::shared_ptr<Event> event = std::make_shared<Event>();
-    this->enqueue_record_event(event, true);
+    uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    if (this->device->num_hw_cqs() == 1 and dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::ETH) {
+        // wait on dispatch_s before issuing counter reset
+        cmd_sequence_sizeB += CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    }
+    void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->id);
+    HugepageDeviceCommand command_sequence(cmd_region, cmd_sequence_sizeB);
+
+    if (this->device->num_hw_cqs() == 1 and dispatch_core_manager::instance().get_dispatch_core_type(this->device->id()) == CoreType::ETH) {
+        // wait on dispatch_s before issuing counter reset
+        command_sequence.add_dispatch_wait(false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, true, false, true, 1);
+    }
+    // dispatch_d waits for latest non-zero counter from dispatch_s and then clears its local counter
+    command_sequence.add_dispatch_wait(false, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed, true);
+
+    this->manager.issue_queue_push_back(cmd_sequence_sizeB, this->id);
+    this->manager.fetch_queue_reserve_back(this->id);
+    this->manager.fetch_queue_write(cmd_sequence_sizeB, this->id);
+    this->expected_num_workers_completed = 0;
     // Record commands using bypass mode
     this->tid = tid;
     this->trace_ctx = ctx;
