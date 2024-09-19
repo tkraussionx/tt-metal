@@ -55,6 +55,7 @@ class UserInfo:
         self.rag_context = None
         self.prompt_tokens = context_tokens
         self.num_prefill_tokens = len(self.prompt_tokens)
+        self.num_tokens_decoded = 0
         self.position_id = 0
         self.batch_counter = 0
         # self.position_id = position_id
@@ -298,21 +299,6 @@ class PrefillDecodeBackend:
         if log:
             logger.info(batch_stats)
         return batch_stats
-
-    def generate_n(self, n_tokens, return_logits=False):
-        """
-        use with add_users_from_context()
-        """
-        self.batch_preprocessing()
-        self.prefill()
-        # self.start_decode_loop()
-        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
-            self.decode(return_logits=return_logits)
-        self.get_batch_stats(log=True)
-        if return_logits:
-            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
-        else:
-            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
 
     def teardown(self):
         logger.info("teardown ...")
@@ -624,6 +610,7 @@ class PrefillDecodeBackend:
             elif user.decode_complete:
                 logger.error(f"user.decode_complete={user.decode_complete}, and is still generating. Should be None")
             else:
+                user.num_tokens_decoded += 1
                 token = top_pk_logits_efficient(
                     logits[idx],
                     user.generation_params.get("top_p"),
@@ -734,6 +721,21 @@ class PrefillDecodeBackend:
             self.batch_idx += 1
             if run_once:
                 break
+
+    def generate_n(self, n_tokens, return_logits=False):
+        """
+        use with add_users_from_context()
+        """
+        self.batch_preprocessing()
+        self.prefill()
+        # self.start_decode_loop()
+        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
+            self.decode(return_logits=return_logits)
+        self.get_batch_stats(log=True)
+        if return_logits:
+            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
+        else:
+            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
 
 
 def top_pk_logits_efficient(
