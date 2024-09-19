@@ -1,6 +1,7 @@
 import json
 import time
 import torch
+import os
 from unittest.mock import patch
 
 import lm_eval.evaluator as evaluator
