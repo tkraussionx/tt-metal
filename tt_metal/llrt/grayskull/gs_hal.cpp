@@ -6,14 +6,10 @@
 #include "llrt/hal.hpp"
 #include "tt_metal/third_party/umd/device/tt_soc_descriptor.h"
 
-#if defined (ARCH_GRAYSKULL)
-
 #include "hw/inc/grayskull/dev_mem_map.h"
 #include "hw/inc/grayskull/eth_l1_address_map.h" // TODO remove when commonruntimeaddressmap is gone
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hw/inc/dev_msgs.h"
-
-#endif
 
 #define GET_MAILBOX_ADDRESS_HOST(x) ((uint64_t) & (((mailboxes_t *)MEM_MAILBOX_BASE)->x))
 
@@ -26,7 +22,6 @@ static inline int hv (enum HalMemAddrType v) {
 }
 
 void Hal::initialize_gs() {
-#if defined (ARCH_GRAYSKULL)
 
     static_assert(static_cast<int>(HalProgrammableCoreType::TENSIX) == static_cast<int>(ProgrammableCoreType::TENSIX));
 
@@ -53,7 +48,6 @@ void Hal::initialize_gs() {
     mem_map_sizes[hv(HalMemAddrType::UNRESERVED)] = MEM_L1_SIZE - L1_UNRESERVED_BASE;
 
     this->core_info_.push_back({HalProgrammableCoreType::TENSIX, CoreType::WORKER, num_proc_per_tensix_core, mem_map_bases, mem_map_sizes, true});
-#endif
 }
 
 }  // namespace tt_metal
