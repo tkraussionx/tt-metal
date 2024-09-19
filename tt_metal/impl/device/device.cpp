@@ -36,13 +36,6 @@ Device::Device(
     id_(device_id), worker_thread_core(worker_core), work_executor(worker_core, device_id) {
     ZoneScoped;
     tunnel_device_dispatch_workers_ = {};
-    // std::cout << "Mailboxes Size: " << sizeof(mailboxes_t) << std::endl;
-    // std::cout << "Erisc Mem mailbox base: " << eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE << std::endl;
-    // std::cout << "Profiler L1 Buffer: " << eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER << std::endl;
-    // std::cout << " Profiler Control: " << eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL << std::endl;
-    // std::cout << "Kernel Config: " << eth_l1_mem::address_map::ERISC_L1_KERNEL_CONFIG_BASE << std::endl;
-    // std::cout << "ERISC_L1_UNRESERVED_BASE: " << eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE << std::endl;
-    // std::cout << "Erisc L1 Unreserved Size: " << eth_l1_mem::address_map::ERISC_L1_UNRESERVED_SIZE << std::endl;
     this->initialize(num_hw_cqs, l1_small_size, trace_region_size, l1_bank_remap, minimal);
 }
 

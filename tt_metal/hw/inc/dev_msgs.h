@@ -295,7 +295,6 @@ static_assert(sizeof(watcher_msg_t) % sizeof(uint32_t) == 0);
 static_assert(sizeof(kernel_config_msg_t) % sizeof(uint32_t) == 0);
 static_assert(sizeof(core_info_msg_t) % sizeof(uint32_t) == 0);
 
-// These asserts may need to be modified
 #ifndef TENSIX_FIRMWARE
 // Validate assumptions on mailbox layout on host compile
 // Constexpr definitions allow for printing of breaking values at compile time
