@@ -29,8 +29,7 @@ from models.demos.t3000.llama2_70b.tt.llama_generation import (
     get_padded_prefill_len,
     num_blocks_in_seq,
 )
-from models.demos.t3000.llama2_70b.demo.demo_continuous_batching_paged_attention import (
-    PagedAttentionConfig,
+from models.demos.t3000.llama2_70b.demo.demo_continuous_batching import (
     ModelArgs,
     TTArgs,
     DataArgs,
@@ -318,7 +317,7 @@ class PrefillDecodeBackend:
         model_args = args.model
         tt_args = args.tt
 
-        generator = build_generator(model_args, tt_args, paged_attention_config)
+        generator = build_generator(model_args, tt_args)
         self.model = generator.model
         self.tokenizer = generator.tokenizer
         self.formatter = ChatFormat(self.tokenizer)
@@ -406,13 +405,13 @@ class PrefillDecodeBackend:
             last_token_idx = seq_len - 1
 
             prefill_seq_len = get_padded_prefill_len(seq_len)
+            tokens = torch.tensor(user.prompt_tokens, dtype=torch.long, device="cpu").unsqueeze(0)
             prefill_ids = torch.cat(
-                [user.prompt_tokens[:, :seq_len], torch.zeros(1, prefill_seq_len - seq_len).long()], dim=-1
+                [tokens, torch.zeros(1, prefill_seq_len - seq_len).long()], dim=-1
             )
 
-            logger.info(f"Filling kv cache for user {user_id + 1}")
-
-            logits = self.prefill_forward_single_user(
+            logger.info(f"Filling kv cache for user_id:= {user.user_index}, prefill_ids.shape:={prefill_ids.shape}")
+            logits = self.model.prefill_forward_single_user(
                 prefill_ids,
                 start_pos=0,
                 user_id=user.user_index,
@@ -422,8 +421,7 @@ class PrefillDecodeBackend:
             )
             # Since we give unpadded_seq_len, only the tile containing the last token is returned
             output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
-
-            next_logits = output_logits[:, prompt_len - 1, :]  # 1, seq_len, vocab -> 1, vocab
+            next_logits = output_logits[:, 0, :]  # 1, seq_len, vocab -> 1, vocab
             # TODO: add params
             next_token = batch_top_pk_logits_efficient_same_params(
                 next_logits,
@@ -434,8 +432,9 @@ class PrefillDecodeBackend:
             user.prefill_stop_time = time.time()
             user.generated_tokens.append(next_token)
             self.batch_token_inputs[user.user_index] = next_token
-            self.batch_token_indices[user.user_index] = prompt_len
-            user.num_tokens_prefilled = prompt_len
+            self.batch_token_indices[user.user_index] = prefill_seq_len
+            # only record actual prefill tokens for metrics, not padded tokens
+            user.num_tokens_prefilled = user.num_prefill_tokens
             user.prefill_complete = True
             # TODO: better way to handle more prefill users changing decode time
             user.start_decode_timer()

@@ -42,17 +42,17 @@ def mock_build_generator(model_args, tt_args, *args, **kwargs):
             self.max_seq_len = max_seq_len
 
         def prefill_forward_single_user(
-            self, prompt_tokens, position_id, batch_idx, page_table
+            self, tokens: torch.Tensor, start_pos: int, user_id: int, last_token_idx=None, page_table=None, kv_cache=None,
         ):
             return self.decode_forward(
-                tokens_tensor=prompt_tokens, indices_tensor=None, page_table=page_table
+                tokens=tokens, start_pos=start_pos
             )
 
         def decode_forward(
-            self, tokens_tensor, indices_tensor, page_table, *args, **kwargs
+            self, tokens: torch.Tensor, start_pos: int, page_table=None, kv_cache=None,
         ):
-            assert len(tokens_tensor.shape) == 2
-            batch, seqlen = tokens_tensor.shape
+            assert len(tokens.shape) == 2
+            batch, seqlen = tokens.shape
             forward_start = time.time()
             simulated_tps = 10000.0
             simulated_duration = 1.0 / simulated_tps
@@ -65,10 +65,14 @@ def mock_build_generator(model_args, tt_args, *args, **kwargs):
             EOS_ID = 128001
             send_index = 200
             send_token = EOT_ID
-            if indices_tensor is not None:
-                send_token_mask = indices_tensor > send_index
-                batch_indices = torch.nonzero(send_token_mask).squeeze()
-                logits[batch_indices, 0, send_token] = 100.0
+            if start_pos is not None:
+                if isinstance(start_pos, int):
+                    cache_idxs = torch.tensor([start_pos for _ in range(batch)], dtype=torch.int64)
+                else:
+                    cache_idxs = start_pos.to(dtype=torch.int64)
+                    send_token_mask = cache_idxs > send_index
+                    batch_indices = torch.nonzero(send_token_mask).squeeze()
+                    logits[batch_indices, 0, send_token] = 100.0
 
             actual_duration = time.time() - forward_start
             # simulate forward latency
@@ -98,17 +102,16 @@ def get_model_backend(mock_model=False):
     assert cache_path is not None, "CACHE_ROOT environment variable must be set"
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
-            with patch.object(PrefillDecodeBackend, "init_paged_attention", return_value=None):
-                with patch(
-                    "models.demos.t3000.llama3_70b.demo.lm_backend.build_generator", new=mock_build_generator
-                ):
-                    model_backend = PrefillDecodeBackend(
-                        model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
-                        batch_size=32,
-                        num_layers=80,
-                        max_seq_len=2048,
-                        cache_root=cache_path,
-                    )
+            with patch(
+                "models.demos.t3000.llama3_70b.demo.lm_backend.build_generator", new=mock_build_generator
+            ):
+                model_backend = PrefillDecodeBackend(
+                    model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
+                    batch_size=32,
+                    num_layers=80,
+                    max_seq_len=2048,
+                    cache_root=cache_path,
+                )
     else:
         model_backend = PrefillDecodeBackend(
             model_version="meta-llama/Meta-Llama-3.1-70B-Instruct",
