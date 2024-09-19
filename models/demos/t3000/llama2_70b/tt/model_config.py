@@ -33,7 +33,7 @@ def get_model_config(
     llm_mode = "decode" if seq_len == 1 else "prefill"
     assert num_devices == 8
     assert batch in (1, 16, 32)
-    assert seq_len in (1, 128, 256, 2048, 4096, 8192, 32 * 1024, 128 * 1024)
+    assert seq_len in (1, 32, 128, 256, 2048, 4096, 8192, 32 * 1024, 128 * 1024)
 
     # Supported values, TODO update for larger TT chips
     if max_context_len == 8192:
@@ -67,6 +67,7 @@ def get_model_config(
         "MAX_CONTEXT_LEN": max_context_len,
         "llama3-tg": MAX_SEQ_LEN_LLAMA3,
         "llama3.1-tg": MAX_SEQ_LEN_LLAMA3_1,
+        "PADDING_LENGTH": 32,
         "COMPUTE_KERNEL_CONFIG": ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.HiFi2,
             math_approx_mode=True,
@@ -110,7 +111,10 @@ def get_model_config(
         "WIDTH_SHARDED_MEMCFG": WIDTH_SHARDED_MEMCFG,
         "HEIGHT_SHARDED_MEMCFG": HEIGHT_SHARDED_MEMCFG,
         "BLOCK_SHARDED_MEMCFG": BLOCK_SHARDED_MEMCFG,
-        "MAX_MM_SEQ_LEN": 1024,  # Used to support seq len greater than 2k
+        "MAX_MM_SEQ_LEN": min(seq_len, 1024),  # Used to support seq len greater than 2k
+        "CORE_GRID_Y": 4
+        if min(seq_len, 1024) // 32 >= 4
+        else min(seq_len, 1024) // 32,  # Core grid must be ratio of seq_len // 32
         "HIDDEN_SIZE": model_config_entries["hidden_size"],
     }
     hidden_size = model_config_entries["hidden_size"]
