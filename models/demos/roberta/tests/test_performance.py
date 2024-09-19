@@ -19,8 +19,7 @@ from models.demos.bert.tt import ttnn_optimized_bert
 from ttnn.model_preprocessing import preprocess_model_parameters
 
 from models.utility_functions import (
-    is_wormhole_b0,
-    is_blackhole,
+    skip_for_wormhole_b0,
     enable_persistent_kernel_cache,
     disable_persistent_kernel_cache,
 )
@@ -29,12 +28,11 @@ from models.perf.perf_utils import prep_perf_report
 
 def get_expected_times(bert):
     return {
-        ttnn_bert: (13, 32),
-        ttnn_optimized_bert: (12, 0.092),
+        ttnn_bert: (13, 5.5),
+        ttnn_optimized_bert: (12, 0.12),
     }[bert]
 
 
-@pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="Unsupported on WH and BH")
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.models_performance_virtual_machine
 @pytest.mark.parametrize("model_name", ["deepset/roberta-large-squad2"])
@@ -52,9 +50,9 @@ def test_performance(device, use_program_cache, model_name, batch_size, sequence
     torch_attention_mask = torch.zeros(1, sequence_size) if bert == ttnn_optimized_bert else None
 
     if bert == ttnn_bert:
-        tt_model_name = f"ttnn_{model_name}"
+        tt_model_name = f"ttnn_roberta_{model_name}"
     elif bert == ttnn_optimized_bert:
-        tt_model_name = f"ttnn_{model_name}_optimized"
+        tt_model_name = f"ttnn_roberta_{model_name}_optimized"
     else:
         raise ValueError(f"Unknown functional_roberta: {bert}")
 

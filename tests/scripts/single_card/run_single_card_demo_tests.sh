@@ -19,6 +19,9 @@ run_common_func_tests() {
   # Resnet
   WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest -n auto --disable-warnings models/demos/wormhole/resnet50/demo/demo.py; fail+=$?
 
+  # RoBERTa
+  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest -n auto --disable-warnings -q -s --input-method=json --input-path='models/demos/roberta/demo/input_data.json' models/demos/roberta/demo/demo.py --timeout 420; fail+=$?
+
   return $fail
 }
 

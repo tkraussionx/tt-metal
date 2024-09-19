@@ -27,6 +27,8 @@ run_perf_models_other() {
 
     env pytest -n auto models/demos/metal_BERT_large_11/tests -m $test_marker
 
+    env pytest -n auto models/demos/roberta/tests/test_performance.py -m $test_marker
+
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
 }
@@ -82,6 +84,9 @@ run_device_perf_models() {
         env pytest models/demos/ttnn_falcon7b/tests -m $test_marker --timeout=360
 
         env pytest models/demos/bert/tests -m $test_marker
+
+        env pytest models/demos/roberta/tests/test_perf_device_roberta.py -m $test_marker
+
     fi
 
     if [ "$tt_arch" == "wormhole_b0" ]; then
@@ -94,6 +99,9 @@ run_device_perf_models() {
         env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/metal_BERT_large_11/tests -m $test_marker
 
         env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b_common/tests -m $test_marker
+
+        env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/roberta/tests/test_perf_device_roberta.py -m $test_marker
+
     fi
 
     ## Merge all the generated reports
