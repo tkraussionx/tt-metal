@@ -98,8 +98,7 @@ def get_model_backend(mock_model=False):
     model_config, ckpt_dir, tokenizer_path, cache_path = setup_llama_env(
         llama_version=llama_version,
     )
-    cache_path = os.environ.get("CACHE_ROOT")
-    assert cache_path is not None, "CACHE_ROOT environment variable must be set"
+    
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
             with patch(
@@ -133,12 +132,15 @@ def main():
     # tasks = ["gpqa_main_cot_zeroshot"]
     # tasks = ["ifeval"]
     tasks = ["ifeval", "gpqa_main_cot_zeroshot"]
-    eval_output_fpath = "eval_output"
+    eval_output_fname = "eval_output"
     limit = None        # limit the number of samples per task
     log_samples = True  # log samples and outputs to file
     mock_model = False   # use random logits model for testing
     num_fewshot = None  # number of fewshot samples (task dependent)
     # -----------------------------------
+    cache_path = os.environ.get("CACHE_ROOT")
+    assert cache_path is not None, "CACHE_ROOT environment variable must be set"
+    eval_output_fpath = os.path.join(cache_path, eval_output_fname)
     if "ifeval" in tasks:
         # download nltk punkt tokenizer if not available
         import nltk
