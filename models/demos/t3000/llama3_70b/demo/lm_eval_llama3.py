@@ -93,6 +93,8 @@ def get_model_backend(mock_model=False):
     model_config, ckpt_dir, tokenizer_path, cache_path = setup_llama_env(
         llama_version=llama_version,
     )
+    cache_path = os.environ.get("CACHE_ROOT")
+    assert cache_path is not None, "CACHE_ROOT environment variable must be set"
     if mock_model:
         with patch.object(PrefillDecodeBackend, "init_tt_metal_device", return_value=None):
             with patch.object(PrefillDecodeBackend, "init_paged_attention", return_value=None):
@@ -104,7 +106,7 @@ def get_model_backend(mock_model=False):
                         batch_size=32,
                         num_layers=80,
                         max_seq_len=2048,
-                        cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
+                        cache_root=cache_path,
                     )
     else:
         model_backend = PrefillDecodeBackend(
@@ -112,7 +114,7 @@ def get_model_backend(mock_model=False):
             batch_size=32,
             num_layers=80,
             max_seq_len=2048,
-            cache_root="/mnt/tt-metal-llama3_1-70b-t3000-api-fs",
+            cache_root=cache_path,
         )
 
     return model_backend, model_backend.formatter
