@@ -412,8 +412,7 @@ class PrefillDecodeBackend:
             prefill_ids = torch.cat(
                 [tokens, torch.zeros(1, prefill_seq_len - seq_len).long()], dim=-1
             )
-
-            logger.info(f"Filling kv cache for user_id:= {user.user_index}, prefill_ids.shape:={prefill_ids.shape}")
+            logger.info(f"Filling kv cache for user_id:= {user.user_index}, prefill_ids.shape:={prefill_ids.shape}, seq_len={seq_len}")
             logits = self.model.prefill_forward_single_user(
                 prefill_ids,
                 start_pos=0,
@@ -432,6 +431,7 @@ class PrefillDecodeBackend:
                 k=user.generation_params.get("top_k"),
                 temperature=user.generation_params.get("temperature"),
             ).item()  # shape = (1,)
+            logger.info(f"completed prefill user_id:= {user.user_index}, next_token:={next_token}")
             user.prefill_stop_time = time.time()
             user.generated_tokens.append(next_token)
             user.num_tokens_decoded += 1
