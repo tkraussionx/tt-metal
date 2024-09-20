@@ -193,9 +193,15 @@ class TtLlamaAttention_galaxy:
 
             self.COMPUTE_KERNEL_SDPA = ttnn.WormholeComputeKernelConfig(
                 math_fidelity=ttnn.MathFidelity.HiFi4,
-                math_approx_mode=False,
+                math_approx_mode=True,
                 fp32_dest_acc_en=False,
                 packer_l1_acc=False,
+            )
+
+            self.SDPA_PROG_CFG = lambda seq_len: ttnn.SDPAProgramConfig(
+                compute_with_storage_grid_size=[8, 7],
+                q_chunk_size=128 if seq_len == 256 else 256,
+                k_chunk_size=128 if seq_len == 256 else 256,
             )
 
             self.FUSED_QKV_MM_PROGCFG = get_matmul_2d_config_from_tensor_shapes(
@@ -239,17 +245,14 @@ class TtLlamaAttention_galaxy:
         )
         layer_past = [cache_k, cache_v]
         self.layer_past = [
-            ttnn.to_device(
-                ttnn.as_tensor(
-                    lp,
-                    device=self.mesh_device,
-                    mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
-                    layout=ttnn.TILE_LAYOUT,
-                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                    dtype=ttnn.bfloat8_b,
-                    cache_file_name=self.cache_path / f"empty_attn_cache_galaxy_{cache_k.shape}",
-                ),
-                self.mesh_device,
+            ttnn.as_tensor(
+                lp,
+                device=self.mesh_device,
+                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                dtype=ttnn.bfloat8_b,
+                cache_file_name=self.cache_path / f"empty_attn_cache_galaxy_{cache_k.shape}",
             )
             for lp in layer_past
         ]
@@ -638,6 +641,8 @@ class TtLlamaAttention_galaxy:
             value_layer,
             is_causal=True,
             scale=self.scale,
+            compute_kernel_config=self.COMPUTE_KERNEL_SDPA,
+            program_config=self.SDPA_PROG_CFG(query_layer.shape[-2]),  # pass seq_len
         )
 
         return attn_output
