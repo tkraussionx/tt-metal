@@ -58,15 +58,14 @@ runs:
         # The most important option below is `--rm`. The machines will fill up with containers.
         options: |
           --rm
-          -v ${{ github.workspace }}:/github_workspace:ro
+          -v ${{ github.workspace }}:/github_workspace
           --net=host
           ${{ inputs.docker_opts }}
           -e LOGURU_LEVEL=${{ env.LOGURU_LEVEL }}
           -e PYTHONPATH=/usr/app
           ${{ inputs.device }}
         run: |
-          cp -r /github_workspace/* /usr/app/
-          cd /usr/app/
+          cd /github_workspace
           if [ ${{ inputs.install_wheel }} = true ]; then
             rm -rf tt_metal tt_eager
             WHEEL_FILENAME=$(ls -1 *.whl)
