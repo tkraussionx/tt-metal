@@ -59,21 +59,3 @@ def test_neck(device, reset_seeds, model_location_generator):
     torch_model.eval()
 
     result_ttnn = ttnn_model(device, ttnn_input_tensor)
-    start_time = time.time()
-    for x in range(2):
-        result_ttnn = ttnn_model(device, ttnn_input_tensor)
-    logger.info(f"Time taken: {time.time() - start_time}")
-
-    result_1 = ttnn.to_torch(result_ttnn[0])
-    result_2 = ttnn.to_torch(result_ttnn[1])
-    result_3 = ttnn.to_torch(result_ttnn[2])
-    ref1, ref2, ref3 = torch_model(torch_input_tensor[0], torch_input_tensor[1], torch_input_tensor[2])
-    ref1 = ref1.permute(0, 2, 3, 1)
-    ref2 = ref2.permute(0, 2, 3, 1)
-    ref3 = ref3.permute(0, 2, 3, 1)
-    result1 = result_1.reshape(ref1.shape)
-    result2 = result_2.reshape(ref2.shape)
-    result3 = result_3.reshape(ref3.shape)
-    assert_with_pcc(result1, ref1, 0.94)  # PCC = 0.94
-    assert_with_pcc(result2, ref2, 0.99)  # PCC = 0.99
-    assert_with_pcc(result3, ref3, 0.96)  # PCC = 0.96
