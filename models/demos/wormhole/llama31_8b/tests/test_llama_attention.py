@@ -72,10 +72,8 @@ def test_llama_attention_inference(device, use_program_cache, reset_seeds):
             device,
         )
 
-        tt_out = tt_model([attention_input], pos, rot_mats=current_rot_mat)
-        # multi-device attention module returns replicated output
-        assert isinstance(tt_out, list)
-        tt_out = tt_out[0]
+        tt_out = tt_model(attention_input, pos, rot_mats=current_rot_mat)
+
         tt_output_torch = (
             ttnn.to_torch(tt_out).view(1, -1, 4096).permute(1, 0, 2)[: model_args.max_batch_size, :, :]
         )  # [ batch, seq, hidden_dim]
@@ -107,11 +105,8 @@ def test_llama_attention_inference(device, use_program_cache, reset_seeds):
                 reference_model.cache_v.clone().permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
             ]
             # TT hardware execution -------------------------------------------------------------
-            tt_layer_present = []
-            for layer_past in tt_model.layer_past_list:
-                tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
 
-            tt_layer_present = tt_layer_present[0]
+            tt_layer_present = [ttnn.to_torch(cache) for cache in layer_past]
 
             for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
                 cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
