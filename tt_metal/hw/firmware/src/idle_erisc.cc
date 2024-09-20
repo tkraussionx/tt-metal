@@ -24,6 +24,7 @@
 #include "dataflow_api.h"
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 
+#include "debug/watcher_common.h"
 #include "debug/waypoint.h"
 #include "debug/dprint.h"
 #include "debug/stack_usage.h"
@@ -149,6 +150,7 @@ int main() {
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, NOC_UNICAST_WRITE_VC, 1, 31 /*wrap*/, false /*linked*/);
                 mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
+                CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
             }
 
             while (1) {

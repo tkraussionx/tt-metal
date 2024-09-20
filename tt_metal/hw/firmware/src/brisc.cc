@@ -28,6 +28,7 @@
 #include "dev_mem_map.h"
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 
+#include "debug/watcher_common.h"
 #include "debug/waypoint.h"
 #include "debug/dprint.h"
 #include "debug/stack_usage.h"
@@ -451,6 +452,7 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
                 mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
+                CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
             }
         }
     }

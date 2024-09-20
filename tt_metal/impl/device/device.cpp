@@ -339,6 +339,9 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
     tt::Cluster::instance().write_core(init_launch_msg_data.data(), launch_msg_buffer_num_entries * sizeof(launch_msg_t), tt_cxy_pair(this->id(), phys_core), this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
     uint64_t go_addr = this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
     tt::Cluster::instance().write_core(go_msg, sizeof(go_msg_t), tt_cxy_pair(this->id(), phys_core), go_addr);
+    uint64_t launch_message_read_ptr_addr = this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH) - sizeof(uint32_t);
+    std::vector<uint32_t> zero = {0};
+    tt::Cluster::instance().write_core(zero.data(), sizeof(uint32_t), tt_cxy_pair(this->id(), phys_core), launch_message_read_ptr_addr);
 }
 
 void Device::reset_cores() {
