@@ -7,8 +7,29 @@
 #define REDUCE_OP PoolType::SUM
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
+#include "debug/dprint.h"
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
+#include "compute_kernel_api/eltwise_unary/moreh_mul_sub.h"
 
+uint32_t get_tilized_idx(uint32_t h_idx, uint32_t w_idx, uint32_t tile_height, uint32_t tile_width) {
+    const auto half_tile_height = tile_height / 2;
+    const auto half_tile_width = tile_width / 2;
+
+    if (h_idx < half_tile_height && w_idx < half_tile_width) {
+        return h_idx * half_tile_width + w_idx;
+    }
+
+    if (h_idx < half_tile_height && w_idx >= half_tile_width) {
+        return h_idx * half_tile_width + (w_idx % half_tile_width) + half_tile_height * half_tile_width;
+    }
+
+    if (h_idx >= half_tile_height && w_idx < half_tile_width) {
+        return (h_idx % half_tile_width) * half_tile_width + w_idx + half_tile_height * tile_width;
+    }
+
+    return (h_idx % half_tile_height) * half_tile_width + (w_idx % half_tile_width) +
+           half_tile_height * (tile_width + half_tile_width);
+}
 namespace NAMESPACE {
 void MAIN {
     constexpr uint32_t onetile = 1;
@@ -30,79 +51,132 @@ void MAIN {
     uint32_t Wt = get_compile_time_arg_val(1);
 
     for (uint32_t n = 0; n < N; ++n) {
-
-        #ifdef LOG
-            // sum(dy)
-            for (uint32_t w = 0; w < Wt; ++w) {
-                if (w == Wt - 1) {
-                    if (w == 0){
-                        mask_tile_to_cb(cb_dy, cb_mask, cb_add, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
-                    } else {
-                        constexpr auto cb_inter0 = tt::CB::c_intermed0;
-                        mask_tile_to_cb(cb_dy, cb_mask, cb_inter0, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
-
-                        add_tiles_to_cb(cb_add, cb_inter0, cb_add);
-                    }
+#ifdef LOG
+        // sum(dy)
+        for (uint32_t w = 0; w < Wt; ++w) {
+            if (w == Wt - 1) {
+                if (w == 0) {
+                    mask_tile_to_cb(cb_dy, cb_mask, cb_add, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
                 } else {
-                    if (w == 0) {
-                        copy_tile_to_cb(cb_dy, cb_add);
-                    }
-                    else {
-                        add_tiles_to_cb(cb_add, cb_dy, cb_add);
-                    }
+                    constexpr auto cb_inter0 = tt::CB::c_intermed0;
+                    mask_tile_to_cb(cb_dy, cb_mask, cb_inter0, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
+
+                    add_tiles_to_cb(cb_add, cb_inter0, cb_add);
+                }
+            } else {
+                if (w == 0) {
+                    copy_tile_to_cb(cb_dy, cb_add);
+                } else {
+                    add_tiles_to_cb(cb_add, cb_dy, cb_add);
+                }
+            }
+        }
+
+        reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
+
+        // broadcast cb_sum to row-direction
+        DPRINT << "KNH" << ENDL();
+        {
+            tile_regs_acquire();
+            cb_wait_front(cb_sum, 1);
+#ifdef TRISC_UNPACK
+            auto cb_sum_ptr = get_l1_ptr<RISCV::UNPACK, DTYPE::FP32>(cb_sum);
+            for (int h = 0; h < 32; ++h) {
+                for (int w = 1; w < 32; ++w) {
+                    cb_sum_ptr[get_tilized_idx(h, w, 32, 32)] = cb_sum_ptr[get_tilized_idx(h, 0, 32, 32)];
                 }
             }
 
-            reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
+            print_cb<RISCV::UNPACK, DTYPE::FP32>("cb_sum", cb_sum);
+#endif
+            cb_pop_front(cb_sum, 1);
+            tile_regs_commit();
 
-            for (uint32_t w = 0; w < Wt; w += onetile) {
-                // exp(y)
-                constexpr auto cb_exp = tt::CB::c_intermed0;
-                exp_tile_to_cb(cb_y, cb_exp, 0);
+            tile_regs_wait();
+            cb_reserve_back(cb_sum, 1);
+            cb_push_back(cb_sum, 1);
+            tile_regs_release();
+        }
+
+        for (uint32_t w = 0; w < Wt; w += onetile) {
+            // exp(y)
+            constexpr auto cb_exp = tt::CB::c_intermed0;
+            exp_tile_to_cb(cb_y, cb_exp, 0);
+
+            if (0) {
                 // sum * exp(y)
+                // change to sfpu
                 mul_tiles_bcast_cols_to_cb(cb_exp, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
 
                 // dy - sum * exp(y)
+                // change to sfpu
                 sub_tiles_to_cb(cb_dy, cb_inter2, cb_dx);
+            } else {
+                tile_regs_acquire();
+                cb_wait_front(cb_exp, 1);
+                cb_wait_front(cb_sum, 1);
+                cb_wait_front(cb_dy, 1);
+
+                copy_tile_init_with_dt(cb_exp);
+                copy_tile(cb_exp, 0, 0);
+
+                copy_tile_init_with_dt(cb_sum);
+                copy_tile(cb_sum, 0, 1);
+
+                copy_tile_init_with_dt(cb_dy);
+                copy_tile(cb_dy, 0, 2);
+
+                moreh_mul_sub(0);
+
+                cb_pop_front(cb_exp, 1);
+                cb_pop_front(cb_dy, 1);
+                tile_regs_commit();
+
+                tile_regs_wait();
+                cb_reserve_back(cb_dx, 1);
+                pack_tile_with_dt(0, cb_dx);
+                cb_push_back(cb_dx, 1);
+                tile_regs_release();
+            }
+        }
+
+        cb_pop_front(cb_sum, onetile);
+#else
+        // step 1, compute y * dy
+        for (uint32_t w = 0; w < Wt; ++w) {
+            if (w == Wt - 1) {
+                mul_tiles_and_mask_tile_to_cb(
+                    cb_y, cb_dy, cb_mask, cb_ydy, 0, 0, 0, /*pop0=*/1, /*pop1=*/1, /*popm=*/0);
+            } else {
+                mul_tiles_to_cb(cb_y, cb_dy, cb_ydy);
             }
 
-            cb_pop_front(cb_sum, onetile);
-        #else
-            // step 1, compute y * dy
-            for (uint32_t w = 0; w < Wt; ++w) {
-                if (w == Wt - 1) {
-                    mul_tiles_and_mask_tile_to_cb(
-                        cb_y, cb_dy, cb_mask, cb_ydy, 0, 0, 0, /*pop0=*/1, /*pop1=*/1, /*popm=*/0);
-                } else {
-                    mul_tiles_to_cb(cb_y, cb_dy, cb_ydy);
-                }
-
-                if (w == 0) {
-                    copy_tile_to_cb(cb_ydy, cb_add);
-                } else {
-                    add_tiles_to_cb(cb_add, cb_ydy, cb_add);
-                }
+            if (w == 0) {
+                copy_tile_to_cb(cb_ydy, cb_add);
+            } else {
+                add_tiles_to_cb(cb_add, cb_ydy, cb_add);
             }
+        }
 
-            // step 2, compute sum(y * dy)
-            reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
+        // step 2, compute sum(y * dy)
+        reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
 
-            // step 3, compute final result
-            for (uint32_t w = 0; w < Wt; w += onetile) {
-                // dy - sum
-                sub_tiles_bcast_cols_to_cb(cb_dy, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
+        // step 3, compute final result
+        for (uint32_t w = 0; w < Wt; w += onetile) {
+            // dy - sum
+            sub_tiles_bcast_cols_to_cb(cb_dy, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
 
-                #ifdef SOFTMAX
-                    // (dy - sum) * y
-                    mul_tiles_to_cb(cb_y, cb_inter2, cb_dx);
-                #else
-                    // -(dy - sum) * y
-                    mul_tiles_and_negative_to_cb(cb_y, cb_inter2, cb_dx);
-                #endif
-            }
+#ifdef SOFTMAX
+            // (dy - sum) * y
+            mul_tiles_to_cb(cb_y, cb_inter2, cb_dx);
+#else
+            // -(dy - sum) * y
+            mul_tiles_and_negative_to_cb(cb_y, cb_inter2, cb_dx);
+#endif
+        }
 
-            cb_pop_front(cb_sum, onetile);
-        #endif
+        cb_pop_front(cb_sum, onetile);
+#endif
     }
 }
 }  // namespace NAMESPACE
