@@ -81,7 +81,10 @@ class UserRow:
         context_tokens,
         params,
         tokenizer,
-        max_context=inference_config.model_config.max_seq_len,
+        max_context: int = inference_config.model_config.max_seq_len,
+        send_eot: bool = False,
+        send_end_seq: bool = False,
+        send_user_stats: bool = False,
     ):
         self.user_id = user_id
         self.user_index = user_index
@@ -102,6 +105,9 @@ class UserRow:
         self.prefill_complete = False
         self.decode_complete = False
         self.sent_stop = False
+        self.send_eot = send_eot
+        self.send_end_seq = send_end_seq
+        self.send_user_stats = send_user_stats
         # timer
         self.prefill_start_time = None
         self.prefill_stop_time = None
@@ -480,6 +486,9 @@ class PrefillDecodeBackend:
             if user_decode_id in user.stop_tokens:
                 # generated stop token
                 user.decode_complete = True
+                if not user.send_eot:
+                    # remove eot token
+                    user.generated_tokens.pop()
             elif user.num_tokens_decoded > user.max_tokens:
                 # request specified max generation
                 user.decode_complete = True
@@ -508,8 +517,14 @@ class PrefillDecodeBackend:
             return_text = full_text[user.num_generated_chars :]
             user.num_generated_chars = len(full_text)
             # send special EOS string to frontend
-            if (user_decode_id in user.stop_tokens) or (user.decode_complete):
-                return_text += inference_config.end_of_sequence_str
+            if user.decode_complete:
+                if user.send_end_seq:
+                    # send special EOS string to frontend to delineate end of response
+                    return_text += inference_config.end_of_sequence_str
+                if user.send_user_stats:
+                    # optionally send user stats, add extra EOS string to delineate
+                    return_text += json.dumps(user.stats)
+                    return_text += inference_config.end_of_sequence_str
             output_q.put((user.user_id, return_text))
             if self.verbose:
                 logger.debug(f"user_id:{user.user_id}, {return_text}")
