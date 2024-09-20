@@ -8,7 +8,7 @@
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 
-// #define SKIP 1
+#define SKIP 1
 
 void kernel_main() {
     // DeviceZoneScopedN("in0_sender");
@@ -129,6 +129,7 @@ void kernel_main() {
     }
 
     for (uint32_t b = 0; b < batch; ++b) {
+        DeviceZoneScopedN("in0_sender_batch_loop");
         for (uint32_t block = 0; block < num_blocks; ++block) {
             // DeviceZoneScopedN("in0_sender_block_loop");
             uint32_t block_id = block / num_blocks_per_shard;
@@ -138,7 +139,7 @@ void kernel_main() {
 
 {
     // DeviceZoneScopedN("reserve");
-            cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+            // cb_reserve_back(cb_id_in0, in0_block_num_tiles);
 }
             #ifndef SKIP
             // All cores in receiver grid need to participate in receiving regardless if they produce output work or
@@ -174,6 +175,7 @@ void kernel_main() {
                 // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its
                 // value should be in0_mcast_num_dests), then reset the semaphore_addr value back to zero for the next
                 // block
+
                 if constexpr (core_in_in0_receiver_mcast_grid) {
                     // wait for every core in receiver grid EXCLUDING myself
                     noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests - 1);
@@ -185,10 +187,11 @@ void kernel_main() {
 
                 // Now we have the block in the CB address, we can mcast to dests!
                 uint64_t in0_multicast_data_addr = in0_multicast_data_noc | l1_write_addr_in0;
-
                 if constexpr (core_in_in0_receiver_mcast_grid) {
                     // Mcast from/to same CB
                     // Skip if there are no other cores since this core already has the data.
+                {
+                    DeviceZoneScopedN("zone-1");
                     // Note: noc_async_write_multicast[_loopback_src] may hang if called with 0 cores.
                     if constexpr (in0_mcast_num_cores > 1) {
                         if constexpr (extract_shard_sub_blocks) {
@@ -211,6 +214,7 @@ void kernel_main() {
                                     true);
                         }
                     }
+                }
 
                     // We should also multicast the flag to destinations
                     if constexpr (in0_mcast_num_cores == 1) {
@@ -246,6 +250,8 @@ void kernel_main() {
 
                 local_read_addr += in0_block_size_bytes;
             } else if constexpr (core_in_in0_receiver_mcast_grid) {
+                DeviceZoneScopedN("zone-2");
+
                 uint64_t in0_mcast_sender_semaphore_noc_addr = remote_sender_noc_addrs[block_id];
 
                 // Atomic increment source core counter
@@ -253,6 +259,7 @@ void kernel_main() {
             }
 
             if constexpr (core_in_in0_receiver_mcast_grid) {
+                DeviceZoneScopedN("zone-3");
                 // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
                 noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             }

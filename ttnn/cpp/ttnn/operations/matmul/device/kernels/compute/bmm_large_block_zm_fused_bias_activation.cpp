@@ -12,7 +12,7 @@
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
 #endif
-// #define SKIP_OVERHEAD 1
+#define SKIP_OVERHEAD 1
 // #define SKIP_COMPUTE 1
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
@@ -34,11 +34,11 @@ FORCE_INLINE void reload_from_cb_to_dst(
     uint32_t in0_block_w) {
     // Reconfigure input
     copy_tile_to_dst_init_short_with_dt(in1_cb_id, mm_partials_cb_id);
-    cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
+    // cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
 
     uint32_t start_dst_index = 0;
     uint32_t start_tile_index = 0;
-    copy_block_matmul_partials(mm_partials_cb_id, start_tile_index, start_dst_index, out_subblock_num_tiles);
+    // copy_block_matmul_partials(mm_partials_cb_id, start_tile_index, start_dst_index, out_subblock_num_tiles);
 
     cb_pop_front(mm_partials_cb_id, out_subblock_num_tiles);
     // Reconfigure srcA back
@@ -54,22 +54,22 @@ inline void reblock_and_untilize(
     uint32_t interm_cb_id,
     uint32_t out_cb_id) {
     uint32_t num_tiles_in_row_of_subblocks = mulsi3(out_subblock_num_tiles, num_out_subblocks_in_col);
-    cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
+    // cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
 
     uint32_t within_block_index = 0;
     for (uint32_t h = 0; h < out_subblock_h; h++) {
         uint32_t block_offset = 0;
 
-        cb_reserve_back(out_cb_id, out_block_w);
+        // cb_reserve_back(out_cb_id, out_block_w);
         for (uint32_t n = 0; n < num_out_subblocks_in_col; n++) {
             tile_regs_acquire();
             for (uint32_t w = 0; w < out_subblock_w; w++) {
                 uint32_t tile_index = block_offset + within_block_index + w;
-                copy_tile(interm_cb_id, tile_index, w);
+                // copy_tile(interm_cb_id, tile_index, w);
             }
             tile_regs_commit();
             tile_regs_wait();
-            pack_untilize_dst<out_subblock_w, out_block_w>(out_cb_id, 1, n);
+            // pack_untilize_dst<out_subblock_w, out_block_w>(out_cb_id, 1, n);
             tile_regs_release();
             block_offset += out_subblock_num_tiles;
         }
@@ -90,7 +90,7 @@ void MAIN {
     }
 #endif
 
-    constexpr uint32_t in0_block_w = get_compile_time_arg_val(0);        // inner block size in tiles
+    constexpr uint32_t in0_block_w = 72; // get_compile_time_arg_val(0);        // inner block size in tiles
     constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1);  // outer row block size (in inner row blocks)
     constexpr uint32_t in0_block_num_tiles =
         get_compile_time_arg_val(2);  // out_subblock_h*in0_block_w*in0_num_subblocks;
@@ -138,12 +138,12 @@ void MAIN {
 #ifdef PACK_RELU
         // for each batch we start we relu disabled so that intermediate results are not relu'd
         if constexpr (batch > 1) {
-            PACK((llk_pack_relu_config(ReluType::NO_RELU)));
+            // PACK((llk_pack_relu_config(ReluType::NO_RELU)));
         }
 #endif
 
         if constexpr (batch > 1) {
-            PACK((pack_reconfig_data_format(mm_partials_cb_id)));
+            // PACK((pack_reconfig_data_format(mm_partials_cb_id)));
         }
 
         for (uint32_t block = 0; block < num_blocks; block++) {
@@ -153,14 +153,14 @@ void MAIN {
             if (last_out) {
                 #ifndef SKIP_OVERHEAD
                 // if last block we pack the final result with relu enabled
-                PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
+                // PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
                 #endif
             }
 #endif
-            #ifndef SKIP_OVERHEAD
-            cb_wait_front(in0_cb_id, in0_block_num_tiles);
-            cb_wait_front(in1_cb_id, in1_block_num_tiles);
-            #endif
+
+            // cb_wait_front(in0_cb_id, in0_block_num_tiles);
+            // cb_wait_front(in1_cb_id, in1_block_num_tiles);
+
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
@@ -217,27 +217,27 @@ void MAIN {
 
                         tile_regs_commit();
                         // Pack out to output buffer
-                        cb_reserve_back(mm_out_cb_id, out_subblock_num_tiles);
+                        // cb_reserve_back(mm_out_cb_id, out_subblock_num_tiles);
                         tile_regs_wait();
 
 #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
-                        PACK((pack_reconfig_data_format(mm_out_cb_id)));
+                        // PACK((pack_reconfig_data_format(mm_out_cb_id)));
 #endif
 
 #ifdef PACKER_L1_ACC
 #ifdef FUSE_BIAS
                         if (block == 0) {  // no accumulation for first iteration
-                            PACK((llk_pack_reconfig_l1_acc(0)));
+                            // PACK((llk_pack_reconfig_l1_acc(0)));
                         } else {
-                            PACK((llk_pack_reconfig_l1_acc(1)));
+                            // PACK((llk_pack_reconfig_l1_acc(1)));
                         }
 #else
-                        PACK((llk_pack_reconfig_l1_acc(0)));
+                        // PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
 #endif
 
                         uint32_t start_dst_index = 0;
-                        matmul_pack_tile(start_dst_index, mm_out_cb_id, out_subblock_num_tiles);
+                        // matmul_pack_tile(start_dst_index, mm_out_cb_id, out_subblock_num_tiles);
 
                         tile_regs_release();
                         #endif
@@ -248,23 +248,23 @@ void MAIN {
                         tile_regs_commit();
                         // Wait for tiles in output buffer to be written out since interm and output share memory
                         if (block == 0) {
-                            cb_reserve_back(out_cb_id, out_num_tiles_to_wait);
+                            // cb_reserve_back(out_cb_id, out_num_tiles_to_wait);
                             out_num_tiles_to_wait += out_subblock_num_tiles;
                         }
                         // Move partial result to interm buffer
-                        cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
+                        // cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
                         tile_regs_wait();
 
 #ifdef PACKER_L1_ACC
                         if (block == 0) {  // no accumulation for first iteration
-                            PACK((llk_pack_reconfig_l1_acc(0)));
+                            // PACK((llk_pack_reconfig_l1_acc(0)));
                         } else if (block == 1) {
-                            PACK((llk_pack_reconfig_l1_acc(1)));
+                            // PACK((llk_pack_reconfig_l1_acc(1)));
                         }
 #endif
 
                         uint32_t start_dst_index = 0;
-                        matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
+                        // matmul_pack_tile(start_dst_index, mm_partials_cb_id, out_subblock_num_tiles);
 
                         tile_regs_release();
                         #endif
@@ -281,7 +281,7 @@ void MAIN {
             if (block < num_blocks - 1) {
                 // Wait for l1 accumulation to populate interm buffer,
                 // then pop to update fifo rd pointer
-                cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
+                // cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
                 cb_pop_front(mm_partials_cb_id, out_block_num_tiles);
             }
             // never reload when with bias, bias uses interm buffer
@@ -289,7 +289,7 @@ void MAIN {
 #else
             // Last iteration does spill and reload to output buffer
             if (block < num_blocks - 2) {
-                cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
+                // cb_wait_front(mm_partials_cb_id, out_block_num_tiles);
                 cb_pop_front(mm_partials_cb_id, out_block_num_tiles);
             }
             if (block == num_blocks - 2) {
@@ -309,29 +309,29 @@ void MAIN {
 #ifdef FUSE_BIAS
 #ifdef PACK_RELU
         // if last block we pack the final result with relu enabled
-        PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
+        // PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
 #endif
 #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
-        PACK((pack_reconfig_data_format(out_cb_id)));
+        // PACK((pack_reconfig_data_format(out_cb_id)));
 #endif
 #ifdef PACKER_L1_ACC
-        PACK((llk_pack_reconfig_l1_acc(0)));
+        // PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
 
-        unpack_reconfig_data_format(in1_cb_id, mm_partials_cb_id, in0_cb_id, bias_cb_id);
+        // unpack_reconfig_data_format(in1_cb_id, mm_partials_cb_id, in0_cb_id, bias_cb_id);
         add_bcast_rows_init_short();
         // reconfigure unpacker df for src B
-        cb_wait_front(bias_cb_id, in1_per_core_w);
+        // cb_wait_front(bias_cb_id, in1_per_core_w);
         for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
             int in1_index_subblock_offset = 0;
             for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
                 // Redundant wait since we know data was just pushed
-                cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
+                // cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
                 tile_regs_acquire();
                 for (uint32_t i = 0, j = 0; j < out_subblock_h; j++) {
                     uint32_t bcast_tile_idx = in1_index_subblock_offset;
                     for (uint32_t k = 0; k < out_subblock_w; k++, i++) {
-                        add_tiles_bcast_rows(mm_partials_cb_id, bias_cb_id, i, bcast_tile_idx, i);
+                        // add_tiles_bcast_rows(mm_partials_cb_id, bias_cb_id, i, bcast_tile_idx, i);
                         bcast_tile_idx++;
                     }
                 }
@@ -351,10 +351,10 @@ void MAIN {
 #endif
 
                 // Pack out to output buffer
-                cb_reserve_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
+                // cb_reserve_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
                 tile_regs_wait();
                 for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                    pack_tile(i, untilize_mode_out_cb_id);
+                    // pack_tile(i, untilize_mode_out_cb_id);
                 }
                 tile_regs_release();
                 cb_push_back(untilize_mode_out_cb_id, out_subblock_num_tiles);
@@ -365,22 +365,22 @@ void MAIN {
 #endif  // FUSE_BIAS
         if constexpr (untilize_out) {
 #ifdef PACK_RELU
-            PACK((llk_pack_relu_config(ReluType::NO_RELU)));
+            // PACK((llk_pack_relu_config(ReluType::NO_RELU)));
 #endif  // PACK_RELU
 #ifndef FUSE_BIAS
-            unpack_reconfig_data_format_srca(in1_cb_id, mm_partials_cb_id);
+            // unpack_reconfig_data_format_srca(in1_cb_id, mm_partials_cb_id);
 #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
-            PACK((pack_reconfig_data_format(out_cb_id)));
+            // PACK((pack_reconfig_data_format(out_cb_id)));
 #endif
 #ifdef PACKER_L1_ACC
-            PACK((llk_pack_reconfig_l1_acc(0)));
+            // PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
 #endif  // FUSE_BIAS
             pack_untilize_dst_init_short<out_subblock_w, out_block_w>(out_cb_id);
             copy_tile_to_dst_init_short();
             for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
-                reblock_and_untilize<out_subblock_w, out_block_w>(
-                    in1_num_subblocks, out_subblock_num_tiles, out_subblock_h, mm_partials_cb_id, out_cb_id);
+                // reblock_and_untilize<out_subblock_w, out_block_w>(
+                //     in1_num_subblocks, out_subblock_num_tiles, out_subblock_h, mm_partials_cb_id, out_cb_id);
             }
             pack_untilize_uninit(mm_partials_cb_id);
         }
@@ -389,10 +389,10 @@ void MAIN {
             mm_block_init_short(in0_cb_id, in1_cb_id, 0, out_subblock_w, out_subblock_h, in0_block_w);
 #ifdef FUSE_BIAS
             // reconfigure unpacker df for src A and src B
-            unpack_reconfig_data_format(mm_partials_cb_id, in1_cb_id, bias_cb_id, in0_cb_id);
+            // unpack_reconfig_data_format(mm_partials_cb_id, in1_cb_id, bias_cb_id, in0_cb_id);
 #else
             // reconfigure unpacker df for src A
-            unpack_reconfig_data_format_srca(mm_partials_cb_id, in1_cb_id);
+            // unpack_reconfig_data_format_srca(mm_partials_cb_id, in1_cb_id);
 #endif
         }
     }

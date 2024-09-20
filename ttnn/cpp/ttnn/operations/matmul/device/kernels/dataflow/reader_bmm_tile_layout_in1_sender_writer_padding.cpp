@@ -8,7 +8,7 @@
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 
-// #define SKIP_DRAM 1
+#define SKIP_DRAM 1
 void kernel_main() {
     // DeviceZoneScopedN("in1_sender");
     // READER
@@ -181,6 +181,7 @@ void kernel_main() {
 #endif
 
     for (uint32_t b = 0; b < batch; ++b) {
+        DeviceZoneScopedN("in1_sender_batch_loop");
 #ifdef IN1_DRAM_SHARDED
         uint32_t l1_read_addr_in1_offset = 0;
 #endif
@@ -238,8 +239,8 @@ void kernel_main() {
 #ifndef IN1_SHARDED
             // Operand 1
             // {
-            //     DeviceZoneScopedN("reserve");
-            cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+                // DeviceZoneScopedN("reserve");
+            // cb_reserve_back(cb_id_in1, in1_block_num_tiles);
             // }
 
             #ifndef SKIP_DRAM
@@ -440,7 +441,7 @@ void kernel_main() {
 
 #if OUT_SHARDED
 {
-    // DeviceZoneScopedN("OUT_SHARDED_WAIT");
+    DeviceZoneScopedN("OUT_SHARDED_WAIT");
     cb_wait_front(
         cb_id_out0,
         batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
