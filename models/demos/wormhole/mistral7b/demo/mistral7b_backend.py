@@ -26,7 +26,9 @@ from models.demos.wormhole.mistral7b.tt.mistral_model import TtTransformer
 from models.demos.wormhole.mistral7b.tt.mistral_embedding import TtMistralEmbedding
 from models.demos.wormhole.mistral7b.reference.tokenizer import Tokenizer
 from models.demos.wormhole.mistral7b.tt.model_config import TtModelArgs
-from models.demos.wormhole.mistral7b.demo.demo_with_prefill import Emb, preprocess_inputs_prefill
+from models.demos.wormhole.mistral7b.demo.demo_with_prefill import Emb
+
+# preprocess_inputs_prefill
 from models.demos.wormhole.mistral7b.demo.demo import preprocess_inputs
 
 
@@ -46,6 +48,89 @@ def initialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
     eos_reached = torch.tensor([False] * bsz, device="cpu")
     input_text_mask = tokens != pad_id  # use prefill token if that token is not masked
     return tokens, input_text_mask, eos_reached
+
+
+def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, embd, instruct, device):
+    """
+    Run tokenizer on inputs, and create embeddings for the first token of each input
+    """
+    if instruct:
+        encoded_prompts = []
+        for prompt in input_prompts:
+            if isinstance(prompt, str):  # If it's a string, we can concatenate
+                encoded_prompts.append(tokenizer.encode("[INST] " + prompt + " [/INST]"))
+    else:
+        encoded_prompts = [tokenizer.encode(prompt) for prompt in input_prompts]
+
+    prompt_lens = [len(x) for x in encoded_prompts]
+
+    min_prompt_len = min(prompt_lens)
+    max_prompt_len = max(prompt_lens)
+    assert (
+        max_prompt_len <= model_args.max_seq_len
+    ), f"Max prompt length {max_prompt_len} exceeds model max seq len {model_args.max_seq_len}"
+    assert min_prompt_len > 0, "Minimum prompt length must be greater than 0"
+    assert min_prompt_len <= max_prompt_len, f"Minimum prompt length {min_prompt_len} exceeds max len {max_prompt_len}"
+
+    if min_prompt_len < 128:
+        prefill_seq_len = 0  # For short prompts do decode-as-prefill instead
+    else:
+        prefill_seq_len = (
+            1024 if min_prompt_len > 1024 else (512 if min_prompt_len > 512 else 128)
+        )  # TODO Only supports prefill lengths of 128, 512, 1024
+        # Initial prefill tensor full of pad tokens
+        input_tokens_prefill = torch.full((len(input_prompts), prefill_seq_len), tokenizer.pad_id, dtype=torch.int32)
+
+    # Initial decode tensor full of pad tokens
+    input_tokens_decode = torch.full(
+        (len(input_prompts), max_prompt_len - prefill_seq_len), tokenizer.pad_id, dtype=torch.long
+    )
+
+    for i, encoded in enumerate(encoded_prompts):
+        if prefill_seq_len > 0:
+            input_tokens_prefill[i] = torch.tensor(encoded[:prefill_seq_len]).to(input_tokens_prefill)
+            pt_tokenized_inputs_prefill = torch.tensor(input_tokens_prefill)
+        input_tokens_decode[i, : len(encoded[prefill_seq_len:])] = torch.tensor(encoded[prefill_seq_len:]).to(
+            input_tokens_decode
+        )
+
+    input_mask = (input_tokens_decode != tokenizer.pad_id).to(torch.bool)
+
+    num_users = len(encoded_prompts)
+    logger.info(f"# of users: {num_users}")
+
+    # Select the first token from the prompts for initial decoding
+    pt_tokenized_inputs_decode = torch.tensor(input_tokens_decode)
+    emb_inputs_decode = embd(pt_tokenized_inputs_decode[:, 0]).view(model_args.max_batch_size, 1, -1)
+    if prefill_seq_len > 0:
+        emb_prefill_inputs = [
+            embd(pt_tokenized_inputs_prefill[b, :]).view(1, prefill_seq_len, -1)
+            for b in range(model_args.max_batch_size)
+        ]
+    else:
+        emb_prefill_inputs = None
+
+    # Return the rotational embedding matrix on device
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    rot_emb_matrix = freqs_to_rotation_matrix(cos, sin)
+
+    rot_emb_matrix_list = []
+    for i in range(rot_emb_matrix.shape[0]):
+        rot_emb_matrix_list.append(
+            ttnn.from_torch(
+                rot_emb_matrix[i, :, :].unsqueeze(0).unsqueeze(0), device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
+            )
+        )  # ttnn.bfloat16
+
+    return (
+        emb_inputs_decode,
+        pt_tokenized_inputs_decode,
+        emb_prefill_inputs,
+        input_mask,
+        rot_emb_matrix_list,
+        prefill_seq_len,
+        encoded_prompts,
+    )
 
 
 class UserInfo:
@@ -163,21 +248,6 @@ class PrefillDecodeBackend:
         tt_cache_path.mkdir(parents=True, exist_ok=True)
         return tt_cache_path
 
-    def tokenize_prompt(self, prompt: str, rag_context: str = None, add_special_tokens: bool = True, **kwargs):
-        # if self.chat and add_special_tokens:
-        #     if rag_context:
-        #         messages = [
-        #             Message(role="system", content=f"Please use the following context to answer the question:\n{rag_context}"),
-        #             Message(role="user", content=prompt)
-        #         ]
-        #         return self.formatter.encode_dialog_prompt(messages)
-        #     else:
-        #         # encode as a single turn of dialog
-        #         messages = [Message(role="user", content=prompt)]
-        #         return self.formatter.encode_dialog_prompt(messages)
-        # else:
-        return self.tokenizer.encode(prompt)
-
     def add_users_from_context(self, context_enc_list, do_sample=True):
         """
         Add users from the given context_enc_list.
@@ -217,6 +287,21 @@ class PrefillDecodeBackend:
                 tokenizer=self.tokenizer,
             )
 
+    def tokenize_prompt(self, prompt: str, rag_context: str = None, add_special_tokens: bool = True, **kwargs):
+        # if self.chat and add_special_tokens:
+        #     if rag_context:
+        #         messages = [
+        #             Message(role="system", content=f"Please use the following context to answer the question:\n{rag_context}"),
+        #             Message(role="user", content=prompt)
+        #         ]
+        #         return self.formatter.encode_dialog_prompt(messages)
+        #     else:
+        #         # encode as a single turn of dialog
+        #         messages = [Message(role="user", content=prompt)]
+        #         return self.formatter.encode_dialog_prompt(messages)
+        # else:
+        return self.tokenizer.encode(prompt)
+
     def prepare_batch_inputs(self):
         self.num_users = len(self.get_users())
         assert self.num_users <= self.max_users
@@ -230,12 +315,31 @@ class PrefillDecodeBackend:
                 f"Truncating input prompt min_prompt_len:={self.min_prompt_len} to max_seq_len:={self.max_seq_len}"
             )
         # pad inputs, empty users get pad id
-        prefill_tokens, input_text_mask, _ = initialize_inputs(
-            tokenizer=self.tokenizer,
-            prompt_tokens=input_prompts,
-            bsz=len(input_prompts),
-            total_len=total_len,
+        # prefill_tokens, input_text_mask, _ = initialize_inputs(
+        #     tokenizer=self.tokenizer,
+        #     prompt_tokens=input_prompts,
+        #     bsz=len(input_prompts),
+        #     total_len=total_len,
+        # )
+
+        (
+            self.pt_encoded_input,
+            self.tt_decode_input,
+            self.pt_prefill_input,
+            self.input_mask,
+            self.rot_emb_matrix_list,
+            self.prefill_seq_len,
+            _,
+        ) = preprocess_inputs_prefill(
+            input_prompts,
+            self.tokenizer,
+            self.model_args,
+            self.dtype,
+            self.embd,
+            self.instruct_mode,
+            self.device,
         )
+        # set k
         # where does intput_text_mask get used?
         self.input_text_mask = input_text_mask
         self.prefill_ids = prefill_tokens
@@ -260,45 +364,6 @@ class PrefillDecodeBackend:
     #             user.start_decode_timer()
     #     self.timer_start("decode_batch")
     #     logger.info("Running inference decode and pushing results ...")
-
-    def get_batch_stats(self, log=True):
-        # self.timer_stop("decode_batch") # TODO turn back on later
-        batch_duration = time.time() - self.batch_start_time
-
-        # actual prefill tokens
-        prefill_batch_tokens = self.prefill_batch_size * self.prefill_seq_len
-        prefill_time = self.timestamps_stop["prefill"] - self.timestamps_start["prefill"]
-
-        # prefill-via-decode + decode generation tokens
-        decode_batches = self.decode_counter - self.prev_decode_counter
-        decode_batch_tokens = decode_batches * self.batch_size
-        decode_batch_e2e_time = self.timestamps_stop["decode_batch"] - self.timestamps_start["decode_batch"]
-        decode_batch_time = self.timer_sums["decode"]
-        self.timer_sums["decode"] = 0
-
-        self.prev_decode_counter = self.decode_counter
-
-        batch_stats = {
-            "batch_counter": self.batch_counter,
-            "decode_counter": self.decode_counter,
-            "batch_duration": round(batch_duration, 3),
-            "batch_users": self.num_users,
-            "prefill": {
-                "prefill_batch_size": self.prefill_batch_size,
-                "prefill_batch_tokens": prefill_batch_tokens,
-                "e2e_throughput_tps": round(prefill_batch_tokens / prefill_time, 3),
-            },
-            "decode": {
-                "decode_batch_tokens": decode_batch_tokens,
-                "e2e_throughput_tps": round(decode_batch_tokens / decode_batch_e2e_time, 3),
-                "e2e_latency_ms": round((decode_batch_e2e_time / decode_batches) * 1000, 2),
-                "decode_throughput_tps": round(decode_batch_tokens / decode_batch_time, 3),
-                "decode_latency_ms": round((decode_batch_time / decode_batches) * 1000, 2),
-            },
-        }
-        if log:
-            logger.info(batch_stats)
-        return batch_stats
 
     def teardown(self):
         logger.info("teardown ...")
@@ -683,6 +748,45 @@ class PrefillDecodeBackend:
                 self.log_user_stats(idx, user)
                 self.users[idx] = None
 
+    def get_batch_stats(self, log=True):
+        # self.timer_stop("decode_batch") # TODO turn back on later
+        batch_duration = time.time() - self.batch_start_time
+
+        # actual prefill tokens
+        prefill_batch_tokens = self.prefill_batch_size * self.prefill_seq_len
+        prefill_time = self.timestamps_stop["prefill"] - self.timestamps_start["prefill"]
+
+        # prefill-via-decode + decode generation tokens
+        decode_batches = self.decode_counter - self.prev_decode_counter
+        decode_batch_tokens = decode_batches * self.batch_size
+        decode_batch_e2e_time = self.timestamps_stop["decode_batch"] - self.timestamps_start["decode_batch"]
+        decode_batch_time = self.timer_sums["decode"]
+        self.timer_sums["decode"] = 0
+
+        self.prev_decode_counter = self.decode_counter
+
+        batch_stats = {
+            "batch_counter": self.batch_counter,
+            "decode_counter": self.decode_counter,
+            "batch_duration": round(batch_duration, 3),
+            "batch_users": self.num_users,
+            "prefill": {
+                "prefill_batch_size": self.prefill_batch_size,
+                "prefill_batch_tokens": prefill_batch_tokens,
+                "e2e_throughput_tps": round(prefill_batch_tokens / prefill_time, 3),
+            },
+            "decode": {
+                "decode_batch_tokens": decode_batch_tokens,
+                "e2e_throughput_tps": round(decode_batch_tokens / decode_batch_e2e_time, 3),
+                "e2e_latency_ms": round((decode_batch_e2e_time / decode_batches) * 1000, 2),
+                "decode_throughput_tps": round(decode_batch_tokens / decode_batch_time, 3),
+                "decode_latency_ms": round((decode_batch_time / decode_batches) * 1000, 2),
+            },
+        }
+        if log:
+            logger.info(batch_stats)
+        return batch_stats
+
     def send_status(self, prompt_q, status_q):
         if time.time() - self.time_last_status > self.update_period:
             # send status queue which includes the (length of the prompt_q, the number of users being decoded rn, the user_ids being decoded)
@@ -694,6 +798,21 @@ class PrefillDecodeBackend:
             status_q.put(cur_status)
             # udpate cur time
             self.time_last_status = time.time()
+
+    def generate_n(self, n_tokens, return_logits=False):
+        """
+        use with add_users_from_context()
+        """
+        self.batch_preprocessing()
+        self.prefill()
+        # self.start_decode_loop()
+        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
+            self.decode(return_logits=return_logits)
+        self.get_batch_stats(log=True)
+        if return_logits:
+            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
+        else:
+            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
 
     def run_generate(self, prompt_q, output_q, status_q, run_once=False):
         """
@@ -721,21 +840,6 @@ class PrefillDecodeBackend:
             self.batch_idx += 1
             if run_once:
                 break
-
-    def generate_n(self, n_tokens, return_logits=False):
-        """
-        use with add_users_from_context()
-        """
-        self.batch_preprocessing()
-        self.prefill()
-        # self.start_decode_loop()
-        while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
-            self.decode(return_logits=return_logits)
-        self.get_batch_stats(log=True)
-        if return_logits:
-            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
-        else:
-            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
 
 
 def top_pk_logits_efficient(
