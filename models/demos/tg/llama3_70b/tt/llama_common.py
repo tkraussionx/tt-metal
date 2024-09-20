@@ -82,3 +82,8 @@ def tt_sharded_all_gather(input_tensor, mesh_device, cluster_axis, dim, num_link
         mesh_device=mesh_device,
         memory_config=memory_config,
     )
+
+def upper_pad_sequence_length(length, padding_size):
+    if length % padding_size == 0:
+        return length  # No padding needed
+    return ((length + padding_size - 1) // padding_size) * padding_size
