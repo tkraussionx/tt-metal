@@ -129,7 +129,14 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
 @pytest.mark.parametrize("c", [3])
 @pytest.mark.parametrize("h", [224])
 @pytest.mark.parametrize("w", [256])
-@pytest.mark.parametrize("padding,torch_padding", [(((1, 1), (2, 32), (0, 0)), (0, 0, 2, 32, 1, 1))])
+@pytest.mark.parametrize(
+    "padding,torch_padding",
+    [
+        (((0, 1), (0, 32), (0, 0)), (0, 0, 0, 32, 0, 1)),
+        # same config, but with 32 pad on last dim
+        (((0, 1), (0, 32), (0, 32), (0, 32)), (0, 32, 0, 32, 0, 1, 0, 32)),
+    ],
+)
 @pytest.mark.parametrize("value", [8])
 @pytest.mark.parametrize("shard_orient", [ttnn.ShardOrientation.COL_MAJOR, ttnn.ShardOrientation.ROW_MAJOR])
 def test_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_orient, use_program_cache):
