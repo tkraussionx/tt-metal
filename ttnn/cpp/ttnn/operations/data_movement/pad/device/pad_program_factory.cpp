@@ -1342,15 +1342,6 @@ operation::ProgramWithCallbacks pad_rm_sharded(const Tensor &a,
     auto rem_stick_size_padded = stick_size_padded - stick_size_unpadded;
     uint32_t row_major_min_bytes = 16;
 
-    uint32_t zero_pad_stick_size = tt::tt_metal::find_max_divisor(stick_size_padded, 512);
-    uint32_t num_zero_pad_sticks_read = stick_size_padded / zero_pad_stick_size;
-
-    tt::log_debug("zero_pad_stick_size: {}", zero_pad_stick_size);
-    tt::log_debug("num_zero_pad_sticks_read: {}", num_zero_pad_sticks_read);
-
-    // TODO: add a general case, where we can pad on any dim.
-    TT_FATAL(stick_size_unpadded == stick_size_padded, "sharded pad does not support pad on last dim currently as that will cause perf degradation");
-
     tt::DataFormat cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(a.get_dtype());
     tt::DataFormat dst_cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(output.get_dtype());
 
