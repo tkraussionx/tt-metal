@@ -35,9 +35,20 @@ Tensor _rad2deg(const Tensor& input_tensor, const std::optional<MemoryConfig>& o
 
 // // tanhshrink(x) = x - tanh(x)
 Tensor _tanhshrink(const Tensor& x, const std::optional<MemoryConfig>& output_mem_config) {
-    Tensor tan_x = ttnn::tanh(x, output_mem_config);
-    Tensor result = ttnn::subtract(x, tan_x, std::nullopt, output_mem_config);
-    return result;
+    // Tensor tan_x = ttnn::tanh(x, output_mem_config);
+    // Tensor result = ttnn::subtract(x, tan_x, std::nullopt, output_mem_config);
+
+    // temporarily implemented add1 logic here
+    if(x.get_layout() == Layout::TILE) {
+        Tensor result = ttnn::add(x, 1.0f, std::nullopt, output_mem_config);
+        return result;
+    } else {
+        //use bcast if layout is not TILE
+        Tensor scalar = ttnn::operations::creation::create_scalar(1.0f, x.get_dtype(), Layout::TILE, x.device());
+        Tensor result = ttnn::bcast(DefaultQueueId, x, scalar, BcastOpMath::ADD, BcastOpDim::HW);
+        return result;
+    }
+
 }
 
 // power - floating point exponent
