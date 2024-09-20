@@ -28,6 +28,7 @@ constexpr uint32_t cb_out0 = tt::CB::c_out0;
 constexpr uint32_t cb_intermed0 = tt::CB::c_intermed0;
 constexpr uint32_t cb_intermed1 = tt::CB::c_intermed1;
 constexpr uint32_t cb_intermed2 = tt::CB::c_intermed2;
+constexpr uint32_t cb_intermed3 = tt::CB::c_intermed3;
 
 ////////////////////
 // inline functions
@@ -151,8 +152,8 @@ FORCE_INLINE void mask_tile_to_cb(uint32_t& mm_src, bool& need_mask, bool need_m
 FORCE_INLINE void bias_add(bool is_scalar_bias)
 {
     static bool scalar_bias_loaded = false;
-    pack_onetile_to_cb(cb_intermed0);
-    cb_wait_front(cb_intermed0, onetile);
+    pack_onetile_to_cb(cb_intermed3);
+    cb_wait_front(cb_intermed3, onetile);
 
     if (is_scalar_bias && !scalar_bias_loaded) {
         cb_wait_front(bias_cb_id, onetile);
@@ -164,21 +165,21 @@ FORCE_INLINE void bias_add(bool is_scalar_bias)
     tile_regs_acquire();
     if (is_scalar_bias) {
         #if defined FP32_DEST_ACC_EN
-            unpack_reconfig_data_format(cb_intermed0, bias_cb_id);
+            unpack_reconfig_data_format(cb_intermed3, bias_cb_id);
         #endif
-        add_bcast_scalar_init_short(cb_intermed0, bias_cb_id);
-        add_tiles_bcast_scalar(cb_intermed0, bias_cb_id, 0, 0, 0);
+        add_bcast_scalar_init_short(cb_intermed3, bias_cb_id);
+        add_tiles_bcast_scalar(cb_intermed3, bias_cb_id, 0, 0, 0);
     }
     else {
         #if defined FP32_DEST_ACC_EN
-            unpack_reconfig_data_format(cb_intermed0, bias_cb_id);
+            unpack_reconfig_data_format(cb_intermed3, bias_cb_id);
         #endif
-        add_bcast_rows_init_short(cb_intermed0, bias_cb_id);
-        add_tiles_bcast_rows(cb_intermed0, bias_cb_id, 0, 0, 0);
+        add_bcast_rows_init_short(cb_intermed3, bias_cb_id);
+        add_tiles_bcast_rows(cb_intermed3, bias_cb_id, 0, 0, 0);
     }
     tile_regs_commit();
 
-    cb_pop_front(cb_intermed0, onetile);
+    cb_pop_front(cb_intermed3, onetile);
     if (!is_scalar_bias) {
         cb_pop_front(bias_cb_id, onetile);
     }

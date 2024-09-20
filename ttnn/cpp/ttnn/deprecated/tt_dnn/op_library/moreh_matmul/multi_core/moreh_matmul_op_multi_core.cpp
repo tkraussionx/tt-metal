@@ -208,6 +208,7 @@ operation::ProgramWithCallbacks moreh_matmul_multi_core(
     const uint32_t im0_t {1};   // temp
     const uint32_t im1_t {2};   // transpose for input
     const uint32_t im2_t {2};   // transpose for other
+    const uint32_t im3_t {3};   // temp for bias
     const uint32_t out0_t {2};  // output
 
     CreateCircularBuffer(
@@ -223,6 +224,7 @@ operation::ProgramWithCallbacks moreh_matmul_multi_core(
             {CB::c_intermed0, im0_t, (fp32_dest_acc_en) ? tt::DataFormat::Float32: cb_data_format},
             {CB::c_intermed1, im1_t},
             {CB::c_intermed2, im2_t},
+            {CB::c_intermed3, im0_t, (fp32_dest_acc_en) ? tt::DataFormat::Float32: cb_data_format},
             {CB::c_out0, out0_t},
         });
 
