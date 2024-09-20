@@ -47,7 +47,11 @@ jobs:
             -e TT_METAL_HOME=/usr/app
             -e ARCH_NAME=${{ matrix.runner-info.arch }}
           run_args: |
-            ./create_venv.sh
+            
+            # Create and activate virtual environment
+            python3 -m venv python_env
+            source python_env/bin/activate
+            pip install -e .
             ./tests/scripts/run_profiler_regressions.sh
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
