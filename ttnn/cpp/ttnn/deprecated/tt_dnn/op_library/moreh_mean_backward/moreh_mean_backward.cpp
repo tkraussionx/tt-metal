@@ -168,6 +168,7 @@ operation::ProgramWithCallbacks moreh_mean_backward_impl(
     if (fp32_dest_acc_en) {
         compute_defines["FP32_DEST_ACC_EN"] = "1";
     }
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
 
     const auto compute_kernel_file =
         "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/moreh_mean_backward/kernels/moreh_mean_backward.cpp";
@@ -185,7 +186,7 @@ operation::ProgramWithCallbacks moreh_mean_backward_impl(
             .fp32_dest_acc_en = fp32_dest_acc_en,
             // TODO(hyungsuk): change preserve_fp32_precision from false to fp32_dest_acc_en after fix #10337
             // .preserve_fp32_precision = fp32_dest_acc_en,
-            .preserve_fp32_precision = false,
+            .preserve_fp32_precision = preserve_fp32_precision,
             .math_approx_mode = math_approx_mode,
             .defines = compute_defines});
 

@@ -119,6 +119,7 @@ operation::ProgramWithCallbacks moreh_mean_w(
         origin_W,
     };
 
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
     auto compute_kernel_ids = CreateComputeKernel(
         program,
         compute_kernel_name,
@@ -131,7 +132,7 @@ operation::ProgramWithCallbacks moreh_mean_w(
             .fp32_dest_acc_en = fp32_dest_acc_en,
             // TODO(hyungsuk): change preserve_fp32_precision from false to fp32_dest_acc_en after fix #10337
             // .preserve_fp32_precision = fp32_dest_acc_en,
-            .preserve_fp32_precision = false,
+            .preserve_fp32_precision = preserve_fp32_precision,
             .math_approx_mode = math_approx_mode,
             .defines = compute_defines});
 
