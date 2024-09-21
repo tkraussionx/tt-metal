@@ -72,6 +72,7 @@ class SystemMesh {
 
     // Get the physical device IDs mapped to a MeshDevice
     std::vector<chip_id_t> get_mapped_physical_device_ids(const MeshDeviceConfig &config) const;
+    void register_mesh_device(const std::shared_ptr<MeshDevice> &mesh_device, const std::vector<Device*>& devices);
 
     // Map MeshDevice to physical devices
     std::vector<Device *> map_mesh_device(
@@ -85,14 +86,18 @@ class SystemMesh {
 
     // Unmap MeshDevice, releasing the associated physical devices.
     void unmap_mesh_device(const std::shared_ptr<MeshDevice> &mesh_device);
+    std::shared_ptr<MeshDevice> get_mesh_device(const std::vector<chip_id_t>& physical_device_ids);
+    Device* get_device(const chip_id_t physical_device_id);
 };
 
 class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
+  private:
     MeshDeviceID mesh_id;
     MeshShape mesh_device_shape;
     std::shared_ptr<MeshDeviceView> primary_view;
     std::vector<Device *> devices;
-    std::unordered_map<chip_id_t, int> physical_id_to_device_index;
+    std::shared_ptr<MeshDevice> parent_mesh;
+    std::vector<std::shared_ptr<MeshDevice>> submeshes;
 
     void initialize(
         size_t l1_small_size,
@@ -103,7 +108,7 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
         const std::vector<chip_id_t> &physical_device_ids);
 
    public:
-    MeshDevice(const MeshShape &mesh_device_shape);
+    MeshDevice(const MeshShape &mesh_device_shape, std::shared_ptr<MeshDevice> parent_mesh = nullptr);
     ~MeshDevice();
 
     MeshDevice(const MeshDevice &) = delete;
@@ -116,8 +121,6 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
     Device *get_device_index(int logical_device_id) const;
     Device *get_device(int physical_device_id) const;
     Device *get_device(int row_idx, int col_idx) const;
-    std::vector<Device *> get_devices_on_row(int row_idx) const;
-    std::vector<Device *> get_devices_on_column(int col_idx) const;
 
     const DeviceIds get_device_ids() const;
 
@@ -138,6 +141,7 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
 
     std::string to_string() const;
     MeshDeviceID get_mesh_id() const;
+    bool is_parent_mesh() const;
 
     static std::shared_ptr<MeshDevice> create(
         const MeshShape &mesh_device_shape,
@@ -147,6 +151,13 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
         DispatchCoreType dispatch_core_type,
         const std::pair<size_t, size_t> &offset = {0, 0},
         const std::vector<chip_id_t> &physical_device_ids = {});
+
+    std::vector<std::shared_ptr<MeshDevice>> get_submeshes() const;
+    std::vector<std::shared_ptr<MeshDeviceView>> get_submesh_views();
+    std::shared_ptr<MeshDeviceView> get_view(const Device* device);
+
+    std::shared_ptr<MeshDevice> create_submesh(const MeshShape &submesh_shape, const MeshOffset &offset = {0, 0});
+    static std::shared_ptr<MeshDevice> fetch_mesh_device(const std::vector<Device*>& devices);
 };
 
 std::ostream &operator<<(std::ostream &os, const MeshDevice &mesh_device);

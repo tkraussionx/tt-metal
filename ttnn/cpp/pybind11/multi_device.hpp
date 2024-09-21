@@ -47,6 +47,7 @@ void py_module(py::module& module) {
             py::arg("offset"),
             py::arg("physical_device_ids"))
         .def("get_num_devices", &MeshDevice::num_devices)
+        .def("get_mesh_id", &MeshDevice::get_mesh_id)
         .def("get_device_ids", &MeshDevice::get_device_ids)
         .def(
             "get_device",
@@ -62,26 +63,7 @@ void py_module(py::module& module) {
             Returns:
                 List[Device]: The devices in the device mesh.
         )doc")
-        .def(
-            "get_devices_on_row",
-            &MeshDevice::get_devices_on_row,
-            py::return_value_policy::reference,
-            R"doc(
-            Get the devices in a row of the device mesh.
-
-            Returns:
-                List[Device]: The devices on a row in the device mesh.
-        )doc")
-        .def(
-            "get_devices_on_column",
-            &MeshDevice::get_devices_on_column,
-            py::return_value_policy::reference,
-            R"doc(
-            Get the devices in a row of the device mesh.
-
-            Returns:
-                List[Device]: The devices on a row in the device mesh.
-        )doc")
+        .def("create_submesh", &MeshDevice::create_submesh, py::arg("submesh_shape"), py::arg("offset") = std::pair<size_t, size_t>{0, 0}, py::return_value_policy::reference_internal, py::keep_alive<0, 1>())
         .def(
             "compute_with_storage_grid_size",
             &MeshDevice::compute_with_storage_grid_size,
