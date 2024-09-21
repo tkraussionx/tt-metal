@@ -11,7 +11,7 @@ from tests.ttnn.unit_tests.operations.test_reduce_scatter_post_commit import (
     is_unsupported_case,
     run_reduce_scatter_test,
 )
-from models.utility_functions import skip_for_grayskull, get_devices_for_t3000
+from models.utility_functions import skip_for_grayskull
 import itertools
 
 

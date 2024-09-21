@@ -53,6 +53,13 @@ struct Coordinate {
  *    specific sub-regions. This is particularly useful for collective communication operations
  *    (CCL-ops), such as line all-gather, which require column or row views of the device mesh.
  */
+
+enum class IterationOrder {
+    ROW_MAJOR,
+    RING,
+    LINE
+};
+
 class MeshDeviceView {
 public:
     using device_pointer = Device*;
@@ -68,12 +75,11 @@ public:
     [[nodiscard]] device_pointer get_device(size_t row, size_t col);
     [[nodiscard]] const_device_pointer get_device(size_t row, size_t col) const;
 
-    [[nodiscard]] const std::vector<device_pointer>& get_devices() const;
-
     // Get devices spanning the rectangular region defined by the top-left and bottom-right coordinates
     // devices are returned in row-major order with start/end coordinates inclusive
     [[nodiscard]] DeviceView get_devices(const Coordinate& start, const Coordinate& end);
     [[nodiscard]] DeviceView get_devices(const MeshShape& shape);
+    [[nodiscard]] DeviceView get_devices(IterationOrder order = IterationOrder::ROW_MAJOR);
 
     [[nodiscard]] DeviceView get_devices_on_row(size_t row) const;
     [[nodiscard]] DeviceView get_devices_on_column(size_t col) const;
@@ -86,7 +92,7 @@ public:
 
     [[nodiscard]] bool empty() const noexcept;
     [[nodiscard]] size_t size() const noexcept;
-    [[nodiscard]] std::pair<size_t, size_t> shape() const noexcept;
+    [[nodiscard]] MeshShape shape() const noexcept;
     [[nodiscard]] bool contains(const Coordinate& coord) const noexcept;
     [[nodiscard]] const_device_pointer at(const Coordinate& coord) const noexcept;
 
@@ -99,10 +105,17 @@ public:
     [[nodiscard]] std::size_t num_cols() const { return bottom_right_.col - top_left_.col + 1; }
     [[nodiscard]] std::size_t num_devices() const { return devices_.size(); }
 
+    [[nodiscard]] bool contains_device(chip_id_t device_id) const;
     [[nodiscard]] Coordinate find_device(chip_id_t device_id) const;
     [[nodiscard]] chip_id_t find_device_id(const Coordinate& coord) const;
 
 private:
+    [[nodiscard]] std::vector<device_pointer> get_ring_devices();
+    [[nodiscard]] std::vector<device_pointer> get_line_devices();
+
+    [[nodiscard]] std::vector<Coordinate> get_ring_coordinates(const MeshShape& shape, const Coordinate& offset) const;
+    [[nodiscard]] std::vector<Coordinate> get_line_coordinates(size_t length, const Coordinate& offset) const;
+
     std::vector<device_pointer> devices_;
     std::unordered_map<chip_id_t, Coordinate> device_coordinates_;
     Coordinate top_left_;

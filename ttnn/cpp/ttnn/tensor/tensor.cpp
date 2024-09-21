@@ -698,7 +698,7 @@ Tensor allocate_tensor_on_device(
     const std::optional<Tile>& tile
     ) {
     // Top level wrapper to asynchronously create a device tensor (multi-device)
-    Tensor device_tensor = Tensor(mesh_device->get_devices());
+    Tensor device_tensor = Tensor(mesh_device->get_view()->get_devices(IterationOrder::LINE));
     uint32_t device_tensor_ref_count = device_tensor.tensor_attributes->record_main_thread_ref_count();
     const auto& workers = device_tensor.get_workers();
     uint32_t num_workers = workers.size();
@@ -791,14 +791,16 @@ std::vector<Device*> distribute_tensor_to_mesh(const Tensor& tensor, MeshDevice&
         return workers;
     };
 
-    if (mesh_device.get_view() != nullptr and std::holds_alternative<MultiDeviceHostStorage>(tensor.get_storage())) {
+    auto mesh_view = mesh_device.get_view();
+    if (mesh_view != nullptr and std::holds_alternative<MultiDeviceHostStorage>(tensor.get_storage())) {
         const auto& host_storage = std::get<tt::tt_metal::MultiDeviceHostStorage>(tensor.get_storage());
 
         return std::visit([&](const auto& strategy) {
             using StrategyType = std::decay_t<decltype(strategy)>;
             if constexpr (std::is_same_v<StrategyType, ShardTensor2D>) {
-                auto mesh_view = mesh_device.get_view();
                 return mesh_view->get_devices(strategy.shard_mesh);
+            } else if constexpr (std::is_same_v<StrategyType, ShardTensor>) {
+                return mesh_view->get_devices(IterationOrder::LINE);
             } else {
                 return get_multi_device_workers(mesh_device.get_devices());
             }

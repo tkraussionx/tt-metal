@@ -13,7 +13,7 @@ from models.utility_functions import (
     comp_allclose,
 )
 
-from models.utility_functions import tt2torch_tensor, get_devices_for_t3000, skip_for_grayskull
+from models.utility_functions import tt2torch_tensor, skip_for_grayskull
 
 
 def rms_norm(x, gamma, eps):

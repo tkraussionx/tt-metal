@@ -25,7 +25,6 @@ from models.utility_functions import (
     disable_compilation_reports,
     nearest_32,
     skip_for_grayskull,
-    get_devices_for_t3000,
 )
 from models.perf.perf_utils import prep_perf_report
 from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report

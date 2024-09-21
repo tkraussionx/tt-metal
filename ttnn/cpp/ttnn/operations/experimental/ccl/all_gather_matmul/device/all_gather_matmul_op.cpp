@@ -138,15 +138,15 @@ std::vector <ttnn::Tensor> all_gather_matmul(
 
     TT_FATAL(std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "AllGatherMatmul is only supported for Fast Dispatch");
 
-    auto devices = input_tensor.get_workers();
     std::vector<Tensor> output_tensors = {ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor})),
                                             ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor})),
                                             ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor}))};
     std::vector<std::optional<const ttnn::Tensor>> optional_input_tensors = {std::nullopt};
 
+    auto mesh_device = MeshDevice::fetch_mesh_device(input_tensor.get_workers());
 
     operation::launch_op(
-        [dim, all_gather_core_grid_offset, num_links, memory_config_ag, user_defined_num_workers, user_defined_num_buffers_per_channel, memory_config_mm, transpose_a, transpose_b, dtype, program_config, activation, compute_kernel_config, core_grid, devices](
+        [dim, all_gather_core_grid_offset, num_links, memory_config_ag, user_defined_num_workers, user_defined_num_buffers_per_channel, memory_config_mm, transpose_a, transpose_b, dtype, program_config, activation, compute_kernel_config, core_grid, mesh_device](
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const ttnn::Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
@@ -155,7 +155,8 @@ std::vector <ttnn::Tensor> all_gather_matmul(
             const auto& weight_tensor = input_tensors[1];
 
             /* AllGather setup */
-            ttnn::AllGather all_gather_struct = ttnn::create_all_gather_struct(input_tensor, dim, num_links, memory_config_ag, user_defined_num_workers, user_defined_num_buffers_per_channel, devices, ttnn::ccl::Topology::Ring);
+            auto submesh_view = mesh_device->get_view(input_tensor.device());
+            ttnn::AllGather all_gather_struct = ttnn::create_all_gather_struct(input_tensor, dim, num_links, memory_config_ag, user_defined_num_workers, user_defined_num_buffers_per_channel,  submesh_view->get_devices(IterationOrder::RING), ttnn::ccl::Topology::Ring);
 
             // Create the all gather output tensor used as input (activation) to the matmul
             ttnn::Tensor all_gather_out_tensor = all_gather_struct.create_output_tensors({input_tensor})[0];
