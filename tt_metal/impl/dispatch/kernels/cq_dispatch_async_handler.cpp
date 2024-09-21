@@ -17,28 +17,27 @@
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 
-constexpr uint32_t dispatch_cb_log_page_size = get_compile_time_arg_val(1);
-constexpr uint32_t dispatch_cb_page_size = 1 << dispatch_cb_log_page_size;
-constexpr uint32_t dispatch_cb_pages = get_compile_time_arg_val(2);
-constexpr uint32_t cb_base = get_compile_time_arg_val(22);
-constexpr uint32_t cb_size = get_compile_time_arg_val(30);
-constexpr uint32_t cb_end = cb_base + cb_size;
+constexpr uint32_t cb_base = get_compile_time_arg_val(0);
+constexpr uint32_t cb_log_page_size = get_compile_time_arg_val(1);
+constexpr uint32_t cb_size = get_compile_time_arg_val(2);
+constexpr uint32_t my_dispatch_cb_sem_id = get_compile_time_arg_val(3);
+constexpr uint32_t upstream_dispatch_cb_sem_id = get_compile_time_arg_val(4);
+constexpr uint32_t dispatch_s_sync_sem_id = get_compile_time_arg_val(5);
+constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(6);
+constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(7);
+constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(8);
+constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(9);
+constexpr uint32_t my_noc_xy = get_compile_time_arg_val(10); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
+constexpr uint32_t dispatch_d_noc_xy = get_compile_time_arg_val(11);
+constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(12); // dispatch_s and dispatch_d running on different cores
+constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(13); // workers update the semaphore at this location to signal completion
 
-constexpr uint32_t my_dispatch_cb_sem_id = get_compile_time_arg_val(23);
-constexpr uint32_t upstream_dispatch_cb_sem_id = get_compile_time_arg_val(24);
-constexpr uint32_t dispatch_s_sync_sem_id = get_compile_time_arg_val(25);
-constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(26);
-constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(27);
-constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(28);
-constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(29);
+constexpr uint32_t cb_page_size = 1 << cb_log_page_size;
+constexpr uint32_t cb_end = cb_base + cb_size;
 
 // Get dispatch_s coords from RTA. TODO: When dispatch_s is separated out, get this from CTAs.
 // Upstream coords will need to explicitly be programmed in CTA as well
 // dispatch_d and prefetch_hd need to have specific CTA for dispatch_s coords
-constexpr uint32_t my_noc_xy = get_compile_time_arg_val(31); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
-constexpr uint32_t dispatch_d_noc_xy = get_compile_time_arg_val(32);
-constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(33); // dispatch_s and dispatch_d running on different cores
-constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(34); // workers update the semaphore at this location to signal completion
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 
 static uint32_t num_pages_acquired = 0;
@@ -269,7 +268,7 @@ void kernel_main() {
             DPRINT << "Got invalid command" << ENDL();
         }
         cmd_ptr += sizeof(CQDispatchCmd);
-        cmd_ptr = round_up_pow2(cmd_ptr, dispatch_cb_page_size);
+        cmd_ptr = round_up_pow2(cmd_ptr, cb_page_size);
         cb_release_pages_dispatch_s<upstream_noc_xy, upstream_dispatch_cb_sem_id>(1);
         if (cmd_ptr == cb_end) {
             cmd_ptr = cb_base;

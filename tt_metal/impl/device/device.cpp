@@ -1109,6 +1109,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 uint32_t demux_sem = demux_d_settings.producer_semaphore_id;
                 for (auto&[core, prefetch_d_settings] : device_worker_variants[DispatchWorkerType::PREFETCH_D]) {
                     auto dispatch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_D][prefetch_d_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_d
+                    auto dispatch_s_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_S][prefetch_d_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_s
                     auto dispatch_core_type = prefetch_d_settings.dispatch_core_type;
                     prefetch_d_settings.upstream_cores.push_back(demux_d_settings.worker_physical_core);
                     prefetch_d_settings.downstream_cores.push_back(dispatch_d_settings.worker_physical_core);
@@ -1151,10 +1152,10 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[21] = true;  // is_dram_variant
                     compile_args[22] = false; // is_host_variant
                     compile_args[23] = dispatch_s_buffer_base;
-                    compile_args[24] = prefetch_d_settings.prefetch_dispatch_s_semaphore_id; // Semaphore on prefetch to handshake with dispatch_s
-                    compile_args[25] = dispatch_d_settings.dispatch_s_semaphore_id; // Semaphore on dispatch_s to handshake with prefetch
+                    compile_args[24] = prefetch_d_settings.consumer_slave_semaphore_id; // Semaphore on prefetch to handshake with dispatch_s
+                    compile_args[25] = dispatch_s_settings.producer_semaphore_id; // Semaphore on dispatch_s to handshake with prefetch
                     compile_args[26] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
-                    compile_args[27] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_d_settings.dispatch_s_physical_core);
+                    compile_args[27] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_s_settings.worker_physical_core);
                     prefetch_d_idx++; // move on to next prefetcher
                 }
                 break;
@@ -1170,14 +1171,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 uint32_t mux_sem = mux_d_settings.consumer_semaphore_id;
                 for (auto&[core, dispatch_d_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_D]) {
                     auto prefetch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH_D][dispatch_d_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_d
+                    auto dispatch_s_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_S][dispatch_d_idx]); // 1 to 1 mapping bw dispatch_s and dispatch_d
                     auto dispatch_core_type = dispatch_d_settings.dispatch_core_type;
-                    uint32_t dispatch_s_buffer_base;
-                    if (dispatch_core_type == CoreType::WORKER) {
-                        dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
-                    }
-                    else {
-                        dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE;
-                    }
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
                     dispatch_d_settings.compile_args.resize(35);
@@ -1204,20 +1199,57 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[19] = dispatch_d_settings.num_compute_cores;
                     compile_args[20] = true; // is_dram_variant
                     compile_args[21] = false; // is_host_variant
-                    compile_args[22] = dispatch_s_buffer_base;
-                    compile_args[23] = dispatch_d_settings.dispatch_s_semaphore_id;
-                    compile_args[24] = prefetch_d_settings.prefetch_dispatch_s_semaphore_id;
-                    compile_args[25] = dispatch_d_settings.dispatch_s_sync_semaphore_id;
-                    compile_args[30] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
-                    compile_args[31] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_d_settings.dispatch_s_physical_core);
-                    compile_args[32] = this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_d_settings.worker_physical_core);
-                    compile_args[33] = (dispatch_core_type == CoreType::ETH);
-                    compile_args[34] = DISPATCH_MESSAGE_ADDR;
-                    // compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
-                    // compile_args[27] = tensix_num_worker_cores;
-                    // compile_args[28] = tensix_worker_go_signal_addr;
-                    // compile_args[29] = eth_worker_go_signal_addr;
+                    compile_args[22] = 0; //dispatch_s_buffer_base;
+                    compile_args[23] = 0; // dispatch_d_settings.dispatch_s_semaphore_id;
+                    compile_args[24] = 0; //prefetch_d_settings.consumer_slave_semaphore_id;
+                    compile_args[25] = dispatch_s_settings.consumer_semaphore_id;
+                    //  need to add more compile args here
+                    compile_args[30] = 0; //dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
+                    compile_args[31] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_s_settings.worker_physical_core);
                     dispatch_d_idx++; // move on to next dispatcher
+                }
+                break;
+            }
+            case DispatchWorkerType::DISPATCH_S:
+            {
+                if (this->enable_dispatch_s()) {
+                    uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+                    uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+                    for (auto&[core, dispatch_s_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_S]) {
+                        int dispatch_s_idx = 0;
+                        auto prefetch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH_D][dispatch_s_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_s
+                        auto dispatch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_D][dispatch_s_idx]); // 1 to 1 mapping bw dispatch_d and dispatch_s
+                        dispatch_s_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
+                        dispatch_s_settings.downstream_cores.push_back(tt_cxy_pair(0, 0, 0));
+                        auto dispatch_core_type = dispatch_s_settings.dispatch_core_type;
+                        auto chip_id = core.chip;
+                        auto worker_grid = tt::get_compute_grid_size(chip_id, num_hw_cqs, dispatch_core_type);
+                        std::size_t tensix_num_worker_cols = worker_grid.x;
+                        std::size_t tensix_num_worker_rows = worker_grid.y;
+                        uint32_t tensix_num_worker_cores = tensix_num_worker_cols * tensix_num_worker_rows;
+                        const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(chip_id);
+                        CoreCoord tensix_worker_start_phys = soc_desc.get_physical_core_from_logical_core(CoreCoord(0, 0), CoreType::WORKER); // Logical Worker Coords start at 0,0
+                        CoreCoord tensix_worker_end_phys = soc_desc.get_physical_core_from_logical_core(CoreCoord(tensix_num_worker_cols - 1, tensix_num_worker_rows - 1), CoreType::WORKER);
+                        CoreRange tensix_worker_physical_grid = CoreRange(tensix_worker_start_phys, tensix_worker_end_phys);
+
+                        dispatch_s_settings.compile_args.resize(14);
+                        auto& compile_args = dispatch_s_settings.compile_args;
+                        compile_args[0] = dispatch_s_settings.cb_start_address;
+                        compile_args[1] = dispatch_s_settings.cb_log_page_size;
+                        compile_args[2] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
+                        compile_args[3] = dispatch_s_settings.producer_semaphore_id;
+                        compile_args[4] = prefetch_d_settings.consumer_slave_semaphore_id;
+                        compile_args[5] = dispatch_s_settings.consumer_semaphore_id;
+                        compile_args[6] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
+                        compile_args[7] = tensix_num_worker_cores;
+                        compile_args[8] = tensix_worker_go_signal_addr;
+                        compile_args[9] = eth_worker_go_signal_addr;
+                        compile_args[10] = 0; // don't need this
+                        compile_args[11] = this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_d_settings.worker_physical_core);
+                        compile_args[12] = (dispatch_core_type == CoreType::ETH);
+                        compile_args[13] = DISPATCH_MESSAGE_ADDR;
+                        dispatch_s_idx++;
+                    }
                 }
                 break;
             }
@@ -1460,7 +1492,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_pages()); // prefetch_d_dispatch_sync_sem
                 settings.consumer_semaphore_id = 1;
                 settings.producer_semaphore_id = 2;
-                settings.prefetch_dispatch_s_semaphore_id = 3;
+                settings.consumer_slave_semaphore_id = 3;
                 tt_cxy_pair prefetch_d_location = dispatch_core_manager::instance().prefetcher_d_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(prefetch_d_location.chip, get_physical_core_coordinate(prefetch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_prefetch.cpp";
@@ -1475,40 +1507,50 @@ void Device::setup_tunnel_for_remote_devices() {
 
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 settings.semaphores.push_back(0);// dispatch_sem
-                settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs));// dispatch_downstream_cb_sem
-                settings.semaphores.push_back(0); // used by dispatch_s to sync with prefetch_d
-                settings.semaphores.push_back(0); // dispatch_s waits on this until dispatch_d increments it
+                settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs)); // dispatch_downstream_cb_sem
                 settings.consumer_semaphore_id = 0;
                 settings.producer_semaphore_id = 1;
-                if (dispatch_core_type == CoreType::WORKER) {
-                    // dispatch_s is on the same Tensix core as dispatch_d. Shared resources. Offset CB start and sem idx.
-                    settings.dispatch_s_semaphore_id = 2;
-                    settings.dispatch_s_sync_semaphore_id = 3;
-                }
-                else {
-                    // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB and semaphores start at base.
-                    settings.dispatch_s_semaphore_id = 0;
-                    settings.dispatch_s_sync_semaphore_id = 1;
-                }
                 settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                 settings.cb_log_page_size = dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE;
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
                 tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
-                tt_cxy_pair dispatch_s_location = tt_cxy_pair(0xff, 0xff, 0xff);
-                settings.dispatch_s_physical_core = tt_cxy_pair(0xff, 0xff, 0xff);
-                if (num_hw_cqs == 1 or dispatch_core_type == CoreType::WORKER) {
-                    dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
-                    settings.dispatch_s_physical_core = tt_cxy_pair(dispatch_s_location.chip, get_physical_core_coordinate(dispatch_s_location, dispatch_core_type));
-                }
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
-                settings.dispatch_s_kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp";
-                settings.dispatch_s_logical_core = dispatch_s_location;
                 tunnel_core_allocations[DISPATCH_D].push_back(std::make_tuple(dispatch_d_location, settings));
                 settings.semaphores.clear();
                 std::cout << "Dispatch_d: " << dispatch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
-                std::cout << "Dispatch_s:" << dispatch_s_location.str() << " " << settings.dispatch_s_physical_core.str() << std::endl;
+            }
+            if (this->enable_dispatch_s()) {
+                // Populate settings for dispatch_s
+                for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
+                    // Initialize dispatch_s settings as invalid values. To be populated if dispatch_s is enabled.
+                    settings.cb_log_page_size = dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE;
+                    settings.semaphores.push_back(0); // used by dispatch_s to sync with prefetch_d
+                    settings.semaphores.push_back(0); // dispatch_s waits on this until dispatch_d increments it
+                    if (dispatch_core_type == CoreType::WORKER) {
+                        // dispatch_s is on the same Tensix core as dispatch_d. Shared resources. Offset CB start and sem idx.
+                        settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
+                        settings.producer_semaphore_id = 2; // sync with producer (prefetcher)
+                        settings.consumer_semaphore_id = 3; // sync with dispatch_d (this is the "consumer" of dispatch_s)
+                    }
+                    else {
+                        // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB and semaphores start at base.
+                        settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
+                        settings.producer_semaphore_id = 0; // sync with producer (prefetcher)
+                        settings.consumer_semaphore_id = 1; // sync with dispatch_d (this is the "consumer" of dispatch_s)
+                    }
+
+                    tt_cxy_pair dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
+                    settings.worker_physical_core = tt_cxy_pair(dispatch_s_location.chip, get_physical_core_coordinate(dispatch_s_location, dispatch_core_type));
+                    settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp";
+                    std::cout << "Dispatch_s:" << dispatch_s_location.str() << " " << settings.worker_physical_core.str() << std::endl;
+                    tunnel_core_allocations[DISPATCH_S].push_back(std::make_tuple(dispatch_s_location, settings));
+                    settings.semaphores.clear();
+                }
+            } else {
+                // These settings are invalid and won't be used, since dispatch_s is not enabled
+                tunnel_core_allocations[DISPATCH_S] = tunnel_core_allocations[DISPATCH_D];
             }
         }
         tunnel_dispatch_core_allocations.insert(std::make_pair(tunnel_id, tunnel_core_allocations));
@@ -1578,6 +1620,13 @@ void Device::setup_tunnel_for_remote_devices() {
     }
 }
 
+bool Device::enable_dispatch_s() {
+    // Dispatch_s is always enabled for Tensix Dispatch
+    // Conditionally enabled for Ethernet Dispatch - If a single CQ is being used
+    // This condition may be modified for BH
+    return (this->num_hw_cqs() == 1 or dispatch_core_manager::instance().get_dispatch_core_type(this->id()) == CoreType::WORKER);
+}
+
 void Device::compile_command_queue_programs() {
     ZoneScoped;
     std::unique_ptr<Program, detail::ProgramDeleter> command_queue_program_ptr(new Program);
@@ -1619,14 +1668,28 @@ void Device::compile_command_queue_programs() {
             CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device_id);
             tt_cxy_pair prefetch_core = dispatch_core_manager::instance().prefetcher_core(device_id, channel, cq_id);
             tt_cxy_pair dispatch_core = dispatch_core_manager::instance().dispatcher_core(device_id, channel, cq_id);
+            // dispatch_s location and control vars initialized as invalid. Will be set if dispatch_s is enabled for the given configuration.
             tt_cxy_pair dispatch_s_core = tt_cxy_pair(0xff, 0xff, 0xff);
             CoreCoord dispatch_s_physical_core = {0xff, 0xff};
-            bool enable_dispatch_s = false;
-            if (num_hw_cqs == 1 or dispatch_core_type == CoreType::WORKER) {
+            uint32_t dispatch_s_buffer_base = 0xff;
+            uint32_t dispatch_s_sem = 0xff; // used by dispatch_s to sync with prefetch
+            uint32_t dispatch_s_sync_sem_id = 0xff; // used by dispatch_d to signal that dispatch_s can send go signal
+            if (this->enable_dispatch_s()) {
                 // Skip allocating dispatch_s for multi-CQ configurations with ethernet dispatch
                 dispatch_s_core = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
                 dispatch_s_physical_core = get_physical_core_coordinate(dispatch_s_core, dispatch_core_type);
-                enable_dispatch_s = true;
+                if (dispatch_core_type == CoreType::WORKER) {
+                    // dispatch_s is on the same Tensix core as dispatch_d. Shared resources. Offset CB start and sem idx.
+                    dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
+                    dispatch_s_sem = 1;
+                    dispatch_s_sync_sem_id = 2;
+                }
+                else {
+                    // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB and semaphores start at base.
+                    dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE;
+                    dispatch_s_sem = 0;
+                    dispatch_s_sync_sem_id = 1;
+                }
             }
             CoreCoord prefetch_physical_core = get_physical_core_coordinate(prefetch_core, dispatch_core_type);
             CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_core, dispatch_core_type);
@@ -1641,21 +1704,6 @@ void Device::compile_command_queue_programs() {
             uint32_t issue_queue_size = this->sysmem_manager_->get_issue_queue_size(cq_id);
             uint32_t completion_queue_start_addr = issue_queue_start_addr + issue_queue_size;
             uint32_t completion_queue_size = this->sysmem_manager_->get_completion_queue_size(cq_id);
-            uint32_t dispatch_s_buffer_base;
-            uint32_t dispatch_s_sem;
-            uint32_t dispatch_s_sync_sem_id;
-            if (dispatch_core_type == CoreType::WORKER) {
-                // dispatch_s is on the same Tensix core as dispatch_d. Shared resources. Offset CB start and sem idx.
-                dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
-                dispatch_s_sem = 1;
-                dispatch_s_sync_sem_id = 2;
-            }
-            else {
-                // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB and semaphores start at base.
-                dispatch_s_buffer_base = dispatch_constants::DISPATCH_BUFFER_BASE;
-                dispatch_s_sem = 0;
-                dispatch_s_sync_sem_id = 1;
-            }
 
             std::vector<uint32_t> prefetch_compile_args = {
                 dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1745,7 +1793,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_s_sem,
                 prefetch_dispatch_s_sync_sem,
                 dispatch_s_sync_sem_id,
-                this->get_noc_multicast_encoding(enable_dispatch_s ? NOC::NOC_1 : NOC::NOC_0, tensix_worker_physical_grid),
+                this->get_noc_multicast_encoding(NOC::NOC_0, tensix_worker_physical_grid),
                 tensix_num_worker_cores,
                 tensix_worker_go_signal_addr,
                 eth_worker_go_signal_addr,
@@ -1770,11 +1818,28 @@ void Device::compile_command_queue_programs() {
                 dispatch_upstream_noc_index,
                 my_noc_index
             );
-            if (enable_dispatch_s) {
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
+            if (this->enable_dispatch_s()) {
+                std::vector<uint32_t> dispatch_s_compile_args = {
+                    dispatch_s_buffer_base,
+                    dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
+                    dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size(),
+                    dispatch_s_sem,
+                    prefetch_dispatch_s_sync_sem,
+                    dispatch_s_sync_sem_id,
+                    this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid),
+                    tensix_num_worker_cores,
+                    tensix_worker_go_signal_addr,
+                    eth_worker_go_signal_addr,
+                    this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core), // This is not needed
+                    this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_physical_core),
+                    dispatch_core_type == CoreType::ETH,
+                    DISPATCH_MESSAGE_ADDR
+                };
                 configure_kernel_variant(
                     *command_queue_program_ptr,
                     "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp",
-                    dispatch_compile_args,
+                    dispatch_s_compile_args,
                     dispatch_s_core,
                     dispatch_s_physical_core,
                     dispatch_core_type,
@@ -1787,9 +1852,6 @@ void Device::compile_command_queue_programs() {
                     false,
                     true
                 );
-            }
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
-            if (enable_dispatch_s) {
                 tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
                 tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_d to signal that dispatch_s can send go signal
             }
@@ -2026,10 +2088,6 @@ void Device::compile_command_queue_programs() {
         }
         cq_id = 0;
         for (auto [dispatch_d_core, dispatch_d_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_D]) {
-            bool enable_dispatch_s = false;
-            if (num_hw_cqs == 1 or dispatch_d_settings.dispatch_core_type == CoreType::WORKER) {
-                enable_dispatch_s = true;
-            }
             std::size_t tensix_num_worker_cols = this->compute_with_storage_grid_size().x;
             std::size_t tensix_num_worker_rows = this->compute_with_storage_grid_size().y;
             uint32_t tensix_num_worker_cores = tensix_num_worker_cols * tensix_num_worker_rows;
@@ -2038,7 +2096,7 @@ void Device::compile_command_queue_programs() {
             CoreRange tensix_worker_physical_grid = CoreRange(tensix_worker_start_phys, tensix_worker_end_phys);
             uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
             uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
-            dispatch_d_settings.compile_args[26] = this->get_noc_multicast_encoding(enable_dispatch_s ? NOC::NOC_1 : NOC::NOC_0, tensix_worker_physical_grid);
+            dispatch_d_settings.compile_args[26] = this->get_noc_multicast_encoding(NOC::NOC_0, tensix_worker_physical_grid);
             dispatch_d_settings.compile_args[27] = tensix_num_worker_cores;
             dispatch_d_settings.compile_args[28] = tensix_worker_go_signal_addr;
             dispatch_d_settings.compile_args[29] = eth_worker_go_signal_addr;
@@ -2062,20 +2120,23 @@ void Device::compile_command_queue_programs() {
                 dispatch_upstream_noc_index,
                 my_noc_index
             );
-            if (enable_dispatch_s) {
-                // Update this once dispatch_s has its own compile time args
-                for (int i = 0; i < 2; i++) {
-                    tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_d_settings.dispatch_s_logical_core, 0, dispatch_d_settings.dispatch_core_type);
+            cq_id = (cq_id + 1) % num_hw_cqs;
+        }
+        cq_id = 0;
+        if (this->enable_dispatch_s()) {
+            for (auto [dispatch_s_core, dispatch_s_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_S]) {
+                for (auto sem : dispatch_s_settings.semaphores) {
+                    tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, sem, dispatch_s_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *command_queue_program_ptr,
-                    dispatch_d_settings.dispatch_s_kernel_file,
-                    dispatch_d_settings.compile_args,
-                    dispatch_d_settings.dispatch_s_logical_core,
-                    dispatch_d_settings.dispatch_s_physical_core,
-                    dispatch_d_settings.dispatch_core_type,
-                    dispatch_d_settings.upstream_cores[0],
-                    dispatch_d_settings.downstream_cores[0],
+                    dispatch_s_settings.kernel_file,
+                    dispatch_s_settings.compile_args,
+                    dispatch_s_core,
+                    dispatch_s_settings.worker_physical_core,
+                    dispatch_s_settings.dispatch_core_type,
+                    dispatch_s_settings.upstream_cores[0],
+                    dispatch_s_settings.downstream_cores[0],
                     std::map<string, string> {},
                     my_noc_index,
                     dispatch_upstream_noc_index,
@@ -2083,10 +2144,9 @@ void Device::compile_command_queue_programs() {
                     false,
                     true
                 );
+                cq_id = (cq_id + 1) % num_hw_cqs;
             }
-            cq_id = (cq_id + 1) % num_hw_cqs;
         }
-
 
         auto [mux_d_core, mux_d_settings] = device_worker_variants[DispatchWorkerType::MUX_D][0];
         for (auto sem : mux_d_settings.semaphores) {

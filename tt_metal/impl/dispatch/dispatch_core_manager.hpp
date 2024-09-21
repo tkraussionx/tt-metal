@@ -26,15 +26,16 @@ enum DispatchWorkerType : uint32_t {
     PREFETCH_D = 1,
     DISPATCH = 2,
     DISPATCH_D = 3,
-    MUX = 4,
-    MUX_D = 5,
-    DEMUX = 6,
-    DEMUX_D = 7,
-    US_TUNNELER_LOCAL = 8,
-    US_TUNNELER_REMOTE = 9,
-    DS_TUNNELER_LOCAL = 10,
-    DS_TUNNELER_REMOTE = 11,
-    COUNT = 12
+    DISPATCH_S = 4,
+    MUX = 5,
+    MUX_D = 6,
+    DEMUX = 7,
+    DEMUX_D = 8,
+    US_TUNNELER_LOCAL = 9,
+    US_TUNNELER_REMOTE = 10,
+    DS_TUNNELER_LOCAL = 11,
+    DS_TUNNELER_REMOTE = 12,
+    COUNT = 13
 };
 
 enum DispatchCoreType: uint32_t {
@@ -60,9 +61,7 @@ struct dispatch_worker_build_settings_t{
     std::vector<uint32_t> semaphores;
     uint32_t producer_semaphore_id;
     uint32_t consumer_semaphore_id;
-    uint32_t prefetch_dispatch_s_semaphore_id;
-    uint32_t dispatch_s_semaphore_id;
-    uint32_t dispatch_s_sync_semaphore_id;
+    uint32_t consumer_slave_semaphore_id;
     tt_cxy_pair dispatch_s_logical_core;
     tt_cxy_pair dispatch_s_physical_core;
     uint32_t cb_start_address;

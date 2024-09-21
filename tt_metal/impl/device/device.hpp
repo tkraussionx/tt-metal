@@ -339,6 +339,7 @@ class Device {
    private:
     void DisableAllocs();
     void EnableAllocs();
+    bool enable_dispatch_s();
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };
 

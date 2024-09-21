@@ -167,13 +167,11 @@ inline __attribute__((always_inline)) void noc_init() {
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_AT_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)(atomic_ret_addr & 0xFFFFFFFF));
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_AT_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(atomic_ret_addr >> NOC_ADDR_COORD_SHIFT));
     // Set ret coordinate and address for BRISC_AT_CMD_BUF - need this when dispatch slave on BRISC uses this cmd_buf for syncing with prefetcher
-    // These fields will not get modified in the dispatch cmd buffer, since this resource is only shared between semaphore increments for BRISC
-    // and inline_dw writes
-    // TODO: Explore better ways of sharing this cmd buf for 2 types of txns and make it safer
-    // if (noc == 1 && my_x == 7 && my_y == 1) {
+    // These fields will not get modified in the dispatcher cmd buffer (for either NOC), since this resource is only shared between semaphore increments for BRISC
+    // and inline_dw writes (which do not overwrite these fields)
+    // TODO: Explictly set this in dispatch_s when its on BRISC
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_AT_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)(atomic_ret_addr & 0xFFFFFFFF));
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_AT_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(atomic_ret_addr >> NOC_ADDR_COORD_SHIFT));
-    // }
     uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(1);
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(xy_local_addr >> NOC_ADDR_COORD_SHIFT));
