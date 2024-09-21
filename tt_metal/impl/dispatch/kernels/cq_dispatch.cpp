@@ -42,14 +42,13 @@ constexpr uint32_t prefetch_h_noc_xy = get_compile_time_arg_val(16);
 constexpr uint32_t prefetch_h_local_downstream_sem_addr = get_compile_time_arg_val(17);
 constexpr uint32_t prefetch_h_max_credits = get_compile_time_arg_val(18);
 constexpr uint32_t packed_write_max_unicast_sub_cmds = get_compile_time_arg_val(19); // Number of cores in compute grid
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(20);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(21);
-constexpr uint32_t dispatch_s_sem_id = get_compile_time_arg_val(25);
-constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(26);
-constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(27);
-constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(28);
-constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(29);
-constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(31); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
+constexpr uint32_t dispatch_s_sem_id = get_compile_time_arg_val(20);
+constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(21);
+constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(22);
+constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(23);
+constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(24); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(25);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(26);
 
 constexpr uint8_t upstream_noc_index = UPSTREAM_NOC_INDEX;
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
@@ -828,7 +827,8 @@ void process_go_signal_mcast_cmd() {
     while (*worker_sem_addr < cmd->mcast.wait_count);
     if (cmd->mcast.mcast_flag & 0x1) {
         uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
-        noc_async_write_multicast_one_packet((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
+        // packed_write_max_unicast_sub_cmds is the total number of compute cores (num_mcast_dests for this txn)
+        noc_async_write_multicast_one_packet((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), packed_write_max_unicast_sub_cmds);
     }
     if (cmd->mcast.mcast_flag & 0x2) {
         for (int core_idx = 0; core_idx < num_unicast_cores; core_idx++) {

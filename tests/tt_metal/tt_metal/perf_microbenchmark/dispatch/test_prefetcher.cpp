@@ -1640,13 +1640,11 @@ void configure_for_single_chip(Device *device,
         prefetch_downstream_cb_sem, // prefetch_d only
         dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
         dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
-        true,
-        true,
-        0,
-        0,
-        0,
-        0,
-        0
+        0, // unused: for prefetch_hd <--> dispatch_hd
+        0, // unused: for prefetch_hd <--> dispatch_hd
+        0, // unused: for prefetch_hd <--> dispatch_hd
+        0, // unused: for prefetch_hd <--> dispatch_hd
+        0  // unused: for prefetch_hd <--> dispatch_hd
     };
 
     constexpr NOC my_noc_index = NOC::NOC_0;
@@ -1665,8 +1663,6 @@ void configure_for_single_chip(Device *device,
         prefetch_compile_args[11] = prefetch_d_buffer_base;
         prefetch_compile_args[12] = prefetch_d_buffer_pages * (1 << dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE);
         prefetch_compile_args[13] = scratch_db_base;
-        prefetch_compile_args[21] = true;
-        prefetch_compile_args[22] = false;
         CoreCoord phys_prefetch_d_upstream_core =
             packetized_path_en_g ? phys_prefetch_relay_demux_core : phys_prefetch_core_g;
         configure_kernel_variant<true, false>(program,
@@ -1690,8 +1686,6 @@ void configure_for_single_chip(Device *device,
         prefetch_compile_args[11] = cmddat_q_base;
         prefetch_compile_args[12] = cmddat_q_size_g;
         prefetch_compile_args[13] = 0;
-        prefetch_compile_args[21] = false;
-        prefetch_compile_args[22] = true;
         CoreCoord phys_prefetch_h_downstream_core =
             packetized_path_en_g ? phys_prefetch_relay_mux_core : phys_prefetch_d_core;
         configure_kernel_variant<false, true>(program,
@@ -1899,18 +1893,11 @@ void configure_for_single_chip(Device *device,
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
          num_compute_cores, // max_write_packed_cores
-         true,
-         true,
          0,
          0,
          0,
          0,
          0,
-         0,
-         0,
-         0,
-         0,
-         0
     };
 
     CoreCoord phys_upstream_from_dispatch_core = split_prefetcher_g ? phys_prefetch_d_core : phys_prefetch_core_g;
@@ -1924,8 +1911,6 @@ void configure_for_single_chip(Device *device,
         dispatch_compile_args[12] = dispatch_downstream_cb_sem;
         dispatch_compile_args[13] = dispatch_h_cb_sem;
         dispatch_compile_args[14] = dispatch_d_preamble_size;
-        dispatch_compile_args[20] = true;
-        dispatch_compile_args[21] = false;
         CoreCoord phys_dispatch_d_downstream_core =
             packetized_path_en_g ? phys_dispatch_relay_mux_core : phys_dispatch_h_core;
         configure_kernel_variant<true, false>(program,
@@ -1946,8 +1931,6 @@ void configure_for_single_chip(Device *device,
         dispatch_compile_args[12] = dispatch_h_cb_sem;
         dispatch_compile_args[13] = dispatch_downstream_cb_sem;
         dispatch_compile_args[14] = 0; // preamble size
-        dispatch_compile_args[20] = false;
-        dispatch_compile_args[21] = true;
         CoreCoord phys_dispatch_h_upstream_core =
             packetized_path_en_g ? phys_dispatch_relay_demux_core : phys_dispatch_core;
         configure_kernel_variant<false, true>(program,
@@ -2289,6 +2272,11 @@ void configure_for_multi_chip(Device *device,
         prefetch_downstream_cb_sem, // prefetch_d only
         dispatch_constants::PREFETCH_D_BUFFER_LOG_PAGE_SIZE,
         dispatch_constants::PREFETCH_D_BUFFER_BLOCKS, // prefetch_d only
+        0, // unused: for prefetch_d <--> dispatch_d
+        0, // unused: for prefetch_d <--> dispatch_d
+        0, // unused: for prefetch_d <--> dispatch_d
+        0, // unused: for prefetch_d <--> dispatch_d
+        0  // unused: for prefetch_d <--> dispatch_d
     };
 
     constexpr NOC my_noc_index = NOC::NOC_0;
@@ -2623,7 +2611,12 @@ void configure_for_multi_chip(Device *device,
          NOC_XY_ENCODING(phys_prefetch_core_g.x, phys_prefetch_core_g.y),
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
-         num_compute_cores
+         num_compute_cores,
+         0,
+         0,
+         0,
+         0,
+         0,
     };
 
     CoreCoord phys_upstream_from_dispatch_core = split_prefetcher_g ? phys_prefetch_d_core : phys_prefetch_core_g;

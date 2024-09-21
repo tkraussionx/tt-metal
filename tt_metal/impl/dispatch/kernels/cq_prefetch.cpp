@@ -45,14 +45,15 @@ constexpr uint32_t upstream_cb_sem_id = get_compile_time_arg_val(18);
 constexpr uint32_t cmddat_q_log_page_size = get_compile_time_arg_val(19);
 constexpr uint32_t cmddat_q_blocks = get_compile_time_arg_val(20);
 
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(21);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(22);
+// used for prefetch_d <--> dispatch_s data path
+constexpr uint32_t dispatch_s_buffer_base = get_compile_time_arg_val(21);
+constexpr uint32_t my_dispatch_s_cb_sem_id = get_compile_time_arg_val(22);
+constexpr uint32_t downstream_dispatch_s_cb_sem_id = get_compile_time_arg_val(23);
+constexpr uint32_t dispatch_s_buffer_size = get_compile_time_arg_val(24);
+constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(25); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
 
-constexpr uint32_t dispatch_s_buffer_base = get_compile_time_arg_val(23);
-constexpr uint32_t my_dispatch_s_cb_sem_id = get_compile_time_arg_val(24);
-constexpr uint32_t downstream_dispatch_s_cb_sem_id = get_compile_time_arg_val(25);
-constexpr uint32_t dispatch_s_buffer_size = get_compile_time_arg_val(26);
-constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(27); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(26);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(27);
 
 constexpr uint8_t my_noc_index = NOC_INDEX;
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
