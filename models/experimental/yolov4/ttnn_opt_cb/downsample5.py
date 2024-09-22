@@ -17,45 +17,27 @@ class Down5:
         self.conv1 = Conv(
             torch_model, "down5.conv1", [1, 20, 20, 512], (2, 2, 1, 1), reshard=True, height_sharding=False
         )
-        self.conv2 = Conv(torch_model, "down5.conv2", [1, 10, 10, 1024], (1, 1, 0, 0), reshard=True)
+        self.conv2 = Conv(torch_model, "down5.conv2", [1, 10, 10, 1024], (1, 1, 0, 0), reshard=True, deallocate=False)
         self.conv3 = Conv(torch_model, "down5.conv3", [1, 10, 10, 1024], (1, 1, 0, 0))
 
         self.res1_conv1 = Conv(
-            torch_model,
-            "down5.resblock.module_list.0.0",
-            [1, 10, 10, 512],
-            (1, 1, 0, 0),
+            torch_model, "down5.resblock.module_list.0.0", [1, 10, 10, 512], (1, 1, 0, 0), deallocate=False
         )
         self.res1_conv2 = Conv(torch_model, "down5.resblock.module_list.0.1", [1, 10, 10, 512], (1, 1, 1, 1))
         self.res2_conv1 = Conv(
-            torch_model,
-            "down5.resblock.module_list.1.0",
-            [1, 10, 10, 512],
-            (1, 1, 0, 0),
+            torch_model, "down5.resblock.module_list.1.0", [1, 10, 10, 512], (1, 1, 0, 0), deallocate=False
         )
         self.res2_conv2 = Conv(torch_model, "down5.resblock.module_list.1.1", [1, 10, 10, 512], (1, 1, 1, 1))
         self.res3_conv1 = Conv(
-            torch_model,
-            "down5.resblock.module_list.2.0",
-            [1, 10, 10, 512],
-            (1, 1, 0, 0),
+            torch_model, "down5.resblock.module_list.2.0", [1, 10, 10, 512], (1, 1, 0, 0), deallocate=False
         )
         self.res3_conv2 = Conv(torch_model, "down5.resblock.module_list.2.1", [1, 10, 10, 512], (1, 1, 1, 1))
         self.res4_conv1 = Conv(
-            torch_model,
-            "down5.resblock.module_list.3.0",
-            [1, 10, 10, 512],
-            (1, 1, 0, 0),
+            torch_model, "down5.resblock.module_list.3.0", [1, 10, 10, 512], (1, 1, 0, 0), deallocate=False
         )
         self.res4_conv2 = Conv(torch_model, "down5.resblock.module_list.3.1", [1, 10, 10, 512], (1, 1, 1, 1))
 
-        self.conv4 = Conv(
-            torch_model,
-            "down5.conv4",
-            [1, 10, 10, 512],
-            (1, 1, 0, 0),
-            reshard=True,
-        )
+        self.conv4 = Conv(torch_model, "down5.conv4", [1, 10, 10, 512], (1, 1, 0, 0), reshard=True, deallocate=False)
 
         self.conv5 = Conv(torch_model, "down5.conv5", [1, 10, 10, 1024], (1, 1, 0, 0), height_sharding=False)
 
@@ -73,6 +55,7 @@ class Down5:
         output_tensor = self.res1_conv2(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)
         res2_split = res1_split + output_tensor
+        ttnn.deallocate(res1_split)
 
         output_tensor = self.res2_conv1(device, res2_split)
         output_tensor = ttnn.mish(output_tensor)
@@ -80,11 +63,15 @@ class Down5:
         output_tensor = ttnn.mish(output_tensor)
         res3_split = res2_split + output_tensor
 
+        ttnn.deallocate(res2_split)
+
         output_tensor = self.res3_conv1(device, res3_split)
         output_tensor = ttnn.mish(output_tensor)
         output_tensor = self.res3_conv2(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)
         res4_split = res3_split + output_tensor
+
+        ttnn.deallocate(res3_split)
 
         output_tensor = self.res4_conv1(device, res4_split)
         output_tensor = ttnn.mish(output_tensor)
@@ -92,12 +79,15 @@ class Down5:
         output_tensor = ttnn.mish(output_tensor)
         output_tensor = res4_split + output_tensor
 
+        ttnn.deallocate(res4_split)
+
         output_tensor = self.conv4(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)
 
         output_tensor = ttnn.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
         output_tensor_left = ttnn.sharded_to_interleaved(output_tensor_left, ttnn.L1_MEMORY_CONFIG)
         output_tensor = ttnn.concat([output_tensor, output_tensor_left], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.deallocate(output_tensor_left)
 
         output_tensor = self.conv5(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)

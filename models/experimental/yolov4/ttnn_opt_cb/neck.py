@@ -69,6 +69,7 @@ class TtNeck:
             (1, 1, 0, 0),
             height_sharding=True,
             reshard=True,
+            deallocate=False,
         )
         self.conv7_2 = Conv(
             torch_model,
@@ -123,6 +124,7 @@ class TtNeck:
             [1, 20, 20, 256],
             (1, 1, 0, 0),
             reshard=True,
+            deallocate=False,
         )
         self.conv9_2 = Conv(
             torch_model,
@@ -224,6 +226,9 @@ class TtNeck:
         output_tensor = ttnn.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
 
         output_tensor = ttnn.concat([pool_3, pool_2, pool_1, output_tensor], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.deallocate(pool_3)
+        ttnn.deallocate(pool_2)
+        ttnn.deallocate(pool_1)
 
         output_tensor = self.conv4(device, output_tensor)
         output_tensor = ttnn.leaky_relu(output_tensor, slope=0.1)
@@ -251,6 +256,7 @@ class TtNeck:
         output_tensor = ttnn.concat(
             [output_tensor, output_tensor_upsample_1], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG
         )
+        ttnn.deallocate(output_tensor_upsample_1)
 
         output_tensor = self.conv7_3(device, output_tensor)
         output_tensor = ttnn.leaky_relu(output_tensor, slope=0.1)
@@ -284,9 +290,7 @@ class TtNeck:
         output_tensor = ttnn.concat(
             [output_tensor, output_tensor_upsample_2], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG
         )
-        ttnn.deallocate(pool_3)
-        ttnn.deallocate(pool_2)
-        ttnn.deallocate(pool_1)
+        ttnn.deallocate(output_tensor_upsample_2)
 
         output_tensor = self.conv9_3(device, output_tensor)
         output_tensor = ttnn.leaky_relu(output_tensor, slope=0.1)

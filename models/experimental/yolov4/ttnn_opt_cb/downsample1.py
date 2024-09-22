@@ -16,9 +16,9 @@ class Down1:
         self.torch_model = torch_model
         self.conv1 = Conv(torch_model, "down1.conv1", [1, 320, 320, 3], (1, 1, 1, 1), act_block_h=128)
         self.conv2 = Conv(torch_model, "down1.conv2", [1, 320, 320, 32], (2, 2, 1, 1), reshard=True)
-        self.conv3 = Conv(torch_model, "down1.conv3", [1, 160, 160, 64], (1, 1, 0, 0))
+        self.conv3 = Conv(torch_model, "down1.conv3", [1, 160, 160, 64], (1, 1, 0, 0), deallocate=False)
         self.conv4 = Conv(torch_model, "down1.conv4", [1, 160, 160, 64], (1, 1, 0, 0), reshard=True)
-        self.conv5 = Conv(torch_model, "down1.conv5", [1, 160, 160, 64], (1, 1, 0, 0))
+        self.conv5 = Conv(torch_model, "down1.conv5", [1, 160, 160, 64], (1, 1, 0, 0), deallocate=False)
         self.conv6 = Conv(torch_model, "down1.conv6", [1, 160, 160, 32], (1, 1, 1, 1))
         self.conv7 = Conv(torch_model, "down1.conv7", [1, 160, 160, 64], (1, 1, 0, 0))
         self.conv8 = Conv(torch_model, "down1.conv8", [1, 160, 160, 128], (1, 1, 0, 0))
@@ -39,6 +39,8 @@ class Down1:
         output_tensor = self.conv6(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)
         output_tensor = res_block_split + output_tensor
+
+        ttnn.deallocate(res_block_split)
         output_tensor = self.conv7(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)
 
@@ -46,6 +48,7 @@ class Down1:
         output_tensor_left = ttnn.sharded_to_interleaved(output_tensor_left, ttnn.L1_MEMORY_CONFIG)
 
         output_tensor = ttnn.concat([output_tensor, output_tensor_left], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.deallocate(output_tensor_left)
 
         output_tensor = self.conv8(device, output_tensor)
         output_tensor = ttnn.mish(output_tensor)

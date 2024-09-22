@@ -35,7 +35,7 @@ class Conv:
         *,
         act_block_h=None,
         reshard=False,
-        deallocate=False,
+        deallocate=True,
         height_sharding=True,
         activation="",
         fused_op=True,

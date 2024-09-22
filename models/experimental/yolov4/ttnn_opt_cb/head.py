@@ -14,21 +14,9 @@ class TtHead:
         else:
             torch_model = model.torch_model
         self.torch_model = torch_model
-        self.conv1 = Conv(
-            torch_model,
-            "head.conv1",
-            [1, 40, 40, 128],
-            (1, 1, 1, 1),
-            reshard=True,
-        )
+        self.conv1 = Conv(torch_model, "head.conv1", [1, 40, 40, 128], (1, 1, 1, 1), reshard=True, deallocate=False)
         self.conv2 = Conv(torch_model, "head.conv2", [1, 40, 40, 256], (1, 1, 0, 0), fused_op=False)
-        self.conv3 = Conv(
-            torch_model,
-            "head.conv3",
-            [1, 40, 40, 128],
-            (2, 2, 1, 1),
-            reshard=True,
-        )
+        self.conv3 = Conv(torch_model, "head.conv3", [1, 40, 40, 128], (2, 2, 1, 1), reshard=True, deallocate=False)
         self.conv4 = Conv(
             torch_model,
             "head.conv4",
@@ -67,13 +55,7 @@ class TtHead:
             reshard=True,
             height_sharding=True,
         )
-        self.conv9 = Conv(
-            torch_model,
-            "head.conv9",
-            [1, 20, 20, 256],
-            (1, 1, 1, 1),
-            reshard=True,
-        )
+        self.conv9 = Conv(torch_model, "head.conv9", [1, 20, 20, 256], (1, 1, 1, 1), reshard=True, deallocate=False)
         self.conv10 = Conv(
             torch_model,
             "head.conv10",
