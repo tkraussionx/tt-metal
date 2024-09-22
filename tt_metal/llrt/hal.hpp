@@ -38,7 +38,9 @@ enum class HalMemAddrType : uint8_t {
     KERNEL_CONFIG = 5,
     UNRESERVED = 6,
     CORE_INFO = 7,
-    COUNT = 8
+    GO_MSG = 8,
+    LAUNCH_MSG_BUFFER_RD_PTR = 9,
+    COUNT = 10
 };
 
 using DeviceAddr = std::uint64_t;

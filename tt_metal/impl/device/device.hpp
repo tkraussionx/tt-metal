@@ -121,7 +121,7 @@ class Device {
     CoreCoord logical_core_from_ethernet_core(const CoreCoord &physical_core) const;
 
     std::vector<CoreCoord> ethernet_cores_from_logical_cores(const std::vector<CoreCoord> &logical_cores) const;
-    std::vector<uint32_t> get_noc_encoding_for_all_etherent_sockets(uint8_t noc_index = 1);
+    std::vector<uint32_t> get_noc_encoding_for_active_eth_cores(NOC noc_index);
 
     std::unordered_set<chip_id_t> get_ethernet_connected_device_ids() const {
         return tt::Cluster::instance().get_ethernet_connected_device_ids(this->id_);
@@ -339,7 +339,8 @@ class Device {
    private:
     void DisableAllocs();
     void EnableAllocs();
-    bool enable_dispatch_s();
+    bool enable_dispatch_s() const;
+    bool distributed_dispatcher() const;
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };
 

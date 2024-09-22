@@ -147,6 +147,7 @@ void write_launch_msg_to_core(chip_id_t chip, const CoreCoord core, launch_msg_t
     msg->kernel_config.mode = DISPATCH_MODE_HOST;
 
     uint64_t launch_addr = base_addr + offsetof(launch_msg_t, kernel_config);
+    // TODO: Get this from the hal. Need to modify the write_launch_msg_to_core API to get the LM and Go signal addr from the hal.
     uint64_t go_addr = base_addr + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
 
     tt::Cluster::instance().write_core((void *)&msg->kernel_config, sizeof(kernel_config_msg_t), tt_cxy_pair(chip, core), launch_addr);
@@ -273,7 +274,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
 
     tt_metal::HalProgrammableCoreType dispatch_core_type =  is_active_eth_core ? tt_metal::HalProgrammableCoreType::ACTIVE_ETH :
         is_inactive_eth_core ? tt_metal::HalProgrammableCoreType::IDLE_ETH : tt_metal::HalProgrammableCoreType::TENSIX;
-    uint64_t go_msg_addr = tt_metal::hal.get_dev_addr(dispatch_core_type, tt_metal::HalMemAddrType::LAUNCH) + sizeof(launch_msg_t) * launch_msg_buffer_num_entries;
+    uint64_t go_msg_addr = tt_metal::hal.get_dev_addr(dispatch_core_type, tt_metal::HalMemAddrType::GO_MSG);
 
     auto get_mailbox_is_done = [&](uint64_t go_msg_addr) {
         constexpr int RUN_MAILBOX_BOGUS = 3;
