@@ -64,7 +64,7 @@ class Conv:
         conv_config = ttnn.Conv2dConfig(
             dtype=ttnn.bfloat16,
             weights_dtype=ttnn.bfloat16,
-            math_fidelity=ttnn.MathFidelity.HiFi4,
+            math_fidelity=ttnn.MathFidelity.LoFi,
             activation=self.activation,
             shard_layout=self.shard_layout,
             math_approx_mode_enabled=True,
