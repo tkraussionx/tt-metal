@@ -612,6 +612,7 @@ void Device::configure_kernel_variant(
     CoreType dispatch_core_type,
     CoreCoord upstream_physical_core,
     CoreCoord downstream_physical_core,
+    CoreCoord downstream_slave_physical_core,
     std::map<string, string> defines_in,
     NOC my_noc_index,
     NOC upstream_noc_index,
@@ -636,6 +637,8 @@ void Device::configure_kernel_variant(
         {"UPSTREAM_NOC_Y", std::to_string(NOC_0_Y(upstream_noc_index, grid_size.y, upstream_physical_core.y))},
         {"DOWNSTREAM_NOC_X", std::to_string(NOC_0_X(downstream_noc_index, grid_size.x, downstream_physical_core.x))},
         {"DOWNSTREAM_NOC_Y", std::to_string(NOC_0_Y(downstream_noc_index, grid_size.y, downstream_physical_core.y))},
+        {"DOWNSTREAM_SLAVE_NOC_X", std::to_string(NOC_0_X(downstream_noc_index, grid_size.x, downstream_slave_physical_core.x))},
+        {"DOWNSTREAM_SLAVE_NOC_Y", std::to_string(NOC_0_Y(downstream_noc_index, grid_size.y, downstream_slave_physical_core.y))},
         {"FD_CORE_TYPE", std::to_string(programmable_core_type_index)},
     };
     defines.insert(defines_in.begin(), defines_in.end());
@@ -718,9 +721,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[22] = 0; // unused: prefetch_d only
                     compile_args[23] = 0; // unused: prefetch_d only
                     compile_args[24] = 0; // unused: prefetch_d only
-                    compile_args[25] = 0; // unused: prefetch_d only
-                    compile_args[26] = false;  // is_dram_variant
-                    compile_args[27] = true;    // is_host_variant
+                    compile_args[25] = false;  // is_dram_variant
+                    compile_args[26] = true;    // is_host_variant
                 }
                 break;
             }
@@ -946,9 +948,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[21] = 0; // unused: dispatch_d only
                     compile_args[22] = 0; // unused: dispatch_d only
                     compile_args[23] = 0; // unused: dispatch_d only
-                    compile_args[24] = 0; // unused: dispatch_d only
-                    compile_args[25] = false; // is_dram_variant
-                    compile_args[26] = true; // is_host_variant
+                    compile_args[24] = false; // is_dram_variant
+                    compile_args[25] = true; // is_host_variant
 
                     dispatch_idx++;
                 }
@@ -1114,7 +1115,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     auto dispatch_core_type = prefetch_d_settings.dispatch_core_type;
                     prefetch_d_settings.upstream_cores.push_back(demux_d_settings.worker_physical_core);
                     prefetch_d_settings.downstream_cores.push_back(dispatch_d_settings.worker_physical_core);
-
+                    prefetch_d_settings.downstream_cores.push_back(dispatch_s_settings.worker_physical_core);
                     uint32_t scratch_db_base = (prefetch_d_settings.cb_start_address + prefetch_d_settings.cb_size_bytes + PCIE_ALIGNMENT - 1) & (~(PCIE_ALIGNMENT - 1));
                     uint32_t scratch_db_size = dispatch_constants::get(dispatch_core_type).scratch_db_size();
                     const uint32_t l1_size = dispatch_core_type == CoreType::WORKER ? MEM_L1_SIZE : MEM_ETH_SIZE;
@@ -1154,9 +1155,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[22] = prefetch_d_settings.consumer_slave_semaphore_id; // Semaphore on prefetch to handshake with dispatch_s
                     compile_args[23] = dispatch_s_settings.producer_semaphore_id; // Semaphore on dispatch_s to handshake with prefetch
                     compile_args[24] = dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size();
-                    compile_args[25] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_s_settings.worker_physical_core);
-                    compile_args[26] = true;  // is_dram_variant
-                    compile_args[27] = false; // is_host_variant
+                    compile_args[25] = true;  // is_dram_variant
+                    compile_args[26] = false; // is_host_variant
                     prefetch_d_idx++; // move on to next prefetcher
                 }
                 break;
@@ -1176,11 +1176,9 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     auto prefetch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH_D][dispatch_d_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_d
                     auto dispatch_s_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_S][dispatch_d_idx]); // 1 to 1 mapping bw dispatch_s and dispatch_d
                     auto dispatch_core_type = dispatch_d_settings.dispatch_core_type;
-                    // The NOC encoding for this should be passed through the settings
-                    auto chip_id = core.chip;
-                    auto [tensix_num_worker_cores, tensix_worker_physical_grid] = get_physical_worker_grid_config(chip_id, num_hw_cqs, dispatch_core_type);
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
+                    dispatch_d_settings.downstream_cores.push_back(dispatch_s_settings.worker_physical_core);
                     dispatch_d_settings.compile_args.resize(27);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
@@ -1204,12 +1202,11 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs), // mux buffer size is a function of num_cqs
                     compile_args[19] = dispatch_d_settings.num_compute_cores;
                     compile_args[20] = dispatch_s_settings.consumer_semaphore_id;
-                    compile_args[21] = this->get_noc_multicast_encoding(NOC::NOC_0, tensix_worker_physical_grid);
+                    compile_args[21] = dispatch_d_settings.compute_core_mcast_noc_coords;
                     compile_args[22] = tensix_worker_go_signal_addr;
                     compile_args[23] = eth_worker_go_signal_addr;
-                    compile_args[24] = this->get_noc_unicast_encoding(NOC::NOC_0, dispatch_s_settings.worker_physical_core);
-                    compile_args[25] = true; // is_dram_variant
-                    compile_args[26] = false; // is_host_variant
+                    compile_args[24] = true; // is_dram_variant
+                    compile_args[25] = false; // is_host_variant
                     dispatch_d_idx++; // move on to next dispatcher
                 }
                 break;
@@ -1224,11 +1221,8 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                         auto prefetch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH_D][dispatch_s_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_s
                         auto dispatch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::DISPATCH_D][dispatch_s_idx]); // 1 to 1 mapping bw dispatch_d and dispatch_s
                         dispatch_s_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
-                        dispatch_s_settings.downstream_cores.push_back(tt_cxy_pair(0, 0, 0));
+                        dispatch_s_settings.downstream_cores.push_back(dispatch_d_settings.worker_physical_core);
                         auto dispatch_core_type = dispatch_s_settings.dispatch_core_type;
-                        auto chip_id = core.chip;
-                        // The NOC encoding for this should be passed through the settings
-                        auto [tensix_num_worker_cores, tensix_worker_physical_grid] = get_physical_worker_grid_config(chip_id, num_hw_cqs, dispatch_core_type);
                         dispatch_s_settings.compile_args.resize(14);
                         auto& compile_args = dispatch_s_settings.compile_args;
                         compile_args[0] = dispatch_s_settings.cb_start_address;
@@ -1237,14 +1231,12 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                         compile_args[3] = dispatch_s_settings.producer_semaphore_id;
                         compile_args[4] = prefetch_d_settings.consumer_slave_semaphore_id;
                         compile_args[5] = dispatch_s_settings.consumer_semaphore_id;
-                        compile_args[6] = this->get_noc_multicast_encoding(NOC::NOC_1, tensix_worker_physical_grid);
-                        compile_args[7] = tensix_num_worker_cores;
+                        compile_args[6] = dispatch_s_settings.compute_core_mcast_noc_coords;
+                        compile_args[7] = dispatch_s_settings.num_compute_cores;
                         compile_args[8] = tensix_worker_go_signal_addr;
                         compile_args[9] = eth_worker_go_signal_addr;
-                        compile_args[10] = 0; // don't need this
-                        compile_args[11] = this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_d_settings.worker_physical_core);
-                        compile_args[12] = (dispatch_core_type == CoreType::ETH);
-                        compile_args[13] = DISPATCH_MESSAGE_ADDR;
+                        compile_args[10] = (dispatch_core_type == CoreType::ETH);
+                        compile_args[11] = DISPATCH_MESSAGE_ADDR;
                         dispatch_s_idx++;
                     }
                 }
@@ -1324,6 +1316,9 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
 
 void Device::setup_tunnel_for_remote_devices() {
     chip_id_t mmio_device_id = this->id_;
+    constexpr NOC dispatch_d_noc_index = NOC::NOC_0;
+    constexpr NOC dispatch_s_noc_index = NOC::NOC_1; // Use NOC_1, since when dispatch_s and dispatch_d are on the same tensix, we want to distribute resources
+    static_assert(dispatch_d_noc_index != dispatch_s_noc_index, "Dispatch_s NOC must be different from Dispatch_d NOC");
     uint32_t num_tunnels = tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id);
     if (num_tunnels == 0) {
         //no remote device conected to this mmio device.
@@ -1356,6 +1351,7 @@ void Device::setup_tunnel_for_remote_devices() {
             uint32_t vc_count = 1 + (tunnel.size() - 1) * num_hw_cqs; // 1 return vc. outgoing vc count depends on tunnel size and cq size.
             uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
             CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(mmio_device_id);
+            auto [tensix_num_worker_cores, tensix_worker_physical_grid] = get_physical_worker_grid_config(device_id, num_hw_cqs, dispatch_core_type);
 
             dispatch_worker_build_settings_t settings = {};
             //allocations below are on mmio chip.
@@ -1501,7 +1497,6 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.clear();
                 std::cout << "Prefetch_d: " << prefetch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
-
             for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                 settings.semaphores.push_back(0);// dispatch_sem
                 settings.semaphores.push_back(dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs)); // dispatch_downstream_cb_sem
@@ -1511,6 +1506,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.cb_log_page_size = dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE;
                 settings.cb_pages = dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                 settings.cb_size_bytes = (1 << settings.cb_log_page_size) * settings.cb_pages;
+                settings.compute_core_mcast_noc_coords = this->get_noc_multicast_encoding(dispatch_d_noc_index, tensix_worker_physical_grid);
                 tt_cxy_pair dispatch_d_location = dispatch_core_manager::instance().dispatcher_d_core(device_id, channel, cq_id);
                 settings.worker_physical_core = tt_cxy_pair(dispatch_d_location.chip, get_physical_core_coordinate(dispatch_d_location, dispatch_core_type));
                 settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch.cpp";
@@ -1537,7 +1533,7 @@ void Device::setup_tunnel_for_remote_devices() {
                         settings.producer_semaphore_id = 0; // sync with producer (prefetcher)
                         settings.consumer_semaphore_id = 1; // sync with dispatch_d (this is the "consumer" of dispatch_s)
                     }
-
+                    settings.compute_core_mcast_noc_coords = this->get_noc_multicast_encoding(dispatch_s_noc_index, tensix_worker_physical_grid);
                     tt_cxy_pair dispatch_s_location = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
                     settings.worker_physical_core = tt_cxy_pair(dispatch_s_location.chip, get_physical_core_coordinate(dispatch_s_location, dispatch_core_type));
                     settings.kernel_file = "tt_metal/impl/dispatch/kernels/cq_dispatch_async_handler.cpp";
@@ -1649,7 +1645,9 @@ void Device::compile_command_queue_programs() {
     // TODO: this->hw_command_queues_[cq_id]->noc_index is also hardcoded to NOC_0 elsewhere, should have one definition and remove assertion
     constexpr NOC my_noc_index = NOC::NOC_0;
     constexpr NOC dispatch_upstream_noc_index = NOC::NOC_1;
+    constexpr NOC dispatch_s_noc_index = NOC::NOC_1;
     static_assert(my_noc_index != dispatch_upstream_noc_index, "Dispatch NOC used to communicate with upstream must be different from NOC used for other transactions");
+    static_assert(my_noc_index != dispatch_s_noc_index, "Dispatch_s NOC must be different from Dispatch_d NOC");
     for (uint8_t cq_id = 0; cq_id < this->num_hw_cqs(); cq_id++) {
         TT_ASSERT(this->hw_command_queues_[cq_id]->noc_index == my_noc_index, "Command Queue NOC index must match");
     }
@@ -1728,7 +1726,6 @@ void Device::compile_command_queue_programs() {
                 prefetch_dispatch_s_sync_sem,
                 dispatch_s_sem,
                 dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_size(),
-                this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core),
                 true,   // is_dram_variant
                 true    // is_host_variant
             };
@@ -1742,6 +1739,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_core_type,
                 CoreCoord{0, 0},
                 dispatch_physical_core,
+                dispatch_s_physical_core,
                 std::map<string, string> {},
                 my_noc_index,
                 my_noc_index,
@@ -1780,10 +1778,9 @@ void Device::compile_command_queue_programs() {
                 0,      // unused prefetch_downstream_buffer_pages
                 num_compute_cores, // max_write_packed_cores
                 dispatch_s_sync_sem_id, // used to notify dispatch_s that its safe to send a go signal
-                this->get_noc_multicast_encoding(NOC::NOC_0, tensix_worker_physical_grid), // used by dispatch_d to mcast go signals when dispatch_s is not enabled
+                this->get_noc_multicast_encoding(my_noc_index, tensix_worker_physical_grid), // used by dispatch_d to mcast go signals when dispatch_s is not enabled
                 tensix_worker_go_signal_addr, // used by dispatch_d to mcast go signals when dispatch_s is not enabled
                 eth_worker_go_signal_addr, // used by dispatch_d to mcast go signals when dispatch_s is not enabled
-                this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core), // dispatch_s core coords (should migrate to CTA)
                 true,   // is_dram_variant
                 true,    // is_host_variant
             };
@@ -1797,6 +1794,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_core_type,
                 prefetch_physical_core,
                 CoreCoord{0, 0},
+                dispatch_s_physical_core,
                 std::map<string, string> {},
                 my_noc_index,
                 dispatch_upstream_noc_index,
@@ -1815,8 +1813,6 @@ void Device::compile_command_queue_programs() {
                     tensix_num_worker_cores,
                     tensix_worker_go_signal_addr,
                     eth_worker_go_signal_addr,
-                    this->get_noc_unicast_encoding(my_noc_index, dispatch_s_physical_core), // This is not needed
-                    this->get_noc_unicast_encoding(NOC::NOC_1, dispatch_physical_core),
                     dispatch_core_type == CoreType::ETH,
                     DISPATCH_MESSAGE_ADDR
                 };
@@ -1828,11 +1824,12 @@ void Device::compile_command_queue_programs() {
                     dispatch_s_physical_core,
                     dispatch_core_type,
                     prefetch_physical_core,
+                    dispatch_physical_core,
                     CoreCoord{0, 0},
                     std::map<string, string> {},
-                    dispatch_upstream_noc_index,
-                    dispatch_upstream_noc_index,
-                    dispatch_upstream_noc_index,
+                    dispatch_s_noc_index,
+                    dispatch_s_noc_index,
+                    dispatch_s_noc_index,
                     false,
                     true
                 );
@@ -1897,6 +1894,7 @@ void Device::compile_command_queue_programs() {
                     prefetch_settings.dispatch_core_type,
                     prefetch_settings.upstream_cores[0],
                     prefetch_settings.downstream_cores[0],
+                    CoreCoord{0, 0},
                     std::map<string, string> {},
                     my_noc_index,
                     my_noc_index,
@@ -1920,6 +1918,7 @@ void Device::compile_command_queue_programs() {
                 mux_settings.dispatch_core_type,
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
+                CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
                 my_noc_index, // Only one Mux - use NOC for CQ 0
                 my_noc_index,
@@ -1934,6 +1933,7 @@ void Device::compile_command_queue_programs() {
                 tunneler_core,
                 CoreCoord{0, 0},
                 CoreType::ETH,
+                CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
@@ -1958,6 +1958,7 @@ void Device::compile_command_queue_programs() {
                 demux_settings.dispatch_core_type,
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
+                CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
                 my_noc_index, // Only one Demux - use NOC for CQ 0
                 my_noc_index,
@@ -1979,6 +1980,7 @@ void Device::compile_command_queue_programs() {
                     dispatch_settings.dispatch_core_type,
                     dispatch_settings.upstream_cores[0],
                     CoreCoord{0xffffffff, 0xffffffff},
+                    CoreCoord{0, 0},
                     std::map<string, string> {},
                     my_noc_index,
                     dispatch_upstream_noc_index,
@@ -2000,6 +2002,7 @@ void Device::compile_command_queue_programs() {
             CoreType::ETH,
             CoreCoord{0, 0},
             CoreCoord{0, 0},
+            CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
             my_noc_index, // Only one Local Tunneler - use NOC for CQ 0
             my_noc_index,
@@ -2017,6 +2020,7 @@ void Device::compile_command_queue_programs() {
                 ds_tunneler_core,
                 CoreCoord{0, 0},
                 CoreType::ETH,
+                CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 CoreCoord{0, 0},
                 std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
@@ -2042,6 +2046,7 @@ void Device::compile_command_queue_programs() {
             demux_d_settings.dispatch_core_type,
             CoreCoord{0, 0},
             CoreCoord{0, 0},
+            CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},
             my_noc_index, // Only one Demux - use NOC for CQ 0
             my_noc_index,
@@ -2063,6 +2068,7 @@ void Device::compile_command_queue_programs() {
                 prefetch_d_settings.dispatch_core_type,
                 prefetch_d_settings.upstream_cores[0],
                 prefetch_d_settings.downstream_cores[0],
+                prefetch_d_settings.downstream_cores[1], // need to update
                 std::map<string, string> {},
                 my_noc_index,
                 my_noc_index,
@@ -2086,6 +2092,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_d_settings.dispatch_core_type,
                 dispatch_d_settings.upstream_cores[0],
                 dispatch_d_settings.downstream_cores[0],
+                dispatch_d_settings.downstream_cores[1], // need to update
                 std::map<string, string> {},
                 my_noc_index,
                 dispatch_upstream_noc_index,
@@ -2108,10 +2115,11 @@ void Device::compile_command_queue_programs() {
                     dispatch_s_settings.dispatch_core_type,
                     dispatch_s_settings.upstream_cores[0],
                     dispatch_s_settings.downstream_cores[0],
+                    CoreCoord{0, 0},
                     std::map<string, string> {},
-                    my_noc_index,
-                    dispatch_upstream_noc_index,
-                    my_noc_index,
+                    dispatch_s_noc_index,
+                    dispatch_s_noc_index,
+                    dispatch_s_noc_index,
                     false,
                     true
                 );
@@ -2132,6 +2140,7 @@ void Device::compile_command_queue_programs() {
             mux_d_core,
             CoreCoord{0, 0},
             mux_d_settings.dispatch_core_type,
+            CoreCoord{0, 0},
             CoreCoord{0, 0},
             CoreCoord{0, 0},
             std::map<string, string> {{"SKIP_NOC_LOGGING", "1"}},

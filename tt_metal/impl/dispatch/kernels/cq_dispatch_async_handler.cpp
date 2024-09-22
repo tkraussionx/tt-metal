@@ -27,18 +27,15 @@ constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(6);
 constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(7);
 constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(8);
 constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(9);
-constexpr uint32_t my_noc_xy = get_compile_time_arg_val(10); // uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
-constexpr uint32_t dispatch_d_noc_xy = get_compile_time_arg_val(11);
-constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(12); // dispatch_s and dispatch_d running on different cores
-constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(13); // workers update the semaphore at this location to signal completion
+constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(10); // dispatch_s and dispatch_d running on different cores
+constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(11); // workers update the semaphore at this location to signal completion
+
+constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
+constexpr uint32_t dispatch_d_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
+constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 
 constexpr uint32_t cb_page_size = 1 << cb_log_page_size;
 constexpr uint32_t cb_end = cb_base + cb_size;
-
-// Get dispatch_s coords from RTA. TODO: When dispatch_s is separated out, get this from CTAs.
-// Upstream coords will need to explicitly be programmed in CTA as well
-// dispatch_d and prefetch_hd need to have specific CTA for dispatch_s coords
-constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 
 static uint32_t num_pages_acquired = 0;
 static uint32_t num_mcasts_sent = 0;

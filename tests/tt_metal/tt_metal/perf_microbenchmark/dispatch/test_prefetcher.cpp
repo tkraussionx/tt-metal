@@ -1644,7 +1644,6 @@ void configure_for_single_chip(Device *device,
         0, // unused: for prefetch_hd <--> dispatch_hd
         0, // unused: for prefetch_hd <--> dispatch_hd
         0, // unused: for prefetch_hd <--> dispatch_hd
-        0  // unused: for prefetch_hd <--> dispatch_hd
     };
 
     constexpr NOC my_noc_index = NOC::NOC_0;
@@ -1893,7 +1892,6 @@ void configure_for_single_chip(Device *device,
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
          num_compute_cores, // max_write_packed_cores
-         0,
          0,
          0,
          0,
@@ -2276,7 +2274,6 @@ void configure_for_multi_chip(Device *device,
         0, // unused: for prefetch_d <--> dispatch_d
         0, // unused: for prefetch_d <--> dispatch_d
         0, // unused: for prefetch_d <--> dispatch_d
-        0  // unused: for prefetch_d <--> dispatch_d
     };
 
     constexpr NOC my_noc_index = NOC::NOC_0;
@@ -2612,7 +2609,6 @@ void configure_for_multi_chip(Device *device,
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
          num_compute_cores,
-         0,
          0,
          0,
          0,

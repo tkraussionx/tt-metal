@@ -46,13 +46,13 @@ constexpr uint32_t dispatch_s_sem_id = get_compile_time_arg_val(20);
 constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(21);
 constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(22);
 constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(23);
-constexpr uint32_t dispatch_s_noc_xy = get_compile_time_arg_val(24); // currently getting dispatch_s coords through RTAs. Migrate to CTAs.
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(25);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(26);
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(24);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(25);
 
 constexpr uint8_t upstream_noc_index = UPSTREAM_NOC_INDEX;
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
+constexpr uint32_t dispatch_s_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_SLAVE_NOC_X, DOWNSTREAM_SLAVE_NOC_Y));
 constexpr uint8_t my_noc_index = NOC_INDEX;
 constexpr uint32_t my_noc_xy = uint32_t(NOC_XY_ENCODING(MY_NOC_X, MY_NOC_Y));
 constexpr uint64_t pcie_noc_xy = uint64_t(NOC_XY_PCIE_ENCODING(NOC_0_X(static_cast<uint8_t>(NOC_INDEX), noc_size_x, PCIE_NOC_X), NOC_0_Y(static_cast<uint8_t>(NOC_INDEX), noc_size_y, PCIE_NOC_Y), NOC_INDEX));
