@@ -385,7 +385,8 @@ int main(int argc, char **argv) {
         uint32_t num_compute_cores = device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
 
         // Want different buffers on each core, instead use big buffer and self-manage it
-        uint32_t l1_buf_base = align(DISPATCH_L1_UNRESERVED_BASE, dispatch_buffer_page_size_g);
+        uint32_t dispatch_l1_unreserved_base = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::UNRESERVED);
+        uint32_t l1_buf_base = align(dispatch_l1_unreserved_base, dispatch_buffer_page_size_g);
         TT_ASSERT((l1_buf_base & (dispatch_buffer_page_size_g - 1)) == 0);
 
         // Make sure user doesn't exceed available L1 space with cmd line arguments.

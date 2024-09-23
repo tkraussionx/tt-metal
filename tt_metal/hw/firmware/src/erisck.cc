@@ -18,7 +18,6 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 #include "tools/profiler/kernel_profiler.hpp"
-#include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include <kernel_includes.hpp>
 
 
@@ -35,7 +34,8 @@ void __attribute__((section("erisc_l1_code"))) kernel_launch() {
     if (routing_info->routing_enabled and mailboxes->launch.kernel_config.mode == DISPATCH_MODE_DEV) {
         uint64_t dispatch_addr =
             NOC_XY_ADDR(NOC_X(mailboxes->launch.kernel_config.dispatch_core_x),
-                        NOC_Y(mailboxes->launch.kernel_config.dispatch_core_y), DISPATCH_MESSAGE_ADDR);
+                        NOC_Y(mailboxes->launch.kernel_config.dispatch_core_y),
+                        DISPATCH_MESSAGE_ADDR);
         internal_::notify_dispatch_core_done(dispatch_addr);
     }
 }

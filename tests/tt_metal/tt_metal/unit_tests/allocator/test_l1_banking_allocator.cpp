@@ -18,9 +18,9 @@ TEST_F(BasicFixture, TestL1BuffersAllocatedTopDown) {
     size_t total_size_bytes = 0;
 
     const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(device->id());
-    CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
-    const uint32_t interleaved_l1_bank_size = tt::get_l1_bank_size(device->id(), device->num_hw_cqs(), dispatch_core_type);
-    uint64_t alloc_limit = interleaved_l1_bank_size - STORAGE_ONLY_UNRESERVED_BASE;
+    const uint32_t interleaved_l1_bank_size = device->bank_size(BufferType::L1);
+    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + ALLOCATOR_ALIGNMENT - 1) / ALLOCATOR_ALIGNMENT) * ALLOCATOR_ALIGNMENT;
+    uint64_t alloc_limit = interleaved_l1_bank_size - storage_core_unreserved_base;
 
     std::vector<std::unique_ptr<Buffer>> buffers;
     int alloc_size_idx = 0;
@@ -46,9 +46,9 @@ TEST_F(BasicFixture, TestL1BuffersDoNotGrowBeyondBankSize) {
     tt::tt_metal::Device *device = tt::tt_metal::CreateDevice(0, 1, 0);
 
     const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(device->id());
-    CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
-    const uint32_t interleaved_l1_bank_size = tt::get_l1_bank_size(device->id(), device->num_hw_cqs(), dispatch_core_type);
-    uint64_t alloc_limit = interleaved_l1_bank_size - STORAGE_ONLY_UNRESERVED_BASE;
+    const uint32_t interleaved_l1_bank_size = device->bank_size(BufferType::L1);
+    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + ALLOCATOR_ALIGNMENT - 1) / ALLOCATOR_ALIGNMENT) * ALLOCATOR_ALIGNMENT;
+    uint64_t alloc_limit = interleaved_l1_bank_size - storage_core_unreserved_base;
 
     tt::tt_metal::InterleavedBufferConfig l1_config{
                     .device=device,

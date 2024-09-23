@@ -30,7 +30,7 @@ HalCoreInfoType create_tensix_mem_map() {
     mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::DPRINT)] = GET_MAILBOX_ADDRESS_HOST(dprint_buf);
     mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::PROFILER)] = GET_MAILBOX_ADDRESS_HOST(profiler);
     mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::KERNEL_CONFIG)] = L1_KERNEL_CONFIG_BASE;
-    mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::UNRESERVED)] = L1_UNRESERVED_BASE;
+    mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::UNRESERVED)] = ((L1_KERNEL_CONFIG_BASE + L1_KERNEL_CONFIG_SIZE - 1) | (ALLOCATOR_ALIGNMENT - 1)) + 1;
     mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::CORE_INFO)] = GET_MAILBOX_ADDRESS_HOST(core_info);
 
     std::vector<uint32_t> mem_map_sizes;
@@ -41,7 +41,7 @@ HalCoreInfoType create_tensix_mem_map() {
     mem_map_sizes[utils::underlying_type<HalMemAddrType>(HalMemAddrType::DPRINT)] = sizeof(dprint_buf_msg_t);
     mem_map_sizes[utils::underlying_type<HalMemAddrType>(HalMemAddrType::PROFILER)] = sizeof(profiler_msg_t);
     mem_map_sizes[utils::underlying_type<HalMemAddrType>(HalMemAddrType::KERNEL_CONFIG)] = L1_KERNEL_CONFIG_SIZE;
-    mem_map_sizes[utils::underlying_type<HalMemAddrType>(HalMemAddrType::UNRESERVED)] = MEM_L1_SIZE - L1_UNRESERVED_BASE;
+    mem_map_sizes[utils::underlying_type<HalMemAddrType>(HalMemAddrType::UNRESERVED)] = MEM_L1_SIZE - mem_map_bases[utils::underlying_type<HalMemAddrType>(HalMemAddrType::UNRESERVED)];
 
     return {HalProgrammableCoreType::TENSIX, CoreType::WORKER, num_proc_per_tensix_core, mem_map_bases, mem_map_sizes, true};
 }

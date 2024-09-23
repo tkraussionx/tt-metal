@@ -290,6 +290,7 @@ class EnqueueProgramCommand : public Command {
     CoreType dispatch_core_type;
     uint32_t expected_num_workers_completed;
     uint32_t packed_write_max_unicast_sub_cmds;
+    uint32_t dispatch_message_addr;
 
    public:
     struct CachedProgramCommandSequence {

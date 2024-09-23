@@ -16,6 +16,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/impl/allocator/allocator_types.hpp"
+#include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/buffers/buffer_constants.hpp"
 #include "tt_metal/third_party/umd/device/tt_soc_descriptor.h" // For CoreType
 #include "tt_metal/tt_stl/concepts.hpp"
@@ -25,8 +26,6 @@
 namespace tt {
 
 namespace tt_metal {
-
-class Device;
 
 struct ShardSpec {
     /* The individual cores the shard grid is mapped to */
