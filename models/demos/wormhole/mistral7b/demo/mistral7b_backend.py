@@ -2,6 +2,8 @@ import os
 import time
 import traceback
 from multiprocessing import Queue
+from collections import defaultdict
+
 
 # from functools import partial
 from pathlib import Path
@@ -169,6 +171,15 @@ class UserInfo:
         self.generated_logits = torch.tensor([])
         self.num_generated_chars = 0
         self.max_generated_tokens = 120
+        # timer
+        self.prefill_start_time = None
+        self.prefill_stop_time = None
+        self.prefill_via_decode_start_time = None
+        self.prefill_via_decode_stop_time = None
+        self.decode_start_time = None
+        self.decode_stop_time = None
+        self.first_decode_time = None
+        self.user_start_time = time.time()
 
         # TODO: check if this is correct
         if params.get("stop_sequence"):
@@ -207,6 +218,7 @@ class PrefillDecodeBackend:
         self.default_temperature = 1.0
         self.timestamps_start = {}
         self.timestamps_stop = {}
+        self.timer_sums = defaultdict(int)
         self.enable_profile_logging = True
         self.device = None
         self.cache_root = Path(cache_root)
@@ -224,9 +236,9 @@ class PrefillDecodeBackend:
         self.prefill_seq_len = 0  # 0 is default if there is no prefill
         self.max_generated_tokens = 120
         self.batch_counter = 0
-        self.decode_counter = 1
+        self.decode_counter = 0
         self.prev_decode_counter = 0
-        self.prefill_batch_size = None
+        self.prefill_batch_size = 0
 
     def get_users(self):
         return [u for u in self.users if u]
@@ -366,12 +378,12 @@ class PrefillDecodeBackend:
         self.cur_pos = self.prev_pos + 1
         self.batch_counter += 1
 
-    # def start_decode_loop(self):
-    #     for user in self.get_users():
-    #         if user.prefill_complete:
-    #             user.start_decode_timer()
-    #     self.timer_start("decode_batch")
-    #     logger.info("Running inference decode and pushing results ...")
+    def start_decode_loop(self):
+        for user in self.get_users():
+            if user.prefill_complete:
+                user.start_decode_timer()
+        self.timer_start("decode_batch")
+        logger.info("Running inference decode and pushing results ...")
 
     def teardown(self):
         logger.info("teardown ...")
@@ -572,7 +584,9 @@ class PrefillDecodeBackend:
         self.iteration = 0
 
     def prefill(self):
+        self.timer_start("prefill")
         if self.prefill_seq_len > 0:
+            self.prefill_batch_size = self.batch_size  # TODO need to check if this makes sense
             logger.info(f"Starting prefill [{self.prefill_seq_len} tokens]...")
             rot_mats_prefill = get_prefill_rot_mat(
                 self.model_args.head_dim, self.model_args.max_seq_len, self.device, seq_len=self.prefill_seq_len
@@ -602,6 +616,7 @@ class PrefillDecodeBackend:
                 )
 
             logger.info(f"Prefill finished [{self.prefill_seq_len} tokens]!")
+        self.timer_stop("prefill")
 
     def decode(self, return_logits=False):
         self.decode_counter += 1
@@ -685,6 +700,7 @@ class PrefillDecodeBackend:
                 logger.error(f"user.decode_complete={user.decode_complete}, and is still generating. Should be None")
             else:
                 user.num_tokens_decoded += 1
+                user.generated_logits = torch.cat([user.generated_logits, logits[idx]], dim=0)
                 token = top_pk_logits_efficient(
                     logits[idx],
                     user.generation_params.get("top_p"),
@@ -758,10 +774,11 @@ class PrefillDecodeBackend:
                 self.users[idx] = None
 
     def get_batch_stats(self, log=True):
-        # self.timer_stop("decode_batch") # TODO turn back on later
+        self.timer_stop("decode_batch")  # TODO turn back on later
         batch_duration = time.time() - self.batch_start_time
 
         # actual prefill tokens
+        breakpoint()
         prefill_batch_tokens = self.prefill_batch_size * self.prefill_seq_len
         prefill_time = self.timestamps_stop["prefill"] - self.timestamps_start["prefill"]
 
@@ -782,7 +799,7 @@ class PrefillDecodeBackend:
             "prefill": {
                 "prefill_batch_size": self.prefill_batch_size,
                 "prefill_batch_tokens": prefill_batch_tokens,
-                "e2e_throughput_tps": round(prefill_batch_tokens / prefill_time, 3),
+                "e2e_throughput_tps": round(prefill_batch_tokens / prefill_time, 3) if prefill_time > 0 else 0,
             },
             "decode": {
                 "decode_batch_tokens": decode_batch_tokens,
@@ -815,7 +832,7 @@ class PrefillDecodeBackend:
         # breakpoint()
         self.batch_preprocessing()
         self.prefill()  # TODO: this also handle being able done in a batched manner
-        # self.start_decode_loop()
+        self.start_decode_loop()
         while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
             self.decode(return_logits=return_logits)
         self.get_batch_stats(log=True)
