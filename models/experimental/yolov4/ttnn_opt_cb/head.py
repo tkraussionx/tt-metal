@@ -22,47 +22,47 @@ class TtHead:
             "head.conv4",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
         self.conv5 = Conv(
             torch_model,
             "head.conv5",
             [1, 20, 20, 256],
             (1, 1, 1, 1),
-            reshard=True,
         )
         self.conv6 = Conv(
             torch_model,
             "head.conv6",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
         self.conv7 = Conv(
             torch_model,
             "head.conv7",
             [1, 20, 20, 256],
             (1, 1, 1, 1),
-            reshard=True,
         )
         self.conv8 = Conv(
             torch_model,
             "head.conv8",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
-        self.conv9 = Conv(torch_model, "head.conv9", [1, 20, 20, 256], (1, 1, 1, 1), reshard=True, deallocate=False)
+        self.conv9 = Conv(
+            torch_model,
+            "head.conv9",
+            [1, 20, 20, 256],
+            (1, 1, 1, 1),
+            deallocate=False,
+        )
         self.conv10 = Conv(
             torch_model,
             "head.conv10",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
             fused_op=False,
         )
         self.conv11 = Conv(
@@ -77,57 +77,50 @@ class TtHead:
             "head.conv12",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
         self.conv13 = Conv(
             torch_model,
             "head.conv13",
             [1, 10, 10, 512],
             (1, 1, 1, 1),
-            reshard=True,
-            height_sharding=False,
+            width_sharding=True,
         )
         self.conv14 = Conv(
             torch_model,
             "head.conv14",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
         self.conv15 = Conv(
             torch_model,
             "head.conv15",
             [1, 10, 10, 512],
             (1, 1, 1, 1),
-            reshard=True,
-            height_sharding=False,
+            width_sharding=True,
         )
         self.conv16 = Conv(
             torch_model,
             "head.conv16",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            reshard=True,
-            height_sharding=True,
+            height_sharding=False,
         )
         self.conv17 = Conv(
             torch_model,
             "head.conv17",
             [1, 10, 10, 512],
             (1, 1, 1, 1),
-            reshard=True,
-            height_sharding=False,
+            width_sharding=True,
         )
         self.conv18 = Conv(
             torch_model,
             "head.conv18",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            reshard=True,
             fused_op=False,
-            height_sharding=True,
+            height_sharding=False,
         )
 
     def __call__(self, device, input_tensor):

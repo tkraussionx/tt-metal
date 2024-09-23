@@ -5,6 +5,7 @@
 import torch
 import ttnn
 from models.experimental.yolov4.ttnn_opt_cb.common import Conv
+from tt_lib.fallback_ops import fallback_ops
 
 
 class TtNeck:
@@ -19,7 +20,7 @@ class TtNeck:
             "neek.conv1",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            height_sharding=True,
+            height_sharding=False,
             reshard=True,
         )
         self.conv2 = Conv(
@@ -27,8 +28,7 @@ class TtNeck:
             "neek.conv2",
             [1, 10, 10, 512],
             (1, 1, 1, 1),
-            height_sharding=False,
-            reshard=True,
+            width_sharding=True,
         )
         self.conv3 = Conv(
             torch_model,
@@ -44,31 +44,27 @@ class TtNeck:
             [1, 10, 10, 2048],
             (1, 1, 0, 0),
             height_sharding=False,
-            reshard=True,
         )
         self.conv5 = Conv(
             torch_model,
             "neek.conv5",
             [1, 10, 10, 512],
             (1, 1, 1, 1),
-            height_sharding=False,
-            reshard=True,
+            width_sharding=True,
         )
         self.conv6 = Conv(
             torch_model,
             "neek.conv6",
             [1, 10, 10, 1024],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            height_sharding=False,
         )
         self.conv7 = Conv(
             torch_model,
             "neek.conv7",
             [1, 10, 10, 512],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            width_sharding=True,
             deallocate=False,
         )
         self.conv7_2 = Conv(
@@ -76,31 +72,27 @@ class TtNeck:
             "neek.conv8",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            height_sharding=False,
         )
         self.conv7_3 = Conv(
             torch_model,
             "neek.conv9",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            height_sharding=False,
         )
         self.conv8 = Conv(
             torch_model,
             "neek.conv10",
             [1, 20, 20, 256],
             (1, 1, 1, 1),
-            reshard=True,
         )
         self.conv7_4 = Conv(
             torch_model,
             "neek.conv11",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            height_sharding=False,
         )
         self.conv8_2 = Conv(
             torch_model,
@@ -114,8 +106,7 @@ class TtNeck:
             "neek.conv13",
             [1, 20, 20, 512],
             (1, 1, 0, 0),
-            height_sharding=True,
-            reshard=True,
+            height_sharding=False,
         )
 
         self.conv9 = Conv(
@@ -123,7 +114,6 @@ class TtNeck:
             "neek.conv14",
             [1, 20, 20, 256],
             (1, 1, 0, 0),
-            reshard=True,
             deallocate=False,
         )
         self.conv9_2 = Conv(
@@ -131,21 +121,18 @@ class TtNeck:
             "neek.conv15",
             [1, 40, 40, 256],
             (1, 1, 0, 0),
-            reshard=True,
         )
         self.conv9_3 = Conv(
             torch_model,
             "neek.conv16",
             [1, 40, 40, 256],
             (1, 1, 0, 0),
-            reshard=True,
         )
         self.conv10 = Conv(
             torch_model,
             "neek.conv17",
             [1, 40, 40, 128],
             (1, 1, 1, 1),
-            reshard=True,
         )
 
         self.conv9_4 = Conv(
@@ -153,21 +140,18 @@ class TtNeck:
             "neek.conv18",
             [1, 40, 40, 256],
             (1, 1, 0, 0),
-            reshard=True,
         )
         self.conv10_2 = Conv(
             torch_model,
             "neek.conv19",
             [1, 40, 40, 128],
             (1, 1, 1, 1),
-            reshard=True,
         )
         self.conv9_5 = Conv(
             torch_model,
             "neek.conv20",
             [1, 40, 40, 256],
             (1, 1, 0, 0),
-            reshard=True,
         )
 
     def __call__(self, device, input_tensor):
