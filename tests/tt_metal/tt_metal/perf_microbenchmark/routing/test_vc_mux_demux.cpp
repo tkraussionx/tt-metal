@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
-    constexpr uint32_t default_rx_disable_header_check = 0; // TODO::
+    constexpr uint32_t default_rx_disable_header_check = 0;
 
     constexpr uint32_t src_endpoint_start_id = 0xaa;
     constexpr uint32_t dest_endpoint_start_id = 0xbb;
