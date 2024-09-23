@@ -33,7 +33,8 @@ void kernel_main() {
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(14);
 
     constexpr uint32_t batch = get_compile_time_arg_val(15);
-    constexpr bool fuse_op = (bool)get_compile_time_arg_val(16);
+    constexpr bool gather_in0 = (bool)get_compile_time_arg_val(16);
+    constexpr bool fuse_op = (bool)get_compile_time_arg_val(17);
 
     uint32_t rt_args_idx = 0;
     const uint32_t sender_id = get_arg_val<uint32_t>(rt_args_idx++);
@@ -130,7 +131,24 @@ void kernel_main() {
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
 
-            if constexpr (full_in0_available) {
+            // Trasnsfer in0 from the sharded cb2 to cb0
+            if constexpr (gather_in0) {
+                cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+
+                noc_shard_read_start_addr = get_noc_addr(get_read_ptr(cb_id_in2));
+                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+
+                uint32_t l1_write_extract_shard_in0 = l1_write_addr_in0;
+                uint64_t noc_shard_read_addr = noc_shard_read_start_addr;
+
+                for (uint32_t i = 0; i < shard_height_in_tiles; i++) {
+                    noc_async_read(noc_shard_read_addr, l1_write_extract_shard_in0, shard_read_width);
+
+                    l1_write_extract_shard_in0 += shard_read_width;
+                    noc_shard_read_addr += shard_read_stride;
+                }
+                noc_async_read_barrier();
+
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
                 continue;
             }

@@ -222,6 +222,7 @@ def run_prefetch_matmul_on_t3000_impl(
             per_core_M=shard_height // 32,  # M / TILE_HEIGHT / Grid_Size
             per_core_N=max(1, math.ceil(N / 32 / (core_grid[0] * core_grid[1]))),  # N / TILE_WIDTH / Grid_Size
             mcast_in0=True,
+            gather_in0=True,
             fused_activation=None,  # ttnn.UnaryOpType.SILU,
             fuse_batch=True,
         )

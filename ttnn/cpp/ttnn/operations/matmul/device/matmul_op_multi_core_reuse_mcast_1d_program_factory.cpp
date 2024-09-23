@@ -36,6 +36,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     uint32_t N,
     uint32_t K,
     bool bcast_batch,
+    bool gather_in0,
     uint32_t in0_block_w,
     uint32_t out_subblock_h,
     uint32_t out_subblock_w,
@@ -232,7 +233,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             (std::uint32_t)(in0_block_w),
 
             // batch args
-            (std::uint32_t)B  // batch
+            (std::uint32_t)B,  // batch
+            (std::uint32_t)(gather_in0)
         };
     } else {
         in0_sender_compile_time_args = {
@@ -1534,6 +1536,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     bool fuse_batch,
     std::optional<UnaryWithParam> fused_activation,
     bool mcast_in0,
+    bool gather_in0,
     bool untilize_out,
     std::optional<ttnn::experimental::ccl::MatmulFusedOpSignaler> &fused_op_signaler) {
     const auto &ashape = a.get_legacy_shape(), bshape = b.get_legacy_shape();
@@ -1662,6 +1665,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
             Nt,
             Kt,
             bcast_batch,
+            gather_in0,
             in0_block_w,
             out_subblock_h,
             out_subblock_w,
@@ -1729,6 +1733,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(
     bool fuse_batch,
     std::optional<UnaryWithParam> fused_activation,
     bool mcast_in0,
+    bool gather_in0,
     bool untilize_out) {
 
     tt_metal::Program program{}; /* Create a program */
@@ -1751,6 +1756,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(
         fuse_batch,
         fused_activation,
         mcast_in0,
+        gather_in0,
         untilize_out,
         empty_fused_op_signaler);
 }
@@ -1786,6 +1792,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_helpe
         config.fuse_batch,
         config.fused_activation,
         config.mcast_in0,
+        config.gather_in0,
         untilize_out,
         fused_op_signaler);
 }

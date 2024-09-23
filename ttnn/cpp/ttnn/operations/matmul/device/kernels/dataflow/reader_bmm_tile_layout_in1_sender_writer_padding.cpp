@@ -8,7 +8,7 @@
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 
-#define SKIP_DRAM 1
+// #define SKIP_DRAM 1
 void kernel_main() {
     // DeviceZoneScopedN("in1_sender");
     // READER
