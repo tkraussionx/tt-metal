@@ -216,7 +216,6 @@ def test_group_attn_matmul(
     input_shape_a = [q_len, q_heads, batch, K]
     input_shape_b = [batch, kv_heads, K, seq_len]
     for _ in range(num_loops):
-        print("Running loop " + str(_))
         input_tensor_a = torch.randn(input_shape_a).bfloat16()
         input_tensor_b = torch.randn(input_shape_b).bfloat16()
 

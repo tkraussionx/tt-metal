@@ -867,19 +867,6 @@ std::vector<CoreCoord> Cluster::get_ethernet_sockets(chip_id_t local_chip, chip_
     return local_ethernet_sockets.at(remote_chip);
 }
 
-std::vector<CoreCoord> Cluster::get_all_ethernet_sockets_for_chip(chip_id_t chip) const {
-    auto sockets_per_connected_chip = this->ethernet_sockets_.at(chip);
-    std::vector<CoreCoord> all_sockets_for_chip = {};
-    for (auto& sock_per_chip : sockets_per_connected_chip) {
-        for (auto& core : sock_per_chip.second) {
-            if (std::find(all_sockets_for_chip.begin(), all_sockets_for_chip.end(), core) == all_sockets_for_chip.end()) {
-                all_sockets_for_chip.push_back(core);
-            }
-        }
-    }
-    return all_sockets_for_chip;
-}
-
 CoreCoord Cluster::ethernet_core_from_logical_core(chip_id_t chip_id, const CoreCoord &logical_core) const {
     const metal_SocDescriptor &soc_desc = get_soc_desc(chip_id);
     return soc_desc.get_physical_ethernet_core_from_logical(logical_core);

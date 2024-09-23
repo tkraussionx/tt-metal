@@ -1,4 +1,4 @@
-    // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -285,7 +285,7 @@ struct mailboxes_t {
     struct go_msg_t go_message;
     struct watcher_msg_t watcher;
     struct dprint_buf_msg_t dprint_buf;
-    uint32_t pads_2[PROFILER_NOC_ALIGMENT_PAD_COUNT]; // May need to change this
+    uint32_t pads_2[PROFILER_NOC_ALIGMENT_PAD_COUNT];
     struct profiler_msg_t profiler;
     struct core_info_msg_t core_info;
 };

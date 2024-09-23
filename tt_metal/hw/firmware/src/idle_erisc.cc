@@ -121,7 +121,7 @@ int main() {
         WAYPOINT("GD");
 
         {
-            // Idle ERISC Kernels aren't given go-signals corresponding to empty launch messages
+            // Idle ERISC Kernels aren't given go-signals corresponding to empty launch messages. Always profile this iteration, since its guaranteed to be valid.
             DeviceZoneScopedMainN("ERISC-IDLE-FW");
             DeviceZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id);
 

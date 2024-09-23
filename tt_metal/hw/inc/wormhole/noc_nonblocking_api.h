@@ -158,8 +158,6 @@ inline __attribute__((always_inline)) void noc_init() {
     uint64_t xy_local_addr = NOC_XY_ADDR(my_x, my_y, 0);
 
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_COORDINATE, (uint32_t)(xy_local_addr >> NOC_ADDR_COORD_SHIFT));
-    // Set src coordinate for NCRISC_WR_REG_CMD_BUF - need this for workers which use noc_semaphore_set_multicast.
-    // This API expects the NOC_TARG_ADDR_COORDINATE field to be pre-programmed at init
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_COORDINATE, (uint32_t)(xy_local_addr >> NOC_ADDR_COORD_SHIFT));
 
     uint64_t atomic_ret_addr = NOC_XY_ADDR(my_x, my_y, (uint32_t)(&atomic_ret_val));

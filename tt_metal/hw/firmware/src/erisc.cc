@@ -70,6 +70,8 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
         if (mailboxes->go_message.signal == RUN_MSG_GO) {
+            // Only include this iteration in the device profile if the launch message is valid. This is because all workers get a go signal regardless of whether
+            // they're running a kernel or not. We don't want to profile "invalid" iterations.
             DeviceConditionalZoneScopedMainN("ERISC-FW",  mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
             DeviceConditionalZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables;
@@ -86,12 +88,13 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
                                 NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR);
                 internal_::notify_dispatch_core_done(dispatch_addr);
                 mailboxes->launch_msg_rd_ptr = (mailboxes->launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
+                // Only executed if watcher is enabled. Ensures that we don't report stale data due to invalid launch messages in the ring buffer
                 CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
             }
             WAYPOINT("R");
 
         } else if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
-            // Set the rd_ptr on workers to specified value
+            // Reset the launch message buffer read ptr
             mailboxes->launch_msg_rd_ptr = 0;
             int64_t dispatch_addr =
                 NOC_XY_ADDR(NOC_X(mailboxes->go_message.master_x),

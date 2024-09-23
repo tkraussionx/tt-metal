@@ -369,6 +369,8 @@ int main() {
         uint32_t count = 0;
 
         while (mailboxes->go_message.signal != RUN_MSG_GO) {
+            // While the go signal for kernel execution  is not sent, check if the worker was signalled
+            // to reset its launch message read pointer.
             if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
                 // Set the rd_ptr on workers to specified value
                 mailboxes->launch_msg_rd_ptr = 0;
@@ -393,6 +395,8 @@ int main() {
         WAYPOINT("GD");
 
         {
+            // Only include this iteration in the device profile if the launch message is valid. This is because all workers get a go signal regardless of whether
+            // they're running a kernel or not. We don't want to profile "invalid" iterations.
             DeviceConditionalZoneScopedMainN("BRISC-FW", mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
             DeviceConditionalZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
             // Copies from L1 to IRAM on chips where NCRISC has IRAM
@@ -412,7 +416,6 @@ int main() {
             uint32_t tt_l1_ptr *cb_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
                 mailboxes->launch[launch_msg_rd_ptr].kernel_config.cb_offset);
             setup_cb_read_write_interfaces(cb_l1_base, 0, num_cbs_to_early_init, true, true, false);
-            // while (mailboxes->go_message.signal != RUN_MSG_GO);
             finish_ncrisc_copy_and_run(enables);
 
             // Run the BRISC kernel
@@ -448,6 +451,7 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
                 mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
+                // Only executed if watcher is enabled. Ensures that we don't report stale data due to invalid launch messages in the ring buffer
                 CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
             }
         }

@@ -663,9 +663,6 @@ void Device::configure_kernel_variant(
     defines.insert(defines_in.begin(), defines_in.end());
 
     if (dispatch_core_type == CoreType::WORKER) {
-        if (send_to_brisc) {
-            // std::cout << "placing kernel " << path << " on brisc" << std::endl;
-        }
         tt::tt_metal::CreateKernel(
             program,
             path,
