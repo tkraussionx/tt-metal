@@ -127,16 +127,61 @@ void MAIN {
     SFPU_OP_INIT_ACTIVATION
 #endif
 
+#ifdef MM_DUMMY_LOOPS
+    // DIDT args
+    constexpr uint32_t mm_ramp_group_size = get_compile_time_arg_val(14); // TODO: Separate feature
+    constexpr uint32_t mm_ramp_multiple = get_compile_time_arg_val(15); // TODO: Separate feature
+    const uint32_t core_id = get_arg_val<uint32_t>(0);
+#endif
+
 #ifdef MM_RAMP
     // DIDT args
-    constexpr uint32_t mm_ramp_all_active_start = get_compile_time_arg_val(14);
-    constexpr uint32_t mm_ramp_all_active_end = get_compile_time_arg_val(15);
+    constexpr uint32_t mm_ramp_all_active_start = get_compile_time_arg_val(16);
+    constexpr uint32_t mm_ramp_all_active_end = get_compile_time_arg_val(17);
     constexpr uint32_t cb_ramp_group_sync = tt::CB::c_intermed7;
 #endif
 
     constexpr bool spill = num_blocks > 1;
 
     mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
+
+#ifdef MM_DUMMY_LOOPS
+    // UNPACK(( DPRINT << "LOOPY UP" << ENDL() ));
+    tile_regs_acquire();
+    tile_regs_wait();
+    uint32_t group_size = mm_ramp_group_size;
+    while (group_size > 1) {
+        if (core_id % group_size == 0) {
+            // UNPACK(( DPRINT << "Dummy compute at group size: " << group_size << ENDL() ));
+            matmul_block(
+                in0_cb_id,
+                in1_cb_id,
+                /*in0_index=*/0,
+                /*in1_index=*/0,
+                /*dst_index=*/0,
+                false,
+                out_subblock_w,
+                out_subblock_h,
+                in0_block_w);
+        }
+        group_size = (group_size - 1) / mm_ramp_multiple + 1; // Div up
+    }
+    // Do one more with all cores enabled
+    // UNPACK(( DPRINT << "Dummy compute at group size: " << 1 << ENDL() ));
+    matmul_block(
+        in0_cb_id,
+        in1_cb_id,
+        /*in0_index=*/0,
+        /*in1_index=*/0,
+        /*dst_index=*/0,
+        false,
+        out_subblock_w,
+        out_subblock_h,
+        in0_block_w);
+    tile_regs_commit();
+    tile_regs_release();
+#endif
+
     for (uint32_t b = 0; b < batch; b++) {
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
@@ -154,6 +199,7 @@ void MAIN {
 
         for (uint32_t block = 0; block < num_blocks; block++) {
             bool last_out = block == (num_blocks - 1);
+            DPRINT << "LOOP " << block << ENDL();
 // Configure packer once for pack out without Bias
 #if not defined FUSE_BIAS and defined PACK_RELU
             if (last_out) {
@@ -400,5 +446,32 @@ void MAIN {
 #endif
         }
     }
+#ifdef MM_DUMMY_LOOPS
+    // UNPACK(( DPRINT << "LOOPY DOWN" << ENDL() ));
+    tile_regs_acquire();
+    tile_regs_wait();
+    group_size = 1;
+    while (group_size < mm_ramp_group_size) {
+        if (core_id % group_size == 0) {
+            // UNPACK(( DPRINT << "Dummy compute at group size: " << group_size << ENDL() ));
+            matmul_block(
+                in0_cb_id,
+                in1_cb_id,
+                /*in0_index=*/0,
+                /*in1_index=*/0,
+                /*dst_index=*/0,
+                false,
+                out_subblock_w,
+                out_subblock_h,
+                in0_block_w);
+        }
+        group_size *= mm_ramp_multiple;
+    }
+    // TODO: If you have group size of 7 and ramp multiple of 2, this will only do group sizes 1, 2, 4
+    // Maybe add additional logic to run dummy compute at mm_ramp_group_size at the end
+    tile_regs_commit();
+    tile_regs_release();
+#endif
+
 }
 }  // namespace NAMESPACE

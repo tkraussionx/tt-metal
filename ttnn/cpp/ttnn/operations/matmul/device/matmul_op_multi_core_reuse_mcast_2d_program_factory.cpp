@@ -264,14 +264,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     }
 
     // DIDT args
+    bool mm_enable_dummy_loops; // TODO: Separate feature
     bool mm_enable_ramp;
     uint32_t mm_ramp_group_size;
     uint32_t mm_ramp_multiple;
     uint32_t mm_ramp_all_active_start;
     uint32_t mm_ramp_all_active_end;
-    std::tie(mm_enable_ramp, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end) = bmm_op_utils::get_mm_ramp_parameters(num_cores_with_work_c * num_cores_with_work_r, num_blocks);
+    std::tie(mm_enable_dummy_loops, mm_enable_ramp, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end) = bmm_op_utils::get_mm_ramp_parameters(num_cores_with_work_c * num_cores_with_work_r, num_blocks);
     // TODO: Only block sharded in0 is supported now
     mm_enable_ramp &= in0_block_sharded;
+    mm_enable_dummy_loops &= in0_block_sharded;
 
     uint32_t ramp_group_sync_semaphore;
     std::cout << "before mm enable ramp!\n";
@@ -502,6 +504,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     bmm_op_utils::add_stagger_defines_if_needed(device->arch(), cores.size(), mm_kernel_defines);
 
    // DIDT args
+    if (mm_enable_dummy_loops) { // TODO: separate feature
+        mm_kernel_defines["MM_DUMMY_LOOPS"] = "1";
+    }
     if (mm_enable_ramp) {
         mm_kernel_defines["MM_RAMP"] = "1";
         mm_kernel_in0_sender_sharded_defines["MM_RAMP"] = "1";
@@ -675,10 +680,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
         untilize_out};
     // DIDT args
-    if (mm_enable_ramp) {
-        compute_kernel_args.push_back(mm_ramp_all_active_start);
-        compute_kernel_args.push_back(mm_ramp_all_active_end);
+    if (mm_enable_dummy_loops or mm_enable_ramp) {
+        compute_kernel_args.push_back(mm_ramp_group_size); // TODO: Only used for dummy_loops feature
+        compute_kernel_args.push_back(mm_ramp_multiple); // TODO: Only used for dummy_loops feature
+        compute_kernel_args.push_back(mm_ramp_all_active_start); // TODO: Only used for enable_ramp feature
+        compute_kernel_args.push_back(mm_ramp_all_active_end); // TODO: Only uesd for enable_ramp feature
     }
+
 
     // Create compute kernel
     // bool fp32_dest_acc_en = true;
@@ -960,7 +968,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_x.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
                 mm_in0_sender_args.insert(mm_in0_sender_args.end(), mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset, mm_ramp_cores_noc_y.begin() + mm_ramp_cores_vec_offset + mm_ramp_group_size);
 
-                i++;
             }
 
             if (in1_idx < num_blocks_x) {
@@ -1201,6 +1208,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 }
             }
         }
+        // DIDT args
+        // TODO: Only used for mm_enable_dummy_loops feature
+        tt_metal::SetRuntimeArgs(
+            program,
+            mm_kernel,
+            core,
+            {i}
+        );
+
+        // TODO: Counter for cores for DIDT args
+        i++;
+
     }
 
     auto override_runtime_arguments_callback =

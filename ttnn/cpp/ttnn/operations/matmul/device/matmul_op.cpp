@@ -870,40 +870,51 @@ void add_stagger_defines_if_needed(
     }
 }
 
-std::tuple<bool, uint32_t, uint32_t, uint32_t, uint32_t> get_mm_ramp_parameters(const uint32_t num_cores, const uint32_t num_blocks) {
+std::tuple<bool, bool, uint32_t, uint32_t, uint32_t, uint32_t> get_mm_ramp_parameters(const uint32_t num_cores, const uint32_t num_blocks) {
     std::string json_str = std::getenv("TT_MATMUL_RAMP_CONFIG") == nullptr ? "{}" : std::getenv("TT_MATMUL_RAMP_CONFIG");
     nlohmann::json mm_ramp_config = nlohmann::json::parse(json_str);
+
+    // TODO: Separate feature to ramp up cores by inserting dummy loops at the beginning/end of matmul
+    // Uses mm_enable_dummy_loops, mm_ramp_group_size, and mm_enable_ramp
+    const bool mm_enable_dummy_loops = mm_ramp_config["enable_dummy_loops"] == nullptr ? false : (bool) mm_ramp_config["enable_dummy_loops"];
 
     const bool mm_enable_ramp = mm_ramp_config["enable_ramp"] == nullptr ? false : (bool) mm_ramp_config["enable_ramp"];
     const uint32_t mm_ramp_initial_cores = mm_ramp_config["initial_cores"] == nullptr ? 8 : (uint32_t) mm_ramp_config["initial_cores"];
     const uint32_t mm_ramp_multiple = mm_ramp_config["ramp_multiple"] == nullptr ? 2 : (uint32_t) mm_ramp_config["ramp_multiple"];
 
-    if (mm_enable_ramp) {
-        TT_FATAL(num_cores % mm_ramp_initial_cores == 0, "Only one ramp group size is supported!");
-        const uint32_t mm_ramp_group_size = num_cores / mm_ramp_initial_cores;
+    TT_FATAL(num_cores % mm_ramp_initial_cores == 0, "Only one ramp group size is supported!");
+    const uint32_t mm_ramp_group_size = num_cores / mm_ramp_initial_cores;
 
-        uint32_t mm_ramp_all_active_start = num_blocks;
-        uint32_t mm_ramp_all_active_end = 0;
-        if (mm_ramp_multiple > 1) {
-            const uint32_t mm_ramp_loops = std::ceil(std::log(mm_ramp_group_size) / std::log(mm_ramp_multiple));
-            mm_ramp_all_active_start =  std::min(mm_ramp_loops, num_blocks / 2);
-            // If odd number of loops and doesn't reach all cores active, count the middle core as ramp down loop
-            if (mm_ramp_loops > num_blocks / 2 and num_blocks % 2 == 1) {
-                mm_ramp_all_active_end = num_blocks / 2;
-            } else {
-                mm_ramp_all_active_end = num_blocks - mm_ramp_all_active_start;
-            }
+    uint32_t mm_ramp_all_active_start = num_blocks;
+    uint32_t mm_ramp_all_active_end = 0;
+    if (mm_ramp_multiple > 1) {
+        const uint32_t mm_ramp_loops = std::ceil(std::log(mm_ramp_group_size) / std::log(mm_ramp_multiple));
+        mm_ramp_all_active_start =  std::min(mm_ramp_loops, num_blocks / 2);
+        // If odd number of loops and doesn't reach all cores active, count the middle core as ramp down loop
+        if (mm_ramp_loops > num_blocks / 2 and num_blocks % 2 == 1) {
+            mm_ramp_all_active_end = num_blocks / 2;
+        } else {
+            mm_ramp_all_active_end = num_blocks - mm_ramp_all_active_start;
         }
-        log_warning(tt::LogOp, "Matmul ramp up/down enabled! Less cores will be used at the beginning and end of the matmul.");
-        log_warning(tt::LogOp, "Initial group size: {}", mm_ramp_group_size);
-        log_warning(tt::LogOp, "Ramp multiple: {}", mm_ramp_multiple);
-        log_warning(tt::LogOp, "All cores active start (inclusive): {}", mm_ramp_all_active_start);
-        log_warning(tt::LogOp, "All cores active end (exclusive): {}", mm_ramp_all_active_end);
-
-        return {true, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end};
     }
 
-    return {false, 0, 0 ,0, 0};
+    if (mm_enable_dummy_loops) {
+        log_warning(tt::LogOp, "Matmul dummy loops at beginning/end enabled! Gradually turn on/off cores by running dummy compute at beginning and end of the matmul.");
+        log_warning(tt::LogOp, "-- Initial group size: {}", mm_ramp_group_size);
+        log_warning(tt::LogOp, "-- Ramp multiple: {}", mm_ramp_multiple);
+
+    }
+
+    if (mm_enable_ramp) {
+        log_warning(tt::LogOp, "Matmul ramp up/down enabled! Less cores will be used at the beginning and end of the matmul.");
+        log_warning(tt::LogOp, "-- Initial group size: {}", mm_ramp_group_size);
+        log_warning(tt::LogOp, "-- Ramp multiple: {}", mm_ramp_multiple);
+        log_warning(tt::LogOp, "-- All cores active start (inclusive): {}", mm_ramp_all_active_start);
+        log_warning(tt::LogOp, "-- All cores active end (exclusive): {}", mm_ramp_all_active_end);
+
+    }
+
+    return {mm_enable_dummy_loops, mm_enable_ramp, mm_ramp_group_size, mm_ramp_multiple, mm_ramp_all_active_start, mm_ramp_all_active_end};
 }
 
 }  // namespace bmm_op_utils
