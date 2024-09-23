@@ -26,9 +26,7 @@ from models.demos.wormhole.mistral7b.tt.mistral_model import TtTransformer
 from models.demos.wormhole.mistral7b.tt.mistral_embedding import TtMistralEmbedding
 from models.demos.wormhole.mistral7b.reference.tokenizer import Tokenizer
 from models.demos.wormhole.mistral7b.tt.model_config import TtModelArgs
-from models.demos.wormhole.mistral7b.demo.demo_with_prefill import Emb
-
-# preprocess_inputs_prefill
+from models.demos.wormhole.mistral7b.demo.demo_with_prefill import Emb, preprocess_inputs_prefill
 from models.demos.wormhole.mistral7b.demo.demo import preprocess_inputs
 
 
@@ -50,17 +48,20 @@ def initialize_inputs(tokenizer, prompt_tokens, bsz, total_len):
     return tokens, input_text_mask, eos_reached
 
 
-def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, embd, instruct, device):
+def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args, dtype, embd, instruct, device):
     """
     Run tokenizer on inputs, and create embeddings for the first token of each input
     """
-    if instruct:
-        encoded_prompts = []
-        for prompt in input_prompts:
-            if isinstance(prompt, str):  # If it's a string, we can concatenate
-                encoded_prompts.append(tokenizer.encode("[INST] " + prompt + " [/INST]"))
+    if isinstance(input_prompts[0], list):
+        if instruct:
+            # Prepend [INST] and append [/INST] to each tokenized prompt
+            encoded_prompts = [
+                tokenizer.encode("[INST]") + prompt + tokenizer.encode("[/INST]") for prompt in input_prompts
+            ]
+        else:
+            encoded_prompts = input_prompts
     else:
-        encoded_prompts = [tokenizer.encode(prompt) for prompt in input_prompts]
+        raise ValueError("Input prompts must be a list of tokenized prompts (lists of token IDs).")
 
     prompt_lens = [len(x) for x in encoded_prompts]
 
@@ -90,6 +91,11 @@ def preprocess_inputs_prefill(input_prompts, tokenizer, model_args, dtype, embd,
         if prefill_seq_len > 0:
             input_tokens_prefill[i] = torch.tensor(encoded[:prefill_seq_len]).to(input_tokens_prefill)
             pt_tokenized_inputs_prefill = torch.tensor(input_tokens_prefill)
+            print(f"Encoded Tokens: {encoded}")
+            print(f"Prefill Sequence Length: {prefill_seq_len}")
+            print(f"Length of Encoded: {len(encoded)}")
+
+        # breakpoint()
         input_tokens_decode[i, : len(encoded[prefill_seq_len:])] = torch.tensor(encoded[prefill_seq_len:]).to(
             input_tokens_decode
         )
@@ -220,6 +226,7 @@ class PrefillDecodeBackend:
         self.batch_counter = 0
         self.decode_counter = 1
         self.prev_decode_counter = 0
+        self.prefill_batch_size = None
 
     def get_users(self):
         return [u for u in self.users if u]
@@ -305,7 +312,7 @@ class PrefillDecodeBackend:
     def prepare_batch_inputs(self):
         self.num_users = len(self.get_users())
         assert self.num_users <= self.max_users
-        input_prompts = [user.prompt_tokens for user in self.get_users()]
+        input_prompts = [user.prompt_tokens for user in self.get_users()]  # Note these are already tokenized
         self.max_prompt_len = max([user.num_prefill_tokens for user in self.get_users()])
         self.min_prompt_len = min([user.num_prefill_tokens for user in self.get_users()])
         # limit total length to max_seq_len
@@ -321,6 +328,7 @@ class PrefillDecodeBackend:
         #     bsz=len(input_prompts),
         #     total_len=total_len,
         # )
+        # TODO: this is returning the prefill tokens with padding in a batched manner
 
         (
             self.pt_encoded_input,
@@ -330,7 +338,7 @@ class PrefillDecodeBackend:
             self.rot_emb_matrix_list,
             self.prefill_seq_len,
             _,
-        ) = preprocess_inputs_prefill(
+        ) = preprocess_inputs_prefill_pre_tokenized(
             input_prompts,
             self.tokenizer,
             self.model_args,
@@ -341,12 +349,12 @@ class PrefillDecodeBackend:
         )
         # set k
         # where does intput_text_mask get used?
-        self.input_text_mask = input_text_mask
-        self.prefill_ids = prefill_tokens
-        # decode_ids are padded to batch_size
-        decode_ids = torch.full((self.batch_size, 1), self.tokenizer.pad_id, dtype=torch.long, device="cpu")
-        decode_ids[: self.num_users, :1] = prefill_tokens[:, :1].clone()
-        self.decode_ids = decode_ids
+        # self.input_text_mask = input_text_mask
+        # self.prefill_ids = self.prefill_tokens # prefill tokens with pad_id appended
+        # # decode_ids are padded to batch_size
+        # decode_ids = torch.full((self.batch_size, 1), self.tokenizer.pad_id, dtype=torch.long, device="cpu")
+        # decode_ids[: self.num_users, :1] = prefill_tokens[:, :1].clone()
+        # self.decode_ids = decode_ids
 
     def batch_preprocessing(self):
         # TODO: investigate changing when continous batching supported
@@ -495,6 +503,7 @@ class PrefillDecodeBackend:
                 logger.warning(f"Ignoring duplicate input from user {user_id}")
                 continue
 
+            context_tokens = self.tokenize_prompt(prompt)
             user_info = UserInfo(user_id, prompt, 0, params, self.tokenizer)
             idx = self._find_free_user_slot()
             self.users[idx] = user_info
@@ -539,7 +548,7 @@ class PrefillDecodeBackend:
             self.rot_emb_matrix_list,
             self.prefill_seq_len,
             _,
-        ) = preprocess_inputs_prefill(
+        ) = preprocess_inputs_prefill_pre_tokenized(
             input_prompts,
             self.tokenizer,
             self.model_args,
@@ -803,8 +812,9 @@ class PrefillDecodeBackend:
         """
         use with add_users_from_context()
         """
+        # breakpoint()
         self.batch_preprocessing()
-        self.prefill()
+        self.prefill()  # TODO: this also handle being able done in a batched manner
         # self.start_decode_loop()
         while not all([user.num_tokens_decoded >= n_tokens or user.decode_complete for user in self.get_users()]):
             self.decode(return_logits=return_logits)
