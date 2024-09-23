@@ -20,8 +20,8 @@ def fold_bn_to_conv_weights_bias(model, path):
 
     bias = bias.reshape(1, 1, 1, -1)
     return (
-        ttnn.from_torch(weight, dtype=ttnn.bfloat16),
-        ttnn.from_torch(bias, dtype=ttnn.bfloat16),
+        ttnn.from_torch(weight),
+        ttnn.from_torch(bias),
     )
 
 
@@ -45,9 +45,9 @@ class Conv:
         else:
             weight = model[path + ".conv.0.weight"]
             bias = model[path + ".conv.0.bias"]
-            self.weights = ttnn.from_torch(weight, dtype=ttnn.bfloat16)
+            self.weights = ttnn.from_torch(weight)
             bias = bias.reshape(1, 1, 1, -1)
-            self.bias = ttnn.from_torch(bias, dtype=ttnn.bfloat16)
+            self.bias = ttnn.from_torch(bias)
         self.input_params = input_params
         self.kernel_size = (self.weights.shape[2], self.weights.shape[3])
         self.conv_params = conv_params
@@ -63,7 +63,7 @@ class Conv:
     def __call__(self, device, input_tensor):
         conv_config = ttnn.Conv2dConfig(
             dtype=ttnn.bfloat16,
-            weights_dtype=ttnn.bfloat16,
+            weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
             activation=self.activation,
             shard_layout=self.shard_layout,
