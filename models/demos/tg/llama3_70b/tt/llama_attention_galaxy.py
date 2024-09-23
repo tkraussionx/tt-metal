@@ -78,7 +78,6 @@ class TtLlamaAttention_galaxy:
 
     def set_model_config(self, model_config):
         self.model_config = model_config
-        self.get_attn_model_config()
 
     def get_slice_mat(self):
         # Create the slice weight matrices
@@ -357,7 +356,6 @@ class TtLlamaAttention_galaxy:
 
     def __call__(self, xs, rot_mats, start_pos: int, attn_masks, user_id: int = 0, mode="decode"):
         self.attention_config = self.model_config["attention"][mode]
-        # self.get_attn_model_config(mode)
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if mode == "decode":
             return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
@@ -386,16 +384,16 @@ class TtLlamaAttention_galaxy:
         fused_query_key_value = ttnn.matmul(
             xs,
             self.qkv,
-            program_config=self.attn_config["FUSED_QKV_MM_PROGCFG"],
+            program_config=self.attention_config["FUSED_QKV_MM_PROGCFG"],
             dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            compute_kernel_config=self.attn_config["COMPUTE_KERNEL_QKV"],
+            compute_kernel_config=self.attention_config["COMPUTE_KERNEL_QKV"],
         )
         xs.deallocate(True)
 
         # TODO: Use sharded all_reduce when PCC issue is fixed in this particular configuration
         # fused_query_key_value = tt_sharded_all_reduce(
-        #     fused_query_key_value, self.mesh_device, cluster_axis=1, num_links=2, memory_config=self.attention_config["QKV_OUT_GATHERED_MEMCFG"](self.cluster_shape[1])
+        #     fused_query_key_value, self.mesh_device, cluster_axis=1, num_links=2, memory_config=self.attention_config["QKV_OUT_GATHERED_MEMCFG"](self.cluster_shape[0])
         # )
 
         fused_query_key_value = tt_all_reduce(
@@ -420,7 +418,7 @@ class TtLlamaAttention_galaxy:
         )
 
         fused_query_key_value = ttnn.to_memory_config(
-            fused_query_key_value, memory_config=self.attn_config["CREATE_HEAD_INPUT_MEMCFG"]
+            fused_query_key_value, memory_config=self.attention_config["CREATE_HEAD_INPUT_MEMCFG"]
         )
 
         # Split QKV
@@ -442,17 +440,17 @@ class TtLlamaAttention_galaxy:
         query_layer = ttnn.matmul(
             query_layer,
             rot_mats,
-            program_config=self.attn_config["ROT_MAT_MM_PROGCFG"],
+            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"],
             memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-            compute_kernel_config=self.attn_config["COMPUTE_KERNEL_ROTARY"],
+            compute_kernel_config=self.attention_config["COMPUTE_KERNEL_ROTARY"],
         )
 
         key_layer = ttnn.matmul(
             key_layer,
             rot_mats,
-            program_config=self.attn_config["ROT_MAT_MM_PROGCFG"],
+            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"],
             memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-            compute_kernel_config=self.attn_config["COMPUTE_KERNEL_ROTARY"],
+            compute_kernel_config=self.attention_config["COMPUTE_KERNEL_ROTARY"],
         )
 
         return query_layer, key_layer, value_layer
@@ -499,7 +497,6 @@ class TtLlamaAttention_galaxy:
         attn_output,
     ):
         # ATTENTION SELFOUT
-        # breakpoint()
         # (1, 8, 8(32), 128) - > (1, 1, 8(32), 1024) ->(1, 1, 32, 1024)
         attn_output = ttnn.experimental.nlp_concat_heads_decode(
             attn_output,
@@ -512,7 +509,7 @@ class TtLlamaAttention_galaxy:
             dim=2,
             cluster_axis=1,
             num_links=2,
-            memory_config=self.attention_config["GATHER_USERS_MEMCFG"](self.cluster_shape[1]),
+            memory_config=self.attention_config["GATHER_USERS_MEMCFG"](self.cluster_shape[0]),
         )
         attn_output = ttnn.to_memory_config(attn_output, ttnn.L1_MEMORY_CONFIG)
         # user_selection_matrix = [1, 1, 32, 128]
@@ -539,7 +536,7 @@ class TtLlamaAttention_galaxy:
             self.mesh_device,
             cluster_axis=0,
             num_links=2,
-            memory_config=self.attention_config["SELF_OUT_GATHERED_MEMCFG"](self.cluster_shape[0]),
+            memory_config=self.attention_config["SELF_OUT_GATHERED_MEMCFG"](self.cluster_shape[1]),
         )
 
         return attn_output
@@ -564,7 +561,7 @@ class TtLlamaAttention_galaxy:
         assert xs.shape[2] % 32 == 0 and xs.shape[2] > 0, "Seqlen must be divisible by 32"
         _, _, seq_len, _ = xs.shape
 
-        max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"]
+        max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"](seq_len)
         batch_dim = 1 if seq_len < max_mm_seq_len else seq_len // max_mm_seq_len  # Find the division factor
 
         xs = ttnn.reshape(xs, (1, batch_dim, seq_len // batch_dim, -1))
@@ -576,7 +573,7 @@ class TtLlamaAttention_galaxy:
             dtype=ttnn.bfloat16,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             compute_kernel_config=self.attention_config["COMPUTE_KERNEL_QKV"],
-            program_config=self.attention_config["FUSED_QKV_MM_PROGCFG"],
+            program_config=self.attention_config["FUSED_QKV_MM_PROGCFG"](seq_len),
         )
 
         fused_query_key_value = tt_all_reduce(
@@ -683,7 +680,7 @@ class TtLlamaAttention_galaxy:
 
         _, _, seq_len, _ = attn_output.shape
 
-        max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"]
+        max_mm_seq_len = self.model_config["MAX_MM_SEQ_LEN"](seq_len)
         batch_dim = 1 if seq_len < max_mm_seq_len else seq_len // max_mm_seq_len  # Find the division factor
         attn_output = ttnn.reshape(attn_output, (1, batch_dim, seq_len // batch_dim, -1))
 
@@ -692,7 +689,7 @@ class TtLlamaAttention_galaxy:
             self.wo,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
-            program_config=self.attention_config["SELFOUT_PROGCFG"],
+            program_config=self.attention_config["SELFOUT_PROGCFG"](seq_len),
             compute_kernel_config=self.attention_config["COMPUTE_KERNEL_SELFOUT"],
         )  # bsz, 1, seqlen, hidden_size
 

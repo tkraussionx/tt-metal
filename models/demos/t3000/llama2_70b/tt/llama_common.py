@@ -20,6 +20,7 @@ from models.demos.t3000.llama2_70b.reference.llama.llama.generation import (
 )
 import pytest
 from models.demos.t3000.llama2_70b.tt.model_config import get_model_config
+from models.demos.tg.llama3_70b.tt.model_config import get_model_config as get_galaxy_model_config
 
 MAX_SEQ_LEN = 4096
 MAX_SEQ_LEN_LLAMA3 = 8192
@@ -174,11 +175,19 @@ def setup_llama_env(llama_version="llama3", max_batch_size=32, max_context_len=4
     logger.info(f"Tokenizer file: {tokenizer_path}")
     logger.info(f"Cache directory: {cache_path}")
 
-    model_config = get_model_config(
-        llama_version=llama_version,
-        max_batch_size=max_batch_size,
-        max_context_len=max_context_len,
-    )
+    if llama_version == "llama3-tg":
+        model_config = get_galaxy_model_config(
+            llama_version=llama_version,
+            max_batch_size=max_batch_size,
+            max_context_len=max_context_len,
+        )
+        print("llama3-tg")
+    else:
+        model_config = get_model_config(
+            llama_version=llama_version,
+            max_batch_size=max_batch_size,
+            max_context_len=max_context_len,
+        )
 
     return model_config, ckpt_dir, tokenizer_path, cache_path
 
