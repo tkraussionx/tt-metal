@@ -107,7 +107,7 @@ hidden_size_12_pad = (hidden_size + (cluster_size[0] * 12 * TILE_SIZE * 2 // 3))
 shard_width_hidden_dim_across_48_cores = hidden_size_48_pad // 48
 shard_width_hidden_dim_across_36_cores = hidden_size_24_pad // 36
 shard_width_hidden_dim_across_32_cores = hidden_size_tg // 32
-shard_width_hidden_dim_across_24_cores = hidden_size_24_pad // 24
+shard_width_hidden_dim_across_24_cores = hidden_size_24_pad
 shard_width_hidden_dim_across_16_cores = hidden_size_tg // 16
 shard_width_hidden_dim_across_12_cores = hidden_size_12_pad // 12
 shard_width_hidden_dim_across_8_cores = hidden_size_tg // 8
@@ -139,8 +139,9 @@ def run_prefetch_matmul_on_t3000_impl(
     ##### Create input tensor for the all gather #####
     _, _, M, K = input_shape
     input_tensor = torch.randn(input_shape).float()
+    input_tensor_cat = torch.cat([input_tensor] * 24, dim=3)
     tt_input_tensor = ttnn.as_tensor(
-        input_tensor,
+        input_tensor_cat,
         dtype=input_dtype,
         layout=layout,
         device=t3k_mesh_device,
@@ -215,11 +216,9 @@ def run_prefetch_matmul_on_t3000_impl(
     elif matmul_config == "matmul_1d_ff1":
         program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=core_grid,
-            in0_block_w=max(
-                1, math.ceil(K / 32 / mem_config_input.shard_spec.num_cores())
-            ),  # how much inner dim you take each time
+            in0_block_w=max(1, math.ceil(K / 32)),  # how much inner dim you take each time
             out_subblock_h=1,  # Must be divisible by per_core_M
-            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            out_subblock_w=5,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
             per_core_M=shard_height // 32,  # M / TILE_HEIGHT / Grid_Size
             per_core_N=max(1, math.ceil(N / 32 / (core_grid[0] * core_grid[1]))),  # N / TILE_WIDTH / Grid_Size
             mcast_in0=True,
@@ -379,98 +378,98 @@ def run_prefetch_matmul_on_t3000_impl(
 @pytest.mark.parametrize(
     "matmul_config, input_shape, N, weight_shard_dim, core_grid, max_in0_block_w, mem_config_input, mem_config_weights, mem_config_mm",
     [
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (8, 1),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_1_cores_grid,
-                    [
-                        shard_height,
-                        hidden_size_tg,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (8, 1),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_8_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_8_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_12_pad],
-            3584,
-            3,
-            (6, 2),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_12_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_12_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (8, 2),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_16_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_16_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (8, 1),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_1_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 hidden_size_tg,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (8, 1),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_8_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_8_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_12_pad],
+        #     3584,
+        #     3,
+        #     (6, 2),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_12_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_12_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (8, 2),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_16_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_16_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_24_pad],
@@ -494,190 +493,190 @@ def run_prefetch_matmul_on_t3000_impl(
             "dram",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
         ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (8, 4),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_32_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_32_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (6, 6),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_36_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_36_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 matmul1d
-            "matmul_1d_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            (8, 6),
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_48_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_48_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 dram sharded
-            "matmul_dram_sharded_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_8_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_8_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff1",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 dram sharded
-            "matmul_dram_sharded_ff1",
-            [1, 1, 32, hidden_size_12_pad],
-            3584,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_12_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_12_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff1",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 dram sharded
-            "matmul_dram_sharded_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_16_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_16_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff1",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 dram sharded
-            "matmul_dram_sharded_ff1",
-            [1, 1, 32, hidden_size_24_pad],
-            3584,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_24_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_24_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff1",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
-        (  # FF1/3 dram sharded
-            "matmul_dram_sharded_ff1",
-            [1, 1, 32, hidden_size_tg],
-            3584,
-            3,
-            None,
-            4,
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    shard_spec_32_cores_grid,
-                    [
-                        shard_height,
-                        shard_width_hidden_dim_across_32_cores,
-                    ],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-            "dram_sharded_ff1",
-            ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
-        ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (8, 4),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_32_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_32_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (6, 6),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_36_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_36_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 matmul1d
+        #     "matmul_1d_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     (8, 6),
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_48_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_48_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 dram sharded
+        #     "matmul_dram_sharded_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_8_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_8_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff1",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 dram sharded
+        #     "matmul_dram_sharded_ff1",
+        #     [1, 1, 32, hidden_size_12_pad],
+        #     3584,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_12_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_12_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff1",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 dram sharded
+        #     "matmul_dram_sharded_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_16_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_16_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff1",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 dram sharded
+        #     "matmul_dram_sharded_ff1",
+        #     [1, 1, 32, hidden_size_24_pad],
+        #     3584,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_24_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_24_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff1",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
+        # (  # FF1/3 dram sharded
+        #     "matmul_dram_sharded_ff1",
+        #     [1, 1, 32, hidden_size_tg],
+        #     3584,
+        #     3,
+        #     None,
+        #     4,
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             shard_spec_32_cores_grid,
+        #             [
+        #                 shard_height,
+        #                 shard_width_hidden_dim_across_32_cores,
+        #             ],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        #     "dram_sharded_ff1",
+        #     ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        # ),
         # (  # FF1/3 dram sharded
         #     "matmul_dram_sharded_ff1",
         #     [1, 1, 32, hidden_size_tg],
@@ -793,19 +792,19 @@ def run_prefetch_matmul_on_t3000_impl(
         # ),
     ],
     ids=[
-        "ff1_matmul1d_1",
-        "ff1_matmul1d_8",
-        "ff1_matmul1d_12",
-        "ff1_matmul1d_16",
+        # "ff1_matmul1d_1",
+        # "ff1_matmul1d_8",
+        # "ff1_matmul1d_12",
+        # "ff1_matmul1d_16",
         "ff1_matmul1d_24",
-        "ff1_matmul1d_32",
-        "ff1_matmul1d_36",
-        "ff1_matmul1d_48",
-        "ff1_dram_sharded_8",
-        "ff1_dram_sharded_12",
-        "ff1_dram_sharded_16",
-        "ff1_dram_sharded_24",
-        "ff1_dram_sharded_32",
+        # "ff1_matmul1d_32",
+        # "ff1_matmul1d_36",
+        # "ff1_matmul1d_48",
+        # "ff1_dram_sharded_8",
+        # "ff1_dram_sharded_12",
+        # "ff1_dram_sharded_16",
+        # "ff1_dram_sharded_24",
+        # "ff1_dram_sharded_32",
         # "ff1_dram_sharded_36",
         # "ff1_dram_sharded_48",
         # "ff2_dram_sharded",

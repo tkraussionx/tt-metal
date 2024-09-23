@@ -110,7 +110,9 @@ void MAIN {
 
     constexpr uint32_t out_block_w = out_subblock_w * in1_num_subblocks;
 
-    constexpr uint32_t in0_cb_id = tt::CB::c_in0;
+    constexpr bool full_in0_available = true;
+
+    constexpr uint32_t in0_cb_id = full_in0_available ? tt::CB::c_in2 : tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
     constexpr uint32_t mm_partials_cb_id = tt::CB::c_intermed0;

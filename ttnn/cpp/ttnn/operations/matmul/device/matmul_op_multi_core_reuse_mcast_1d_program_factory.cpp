@@ -1564,7 +1564,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     TT_FATAL(in1_buffer->size() % in1_single_tile_size == 0, "Error");
 
     TT_FATAL(
-        ashape[-1] == bshape[-2],
+        ashape[-1] / 24 == bshape[-2],
         "Dimension K (A.shape[-1] and B.shape[-2]) must match for A and B in bmm_op");  // A.K == B.K
     TT_FATAL(ashape[-2] % TILE_HEIGHT == 0, "Error");
     TT_FATAL(ashape[-1] % TILE_WIDTH == 0, "Error");
@@ -1599,7 +1599,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
 
     if (fp32_dest_acc_en) {
         TT_FATAL(
-            out_subblock_h * out_subblock_w <= 4,
+            out_subblock_h * out_subblock_w <= 8,
             "Total number of tiles in a subblock must be less than 4 when in fp32_dest_acc mode");
     }
 
@@ -1610,7 +1610,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
     uint32_t B = get_batch_size(ashape);
     uint32_t Mt = ashape[-2] / TILE_HEIGHT;
-    uint32_t Kt = ashape[-1] / TILE_WIDTH;
+    uint32_t Kt = ashape[-1] / TILE_WIDTH / 24;
     uint32_t Nt = bshape[-1] / TILE_WIDTH;
 
     if (fuse_batch) {

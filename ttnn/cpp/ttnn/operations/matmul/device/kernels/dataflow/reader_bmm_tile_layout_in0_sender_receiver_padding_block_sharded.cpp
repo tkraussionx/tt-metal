@@ -55,7 +55,9 @@ void kernel_main() {
         );
     }
 
-    constexpr uint32_t cb_id_in0 = 0;
+    constexpr bool full_in0_available = true;
+
+    constexpr uint32_t cb_id_in0 = full_in0_available ? 2 : 0;
     constexpr uint32_t cb_id_in2 = 2;  // Sharded cb
 
     constexpr uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
@@ -130,6 +132,12 @@ void kernel_main() {
 
     for (uint32_t b = 0; b < batch; ++b) {
         for (uint32_t block = 0; block < num_blocks; ++block) {
+
+            if constexpr (full_in0_available) {
+                cb_push_back(cb_id_in0, in0_block_num_tiles);
+                continue;
+            }
+
             // DeviceZoneScopedN("in0_sender_block_loop");
             uint32_t block_id = block / num_blocks_per_shard;
             if constexpr (fuse_op) { // If used fused op, make block_id conform to ordering of tensor slices from all gather
