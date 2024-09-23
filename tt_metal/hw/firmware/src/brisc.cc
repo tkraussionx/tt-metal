@@ -367,7 +367,7 @@ int main() {
 
         WAYPOINT("GW");
         uint32_t count = 0;
-        // while (mailboxes->go_message.signal != RUN_MSG_GO and mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables == 0) {
+
         while (mailboxes->go_message.signal != RUN_MSG_GO) {
             if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
                 // Set the rd_ptr on workers to specified value
@@ -388,11 +388,7 @@ int main() {
                     false /*linked*/);
             }
         }
-        // for (volatile int i = 0; i < 1000000; i++) {
 
-        // }
-
-        // DPRINT << "Done Waiting for go signal: " << (mailboxes->go_message.signal)  << ENDL();
         uint32_t launch_msg_rd_ptr = mailboxes->launch_msg_rd_ptr;
         WAYPOINT("GD");
 
