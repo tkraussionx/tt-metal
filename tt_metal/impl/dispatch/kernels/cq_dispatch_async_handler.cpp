@@ -41,7 +41,6 @@ constexpr uint32_t cb_end = cb_base + cb_size;
 
 static uint32_t num_pages_acquired = 0;
 static uint32_t num_mcasts_sent = 0;
-static uint32_t curr_num_workers_completed = 0;
 static uint32_t cmd_ptr;
 static uint32_t unicast_only_cores[16]; // Allocate this on stack
 static int num_unicast_cores = -1;
@@ -57,7 +56,7 @@ uint32_t aligned_worker_update __attribute__((aligned(16))) __attribute__((secti
 
 FORCE_INLINE
 void dispatch_s_atomic_cmd_buf_init() {
-    uint64_t atomic_ret_addr = NOC_XY_ADDR(my_x, my_y, (uint32_t)(&atomic_ret_val));
+    uint64_t atomic_ret_addr = get_noc_addr_helper(my_noc_xy, (uint32_t)(&atomic_ret_val));
     NOC_CMD_BUF_WRITE_REG(my_noc_index, DISPATCH_S_ATOMIC_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)(atomic_ret_addr & 0xFFFFFFFF));
     NOC_CMD_BUF_WRITE_REG(my_noc_index, DISPATCH_S_ATOMIC_CMD_BUF, NOC_RET_ADDR_COORDINATE, (uint32_t)(atomic_ret_addr >> NOC_ADDR_COORD_SHIFT));
 }
@@ -193,7 +192,7 @@ void process_dispatch_s_wait_cmd() {
 
 void kernel_main() {
     // DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
-    // dispatch_s_atomic_cmd_buf_init();
+    dispatch_s_atomic_cmd_buf_init();
     cmd_ptr = cb_base;
     bool done = false;
     while(!done) {
