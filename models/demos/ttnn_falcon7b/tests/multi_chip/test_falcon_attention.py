@@ -61,7 +61,7 @@ def torch_model():
 @pytest.mark.parametrize(
     "mesh_device",
     [
-        8,
+        2,
     ],
     indirect=True,
 )

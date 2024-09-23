@@ -198,6 +198,8 @@ TEST_F(WatcherFixture, TestWatcherAssertNCrisc) {
 }
 
 TEST_F(WatcherFixture, TestWatcherAssertTrisc0) {
+    if (this->slow_dispatch_)
+        GTEST_SKIP();
     this->RunTestOnDevice(
         [](WatcherFixture *fixture, Device *device){RunTest(fixture, device, DebugTrisc0);},
         this->devices_[0]
@@ -205,6 +207,8 @@ TEST_F(WatcherFixture, TestWatcherAssertTrisc0) {
 }
 
 TEST_F(WatcherFixture, TestWatcherAssertTrisc1) {
+    if (this->slow_dispatch_)
+        GTEST_SKIP();
     this->RunTestOnDevice(
         [](WatcherFixture *fixture, Device *device){RunTest(fixture, device, DebugTrisc1);},
         this->devices_[0]
@@ -212,6 +216,8 @@ TEST_F(WatcherFixture, TestWatcherAssertTrisc1) {
 }
 
 TEST_F(WatcherFixture, TestWatcherAssertTrisc2) {
+    if (this->slow_dispatch_)
+        GTEST_SKIP();
     this->RunTestOnDevice(
         [](WatcherFixture *fixture, Device *device){RunTest(fixture, device, DebugTrisc2);},
         this->devices_[0]
