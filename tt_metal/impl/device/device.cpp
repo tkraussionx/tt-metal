@@ -165,7 +165,7 @@ void Device::initialize_allocator(size_t l1_small_size, size_t trace_region_size
          .dram_bank_offsets = {},
          .worker_grid_size = this->logical_grid_size(),
          .worker_l1_size = static_cast<size_t>(soc_desc.worker_l1_size),
-         .l1_bank_size = static_cast<size_t>(get_l1_bank_size(id_, num_hw_cqs_, dispatch_core_type)),
+         .storage_core_bank_size = get_storage_core_bank_size(id_, num_hw_cqs_, dispatch_core_type),
          .l1_small_size = l1_small_size,
          .trace_region_size = trace_region_size,
          .core_type_from_noc_coord_table = {},  // Populated later
@@ -173,7 +173,8 @@ void Device::initialize_allocator(size_t l1_small_size, size_t trace_region_size
          .worker_log_to_physical_routing_y = soc_desc.worker_log_to_physical_routing_y,
          .l1_bank_remap = l1_bank_remap,
          .compute_grid_size = this->compute_with_storage_grid_size()});
-    TT_FATAL(config.l1_small_size < config.l1_bank_size, "Reserved size must be less than bank size");
+    TT_FATAL(config.l1_small_size < (config.storage_core_bank_size.has_value() ? config.storage_core_bank_size.value() : config.worker_l1_size - L1_UNRESERVED_BASE),
+            "Reserved size must be less than bank size");
     TT_FATAL(
         config.l1_small_size % ALLOCATOR_ALIGNMENT == 0,
         "Reserved size must be aligned to ALLOCATOR_ALIGNMENT {}",
