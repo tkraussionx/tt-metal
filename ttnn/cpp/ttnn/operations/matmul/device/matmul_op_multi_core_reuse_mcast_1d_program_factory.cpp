@@ -212,30 +212,48 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     std::vector<uint32_t> in0_sender_compile_time_args;
     if (in0_is_sharded) {
-        in0_sender_compile_time_args = {
-            (std::uint32_t)1,  // core_has_output_block_work
-            (std::uint32_t)1,  // core_in_in0_receiver_mcast_grid
+        if (gather_in0) {
+            in0_sender_compile_time_args = {
 
-            (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
-            (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
-            // in0/in1 common args
-            (std::uint32_t)num_blocks,  // num_blocks
-            // in0 mcast args
-            (std::uint32_t)in0_mcast_sender_semaphore_id,
-            (std::uint32_t)in0_mcast_receiver_semaphore_id,
-            (std::uint32_t)in0_mcast_receiver_num_dests,  // in0_mcast_num_dests
-            (std::uint32_t)in0_mcast_receiver_num_cores,  // in0_mcast_num_cores
-            (std::uint32_t)(in0_mcast_sender_cores_grid.x),
-            (std::uint32_t)(in0_mcast_sender_cores_grid.y),
-            (std::uint32_t)(false),
-            (std::uint32_t)(in0_shard_width_in_tiles),
-            (std::uint32_t)(in0_shard_height_in_tiles),
-            (std::uint32_t)(in0_block_w),
+                (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
+                (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
+                // in0/in1 common args
+                (std::uint32_t)num_blocks,  // num_blocks
 
-            // batch args
-            (std::uint32_t)B,  // batch
-            (std::uint32_t)(gather_in0)
-        };
+                (std::uint32_t)(in0_shard_width_in_tiles),
+                (std::uint32_t)(in0_shard_height_in_tiles),
+                (std::uint32_t)(in0_block_w),
+
+                // batch args
+                (std::uint32_t)B,  // batch
+            };
+
+        } else {
+            in0_sender_compile_time_args = {
+                (std::uint32_t)1,  // core_has_output_block_work
+                (std::uint32_t)1,  // core_in_in0_receiver_mcast_grid
+
+                (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
+                (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
+                // in0/in1 common args
+                (std::uint32_t)num_blocks,  // num_blocks
+                // in0 mcast args
+                (std::uint32_t)in0_mcast_sender_semaphore_id,
+                (std::uint32_t)in0_mcast_receiver_semaphore_id,
+                (std::uint32_t)in0_mcast_receiver_num_dests,  // in0_mcast_num_dests
+                (std::uint32_t)in0_mcast_receiver_num_cores,  // in0_mcast_num_cores
+                (std::uint32_t)(in0_mcast_sender_cores_grid.x),
+                (std::uint32_t)(in0_mcast_sender_cores_grid.y),
+                (std::uint32_t)(false),
+                (std::uint32_t)(in0_shard_width_in_tiles),
+                (std::uint32_t)(in0_shard_height_in_tiles),
+                (std::uint32_t)(in0_block_w),
+
+                // batch args
+                (std::uint32_t)B,  // batch
+                (std::uint32_t)(gather_in0)
+            };
+        }
     } else {
         in0_sender_compile_time_args = {
             // interleaved accessor args
@@ -377,8 +395,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     auto mm_kernel_in0_mcast_cores_with_work_and_in_receiver_grid_id = tt_metal::CreateKernel(
         program,
         in0_is_sharded
-            ? "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
-              "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp"
+            ? (gather_in0 ? "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_ring_all_gather.cpp" : "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
+              "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp")
             : "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
         in0_mcast_cores_with_work_and_in_receiver_grid,
         tt_metal::DataMovementConfig{
@@ -389,7 +407,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_in_receiver_grid_id = 0;
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_not_in_receiver_grid_id = 0;
-    if (in0_is_sharded) {
+    if (in0_is_sharded && !gather_in0) {
         if (in0_mcast_cores_without_work_and_in_receiver_grid.num_cores() > 0) {
             in0_sender_compile_time_args[0] = 0;  // core_has_output_block_work
             in0_sender_compile_time_args[1] = 1;  // core_in_in0_receiver_mcast_grid
