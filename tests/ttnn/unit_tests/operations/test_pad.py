@@ -83,8 +83,9 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     )
 
     n_unpadded = n
-    c_unpadded = c + padding[0][1] + padding[0][0]
-    h_unpadded = h + padding[1][1] + padding[1][0]
+    c_unpadded = c + padding[0][1]
+    h_unpadded = h + padding[1][1]
+    w_unpadded = w + padding[2][1]
 
     # shard config
     num_cores_x = 8
@@ -99,6 +100,9 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     sharded_mem_config = ttnn.MemoryConfig(
         ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
     )
+    import pdb
+
+    pdb.set_trace()
     tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, sharded_mem_config)
 
     # output shard config
@@ -110,7 +114,7 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     grid_size = ttnn.CoreGrid(y=num_cores_y, x=num_cores_x)
     grid_coord = ttnn.CoreCoord(grid_size.x - 1, grid_size.y - 1)
     shard_grid = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), grid_coord)})
-    shard_spec = ttnn.ShardSpec(shard_grid, (shard_h, w), shard_orient, False)
+    shard_spec = ttnn.ShardSpec(shard_grid, (shard_h, w_unpadded), shard_orient, False)
     output_mem_config = ttnn.MemoryConfig(
         ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
     )
@@ -132,9 +136,9 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
 @pytest.mark.parametrize(
     "padding,torch_padding",
     [
-        (((0, 1), (0, 32), (0, 0)), (0, 0, 0, 32, 0, 1)),
-        # same config, but with 32 pad on last dim
-        (((0, 1), (0, 32), (0, 32), (0, 32)), (0, 32, 0, 32, 0, 1, 0, 32)),
+        (((0, 1), (0, 32), (0, 0), (0, 0)), (0, 0, 0, 0, 0, 32, 0, 1)),
+        # test for sharded padding on the last dim: requires another dim with no padding
+        (((0, 1), (0, 32), (0, 0), (0, 32)), (0, 32, 0, 32, 0, 32, 0, 1)),
     ],
 )
 @pytest.mark.parametrize("value", [8])
