@@ -11,6 +11,9 @@
 
 using namespace tt;
 
+// Lock on top-level dispatch data collection functions to ensure they can be called from different threads.
+std::mutex dispatch_data_lock;
+
 namespace {
 
 // Class to track stats for DispatchData
@@ -97,6 +100,31 @@ public:
         total_stats.Dump(outfile, total_data);
     }
 
+    void DumpStatsCondensed(std::ofstream &outfile) {
+        // Track stats for all RISCS, as well as per RISC
+        DispatchStats total_stats;
+        map<uint32_t, uint32_t> total_data;
+
+        // Iterate indices here to include even riscs with no data
+        for (uint8_t idx = 0; idx <= RISCV::MAX; idx++) {
+            RISCV risc = static_cast<RISCV>(idx);
+            // Go through all data and update stats
+            DispatchStats riscv_stats;
+            for (auto &size_and_count : data[risc]) {
+                riscv_stats.Update(size_and_count.first, size_and_count.second);
+                total_data[size_and_count.first] += size_and_count.second;
+            }
+            total_stats.Update(riscv_stats);
+
+            // For binaries, report riscs separately and then totaled
+            if (type == DISPATCH_DATA_BINARY) {
+                outfile << riscv_stats.total_write_size << ",";
+            }
+        }
+
+        outfile << total_stats.total_write_size << ",";
+    }
+
 private:
     map<RISCV, map<uint32_t, uint32_t>> data; // RISCV -> transaction size -> count
     data_collector_t type;
@@ -120,6 +148,7 @@ public:
     void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup> &kernel_groups);
     void RecordProgramRun(Program &program);
     void DumpData();
+    void DumpDataCondensed();
 
 private:
     map<uint64_t, vector<DispatchData>> program_id_to_dispatch_data;
@@ -238,10 +267,62 @@ void DataCollector::DumpData() {
     outfile.close();
 }
 
+void DataCollector::DumpDataCondensed() {
+    std::ofstream outfile = std::ofstream("dispatch_data_condensed.txt");
+
+    // Go through all programs, and dump relevant data
+    outfile << "Program ID,Run Count,# Tensix CoreRanges,# Ethernet CoreRanges,";
+    for (int type_int = 0; type_int != DISPATCH_DATA_COUNT; type_int++) {
+        data_collector_t data_type = static_cast<data_collector_t>(type_int);
+        if (data_type == DISPATCH_DATA_BINARY) {
+            for (uint8_t idx = 0; idx < RISCV::MAX; idx++) {
+                RISCV risc = static_cast<RISCV>(idx);
+                outfile << fmt::format("{} Total Binary Size,", risc);
+            }
+            outfile << ",Total Binary Size,";
+        } else {
+            outfile << fmt::format("{} Total Write Size,", data_type);
+        }
+    }
+    outfile << "\n";
+
+    for (auto &id_and_data : program_id_to_dispatch_data) {
+        uint64_t program_id = id_and_data.first;
+        outfile << program_id << "," << program_id_to_call_count[program_id] << ",";
+
+        // Dump kernel ids for each kernel group in this program
+        // For condensed data, what we're interested in is the number of CoreRanges across all KernelGroups for this
+        // Program. Use this number to get an average of per-RISC binary sizes for the Program.
+        int num_tensix_core_ranges = 0, num_eth_core_ranges = 0;
+        for (auto &core_type_and_kernel_groups : program_id_to_kernel_groups[program_id]) {
+            CoreType core_type = core_type_and_kernel_groups.first;
+            vector<pair<kernel_id_array_t, CoreRangeSet>> &kernel_groups = core_type_and_kernel_groups.second;
+            for (auto &ids_and_ranges : kernel_groups) {
+                if (core_type == CoreType::WORKER)
+                    num_tensix_core_ranges += ids_and_ranges.second.size();
+                else if (core_type == CoreType::ETH)
+                    num_eth_core_ranges += ids_and_ranges.second.size();
+            }
+        }
+        outfile << num_tensix_core_ranges << ",";
+        outfile << num_eth_core_ranges << ",";
+
+        // Dump dispatch write stats
+        for (int type_int = 0; type_int != DISPATCH_DATA_COUNT; type_int++) {
+            DispatchData &data = id_and_data.second.at(type_int);
+            data.DumpStatsCondensed(outfile);
+        }
+        outfile << "\n";
+    }
+
+    outfile.close();
+}
+
 DataCollector* DataCollector::inst = nullptr;
 
 void DumpDispatchDataAndClose() {
     DataCollector::inst->DumpData();
+    DataCollector::inst->DumpDataCondensed();
     delete DataCollector::inst;
 }
 
@@ -262,8 +343,10 @@ void RecordDispatchData(Program &program, data_collector_t type, uint32_t transa
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;
 
+    dispatch_data_lock.lock();
     InitDataCollector();
     DataCollector::inst->RecordData(program, type, transaction_size, riscv);
+    dispatch_data_lock.unlock();
 }
 
 void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup> &kernel_groups) {
@@ -271,8 +354,10 @@ void RecordKernelGroups(Program &program, CoreType core_type, vector<KernelGroup
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;
 
+    dispatch_data_lock.lock();
     InitDataCollector();
     DataCollector::inst->RecordKernelGroups(program, core_type, kernel_groups);
+    dispatch_data_lock.unlock();
 }
 
 void RecordProgramRun(Program &program) {
@@ -280,8 +365,10 @@ void RecordProgramRun(Program &program) {
     if (!tt::llrt::OptionsG.get_dispatch_data_collection_enabled())
         return;
 
+    dispatch_data_lock.lock();
     InitDataCollector();
     DataCollector::inst->RecordProgramRun(program);
+    dispatch_data_lock.unlock();
 }
 
 } // end namepsace tt

@@ -8,7 +8,7 @@
 
 namespace tt {
 
-typedef enum e_data_collector_t {
+typedef enum {
     DISPATCH_DATA_CB_CONFIG,
     DISPATCH_DATA_SEMAPHORE,
     DISPATCH_DATA_RTARGS,
