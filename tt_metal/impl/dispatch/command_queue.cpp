@@ -692,7 +692,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands() {
 
             for (auto& data_per_kernel : common_rt_data_and_sizes) {
                 for (auto& data_and_sizes : data_per_kernel) {
-                    RecordDispatchData(program, DISPATCH_DATA_RTARGS, std::get<1>(data_and_sizes));
+                    RecordDispatchData(program, DISPATCH_DATA_COMMON_RTARGS, std::get<1>(data_and_sizes));
                 }
             }
             common_rt_data_and_sizes.clear();

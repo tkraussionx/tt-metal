@@ -61,10 +61,12 @@ public:
         data[riscv][transaction_size]++;
     }
 
-    void Merge(const DispatchData &other) {
+    // Merge another DispatchData into this one. Optional multiplier for values for the other DispatchData (used for
+    // Program run counts, etc.)
+    void Merge(const DispatchData &other, uint32_t multiplier = 1) {
         for (auto &riscv_and_data : other.data) {
             for (auto &size_and_count : riscv_and_data.second) {
-                this->data[riscv_and_data.first][size_and_count.first] += size_and_count.second;
+                this->data[riscv_and_data.first][size_and_count.first] += size_and_count.second * multiplier;
             }
         }
     }
@@ -246,14 +248,14 @@ void DataCollector::DumpData() {
                 outfile << "} on cores ";
 
                 // Dump the cores this kernel group contains
-                outfile << ids_and_ranges.second.str() << "\n";
+                outfile << ids_and_ranges.second.str() << ", " << ids_and_ranges.second.num_cores() << "\n";
             }
         }
 
         // Dump dispatch write stats
         for (int type_int = 0; type_int != DISPATCH_DATA_COUNT; type_int++) {
             DispatchData &data = id_and_data.second.at(type_int);
-            cross_program_data[type_int]->Merge(data);
+            cross_program_data[type_int]->Merge(data, program_id_to_call_count[program_id]);
             data.DumpStats(outfile);
         }
     }
@@ -271,7 +273,7 @@ void DataCollector::DumpDataCondensed() {
     std::ofstream outfile = std::ofstream("dispatch_data_condensed.txt");
 
     // Go through all programs, and dump relevant data
-    outfile << "Program ID,Run Count,# Tensix CoreRanges,# Ethernet CoreRanges,";
+    outfile << "Program ID,Run Count,# Tensix CoreRanges,# Ethernet CoreRanges,# Cores,";
     for (int type_int = 0; type_int != DISPATCH_DATA_COUNT; type_int++) {
         data_collector_t data_type = static_cast<data_collector_t>(type_int);
         if (data_type == DISPATCH_DATA_BINARY) {
@@ -294,6 +296,8 @@ void DataCollector::DumpDataCondensed() {
         // For condensed data, what we're interested in is the number of CoreRanges across all KernelGroups for this
         // Program. Use this number to get an average of per-RISC binary sizes for the Program.
         int num_tensix_core_ranges = 0, num_eth_core_ranges = 0;
+        // We're also interested in how many cores each program uses.
+        int num_cores_used = 0;
         for (auto &core_type_and_kernel_groups : program_id_to_kernel_groups[program_id]) {
             CoreType core_type = core_type_and_kernel_groups.first;
             vector<pair<kernel_id_array_t, CoreRangeSet>> &kernel_groups = core_type_and_kernel_groups.second;
@@ -302,10 +306,12 @@ void DataCollector::DumpDataCondensed() {
                     num_tensix_core_ranges += ids_and_ranges.second.size();
                 else if (core_type == CoreType::ETH)
                     num_eth_core_ranges += ids_and_ranges.second.size();
+                num_cores_used += ids_and_ranges.second.num_cores();
             }
         }
         outfile << num_tensix_core_ranges << ",";
         outfile << num_eth_core_ranges << ",";
+        outfile << num_cores_used << ",";
 
         // Dump dispatch write stats
         for (int type_int = 0; type_int != DISPATCH_DATA_COUNT; type_int++) {
