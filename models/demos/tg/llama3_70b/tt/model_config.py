@@ -1,7 +1,8 @@
 import ttnn
 
 from models.demos.t3000.falcon40b.tt.model_utils import (
-    matmul_2d_config_from_tensor_shapes as get_matmul_2d_config_from_tensor_shapes,
+    matmul_2d_config_from_tensor_shapes,
+    matmul_1d_config_from_tensor_shapes,
 )
 from models.utility_functions import nearest_32
 
@@ -79,6 +80,8 @@ def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_l
     model_config["mlp"] = set_mlp_config(model_config, cluster_shape)
     # Set decoder config
     model_config["decoder"] = set_decoder_config(model_config)
+    # Set core model config
+    model_config["core_model"] = set_core_model_config(model_config, cluster_shape)
     return model_config
 
 
@@ -230,7 +233,7 @@ def set_attention_config(model_config, max_batch_size):
         k_chunk_size=seq_len if seq_len < 256 else 256,
     )
 
-    prefill_config["FUSED_QKV_MM_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+    prefill_config["FUSED_QKV_MM_PROGCFG"] = lambda seq_len: matmul_2d_config_from_tensor_shapes(
         (1, 1, model_config["MAX_MM_SEQ_LEN"](seq_len), 2048),
         (1, 1, 2048, 1280),
         grid=ttnn.CoreGrid(x=8, y=model_config["CORE_GRID_Y"](seq_len)),
@@ -239,7 +242,7 @@ def set_attention_config(model_config, max_batch_size):
         fuse_batch=False,
     )
 
-    prefill_config["SELFOUT_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+    prefill_config["SELFOUT_PROGCFG"] = lambda seq_len: matmul_2d_config_from_tensor_shapes(
         (1, 1, model_config["MAX_MM_SEQ_LEN"](seq_len), 1024),
         (1, 1, 1024, 2048),
         grid=ttnn.CoreGrid(x=8, y=model_config["CORE_GRID_Y"](seq_len)),
@@ -359,7 +362,7 @@ def set_mlp_config(model_config, cluster_shape):
     )
     hidden_dim_per_chip = model_config_entries["hidden_size"] // cluster_shape[0]  # 2048
     ff_outer_dim_per_chip = model_config["FFN_EXPANDED_HIDDEN_SIZE"] // cluster_shape[1]  # 3584
-    prefill_config["FF1_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+    prefill_config["FF1_PROGCFG"] = lambda seq_len: matmul_2d_config_from_tensor_shapes(
         (
             1,
             1,
@@ -372,7 +375,7 @@ def set_mlp_config(model_config, cluster_shape):
         overwrite_subblock_w=1,
         fuse_batch=False,
     )
-    prefill_config["FF2_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+    prefill_config["FF2_PROGCFG"] = lambda seq_len: matmul_2d_config_from_tensor_shapes(
         (
             1,
             1,
@@ -447,6 +450,55 @@ def set_decoder_config(model_config):
     prefill_config = {}
 
     prefill_config["LN_COMPUTE_KERNEL_CONFIG"] = decode_config["LN_COMPUTE_KERNEL_CONFIG"]
+
+    return {"prefill": prefill_config, "decode": decode_config}
+
+
+def set_core_model_config(model_config, cluster_shape):
+    decode_config = {}
+    decode_config["LN_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+    decode_config["COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+    decode_config["LM_HEAD_ACT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 2048 // 32),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    prefill_config = {}
+    prefill_config["LN_COMPUTE_KERNEL_CONFIG"] = decode_config["LN_COMPUTE_KERNEL_CONFIG"]
+    prefill_config["COMPUTE_KERNEL_CONFIG"] = decode_config["COMPUTE_KERNEL_CONFIG"]
+    prefill_config["LM_HEAD_ACT_MEMCFG"] = decode_config["LM_HEAD_ACT_MEMCFG"]
+
+    hidden_size_per_chip = model_config_entries["hidden_size"] // cluster_shape[0]
+    prefill_config["LM_HEAD_PROGCFG"] = matmul_1d_config_from_tensor_shapes(
+        (
+            1,
+            1,
+            model_config["PADDING_LENGTH"],
+            hidden_size_per_chip,
+        ),  # get only last padding_length (32) tokens
+        (
+            1,
+            1,
+            hidden_size_per_chip,
+            model_config_entries["padded_vocab_size"] // cluster_shape[1],
+        ),  # (1, 1, 2048, 16 * 1024)
+        grid=ttnn.CoreGrid(x=8, y=4),
+        overwrite_subblock_h=1,
+        overwrite_subblock_w=1,
+    )
 
     return {"prefill": prefill_config, "decode": decode_config}
 

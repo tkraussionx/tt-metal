@@ -113,48 +113,6 @@ class TtLlamaModel_galaxy:
         self.model_config = model_config
         for layer in self.layers:
             layer.set_model_config(model_config)
-        self.get_model_config()
-
-    def get_model_config(self, mode):
-        self.LN_COMPUTE_KERNEL_CONFIG = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi2,
-            math_approx_mode=False,
-            fp32_dest_acc_en=False,
-            packer_l1_acc=False,
-        )
-        self.COMPUTE_KERNEL_CONFIG = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi4,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
-        self.LM_HEAD_ACT_MEMCFG = ttnn.create_sharded_memory_config(
-            shape=(32, 2048 // 32),
-            core_grid=ttnn.CoreGrid(y=4, x=8),
-            strategy=ttnn.ShardStrategy.WIDTH,
-            orientation=ttnn.ShardOrientation.ROW_MAJOR,
-            use_height_and_width_as_shard_shape=True,
-        )
-        if mode == "prefill":
-            # seq_len is 32 if we slice LM head input
-            hidden_size_per_chip = self.hidden_size // self.cluster_shape[0]
-            self.LM_HEAD_PROGCFG = matmul_1d_config_from_tensor_shapes(
-                (
-                    1,
-                    1,
-                    self.model_config["PADDING_LENGTH"],
-                    hidden_size_per_chip,
-                ),  # get only last padding_length (32) tokens
-                (
-                    1,
-                    1,
-                    hidden_size_per_chip,
-                    self.padded_vocab_size // self.cluster_shape[1],
-                ),  # (1, 1, 2048, 16 * 1024)
-                grid=ttnn.CoreGrid(x=8, y=4),
-                overwrite_subblock_h=1,
-                overwrite_subblock_w=1,
-            )
 
     def load_weights(self):
         norm_str = "norm.weight"
@@ -330,7 +288,7 @@ class TtLlamaModel_galaxy:
         user_id: int = 0,
         mode="decode",
     ) -> ttnn.Tensor:
-        self.get_model_config(mode)
+        self.core_model_config = self.model_config["core_model"][mode]
         if mode == "decode":
             return self.decode_forward(xs, rot_mats, start_pos, attn_masks)
         elif mode == "prefill":
@@ -341,7 +299,7 @@ class TtLlamaModel_galaxy:
     def tt_distributed_rmsnorm(self, inp, epsilon, gamma):
         # Run distributed rmsnorm part 1
         tt_stats = ttnn.rms_norm_pre_all_gather(
-            inp, compute_kernel_config=self.LN_COMPUTE_KERNEL_CONFIG, dtype=ttnn.bfloat16
+            inp, compute_kernel_config=self.core_model_config["LN_COMPUTE_KERNEL_CONFIG"], dtype=ttnn.bfloat16
         )
 
         padded_shape = (1, 1, inp.shape[-2], 32)
@@ -357,7 +315,11 @@ class TtLlamaModel_galaxy:
 
         # Run distributed rmsnorm part 2
         tt_out = ttnn.rms_norm_post_all_gather(
-            inp, tt_stats, epsilon=epsilon, weight=gamma, compute_kernel_config=self.LN_COMPUTE_KERNEL_CONFIG
+            inp,
+            tt_stats,
+            epsilon=epsilon,
+            weight=gamma,
+            compute_kernel_config=self.core_model_config["LN_COMPUTE_KERNEL_CONFIG"],
         )
 
         tt_stats.deallocate(True)
@@ -383,7 +345,7 @@ class TtLlamaModel_galaxy:
             gamma=self.norm_sharded,
         )
 
-        norm_out = ttnn.to_memory_config(norm_out, memory_config=self.LM_HEAD_ACT_MEMCFG)
+        norm_out = ttnn.to_memory_config(norm_out, memory_config=self.core_model_config["LM_HEAD_ACT_MEMCFG"])
 
         ### Each device does an LM head fracture
         lm_head_out = ttnn.matmul(
@@ -391,7 +353,7 @@ class TtLlamaModel_galaxy:
             self.lm_head,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
-            compute_kernel_config=self.COMPUTE_KERNEL_CONFIG,
+            compute_kernel_config=self.core_model_config["COMPUTE_KERNEL_CONFIG"],
         )
         norm_out.deallocate(True)
 
@@ -439,8 +401,8 @@ class TtLlamaModel_galaxy:
             self.lm_head,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
-            compute_kernel_config=self.COMPUTE_KERNEL_CONFIG,
-            program_config=self.LM_HEAD_PROGCFG,
+            compute_kernel_config=self.core_model_config["COMPUTE_KERNEL_CONFIG"],
+            program_config=self.core_model_config["LM_HEAD_PROGCFG"],
         )
 
         lm_head_out = tt_all_reduce(
