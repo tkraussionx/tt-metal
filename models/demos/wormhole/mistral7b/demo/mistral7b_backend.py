@@ -253,8 +253,8 @@ class PrefillDecodeBackend:
         if name in self.timestamps_start.keys():
             self.timestamps_stop[name] = time.time()
             timedelta = self.timestamps_stop[name] - self.timestamps_start[name]
+            self.timer_sums[name] += timedelta
             if log or self.enable_profile_logging:
-                print(f"timedelta: {name}: {timedelta} seconds")
                 logger.info(f"timedelta: {name}: {timedelta} seconds")
 
     def model_location_generator(self, model_version, model_subdir=""):
@@ -285,7 +285,7 @@ class PrefillDecodeBackend:
         # reset users
         for idx in range(len(self.get_users())):
             # reset memory
-            self.decode_ids[idx, 0] = 0
+            # self.decode_ids[idx, 0] = 0
             self.users[idx] = None
 
         params = {
@@ -359,6 +359,18 @@ class PrefillDecodeBackend:
             self.instruct_mode,
             self.device,
         )
+        # set kv cache to zeros if not first batch, to avoid context leaking
+        if self.batch_idx != 0:
+            for layer in self.tt_model.layers:
+                k_cache, v_cache = layer.attention.layer_past_list[0]
+                k_cache = k_cache * 0
+                v_cache = v_cache * 0
+                # Deallocation is necessary to avoid memory leaks and running out of L1 in later batches
+                layer.attention.layer_past_list[0][0].deallocate(True)
+                layer.attention.layer_past_list[0][1].deallocate(True)
+                layer.attention.layer_past_list[0] = [k_cache, v_cache]
+
+        self.iteration = 0  # reset the decode iteration counter  at start of new batch
         # set k
         # where does intput_text_mask get used?
         # self.input_text_mask = input_text_mask
@@ -570,7 +582,7 @@ class PrefillDecodeBackend:
             self.device,
         )
         # set kv cache to zeros if not first batch, to avoid context leaking
-        if self.batch_idx != 0:
+        if self.batch_counter != 0:  # batch_counter used here to stay consistent with batch preprocessing function
             for layer in self.tt_model.layers:
                 k_cache, v_cache = layer.attention.layer_past_list[0]
                 k_cache = k_cache * 0
@@ -685,10 +697,16 @@ class PrefillDecodeBackend:
     ):
         out_tokens = []
         for idx, user in enumerate(self.users):
+            # Initialize token to skip_token by default in case none of the conditions trigger
+            token = torch.tensor([skip_token])
+
             if not user:
                 # skip None users, fill with skip token
                 token = torch.tensor([skip_token])
             elif not user.prefill_complete:
+                # breakpoint()
+                # if self.iteration == 283 or self.iteration == 284:
+                #     breakpoint()
                 token = self.tt_decode_input[idx, self.iteration].unsqueeze(0)
                 if user.return_prompt:
                     user.generated_tokens.append(token.item())
@@ -778,7 +796,7 @@ class PrefillDecodeBackend:
         batch_duration = time.time() - self.batch_start_time
 
         # actual prefill tokens
-        breakpoint()
+        # breakpoint()
         prefill_batch_tokens = self.prefill_batch_size * self.prefill_seq_len
         prefill_time = self.timestamps_stop["prefill"] - self.timestamps_start["prefill"]
 
