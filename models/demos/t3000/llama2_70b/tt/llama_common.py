@@ -181,7 +181,6 @@ def setup_llama_env(llama_version="llama3", max_batch_size=32, max_context_len=4
             max_batch_size=max_batch_size,
             max_context_len=max_context_len,
         )
-        print("llama3-tg")
     else:
         model_config = get_model_config(
             llama_version=llama_version,

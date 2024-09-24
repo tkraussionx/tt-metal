@@ -3,7 +3,7 @@ import ttnn
 from models.demos.t3000.falcon40b.tt.model_utils import (
     matmul_2d_config_from_tensor_shapes as get_matmul_2d_config_from_tensor_shapes,
 )
-
+from models.utility_functions import nearest_32
 
 MAX_SEQ_LEN = 4096
 MAX_SEQ_LEN_LLAMA3 = 8192
@@ -36,7 +36,7 @@ def num_to_corerange_set(x):
     )
 
 
-def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_len=4096):
+def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_len=4096, cluster_shape=(4, 8)):
     assert max_batch_size in (1, 16, 32)
 
     if max_context_len == 8192:
@@ -47,6 +47,8 @@ def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_l
         assert max_batch_size == 32
 
     model_config = {
+        "MAX_GRID_SIZE": (8, 8),
+        "CLUSTER_SHAPE": cluster_shape,
         "HIDDEN_SIZE": model_config_entries["hidden_size"],
         "MAX_BATCH_SIZE": max_batch_size,
         "MAX_CONTEXT_LEN": max_context_len,
@@ -73,6 +75,8 @@ def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_l
 
     # Set attention config
     model_config["attention"] = set_attention_config(model_config, max_batch_size)
+    # Set mlp config
+    model_config["mlp"] = set_mlp_config(model_config, cluster_shape)
 
     return model_config
 
@@ -244,6 +248,159 @@ def set_attention_config(model_config, max_batch_size):
     )
 
     return {"prefill": prefill_config, "decode": decode_config}
+
+
+def set_mlp_config(model_config, cluster_shape):
+    decode_config = {}
+
+    decode_config["COMPUTE_KERNEL_LOFI"] = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+    M, K, N = 32, model_config["HIDDEN_SIZE"], model_config["FFN_EXPANDED_HIDDEN_SIZE"]
+    K = K // cluster_shape[0]
+    N = N // cluster_shape[1]
+    decode_config["W1_MEM_CONFIG"] = lambda mesh_device: ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.BufferType.DRAM,
+        ttnn.ShardSpec(
+            setup_weight_grid(mesh_device),
+            (K, nearest_32(N // 12)),
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    decode_config["W2_MEM_CONFIG"] = lambda mesh_device: ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.BufferType.DRAM,
+        ttnn.ShardSpec(
+            setup_weight_grid(mesh_device),
+            (N, nearest_32(K // 12)),
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    decode_config["FF1_DRAM_SHARDED_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+        in0_block_w=K // 8 // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+        per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
+        per_core_N=N // 8 // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
+        fused_activation=None,
+    )
+
+    decode_config["FF2_DRAM_SHARDED_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+        in0_block_w=N // 8 // 32,  # K = 8192 / TILE_WIDTH=32 / Grid_Size is based on compute_with_storage_grid_size
+        per_core_M=M // 32,  # M / TILE_HEIGHT = 32 / 32
+        per_core_N=K // 8 // 32,  # N / TILE_WIDTH / Grid_Size is based on compute_with_storage_grid_size
+        fused_activation=None,
+    )
+
+    full_grid = ttnn.CoreRangeSet(
+        {
+            ttnn.CoreRange(
+                ttnn.CoreCoord(0, 0),
+                ttnn.CoreCoord(7, 7),
+            )
+        }
+    )
+    decode_config["FULL_GRID_MEMCFG"] = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.BufferType.L1,
+        ttnn.ShardSpec(
+            full_grid,
+            [
+                32,
+                nearest_32(56),
+            ],
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+    decode_config["FF2_ACT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(M, N // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    decode_config["FF1_ACT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 2048 // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    decode_config["FF1_OUT_GATHERED_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(M * cluster_shape[0], N // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    decode_config["FF2_OUT_GATHERED_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32 * cluster_shape[1], 2048 // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    prefill_config = {}
+
+    prefill_config["COMPUTE_KERNEL_LOFI"] = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+    hidden_dim_per_chip = model_config_entries["hidden_size"] // cluster_shape[0]  # 2048
+    ff_outer_dim_per_chip = model_config["FFN_EXPANDED_HIDDEN_SIZE"] // cluster_shape[1]  # 3584
+    prefill_config["FF1_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+        (
+            1,
+            1,
+            model_config["MAX_MM_SEQ_LEN"](seq_len),
+            hidden_dim_per_chip,
+        ),  # (1, 1, self.model_config["MAX_MM_SEQ_LEN"], 2048)
+        (1, 1, hidden_dim_per_chip, ff_outer_dim_per_chip),  # (1, 1, 2048, 3584)
+        grid=ttnn.CoreGrid(x=8, y=model_config["CORE_GRID_Y"](seq_len)),
+        overwrite_subblock_h=1,
+        overwrite_subblock_w=1,
+        fuse_batch=False,
+    )
+    prefill_config["FF2_PROGCFG"] = lambda seq_len: get_matmul_2d_config_from_tensor_shapes(
+        (
+            1,
+            1,
+            model_config["MAX_MM_SEQ_LEN"](seq_len),
+            ff_outer_dim_per_chip,
+        ),  # (1, 1, self.model_config["MAX_MM_SEQ_LEN"], 3584)
+        (1, 1, ff_outer_dim_per_chip, hidden_dim_per_chip),  # (1, 1, 3584, 2048)
+        grid=ttnn.CoreGrid(x=8, y=model_config["CORE_GRID_Y"](seq_len)),
+        overwrite_subblock_h=1,
+        overwrite_subblock_w=1,
+        fuse_batch=False,
+    )
+
+    return {"prefill": prefill_config, "decode": decode_config}
+
+
+def setup_weight_grid(mesh_device):
+    weight_grid = ttnn.CoreRangeSet(
+        {
+            ttnn.CoreRange(
+                ttnn.CoreCoord(0, 0),
+                ttnn.CoreCoord(
+                    mesh_device.dram_grid_size().x - 1,
+                    mesh_device.dram_grid_size().y - 1,
+                ),
+            )
+        }
+    )
+    return weight_grid
 
 
 model_config_entries = {
