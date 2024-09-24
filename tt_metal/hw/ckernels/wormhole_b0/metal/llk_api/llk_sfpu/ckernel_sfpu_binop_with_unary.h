@@ -45,8 +45,12 @@ void calculate_binop_with_scalar(uint32_t param) {
         } else if constexpr (BINOP_MODE == RSUB) {
             result = parameter - val;
         }
-
-        dst_reg[0] = result;
+        if constexpr(BINOP_MODE == MUL){
+            vFloat round_even = reinterpret<vFloat>(float_to_fp16b(result, 0));
+            dst_reg[0] = round_even;
+        }else{
+            dst_reg[0] = result;
+        }
         dst_reg++;
     }
 }

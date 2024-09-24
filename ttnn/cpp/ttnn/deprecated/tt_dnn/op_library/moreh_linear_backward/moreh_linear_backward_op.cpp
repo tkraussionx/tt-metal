@@ -118,7 +118,7 @@ std::vector<std::optional<Tensor>> moreh_linear_backward(
 
     if (input_required_grad) {
         TT_ASSERT(input_grad.has_value(), "input_grad tensor should not be std::nullopt");
-        result[0] = moreh_matmul(output_grad, weight, false, false, input_grad, std::nullopt, input_grad_mem_config);
+        result[0] = moreh_matmul(output_grad, weight, false, false, input_grad, std::nullopt, input_grad_mem_config, compute_kernel_config);
     }
 
     if (weight_required_grad) {

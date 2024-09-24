@@ -210,8 +210,8 @@ std::vector<std::optional<Tensor>> _tanh_bw(uint8_t queue_id, const Tensor& grad
     std::vector<std::optional<Tensor>> grad_tensor;
     TT_FATAL(are_required_outputs.at(0), "input_grad derivative is required output");
 
-    Tensor tanh_res = ttnn::tanh(queue_id, input, output_mem_config);
-    tanh_res = ttnn::square(queue_id, tanh_res, output_mem_config);
+    // Tensor tanh_res = ttnn::tanh(queue_id, input, output_mem_config);
+    Tensor tanh_res = ttnn::square(queue_id, input, output_mem_config);
     tanh_res = ttnn::rsub(queue_id, tanh_res, 1.0f, output_mem_config);
     if(input_grad.has_value()){
         ttnn::multiply(queue_id, grad, tanh_res, std::nullopt, output_mem_config, input_grad);

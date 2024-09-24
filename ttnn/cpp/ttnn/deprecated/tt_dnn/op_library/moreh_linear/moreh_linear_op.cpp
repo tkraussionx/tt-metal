@@ -29,7 +29,7 @@ Tensor _moreh_linear(
     const MemoryConfig& output_mem_config,
     std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config) {
     moreh_linear_validate(weight);
-    output = moreh_matmul(input, weight, false, true, output, bias, output_mem_config);
+    output = moreh_matmul(input, weight, false, true, output, bias, output_mem_config, compute_kernel_config);
     return output.value();
 }
 
