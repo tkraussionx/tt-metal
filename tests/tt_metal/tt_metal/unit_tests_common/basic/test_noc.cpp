@@ -238,7 +238,7 @@ bool run_multicast_test(CommonFixture *fixture, tt_metal::Device *device, uint32
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = tt_metal::NOC::NOC_1,
-            .compile_args = {num_writes_per_cmd_buff, L1_ALIGNMENT*2}
+            .compile_args = {num_writes_per_cmd_buff, addr_inc_per_cmd_buff}
         });
 
 
