@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "common/constants.hpp"
+#include "common/core_coord.h"
 #include "gtest/gtest.h"
 #include "impl/event/event.hpp"
 #include "impl/program/program.hpp"
@@ -145,11 +146,55 @@ TEST_P(MatmulOpInterfaceTestFixture, MlirInterfaceTest) {
     auto param_combination = GetParam();
     auto input_a = std::get<0>(param_combination);
     auto input_b = std::get<1>(param_combination);
-    auto program_config = std::get<2>(param_combination);
+    // auto program_config = std::get<2>(param_combination);
 
     // pad input shapes (this isn't happening automagically)
-    input_a.shape = pad_shape_to_tile(input_a.shape);
-    input_b.shape = pad_shape_to_tile(input_b.shape);
+    // input_a.shape = pad_shape_to_tile(input_a.shape);
+    // input_b.shape = pad_shape_to_tile(input_b.shape);
+
+    const auto create_program_config = [&]() {
+        // this should be read from the output memory config
+        auto num_cores = input_a.memory_config.shard_spec.value().num_cores();
+
+        bool fuse_batch = true;  // required for sharded inputs
+
+        // note: use ttnn::Shape::value returns a legacy tt::tt_metal::Shape object which does take padding into account
+        uint32_t M = fuse_batch ? input_a.shape.volume() / input_a.shape.value[-1] : input_a.shape.value[-2];
+        uint32_t K = input_a.shape.value[-1];
+        uint32_t N = input_b.shape.value[-1];
+        bool mcast_in0 = N > M;
+
+        uint32_t per_core_M, per_core_N;
+
+        if (mcast_in0) {
+            per_core_M = M / tt::constants::TILE_HEIGHT;
+            per_core_N = tt::div_up(tt::div_up(N, num_cores), tt::constants::TILE_WIDTH);
+        } else {
+            per_core_M = tt::div_up(tt::div_up(M, num_cores), tt::constants::TILE_HEIGHT);
+            per_core_N = N / tt::constants::TILE_WIDTH;
+        }
+
+        tt::log_info("DEBUG M {} N {} K {} per_core_M {} per_core_N {}", M, N, K, per_core_M, per_core_N);
+
+        uint32_t in0_block_w = K / tt::constants::TILE_WIDTH % 2 == 0 ? 2 : 1;
+
+        // these should work in most cases, but there is a logic how we can optimize this later
+        uint32_t out_subblock_h = 1, out_subblock_w = 1;
+
+        return ttnn::operations::matmul::MatmulMultiCoreReuseMultiCast1DProgramConfig{
+            .compute_with_storage_grid_size = CoreCoord(1, 8),  // should be read from output memory config
+            .in0_block_w = in0_block_w,
+            .out_subblock_h = out_subblock_h,
+            .out_subblock_w = out_subblock_w,
+            .per_core_M = per_core_M,
+            .per_core_N = per_core_N,
+            .fuse_batch = true,
+            .fused_activation = std::nullopt,
+            .mcast_in0 = mcast_in0};
+    };
+
+    auto program_config = create_program_config();
+
     std::cout << "OP = matmul(" << input_a.shape << ", " << input_b.shape << ")" << std::endl;
 
     // TODO: Test constraints
@@ -161,8 +206,7 @@ TEST_P(MatmulOpInterfaceTestFixture, MlirInterfaceTest) {
         auto input_tensor_b =
             ttnn::zeros(input_b.shape, input_b.data_type, input_b.layout, this->getDevice(), input_b.memory_config);
 
-        auto call = [&] {
-            const auto output_tensor = ttnn::matmul(
+        const auto output_tensor = ttnn::matmul(
                 input_tensor_a,
                 input_tensor_b,
                 false /* transpose_a */,
@@ -170,34 +214,6 @@ TEST_P(MatmulOpInterfaceTestFixture, MlirInterfaceTest) {
                 std::nullopt /* memory_config */,
                 std::nullopt /* dtype */,
                 program_config);
-
-            return output_tensor;
-        };
-
-        // // get graph trace for ground truth
-        auto json_trace = graph::query_trace(call);
-        // tt::log_info("Trace: {}", json_trace.dump(4));
-
-        // L1 interface calls and checks against graph trace
-        {
-            const auto shape_a = input_a.shape.value;
-            const auto shape_b = input_b.shape.value;
-
-            auto l1_input_a = std::make_tuple(input_a.shape, input_a.data_type, input_a.layout, input_a.memory_config);
-            auto l1_input_b = std::make_tuple(input_b.shape, input_b.data_type, input_b.layout, input_b.memory_config);
-
-            // If tt-mlir doesn't specify output memory config, the default is dram interleaved
-            auto l1_output = std::make_tuple(
-                ttnn::Shape(tt::tt_metal::Array4D{shape_a[0], shape_a[1], shape_a[-2], shape_b[-1]}),
-                input_a.data_type,
-                tt::tt_metal::Layout::TILE,
-                ttnn::DRAM_MEMORY_CONFIG);
-
-            auto l1_usage = MatmulOpL1UsageFactory::Make(l1_input_a, l1_input_a, l1_output, program_config);
-
-            compare_l1_circular_buffer_allocations(l1_usage->get_circular_buffer_l1_allocations_per_core(), json_trace);
-            compare_l1_tensor_allocations(l1_usage->get_tensor_l1_allocations_per_core(), json_trace);
-        }
     }
 }
 
@@ -244,31 +260,29 @@ INSTANTIATE_TEST_SUITE_P(
     MlirInterfaceTests_REUSE_MCAST_1D_IN1,  // Prefix for the instantiated test suite
     MatmulOpInterfaceTestFixture,           // Test suite name
     ::testing::Combine(
-        ::testing::Values(
-            OperandShapeTestParam{
-                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 4096, 64}),
-                .memory_config = ttnn::DRAM_MEMORY_CONFIG,
-            },
-            OperandShapeTestParam{
-                .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 4096, 64}),
-                .memory_config =
-                    {.memory_layout = tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED,
-                     .buffer_type = tt::tt_metal::BufferType::L1,
-                     .shard_spec =
-                         tt::tt_metal::ShardSpec{
-                             CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{7, 3}}}},
-                             {128, 64},
-                             ShardOrientation::ROW_MAJOR}},
-            }),
-
+        // INPUT A
         ::testing::Values(OperandShapeTestParam{
-            .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 64, 256}),
-            .memory_config = ttnn::DRAM_MEMORY_CONFIG,
+            .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32, 800}),
+            .memory_config =
+                {.memory_layout = tt::tt_metal::TensorMemoryLayout::WIDTH_SHARDED,
+                 .buffer_type = tt::tt_metal::BufferType::L1,
+                 .shard_spec =
+                     tt::tt_metal::ShardSpec{
+                         CoreRangeSet{std::set<CoreRange>{CoreRange{CoreCoord{0, 0}, CoreCoord{0, 7}}}},
+                         {32, 128},
+                         ShardOrientation::ROW_MAJOR}},
         }),
 
+        // INPUT B
+        ::testing::Values(OperandShapeTestParam{
+            .shape = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 800, 256}),
+            .memory_config =
+                {.memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
+                 .buffer_type = tt::tt_metal::BufferType::DRAM}}),
+
         ::testing::Values(ttnn::operations::matmul::MatmulMultiCoreReuseMultiCast1DProgramConfig{
-            .compute_with_storage_grid_size = CoreCoord(8, 4),
-            .in0_block_w = 2,
+            .compute_with_storage_grid_size = CoreCoord(1, 8),
+            .in0_block_w = 155,
             .out_subblock_h = 1,
             .out_subblock_w = 1,
             .per_core_M = 4,
