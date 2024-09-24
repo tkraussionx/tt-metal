@@ -43,9 +43,7 @@ static uint32_t num_pages_acquired = 0;
 static uint32_t num_mcasts_sent = 0;
 static uint32_t cmd_ptr;
 static uint32_t unicast_only_cores[16]; // Allocate this on stack
-static int num_unicast_cores = -1;
-constexpr uint8_t send_mcast = 0x1; // Make enum
-constexpr uint8_t send_unicast = 0x2;
+static int num_unicast_cores = -1; // Initialize to -1: Number of cores we need to unicast go signals to. Host will set this during init.
 
 // Cleanup wrap based checking
 
@@ -132,11 +130,11 @@ void process_go_signal_mcast_cmd() {
     // Wait until workers have completed before sending go signal
     wait_for_workers(cmd);
     // send go signal update here
-    if (cmd->mcast.mcast_flag & send_mcast) {
+    if (cmd->mcast.mcast_flag & GoSignalMcastSettings::SEND_MCAST) {
         uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
         noc_async_write_multicast_one_packet((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), num_worker_cores_to_mcast);
     }
-    if (cmd->mcast.mcast_flag & send_unicast) {
+    if (cmd->mcast.mcast_flag & GoSignalMcastSettings::SEND_UNICAST) {
         // If dispatch_s needs to unicast the go signal to specific cores, num_unicast_cores
         // must be set using set_go_signal_unicast_only_cores
         ASSERT(num_unicast_cores > 0);

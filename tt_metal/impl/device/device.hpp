@@ -335,12 +335,12 @@ class Device {
 
     template <typename CoreRangeContainer>
     std::vector<pair<transfer_info_cores, uint32_t>> extract_dst_noc_multicast_info(const CoreRangeContainer& ranges, const CoreType core_type);
+    bool dispatch_s_enabled() const;
+    bool distributed_dispatcher() const;
 
    private:
     void DisableAllocs();
     void EnableAllocs();
-    bool enable_dispatch_s() const;
-    bool distributed_dispatcher() const;
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };
 

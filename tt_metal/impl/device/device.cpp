@@ -1229,7 +1229,7 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
             }
             case DispatchWorkerType::DISPATCH_S:
             {
-                if (this->enable_dispatch_s()) {
+                if (this->dispatch_s_enabled()) {
                     uint32_t tensix_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::GO_MSG);
                     uint32_t eth_worker_go_signal_addr = hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, HalMemAddrType::GO_MSG);
                     for (auto&[core, dispatch_s_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_S]) {
@@ -1530,7 +1530,7 @@ void Device::setup_tunnel_for_remote_devices() {
                 settings.semaphores.clear();
                 std::cout << "Dispatch_d: " << dispatch_d_location.str() << " " << settings.worker_physical_core.str() << std::endl;
             }
-            if (this->enable_dispatch_s()) {
+            if (this->dispatch_s_enabled()) {
                 // Populate settings for dispatch_s
                 for (uint32_t cq_id = 0; cq_id < num_hw_cqs; cq_id++) {
                     // Initialize dispatch_s settings as invalid values. To be populated if dispatch_s is enabled.
@@ -1629,7 +1629,7 @@ void Device::setup_tunnel_for_remote_devices() {
     }
 }
 
-bool Device::enable_dispatch_s() const {
+bool Device::dispatch_s_enabled() const {
     // Dispatch_s is always enabled for Tensix Dispatch
     // Conditionally enabled for Ethernet Dispatch - If a single CQ is being used
     // This condition may be modified for BH
@@ -1690,7 +1690,7 @@ void Device::compile_command_queue_programs() {
             uint32_t dispatch_s_buffer_base = 0xff;
             uint32_t dispatch_s_sem = 0xff; // used by dispatch_s to sync with prefetch
             uint32_t dispatch_s_sync_sem_id = 0xff; // used by dispatch_d to signal that dispatch_s can send go signal
-            if (this->enable_dispatch_s()) {
+            if (this->dispatch_s_enabled()) {
                 // Skip allocating dispatch_s for multi-CQ configurations with ethernet dispatch
                 dispatch_s_core = dispatch_core_manager::instance().dispatcher_s_core(device_id, channel, cq_id);
                 dispatch_s_physical_core = get_physical_core_coordinate(dispatch_s_core, dispatch_core_type);
@@ -1822,7 +1822,7 @@ void Device::compile_command_queue_programs() {
                 my_noc_index
             );
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
-            if (this->enable_dispatch_s()) {
+            if (this->dispatch_s_enabled()) {
                 std::vector<uint32_t> dispatch_s_compile_args = {
                     dispatch_s_buffer_base,
                     dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
@@ -2122,7 +2122,7 @@ void Device::compile_command_queue_programs() {
             cq_id = (cq_id + 1) % num_hw_cqs;
         }
         cq_id = 0;
-        if (this->enable_dispatch_s()) {
+        if (this->dispatch_s_enabled()) {
             for (auto [dispatch_s_core, dispatch_s_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_S]) {
                 for (auto sem : dispatch_s_settings.semaphores) {
                     tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, sem, dispatch_s_settings.dispatch_core_type);
@@ -2345,7 +2345,7 @@ void Device::init_command_queue_device() {
     }
     // TODO: Move this inside the command queue
     for (auto& hw_cq : this->hw_command_queues_) {
-        hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->enable_dispatch_s() ? NOC::NOC_1 : NOC::NOC_0));
+        hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->dispatch_s_enabled() ? NOC::NOC_1 : NOC::NOC_0));
     }
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());

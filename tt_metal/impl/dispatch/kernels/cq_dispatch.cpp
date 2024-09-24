@@ -109,7 +109,7 @@ static uint8_t go_signal_state_wr_ptr = 0;
 static uint8_t go_signal_state_rd_ptr = 0;
 // Used when dispatch_s is moved into main dispatcher and needs to uicast + multicast go signals
 static uint32_t unicast_only_cores[16];
-static int num_unicast_cores = -1;
+static int num_unicast_cores = -1; // Initialize to -1: Number of cores we need to unicast go signals to. Host will set this during init.
 
 uint32_t aligned_go_signal __attribute__((aligned(16))) __attribute__((section("l1_data"))) __attribute__((used)) = RUN_MSG_GO;
 
@@ -820,12 +820,12 @@ void process_go_signal_mcast_cmd() {
     volatile tt_l1_ptr uint32_t* worker_sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(cmd->mcast.wait_addr);
     aligned_go_signal = cmd->mcast.go_signal;
     while (*worker_sem_addr < cmd->mcast.wait_count);
-    if (cmd->mcast.mcast_flag & 0x1) {
+    if (cmd->mcast.mcast_flag & GoSignalMcastSettings::SEND_MCAST) {
         uint64_t dst = get_noc_addr_helper(worker_mcast_grid, mcast_go_signal_addr);
         // packed_write_max_unicast_sub_cmds is the total number of compute cores (num_mcast_dests for this txn)
         noc_async_write_multicast_one_packet((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t), packed_write_max_unicast_sub_cmds);
     }
-    if (cmd->mcast.mcast_flag & 0x2) {
+    if (cmd->mcast.mcast_flag & GoSignalMcastSettings::SEND_UNICAST) {
         for (int core_idx = 0; core_idx < num_unicast_cores; core_idx++) {
             uint64_t dst = get_noc_addr_helper(unicast_only_cores[core_idx], unicast_go_signal_addr);
             noc_async_write_one_packet((uint32_t)(&aligned_go_signal), dst, sizeof(uint32_t));

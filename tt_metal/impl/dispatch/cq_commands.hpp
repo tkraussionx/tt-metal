@@ -56,6 +56,16 @@ enum CQDispatchCmdId : uint8_t {
     CQ_DISPATCH_CMD_MAX_COUNT,              // for checking legal IDs
 };
 
+enum GoSignalMcastSettings : uint8_t {
+    SEND_MCAST = 1,
+    SEND_UNICAST = 2,
+};
+
+enum DispatcherSelect : uint8_t {
+    DISPATCH_MASTER = 0,
+    DISPATCH_SLAVE = 1,
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 // Shared commands

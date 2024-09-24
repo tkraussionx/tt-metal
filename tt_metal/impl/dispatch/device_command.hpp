@@ -285,7 +285,7 @@ class DeviceCommand {
         }
     }
 
-    void add_dispatch_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal, uint32_t wait_addr, uint8_t dispatcher_type) {
+    void add_dispatch_go_signal_mcast(uint32_t wait_count, uint8_t mcast_flag, uint32_t go_signal, uint32_t wait_addr, DispatcherSelect dispatcher_type) {
         this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), dispatcher_type);
         auto initialize_mcast_cmd = [&](CQDispatchCmd *mcast_cmd) {
             *mcast_cmd = {};
@@ -308,7 +308,8 @@ class DeviceCommand {
     }
 
     void add_dispatch_s_sem_update() {
-        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), 0);
+        // Command to have dispatch_master send a notification to dispatch_slave
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), DispatcherSelect::DISPATCH_MASTER);
         auto initialize_sem_update_cmd = [&](CQDispatchCmd *sem_update_cmd) {
             *sem_update_cmd = {};
             sem_update_cmd->base.cmd_id = CQ_DISPATCH_CMD_SEM_UPDATE;
@@ -408,7 +409,7 @@ class DeviceCommand {
             initialize_exec_buf_cmd(exec_buf_cmd_dst);
         }
     }
-    void add_dispatch_set_unicast_only_cores(const std::vector<uint32_t>& noc_encodings, uint8_t dispatcher_type) {
+    void add_dispatch_set_unicast_only_cores(const std::vector<uint32_t>& noc_encodings, DispatcherSelect dispatcher_type) {
         TT_ASSERT(noc_encodings.size());
         this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd) + noc_encodings.size() * sizeof(uint32_t), dispatcher_type);
         auto initialize_set_unicast_only_cores_cmd = [&] (CQDispatchCmd *set_unicast_only_cores_cmd) {
@@ -450,7 +451,7 @@ class DeviceCommand {
         this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
     }
 
-    void add_dispatch_terminate(uint8_t dispatcher_type = 0) {
+    void add_dispatch_terminate(DispatcherSelect dispatcher_type = DispatcherSelect::DISPATCH_MASTER) {
         this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), dispatcher_type);
         auto initialize_terminate_cmd = [&](CQDispatchCmd *terminate_cmd) {
             *terminate_cmd = {};
@@ -721,13 +722,13 @@ class DeviceCommand {
    private:
     static bool zero_init_enable;
 
-    void add_prefetch_relay_inline(bool flush, uint32_t lengthB, uint8_t dispatcher_type = 0) {
+    void add_prefetch_relay_inline(bool flush, uint32_t lengthB, DispatcherSelect dispatcher_type = DispatcherSelect::DISPATCH_MASTER) {
         if (!flush) {
             TT_ASSERT(lengthB <= (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE), "Data to relay for inline no flush must fit within one page");
         }
         auto initialize_relay_write = [&](CQPrefetchCmd *relay_write) {
             relay_write->base.cmd_id = flush ? CQ_PREFETCH_CMD_RELAY_INLINE : CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH;
-            relay_write->relay_inline.dispatcher_type = dispatcher_type;
+            relay_write->relay_inline.dispatcher_type = (uint8_t)(dispatcher_type);
             relay_write->relay_inline.length = lengthB;
             relay_write->relay_inline.stride = align(sizeof(CQPrefetchCmd) + lengthB, PCIE_ALIGNMENT);
         };

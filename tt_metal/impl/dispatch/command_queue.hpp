@@ -290,8 +290,8 @@ class EnqueueProgramCommand : public Command {
     CoreType dispatch_core_type;
     uint32_t expected_num_workers_completed;
     uint32_t packed_write_max_unicast_sub_cmds;
-    uint32_t launch_message_wptr = 0;
-    uint32_t active_eth_launch_message_wptr = 0;
+    uint32_t multicast_cores_launch_message_wptr = 0;
+    uint32_t unicast_cores_launch_message_wptr = 0;
    public:
     struct CachedProgramCommandSequence {
         HostMemDeviceCommand preamble_command_sequence;
@@ -317,8 +317,8 @@ class EnqueueProgramCommand : public Command {
         CoreCoord& dispatch_core,
         SystemMemoryManager& manager,
         uint32_t expected_num_workers_completed,
-        uint32_t launch_message_wptr,
-        uint32_t active_eth_launch_message_wptr);
+        uint32_t multicast_cores_launch_message_wptr,
+        uint32_t unicast_cores_launch_message_wptr);
 
     void assemble_preamble_commands(std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(bool prefetch_stall);
@@ -394,8 +394,6 @@ class EnqueueTraceCommand : public Command {
     std::shared_ptr<detail::TraceDescriptor> desc;
     uint32_t& expected_num_workers_completed;
     bool clear_count;
-    uint32_t launch_msg_wptr = 0;
-    uint32_t active_eth_launch_msg_wptr = 0;
     NOC noc_index;
     CoreCoord dispatch_core;
    public:
@@ -406,8 +404,6 @@ class EnqueueTraceCommand : public Command {
         std::shared_ptr<detail::TraceDescriptor> desc,
         Buffer& buffer,
         uint32_t& expected_num_workers_completed,
-        uint32_t launch_msg_wptr,
-        uint32_t active_eth_launch_msg_wptr,
         NOC noc_index,
         CoreCoord dispatch_core);
 
@@ -536,10 +532,14 @@ class HWCommandQueue {
     volatile uint32_t num_completed_completion_q_reads;  // completion queue reader thread increments this after reading
                                                          // an entry out of the completion queue
     detail::CompletionReaderQueue issued_completion_q_reads;
-    uint32_t launch_message_wptr = 0;
-    uint32_t active_eth_launch_message_wptr = 0;
-    uint32_t global_launch_message_wptr = 0;
-    uint32_t global_active_eth_launch_message_wptr = 0;
+    uint32_t multicast_cores_launch_message_wptr = 0;
+    uint32_t unicast_cores_launch_message_wptr = 0;
+    // These values are used to reset the host side launch message wptr after a trace is captured
+    // Trace capture is a fully host side operation, but it modifies the state of the wptrs above
+    // To ensure that host and device are not out of sync, we reset the wptrs to their original values
+    // post trace capture.
+    uint32_t multicast_cores_launch_message_wptr_reset = 0;
+    uint32_t unicast_cores_launch_message_wptr_reset = 0;
     Device* device;
 
     std::condition_variable reader_thread_cv;
