@@ -101,7 +101,7 @@ struct dispatch_constants {
             scratch_db_size_ = 128 * 1024;
             dispatch_buffer_block_size = 512 * 1024;
             prefetch_d_buffer_size_ = 256 * 1024;
-            dispatch_s_buffer_size_ = 32 * 1024;
+            dispatch_s_buffer_size_ = 32 * 1024; // dispatch_s only sends Go Signals -> CB can be small
         } else {
             prefetch_q_entries_ = 128;
             max_prefetch_command_size_ = 32 * 1024;
@@ -109,7 +109,7 @@ struct dispatch_constants {
             scratch_db_size_ = 19 * 1024;
             dispatch_buffer_block_size = 128 * 1024;
             prefetch_d_buffer_size_ = 128 * 1024;
-            dispatch_s_buffer_size_ = 32 * 1024;
+            dispatch_s_buffer_size_ = 32 * 1024; // dispatch_s only sends Go Signals -> CB can be small
         }
         TT_ASSERT(cmddat_q_size_ >= 2 * max_prefetch_command_size_);
         TT_ASSERT(scratch_db_size_ % 2 == 0);
