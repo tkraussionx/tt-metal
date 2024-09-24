@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/moreh_common.hpp"
 
 void kernel_main() {
@@ -17,16 +18,12 @@ void kernel_main() {
     const bool do_mask_w = (arg_fetcher.get_next_arg_val<uint32_t>() == 1);
 
     constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
+    constexpr uint32_t scaler = get_compile_time_arg_val(1);
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_scaler = 1;
     constexpr uint32_t cb_id_mask_h_w = 2;
 
-    union {
-        float f;
-        uint32_t u;
-    } scaler;
-    scaler.f = 1.0f;
-    fill_cb_with_value(cb_id_scaler, scaler.u);
+    generate_reduce_scaler(cb_id_scaler, scaler);
 
     if (do_mask_h || do_mask_w) {
         generate_mask_h_w(cb_id_mask_h_w, mask_h, mask_w);
