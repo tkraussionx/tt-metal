@@ -119,6 +119,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t in0_sender_num_cores = in0_is_sharded ? a.shard_spec().value().grid.num_cores() : 1;
     uint32_t num_cores = in0_is_sharded ? std::max(num_cores_with_work, in0_sender_num_cores) : num_cores_with_work;
+    uint32_t ring_size = in0_sender_num_cores;
 
     constexpr bool row_major = true;
     CoreRangeSet all_cores =
@@ -193,6 +194,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto all_gather_signal_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, VALID); // Signal to start processing local data
 
     CoreCoord top_left_core = in0_mcast_receiver_cores_bounding_box.start_coord;
     CoreCoord bottom_right_core = in0_mcast_receiver_cores_bounding_box.end_coord;
@@ -226,6 +228,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
                 // batch args
                 (std::uint32_t)B,  // batch
+
+                // all gather args
+                (std::uint32_t)(ring_size),
+                (std::uint32_t)(all_gather_signal_semaphore_id)
             };
 
         } else {
@@ -651,17 +657,30 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
         if (in0_is_sharded) {
             std::vector<uint32_t> mm_in0_sender_args;
-            mm_in0_sender_args.reserve(5 + in0_mcast_noc_x.size() + in0_mcast_noc_y.size());
-            mm_in0_sender_args.push_back(i);
-            mm_in0_sender_args.push_back(start_core_noc.x);
-            mm_in0_sender_args.push_back(start_core_noc.y);
-            mm_in0_sender_args.push_back(end_core_noc.x);
-            mm_in0_sender_args.push_back(end_core_noc.y);
-            mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
-            mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
 
-            if (fuse_op) {
-                fused_op_signaler->push_matmul_fused_op_rt_args(mm_in0_sender_args, false);
+            if (gather_in0) {
+                uint32_t next_i = i == 0 ? num_cores - 1 : i - 1;
+                const auto& next_core_in_ring = cores[next_i % num_cores];
+                const auto& next_core_in_ring_noc = device->worker_core_from_logical_core(next_core_in_ring);
+
+                mm_in0_sender_args = {
+                    i, // ring_index
+                    next_core_in_ring_noc.x, // next_core_in_ring_noc_x
+                    next_core_in_ring_noc.y, // next_core_in_ring_noc_y
+                };
+            } else {
+                mm_in0_sender_args.reserve(5 + in0_mcast_noc_x.size() + in0_mcast_noc_y.size());
+                mm_in0_sender_args.push_back(i);
+                mm_in0_sender_args.push_back(start_core_noc.x);
+                mm_in0_sender_args.push_back(start_core_noc.y);
+                mm_in0_sender_args.push_back(end_core_noc.x);
+                mm_in0_sender_args.push_back(end_core_noc.y);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
+
+                if (fuse_op) {
+                    fused_op_signaler->push_matmul_fused_op_rt_args(mm_in0_sender_args, false);
+                }
             }
 
             if (i < num_cores_with_work) {
@@ -1587,7 +1606,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     TT_FATAL(in1_buffer->size() % in1_single_tile_size == 0, "Error");
 
     TT_FATAL(
-        ashape[-1] / 24 == bshape[-2],
+        ashape[-1] == bshape[-2],
         "Dimension K (A.shape[-1] and B.shape[-2]) must match for A and B in bmm_op");  // A.K == B.K
     TT_FATAL(ashape[-2] % TILE_HEIGHT == 0, "Error");
     TT_FATAL(ashape[-1] % TILE_WIDTH == 0, "Error");
@@ -1633,7 +1652,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
     uint32_t B = get_batch_size(ashape);
     uint32_t Mt = ashape[-2] / TILE_HEIGHT;
-    uint32_t Kt = ashape[-1] / TILE_WIDTH / 24;
+    uint32_t Kt = ashape[-1] / TILE_WIDTH;
     uint32_t Nt = bshape[-1] / TILE_WIDTH;
 
     if (fuse_batch) {

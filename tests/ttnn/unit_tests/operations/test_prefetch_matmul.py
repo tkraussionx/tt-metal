@@ -107,7 +107,7 @@ hidden_size_12_pad = (hidden_size + (cluster_size[0] * 12 * TILE_SIZE * 2 // 3))
 shard_width_hidden_dim_across_48_cores = hidden_size_48_pad // 48
 shard_width_hidden_dim_across_36_cores = hidden_size_24_pad // 36
 shard_width_hidden_dim_across_32_cores = hidden_size_tg // 32
-shard_width_hidden_dim_across_24_cores = hidden_size_24_pad
+shard_width_hidden_dim_across_24_cores = hidden_size_24_pad // 24
 shard_width_hidden_dim_across_16_cores = hidden_size_tg // 16
 shard_width_hidden_dim_across_12_cores = hidden_size_12_pad // 12
 shard_width_hidden_dim_across_8_cores = hidden_size_tg // 8
@@ -139,9 +139,8 @@ def run_prefetch_matmul_on_t3000_impl(
     ##### Create input tensor for the all gather #####
     _, _, M, K = input_shape
     input_tensor = torch.randn(input_shape).float()
-    input_tensor_cat = torch.cat([input_tensor] * 24, dim=3)
     tt_input_tensor = ttnn.as_tensor(
-        input_tensor_cat,
+        input_tensor,
         dtype=input_dtype,
         layout=layout,
         device=t3k_mesh_device,
@@ -474,7 +473,7 @@ def run_prefetch_matmul_on_t3000_impl(
         (  # FF1/3 matmul1d
             "matmul_1d_ff1",
             [1, 1, 32, hidden_size_24_pad],
-            3584,
+            3584 + 128,
             3,
             (8, 3),
             4,

@@ -956,7 +956,7 @@ void Matmul::validate(
         (input_tensor_a.get_layout() == Layout::TILE && input_tensor_b.get_layout() == Layout::TILE),
         "Inputs to matmul must be tilized");
     TT_FATAL(
-        a_shape[-1] / 24 == b_shape[-2],
+        a_shape[-1] == b_shape[-2],
         "The width of the first tensor must be equal to the height of the second tensor. Mismatch: width={} height={}",
         a_shape[-1],
         b_shape[-2]);
@@ -1039,7 +1039,7 @@ void Matmul::validate(
                         TT_FATAL(M == per_core_M, "Error");
                         TT_FATAL(per_core_M == (shard_shape[0] / TILE_HEIGHT), "Error");
                         TT_FATAL(K % program_config.in0_block_w == 0, "Error");
-                        TT_FATAL((shard_shape[1] / TILE_WIDTH) % program_config.in0_block_w == 0, "Error");
+                        TT_FATAL((shard_shape[1] / TILE_WIDTH) * 24 % program_config.in0_block_w == 0, "Error");
                     }
                     if (this->output_mem_config.is_sharded()) {
                         TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::WIDTH_SHARDED, "Error");
