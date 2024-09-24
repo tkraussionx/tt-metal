@@ -77,7 +77,8 @@ def get_model_config(llama_version="llama3-tg", max_batch_size=32, max_context_l
     model_config["attention"] = set_attention_config(model_config, max_batch_size)
     # Set mlp config
     model_config["mlp"] = set_mlp_config(model_config, cluster_shape)
-
+    # Set decoder config
+    model_config["decoder"] = set_decoder_config(model_config)
     return model_config
 
 
@@ -364,7 +365,7 @@ def set_mlp_config(model_config, cluster_shape):
             1,
             model_config["MAX_MM_SEQ_LEN"](seq_len),
             hidden_dim_per_chip,
-        ),  # (1, 1, self.model_config["MAX_MM_SEQ_LEN"], 2048)
+        ),  # (1, 1, model_config["MAX_MM_SEQ_LEN"], 2048)
         (1, 1, hidden_dim_per_chip, ff_outer_dim_per_chip),  # (1, 1, 2048, 3584)
         grid=ttnn.CoreGrid(x=8, y=model_config["CORE_GRID_Y"](seq_len)),
         overwrite_subblock_h=1,
@@ -384,6 +385,68 @@ def set_mlp_config(model_config, cluster_shape):
         overwrite_subblock_w=1,
         fuse_batch=False,
     )
+
+    return {"prefill": prefill_config, "decode": decode_config}
+
+
+def set_decoder_config(model_config):
+    decode_config = {}
+
+    decode_config["LN_COMPUTE_KERNEL_CONFIG"] = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    decode_config["LN_PROGCFG"] = ttnn.LayerNormShardedMultiCoreProgramConfig(
+        compute_with_storage_grid_size=[8, 4],
+        subblock_w=8,
+        block_h=32 // 32,
+        block_w=8,
+        inplace=False,
+    )
+
+    shard_spec_32_cores_grid = ttnn.CoreRangeSet(
+        {
+            ttnn.CoreRange(
+                ttnn.CoreCoord(0, 0),
+                ttnn.CoreCoord(7, 3),
+            ),
+        }
+    )
+
+    decode_config["LN_OUTPUT_MEMCFG"] = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.BufferType.L1,
+        ttnn.ShardSpec(
+            shard_spec_32_cores_grid,
+            [
+                32,
+                8192 // 32,
+            ],
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+    decode_config["ATTN_ACT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 2048 // 32),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    decode_config["MLP_ACT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 2048 // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    prefill_config = {}
+
+    prefill_config["LN_COMPUTE_KERNEL_CONFIG"] = decode_config["LN_COMPUTE_KERNEL_CONFIG"]
 
     return {"prefill": prefill_config, "decode": decode_config}
 
