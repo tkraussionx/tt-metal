@@ -458,7 +458,7 @@ def test_LlamaAttention_inference(
         max_batch_size=max_batch_size,
         max_context_len=max_context_len,
     )
-
+    check_mesh_device(mesh_device, model_config)
     run_test_LlamaAttention_inference(
         mesh_device,
         cluster_shape,

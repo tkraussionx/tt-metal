@@ -7,7 +7,7 @@ import os
 import json
 import torch
 import torch.nn.functional as F
-import ttnn
+
 from time import time
 import pytest
 from loguru import logger
