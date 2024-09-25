@@ -592,7 +592,6 @@ class PrefillDecodeBackend:
         prefill_ids = torch.cat(
             [tokens, torch.zeros(1, prefill_seq_len - seq_len).long()], dim=-1
         )
-        logger.info(f"Filling kv cache for user_id:= {0}, prefill_ids.shape:={prefill_ids.shape}, seq_len={seq_len}")
         logits = self.model.prefill_forward_single_user(
             prefill_ids,
             start_pos=0,
