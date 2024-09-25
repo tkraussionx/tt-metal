@@ -28,7 +28,7 @@ void MorehTest2::validate_with_output_tensors(
     auto &output = output_tensors.at(0);
 
     check_tensor(input1, "moreh_test2", "input1", {DataType::BFLOAT16, DataType::FLOAT32});
-    check_tensor(cond, "moreh_test2", "cond", {DataType::UINT8});
+    check_tensor(cond, "moreh_test2", "cond", {DataType::UINT16});
     check_tensor(input2, "moreh_test2", "input2", {DataType::BFLOAT16, DataType::FLOAT32});
     check_tensor(output, "moreh_test2", "output", {DataType::BFLOAT16, DataType::FLOAT32});
 }

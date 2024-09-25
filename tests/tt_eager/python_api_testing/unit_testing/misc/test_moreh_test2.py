@@ -12,7 +12,7 @@ TILE_WIDTH = 32
 
 
 def get_tensors(input_shape, data_npu_dtype, data_cpu_dtype, device):
-    condition_npu_dtype = ttnn.DataType.UINT8
+    condition_npu_dtype = ttnn.DataType.UINT16
     condition_cpu_dtype = torch.uint8
     npu_layout = ttnn.Layout.TILE
 
