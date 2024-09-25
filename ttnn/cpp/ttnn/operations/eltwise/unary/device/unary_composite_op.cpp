@@ -314,7 +314,17 @@ Tensor _mish(const Tensor& x, const std::optional<MemoryConfig>& output_mem_conf
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             const auto& x = input_tensors.at(0);
-            Tensor sp_x = ttnn::softplus(x, 1.0f, 20.0f, output_mem_config);
+            Tensor t_one = ttnn::full_like(x, 1.0f);
+            Tensor exp_x = ttnn::exp(x, false, output_mem_config);
+            Tensor one_plus_exp = ttnn::add(t_one, exp_x, std::nullopt, output_mem_config);
+            Tensor log_x = ttnn::log(one_plus_exp, output_mem_config);
+
+            //Tensor sp_x = ttnn::softplus(x, 1.0f, 20.0f, output_mem_config);
+
+            Tensor sp_x = ttnn::where(ttnn::gt(x, 20, std::nullopt, output_mem_config), x,
+                          ttnn::where(ttnn::lt(x, -20, std::nullopt, output_mem_config), exp_x,
+             log_x));
+
             Tensor tanh_x = ttnn::tanh(sp_x, output_mem_config);
             sp_x.deallocate();
             Tensor mish_x = ttnn::multiply(x, tanh_x, std::nullopt, output_mem_config);
