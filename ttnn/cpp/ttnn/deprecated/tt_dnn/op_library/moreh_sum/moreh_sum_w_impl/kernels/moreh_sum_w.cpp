@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "compute_kernel_api/matmul.h"
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
 
 namespace NAMESPACE {
@@ -47,8 +48,8 @@ void MAIN {
 #if defined FP32_DEST_ACC_EN
                     unpack_reconfig_data_format(cb_input, cb_scaler);
 #endif
-                    add_tiles_init(cb_input, cb_zeros, true);
-                    add_tiles(cb_input, cb_zeros, 0, 0, reduce_dst_idx);
+                    mm_init_short(cb_input, cb_scaler, false);
+                    matmul_tiles(cb_input, cb_scaler, 0, 0, reduce_dst_idx, false);
 
                     cb_pop_front(cb_input, onetile);
                 }
@@ -103,26 +104,9 @@ void MAIN {
 #if defined FP32_DEST_ACC_EN
             unpack_reconfig_data_format(cb_input, cb_scaler);
 #endif
-
-            add_tiles_init(cb_input, cb_zeros, true);
-            add_tiles(cb_input, cb_zeros, 0, 0, reduce_dst_idx);
+            mm_init_short(cb_input, cb_scaler, false);
+            matmul_tiles(cb_input, cb_scaler, 0, 0, reduce_dst_idx, false);
             tile_regs_commit();
-
-            tile_regs_wait();
-            cb_reserve_back(cb_accum_dst, onetile);
-            pack_reconfig_data_format(cb_accum_dst);
-            pack_tile(reduce_dst_idx, cb_accum_dst);
-            cb_push_back(cb_accum_dst, onetile);
-            tile_regs_release();
-
-            tile_regs_acquire();
-            cb_wait_front(cb_accum_dst, onetile);
-            unpack_reconfig_data_format(cb_accum_dst, cb_scaler);
-            reduce_init_delta<false>();
-            reduce_tile(cb_accum_dst, cb_scaler, 0, 0, reduce_dst_idx);
-            reduce_revert_delta();
-            tile_regs_commit();
-
 
             cb_reserve_back(cb_out, onetile);
             tile_regs_wait();
@@ -130,7 +114,6 @@ void MAIN {
             pack_reconfig_data_format(cb_out);
 #endif
             pack_tile(reduce_dst_idx, cb_out);
-            print_cb<RISCV::PACK, DTYPE::BF16>("sumed tile", cb_out);
             tile_regs_release();
             cb_push_back(cb_out, onetile);
 

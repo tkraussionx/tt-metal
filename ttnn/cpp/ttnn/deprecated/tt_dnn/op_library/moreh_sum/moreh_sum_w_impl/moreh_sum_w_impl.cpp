@@ -55,7 +55,7 @@ operation::ProgramWithCallbacks moreh_sum_w_impl(
     // Scaler datatype is hardcoded bfloat16 due to tile creation in reader
     tt::DataFormat zero_cb_data_format = tt::DataFormat::Float16_b;
     uint32_t zero_single_tile_size = tt_metal::detail::TileSize(zero_cb_data_format);
-    tt::DataFormat scaler_cb_data_format = (fp32_dest_acc_en) ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    tt::DataFormat scaler_cb_data_format = tt::DataFormat::Float16_b;
     uint32_t scaler_single_tile_size = tt_metal::detail::TileSize(scaler_cb_data_format);
     tt::DataFormat mask_w_cb_data_format = tt::DataFormat::Float16_b;
     uint32_t mask_w_single_tile_size = tt_metal::detail::TileSize(mask_w_cb_data_format);
@@ -123,15 +123,6 @@ operation::ProgramWithCallbacks moreh_sum_w_impl(
 
     bfloat16 bfloat_scaler_value = bfloat16(scaler);
     uint32_t packed_scaler_value = pack_two_bfloat16_into_uint32({bfloat_scaler_value, bfloat_scaler_value});
-    if (fp32_dest_acc_en) {
-        union {
-            float f;
-            uint32_t u;
-        } scaler_fp32_dest_accum;
-
-        scaler_fp32_dest_accum.f = scaler;
-        packed_scaler_value = scaler_fp32_dest_accum.u;
-    }
 
     tt_metal::Buffer *src_buffer = a.buffer();
     bool src_is_dram = src_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -144,7 +135,7 @@ operation::ProgramWithCallbacks moreh_sum_w_impl(
     if (do_mask_w) {
         reader_defines["DO_MASK_W"] = "1";
     }
-    if(fp32_dest_acc_en){
+    if (fp32_dest_acc_en) {
         reader_defines["FP32_DEST_ACC_EN"] = "1";
     }
     tt_metal::KernelHandle reader_kernel_id = tt_metal::CreateKernel(
@@ -170,9 +161,10 @@ operation::ProgramWithCallbacks moreh_sum_w_impl(
         origin_W,
     };
 
-    // set preserve_fp32_precision to the same value as fp32_dest_acc_en
-    // bool preserve_fp32_precision = fp32_dest_acc_en;
-    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    std::vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    if (fp32_dest_acc_en) {
+        preserve_fp32_precision[tt::CB::c_intermed0] = PreserveFP32Target::DEST;
+    }
     auto reduce_compute_kernel_group_1_id = tt_metal::CreateKernel(
         program,
         compute_kernel_name,

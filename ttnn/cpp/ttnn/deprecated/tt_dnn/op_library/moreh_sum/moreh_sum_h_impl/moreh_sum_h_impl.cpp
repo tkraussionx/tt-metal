@@ -4,13 +4,13 @@
 
 #include <algorithm>
 
-#include "ttnn/deprecated/tt_dnn/op_library/moreh_helper_functions.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_op.hpp"
-#include "ttnn/operations/reduction/generic/device/reduce_op.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
+#include "ttnn/deprecated/tt_dnn/op_library/moreh_helper_functions.hpp"
+#include "ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_op.hpp"
+#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "ttnn/operations/reduction/generic/device/reduce_op.hpp"
 
 namespace tt {
 using namespace constants;
@@ -18,8 +18,8 @@ namespace operations {
 
 namespace primary {
 
-
-operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &output, const ttnn::DeviceComputeKernelConfig &compute_kernel_config) {
+operation::ProgramWithCallbacks moreh_sum_h_impl(
+    const Tensor &a, const Tensor &output, const ttnn::DeviceComputeKernelConfig &compute_kernel_config) {
     tt_metal::ReduceOpMath reduce_op = tt_metal::ReduceOpMath::SUM;
     tt_metal::ReduceOpDim reduce_dim = tt_metal::ReduceOpDim::H;
     float scaler = 1.0f;
@@ -37,7 +37,8 @@ operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &
     const bool do_mask_h = (origin_H % TILE_HEIGHT) != 0;
     const auto mask_h = do_mask_h ? origin_H % TILE_HEIGHT : TILE_HEIGHT;
 
-    auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] = get_compute_kernel_config_args(a.device()->arch(), compute_kernel_config);
+    auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] =
+        get_compute_kernel_config_args(a.device()->arch(), compute_kernel_config);
     log_debug(
         LogOp,
         "math_fidelity {} math_approx_mode {} fp32_dest_acc_en {} packer_l1_acc {}",
@@ -54,9 +55,9 @@ operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &
     uint32_t scaler_single_tile_size = tt_metal::detail::TileSize(src0_cb_data_format);
     tt::DataFormat mask_h_cb_data_format = tt::DataFormat::Float16_b;
     uint32_t mask_h_single_tile_size = tt_metal::detail::TileSize(mask_h_cb_data_format);
-    tt::DataFormat intermed_cb_data_format = (fp32_dest_acc_en) ? tt::DataFormat::Float32: tt::DataFormat::Float16_b;
+    tt::DataFormat intermed_cb_data_format = (fp32_dest_acc_en) ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
     tt::DataFormat intermed1_cb_data_format = tt::DataFormat::Float16_b;
-    uint32_t intermed_single_tile_size= tt_metal::detail::TileSize(intermed_cb_data_format);
+    uint32_t intermed_single_tile_size = tt_metal::detail::TileSize(intermed_cb_data_format);
     tt::DataFormat dst_cb_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
     uint32_t dst_single_tile_size = tt_metal::detail::TileSize(dst_cb_data_format);
 
@@ -68,12 +69,14 @@ operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     auto num_cols = other_dims_product * Wt;
 
-    const CoreRange all_core_range({0, 0}, {compute_with_storage_grid_size.x - 1, compute_with_storage_grid_size.y - 1});
+    const CoreRange all_core_range(
+        {0, 0}, {compute_with_storage_grid_size.x - 1, compute_with_storage_grid_size.y - 1});
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_cols_per_core_group_1, num_cols_per_core_group_2] =
         split_work_to_cores(all_core_range, num_cols);
 
-    string compute_kernel_name = "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_h_impl/kernels/moreh_sum_h.cpp";
+    string compute_kernel_name =
+        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_h_impl/kernels/moreh_sum_h.cpp";
 
     uint32_t src0_cb_index = CB::c_in0;
     CBHandle cb_src0;
@@ -151,30 +154,43 @@ operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &
         Ht,                         // Ht
         num_cols_per_core_group_1,  // Wt
         1,                          // NC
-        origin_H
-    };
+        origin_H};
 
     // set preserve_fp32_precision to the same value as fp32_dest_acc_en
-    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    std::vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    if (fp32_dest_acc_en) {
+        preserve_fp32_precision[tt::CB::c_intermed0] = PreserveFP32Target::DEST;
+    }
     auto reduce_compute_kernel_group_1_id = tt_metal::CreateKernel(
         program,
         compute_kernel_name,
         core_group_1,
-        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .preserve_fp32_precision = preserve_fp32_precision, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args_group_1, .defines = reduce_defines});
+        tt_metal::ComputeConfig{
+            .math_fidelity = math_fidelity,
+            .fp32_dest_acc_en = fp32_dest_acc_en,
+            .preserve_fp32_precision = preserve_fp32_precision,
+            .math_approx_mode = math_approx_mode,
+            .compile_args = compute_kernel_args_group_1,
+            .defines = reduce_defines});
 
     if (!core_group_2.ranges().empty()) {
         vector<uint32_t> compute_kernel_args_group_2 = {
             Ht,                         // Ht
             num_cols_per_core_group_2,  // Wt
             1,                          // NC
-            origin_H
-        };
+            origin_H};
 
         auto reduce_compute_kernel_group_2_id = tt_metal::CreateKernel(
             program,
             compute_kernel_name,
             core_group_2,
-            tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .preserve_fp32_precision = preserve_fp32_precision, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args_group_2, .defines = reduce_defines});
+            tt_metal::ComputeConfig{
+                .math_fidelity = math_fidelity,
+                .fp32_dest_acc_en = fp32_dest_acc_en,
+                .preserve_fp32_precision = preserve_fp32_precision,
+                .math_approx_mode = math_approx_mode,
+                .compile_args = compute_kernel_args_group_2,
+                .defines = reduce_defines});
     }
 
     for (uint32_t i = 0, num_cols_read = 0; i < num_cores; i++) {
@@ -195,8 +211,7 @@ operation::ProgramWithCallbacks moreh_sum_h_impl(const Tensor &a, const Tensor &
              num_cols_read / Wt * HtWt + num_cols_read % Wt,
              num_cols_read % Wt,
              num_cols_per_core,
-             mask_h
-             });
+             mask_h});
 
         tt_metal::SetRuntimeArgs(
             program,
