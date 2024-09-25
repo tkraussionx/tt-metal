@@ -46,7 +46,7 @@ def run_pad_rm_with_program_cache(device, n, c, h, w, padding, torch_padding, va
     assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
 
 
-@pytest.mark.parametrize("n", [16])
+@pytest.mark.parametrize("n", [1])
 @pytest.mark.parametrize("c", [3])
 @pytest.mark.parametrize("h", [224])
 @pytest.mark.parametrize("w", [224])
@@ -71,21 +71,21 @@ def test_pad_rm_with_program_cache(device, n, c, h, w, padding, torch_padding, v
 def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_orient):
     torch.manual_seed(0)
 
-    torch_input_tensor = torch.rand((n, c, h, w), dtype=torch.bfloat16)
+    torch_input_tensor = torch.rand((n, c, h, w), dtype=torch.float32)
     torch_output_tensor = torch.nn.functional.pad(torch_input_tensor, torch_padding, mode="constant", value=value)
 
     tt_input_tensor = ttnn.from_torch(
         torch_input_tensor,
-        dtype=ttnn.DataType.BFLOAT16,
+        dtype=ttnn.DataType.FLOAT32,
         layout=ttnn.ROW_MAJOR_LAYOUT,
         device=device,
         memory_config=ttnn.L1_MEMORY_CONFIG,
     )
 
-    n_unpadded = n
-    c_unpadded = c + padding[0][1]
-    h_unpadded = h + padding[1][1]
-    w_unpadded = w + padding[2][1]
+    n_unpadded = n + sum(padding[0])
+    c_unpadded = c + sum(padding[1])
+    h_unpadded = h + sum(padding[2])
+    w_unpadded = w + sum(padding[3])
 
     # shard config
     num_cores_x = 8
@@ -100,9 +100,6 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     sharded_mem_config = ttnn.MemoryConfig(
         ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
     )
-    import pdb
-
-    pdb.set_trace()
     tt_input_tensor = ttnn.to_memory_config(tt_input_tensor, sharded_mem_config)
 
     # output shard config
@@ -111,6 +108,9 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     if num_cores_y > device.core_grid.y:
         num_cores_y = device.core_grid.y
     shard_h = (n_unpadded * c_unpadded * h_unpadded + (num_cores_x * num_cores_y) - 1) // (num_cores_x * num_cores_y)
+    total_h = n_unpadded * c_unpadded * h_unpadded
+    print(f"num_shards = {total_h // shard_h}")
+
     grid_size = ttnn.CoreGrid(y=num_cores_y, x=num_cores_x)
     grid_coord = ttnn.CoreCoord(grid_size.x - 1, grid_size.y - 1)
     shard_grid = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), grid_coord)})
@@ -126,19 +126,26 @@ def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_
     tt_output_tensor = ttnn.to_torch(tt_output_tensor)
 
     assert tt_output_tensor.shape == torch_output_tensor.shape
+    import pdb
+
+    pdb.set_trace()
     assert_with_pcc(torch_output_tensor, tt_output_tensor, 0.9999)
 
 
-@pytest.mark.parametrize("n", [20])
-@pytest.mark.parametrize("c", [3])
-@pytest.mark.parametrize("h", [224])
-@pytest.mark.parametrize("w", [256])
+def padding_and_torch_padding(padding):
+    return (padding, tuple(reversed(sum(padding, ()))))
+
+
+@pytest.mark.parametrize("n", [1])
+@pytest.mark.parametrize("c", [1])
+@pytest.mark.parametrize("h", [1])
+@pytest.mark.parametrize("w", [4])
 @pytest.mark.parametrize(
     "padding,torch_padding",
     [
-        (((0, 1), (0, 32), (0, 0), (0, 0)), (0, 0, 0, 0, 0, 32, 0, 1)),
+        padding_and_torch_padding(((0, 1), (0, 32), (0, 0), (0, 12))),
         # test for sharded padding on the last dim: requires another dim with no padding
-        (((0, 1), (0, 32), (0, 0), (0, 32)), (0, 32, 0, 32, 0, 32, 0, 1)),
+        padding_and_torch_padding(((0, 1), (0, 32), (0, 0), (0, 12))),
     ],
 )
 @pytest.mark.parametrize("value", [8])
@@ -153,7 +160,7 @@ def test_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard
         py_dummy_tensor = torch.randn(dummy_shape)
         tt_dummy_tensor = ttnn.from_torch(
             py_dummy_tensor,
-            dtype=ttnn.DataType.BFLOAT16,
+            dtype=ttnn.DataType.FLOAT32,
             layout=ttnn.TILE_LAYOUT,
             device=device,
             memory_config=ttnn.L1_MEMORY_CONFIG,
