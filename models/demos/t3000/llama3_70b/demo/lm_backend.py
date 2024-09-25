@@ -1,12 +1,8 @@
-import os
 import time
 import traceback
-import threading
 import logging
-from queue import Queue
-from functools import partial
+import json
 from pathlib import Path
-from dataclasses import dataclass
 from collections import defaultdict
 from typing import List
 
@@ -15,7 +11,6 @@ import torch.nn.functional as F
 from transformers.generation.utils import top_k_top_p_filtering
 
 import ttnn
-from ttnn import ReplicateTensorToMesh
 
 from models.demos.t3000.llama2_70b.reference.llama.llama.tokenizer3 import (
     ChatFormat,
@@ -27,16 +22,10 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
 )
 from models.demos.t3000.llama2_70b.tt.llama_generation import (
     get_padded_prefill_len,
-    num_blocks_in_seq,
 )
 from models.demos.t3000.llama2_70b.demo.demo_continuous_batching import (
-    ModelArgs,
-    TTArgs,
-    DataArgs,
-    DemoArgs,
     construct_arg,
     build_generator,
-    initialize_prefill_input,
     initialize_decode_input,
 )
 from conftest import get_dispatch_core_type
@@ -590,6 +579,43 @@ class PrefillDecodeBackend:
             self.decode()
             self.push_outputs(output_q)
             self.update_users()
+
+    def loglikelihood(self, context_enc, return_logits: bool = False):
+        """
+        for loglikelihood_continuous
+        """
+        seq_len = len(context_enc)
+        last_token_idx = seq_len - 1
+
+        prefill_seq_len = get_padded_prefill_len(seq_len)
+        tokens = torch.tensor(context_enc, dtype=torch.long, device="cpu").unsqueeze(0)
+        prefill_ids = torch.cat(
+            [tokens, torch.zeros(1, prefill_seq_len - seq_len).long()], dim=-1
+        )
+        logger.info(f"Filling kv cache for user_id:= {0}, prefill_ids.shape:={prefill_ids.shape}, seq_len={seq_len}")
+        logits = self.model.prefill_forward_single_user(
+            prefill_ids,
+            start_pos=0,
+            user_id=0,
+            last_token_idx=last_token_idx,
+            page_table=None,
+            kv_cache=None,
+        )
+        # Since we give unpadded_seq_len, only the tile containing the last token is returned
+        output_logits = logits[:, last_token_idx % 32 : last_token_idx % 32 + 1, :]
+        next_logits = output_logits[:, -1, :]  # 1, seq_len, vocab -> 1, vocab
+        if return_logits:
+            return next_logits
+        
+        # TODO: add params
+        next_token = batch_top_pk_logits_efficient_same_params(
+            next_logits,
+            p=0.9,
+            k=10,
+            temperature=1.0,
+        ).item()  # shape = (1,)
+        
+        return next_token
 
 
 def batch_top_pk_logits_efficient_multi_params(
