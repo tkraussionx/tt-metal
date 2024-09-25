@@ -11,6 +11,8 @@ import ttnn
 from tests.ttnn.utils_for_testing import check_with_pcc
 from models.utility_functions import torch_random
 
+import os
+
 parameters = {
     "batch_sizes": [(1,), (2,)],
     "height": [384, 1024],
@@ -26,10 +28,10 @@ parameters = {
 }
 
 
-def skip(*, broadcast, input_b_layout, **_) -> Tuple[bool, Optional[str]]:
-    if broadcast in {"w", "hw"} and input_b_layout == ttnn.ROW_MAJOR_LAYOUT:
-        return True, "Broadcasting along width is not supported for row major layout"
-    return False, None
+# def skip(*, broadcast, input_b_layout, **_) -> Tuple[bool, Optional[str]]:
+#     if broadcast in {"w", "hw"} and input_b_layout == ttnn.ROW_MAJOR_LAYOUT:
+#         return True, "Broadcasting along width is not supported for row major layout"
+#     return False, None
 
 
 def run(
@@ -58,7 +60,6 @@ def run(
 
     torch_input_tensor_a = torch_random(input_shape_a, -0.1, 0.1, dtype=torch.float32)
     torch_input_tensor_b = torch_random(input_shape_b, -0.1, 0.1, dtype=torch.float32)
-    torch_output_tensor = torch.add(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(
         torch_input_tensor_a,
@@ -76,6 +77,10 @@ def run(
     )
 
     output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
-    output_tensor = ttnn.to_torch(output_tensor)
 
-    return check_with_pcc(torch_output_tensor, output_tensor, 0.999)
+    if "TT_METAL_MOCKUP_EN" in os.environ:
+        return True, None
+    else:
+        output_tensor = ttnn.to_torch(output_tensor)
+        torch_output_tensor = torch.add(torch_input_tensor_a, torch_input_tensor_b)
+        return check_with_pcc(torch_output_tensor, output_tensor, 0.999)

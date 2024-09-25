@@ -11,6 +11,8 @@ import ttnn
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
 from models.utility_functions import torch_random
 
+import os
+
 parameters = {
     "batch_sizes": [(1,)],
     "m_size": [384, 1024],  # [1, 16, 128, 1024]
@@ -54,7 +56,6 @@ def run(
 
     torch_input_tensor_a = torch_random(input_shape_a, -0.1, 0.1, dtype=torch.float32)
     torch_input_tensor_b = torch_random(input_shape_b, -0.1, 0.1, dtype=torch.float32)
-    torch_output_tensor = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(
         torch_input_tensor_a,
@@ -71,11 +72,13 @@ def run(
         memory_config=input_a_memory_config,
     )
 
-    start_time = start_measuring_time()
     output_tensor = ttnn.matmul(
         input_tensor_a, input_tensor_b, dtype=output_dtype, memory_config=output_memory_config, core_grid=core_grid
     )
-    output_tensor = ttnn.to_torch(output_tensor)
-    e2e_perf = stop_measuring_time(start_time)
 
-    return check_with_pcc(torch_output_tensor, output_tensor, 0.98)
+    if "TT_METAL_MOCKUP_EN" in os.environ:
+        return True, None
+    else:
+        output_tensor = ttnn.to_torch(output_tensor)
+        torch_output_tensor = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
+        return check_with_pcc(torch_output_tensor, output_tensor, 0.98)
