@@ -404,16 +404,12 @@ class PrefillDecodeBackend:
 
     def teardown_tt_metal_device(self):
         logger.info("teardown_tt_metal_device ...")
-        import tt_lib as ttl
-
         ttnn.DumpDeviceProfiler(self.device, True)
         ttnn.DeallocateBuffers(self.device)
         ttnn.Synchronize(self.device)
         ttnn.CloseDevice(self.device)
 
     def init_tt_metal_device(self):
-        import tt_lib as ttl
-
         logger.info("init_tt_metal_device ...")
         device_ids = ttnn.get_device_ids()
         device_id = device_ids[0]
