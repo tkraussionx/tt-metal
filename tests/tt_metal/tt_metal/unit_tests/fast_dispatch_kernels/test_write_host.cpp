@@ -96,7 +96,8 @@ bool test_write_host(Device *device, uint32_t data_size, std::pair<uint32_t, uin
     host_hugepage_base = (void *)tt::Cluster::instance().host_dma_address(0, mmio_device_id, channel);
     host_hugepage_base = (void *)((uint8_t *)host_hugepage_base + dev_hugepage_base);
 
-    uint32_t l1_buf_base = align(L1_UNRESERVED_BASE, dispatch_buffer_page_size_g);
+    uint32_t l1_unreserved_base = devices_.at(id)->get_base_allocator_addr(HalMemType::L1);
+    uint32_t l1_buf_base = align(l1_unreserved_base, dispatch_buffer_page_size_g);
 
     std::vector<uint32_t> dispatch_cmds;
     CQDispatchCmd cmd;

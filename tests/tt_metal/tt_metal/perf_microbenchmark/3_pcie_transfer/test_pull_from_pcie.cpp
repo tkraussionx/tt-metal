@@ -227,7 +227,8 @@ int main(int argc, char **argv) {
 
         std::vector<uint32_t> go_signal = {0};
         std::vector<uint32_t> done_signal = {1};
-        tt_metal::detail::WriteToDeviceL1(device, logical_core, L1_UNRESERVED_BASE, go_signal);
+        uint32_t l1_unreserved_base = device->get_base_allocator_addr(HalMemType::L1);
+        tt_metal::detail::WriteToDeviceL1(device, logical_core, l1_unreserved_base, go_signal);
 
         // Application setup
         tt_metal::Program program = tt_metal::Program();
@@ -241,7 +242,7 @@ int main(int argc, char **argv) {
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_1,
                 .noc = tt_metal::NOC::NOC_0,
-                .compile_args = {host_write_ptr, hugepage_size, kernel_read_size}});
+                .compile_args = {host_write_ptr, hugepage_size, kernel_read_size, l1_unreserved_base}});
 
         // Add 2 * alignment so that we have enough space when aligning the ptr
         // First add is for aligning to next aligned addr
@@ -360,7 +361,7 @@ int main(int argc, char **argv) {
             }
 
             auto t_end = std::chrono::steady_clock::now();
-            tt_metal::detail::WriteToDeviceL1(device, logical_core, L1_UNRESERVED_BASE, done_signal);
+            tt_metal::detail::WriteToDeviceL1(device, logical_core, l1_unreserved_base, done_signal);
 
             t1.join();
 

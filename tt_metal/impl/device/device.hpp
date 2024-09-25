@@ -331,6 +331,9 @@ class Device {
     HalProgrammableCoreType get_programmable_core_type(CoreCoord phys_core) const;
     template <typename T = DeviceAddr>
     T get_dev_addr(CoreCoord phys_core, HalMemAddrType addr_type) const;
+    // Returns address where allocator starts allocating buffer
+    template <typename T = DeviceAddr>
+    T get_base_allocator_addr(const HalMemType &mem_type) const;
 
     template <typename CoreRangeContainer>
     std::vector<pair<transfer_info_cores, uint32_t>> extract_dst_noc_multicast_info(const CoreRangeContainer& ranges, const CoreType core_type);
@@ -360,6 +363,11 @@ inline HalProgrammableCoreType Device::get_programmable_core_type(CoreCoord phys
 template <typename T>
 inline T Device::get_dev_addr(CoreCoord phys_core, HalMemAddrType addr_type) const {
     return hal.get_dev_addr<T>(this->get_programmable_core_type(phys_core), addr_type);
+}
+
+template <typename T>
+inline T Device::get_base_allocator_addr(const HalMemType &mem_type) const {
+    return allocator::get_unreserved_base_address(*this->allocator_, mem_type);
 }
 
 // TODO: Find a better home for this function

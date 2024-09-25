@@ -163,6 +163,8 @@ void Device::initialize_allocator(size_t l1_small_size, size_t trace_region_size
         {.num_dram_channels = static_cast<size_t>(soc_desc.get_num_dram_channels()),
          .dram_bank_size = soc_desc.dram_bank_size,
          .dram_bank_offsets = {},
+         .dram_unreserved_base = DRAM_BARRIER_BASE + DRAM_BARRIER_SIZE, // these should come from the HAL
+         .l1_unreserved_base = hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::UNRESERVED),
          .worker_grid_size = this->logical_grid_size(),
          .worker_l1_size = static_cast<size_t>(soc_desc.worker_l1_size),
          .storage_core_bank_size = get_storage_core_bank_size(id_, num_hw_cqs_, dispatch_core_type),
@@ -173,7 +175,7 @@ void Device::initialize_allocator(size_t l1_small_size, size_t trace_region_size
          .worker_log_to_physical_routing_y = soc_desc.worker_log_to_physical_routing_y,
          .l1_bank_remap = l1_bank_remap,
          .compute_grid_size = this->compute_with_storage_grid_size()});
-    TT_FATAL(config.l1_small_size < (config.storage_core_bank_size.has_value() ? config.storage_core_bank_size.value() : config.worker_l1_size - L1_UNRESERVED_BASE),
+    TT_FATAL(config.l1_small_size < (config.storage_core_bank_size.has_value() ? config.storage_core_bank_size.value() : config.worker_l1_size - config.l1_unreserved_base),
             "Reserved size must be less than bank size");
     TT_FATAL(
         config.l1_small_size % ALLOCATOR_ALIGNMENT == 0,

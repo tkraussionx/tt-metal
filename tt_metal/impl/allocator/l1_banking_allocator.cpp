@@ -176,18 +176,17 @@ void init_compute_and_storage_l1_bank_manager(Allocator &allocator, const Alloca
     // There is only l1_bank_size bytes available for L1 buffers to be allocated in
     uint64_t l1_bank_size = alloc_config.storage_core_bank_size.has_value()
                                 ? alloc_config.storage_core_bank_size.value()
-                                : (alloc_config.worker_l1_size - L1_UNRESERVED_BASE);
+                                : (alloc_config.worker_l1_size - alloc_config.l1_unreserved_base);
     uint64_t interleaved_address_limit = static_cast<uint64_t>(alloc_config.worker_l1_size - l1_bank_size) + storage_core_unreserved_base;
     uint64_t allocatable_l1_size =
-        static_cast<uint64_t>(alloc_config.worker_l1_size) - L1_UNRESERVED_BASE - alloc_config.l1_small_size;
+        static_cast<uint64_t>(alloc_config.worker_l1_size) - alloc_config.l1_unreserved_base - alloc_config.l1_small_size;
     // Assuming top down allocation for L1 buffers so the allocatable memory space is the top l1_bank_size bytes of L1
-    uint64_t alloc_offset = L1_UNRESERVED_BASE;
-    allocator.l1_manager = BankManager(BufferType::L1, bank_id_to_bank_offset, allocatable_l1_size, interleaved_address_limit, ALLOCATOR_ALIGNMENT, alloc_offset);
+    allocator.l1_manager = BankManager(BufferType::L1, bank_id_to_bank_offset, allocatable_l1_size, interleaved_address_limit, ALLOCATOR_ALIGNMENT, alloc_config.l1_unreserved_base);
 
     uint64_t small_interleaved_address_limit = alloc_config.worker_l1_size - alloc_config.l1_small_size;
-    uint64_t small_alloc_offset = alloc_offset + allocatable_l1_size;
+    uint64_t small_alloc_offset = alloc_config.l1_unreserved_base + allocatable_l1_size;
     TT_ASSERT(
-        (alloc_offset + alloc_config.l1_small_size) <= alloc_config.worker_l1_size,
+        (alloc_config.l1_unreserved_base + alloc_config.l1_small_size) <= alloc_config.worker_l1_size,
         "L1 small region extends past L1 size");
     allocator.l1_small_manager = BankManager(
         BufferType::L1_SMALL,

@@ -37,7 +37,9 @@ struct AllocatorConfig {
     size_t num_dram_channels = 0;
     size_t dram_bank_size = 0;
     std::vector<size_t> dram_bank_offsets = {};
+    uint32_t dram_unreserved_base = 0;
     //! worker specific configuration
+    uint32_t l1_unreserved_base = 0;
     CoreCoord worker_grid_size = {};
     size_t worker_l1_size = 0;
     std::optional<uint32_t> storage_core_bank_size = 0;
