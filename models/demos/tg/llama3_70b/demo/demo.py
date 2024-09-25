@@ -438,6 +438,8 @@ def test_LlamaModel_demo(
     ## Get model config
     model_config, ckpt_dir, tokenizer_path, cache_path = setup_llama_env(
         llama_version=llama_version,
+        max_batch_size=max_batch_size,
+        max_context_len=max_context_len,
     )
 
     check_mesh_device(mesh_device, model_config)

@@ -241,6 +241,7 @@ class TtLlamaAttention_galaxy:
         xs,
         rot_mats,
     ):
+        batch_size = xs.shape[2]
         # Fused QKV
         fused_query_key_value = ttnn.matmul(
             xs,
@@ -301,7 +302,7 @@ class TtLlamaAttention_galaxy:
         query_layer = ttnn.matmul(
             query_layer,
             rot_mats,
-            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"],
+            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"](batch_size),
             memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
             compute_kernel_config=self.attention_config["COMPUTE_KERNEL_ROTARY"],
         )
@@ -309,7 +310,7 @@ class TtLlamaAttention_galaxy:
         key_layer = ttnn.matmul(
             key_layer,
             rot_mats,
-            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"],
+            program_config=self.attention_config["ROT_MAT_MM_PROGCFG"](batch_size),
             memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
             compute_kernel_config=self.attention_config["COMPUTE_KERNEL_ROTARY"],
         )
