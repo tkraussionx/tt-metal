@@ -15,6 +15,32 @@ using namespace tt;
 
 namespace unit_tests_common::noc {
 
+std::vector<uint32_t> generate_data(uint32_t data_size_bytes, uint32_t transaction_size_bytes, uint32_t aligned_transaction_size, std::optional<uint32_t> reset_index = std::nullopt) {
+    std::vector<uint32_t> data_vec(data_size_bytes/sizeof(uint32_t));
+    uint32_t val = 0;
+    uint32_t num_val_is_expected = transaction_size_bytes / sizeof(uint32_t);
+    uint32_t num_gaps_expected = (aligned_transaction_size - transaction_size_bytes) / sizeof(uint32_t);
+    uint32_t indices_per_val = num_val_is_expected + num_gaps_expected;
+    uint32_t num_val_seen = 0;
+    for (int i = 0; i < data_vec.size(); i++) {
+        uint32_t curr_val = val;
+        if (num_val_seen >= num_val_is_expected and num_val_seen < indices_per_val) {
+            curr_val = 0;
+        }
+        data_vec[i] = curr_val;
+        num_val_seen = (num_val_seen + 1) % indices_per_val;
+        if (num_val_seen == 0) {
+            val++;
+        }
+
+        if (reset_index.has_value() and i == reset_index.value()) {
+            val = 0;
+            num_val_seen = 0;
+        }
+    }
+    return data_vec;
+}
+
 bool validate_results(const CoreCoord &logical_core, const std::vector<uint32_t> result_vec, uint32_t transaction_size_bytes, uint32_t aligned_transaction_size, std::optional<uint32_t> reset_index = std::nullopt) {
     bool pass = true;
     uint32_t expected_val = 0;
@@ -66,6 +92,7 @@ bool run_cmd_buffer_ordering_test(CommonFixture *fixture, tt_metal::Device *devi
     uint32_t available_l1_size = device->l1_size_per_core() - L1_UNRESERVED_BASE;
     uint32_t aligned_transaction_size = align(transaction_size_bytes, L1_ALIGNMENT);
     uint32_t num_writes_per_cmd_buff = (available_l1_size / aligned_transaction_size) / 2;
+    uint32_t total_bytes_written = num_writes_per_cmd_buff * 2 * aligned_transaction_size;
     uint32_t addr_inc_per_cmd_buff = aligned_transaction_size * 2;
 
     auto sender_kernel = tt_metal::CreateKernel(
@@ -156,11 +183,11 @@ bool run_cmd_buffer_ordering_test(CommonFixture *fixture, tt_metal::Device *devi
 
     CreateSemaphore(program, CoreRange(sender_core, sender_core), 0, CoreType::WORKER);
 
-    std::vector<uint32_t> first_sender_vals(transaction_size_bytes / sizeof(uint32_t), first_send_val);
-    detail::WriteToDeviceL1(device, sender_core, first_sender_address, first_sender_vals, CoreType::WORKER);
+    std::vector<uint32_t> src_vec = generate_data(total_bytes_written, transaction_size_bytes, aligned_transaction_size);
+    detail::WriteToDeviceL1(device, sender_core, first_sender_address, src_vec, CoreType::WORKER);
 
-    std::vector<uint32_t> second_sender_vals(transaction_size_bytes / sizeof(uint32_t), second_send_val);
-    detail::WriteToDeviceL1(device, sender_core, second_sender_address, second_sender_vals, CoreType::WORKER);
+    // std::vector<uint32_t> second_sender_vals(transaction_size_bytes / sizeof(uint32_t), second_send_val);
+    // detail::WriteToDeviceL1(device, sender_core, second_sender_address, second_sender_vals, CoreType::WORKER);
 
     std::vector<uint32_t> zero_vec(available_l1_size/sizeof(uint32_t), 0);
     detail::WriteToDeviceL1(device, receiver_core, L1_UNRESERVED_BASE, zero_vec, CoreType::WORKER);
@@ -170,8 +197,8 @@ bool run_cmd_buffer_ordering_test(CommonFixture *fixture, tt_metal::Device *devi
     fixture->RunProgram(device, program);
 
     bool pass = true;
-    std::vector<uint32_t> result_vec(available_l1_size/sizeof(uint32_t));
-    detail::ReadFromDeviceL1(device, receiver_core, L1_UNRESERVED_BASE, available_l1_size, result_vec);
+    std::vector<uint32_t> result_vec(total_bytes_written/sizeof(uint32_t));
+    detail::ReadFromDeviceL1(device, receiver_core, L1_UNRESERVED_BASE, total_bytes_written, result_vec);
     pass &= validate_results(receiver_core, result_vec, transaction_size_bytes, aligned_transaction_size);
 
     return pass;
