@@ -1,0 +1,5 @@
+ARG BASE_IMAGE_NAME
+FROM ghcr.io/tenstorrent/tt-metal/$BASE_IMAGE_NAME
+
+ARG WHEEL_FILENAME
+RUN pip3 install $WHEEL_FILENAME
