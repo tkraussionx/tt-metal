@@ -215,9 +215,9 @@ def run_prefetch_matmul_on_t3000_impl(
     elif matmul_config == "matmul_1d_ff1":
         program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=core_grid,
-            in0_block_w=max(1, math.ceil(K / 32 / 24)),  # how much inner dim you take each time
+            in0_block_w=max(1, math.ceil(K / 32)),  # how much inner dim you take each time
             out_subblock_h=1,  # Must be divisible by per_core_M
-            out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
+            out_subblock_w=5,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
             per_core_M=shard_height // 32,  # M / TILE_HEIGHT / Grid_Size
             per_core_N=max(1, math.ceil(N / 32 / (core_grid[0] * core_grid[1]))),  # N / TILE_WIDTH / Grid_Size
             mcast_in0=True,

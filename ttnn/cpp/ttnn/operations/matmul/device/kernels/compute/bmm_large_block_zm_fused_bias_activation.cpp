@@ -16,6 +16,8 @@
 // #define SKIP_COMPUTE 1
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "tools/profiler/kernel_profiler.hpp"
+#include "debug/dprint.h"
 
 // Please update
 // tests/tt_metal/tt_metal/perf_microbenchmark/1_compute_mm/kernels/bmm_large_block_zm_fused_bias_activation_copy.cpp
@@ -147,6 +149,7 @@ void MAIN {
         }
 
         for (uint32_t block = 0; block < num_blocks; block++) {
+            // DeviceZoneScopedN("block-loop");
             bool last_out = block == (num_blocks - 1);
 // Configure packer once for pack out without Bias
 #if not defined FUSE_BIAS and defined PACK_RELU
@@ -158,13 +161,14 @@ void MAIN {
             }
 #endif
             #ifndef SKIP_OVERHEAD
-            cb_wait_front(in0_cb_id, in0_block_num_tiles);
-            cb_wait_front(in1_cb_id, in1_block_num_tiles);
+            // cb_wait_front(in0_cb_id, in0_block_num_tiles);
+            // cb_wait_front(in1_cb_id, in1_block_num_tiles);
             #endif
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
+                    // DeviceZoneScopedN("subblock-loop");
 
                     #ifndef SKIP_OVERHEAD
                     tile_regs_acquire();
@@ -186,7 +190,11 @@ void MAIN {
                     uint32_t in0_index = in0_index_subblock_offset;  // offset into in0 block
                     uint32_t in1_index = in1_index_subblock_offset;  // offset into in1 block
                     // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
-                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
+                    for (uint32_t shard_cnt = 1; shard_cnt <= 24; shard_cnt++) {
+                    cb_wait_front(in0_cb_id, shard_cnt * (in0_block_num_tiles / 24));
+                    cb_wait_front(in1_cb_id, shard_cnt * (in1_block_num_tiles / 24));
+                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w / 24; ++inner_dim_idx) {
+                        // DeviceZoneScopedN("in0-block-w-loop");
                         // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                         // accumulation is done by iterating matmul_block across inner dim
                         // in0_block_w is passed as innder dim (kt) to matmul_block, interally used to stride in0
@@ -199,10 +207,11 @@ void MAIN {
                             false,
                             out_subblock_w,
                             out_subblock_h,
-                            in0_block_w);
+                            in0_block_w / 24);
                         in0_index++;                  // stride right by 1
                         in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                       // called in1_block_w)
+                    }
                     }
 #endif  // SKIP_COMPUTE
 

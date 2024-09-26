@@ -47,13 +47,13 @@ void kernel_main() {
     // in1 tensor args
     constexpr uint32_t in1_tensor_stride_w = get_compile_time_arg_val(2);
     constexpr uint32_t in1_tensor_stride_h = get_compile_time_arg_val(3);
-    constexpr uint32_t in1_tensor_next_block_stride = get_compile_time_arg_val(4);
+    constexpr uint32_t in1_tensor_next_block_stride = get_compile_time_arg_val(4) / 24;
     // in1 block args
     constexpr uint32_t in1_block_w = get_compile_time_arg_val(5);
-    constexpr uint32_t in1_block_h = get_compile_time_arg_val(6);
-    constexpr uint32_t in1_block_num_tiles = get_compile_time_arg_val(7);
+    constexpr uint32_t in1_block_h = get_compile_time_arg_val(6) / 24;
+    constexpr uint32_t in1_block_num_tiles = get_compile_time_arg_val(7) / 24;
     // in0/in1 common args
-    constexpr uint32_t num_blocks = get_compile_time_arg_val(8);
+    constexpr uint32_t num_blocks = get_compile_time_arg_val(8) * 24;
     // in1 mcast args
     uint32_t in1_mcast_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(9));
     uint32_t in1_mcast_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(10));
