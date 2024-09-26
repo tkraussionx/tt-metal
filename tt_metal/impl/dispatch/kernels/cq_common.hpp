@@ -378,7 +378,6 @@ template<uint32_t cb_base,
          uint32_t upstream_noc_xy,
          uint32_t upstream_cb_sem,
          uint32_t cb_pages_per_block>
-FORCE_INLINE
 uint32_t get_cb_page_and_release_pages(uint32_t& cmd_ptr,
                      uint32_t& cb_fence,
                      uint32_t& block_noc_writes_to_clear,
