@@ -415,7 +415,7 @@ class PrefillDecodeBackend:
         device_id = device_ids[0]
         num_devices = ttnn.GetNumPCIeDevices()
         assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
-        self.device = ttnn.CreateDevice(device_id)
+        self.device = ttnn.CreateDevice(device_id=device_id, dispatch_core_type=self.get_dispatch_core_type())
         ttnn.SetDefaultDevice(self.device)
         self.device.enable_program_cache()
 
