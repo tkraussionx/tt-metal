@@ -398,7 +398,7 @@ def seperable_conv_norm_act(
 ## OSAStage
 
 This diagram is representing the TT-NN module `OSAStage()`
-![OSAStage](images/OSAStage.png)
+![OSAStage](images/Osastage.png)
 
 ## EffectiveSEModule
 EffectiveSEModule (Squeeze-and-Excitation Networks), consists of a convolution layer and a hard sigmoid activation layer.
