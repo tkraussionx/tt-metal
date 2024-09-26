@@ -39,7 +39,8 @@ void kernel_main() {
     constexpr uint32_t cb_id_in2 = 2;  // Sharded cb
 
     constexpr uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
-    constexpr uint32_t shard_size_bytes = shard_width_in_tiles * shard_height_in_tiles * in0_single_tile_size_bytes;
+    constexpr uint32_t shard_size_in_tiles = shard_width_in_tiles * shard_height_in_tiles;
+    constexpr uint32_t shard_size_bytes = shard_size_in_tiles* in0_single_tile_size_bytes;
     constexpr uint32_t shard_read_stride = shard_width_in_tiles * in0_single_tile_size_bytes;
     constexpr uint32_t shard_read_width = in0_single_tile_size_bytes * in0_block_w;
 
@@ -56,30 +57,30 @@ void kernel_main() {
     // DPRINT << "[" << ring_idx << "] shard_read_width: " << shard_read_width << ENDL();
 
 
-    cb_reserve_back(cb_id_in2, batch * shard_width_in_tiles * shard_height_in_tiles);
-    cb_reserve_back(cb_id_in0, batch * in0_block_num_tiles);
+    cb_reserve_back(cb_id_in2, batch * shard_size_in_tiles);
+    cb_reserve_back(cb_id_in0, batch * ring_size * shard_size_in_tiles);
 
     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
     uint32_t local_shard_read_addr = get_read_ptr(cb_id_in2);
 
     for (uint32_t b = 0; b < batch; ++b) {
 
-        uint32_t curr_ring_idx = ring_idx;
         for (uint32_t shard_cnt = 0; shard_cnt < ring_size && !SKIP; shard_cnt++) {
 
-            uint32_t curr_shard_write_addr = l1_write_addr_in0 + shard_size_bytes * curr_ring_idx;
+            uint32_t curr_shard_write_addr = l1_write_addr_in0 + shard_size_bytes * (shard_cnt + 1);
             uint64_t remote_curr_shard_write_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, curr_shard_write_addr);
-            uint32_t curr_shard_read_addr = curr_shard_write_addr;
+            uint32_t curr_shard_read_addr = l1_write_addr_in0 + shard_size_bytes * shard_cnt;
 
             // Wait for signal from previous core that data has been added to this core's in0
             noc_semaphore_wait_min(l1_signal_sem_addr, shard_cnt + 1);
 
             if (shard_cnt == 0) { // Need to load the local shard from cb2 to cb0 in the correct place
-                noc_async_read(get_noc_addr(local_shard_read_addr), curr_shard_write_addr, shard_size_bytes);
+                noc_async_read(get_noc_addr(local_shard_read_addr), curr_shard_read_addr, shard_size_bytes);
                 noc_async_read_barrier();
             }
 
             // Do stuff for matmul fusion here
+            cb_push_back(cb_id_in0, shard_size_in_tiles);
 
 
             /* Here, assume cb0 has the data the data ready in the correct place. */
@@ -92,10 +93,6 @@ void kernel_main() {
                 uint64_t remote_signal_semaphore_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, signal_semaphore_addr);
                 noc_semaphore_inc(remote_signal_semaphore_addr, 1);
             }
-
-            // Update the ring index
-            curr_ring_idx = (curr_ring_idx + 1) % ring_size;
        }
-        cb_push_back(cb_id_in0, in0_block_num_tiles);
     }
 }

@@ -73,7 +73,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     uint32_t output_single_tile_size = tt_metal::detail::TileSize(output_data_format);
     uint32_t interm0_single_tile_size = tt_metal::detail::TileSize(interm0_data_format);
 
-    uint32_t in0_block_tiles = per_core_M * in0_block_w;
+    uint32_t in0_block_tiles = per_core_M * in0_block_w * num_blocks;
     uint32_t in0_CB_tiles = in0_block_tiles;
     if (B * num_blocks > 1) {
         in0_CB_tiles = in0_CB_tiles * 2;  // double buffer
@@ -337,7 +337,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         in1_sender_writer_compile_time_args.push_back(0);  // Placeholder; not used
     }
 
-    in1_sender_writer_compile_time_args.push_back((std::uint32_t)fuse_op);
+    in1_sender_writer_compile_time_args.push_back((std::uint32_t)(fuse_op || gather_in0));
 
     std::vector<uint32_t> in0_receiver_compile_time_args = {
         // in0 block args
@@ -795,6 +795,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
             if (fuse_op) {
                 fused_op_signaler->push_matmul_fused_op_rt_args(mm_in1_sender_writer_args, true);
+            } else if (gather_in0) {
+                uint32_t in1_stride_per_shard = in0_shard_width_in_tiles * N;
+
+                mm_in1_sender_writer_args.push_back(1); // Core ring all gather is unidirectional
+                mm_in1_sender_writer_args.push_back(ring_size);
+                mm_in1_sender_writer_args.push_back(i);
+                mm_in1_sender_writer_args.push_back(in0_shard_width_in_tiles); // tensor slice width in tiles
+                mm_in1_sender_writer_args.push_back(in1_stride_per_shard);
+                mm_in1_sender_writer_args.push_back((ring_size - 1) * in1_stride_per_shard);
+                mm_in1_sender_writer_args.push_back(ttnn::experimental::ccl::Direction::CCW);
             }
 
             tt_metal::SetRuntimeArgs(
