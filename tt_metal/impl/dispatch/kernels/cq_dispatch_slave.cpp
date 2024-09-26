@@ -170,7 +170,7 @@ void process_dispatch_s_wait_cmd() {
     update_worker_completion_count_on_dispatch_d();
     // Wait for updated count to get picked up by NOC and then clear the counter.
     // dispatch_d will clear its own counter
-    noc_async_write_barrier();
+    noc_async_writes_flushed();
     *worker_sem = 0;
     aligned_worker_update = 0; // Local worker count should reflect state of worker semaphore
     cmd_ptr += sizeof(CQDispatchCmd);

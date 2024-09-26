@@ -364,7 +364,6 @@ int main() {
         reset_ncrisc_with_iram();
 
         WAYPOINT("GW");
-        uint32_t count = 0;
 
         while (mailboxes->go_message.signal != RUN_MSG_GO) {
             // While the go signal for kernel execution  is not sent, check if the worker was signalled
