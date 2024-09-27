@@ -34,6 +34,7 @@ void kernel_main() {
     uint32_t next_core_noc_y = get_arg_val<uint32_t>(rt_args_idx++);
 
     volatile tt_l1_ptr uint32_t* l1_signal_sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(signal_semaphore_addr);
+    uint64_t remote_signal_semaphore_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, signal_semaphore_addr);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in2 = 2;  // Sharded cb
@@ -77,6 +78,8 @@ void kernel_main() {
             if (shard_cnt == 0) { // Need to load the local shard from cb2 to cb0 in the correct place
                 noc_async_read(get_noc_addr(local_shard_read_addr), curr_shard_read_addr, shard_size_bytes);
                 noc_async_read_barrier();
+
+                noc_async_write_one_packet_set_state(remote_curr_shard_write_addr, shard_size_bytes);
             }
 
             // Do stuff for matmul fusion here
@@ -87,10 +90,9 @@ void kernel_main() {
 
             // Send data to next core
             if (shard_cnt < ring_size - 1) { // Skip sending the last shard
-                noc_async_write(curr_shard_read_addr, remote_curr_shard_write_addr, shard_size_bytes);
+                noc_async_write_one_packet_with_state(curr_shard_read_addr, remote_curr_shard_write_addr);
 
                 // Signal the next core that data is ready
-                uint64_t remote_signal_semaphore_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, signal_semaphore_addr);
                 noc_semaphore_inc(remote_signal_semaphore_addr, 1);
             }
        }
