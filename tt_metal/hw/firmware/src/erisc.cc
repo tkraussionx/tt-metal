@@ -101,8 +101,7 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
                             NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR);
             mailboxes->go_message.signal = RUN_MSG_DONE;
             internal_::notify_dispatch_core_done(dispatch_addr);
-        }
-        else {
+        } else {
             internal_::risc_context_switch();
         }
     }

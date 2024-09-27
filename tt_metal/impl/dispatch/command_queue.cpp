@@ -1677,7 +1677,7 @@ EnqueueTraceCommand::EnqueueTraceCommand(
     uint32_t command_queue_id,
     Device* device,
     SystemMemoryManager& manager,
-    std::shared_ptr<detail::TraceDescriptor> desc,
+    std::shared_ptr<detail::TraceDescriptor>& desc,
     Buffer& buffer,
     uint32_t& expected_num_workers_completed,
     NOC noc_index,

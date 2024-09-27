@@ -366,7 +366,7 @@ int main() {
         WAYPOINT("GW");
 
         while (mailboxes->go_message.signal != RUN_MSG_GO) {
-            // While the go signal for kernel execution  is not sent, check if the worker was signalled
+            // While the go signal for kernel execution is not sent, check if the worker was signalled
             // to reset its launch message read pointer.
             if (mailboxes->go_message.signal == RUN_MSG_RESET_READ_PTR) {
                 // Set the rd_ptr on workers to specified value

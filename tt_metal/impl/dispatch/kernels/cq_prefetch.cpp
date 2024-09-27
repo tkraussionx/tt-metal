@@ -1242,7 +1242,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     default:
-        // DPRINT << "prefetch invalid command:" << (uint32_t)cmd->base.cmd_id << " " << cmd_ptr << " " << cmddat_q_base << ENDL();
+        //DPRINT << "prefetch invalid command:" << (uint32_t)cmd->base.cmd_id << " " << cmd_ptr << " " << cmddat_q_base << ENDL();
         // DPRINT << HEX() << *(uint32_t*)cmd_ptr << ENDL();
         // DPRINT << HEX() << *((uint32_t*)cmd_ptr+1) << ENDL();
         // DPRINT << HEX() << *((uint32_t*)cmd_ptr+2) << ENDL();
