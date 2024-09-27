@@ -85,15 +85,19 @@ void kernel_main() {
     uint32_t i_stick = start_id;
     uint32_t curr_c = start_dim_offset[2], curr_h = start_dim_offset[1], curr_n = start_dim_offset[3];
     for (uint32_t iter = 0; iter < num_sticks_per_core; ++iter) {
-        bool read_stick = (curr_h >= front_pad_h and curr_h < H) and (curr_c >= front_pad_c and curr_c < C) and (curr_n >= front_pad_n and curr_n < N);
-
+        bool read_stick = curr_h < H and curr_c < C and curr_n < N;
+        DPRINT << "[DPRINT] Handling " << l1_write_addr - get_write_ptr(cb_out0) << ENDL();
         if (read_stick) {
             l1_write_addr += stick_size_bytes;
             i_stick++;
-
         } else {
-            noc_async_read(pad_val_noc_addr, l1_write_addr, stick_size_bytes);
-            l1_write_addr += stick_size_bytes;
+            #if (not_pad_by_zero)
+                noc_async_read(pad_val_noc_addr, l1_write_addr, stick_size_bytes);
+                l1_write_addr += stick_size_bytes;
+            #else
+                noc_async_read(zeros_noc_addr, l1_write_addr, stick_size_bytes);
+                l1_write_addr += stick_size_bytes;
+            #endif
         }
 
         curr_h++;
