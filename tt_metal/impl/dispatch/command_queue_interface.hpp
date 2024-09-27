@@ -47,7 +47,7 @@ struct dispatch_constants {
     static constexpr uint32_t DISPATCH_BUFFER_LOG_PAGE_SIZE = 12;
     static constexpr uint32_t DISPATCH_BUFFER_SIZE_BLOCKS = 4;
     // dispatch_s CB page size is 128 bytes. This should currently be enough to accomodate all commands that
-    // are sent to. Change as needed, once this endpoint is required to handle more than go signal mcasts.
+    // are sent to it. Change as needed, once this endpoint is required to handle more than go signal mcasts.
     static constexpr uint32_t DISPATCH_S_BUFFER_LOG_PAGE_SIZE = 7;
     static constexpr uint32_t DISPATCH_BUFFER_BASE =
         ((DISPATCH_L1_UNRESERVED_BASE - 1) | ((1 << DISPATCH_BUFFER_LOG_PAGE_SIZE) - 1)) + 1;

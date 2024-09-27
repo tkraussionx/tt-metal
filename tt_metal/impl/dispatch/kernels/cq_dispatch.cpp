@@ -98,7 +98,7 @@ constexpr uint32_t l1_cache_elements_rounded =
     ((l1_cache_elements + l1_to_local_cache_copy_chunk - 1) / l1_to_local_cache_copy_chunk) *
     l1_to_local_cache_copy_chunk;
 
-// Used to send go signals asynchronously. Currently unused bu this is a prototype for a GoSignalState
+// Used to send go signals asynchronously. Currently unused but this is a prototype for a GoSignalState
 // ring buffer that can be used to store and then asynchronously send Go Signals.
 typedef struct GoSignalState {
     uint32_t go_signal;
@@ -108,7 +108,7 @@ typedef struct GoSignalState {
 static GoSignalState go_signal_state_ring_buf[4];
 static uint8_t go_signal_state_wr_ptr = 0;
 static uint8_t go_signal_state_rd_ptr = 0;
-// Used when dispatch_s is moved into main dispatcher and needs to uicast + multicast go signals
+// Used when dispatch_s is moved into main dispatcher and needs to unicast + multicast go signals
 static uint32_t unicast_only_cores[16];
 static int num_unicast_cores = -1; // Initialize to -1: Number of cores we need to unicast go signals to. Host will set this during init.
 
@@ -850,7 +850,7 @@ void process_set_unicast_only_cores() {
 
 FORCE_INLINE
 void process_notify_dispatch_s_go_signal_cmd() {
-    // Update free running counter on dispatch_s, signalling that its safe to send a go signal to workers, since program
+    // Update free running counter on dispatch_s, signalling that it's safe to send a go signal to workers, since program
     // config has been written and barriered upon
     if constexpr (distributed_dispatcher) {
         uint64_t dispatch_s_notify_addr = get_noc_addr_helper(dispatch_s_noc_xy, get_semaphore<fd_core_type>(dispatch_s_sem_id));

@@ -1,21 +1,22 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Dispatch kernel
-//  - receives data in pages from prefetch kernel into the dispatch buffer ring buffer
-//  - processes commands with embedded data from the dispatch buffer to write/sync/etc w/ destination
-//  - sync w/ prefetcher is via 2 semaphores, page_ready, page_done
-//  - page size must be a power of 2
-//  - # blocks must evenly divide the dispatch buffer size
-//  - dispatch buffer base must be page size aligned
+// Dispatch Kernel (slave)
+// Required to asynchronously send go signals to workers, upon recieving a program
+// completion signal. This allows program dispatch (for subsequent programs) to overlap
+// with worker execution (for current program), leading to a lower dispatch latency.
+// - Handles the following commands:
+//  - CQ_DISPATCH_CMD_GO_SIGNAL_MCAST: "multicast" go signal to all workers
+//  - CQ_DISPATCH_CMD_WAIT: Wait for workers to complete and reset wait count
+//  - CQ_DISPATCH_SET_UNICAST_ONLY_CORES: Track workers (ex: eth) that cannot be multicasted to
+//    and instead need a unicast for the go signal
 
 #include "debug/assert.h"
 #include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
-#include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 
 constexpr uint32_t DISPATCH_S_ATOMIC_CMD_BUF = 2;
 constexpr uint32_t cb_base = get_compile_time_arg_val(0);
@@ -43,7 +44,7 @@ static uint32_t num_pages_acquired = 0;
 static uint32_t num_mcasts_sent = 0;
 static uint32_t cmd_ptr;
 static uint32_t unicast_only_cores[16]; // TODO: Allocate this on stack
-// Initialize to -1: Number of cores we need to unicast go signals to. Host will set this during init. Assert of not set
+// Initialize to -1: Number of cores we need to unicast go signals to. Host will set this during init. Assert if not set
 static int num_unicast_cores = -1;
 
 // Initialize the go_signal data that will be sent to workers over NOC1 in L1
@@ -114,12 +115,12 @@ void cb_release_pages_dispatch_s(uint32_t n) {
 FORCE_INLINE
 void process_go_signal_mcast_cmd() {
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
-    // Get semaphore that will be update by dispatch_d, signalling that its safe to send a go signal
+    // Get semaphore that will be update by dispatch_d, signalling that it's safe to send a go signal
     volatile tt_l1_ptr uint32_t* sync_sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
     aligned_go_signal = cmd->mcast.go_signal; // Copy the go signal from the command to a NOC Aligned L1 Location
 
-    // Wait for notification from dispatch_d, signalling that its safe to send the go signal
+    // Wait for notification from dispatch_d, signalling that it's safe to send the go signal
     while (wrap_ge(num_mcasts_sent, *sync_sem_addr)) {
         // Update dispatch_d with the latest num_workers
         update_worker_completion_count_on_dispatch_d();
@@ -160,7 +161,7 @@ void set_go_signal_unicast_only_cores() {
 FORCE_INLINE
 void process_dispatch_s_wait_cmd() {
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
-    // Limited Usage of Wait CMD: dispatch_s should get a wait command only if its not on the
+    // Limited Usage of Wait CMD: dispatch_s should get a wait command only if it's not on the
     // same core as dispatch_d and is used to clear the worker count
     ASSERT(cmd->wait.clear_count && (cmd->wait.addr == worker_sem_addr) && distributed_dispatcher);
     volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
@@ -169,7 +170,7 @@ void process_dispatch_s_wait_cmd() {
     // Send updated worker count to dispatch_d
     update_worker_completion_count_on_dispatch_d();
     // Wait for updated count to get picked up by NOC and then clear the counter.
-    // dispatch_d will clear its own counter
+    // dispatch_d will clear it's own counter
     noc_async_writes_flushed();
     *worker_sem = 0;
     aligned_worker_update = 0; // Local worker count should reflect state of worker semaphore
@@ -177,7 +178,7 @@ void process_dispatch_s_wait_cmd() {
 }
 
 void kernel_main() {
-    // DPRINT << "Dispatch Handler Started: " << cb_base  << " " << cb_end << ENDL();
+    // DPRINT << "Dispatch Handler Started: " << cb_base << " " << cb_end << ENDL();
     dispatch_s_atomic_cmd_buf_init();
     cmd_ptr = cb_base;
     bool done = false;
