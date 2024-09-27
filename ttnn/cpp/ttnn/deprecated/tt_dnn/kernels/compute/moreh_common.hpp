@@ -23,7 +23,7 @@
 #include "compute_kernel_api/eltwise_unary/negative.h"
 #include "compute_kernel_api/eltwise_unary/exp.h"
 #include "compute_kernel_api/eltwise_unary/recip.h"
-#include "compute_kernel_api/eltwise_unary/moreh_sub.h"
+#include "compute_kernel_api/eltwise_unary/moreh_binary.h"
 #include "compute_kernel_api/mask.h"
 #include "compute_kernel_api/reduce.h"
 #include "compute_kernel_api/tile_move_copy.h"
@@ -1307,7 +1307,7 @@ ALWI void sub_tiles_to_cb_sfpu(
     copy_tile(icb0, itile0, dst0);
     copy_tile_init_with_dt(icb1, false);
     copy_tile(icb1, itile1, dst1);
-    moreh_sub(dst0);
+    moreh_binary_sub(dst0);
     //  sub_tiles_init_with_dt(icb0, icb1);
     // sub_tiles(icb0, icb1, itile0, itile1, dst0);
     tile_regs_commit();
