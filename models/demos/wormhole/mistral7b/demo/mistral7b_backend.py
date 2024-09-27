@@ -65,6 +65,10 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
     else:
         raise ValueError("Input prompts must be a list of tokenized prompts (lists of token IDs).")
 
+    if len(encoded_prompts) < model_args.max_batch_size:
+        while len(encoded_prompts) < 8:
+            encoded_prompts.append(encoded_prompts[-1].copy())
+
     prompt_lens = [len(x) for x in encoded_prompts]
 
     min_prompt_len = min(prompt_lens)
@@ -93,10 +97,6 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
         if prefill_seq_len > 0:
             input_tokens_prefill[i] = torch.tensor(encoded[:prefill_seq_len]).to(input_tokens_prefill)
             pt_tokenized_inputs_prefill = torch.tensor(input_tokens_prefill)
-            print(f"Encoded Tokens: {encoded}")
-            print(f"Prefill Sequence Length: {prefill_seq_len}")
-            print(f"Length of Encoded: {len(encoded)}")
-
         # breakpoint()
         input_tokens_decode[i, : len(encoded[prefill_seq_len:])] = torch.tensor(encoded[prefill_seq_len:]).to(
             input_tokens_decode
@@ -110,6 +110,11 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
     # Select the first token from the prompts for initial decoding
     pt_tokenized_inputs_decode = torch.tensor(input_tokens_decode)
     emb_inputs_decode = embd(pt_tokenized_inputs_decode[:, 0]).view(model_args.max_batch_size, 1, -1)
+
+    # CHECK THIS
+    if emb_inputs_decode.shape[2] != 4096:
+        breakpoint()
+
     if prefill_seq_len > 0:
         emb_prefill_inputs = [
             embd(pt_tokenized_inputs_prefill[b, :]).view(1, prefill_seq_len, -1)
@@ -219,7 +224,7 @@ class PrefillDecodeBackend:
         self.timestamps_start = {}
         self.timestamps_stop = {}
         self.timer_sums = defaultdict(int)
-        self.enable_profile_logging = True
+        self.enable_profile_logging = False
         self.device = None
         self.cache_root = Path(cache_root)
         if not self.cache_root.exists():
@@ -739,7 +744,7 @@ class PrefillDecodeBackend:
                 elif (user.stop_sequence is not None) and (token == user.stop_sequence):
                     user.decode_complete = True
             out_tokens.append(token)
-            logger.info(f"Concatenated result shape at iteration {self.iteration}: {len(out_tokens)}")
+            # logger.info(f"Concatenated result shape at iteration {self.iteration}: {len(out_tokens)}")
         return torch.concat(out_tokens)
 
     def push_outputs(self, output_q):
