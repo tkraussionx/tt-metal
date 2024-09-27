@@ -38,7 +38,8 @@ Device::Device(
 std::vector<uint32_t> Device::get_noc_encoding_for_active_eth_cores(NOC noc_index) {
     auto active_ethernet_cores = tt::Cluster::instance().get_active_ethernet_cores(this->id(), true);
     std::vector<uint32_t> noc_encodings = {};
-    for (auto core : active_ethernet_cores) {
+    noc_encodings.reserve(active_ethernet_cores.size());
+    for (const auto& core : active_ethernet_cores) {
         noc_encodings.push_back(this->get_noc_unicast_encoding(noc_index, ethernet_core_from_logical_core(core)));
     }
     return noc_encodings;
@@ -293,7 +294,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
                 llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
             }
             llrt::launch_erisc_app_fw_on_core(this->id(), phys_core);
-            // Ethernet worker core. Launch messages will be sent by FD infra if its enabled
+            // Ethernet worker core. Launch messages will be sent by FD infra if it's enabled
             launch_msg->kernel_config.mode = this->using_slow_dispatch() ? DISPATCH_MODE_HOST :  DISPATCH_MODE_DEV;
         } else {
             tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), phys_core));
@@ -305,7 +306,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
                 llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, eriscv_id);
             }
             llrt::program_risc_startup_addr(this->id(), phys_core);
-            // Idle ethernet core. Used by FD infra. How will write launch messages during init.
+            // Idle ethernet core. Used by FD infra. Host will write launch messages during init.
             launch_msg->kernel_config.mode = DISPATCH_MODE_HOST;
         }
     } else {
@@ -1535,8 +1536,7 @@ void Device::setup_tunnel_for_remote_devices() {
                         settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE + (1 << dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE) *  dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages();
                         settings.producer_semaphore_id = 2; // sync with producer (prefetcher)
                         settings.consumer_semaphore_id = 3; // sync with dispatch_d (this is the "consumer" of dispatch_s)
-                    }
-                    else {
+                    } else {
                         // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB and semaphores start at base.
                         settings.cb_start_address = dispatch_constants::DISPATCH_BUFFER_BASE;
                         settings.producer_semaphore_id = 0; // sync with producer (prefetcher)

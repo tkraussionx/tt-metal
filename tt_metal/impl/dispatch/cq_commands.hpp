@@ -123,7 +123,7 @@ constexpr uint32_t CQ_PREFETCH_CMD_RELAY_PAGED_PACKED_MAX_SUB_CMDS = 35;
 
 struct CQPrefetchRelayInlineCmd {
     uint8_t dispatcher_type;
-    uint16_t pad2;
+    uint16_t pad;
     uint32_t length;
     uint32_t stride;          // explicit stride saves a few insns on device
 } __attribute__((packed));

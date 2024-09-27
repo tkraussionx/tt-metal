@@ -1410,6 +1410,7 @@ void noc_async_read_barrier() {
  *
  * Return value: None
  */
+FORCE_INLINE
 void noc_async_write_barrier() {
     WAYPOINT("NWBW");
     while (!ncrisc_noc_nonposted_writes_flushed(noc_index))
