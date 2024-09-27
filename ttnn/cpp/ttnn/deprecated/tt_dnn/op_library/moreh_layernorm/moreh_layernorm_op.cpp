@@ -72,6 +72,8 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
     const bool is_lastdim_layernorm = normalized_dims == 1;
     const bool is_groupnorm = false;
 
+    TT_FATAL(is_lastdim_layernorm, "TODO: Support hw algorithm");
+
     auto num_inner = compute_inner(input_shape, normalized_dims);
     auto num_outer = compute_outer(input_shape, normalized_dims);
 
@@ -99,6 +101,27 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
     const bool do_mask_w = (origin_W % TILE_WIDTH) != 0;
     const auto mask_w = do_mask_w ? origin_W % TILE_WIDTH : TILE_WIDTH;
 
+    union {
+        float f;
+        uint32_t u;
+    } scaler;
+    if (normalized_dims == 1) {
+        scaler.f = 1.0f / static_cast<float>(origin_W);
+    } else {
+        auto reduce_size = 1;
+        for (uint32_t i = input_rank - normalized_dims; i < input_rank; i++) {
+            auto size = input_shape_without_padding[i];
+            reduce_size *= size;
+        }
+        scaler.f = 1.0f / static_cast<float>(sqrt(reduce_size));
+    }
+
+    union {
+        float f;
+        uint32_t u;
+    } e;
+    e.f = eps;  // epsilon
+
     ////////////////////////////////////////////////////////////////////////////
     //                         Core Setup
     ////////////////////////////////////////////////////////////////////////////
@@ -119,6 +142,12 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
     auto arch = input.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] =
         get_compute_kernel_config_args(arch, compute_kernel_config);
+
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    preserve_fp32_precision[CB::c_intermed0] = PreserveFP32Target::DEST;
+    preserve_fp32_precision[CB::c_intermed3] = PreserveFP32Target::DEST;
+    preserve_fp32_precision[CB::c_intermed4] = PreserveFP32Target::DEST;
+    preserve_fp32_precision[CB::c_intermed7] = PreserveFP32Target::DEST;
 
     // This could be inefficient.
     // If Wt is 65, the block_size will be 5. Then, the number of iteration is 13.
@@ -163,6 +192,8 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
         (im0_t + im1_t + im2_t + im3_t + im4_t + im5_t + im6_t + im7_t) * intermed_single_tile_size;
     const uint32_t available_L1 = device->l1_size_per_core() - L1_UNRESERVED_BASE;
     const bool use_large_algorithm = cb_usage >= available_L1;
+
+    TT_FATAL(!use_large_algorithm, "TODO: Support large algorithm");
 
     if (use_large_algorithm) {
         log_info(LogTest, "Large moreh_layernorm algorithm is selected.");
@@ -260,7 +291,9 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
         static_cast<uint32_t>(mean_has_value),
         static_cast<uint32_t>(rstd_has_value),
         static_cast<uint32_t>(is_lastdim_layernorm),
-        static_cast<uint32_t>(is_groupnorm)};
+        static_cast<uint32_t>(is_groupnorm),
+        scaler.u,
+        e.u};
 
     const auto compute_kernel_file =
         use_large_algorithm ? "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/moreh_layernorm/kernels/moreh_layernorm_large_kernel.cpp"
@@ -273,7 +306,8 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
         compute_defines,
         math_fidelity,
         fp32_dest_acc_en,
-        math_approx_mode);
+        math_approx_mode,
+        preserve_fp32_precision);
 
 
     if (!core_group_2.ranges().empty()) {
@@ -288,7 +322,9 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
             static_cast<uint32_t>(mean_has_value),
             static_cast<uint32_t>(rstd_has_value),
             static_cast<uint32_t>(is_lastdim_layernorm),
-            static_cast<uint32_t>(is_groupnorm)};
+            static_cast<uint32_t>(is_groupnorm),
+            scaler.u,
+            e.u};
 
         CreateComputeKernel(
             program,
@@ -297,35 +333,13 @@ operation::ProgramWithCallbacks moreh_layernorm_impl(
             compute_defines,
             math_fidelity,
             fp32_dest_acc_en,
-            math_approx_mode);
+            math_approx_mode,
+            preserve_fp32_precision);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     //                      RuntimeArgs SetUp
     ////////////////////////////////////////////////////////////////////////////
-    union {
-        float f;
-        uint32_t u;
-    } scaler;
-
-    if (normalized_dims == 1) {
-        scaler.f = 1.0f / static_cast<float>(origin_W);
-    } else {
-        auto reduce_size = 1;
-        for (uint32_t i = input_rank - normalized_dims; i < input_rank; i++) {
-            auto size = input_shape_without_padding[i];
-            reduce_size *= size;
-        }
-
-        scaler.f = 1.0f / static_cast<float>(sqrt(reduce_size));
-    }
-
-    union {
-        float f;
-        uint32_t u;
-    } e;
-    e.f = eps;  // epsilon
-
     const auto input_addr = input.buffer()->address();
     const auto output_addr = output.buffer()->address();
 
