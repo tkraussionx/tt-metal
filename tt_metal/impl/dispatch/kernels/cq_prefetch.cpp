@@ -920,7 +920,8 @@ void paged_read_into_cmddat_q(uint32_t read_ptr, PrefetchExecBufState& exec_buf_
     uint32_t pages = exec_buf_state.pages;
 
     // TODO: tune how much is read
-    uint32_t pages_at_once = (pages > NUM_DRAM_BANKS) ? NUM_DRAM_BANKS : pages;
+    uint32_t max_trace_buffer_pages_in_cmd_dat_q = cmddat_q_size >> log_page_size;
+    uint32_t pages_at_once = (max_trace_buffer_pages_in_cmd_dat_q > pages) ? pages : max_trace_buffer_pages_in_cmd_dat_q;
     uint32_t read_length = pages_at_once << log_page_size;
 
     InterleavedAddrGen<true> addr_gen{.bank_base_address = base_addr, .page_size = page_size};
@@ -931,11 +932,10 @@ void paged_read_into_cmddat_q(uint32_t read_ptr, PrefetchExecBufState& exec_buf_
         read_ptr += page_size;
         page_id++;
         pages_at_once--;
-        pages--;
     }
 
     exec_buf_state.page_id = page_id;
-    exec_buf_state.pages = pages;
+    exec_buf_state.pages -= pages_at_once;
     exec_buf_state.length += read_length;
 }
 
@@ -981,9 +981,9 @@ static uint32_t process_exec_buf_relay_inline_cmd(uint32_t& cmd_ptr,
         // fetch more
         noc_async_writes_flushed();
         paged_read_into_cmddat_q(cmd_ptr, exec_buf_state);
-        noc_async_read_barrier();
         remaining = exec_buf_state.length;
         remaining_stride = exec_buf_state.length;
+        noc_async_read_barrier();
     }
     if constexpr (send_to_dispatch_master) {
         write_downstream<true>(data_ptr, local_downstream_data_ptr, length, downstream_cb_end, downstream_noc_xy);

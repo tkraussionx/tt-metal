@@ -35,8 +35,34 @@ Device::Device(
     this->initialize(num_hw_cqs, l1_small_size, trace_region_size, l1_bank_remap, minimal);
 }
 
+std::unordered_set<CoreCoord> Device::get_active_ethernet_cores(bool skip_reserved_tunnel_cores) const {
+    return tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores);
+}
+
+bool Device::is_active_ethernet_core(CoreCoord logical_core, bool skip_reserved_tunnel_cores) const {
+    auto active_ethernet_cores = this->get_active_ethernet_cores(skip_reserved_tunnel_cores);
+    return active_ethernet_cores.find(logical_core) != active_ethernet_cores.end();
+}
+
+std::unordered_set<CoreCoord> Device::get_inactive_ethernet_cores() const {
+    return tt::Cluster::instance().get_inactive_ethernet_cores(this->id_);
+}
+
+bool Device::is_inactive_ethernet_core(CoreCoord logical_core) const {
+    auto inactive_ethernet_cores = tt::Cluster::instance().get_inactive_ethernet_cores(this->id_);
+    return inactive_ethernet_cores.find(logical_core) != inactive_ethernet_cores.end();
+}
+
+uint32_t Device::num_eth_worker_cores() const {
+    return this->num_eth_worker_cores_;
+}
+
+uint32_t Device::num_worker_cores() const {
+    return this->num_worker_cores_;
+}
+
 std::vector<uint32_t> Device::get_noc_encoding_for_active_eth_cores(NOC noc_index) {
-    auto active_ethernet_cores = tt::Cluster::instance().get_active_ethernet_cores(this->id(), true);
+    auto active_ethernet_cores = this->get_active_ethernet_cores(true);
     std::vector<uint32_t> noc_encodings = {};
     noc_encodings.reserve(active_ethernet_cores.size());
     for (const auto& core : active_ethernet_cores) {
@@ -173,6 +199,8 @@ void Device::initialize_cluster() {
         this->clear_l1_state();
     }
     int ai_clk = tt::Cluster::instance().get_device_aiclk(this->id_);
+    this->num_worker_cores_ = this->compute_with_storage_grid_size().x * this->compute_with_storage_grid_size().y;
+    this->num_eth_worker_cores_ = this->get_active_ethernet_cores(true).size();
     log_info(tt::LogMetal, "AI CLK for device {} is:   {} MHz", this->id_, ai_clk);
 }
 
@@ -2211,6 +2239,7 @@ void Device::configure_command_queue_programs() {
         tt_cxy_pair prefetch_location = dispatch_core_manager::instance().prefetcher_core(device_id, channel, cq_id);
         tt_cxy_pair completion_q_writer_location = dispatch_core_manager::instance().completion_queue_writer_core(device_id, channel, cq_id);
         tt_cxy_pair dispatch_location = dispatch_core_manager::instance().dispatcher_core(device_id, channel, cq_id);
+        tt_cxy_pair remote_dispatcher_location;
         CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(mmio_device_id);
 
         TT_ASSERT(prefetch_location.chip == mmio_device_id and completion_q_writer_location.chip == mmio_device_id,
