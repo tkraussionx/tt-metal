@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
     bool pass = true;
     try {
         int device_id = 0;
-        tt_metal::Device *device = tt_metal::CreateDevice(device_id);
+        tt_metal::Device *device = tt_metal::CreateDevice(device_id, 1, 0, 875521024);
 
         CommandQueue& cq = device->command_queue();
 
@@ -234,18 +234,23 @@ int main(int argc, char **argv) {
             tt_metal::detail::SetLazyCommandQueueMode(true);
         }
 
-        auto start = std::chrono::system_clock::now();
+        // auto start = std::chrono::system_clock::now();
+        uint32_t tid = BeginTraceCapture(device, 0);
         for (int i = 0; i < iterations_g; i++) {
             EnqueueProgram(cq, program[0], false);
             for (int j = 0; j < nfast_kernels_g; j++) {
                 EnqueueProgram(cq, program[1], false);
             }
         }
-        if (time_just_finish_g) {
-            start = std::chrono::system_clock::now();
-        }
-        Finish(cq);
+        EndTraceCapture(device, 0, tid);
+        auto start = std::chrono::system_clock::now();
+        ReplayTrace(device, 0, tid, true);
         auto end = std::chrono::system_clock::now();
+        // if (time_just_finish_g) {
+        //     start = std::chrono::system_clock::now();
+        // }
+        // Finish(cq);
+        // auto end = std::chrono::system_clock::now();
 
         log_info(LogTest, "Warmup iterations: {}", warmup_iterations_g);
         log_info(LogTest, "Iterations: {}", iterations_g);

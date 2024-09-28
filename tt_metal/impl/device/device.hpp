@@ -121,23 +121,15 @@ class Device {
         return tt::Cluster::instance().get_ethernet_connected_device_ids(this->id_);
     }
 
-    std::unordered_set<CoreCoord> get_active_ethernet_cores(bool skip_reserved_tunnel_cores=false) const {
-        return tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores);
-    }
+    std::unordered_set<CoreCoord> get_active_ethernet_cores(bool skip_reserved_tunnel_cores=false) const;
 
-    bool is_active_ethernet_core(CoreCoord logical_core, bool skip_reserved_tunnel_cores=false) const {
-        auto active_ethernet_cores = tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores);
-        return active_ethernet_cores.find(logical_core) != active_ethernet_cores.end();
-    }
+    bool is_active_ethernet_core(CoreCoord logical_core, bool skip_reserved_tunnel_cores=false) const;
 
-    std::unordered_set<CoreCoord> get_inactive_ethernet_cores() const {
-        return tt::Cluster::instance().get_inactive_ethernet_cores(this->id_);
-    }
+    std::unordered_set<CoreCoord> get_inactive_ethernet_cores() const;
 
-    bool is_inactive_ethernet_core(CoreCoord logical_core) const {
-        auto inactive_ethernet_cores = tt::Cluster::instance().get_inactive_ethernet_cores(this->id_);
-        return inactive_ethernet_cores.find(logical_core) != inactive_ethernet_cores.end();
-    }
+    bool is_inactive_ethernet_core(CoreCoord logical_core) const;
+
+    uint32_t num_eth_worker_cores() const;
 
     std::tuple<chip_id_t, CoreCoord> get_connected_ethernet_core(CoreCoord eth_core) const {
         return tt::Cluster::instance().get_connected_ethernet_core(std::make_tuple(this->id_, eth_core));
@@ -294,7 +286,7 @@ class Device {
     std::vector<std::unique_ptr<Program>> command_queue_programs;
     bool using_fast_dispatch;
     program_cache::detail::ProgramCache program_cache;
-
+    uint32_t num_eth_worker_cores_;
     // Program cache interface. Syncrhonize with worker worker threads before querying or
     // modifying this structure, since worker threads use this for compiling ops
     void enable_program_cache() {
