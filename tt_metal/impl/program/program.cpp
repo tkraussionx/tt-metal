@@ -1149,5 +1149,15 @@ uint32_t Program::get_cb_size(Device *device, CoreCoord logical_core, CoreType c
     return this->program_configs_[index].cb_size;
 }
 
+bool Program::runs_on_noc_unicast_only_cores() {
+    return (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1 and
+            this -> get_kernel_groups(hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH)).size());
+}
+
+bool Program::runs_on_noc_multicast_only_cores() {
+    return (hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX) != -1 and
+            this -> get_kernel_groups(hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX)).size());
+}
+
 Program::~Program() {}
 }  // namespace tt::tt_metal

@@ -1327,13 +1327,11 @@ void EnqueueProgramCommand::process() {
     // Note: since present implementation always stalls, we always free up to "now"
     this->manager.get_config_buffer_mgr().free(reservation.first.sync_count);
     uint32_t num_workers = 0;
-    uint32_t tensix_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX);
-    if (tensix_index != -1 and program.get_kernel_groups(tensix_index).size()) {
+    if (program.runs_on_noc_multicast_only_cores()) {
         auto [tensix_num_workers, tensix_worker_physical_grid] = get_physical_worker_grid_config(device->id(), device->num_hw_cqs(), this->dispatch_core_type);
         num_workers += tensix_num_workers;
     }
-    uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
-    if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
+    if (program.runs_on_noc_unicast_only_cores()) {
         num_workers += device->get_active_ethernet_cores(true).size();
     }
     this->manager.get_config_buffer_mgr().alloc(
@@ -1703,9 +1701,12 @@ void EnqueueTraceCommand::process() {
         (this->device->distributed_dispatcher()) * CQ_PREFETCH_CMD_BARE_MIN_SIZE +
         CQ_PREFETCH_CMD_BARE_MIN_SIZE;  // CQ_PREFETCH_CMD_EXEC_BUF
 
-    uint8_t go_signal_mcast_flag = (uint8_t)GoSignalMcastSettings::SEND_MCAST;;
+    uint8_t go_signal_mcast_flag = 0;
+    if (desc->num_traced_programs_needing_go_signal_multicast) {
+        go_signal_mcast_flag |= (uint8_t)GoSignalMcastSettings::SEND_MCAST;
+    }
     if (desc->num_traced_programs_needing_go_signal_unicast) {
-        go_signal_mcast_flag |= (uint8_t)GoSignalMcastSettings::SEND_UNICAST;;
+        go_signal_mcast_flag |= (uint8_t)GoSignalMcastSettings::SEND_UNICAST;
     }
     void* cmd_region = this->manager.issue_queue_reserve(cmd_sequence_sizeB, this->command_queue_id);
 
@@ -1725,8 +1726,9 @@ void EnqueueTraceCommand::process() {
     reset_launch_message_read_ptr_go_signal.master_y = (uint8_t)this->dispatch_core.y;
     // Wait to ensure that all kernels have completed. Then send the reset_rd_ptr go_signal.
     command_sequence.add_dispatch_go_signal_mcast(this->expected_num_workers_completed, go_signal_mcast_flag, *reinterpret_cast<uint32_t*>(&reset_launch_message_read_ptr_go_signal), DISPATCH_MESSAGE_ADDR, dispatcher_for_go_signal);
-    // This needs to be updated to account for tensix cores only if trace runs on tensix
-    this->expected_num_workers_completed += num_mcast_cores;
+    if (desc->num_traced_programs_needing_go_signal_multicast) {
+        this->expected_num_workers_completed += num_mcast_cores;
+    }
     if (desc->num_traced_programs_needing_go_signal_unicast) {
         this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
     }
@@ -2257,21 +2259,19 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
     uint32_t expected_workers_completed = this->manager.get_bypass_mode() ? this->trace_ctx->num_completion_worker_cores
                                                                           : this->expected_num_workers_completed;
     if (this->manager.get_bypass_mode()) {
-        this->trace_ctx->num_completion_worker_cores += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
-        uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
-        // TODO: ugly, can be fixed by looping over indices w/ some work
-        this->trace_ctx->num_traced_programs++;
-        if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
+        if (program.runs_on_noc_multicast_only_cores()) {
+            this->trace_ctx->num_traced_programs_needing_go_signal_multicast++;
+            this->trace_ctx->num_completion_worker_cores += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y; // cache this
+        }
+        if (program.runs_on_noc_unicast_only_cores()) {
             this->trace_ctx->num_traced_programs_needing_go_signal_unicast++;
             this->trace_ctx->num_completion_worker_cores += device->get_active_ethernet_cores(true).size();
         }
     } else {
-         uint32_t tensix_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX);
-        if (tensix_index != -1 and program.get_kernel_groups(tensix_index).size()) {
-            this->expected_num_workers_completed += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y;
+        if (program.runs_on_noc_multicast_only_cores()) {
+            this->expected_num_workers_completed += device->compute_with_storage_grid_size().x * device->compute_with_storage_grid_size().y; // cache this
         }
-        uint32_t eth_index = hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH);
-        if (eth_index != -1 and program.get_kernel_groups(eth_index).size()) {
+        if (program.runs_on_noc_unicast_only_cores()) {
             this->expected_num_workers_completed += device->get_active_ethernet_cores(true).size();
         }
     }
@@ -2287,8 +2287,10 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
         this->multicast_cores_launch_message_wptr,
         this->unicast_cores_launch_message_wptr);
     // Update wptrs for tensix and eth launch message
-    this->multicast_cores_launch_message_wptr = (this->multicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
-    if (hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH) != -1 and program.get_kernel_groups(hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH)).size()) {
+    if (program.runs_on_noc_multicast_only_cores()) {
+        this->multicast_cores_launch_message_wptr = (this->multicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
+    }
+    if (program.runs_on_noc_unicast_only_cores()) {
         this->unicast_cores_launch_message_wptr = (this->unicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
     }
     this->enqueue_command(command, blocking);
@@ -2369,10 +2371,9 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     // Increment the expected worker cores counter due to trace programs completion
     this->expected_num_workers_completed += trace_inst->desc->num_completion_worker_cores;
-    this->multicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs & (launch_msg_buffer_num_entries - 1);
-    if (trace_inst->desc->num_traced_programs_needing_go_signal_unicast) {
-        this->unicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_unicast & (launch_msg_buffer_num_entries - 1);
-    }
+    this->multicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_multicast & (launch_msg_buffer_num_entries - 1);
+    this->unicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_unicast & (launch_msg_buffer_num_entries - 1);
+
     if (blocking) {
         this->finish();
     }
