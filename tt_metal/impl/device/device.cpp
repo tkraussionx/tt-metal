@@ -36,7 +36,7 @@ Device::Device(
 }
 
 std::vector<uint32_t> Device::get_noc_encoding_for_active_eth_cores(NOC noc_index) {
-    auto active_ethernet_cores = this->get_active_ethernet_cores(true);
+    auto active_ethernet_cores = tt::Cluster::instance().get_active_ethernet_cores(this->id(), true);
     std::vector<uint32_t> noc_encodings = {};
     noc_encodings.reserve(active_ethernet_cores.size());
     for (const auto& core : active_ethernet_cores) {
@@ -2497,12 +2497,8 @@ CoreCoord Device::logical_grid_size() const {
 }
 
 CoreCoord Device::compute_with_storage_grid_size() const {
-    static CoreCoord compute_grid_size = {0xff, 0xff};
-    if (compute_grid_size.x == 0xff and compute_grid_size.y == 0xff) {
-        CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(id_);
-        compute_grid_size = tt::get_compute_grid_size(id_, num_hw_cqs_, dispatch_core_type);
-    }
-    return compute_grid_size;
+    CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(id_);
+    return tt::get_compute_grid_size(id_, num_hw_cqs_, dispatch_core_type);
 }
 
 CoreCoord Device::dram_grid_size() const {

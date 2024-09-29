@@ -121,16 +121,12 @@ class Device {
         return tt::Cluster::instance().get_ethernet_connected_device_ids(this->id_);
     }
 
-    const std::unordered_set<CoreCoord>& get_active_ethernet_cores(bool skip_reserved_tunnel_cores=false) const {
-        static std::unordered_map<bool, std::unordered_set<CoreCoord>> cached_eth_cores = {};
-        if (cached_eth_cores.find(skip_reserved_tunnel_cores) == cached_eth_cores.end()) {
-            cached_eth_cores.insert({skip_reserved_tunnel_cores, tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores)});
-        }
-        return cached_eth_cores.at(skip_reserved_tunnel_cores);
+    std::unordered_set<CoreCoord> get_active_ethernet_cores(bool skip_reserved_tunnel_cores=false) const {
+        return tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores);
     }
 
     bool is_active_ethernet_core(CoreCoord logical_core, bool skip_reserved_tunnel_cores=false) const {
-        auto active_ethernet_cores = this->get_active_ethernet_cores(skip_reserved_tunnel_cores);
+        auto active_ethernet_cores = tt::Cluster::instance().get_active_ethernet_cores(this->id_, skip_reserved_tunnel_cores);
         return active_ethernet_cores.find(logical_core) != active_ethernet_cores.end();
     }
 
