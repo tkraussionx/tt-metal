@@ -54,6 +54,13 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
     """
     Run tokenizer on inputs, and create embeddings for the first token of each input
     """
+    modified_batch = False
+    original_batch_size = len(input_prompts)
+    if len(input_prompts) < model_args.max_batch_size:
+        modified_batch = True
+        while len(input_prompts) < 8:
+            input_prompts.append(input_prompts[-1].copy())
+
     if isinstance(input_prompts[0], list):
         if instruct:
             # Prepend [INST] and append [/INST] to each tokenized prompt
@@ -64,10 +71,6 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
             encoded_prompts = input_prompts
     else:
         raise ValueError("Input prompts must be a list of tokenized prompts (lists of token IDs).")
-
-    if len(encoded_prompts) < model_args.max_batch_size:
-        while len(encoded_prompts) < 8:
-            encoded_prompts.append(encoded_prompts[-1].copy())
 
     prompt_lens = [len(x) for x in encoded_prompts]
 
@@ -143,6 +146,8 @@ def preprocess_inputs_prefill_pre_tokenized(input_prompts, tokenizer, model_args
         rot_emb_matrix_list,
         prefill_seq_len,
         encoded_prompts,
+        modified_batch,
+        original_batch_size,
     )
 
 
@@ -244,6 +249,9 @@ class PrefillDecodeBackend:
         self.decode_counter = 0
         self.prev_decode_counter = 0
         self.prefill_batch_size = 0
+        # for batching purposes
+        self.modified_batch = False
+        self.original_batch_size = batch_size
 
     def get_users(self):
         return [u for u in self.users if u]
@@ -355,6 +363,8 @@ class PrefillDecodeBackend:
             self.rot_emb_matrix_list,
             self.prefill_seq_len,
             _,
+            self.modified_batch,
+            self.original_batch_size,
         ) = preprocess_inputs_prefill_pre_tokenized(
             input_prompts,
             self.tokenizer,
@@ -580,6 +590,8 @@ class PrefillDecodeBackend:
             self.rot_emb_matrix_list,
             self.prefill_seq_len,
             _,
+            _,
+            _,
         ) = preprocess_inputs_prefill_pre_tokenized(
             input_prompts,
             self.tokenizer,
@@ -654,11 +666,16 @@ class PrefillDecodeBackend:
         self.timer_stop("decode_preprocessing")
         self.timer_start("decode")
         # Run ttnn mistral model
-        tt_out = self.tt_model(decode_input, current_pos)
+        tt_out = self.tt_model(decode_input, current_pos)  # comment for mock model
+        # breakpoint()
         self.timer_stop("decode")
         self.timer_start("decode_get_logits")
 
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)[: self.model_args.max_batch_size, :, :]
+        # tt_output_torch = torch.rand((self.model_args.max_batch_size, self.model_args.max_seq_len, self.model_args.vocab_size))
+        # if self.cur_pos == 32:
+        #     tt_output_torch[:,:,self.tokenizer.eos_id] = 1000 # set eos with high probability
+        #     breakpoint()
         self.timer_stop("decode_get_logits")
         self.timer_start("token_selection")
 
@@ -735,7 +752,8 @@ class PrefillDecodeBackend:
                     return_probs=return_probs,
                     skip_token=skip_token,
                 )
-                user.generated_tokens.append(token.item())
+                # user.generated_tokens.append(token.item())
+                user.generated_tokens.append(100)
                 user.num_tokens_generated += 1
                 if token == self.tokenizer.eos_id:
                     user.decode_complete = True
@@ -863,9 +881,18 @@ class PrefillDecodeBackend:
             self.decode(return_logits=return_logits)
         self.get_batch_stats(log=True)
         if return_logits:
-            return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
+            if not self.modified_batch:
+                return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in self.get_users()])
+            else:
+                original_users = self.get_users()[: self.original_batch_size]
+                return torch.concat([user.generated_logits[:n_tokens, :].unsqueeze(0) for user in original_users])
+
         else:
-            return [user.generated_tokens[:n_tokens] for user in self.get_users()]
+            if not self.modified_batch:
+                return [user.generated_tokens[:n_tokens] for user in self.get_users()]
+            else:
+                original_users = self.get_users()[: self.original_batch_size]
+                return [user.generated_tokens[:n_tokens] for user in original_users]
 
     def run_generate(self, prompt_q, output_q, status_q, run_once=False):
         """
