@@ -84,6 +84,10 @@ operation::ProgramWithCallbacks moreh_layernorm_backward_gamma_beta_grad_impl(
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] =
         get_compute_kernel_config_args(arch, compute_kernel_config);
 
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    preserve_fp32_precision[CB::c_intermed2] = PreserveFP32Target::DEST;
+    preserve_fp32_precision[CB::c_intermed3] = PreserveFP32Target::DEST;
+
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup
     ////////////////////////////////////////////////////////////////////////////
@@ -186,7 +190,8 @@ operation::ProgramWithCallbacks moreh_layernorm_backward_gamma_beta_grad_impl(
         compute_defines,
         math_fidelity,
         fp32_dest_acc_en,
-        math_approx_mode);
+        math_approx_mode,
+        preserve_fp32_precision);
 
     if (!core_group_2.ranges().empty()) {
         const std::vector<uint32_t> compute_args_group_2{
@@ -208,7 +213,8 @@ operation::ProgramWithCallbacks moreh_layernorm_backward_gamma_beta_grad_impl(
             compute_defines,
             math_fidelity,
             fp32_dest_acc_en,
-            math_approx_mode);
+            math_approx_mode,
+            preserve_fp32_precision);
     }
 
     ////////////////////////////////////////////////////////////////////////////
