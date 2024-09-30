@@ -232,10 +232,10 @@ def pcie_mesh_device(request, silicon_arch_name, silicon_arch_wormhole_b0, devic
     request.node.pci_ids = device_ids[:num_pcie_devices_requested]
 
     mesh_device = ttnn.open_mesh_device(
-        ttnn.MeshShape(1, num_pcie_devices_requested),
+        ttnn.MeshShape(2, 2),
         dispatch_core_type=get_dispatch_core_type(),
         **device_params,
-        physical_device_ids=device_ids[:num_pcie_devices_requested],
+        offset=(0, 1),
     )
 
     logger.debug(f"multidevice with {mesh_device.get_num_devices()} devices is created")
