@@ -21,6 +21,7 @@ def run_tilize_matmul_test(M, K, N, device):
         A.flatten().tolist(),
         a_shape,
         ttnn.bfloat16,
+        # ttnn.TILE_LAYOUT,
         ttnn.ROW_MAJOR_LAYOUT,
         device,
     )
@@ -46,6 +47,5 @@ def run_tilize_matmul_test(M, K, N, device):
     assert passing_pcc
 
 
-@skip_for_blackhole("Hanging on BH, see #12349")
 def test_run_tilize_matmul_test(device):
     run_tilize_matmul_test(32, 32, 32, device)

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // same arg indices as in reader_binary_diff_lenghts for compat
@@ -24,9 +25,9 @@ void kernel_main() {
     constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
 
-    // DPRINT << "Mt=" << Mt << " Kt=" << Kt << " Nt=" << Nt << " MtKt=" << MtKt << "KtNt=" << KtNt << ENDL();
-    // DPRINT << "src0=" << src0_addr << " src1=" << src1_addr << ENDL();
-    // DPRINT << "batch=" << batch << ENDL();
+    DPRINT << "Mt=" << Mt << " Kt=" << Kt << " Nt=" << Nt << " MtKt=" << MtKt << "KtNt=" << KtNt << ENDL();
+    DPRINT << "src0=" << src0_addr << " src1=" << src1_addr << ENDL();
+    DPRINT << "batch=" << batch << ENDL();
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
@@ -69,7 +70,7 @@ void kernel_main() {
                 noc_async_read_barrier();
                 cb_push_back(cb_id_in1, onetile);
             }
-            // DPRINT << "Pushed itileA=" << itileA << " itileB=" << itileB << ENDL();
+            DPRINT << "Pushed itileA=" << itileA << " itileB=" << itileB << ENDL();
 
             itileA += 1;   // A is MK
             itileB += Nt;  // B is KN, so to get k++ we stride by Nt
@@ -91,4 +92,5 @@ void kernel_main() {
             itileA -= Kt;  // resets tileA to kt=0, keep the same mt
         }
     }  // batch loop
+    DPRINT << "rea1" << ENDL();
 }

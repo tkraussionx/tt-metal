@@ -26,5 +26,6 @@ void MAIN {
         cb_push_back(tt::CB::c_out0, per_core_block_tile_cnt);
         cb_pop_front(tt::CB::c_in0, per_core_block_tile_cnt);
     }
+    tilize_uninit(tt::CB::c_in0, tt::CB::c_out0);
 }
 }

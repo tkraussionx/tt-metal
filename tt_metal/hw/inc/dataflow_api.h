@@ -27,6 +27,7 @@
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
 #include "debug/assert.h"
 #include "dev_msgs.h"
+#include "debug/dprint.h"
 
 extern uint8_t noc_index;
 extern uint32_t tt_l1_ptr *rta_l1_base;
@@ -268,7 +269,9 @@ void cb_push_back(const int32_t operand, const int32_t num_pages) {
     uint32_t num_words = num_pages * cb_interface[operand].fifo_page_size;
 
     volatile tt_reg_ptr uint32_t* pages_received_ptr = get_cb_tiles_received_ptr(operand);
+    DPRINT << "cpb1 " << operand << ENDL();
     pages_received_ptr[0] += num_pages;
+    DPRINT << "cpb2 " << operand << ENDL();
 
     cb_interface[operand].fifo_wr_ptr += num_words;
 

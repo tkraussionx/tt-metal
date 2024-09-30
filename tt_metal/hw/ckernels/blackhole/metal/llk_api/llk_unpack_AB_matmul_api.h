@@ -5,7 +5,12 @@
 #pragma once
 #include "llk_unpack_AB_matmul.h"
 #include "llk_unpack_common_api.h"
+#include "debug/dprint.h"
 
+#define P(s) \
+    PACK( DPRINT << "P" << s << ENDL()); \
+    UNPACK( DPRINT << "U" << s << ENDL()); \
+    MATH( DPRINT << "M" << s << ENDL());
 /*************************************************************************
  * LLK UNPACK AB MATMUL
  *************************************************************************/
@@ -107,6 +112,7 @@ inline void llk_unpack_AB_matmul(
     // In0/InA -> srcB (supports partial face)
     // In1/InB -> srcA
 
+    P("ABm1")
     volatile uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
 
     const std::uint32_t operandA_id = get_operand_id(operandA);
@@ -125,6 +131,7 @@ inline void llk_unpack_AB_matmul(
     std::uint32_t tile_size_b = cb_interface[operandB_id].fifo_page_size;
 
     WAYPOINT("UPMW");
+    P("ABm2")
     _llk_unpack_AB_matmul_(
         base_address_a,
         base_address_b,
@@ -139,5 +146,6 @@ inline void llk_unpack_AB_matmul(
         ct_dim,
         rt_dim,
         kt_dim);
+    P("ABm3")
     WAYPOINT("UPMD");
 }
