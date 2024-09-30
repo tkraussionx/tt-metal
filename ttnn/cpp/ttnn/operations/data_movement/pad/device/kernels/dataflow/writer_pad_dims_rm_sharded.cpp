@@ -53,12 +53,12 @@ void kernel_main() {
     constexpr uint32_t N = get_compile_time_arg_val(0);
     constexpr uint32_t H = get_compile_time_arg_val(1);
     constexpr uint32_t C = get_compile_time_arg_val(2);
-    constexpr uint32_t stick_size_bytes = get_compile_time_arg_val(3);
-    constexpr uint32_t N_padded = get_compile_time_arg_val(4);
-    constexpr uint32_t H_padded = get_compile_time_arg_val(5);
-    constexpr uint32_t C_padded = get_compile_time_arg_val(6);
-    constexpr uint32_t num_zero_pad_sticks_read = get_compile_time_arg_val(7);
-    constexpr uint32_t zero_pad_stick_size = get_compile_time_arg_val(8);
+    constexpr uint32_t W = get_compile_time_arg_val(3);
+    constexpr uint32_t stick_size_bytes = get_compile_time_arg_val(4);
+    constexpr uint32_t N_padded = get_compile_time_arg_val(5);
+    constexpr uint32_t H_padded = get_compile_time_arg_val(6);
+    constexpr uint32_t C_padded = get_compile_time_arg_val(7);
+    constexpr uint32_t W_padded = get_compile_time_arg_val(8);
 
     #define not_pad_by_zero get_compile_time_arg_val(9) == 1
     #if (not_pad_by_zero)
@@ -83,7 +83,7 @@ void kernel_main() {
     uint32_t l1_write_addr = get_write_ptr(cb_out0);
 
     uint32_t i_stick = start_id;
-    uint32_t curr_c = start_dim_offset[2], curr_h = start_dim_offset[1], curr_n = start_dim_offset[3];
+    uint32_t curr_c = start_dim_offset[2], curr_h = start_dim_offset[1], curr_w = start_dim_offset[0], curr_n = start_dim_offset[3];
     for (uint32_t iter = 0; iter < num_sticks_per_core; ++iter) {
         bool read_stick = curr_h < H and curr_c < C and curr_n < N;
         DPRINT << "[DPRINT] Handling " << l1_write_addr - get_write_ptr(cb_out0) << ENDL();

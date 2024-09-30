@@ -1339,7 +1339,7 @@ operation::ProgramWithCallbacks pad_rm_sharded(const Tensor &a,
     // stick sizes
     auto stick_size_unpadded = W * a.element_size();
     auto stick_size_padded = W_padded * a.element_size();
-    auto rem_stick_size_padded = stick_size_padded - stick_size_unpadded;
+    auto rem_stick_size_padded = stick_size_padded - stick_size_unpadded; // FIXME: not used in this function
     uint32_t row_major_min_bytes = 16;
 
     tt::DataFormat cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(a.get_dtype());
