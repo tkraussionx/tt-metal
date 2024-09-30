@@ -72,8 +72,9 @@ void __attribute__((section("erisc_l1_code.1"), noinline)) Application(void) {
         if (mailboxes->go_message.signal == RUN_MSG_GO) {
             // Only include this iteration in the device profile if the launch message is valid. This is because all workers get a go signal regardless of whether
             // they're running a kernel or not. We don't want to profile "invalid" iterations.
-            DeviceConditionalZoneScopedMainN("ERISC-FW",  mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
-            DeviceConditionalZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
+            DeviceZoneScopedMainN("ERISC-FW");
+            DeviceValidateProfiler(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables);
+            DeviceZoneSetCounter(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.host_assigned_id);
             enum dispatch_core_processor_masks enables = (enum dispatch_core_processor_masks)mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables;
             if (enables & DISPATCH_CLASS_MASK_ETH_DM0) {
                 firmware_config_init(mailboxes, ProgrammableCoreType::ACTIVE_ETH, DISPATCH_CLASS_ETH_DM0);

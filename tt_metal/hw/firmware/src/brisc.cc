@@ -394,8 +394,9 @@ int main() {
         {
             // Only include this iteration in the device profile if the launch message is valid. This is because all workers get a go signal regardless of whether
             // they're running a kernel or not. We don't want to profile "invalid" iterations.
-            DeviceConditionalZoneScopedMainN("BRISC-FW", mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
-            DeviceConditionalZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id, mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
+            DeviceZoneScopedMainN("BRISC-FW");
+            DeviceValidateProfiler(mailboxes->launch[launch_msg_rd_ptr].kernel_config.enables);
+            DeviceZoneSetCounter(mailboxes->launch[launch_msg_rd_ptr].kernel_config.host_assigned_id);
             // Copies from L1 to IRAM on chips where NCRISC has IRAM
             l1_to_ncrisc_iram_copy(mailboxes->launch[launch_msg_rd_ptr].kernel_config.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
 
