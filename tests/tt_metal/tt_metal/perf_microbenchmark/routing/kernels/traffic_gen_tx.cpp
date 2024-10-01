@@ -91,7 +91,9 @@ inline bool input_queue_handler() {
     while (words_initialized < words_to_init) {
         if (input_queue_state.input_queue_raw_state.all_packets_done()) {
             break;
-        } else if (!input_queue_state.input_queue_raw_state.packet_active()) { // start of a new packet
+        }
+
+        if (!input_queue_state.input_queue_raw_state.packet_active()) { // start of a new packet
             input_queue_state.next_packet(
                 num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
 
