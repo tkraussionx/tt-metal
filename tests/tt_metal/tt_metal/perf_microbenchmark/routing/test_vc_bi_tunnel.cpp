@@ -787,6 +787,12 @@ int main(int argc, char **argv) {
         log_info(LogTest, "MUX status = {}", packet_queue_test_status_to_string(mux_results[PQ_TEST_STATUS_INDEX]));
         pass &= (mux_results[PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
 
+        vector<uint32_t> loopback_mux_results =
+            tt::llrt::read_hex_vec_from_core(
+                device_r->id(), loopback_mux_phys_core, test_results_addr, test_results_size);
+        log_info(LogTest, "LOOPBACK MUX status = {}", packet_queue_test_status_to_string(loopback_mux_results[PQ_TEST_STATUS_INDEX]));
+        pass &= (loopback_mux_results[PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
+
         vector<uint32_t> demux_results =
             tt::llrt::read_hex_vec_from_core(
                 device->id(), demux_phys_core, test_results_addr, test_results_size);
@@ -906,6 +912,28 @@ int main(int argc, char **argv) {
                 pass = false;
             } else {
                 log_info(LogTest, "MUX words sent = {} == Total RX words checked = {} -> OK", mux_words_sent, total_rx_words_checked);
+            }
+
+            uint64_t loopback_mux_words_sent = get_64b_result(loopback_mux_results, PQ_TEST_WORD_CNT_INDEX);
+            uint64_t loopback_mux_elapsed_cycles = get_64b_result(loopback_mux_results, PQ_TEST_CYCLES_INDEX);
+            uint64_t loopback_mux_iter = get_64b_result(loopback_mux_results, PQ_TEST_ITER_INDEX);
+            double loopback_mux_bw = ((double)loopback_mux_words_sent) * PACKET_WORD_SIZE_BYTES / loopback_mux_elapsed_cycles;
+            double loopback_mux_cycles_per_iter = ((double)loopback_mux_elapsed_cycles) / loopback_mux_iter;
+
+            log_info(LogTest,
+                     "LOOPBACK MUX words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
+                     loopback_mux_words_sent, loopback_mux_elapsed_cycles, loopback_mux_bw);
+            log_info(LogTest,
+                        "LOOPBACK MUX iters = {} -> cycles/iter = {:.1f}",
+                        loopback_mux_iter, loopback_mux_cycles_per_iter);
+            stat["loopback_mux_words_sent"] = loopback_mux_words_sent;
+            stat["loopback_mux_elapsed_cycles"] = loopback_mux_elapsed_cycles;
+            stat["loopback_mux_bw (B/cycle)"] = loopback_mux_bw;
+            if (loopback_mux_words_sent != total_rx_words_checked) {
+                log_error(LogTest, "LOOPBACK MUX words sent = {} != Total RX words checked = {}", loopback_mux_words_sent, total_rx_words_checked);
+                pass = false;
+            } else {
+                log_info(LogTest, "LOOPBACK MUX words sent = {} == Total RX words checked = {} -> OK", loopback_mux_words_sent, total_rx_words_checked);
             }
 
             uint64_t demux_words_sent = get_64b_result(demux_results, PQ_TEST_WORD_CNT_INDEX);
