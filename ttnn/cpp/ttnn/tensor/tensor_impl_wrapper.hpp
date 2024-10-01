@@ -15,6 +15,7 @@ auto dispatch(DataType dtype, Func &&func, Args &&...args) {
         case DataType::BFLOAT16: return func.template operator()<bfloat16>(static_cast<Args &&>(args)...);
         case DataType::FLOAT32: return func.template operator()<float>(static_cast<Args &&>(args)...);
         case DataType::INT32: return func.template operator()<int32_t>(static_cast<Args &&>(args)...);
+        case DataType::INT8: return func.template operator()<int8_t>(static_cast<Args &&>(args)...);
         case DataType::UINT32: return func.template operator()<uint32_t>(static_cast<Args &&>(args)...);
         case DataType::UINT16: return func.template operator()<uint16_t>(static_cast<Args &&>(args)...);
         case DataType::UINT8: return func.template operator()<uint8_t>(static_cast<Args &&>(args)...);

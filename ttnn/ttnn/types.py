@@ -8,6 +8,7 @@ from enum import Enum
 import ttnn
 
 DataType = ttnn._ttnn.tensor.DataType
+int8 = DataType.INT8
 uint8 = DataType.UINT8
 uint16 = DataType.UINT16
 int32 = DataType.INT32

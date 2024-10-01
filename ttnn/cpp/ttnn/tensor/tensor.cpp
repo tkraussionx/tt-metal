@@ -599,6 +599,8 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
             return detail::get_raw_host_data_ptr<float>(tensor);
         case DataType::INT32:
             return detail::get_raw_host_data_ptr<int32_t>(tensor);
+        case DataType::INT8:
+            return detail::get_raw_host_data_ptr<int8_t>(tensor);
         case DataType::UINT32:
             return detail::get_raw_host_data_ptr<uint32_t>(tensor);
         case DataType::BFLOAT8_B:

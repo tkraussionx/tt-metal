@@ -34,7 +34,8 @@ enum class DataType {
     UINT8 = 5,
     UINT16 = 6,
     INT32 = 7,
-    INVALID = 8,
+    INT8 = 8,
+    INVALID = 9,
 };
 
 inline bool is_floating_point(DataType dtype) {
@@ -282,6 +283,7 @@ MemoryConfig load_memory_config(std::ifstream &input_stream);
 MemoryConfig load_memory_config(const std::string &file_name);
 
 using OwnedBuffer = std::variant<
+    owned_buffer::Buffer<int8_t>,
     owned_buffer::Buffer<uint8_t>,
     owned_buffer::Buffer<uint16_t>,
     owned_buffer::Buffer<int32_t>,
@@ -341,6 +343,7 @@ struct DeviceStorage {
 };
 
 using BorrowedBuffer = std::variant<
+    borrowed_buffer::Buffer<int8_t>,
     borrowed_buffer::Buffer<uint8_t>,
     borrowed_buffer::Buffer<uint16_t>,
     borrowed_buffer::Buffer<int32_t>,

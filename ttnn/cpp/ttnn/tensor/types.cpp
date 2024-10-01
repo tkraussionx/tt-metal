@@ -44,6 +44,7 @@ tt::DataFormat datatype_to_dataformat_converter(tt::tt_metal::DataType datatype)
         case tt::tt_metal::DataType::BFLOAT4_B: return tt::DataFormat::Bfp4_b;
         case tt::tt_metal::DataType::FLOAT32: return tt::DataFormat::Float32;
         case tt::tt_metal::DataType::INT32: return tt::DataFormat::Int32;
+        case tt::tt_metal::DataType::INT8: return tt::DataFormat::Int8;
         case tt::tt_metal::DataType::UINT32: return tt::DataFormat::UInt32;
         case tt::tt_metal::DataType::UINT16: return tt::DataFormat::UInt16;
         case tt::tt_metal::DataType::UINT8: return tt::DataFormat::UInt8;
