@@ -55,7 +55,7 @@ ALWI void layernorm_sq_acc_tile_init() {
     MATH(( llk_math_eltwise_unary_sfpu_layernorm_sq_acc_init<APPROX>() ));
 }
 
-ALWI void layernorm_rsqrt_tile(uint32_t idst, bool eps) {
+ALWI void layernorm_rsqrt_tile(uint32_t idst, uint32_t eps) {
     MATH(( llk_math_eltwise_unary_sfpu_layernorm_rsqrt<APPROX>(idst, eps) ));
 }
 
