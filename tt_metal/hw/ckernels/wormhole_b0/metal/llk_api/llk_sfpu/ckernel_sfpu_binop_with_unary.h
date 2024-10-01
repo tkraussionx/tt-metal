@@ -49,7 +49,6 @@ void calculate_binop_with_scalar(uint32_t param) {
         dst_reg++;
     }
 }
-}  // namespace sfpu
 
 template <bool APPROXIMATION_MODE, int ITERATIONS = 8>
 void calculate_add(uint32_t param) {
@@ -77,4 +76,5 @@ void calculate_rsub(uint32_t param) {
     return;
 }
 
+}  // namespace sfpu
 }  // namespace ckernel
