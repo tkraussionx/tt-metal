@@ -35,8 +35,7 @@ inline void moreh_binary() {
             res = lhs * rhs;
         }
 
-        vFloat bf16 = reinterpret<vFloat>(float_to_fp16b(res, 0));
-        dst_reg[0] = bf16;
+        dst_reg[0] = res;
         dst_reg++;
     }
 }
