@@ -21,6 +21,7 @@ std::ostream& operator<<(std::ostream& os, const DataType& dtype) {
         case DataType::BFLOAT16: os << "bfloat16"; break;
         case DataType::FLOAT32: os << "float32"; break;
         case DataType::UINT8: os << "uint8"; break;
+        case DataType::INT8: os << "int8"; break;
         case DataType::UINT16: os << "uint16"; break;
         case DataType::UINT32: os << "uint32"; break;
         case DataType::INT32: os << "int32"; break;
@@ -37,6 +38,7 @@ uint32_t element_size_bytes(DataType dtype) {
         case DataType::UINT32: return sizeof(uint32_t);
         case DataType::UINT16: return sizeof(uint16_t);
         case DataType::UINT8: return sizeof(uint8_t);
+        case DataType::INT8: return sizeof(int8_t);
         case DataType::BFLOAT8_B: return sizeof(std::byte);
         case DataType::BFLOAT4_B: return sizeof(std::byte);
         default: TT_THROW("Unsupported data type");
@@ -66,7 +68,8 @@ uint32_t get_page_size(DataType dtype, Layout layout, uint32_t total_size_bytes,
                 case DataType::UINT32:
                 case DataType::INT32:
                 case DataType::UINT16:
-                case DataType::UINT8:{
+                case DataType::UINT8:
+                case DataType::INT8:{
                     uint32_t size_of_element = element_size_bytes(dtype);
                     page_size = constants::TILE_HW * size_of_element;
                 } break;
@@ -232,8 +235,8 @@ void validate_on_device_dtype_and_layout(Device* device, const tt::tt_metal::Leg
     auto supported_dtype = [&dtype]() {
         TT_ASSERT(
             (dtype == DataType::UINT32 || dtype == DataType::INT32 || dtype == DataType::FLOAT32 ||
-             dtype == DataType::UINT8 || dtype == DataType::UINT16 || dtype == DataType::BFLOAT16 ||
-             dtype == DataType::BFLOAT8_B || dtype == DataType::BFLOAT4_B),
+             dtype == DataType::UINT8 || dtype == DataType::INT8 || dtype == DataType::UINT16 ||
+             dtype == DataType::BFLOAT16 || dtype == DataType::BFLOAT8_B || dtype == DataType::BFLOAT4_B),
             "Only UINT32, INT32, FLOAT32, UINT16, UINT8, BFLOAT16, BFLOAT8_B, or BFLOAT4_B dtypes are supported on device!");
     };
     auto supported_layout = [&shape, &dtype, &layout]() {
@@ -242,6 +245,7 @@ void validate_on_device_dtype_and_layout(Device* device, const tt::tt_metal::Leg
             case DataType::INT32:
             case DataType::FLOAT32: break;
             case DataType::UINT8:
+            case DataType::INT8:
                 if (layout == Layout::ROW_MAJOR) {
                     TT_ASSERT(
                         shape[-1] % 4 == 0,
@@ -423,6 +427,11 @@ inline void print_datum(std::ostream& ss, bfloat16 datum) {
 
 template <>
 inline void print_datum(std::ostream& ss, uint8_t datum) {
+    print_datum<uint32_t>(ss, datum);
+}
+
+template <>
+inline void print_datum(std::ostream& ss, int8_t datum) {
     print_datum<uint32_t>(ss, datum);
 }
 
@@ -625,6 +634,7 @@ template std::string to_string<int32_t>(const Tensor& tensor, std::optional<Data
 template std::string to_string<uint32_t>(const Tensor& tensor, std::optional<DataType> original_dtype);
 template std::string to_string<uint16_t>(const Tensor& tensor, std::optional<DataType> original_dtype);
 template std::string to_string<uint8_t>(const Tensor& tensor, std::optional<DataType> original_dtype);
+template std::string to_string<int8_t>(const Tensor& tensor, std::optional<DataType> original_dtype);
 
 template <>
 std::string to_string<bfloat8_b>(const Tensor& tensor, std::optional<DataType> original_dtype) {
@@ -687,6 +697,7 @@ template Tensor to_host<int32_t>(const Tensor& tensor, bool blocking, uint8_t cq
 template Tensor to_host<uint32_t>(const Tensor& tensor, bool blocking, uint8_t cq_id);
 template Tensor to_host<uint16_t>(const Tensor& tensor, bool blocking, uint8_t cq_id);
 template Tensor to_host<uint8_t>(const Tensor& tensor, bool blocking, uint8_t cq_id);
+template Tensor to_host<int8_t>(const Tensor& tensor, bool blocking, uint8_t cq_id);
 
 template <>
 Tensor to_host<bfloat4_b>(const Tensor& tensor, bool blocking, uint8_t cq_id) {
@@ -726,6 +737,7 @@ template Tensor to_host_sharded<int32_t>(const Tensor& tensor);
 template Tensor to_host_sharded<uint32_t>(const Tensor& tensor);
 template Tensor to_host_sharded<uint16_t>(const Tensor& tensor);
 template Tensor to_host_sharded<uint8_t>(const Tensor& tensor);
+template Tensor to_host_sharded<int8_t>(const Tensor& tensor);
 
 template <>
 Tensor to_host_sharded<bfloat4_b>(const Tensor& tensor) {
@@ -916,6 +928,11 @@ template Tensor to_device<uint8_t>(
     Device* target_device,
     const MemoryConfig& memory_config,
     std::optional<std::reference_wrapper<CommandQueue>> queue);
+template Tensor to_device<int8_t>(
+    const Tensor& tensor,
+    Device* target_device,
+    const MemoryConfig& memory_config,
+    std::optional<std::reference_wrapper<CommandQueue>> queue);
 
 template <>
 Tensor to_device<bfloat4_b>(
@@ -1018,6 +1035,7 @@ template Tensor to_layout<int32_t>(const Tensor& tensor, Layout target_layout);
 template Tensor to_layout<uint32_t>(const Tensor& tensor, Layout target_layout);
 template Tensor to_layout<uint16_t>(const Tensor& tensor, Layout target_layout);
 template Tensor to_layout<uint8_t>(const Tensor& tensor, Layout target_layout);
+template Tensor to_layout<int8_t>(const Tensor& tensor, Layout target_layout);
 
 // Template Specialization for unpack_bfloat_tiles_into_float {bfp4,bfp8}
 template <typename... Args>
@@ -1237,6 +1255,8 @@ template Tensor pad<uint16_t>(
     const Tensor& tensor, const tt::tt_metal::LegacyShape& output_shape, const tt::tt_metal::LegacyShape& input_tensor_start, float pad_value);
 template Tensor pad<uint8_t>(
     const Tensor& tensor, const tt::tt_metal::LegacyShape& output_shape, const tt::tt_metal::LegacyShape& input_tensor_start, float pad_value);
+template Tensor pad<int8_t>(
+    const Tensor& tensor, const tt::tt_metal::LegacyShape& output_shape, const tt::tt_metal::LegacyShape& input_tensor_start, float pad_value);
 
 template <>
 Tensor pad<bfloat8_b>(
@@ -1319,6 +1339,7 @@ template Tensor unpad<int32_t>(const Tensor& tensor, const tt::tt_metal::LegacyS
 template Tensor unpad<uint32_t>(const Tensor& tensor, const tt::tt_metal::LegacyShape& output_tensor_start, const tt::tt_metal::LegacyShape& output_tensor_end);
 template Tensor unpad<uint16_t>(const Tensor& tensor, const tt::tt_metal::LegacyShape& output_tensor_start, const tt::tt_metal::LegacyShape& output_tensor_end);
 template Tensor unpad<uint8_t>(const Tensor& tensor, const tt::tt_metal::LegacyShape& output_tensor_start, const tt::tt_metal::LegacyShape& output_tensor_end);
+template Tensor unpad<int8_t>(const Tensor& tensor, const tt::tt_metal::LegacyShape& output_tensor_start, const tt::tt_metal::LegacyShape& output_tensor_end);
 
 template <>
 Tensor unpad<bfloat8_b>(const Tensor& tensor, const tt::tt_metal::LegacyShape& output_tensor_start, const tt::tt_metal::LegacyShape& output_tensor_end) {
@@ -1354,6 +1375,7 @@ template Tensor extract_shard<int32_t>(const Tensor& tensor, const uint32_t& cor
 template Tensor extract_shard<uint32_t>(const Tensor& tensor, const uint32_t& core_id);
 template Tensor extract_shard<uint16_t>(const Tensor& tensor, const uint32_t& core_id);
 template Tensor extract_shard<uint8_t>(const Tensor& tensor, const uint32_t& core_id);
+template Tensor extract_shard<int8_t>(const Tensor& tensor, const uint32_t& core_id);
 
 template <>
 Tensor extract_shard<bfloat8_b>(const Tensor& tensor, const uint32_t& core_id) {

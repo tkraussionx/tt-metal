@@ -23,6 +23,7 @@
 
 using std::array;
 using std::ostream;
+using std::int8_t;
 using std::uint8_t;
 using std::uint32_t;
 using std::uint64_t;

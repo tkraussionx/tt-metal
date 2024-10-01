@@ -192,6 +192,7 @@ constexpr static std::int32_t GET_TILE_SIZE(uint format) {
         case ((uint8_t)DataFormat::Float16_b): return ((2048));
         case ((uint8_t)DataFormat::Float16): return ((2048));
 
+        case ((uint8_t)DataFormat::Int8): return ((1024));
         case ((uint8_t)DataFormat::UInt8): return ((1024));
         case ((uint8_t)DataFormat::UInt16): return ((2048));
 
@@ -214,6 +215,7 @@ constexpr static std::int32_t GET_TILE_SIZE(uint format) {
 FORCE_INLINE
 constexpr static std::uint32_t MUL_WITH_TILE_SIZE(uint format, uint index) {
     switch (format & 0x1F) {
+        case ((uint8_t)DataFormat::Int8): return (index << 10);
         case ((uint8_t)DataFormat::UInt8): return (index << 10);
         case ((uint8_t)DataFormat::UInt16):
         case ((uint8_t)DataFormat::Float16):

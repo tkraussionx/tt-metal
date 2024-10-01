@@ -12,8 +12,8 @@ TILE_WIDTH = 32
 
 
 def get_tensors(input_shape, data_npu_dtype, data_cpu_dtype, device):
-    condition_npu_dtype = ttnn.DataType.UINT8
-    condition_cpu_dtype = torch.uint8
+    condition_npu_dtype = ttnn.DataType.INT8
+    condition_cpu_dtype = torch.int8
     npu_layout = ttnn.Layout.TILE
 
     torch_condition = torch.randint(0, 2, input_shape, dtype=condition_cpu_dtype)
@@ -30,8 +30,8 @@ def get_tensors(input_shape, data_npu_dtype, data_cpu_dtype, device):
 
 
 def get_tensors_backward(input_shape, data_npu_dtype, data_cpu_dtype, device):
-    condition_npu_dtype = ttnn.DataType.UINT8
-    condition_cpu_dtype = torch.uint8
+    condition_npu_dtype = ttnn.DataType.INT8
+    condition_cpu_dtype = torch.int8
     npu_layout = ttnn.Layout.TILE
 
     torch_condition = torch.randint(0, 2, input_shape, dtype=condition_cpu_dtype)

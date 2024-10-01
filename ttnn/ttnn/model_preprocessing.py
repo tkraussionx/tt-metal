@@ -154,6 +154,7 @@ def default_preprocessor(model, name, ttnn_module_args) -> ParameterDict:
 
 
 torch_dtype_to_ttnn_dtype = {
+    torch.int8: ttnn.int8,
     torch.uint8: ttnn.uint8,
     torch.int16: ttnn.uint16,
     torch.int32: ttnn.int32,

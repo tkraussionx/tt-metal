@@ -22,6 +22,7 @@ using MeshDeviceView = tt::tt_metal::MeshDeviceView;
 constexpr auto TILE_SIZE = 32;
 
 using tt::tt_metal::DataType;
+static constexpr auto int8 = DataType::INT8;
 static constexpr auto uint8 = DataType::UINT8;
 static constexpr auto uint16 = DataType::UINT16;
 static constexpr auto int32 = DataType::INT32;

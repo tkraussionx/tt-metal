@@ -30,7 +30,9 @@ namespace detail {
 
 template <typename T>
 constexpr static DataType get_data_type() {
-    if constexpr (std::is_same_v<T, uint8_t>) {
+    if constexpr (std::is_same_v<T, int8_t>) {
+        return DataType::INT8;
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
         return DataType::UINT8;
     } else if constexpr (std::is_same_v<T, uint16_t>) {
         return DataType::UINT16;
@@ -116,6 +118,9 @@ static Tensor full_impl(
         .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED},
     std::optional<Tensor> optional_output_tensor = std::nullopt) {
     switch (data_type) {
+        case DataType::INT8: {
+            return detail::full<int8_t>(queue_id, shape, int8_t(value), layout, device, output_mem_config, optional_output_tensor);
+        }
         case DataType::UINT8: {
             return detail::full<uint8_t>(queue_id, shape, uint8_t(value), layout, device, output_mem_config, optional_output_tensor);
         }
@@ -730,6 +735,7 @@ static Tensor uniform(T low, T high, const tt::tt_metal::LegacyShape& shape, con
 static Tensor random(
     const tt::tt_metal::LegacyShape& shape, const DataType data_type = DataType::BFLOAT16, const Layout layout = Layout::ROW_MAJOR) {
     switch (data_type) {
+        case DataType::INT8: return uniform(int8_t(0), int8_t(1), shape, layout);
         case DataType::UINT8: return uniform(uint8_t(0), uint8_t(1), shape, layout);
         case DataType::UINT16: return uniform(uint16_t(0), uint16_t(1), shape, layout);
         case DataType::UINT32: return uniform(0u, 1u, shape, layout);

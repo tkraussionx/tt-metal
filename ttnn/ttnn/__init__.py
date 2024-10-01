@@ -105,6 +105,7 @@ from ttnn._ttnn.events import create_event, record_event, wait_for_event
 from ttnn.types import (
     TILE_SIZE,
     DataType,
+    int8,
     uint8,
     uint16,
     int32,

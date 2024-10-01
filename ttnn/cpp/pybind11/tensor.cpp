@@ -100,12 +100,14 @@ void tensor_mem_config_module_types(py::module& m_tensor) {
     tt_serializable_class<tt::tt_metal::CoreRangeSet>(m_tensor, "CoreRangeSet", R"doc(
         Class defining a set of CoreRanges required for sharding)doc");
 
+    py::class_<tt::tt_metal::owned_buffer::Buffer<int8_t>>(m_tensor, "owned_buffer_for_int8_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<uint8_t>>(m_tensor, "owned_buffer_for_uint8_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<uint16_t>>(m_tensor, "owned_buffer_for_uint16_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<int32_t>>(m_tensor, "owned_buffer_for_int32_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<uint32_t>>(m_tensor, "owned_buffer_for_uint32_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<float>>(m_tensor, "owned_buffer_for_float32_t", py::buffer_protocol());
     py::class_<tt::tt_metal::owned_buffer::Buffer<::bfloat16>>(m_tensor, "owned_buffer_for_bfloat16_t", py::buffer_protocol());
+    py::class_<tt::tt_metal::borrowed_buffer::Buffer<std::int8_t>>(m_tensor, "borrowed_buffer_for_int8_t", py::buffer_protocol());
     py::class_<tt::tt_metal::borrowed_buffer::Buffer<std::uint8_t>>(m_tensor, "borrowed_buffer_for_uint8_t", py::buffer_protocol());
     py::class_<tt::tt_metal::borrowed_buffer::Buffer<std::uint16_t>>(m_tensor, "borrowed_buffer_for_uint16_t", py::buffer_protocol());
     py::class_<tt::tt_metal::borrowed_buffer::Buffer<std::int32_t>>(m_tensor, "borrowed_buffer_for_int32_t", py::buffer_protocol());
@@ -251,12 +253,14 @@ void tensor_mem_config_module(py::module& m_tensor) {
         .def(py::self == py::self)
         .def(py::self != py::self);
 
+    detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<int8_t>>(m_tensor, "owned_buffer_for_int8_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<uint8_t>>(m_tensor, "owned_buffer_for_uint8_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<uint16_t>>(m_tensor, "owned_buffer_for_uint16_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<int32_t>>(m_tensor, "owned_buffer_for_int32_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<uint32_t>>(m_tensor, "owned_buffer_for_uint32_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<float>>(m_tensor, "owned_buffer_for_float32_t");
     detail::implement_buffer_protocol<tt::tt_metal::owned_buffer::Buffer<::bfloat16>>(m_tensor, "owned_buffer_for_bfloat16_t");
+    detail::implement_buffer_protocol<tt::tt_metal::borrowed_buffer::Buffer<std::int8_t>>(m_tensor, "borrowed_buffer_for_int8_t");
     detail::implement_buffer_protocol<tt::tt_metal::borrowed_buffer::Buffer<std::uint8_t>>(m_tensor, "borrowed_buffer_for_uint8_t");
     detail::implement_buffer_protocol<tt::tt_metal::borrowed_buffer::Buffer<std::uint16_t>>(m_tensor, "borrowed_buffer_for_uint16_t");
     detail::implement_buffer_protocol<tt::tt_metal::borrowed_buffer::Buffer<std::int32_t>>(m_tensor, "borrowed_buffer_for_int32_t");

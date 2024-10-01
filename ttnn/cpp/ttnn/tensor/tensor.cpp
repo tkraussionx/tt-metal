@@ -555,7 +555,8 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
                 if constexpr (
                     std::is_same_v<DataType, float> or std::is_same_v<DataType, bfloat16> or
                     std::is_same_v<DataType, std::uint32_t> or std::is_same_v<DataType, std::int32_t> or
-                    std::is_same_v<DataType, std::uint8_t> or std::is_same_v<DataType, std::uint16_t>) {
+                    std::is_same_v<DataType, std::uint8_t> or std::is_same_v<DataType, std::int8_t> or
+                    std::is_same_v<DataType, std::uint16_t>) {
                     auto buffer = borrowed_buffer::get_as<DataType>(storage.buffer);
                     return buffer.data();
                 } else {
@@ -593,6 +594,8 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
             return detail::get_raw_host_data_ptr<uint16_t>(tensor);
         case DataType::UINT8:
             return detail::get_raw_host_data_ptr<uint8_t>(tensor);
+        case DataType::INT8:
+            return detail::get_raw_host_data_ptr<int8_t>(tensor);
         default:
             TT_THROW("Unsupported data type");
     }
