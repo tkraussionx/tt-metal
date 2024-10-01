@@ -59,10 +59,14 @@ inline Tensors create_async_output_tensors(const Tensors& inputs, const Optional
         requires(const operation_t& t) { t.create_async_output_tensors(inputs, optional_inputs); };
 
     if constexpr (custom_create_async_outputs) {
+        std::cout << "create_async_output_tensors 1: " << std::endl;
         return operation_t::create_async_output_tensors(inputs, optional_inputs);
     } else if constexpr (std::is_same_v<std::decay_t<execute_on_worker_thread_return_t>, Tensor>) {
+        std::cout << "create_async_output_tensors 2: " << inputs.size() << std::endl;
+
         return {Tensor(operation::get_workers_for_op_output(inputs, optional_inputs, enable_autoformat_device))};
     } else if constexpr (detail::is_homogenous_tuple<execute_on_worker_thread_return_t, Tensor>()) {
+        std::cout << "create_async_output_tensors 3: " << std::endl;
         Tensors output_tensors;
         output_tensors.reserve(std::tuple_size_v<execute_on_worker_thread_return_t>);
         for (auto index = 0; index < std::tuple_size_v<execute_on_worker_thread_return_t>; index++) {
@@ -258,7 +262,14 @@ struct registered_operation_t {
         auto output_tensors =
             detail::create_async_output_tensors<operation_t, execute_on_worker_thread_return_t>(
                 input_tensors, optional_input_tensors);
-
+        std::cout << "inputs: " << std::endl;
+        for (auto& input : input_tensors) {
+            std::cout << input.tensor_attributes.get() << std::endl;
+        }
+        std::cout << "outputs: " << std::endl;
+        for (auto& output : output_tensors) {
+            std::cout << output.tensor_attributes.get() << std::endl;
+        }
         const OptionalTensors optional_output_tensors =
             detail::extract_args_to_vector<std::optional<ttnn::Tensor>>(std::forward<args_t>(args)...);
 
@@ -320,7 +331,7 @@ struct registered_operation_t {
 
     template <typename... args_t>
     auto operator()(args_t&&... args) const {
-        tt::log_debug(tt::LogOp, "Started   C++ ttnn operation: {}", std::string_view{cpp_fully_qualified_name});
+        tt::log_info(tt::LogOp, "Started   C++ ttnn operation: {}", std::string_view{cpp_fully_qualified_name});
         GraphTracker::instance().track_function_start(cpp_fully_qualified_name, args...);
         auto output = invoke(std::forward<args_t>(args)...);
 
@@ -332,7 +343,7 @@ struct registered_operation_t {
         */
 
         GraphTracker::instance().track_function_end(output);
-        tt::log_debug(tt::LogOp, "Finished  C++ ttnn operation: {}", std::string_view{cpp_fully_qualified_name});
+        tt::log_info(tt::LogOp, "Finished  C++ ttnn operation: {}", std::string_view{cpp_fully_qualified_name});
         return output;
     }
 };

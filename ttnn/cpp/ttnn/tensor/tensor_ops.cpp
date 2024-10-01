@@ -106,6 +106,10 @@ Tensor tensor_to(const Tensor& input_tensor, const std::vector<Device*>& workers
     input_tensor.tensor_attributes->update_main_thread_ref_count(workers.at(0), original_tensor_ref_count);
     device_tensor = tt::tt_metal::set_tensor_id(device_tensor);
     GraphTracker::instance().track_function_end(device_tensor);
+    std::cout << "Tensor to multi device" << std::endl;
+    for (const auto& worker : workers) {
+        std::cout << worker->id() << std::endl;
+    }
     return device_tensor;
 }
 
@@ -192,6 +196,7 @@ Tensor tensor_to(const Tensor& input_tensor, Layout target_layout, Device* worke
     auto output = tensor_impl::to_layout_wrapper(input_tensor, target_layout);
     output = tt::tt_metal::set_tensor_id(output);
     GraphTracker::instance().track_function_end(output);
+    std::cout << "To layout single device" << std::endl;
     return output;
 }
 
@@ -235,6 +240,7 @@ Tensor tensor_to(const Tensor& input_tensor, Layout target_layout, MeshDevice* m
         }
         tensor_modified_layout = tt::tt_metal::set_tensor_id(tensor_modified_layout);
         GraphTracker::instance().track_function_end(tensor_modified_layout);
+        std::cout << "To layout multi device" << std::endl;
         return tensor_modified_layout;
     }
     // Running without worker threads (non-async)

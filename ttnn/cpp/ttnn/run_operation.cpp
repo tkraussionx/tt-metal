@@ -494,6 +494,10 @@ std::vector<Device*> get_workers_for_op_output(
     size_t min_workers_size = std::numeric_limits<uint32_t>::max();
     for (auto& input : inputs) {
         auto workers = input.get_workers();
+        std::cout << "workers for inputs: " << std::endl;
+        for (const auto& worker : workers) {
+            std::cout << worker->id() << std::endl;
+        }
         min_workers_size = std::min(min_workers_size, workers.size());
         if (workers.size() == min_workers_size) {
             workers_for_op = workers;
@@ -522,6 +526,9 @@ std::vector<Device*> get_workers_for_op_output(
                 "inputs to op.");
             workers_for_op = {AutoFormat::GetDefaultDevice()};
         }
+    }
+    for (const auto& worker : workers_for_op) {
+        std::cout << worker->id() << std::endl;
     }
     return workers_for_op;
 }

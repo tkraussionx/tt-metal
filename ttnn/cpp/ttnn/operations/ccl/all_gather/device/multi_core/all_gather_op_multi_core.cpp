@@ -257,6 +257,12 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers_helper(
     if (fuse_op) {
         fused_op_signaler_sender_workers = fused_op_signaler.value();
     }
+    static std::mutex lck;
+    {
+        std::lock_guard<std::mutex> lock(lck);
+        std::cout << device->id() << " " << receiver_device_id.value() << " " << sender_device_id.value() << std::endl;
+    }
+
     auto const& all_gather_config = AllGatherConfig(input_tensor, output_tensor, dim, ring_size, num_links, topology, num_edm_buffers_per_channel, fuse_op, user_defined_num_workers);
     auto const& topology_config = ttnn::ccl::RingTopology(device, topology, sender_device_id, receiver_device_id, num_links, ring_size, ring_index);
 

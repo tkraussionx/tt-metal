@@ -319,6 +319,7 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
             using StorageType = std::decay_t<decltype(storage)>;
             // Assign workers only to device tensors
             if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
+                std::cout << "SIngle device storage" << std::endl;
                 // Either explictly syncing or workers are pre-populated (this will happen for device tensors if using
                 // the correct APIs).
                 TT_FATAL(
@@ -333,6 +334,7 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
                     workers = this->workers;
                 }
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
+                std::cout << "Multidevice storage" << std::endl;
                 // Either explictly syncing or workers are pre-populated (this will happen for device tensors if using
                 // the correct APIs).
                 TT_FATAL(
@@ -340,6 +342,7 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
                     "Worker Handles for tensor must be populated or blocking = true must be set in get_workers().");
                 if (not this->workers.size()) {
                     // Not populated - sync.
+                    std::cout << "populate workers from storage" << std::endl;
                     this->wait_for_tensor_data_populated();
                     workers.reserve(storage.num_buffers());
                     for (int i = 0; i < storage.ordered_device_ids.size(); ++i) {
@@ -347,6 +350,7 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
                         workers.push_back(storage.get_buffer_for_device_id(device_id)->device());
                     }
                 } else {
+                    std::cout << "Get workers from tensor directly" << std::endl;
                     workers = this->workers;
                 }
             }
@@ -393,6 +397,10 @@ Tensor Tensor::to(Device* target_device, const MemoryConfig& mem_config) const {
 
 Tensor Tensor::to(MeshDevice* mesh_device, const MemoryConfig& mem_config) const {
     std::vector<Device*> workers_to_use = distribute_tensor_to_mesh(*this, *mesh_device);
+    std::cout << "Workers from mesh device" << std::endl;
+    for (const auto& worker : workers_to_use) {
+        std::cout << worker->id() << std::endl;
+    }
     return tensor_ops::tensor_to(*this, workers_to_use, mem_config);
 }
 

@@ -247,6 +247,8 @@ class TtLlamaDecoder_optimized:
             inp, compute_kernel_config=self.model_config["LN_COMPUTE_KERNEL_CONFIG"], dtype=ttnn.bfloat16
         )
 
+        print("Right before all gather")
+
         # AllGather stats
         tt_stats = ttnn.all_gather(
             tt_stats,

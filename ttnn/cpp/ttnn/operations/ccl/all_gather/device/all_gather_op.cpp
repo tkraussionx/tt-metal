@@ -205,6 +205,13 @@ Tensor all_gather(
         ccl_topology = ttnn::ccl::Topology::Linear;
     }
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
+
+    std::cout << "Devices: " << std::endl;
+    for (auto dev : devices) {
+        std::cout << dev->id() << " ";
+    }
+    std::cout << std::endl;
+
     operation::launch_op(
         [dim, num_links, memory_config, user_defined_num_workers, user_defined_num_buffers_per_channel, devices, ccl_topology](
             const std::vector<Tensor>& input_tensors,
@@ -212,6 +219,8 @@ Tensor all_gather(
             const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
 
             const auto& input_tensor = input_tensors.at(0);
+
+            std::cout << "All Gather: " << input_tensor.device()->id() << std::endl;
 
             return operation::run(
                 create_all_gather_struct(input_tensor, dim, num_links, memory_config, user_defined_num_workers, user_defined_num_buffers_per_channel, devices, ccl_topology),
