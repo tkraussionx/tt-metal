@@ -81,14 +81,7 @@ void BinaryDeviceOperation::validate_on_program_cache_miss(
     } else {
         TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED, "Error");
         TT_FATAL(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED, "Error");
-        if (attributes.memory_config.is_sharded()) {
-            TT_FATAL(attributes.memory_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED, "Error");
-            uint32_t num_blocks = input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] / TILE_HEIGHT;
-            auto core_grid = input_tensor_a.device()->compute_with_storage_grid_size();
-            uint32_t num_cores = core_grid.x * core_grid.y;
-            TT_FATAL(num_blocks < num_cores or num_blocks % num_cores == 0, "Error");
-
-        } else {
+        if (!attributes.memory_config.is_sharded()) {
             TT_FATAL(attributes.memory_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Error");
         }
     }
@@ -187,14 +180,7 @@ BinaryDeviceOperation::tensor_return_value_t BinaryDeviceOperation::create_outpu
             } else if (input_tensor_b.memory_config().is_sharded()) {
                 shard_spec = input_tensor_b.shard_spec().value();
             } else {
-                uint32_t num_blocks = input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] / TILE_HEIGHT;
-                auto core_grid = input_tensor_a.device()->compute_with_storage_grid_size();
-                uint32_t num_grid_cores = core_grid.x * core_grid.y;
-                uint32_t target_num_cores = num_blocks < num_grid_cores ? num_blocks : num_grid_cores;
-                shard_spec.grid = tt::tt_metal::num_cores_to_corerange_set(target_num_cores, core_grid, true);
-                shard_spec.shape = {
-                    num_blocks / target_num_cores * TILE_HEIGHT, input_tensor_a.get_legacy_shape()[-1]};
-                shard_spec.orientation = ShardOrientation::ROW_MAJOR;
+                shard_spec = operation_attributes.memory_config.shard_spec.value();
             }
             auto memory_config = operation_attributes.memory_config;
             memory_config.shard_spec = shard_spec;

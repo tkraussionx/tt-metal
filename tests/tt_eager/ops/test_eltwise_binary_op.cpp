@@ -126,8 +126,8 @@ int main() {
         TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_width_sharded, mem_config_width_sharded, mem_config_interleaved);
         TT_FATAL(allclose, "Error");
-        // allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_interleaved, mem_config_width_sharded); //needs to be enabled
-        // TT_FATAL(allclose, "Error");
+        allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_interleaved, mem_config_width_sharded); 
+        TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_width_sharded, mem_config_width_sharded);
         TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_width_sharded, mem_config_interleaved, mem_config_width_sharded);
@@ -154,8 +154,8 @@ int main() {
         TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_block_sharded, mem_config_block_sharded, mem_config_interleaved);
         TT_FATAL(allclose, "Error");
-        // allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_interleaved, mem_config_block_sharded); //needs to be enabled
-        // TT_FATAL(allclose, "Error");
+        allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_interleaved, mem_config_block_sharded); 
+        TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_interleaved, mem_config_block_sharded, mem_config_block_sharded);
         TT_FATAL(allclose, "Error");
         allclose = run_test_memory_configs<host_function<std::plus<float>>>(shape, ttnn::add, device, mem_config_block_sharded, mem_config_interleaved, mem_config_block_sharded);
