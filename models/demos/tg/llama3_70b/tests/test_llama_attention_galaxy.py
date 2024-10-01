@@ -165,6 +165,14 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, rope_
             mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
         )
 
+        cache_idxs = torch.tensor([start_pos for _ in range(batch // llama_attention_model.cluster_shape[0])], dtype=torch.int64)
+        cache_idxs_tt = ttnn.as_tensor(
+            cache_idxs,
+            dtype=ttnn.int32,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
+        )
+
         attn_masks = None
 
     elif mode == "prefill":
@@ -225,11 +233,13 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, rope_
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             device=llama_attention_model.mesh_device,
         )
+        cache_idxs_tt = None
 
     return (
         xs,
         start_pos,
         rot_mats,
+        cache_idxs_tt,
         attn_masks,
     )
 
@@ -316,7 +326,7 @@ def run_test_LlamaAttention_inference(
                 pt_inp_normed, start_pos
             )
         else:
-            attention_input, start_pos, freqs_cis, attn_mask = pytorch_LlamaAttention_model.prepare_inputs(
+            attention_input, start_pos, freqs_cis, cache_idxs, attn_mask = pytorch_LlamaAttention_model.prepare_inputs(
                 pt_inp_normed, start_pos
             )
 
@@ -328,14 +338,15 @@ def run_test_LlamaAttention_inference(
         )
 
         # TT hardware execution -------------------------------------------------------------
-        attention_input, start_pos, rot_mat, attn_mask = tt_llama_attention_prepare_inputs(
+        attention_input, start_pos, rot_mat, cache_idxs, attn_mask = tt_llama_attention_prepare_inputs(
             tt_LlamaAttention_model, tt_input, start_pos, configuration.rope_theta, mode=mode
         )
         tt_out = tt_LlamaAttention_model(
             attention_input,
             rot_mat,
             start_pos,
-            attn_mask,
+            cache_idxs=cache_idxs,
+            attn_masks=attn_mask,
             mode=mode,
         )
         # tt_out = ttnn.to_torch(tt_out, mesh_composer=ListMeshToTensor(mesh_device))[0]

@@ -485,10 +485,36 @@ def set_core_model_config(model_config, cluster_shape):
         use_height_and_width_as_shard_shape=True,
     )
 
+    decode_config["EMBD_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 2048 // 8),
+        core_grid=ttnn.CoreGrid(y=1, x=8),
+        strategy=ttnn.ShardStrategy.WIDTH,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    shard_spec_n_cores_grid = ttnn.CoreRangeSet({num_to_corerange(32 // 4)})
+    head_dim = model_config_entries["head_dim"]
+    decode_config["ROT_MAT_MEMCFG"] = ttnn.MemoryConfig(
+        ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttnn.BufferType.L1,
+        ttnn.ShardSpec(
+            shard_spec_n_cores_grid,
+            [
+                head_dim,
+                head_dim,
+            ],
+            ttnn.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
     prefill_config = {}
     prefill_config["LN_COMPUTE_KERNEL_CONFIG"] = decode_config["LN_COMPUTE_KERNEL_CONFIG"]
     prefill_config["COMPUTE_KERNEL_CONFIG"] = decode_config["COMPUTE_KERNEL_CONFIG"]
     prefill_config["LM_HEAD_ACT_MEMCFG"] = decode_config["LM_HEAD_ACT_MEMCFG"]
+    prefill_config["EMBD_MEMCFG"] = decode_config["EMBD_MEMCFG"]
+    prefill_config["ROT_MAT_MEMCFG"] = decode_config["ROT_MAT_MEMCFG"]
 
     hidden_size_per_chip = model_config_entries["hidden_size"] // cluster_shape[0]
     prefill_config["LM_HEAD_PROGCFG"] = matmul_1d_config_from_tensor_shapes(
