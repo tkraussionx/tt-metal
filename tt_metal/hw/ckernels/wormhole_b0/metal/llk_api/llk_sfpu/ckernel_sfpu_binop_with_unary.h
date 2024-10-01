@@ -45,15 +45,11 @@ void calculate_binop_with_scalar(uint32_t param) {
         } else if constexpr (BINOP_MODE == RSUB) {
             result = parameter - val;
         }
-        if constexpr(BINOP_MODE == MUL){
-            vFloat round_even = reinterpret<vFloat>(float_to_fp16b(result, 0));
-            dst_reg[0] = round_even;
-        }else{
-            dst_reg[0] = result;
-        }
+        dst_reg[0] = result;
         dst_reg++;
     }
 }
+}  // namespace sfpu
 
 template <bool APPROXIMATION_MODE, int ITERATIONS = 8>
 void calculate_add(uint32_t param) {
@@ -81,5 +77,4 @@ void calculate_rsub(uint32_t param) {
     return;
 }
 
-}  // namespace sfpu
 }  // namespace ckernel
