@@ -35,4 +35,14 @@ inline void llk_math_eltwise_unary_sfpu_moreh_adamw(
         ckernel::sfpu::moreh_adamw<APPROXIMATE>, dst_index, vector_mode, param1, param2, param3, param4);
 }
 
+template <bool APPROXIMATE>
+inline void llk_math_eltwise_unary_sfpu_moreh_binary_init() {
+    llk_math_eltwise_unary_sfpu_init<SfpuType::unused, APPROXIMATE>();
+}
+
+template <bool APPROXIMATE>
+inline void llk_math_eltwise_unary_sfpu_moreh_adamw_init() {
+    llk_math_eltwise_unary_sfpu_init<SfpuType::unused, APPROXIMATE>();
+}
+
 }  // namespace ckernel

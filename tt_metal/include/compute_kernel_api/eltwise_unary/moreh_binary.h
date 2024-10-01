@@ -41,4 +41,7 @@ ALWI void moreh_adamw(
         idst, beta1_bits, beta2_bits, recip_bias_correction1_bits, recip_bias_correction2_bits)));
 }
 
+ALWI void moreh_binary_op_init() { MATH((llk_math_eltwise_unary_sfpu_moreh_binary_init<APPROX>())); }
+ALWI void moreh_adamw_init() { MATH((llk_math_eltwise_unary_sfpu_moreh_adamw_init<APPROX>())); }
+
 }  // namespace ckernel
