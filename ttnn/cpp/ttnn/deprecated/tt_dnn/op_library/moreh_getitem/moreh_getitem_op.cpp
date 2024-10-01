@@ -40,8 +40,6 @@ void MorehGetitem::validate_with_output_tensors(
         auto index_layout = index_tensor.get_layout();
         if (index_layout == Layout::ROW_MAJOR) {
             TT_FATAL(index_shape.rank() == 1);
-        } else if (index_layout == Layout::TILE) {
-            TT_FATAL(index_shape.rank() == 5);
         }
         TT_FATAL(
             !(input_layout == Layout::ROW_MAJOR && index_layout == Layout::TILE),
