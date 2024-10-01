@@ -11,26 +11,19 @@ namespace ttnn {
 namespace operations {
 namespace data_movement {
 
-struct IndexedFillOperation {
-    static ttnn::Tensor invoke(
-        uint8_t queue_id,
-        const ttnn::Tensor& batch_id,
-        const ttnn::Tensor& input_tensor_a,
-        const ttnn::Tensor& input_tensor_b,
-        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
-        int64_t dim = 0);
-
-    static ttnn::Tensor invoke(
-        const ttnn::Tensor& batch_id,
-        const ttnn::Tensor& input_tensor_a,
-        const ttnn::Tensor& input_tensor_b,
-        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt,
-        int64_t dim = 0);
+struct IndexedFill {
+    static Tensor invoke(
+        const Tensor& batch_id,
+        const Tensor& input_tensor_a,
+        const Tensor& input_tensor_b,
+        int64_t dim,
+        const std::optional<MemoryConfig>& memory_config);
 };
 
 }  // namespace indexed_fill
 }  // namespace operations
 
-constexpr auto indexed_fill = ttnn::register_operation<"ttnn::indexed_fill", ttnn::operations::data_movement::IndexedFillOperation>();
+constexpr auto indexed_fill =
+    ttnn::register_operation_with_auto_launch_op<"ttnn::indexed_fill", ttnn::operations::data_movement::IndexedFill>();
 
 }  // namespace ttnn
