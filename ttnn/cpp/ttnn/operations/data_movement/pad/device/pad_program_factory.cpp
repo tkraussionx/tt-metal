@@ -1339,8 +1339,17 @@ operation::ProgramWithCallbacks pad_rm_sharded(const Tensor &a,
     // stick sizes
     auto stick_size_unpadded = W * a.element_size();
     auto stick_size_padded = W_padded * a.element_size();
-    auto rem_stick_size_padded = stick_size_padded - stick_size_unpadded; // FIXME: not used in this function
+    auto rem_stick_size_padded = stick_size_padded - stick_size_unpadded;
     uint32_t row_major_min_bytes = 16;
+
+    uint32_t zero_pad_stick_size = tt::tt_metal::find_max_divisor(stick_size_padded, 512);
+    uint32_t num_zero_pad_sticks_read = stick_size_padded / zero_pad_stick_size;
+
+    tt::log_debug("zero_pad_stick_size: {}", zero_pad_stick_size);
+    tt::log_debug("num_zero_pad_sticks_read: {}", num_zero_pad_sticks_read);
+
+    // TODO: add a general case, where we can pad on any dim.
+    TT_FATAL(stick_size_unpadded == stick_size_padded, "sharded pad does not support pad on last dim currently as that will cause perf degradation");
 
     tt::DataFormat cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(a.get_dtype());
     tt::DataFormat dst_cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(output.get_dtype());
@@ -1413,21 +1422,25 @@ operation::ProgramWithCallbacks pad_rm_sharded(const Tensor &a,
     std::vector<uint32_t> reader_ct_args = {(std::uint32_t) stick_size_padded,
                                             (std::uint32_t) shard_height_padded};
 
-    std::vector<uint32_t> writer_ct_args = {(std::uint32_t) N,
-                                            (std::uint32_t) H,
-                                            (std::uint32_t) C,
-                                            (std::uint32_t) W,
+    uint32_t W_padding_front_bytes = front_pad[-4] * a.element_size();
+    uint32_t W_padding_back_bytes = (W_padded - W - front_pad[-4]) * a.element_size();
+
+    std::vector<uint32_t> writer_ct_args = {(std::uint32_t) N + front_pad[-4],
+                                            (std::uint32_t) H + front_pad[-2],
+                                            (std::uint32_t) C + front_pad[-3],
                                             (std::uint32_t) stick_size_padded,
                                             (std::uint32_t) N_padded,
                                             (std::uint32_t) H_padded,
                                             (std::uint32_t) C_padded,
                                             (std::uint32_t) W_padded,
-                                            (std::uint32_t) (W_padded - W) * input_tensor.element_size(),
+                                            (std::uint32_t) W_padding_front_bytes,
+                                            (std::uint32_t) W_padding_back_bytes,
+                                            (std::uint32_t) num_zero_pad_sticks_read,
+                                            (std::uint32_t) zero_pad_stick_size,
                                             (std::uint32_t) not_pad_by_zero,
                                             (std::uint32_t) packed_pad_value,
                                             (std::uint32_t) row_major_min_bytes,
-                                            (std::uint32_t) (stick_size_padded / row_major_min_bytes)
-                                            };
+                                            (std::uint32_t) (stick_size_padded / row_major_min_bytes)};
 
     KernelHandle reader_kernel_id = CreateKernel(
         program,
