@@ -374,8 +374,23 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_an
     if (conv_config.reshard_if_not_optimal || needs_shard_or_reshard) {
         auto block_shard_orientation =
             conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
+        TensorMemoryLayout shard_layout;
+        float nhw = height * width * batch_size;
+        float ratio = nhw / in_channels;
+        log_info(LogOp, "NHW: {}, C: {}, ratio: {}", nhw, in_channels, ratio);
+        if (ratio > 8.0f) {
+            shard_layout = TensorMemoryLayout::HEIGHT_SHARDED;
+            log_info(LogOp, "Shard layout: HEIGHT_SHARDED");
+        } else if (ratio < 0.4f) {
+            shard_layout = TensorMemoryLayout::WIDTH_SHARDED;
+            log_info(LogOp, "Shard layout: WIDTH_SHARDED");
+        } else {
+            log_info(LogOp, "Shard layout: BLOCK_SHARDED");
+            shard_layout = TensorMemoryLayout::BLOCK_SHARDED;
+        }
+
         const ParallelConfig& optimal_parallel_config = determine_parallel_config(
-            conv_config.shard_layout,
+            shard_layout,
             batch_size,
             in_channels,
             height,
