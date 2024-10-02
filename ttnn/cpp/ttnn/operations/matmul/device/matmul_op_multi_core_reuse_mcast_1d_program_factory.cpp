@@ -562,6 +562,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         tt_metal::CreateCircularBuffer(program, all_cores, cb_for_l1_array_config);
     }
 
+    uint32_t signal_cb_index = 3;
+    tt_metal::CircularBufferConfig signal_cb_config =
+        tt_metal::CircularBufferConfig(1 * in0_single_tile_size, {{signal_cb_index, in0_data_format}})
+            .set_page_size(signal_cb_index, in0_single_tile_size);
+    auto cb_signal = tt_metal::CreateCircularBuffer(program, all_cores, signal_cb_config);
+
+    uint32_t signal_val_cb_index = 4;
+    tt_metal::CircularBufferConfig signal_val_cb_config =
+        tt_metal::CircularBufferConfig(1 * in0_single_tile_size, {{signal_val_cb_index, in0_data_format}})
+            .set_page_size(signal_val_cb_index, in0_single_tile_size);
+    auto cb_signal_val = tt_metal::CreateCircularBuffer(program, all_cores, signal_val_cb_config);
+
     uint32_t output_cb_index = 16;  // output operands start at index 16
     uint32_t interm0_cb_index = 24;
     tt_metal::CircularBufferConfig interm0_cb_config =
