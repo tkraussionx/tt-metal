@@ -1413,19 +1413,21 @@ operation::ProgramWithCallbacks pad_rm_sharded(const Tensor &a,
     std::vector<uint32_t> reader_ct_args = {(std::uint32_t) stick_size_padded,
                                             (std::uint32_t) shard_height_padded};
 
-    std::vector<uint32_t> writer_ct_args = {(std::uint32_t) N + front_pad[-4],
-                                            (std::uint32_t) H + front_pad[-2],
-                                            (std::uint32_t) C + front_pad[-3],
+    std::vector<uint32_t> writer_ct_args = {(std::uint32_t) N,
+                                            (std::uint32_t) H,
+                                            (std::uint32_t) C,
+                                            (std::uint32_t) W,
                                             (std::uint32_t) stick_size_padded,
                                             (std::uint32_t) N_padded,
                                             (std::uint32_t) H_padded,
                                             (std::uint32_t) C_padded,
-                                            (std::uint32_t) num_zero_pad_sticks_read,
-                                            (std::uint32_t) zero_pad_stick_size,
+                                            (std::uint32_t) W_padded,
+                                            (std::uint32_t) (W_padded - W) * input_tensor.element_size(),
                                             (std::uint32_t) not_pad_by_zero,
                                             (std::uint32_t) packed_pad_value,
                                             (std::uint32_t) row_major_min_bytes,
-                                            (std::uint32_t) (stick_size_padded / row_major_min_bytes)};
+                                            (std::uint32_t) (stick_size_padded / row_major_min_bytes)
+                                            };
 
     KernelHandle reader_kernel_id = CreateKernel(
         program,
