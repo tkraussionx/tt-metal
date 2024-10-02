@@ -41,11 +41,11 @@ constexpr uint32_t prefetch_h_noc_xy = get_compile_time_arg_val(16);
 constexpr uint32_t prefetch_h_local_downstream_sem_addr = get_compile_time_arg_val(17);
 constexpr uint32_t prefetch_h_max_credits = get_compile_time_arg_val(18);
 constexpr uint32_t packed_write_max_unicast_sub_cmds = get_compile_time_arg_val(19); // Number of cores in compute grid
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(20);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(21);
-constexpr uint32_t host_completion_q_wr_ptr = get_compile_time_arg_val(22);
-constexpr uint32_t dev_completion_q_wr_ptr = get_compile_time_arg_val(23);
-constexpr uint32_t dev_completion_q_rd_ptr = get_compile_time_arg_val(24);
+constexpr uint32_t host_completion_q_wr_ptr = get_compile_time_arg_val(20);
+constexpr uint32_t dev_completion_q_wr_ptr = get_compile_time_arg_val(21);
+constexpr uint32_t dev_completion_q_rd_ptr = get_compile_time_arg_val(22);
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(23);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(24);
 
 constexpr uint8_t upstream_noc_index = UPSTREAM_NOC_INDEX;
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));

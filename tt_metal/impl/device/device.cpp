@@ -858,9 +858,12 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     auto prefetch_h_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH][dispatch_idx]);
                     auto prefetch_physical_core = prefetch_h_settings.worker_physical_core;
                     auto dispatch_core_type = settings.dispatch_core_type;
+                    uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(dispatch_core_type).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);
+                    uint32_t dev_completion_queue_wr_ptr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_WR);
+                    uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
                     settings.upstream_cores.push_back(demux_settings.worker_physical_core);
                     settings.downstream_cores.push_back(tt_cxy_pair(0, 0, 0));
-                    settings.compile_args.resize(22);
+                    settings.compile_args.resize(25);
                     auto& compile_args = settings.compile_args;
                     compile_args[0] = settings.cb_start_address;
                     compile_args[1] = settings.cb_log_page_size;
@@ -882,8 +885,11 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[17] = prefetch_h_settings.producer_semaphore_id, // sem_id on prefetch_h that dispatch_d is meant to increment, to resume sending of cmds post exec_buf stall
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs), // XXXX should this be mux pages?
                     compile_args[19] = settings.num_compute_cores;
-                    compile_args[20] = false; // is_dram_variant
-                    compile_args[21] = true; // is_host_variant
+                    compile_args[20] = host_completion_queue_wr_ptr;
+                    compile_args[21] = dev_completion_queue_wr_ptr;
+                    compile_args[22] = dev_completion_queue_rd_ptr;
+                    compile_args[23] = false; // is_dram_variant
+                    compile_args[24] = true; // is_host_variant
                     dispatch_idx++;
                 }
                 break;
@@ -1095,9 +1101,12 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                 for (auto&[core, dispatch_d_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_D]) {
                     auto prefetch_d_settings = std::get<1>(device_worker_variants[DispatchWorkerType::PREFETCH_D][dispatch_d_idx]); // 1 to 1 mapping bw prefetch_d and dispatch_d
                     auto dispatch_core_type = dispatch_d_settings.dispatch_core_type;
+                    uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(dispatch_core_type).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);
+                    uint32_t dev_completion_queue_wr_ptr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_WR);
+                    uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
                     dispatch_d_settings.upstream_cores.push_back(prefetch_d_settings.worker_physical_core);
                     dispatch_d_settings.downstream_cores.push_back(mux_d_settings.worker_physical_core);
-                    dispatch_d_settings.compile_args.resize(22);
+                    dispatch_d_settings.compile_args.resize(25);
                     auto& compile_args = dispatch_d_settings.compile_args;
                     compile_args[0] = dispatch_d_settings.cb_start_address;
                     compile_args[1] = dispatch_d_settings.cb_log_page_size;
@@ -1119,8 +1128,11 @@ void Device::update_workers_build_settings(std::vector<std::vector<std::tuple<tt
                     compile_args[17] = 1; //prefetch_downstream_cb_sem,
                     compile_args[18] = dispatch_constants::get(dispatch_core_type).mux_buffer_pages(num_hw_cqs), // mux buffer size is a function of num_cqs
                     compile_args[19] = dispatch_d_settings.num_compute_cores;
-                    compile_args[20] = true; // is_dram_variant
-                    compile_args[21] = false; // is_host_variant
+                    compile_args[20] = host_completion_queue_wr_ptr;
+                    compile_args[21] = dev_completion_queue_wr_ptr;
+                    compile_args[22] = dev_completion_queue_rd_ptr;
+                    compile_args[23] = true; // is_dram_variant
+                    compile_args[24] = false; // is_host_variant
                     dispatch_d_idx++; // move on to next dispatcher
                 }
                 break;
@@ -1565,11 +1577,11 @@ void Device::compile_command_queue_programs() {
                 0,      // unused prefetch_local_downstream_sem_addr
                 0,      // unused prefetch_downstream_buffer_pages
                 num_compute_cores, // max_write_packed_cores
-                true,   // is_dram_variant
-                true,   // is_host_variant
                 host_completion_queue_wr_ptr,
                 dev_completion_queue_wr_ptr,
-                dev_completion_queue_rd_ptr
+                dev_completion_queue_rd_ptr,
+                true,   // is_dram_variant
+                true   // is_host_variant
             };
 
             configure_kernel_variant(

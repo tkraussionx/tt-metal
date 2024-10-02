@@ -1883,6 +1883,10 @@ void configure_for_single_chip(Device *device,
             my_noc_index);
     }
 
+    uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);
+    uint32_t dev_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_WR);
+    uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
+
     std::vector<uint32_t> dispatch_compile_args = {
          dispatch_buffer_base,
          dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
@@ -1903,7 +1907,10 @@ void configure_for_single_chip(Device *device,
          NOC_XY_ENCODING(phys_prefetch_core_g.x, phys_prefetch_core_g.y),
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
-         num_compute_cores // max_write_packed_cores
+         num_compute_cores, // max_write_packed_cores
+         host_completion_queue_wr_ptr,
+         dev_completion_queue_wr_ptr,
+         dev_completion_queue_rd_ptr
     };
 
     CoreCoord phys_upstream_from_dispatch_core = split_prefetcher_g ? phys_prefetch_d_core : phys_prefetch_core_g;
@@ -2610,6 +2617,9 @@ void configure_for_multi_chip(Device *device,
             my_noc_index);
     }
 
+    uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);
+    uint32_t dev_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_WR);
+    uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
     std::vector<uint32_t> dispatch_compile_args = {
          dispatch_buffer_base,
          dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
@@ -2630,7 +2640,10 @@ void configure_for_multi_chip(Device *device,
          NOC_XY_ENCODING(phys_prefetch_core_g.x, phys_prefetch_core_g.y),
          prefetch_downstream_cb_sem,
          prefetch_downstream_buffer_pages,
-         num_compute_cores
+         num_compute_cores,
+         host_completion_queue_wr_ptr,
+         dev_completion_queue_wr_ptr,
+         dev_completion_queue_rd_ptr
     };
 
     CoreCoord phys_upstream_from_dispatch_core = split_prefetcher_g ? phys_prefetch_d_core : phys_prefetch_core_g;

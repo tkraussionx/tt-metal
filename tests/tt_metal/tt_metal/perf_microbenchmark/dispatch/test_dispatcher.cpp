@@ -450,6 +450,10 @@ int main(int argc, char **argv) {
         const uint32_t spoof_prefetch_core_sem_1_id = tt_metal::CreateSemaphore(program, {spoof_prefetch_core}, 0);
         const uint32_t prefetch_sync_sem = spoof_prefetch_core_sem_1_id;
 
+        const uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);
+        const uint32_t dev_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_WR);
+        const uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(CoreType::WORKER).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
+
         std::vector<uint32_t> dispatch_compile_args =
             {l1_buf_base,
              log_dispatch_buffer_page_size_g,
@@ -472,6 +476,9 @@ int main(int argc, char **argv) {
              0,    // prefetch_local_downstream_sem_addr
              0,    // prefetch_downstream_buffer_pages
              num_compute_cores, // max_write_packed_cores
+             host_completion_queue_wr_ptr,
+             dev_completion_queue_wr_ptr,
+             dev_completion_queue_rd_ptr,
              true, // is_dram_variant
              true // is_host_variant
             };
