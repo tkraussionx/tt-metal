@@ -105,14 +105,25 @@ sfpi_inline vFloat sfpu_sine_maclaurin_series(vFloat val)
     tmp = tmp*val*val;
     output += -0.00000002505*tmp;
 
-    if constexpr (not APPROXIMATION_MODE) {
-	// x^11/11!
-        tmp = tmp*val*val;
-        output += -0.00000002505*tmp;
+    // if constexpr (not APPROXIMATION_MODE) {
+	// // x^11/11!
+    //     tmp = tmp*val*val;
+    //     output += -0.00000002505*tmp;
 
-	// x^13/13!
-	tmp = tmp*val*val;
-	output += 1.6059043836821613e-10*(tmp);
+	// // x^13/13!
+	// tmp = tmp*val*val;
+	// output += 1.6059043836821613e-10*(tmp);
+    // }
+
+    // TODO(namhyeong): ttnn::sin does not take ck_config as parameter.
+    if constexpr (not APPROXIMATION_MODE) {
+        // x^13/13!
+        tmp = tmp * val * val;
+        output += (1.6059043836821614599392377170155e-10) * tmp;
+
+        // x^15/15!
+        tmp = tmp * val * val;
+        output += (-7.6471637318198164759011319857881e-13) * (tmp);
     }
 
     // Write out output
