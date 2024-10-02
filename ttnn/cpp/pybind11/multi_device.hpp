@@ -23,12 +23,12 @@ void py_module(py::module& module) {
     py_mesh_device
         .def(
             py::init([](const MeshShape& mesh_device_shape,
-                        size_t l1_small_size,
-                        size_t trace_region_size,
-                        size_t num_command_queues,
+                        std::size_t l1_small_size,
+                        std::size_t trace_region_size,
+                        std::size_t num_command_queues,
                         DispatchCoreType dispatch_core_type,
-                        const std::pair<size_t, size_t>& offset,
-                        const std::vector<int>& physical_device_ids) {
+                        const std::pair<std::size_t, std::size_t>& offset,
+                        const std::vector<chip_id_t>& physical_device_ids) {
                 return MeshDevice::create(
                     mesh_device_shape,
                     l1_small_size,
@@ -47,14 +47,15 @@ void py_module(py::module& module) {
             py::arg("offset"),
             py::arg("physical_device_ids"))
         .def("get_num_devices", &MeshDevice::num_devices)
+        .def("get_mesh_id", &MeshDevice::get_mesh_id)
         .def("get_device_ids", &MeshDevice::get_device_ids)
         .def(
             "get_device",
-            py::overload_cast<int>(&MeshDevice::get_device, py::const_),
+            py::overload_cast<chip_id_t>(&MeshDevice::get_device, py::const_),
             py::return_value_policy::reference)
         .def(
             "get_device",
-            py::overload_cast<int, int>(&MeshDevice::get_device, py::const_),
+            py::overload_cast<std::size_t, std::size_t>(&MeshDevice::get_device, py::const_),
             py::return_value_policy::reference)
         .def("get_devices", &MeshDevice::get_devices, py::return_value_policy::reference, R"doc(
             Get the devices in the device mesh.
@@ -62,26 +63,7 @@ void py_module(py::module& module) {
             Returns:
                 List[Device]: The devices in the device mesh.
         )doc")
-        .def(
-            "get_devices_on_row",
-            &MeshDevice::get_devices_on_row,
-            py::return_value_policy::reference,
-            R"doc(
-            Get the devices in a row of the device mesh.
-
-            Returns:
-                List[Device]: The devices on a row in the device mesh.
-        )doc")
-        .def(
-            "get_devices_on_column",
-            &MeshDevice::get_devices_on_column,
-            py::return_value_policy::reference,
-            R"doc(
-            Get the devices in a row of the device mesh.
-
-            Returns:
-                List[Device]: The devices on a row in the device mesh.
-        )doc")
+        .def("create_submesh", &MeshDevice::create_submesh, py::arg("submesh_shape"), py::arg("offset") = std::pair<size_t, size_t>{0, 0}, py::return_value_policy::reference_internal, py::keep_alive<0, 1>())
         .def(
             "compute_with_storage_grid_size",
             &MeshDevice::compute_with_storage_grid_size,

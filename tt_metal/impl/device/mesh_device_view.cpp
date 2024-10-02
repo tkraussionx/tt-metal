@@ -13,10 +13,20 @@ namespace tt::tt_metal {
 
 using MeshDevice = tt::tt_metal::MeshDevice;
 
+static std::vector<MeshDeviceView::device_pointer> get_devices_from_coordinates(MeshDeviceView& mesh, const std::vector<Coordinate>& coords) {
+    std::vector<MeshDeviceView::device_pointer> devices;
+    for (const auto& coord : coords) {
+        if (auto device = mesh.get_device(coord.row, coord.col)) {
+            devices.push_back(device);
+        }
+    }
+    return devices;
+}
+
 MeshDeviceView::MeshDeviceView(const MeshDevice& mesh)
     : top_left_(0, 0), bottom_right_(mesh.num_rows() - 1, mesh.num_cols() - 1) {
-    for (size_t row = 0; row < mesh.num_rows(); ++row) {
-        for (size_t col = 0; col < mesh.num_cols(); ++col) {
+    for (std::size_t row = 0; row < mesh.num_rows(); ++row) {
+        for (std::size_t col = 0; col < mesh.num_cols(); ++col) {
             if (auto device = mesh.get_device(row, col)) {
                 devices_.push_back(device);
                 device_coordinates_[(device)->id()] = {row, col};
@@ -26,12 +36,12 @@ MeshDeviceView::MeshDeviceView(const MeshDevice& mesh)
 }
 
 MeshDeviceView::MeshDeviceView(const MeshDevice& mesh, Coordinate top_left, Coordinate bottom_right)
-    : top_left_(top_left), bottom_right_(bottom_right) {
-    for (size_t row = top_left.row; row <= bottom_right.row; ++row) {
-        for (size_t col = top_left.col; col <= bottom_right.col; ++col) {
+    : top_left_(0, 0), bottom_right_(Coordinate{bottom_right.row - top_left.row, bottom_right.col - top_left.col}) {
+    for (std::size_t row = top_left.row; row <= bottom_right.row; ++row) {
+        for (std::size_t col = top_left.col; col <= bottom_right.col; ++col) {
             if (auto device = mesh.get_device(row, col)) {
                 devices_.push_back(device);
-                device_coordinates_[(device)->id()] = {row, col};
+                device_coordinates_[(device)->id()] = {row - top_left.row, col - top_left.col};
             }
         }
     }
@@ -43,11 +53,11 @@ MeshDeviceView::MeshDeviceView(std::vector<device_pointer> devices, CoordinateMa
     initialize_from_devices(devices_, std::move(mapper));
 }
 
-MeshDeviceView::device_pointer MeshDeviceView::get_device(size_t row, size_t col) {
+MeshDeviceView::device_pointer MeshDeviceView::get_device(std::size_t row, std::size_t col) {
     return const_cast<device_pointer>(std::as_const(*this).get_device(row, col));
 }
 
-MeshDeviceView::const_device_pointer MeshDeviceView::get_device(size_t row, size_t col) const {
+MeshDeviceView::const_device_pointer MeshDeviceView::get_device(std::size_t row, std::size_t col) const {
     for (const auto& device : devices_) {
         auto it = device_coordinates_.find(device->id());
         if (it != device_coordinates_.end() && it->second.row == row && it->second.col == col) {
@@ -57,16 +67,14 @@ MeshDeviceView::const_device_pointer MeshDeviceView::get_device(size_t row, size
     return nullptr;
 }
 
-const std::vector<MeshDeviceView::device_pointer>& MeshDeviceView::get_devices() const { return devices_; }
-
 MeshDeviceView::DeviceView MeshDeviceView::get_devices(const Coordinate& start, const Coordinate& end) {
     if (start.row > end.row || start.col > end.col) {
         log_fatal("Invalid coordinates: start {} must be less than or equal to end {}", start, end);
     }
 
     DeviceView devices_in_region;
-    for (size_t row = start.row; row <= end.row; ++row) {
-        for (size_t col = start.col; col <= end.col; ++col) {
+    for (std::size_t row = start.row; row <= end.row; ++row) {
+        for (std::size_t col = start.col; col <= end.col; ++col) {
             if (auto device = get_device(row, col)) {
                 devices_in_region.push_back(device);
             }
@@ -79,7 +87,7 @@ MeshDeviceView::DeviceView MeshDeviceView::get_devices(const MeshShape& shape) {
     return get_devices({0, 0}, {shape.first - 1, shape.second - 1});
 }
 
-std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_row(size_t row) const {
+std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_row(std::size_t row) const {
     std::vector<device_pointer> row_devices;
     for (const auto& device : devices_) {
         auto it = device_coordinates_.find(device->id());
@@ -90,7 +98,7 @@ std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_row(s
     return row_devices;
 }
 
-std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_column(size_t col) const {
+std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_column(std::size_t col) const {
     std::vector<device_pointer> col_devices;
     for (const auto& device : devices_) {
         auto it = device_coordinates_.find(device->id());
@@ -103,7 +111,7 @@ std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_devices_on_colum
 
 std::vector<std::vector<MeshDeviceView::device_pointer>> MeshDeviceView::get_row_views() const {
     std::vector<std::vector<device_pointer>> row_views;
-    for (size_t row = top_left_.row; row <= bottom_right_.row; ++row) {
+    for (std::size_t row = top_left_.row; row <= bottom_right_.row; ++row) {
         row_views.push_back(get_devices_on_row(row));
     }
     return row_views;
@@ -111,31 +119,21 @@ std::vector<std::vector<MeshDeviceView::device_pointer>> MeshDeviceView::get_row
 
 std::vector<std::vector<MeshDeviceView::device_pointer>> MeshDeviceView::get_column_views() const {
     std::vector<std::vector<device_pointer>> column_views;
-    for (size_t col = top_left_.col; col <= bottom_right_.col; ++col) {
+    for (std::size_t col = top_left_.col; col <= bottom_right_.col; ++col) {
         column_views.push_back(get_devices_on_column(col));
     }
     return column_views;
-}
-
-template<typename Pred>
-MeshDeviceView MeshDeviceView::subview(Pred&& predicate) const {
-    std::vector<device_pointer> filtered_devices;
-    std::copy_if(devices_.begin(), devices_.end(), std::back_inserter(filtered_devices), std::forward<Pred>(predicate));
-    return MeshDeviceView(filtered_devices, [this](int device_id) {
-        auto it = device_coordinates_.find(device_id);
-        return it != device_coordinates_.end() ? std::optional<Coordinate>(it->second) : std::nullopt;
-    });
 }
 
 bool MeshDeviceView::empty() const noexcept {
     return devices_.empty();
 }
 
-size_t MeshDeviceView::size() const noexcept {
+std::size_t MeshDeviceView::size() const noexcept {
     return devices_.size();
 }
 
-std::pair<size_t, size_t> MeshDeviceView::shape() const noexcept {
+std::pair<std::size_t, std::size_t> MeshDeviceView::shape() const noexcept {
     return {num_rows(), num_cols()};
 }
 
@@ -156,6 +154,10 @@ bool MeshDeviceView::operator==(const MeshDeviceView& other) const {
            device_coordinates_ == other.device_coordinates_ &&
            top_left_ == other.top_left_ &&
            bottom_right_ == other.bottom_right_;
+}
+
+bool MeshDeviceView::contains_device(chip_id_t device_id) const {
+    return device_coordinates_.find(device_id) != device_coordinates_.end();
 }
 
 Coordinate MeshDeviceView::find_device(chip_id_t device_id) const {
@@ -195,12 +197,12 @@ void MeshDeviceView::initialize_from_devices(const std::vector<device_pointer>& 
 }
 
 std::vector<Coordinate> MeshDeviceView::get_line_coordinates(
-    size_t length, const Coordinate& offset, size_t num_rows, size_t num_cols) {
+    std::size_t length, const Coordinate& offset, std::size_t num_rows, std::size_t num_cols) {
     std::vector<Coordinate> line_coords;
     auto [row_index, col_index] = offset;
     bool left_to_right = true;
 
-    for (size_t i = 0; i < length && row_index < num_rows && col_index < num_cols; ++i) {
+    for (std::size_t i = 0; i < length && row_index < num_rows && col_index < num_cols; ++i) {
         line_coords.emplace_back(Coordinate{row_index, col_index});
 
         if (left_to_right && col_index < num_cols - 1) {
@@ -217,7 +219,7 @@ std::vector<Coordinate> MeshDeviceView::get_line_coordinates(
     return line_coords;
 }
 
-std::vector<Coordinate> MeshDeviceView::get_ring_coordinates(const MeshShape& ring_shape, const Coordinate& offset, size_t num_rows, size_t num_cols) {
+std::vector<Coordinate> MeshDeviceView::get_ring_coordinates(const MeshShape& ring_shape, const Coordinate& offset, std::size_t num_rows, std::size_t num_cols) {
     auto [start_row, start_col] = offset;
     auto [ring_rows, ring_cols] = ring_shape;
     auto end_row = start_row + ring_rows - 1;
@@ -230,21 +232,21 @@ std::vector<Coordinate> MeshDeviceView::get_ring_coordinates(const MeshShape& ri
     }
 
     // Traverse the top row from left to right
-    for (size_t col = start_col; col <= end_col; ++col) {
+    for (std::size_t col = start_col; col <= end_col; ++col) {
         boundary_coords.emplace_back(Coordinate{start_row, col});
     }
 
     // Traverse the rightmost column from top+1 to bottom
-    for (size_t row = start_row + 1; row <= end_row; ++row) {
+    for (std::size_t row = start_row + 1; row <= end_row; ++row) {
         boundary_coords.emplace_back(Coordinate{row, end_col});
     }
 
     // Traverse the bottom row from right to left, if there is more than one row
     if (ring_rows > 1 and ring_cols > 1) {
-        for (size_t col = end_col - 1; col >= start_col; --col) {
+        for (std::size_t col = end_col - 1; col >= start_col; --col) {
             boundary_coords.emplace_back(Coordinate{end_row, col});
         }
-        for (size_t row = end_row - 1; row >= start_row; --row) {
+        for (std::size_t row = end_row - 1; row >= start_row; --row) {
             boundary_coords.emplace_back(Coordinate{row, start_col});
         }
     }
@@ -256,6 +258,29 @@ std::vector<Coordinate> MeshDeviceView::get_ring_coordinates(const MeshShape& ri
 void MeshDeviceView::validate_coordinates() const {
     if (top_left_.row > bottom_right_.row || top_left_.col > bottom_right_.col) {
         throw std::invalid_argument("Invalid coordinates: top_left must be less than or equal to bottom_right");
+    }
+}
+
+std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_line_devices() {
+    auto boundary_coords = get_line_coordinates(this->num_rows() * this->num_cols(), this->top_left_, this->num_rows(), this->num_cols());
+    return get_devices_from_coordinates(*this, boundary_coords);
+}
+
+std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_ring_devices() {
+    auto boundary_coords = get_ring_coordinates(shape(), this->top_left_, this->num_rows(), this->num_cols());
+    return get_devices_from_coordinates(*this, boundary_coords);
+}
+
+MeshDeviceView::DeviceView MeshDeviceView::get_devices(IterationOrder order) {
+    switch (order) {
+        case IterationOrder::ROW_MAJOR:
+            return this->devices_;
+        case IterationOrder::RING:
+            return this->get_ring_devices();
+        case IterationOrder::LINE:
+            return this->get_line_devices();
+        default:
+            TT_THROW("Unsupported iteration order: {}", order);
     }
 }
 
