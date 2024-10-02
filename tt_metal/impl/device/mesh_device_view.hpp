@@ -102,6 +102,11 @@ public:
     [[nodiscard]] Coordinate find_device(chip_id_t device_id) const;
     [[nodiscard]] chip_id_t find_device_id(const Coordinate& coord) const;
 
+    // Given a starting coordinate, get the coordinates of a line of devices where device[i-1] is connected to device[i]
+    // The current support only provides left-to-right and right-to-left snaking of the line.
+    [[nodiscard]] static std::vector<Coordinate> get_line_coordinates(size_t length, const Coordinate& offset, size_t num_rows, size_t num_cols);
+    [[nodiscard]] std::vector<Coordinate> get_ring_coordinates(const MeshShape& ring_shape, const Coordinate& offset, size_t num_rows, size_t num_cols);
+
 private:
     std::vector<device_pointer> devices_;
     std::unordered_map<chip_id_t, Coordinate> device_coordinates_;

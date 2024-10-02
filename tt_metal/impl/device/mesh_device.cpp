@@ -113,16 +113,29 @@ std::vector<chip_id_t> SystemMesh::get_mapped_physical_device_ids(const MeshDevi
     auto [requested_rows, requested_cols] = config.mesh_shape;
     auto [row_offset, col_offset] = config.offset;
 
-    for (int row = 0; row < requested_rows; row++) {
-        for (int col = 0; col < requested_cols; col++) {
-            auto logical_device_id = (row + row_offset) * system_mesh_cols + (col + col_offset);
-            auto logical_coordinate = Coordinate{logical_device_id / system_mesh_cols, logical_device_id % system_mesh_cols};
+    if (requested_rows == 1) {
+        TT_FATAL(row_offset == 0 and col_offset == 0, "Row and column offsets unsupported for single row mesh");
+        auto line_coords = MeshDeviceView::get_line_coordinates(requested_cols, Coordinate{row_offset, col_offset}, system_mesh_rows, system_mesh_cols);
+        for (const auto& logical_coordinate : line_coords) {
             auto physical_coordinate = this->logical_to_physical_coordinates.at(logical_coordinate);
             auto physical_device_id = this->physical_coordinate_to_device_id.at(physical_coordinate);
             physical_device_ids.push_back(physical_device_id);
 
-            log_debug(LogMetal, "Logical device ID: {}, Logical coordinate: {}, Physical coordinate: {}, Physical device ID: {}",
-                     logical_device_id, logical_coordinate, physical_coordinate, physical_device_id);
+            log_debug(LogMetal, "Logical coordinate: {}, Physical coordinate: {}, Physical device ID: {}",
+                     logical_coordinate, physical_coordinate, physical_device_id);
+        }
+    } else {
+        for (int row = 0; row < requested_rows; row++) {
+            for (int col = 0; col < requested_cols; col++) {
+                auto logical_device_id = (row + row_offset) * system_mesh_cols + (col + col_offset);
+                auto logical_coordinate = Coordinate{logical_device_id / system_mesh_cols, logical_device_id % system_mesh_cols};
+                auto physical_coordinate = this->logical_to_physical_coordinates.at(logical_coordinate);
+                auto physical_device_id = this->physical_coordinate_to_device_id.at(physical_coordinate);
+                physical_device_ids.push_back(physical_device_id);
+
+                log_debug(LogMetal, "Logical device ID: {}, Logical coordinate: {}, Physical coordinate: {}, Physical device ID: {}",
+                         logical_device_id, logical_coordinate, physical_coordinate, physical_device_id);
+            }
         }
     }
     return physical_device_ids;
@@ -313,7 +326,8 @@ std::vector<int> get_t3k_physical_device_ids_ring() {
     auto num_devices = instance.get_num_devices();
     TT_FATAL(num_devices == 8, "T3000 ring topology only works with 8 devices");
 
-    auto physical_device_ids = instance.get_mapped_physical_device_ids(MeshDeviceConfig{instance.get_shape(), MeshOffset{0, 0}});
+    auto physical_device_ids = instance.get_mapped_physical_device_ids(
+        MeshDeviceConfig{MeshShape{1, 8}, MeshOffset{0, 0}});
     return physical_device_ids;
 }
 

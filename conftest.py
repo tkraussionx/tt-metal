@@ -235,7 +235,7 @@ def pcie_mesh_device(request, silicon_arch_name, silicon_arch_wormhole_b0, devic
     request.node.pci_ids = device_ids[:num_pcie_devices_requested]
 
     mesh_device = ttnn.open_mesh_device(
-        ttnn.MeshShape(2, 2), dispatch_core_type=get_dispatch_core_type(), **device_params, offset=(0, 1)
+        ttnn.MeshShape(1, 4), dispatch_core_type=get_dispatch_core_type(), **device_params, offset=(0, 1)
     )
 
     logger.debug(f"multidevice with {mesh_device.get_num_devices()} devices is created")
@@ -280,7 +280,7 @@ def t3k_mesh_device(request, silicon_arch_name, silicon_arch_wormhole_b0, device
 
     request.node.pci_ids = ttnn.get_pcie_device_ids()
     mesh_device = ttnn.open_mesh_device(
-        ttnn.MeshShape(2, 4),
+        ttnn.MeshShape(1, 8),
         dispatch_core_type=get_dispatch_core_type(),
         **device_params,
     )

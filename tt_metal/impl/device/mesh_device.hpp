@@ -9,7 +9,6 @@
 #include <optional>
 #include <vector>
 
-#include "mesh_device_view.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/device/mesh_device_view.hpp"
 
