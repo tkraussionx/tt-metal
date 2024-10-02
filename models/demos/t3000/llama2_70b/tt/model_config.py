@@ -412,7 +412,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
     in0_block_w = 8  # smaller in0_block_w for larger seq_len to fit in L1)
     model_config["PREFILL_SELFOUT_MM_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
-        in0_block_w=8,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=max_mm_seq_tiles // 8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -425,7 +425,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
     in0_block_w = 32  # smaller in0_block_w for larger seq_len to fit in L1)
     model_config["PREFILL_SELFOUT_MM_PROGCFG_128"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
-        in0_block_w=8,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=1,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -454,7 +454,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
     max_mm_seq_tiles = model_config["MAX_MM_SEQ_LEN"] // 32
     model_config["PREFILL_PADDED_FF1_MM_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=max_mm_seq_tiles // 8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -466,7 +466,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
 
     model_config["PREFILL_PADDED_FF1_MM_PROGCFG_128"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=1,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -478,7 +478,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
 
     model_config["PREFILL_PADDED_FF3_MM_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=max_mm_seq_tiles // 8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -490,7 +490,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
 
     model_config["PREFILL_PADDED_FF3_MM_PROGCFG_128"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=1,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -504,7 +504,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
     # input1: [1,1,32k,1k]
     model_config["PREFILL_PADDED_FF2_MM_PROGCFG"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=max_mm_seq_tiles // 8,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
@@ -516,7 +516,7 @@ def get_model_config(llama_version="llama3", max_batch_size=32, max_context_len=
 
     model_config["PREFILL_PADDED_FF2_MM_PROGCFG_128"] = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
-        in0_block_w=4,  # how much inner dim you take each time
+        in0_block_w=1,  # how much inner dim you take each time
         out_subblock_h=1,  # Must be divisible by per_core_M
         out_subblock_w=1,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 4
         per_core_M=1,  # M / TILE_HEIGHT / Grid_Size (dynamic based on seqlen)
