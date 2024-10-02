@@ -2367,8 +2367,10 @@ void Device::init_command_queue_device() {
         }
     }
     // TODO: Move this inside the command queue
-    for (auto& hw_cq : this->hw_command_queues_) {
-        hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->dispatch_s_enabled() ? NOC::NOC_1 : NOC::NOC_0));
+    if (this->num_eth_worker_cores()) {
+        for (auto& hw_cq : this->hw_command_queues_) {
+            hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->dispatch_s_enabled() ? NOC::NOC_1 : NOC::NOC_0));
+        }
     }
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());
@@ -2397,6 +2399,8 @@ bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, size_t t
     this->initialize_cluster();
     this->initialize_allocator(l1_small_size, trace_region_size, l1_bank_remap);
     this->initialize_build();
+    // Reset the launch_message ring buffer state seen on host, since its reset on device, each time FW is initialized
+    this->worker_launch_message_buffer_state.reset();
     // For minimal setup, don't initialize FW, watcher, dprint. They won't work if we're attaching to a hung chip.
     if (minimal)
         return true;
