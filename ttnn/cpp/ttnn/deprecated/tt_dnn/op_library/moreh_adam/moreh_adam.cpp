@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <utility>
+#include <cmath>
 
 #include "ttnn/deprecated/tt_dnn/op_library/math.hpp"
 #include "ttnn/run_operation.hpp"
@@ -58,6 +59,18 @@ operation::ProgramWithCallbacks moreh_adam_(
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] =
         get_compute_kernel_config_args(arch, compute_kernel_config);
 
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    if (fp32_dest_acc_en) {
+        preserve_fp32_precision[CB::c_intermed0] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed1] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed2] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed3] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed4] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed5] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed6] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed7] = PreserveFP32Target::DEST;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup
     ////////////////////////////////////////////////////////////////////////////
@@ -73,8 +86,6 @@ operation::ProgramWithCallbacks moreh_adam_(
             {CB::c_in2, 1},                      // exp_avg_in
             {CB::c_in3, 1},                      // exp_avg_sq_in
             {CB::c_in4, 1},                      // max_exp_avg_sq_in (optional)
-            {CB::c_in5, 5, intermed_cb_format},  // lr, beta1, beta2, eps, weight_decay
-            {CB::c_in6, 1, intermed_cb_format},  // 1.0f
 
             {CB::c_intermed0, 1, intermed_cb_format},  // tmp_grad
             {CB::c_intermed1, 1, intermed_cb_format},  // tmp_exp_avg
@@ -143,7 +154,7 @@ operation::ProgramWithCallbacks moreh_adam_(
 
     const auto compute_kernel_file =
         "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/moreh_adam/kernels/"
-        "moreh_adam.cpp";
+        "moreh_adam_sfpu.cpp";
 
     auto compute_kernel_1_id = CreateComputeKernel(
         program,
@@ -152,7 +163,8 @@ operation::ProgramWithCallbacks moreh_adam_(
         compute_defines,
         math_fidelity,
         fp32_dest_acc_en,
-        math_approx_mode);
+        math_approx_mode,
+        preserve_fp32_precision);
     KernelHandle compute_kernel_2_id = -1;
     if (!core_group_2.ranges().empty()) {
         const std::vector<uint32_t> compute_args_group_2{num_tiles_per_core_group_2};
@@ -164,7 +176,8 @@ operation::ProgramWithCallbacks moreh_adam_(
             compute_defines,
             math_fidelity,
             fp32_dest_acc_en,
-            math_approx_mode);
+            math_approx_mode,
+            preserve_fp32_precision);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -186,12 +199,14 @@ operation::ProgramWithCallbacks moreh_adam_(
     union {
         float f;
         uint32_t u;
-    } f2u_lr, f2u_beta1, f2u_beta2, f2u_eps, f2u_weight_decay;
+    } f2u_lr, f2u_beta1, f2u_beta2, f2u_eps, f2u_weight_decay, f2u_biascorr1, f2u_biascorr2;
     f2u_lr.f = lr;
     f2u_beta1.f = beta1;
     f2u_beta2.f = beta2;
     f2u_eps.f = eps;
     f2u_weight_decay.f = weight_decay;
+    f2u_biascorr1.f = 1.0f - powf(beta1, step);
+    f2u_biascorr2.f = 1.0f - powf(beta2, step);
 
     for (uint32_t i = 0, tile_offset = 0; i < num_cores; ++i) {
         CoreCoord core = {i / num_cores_y, i % num_cores_y};
@@ -211,11 +226,6 @@ operation::ProgramWithCallbacks moreh_adam_(
             exp_avg_in_addr,
             exp_avg_sq_in_addr,
             max_exp_avg_sq_in_addr,
-            f2u_lr.u,
-            f2u_beta1.u,
-            f2u_beta2.u,
-            f2u_eps.u,
-            f2u_weight_decay.u,
             step,
             static_cast<uint32_t>(amsgrad),
             num_tiles_per_core,
@@ -231,10 +241,20 @@ operation::ProgramWithCallbacks moreh_adam_(
             tile_offset};
         tt_metal::SetRuntimeArgs(program, writer_kernel_id, core, writer_runtime_args);
 
+        const std::vector<uint32_t> compute_runtime_args{
+            step,
+            f2u_lr.u,
+            f2u_beta1.u,
+            f2u_beta2.u,
+            f2u_eps.u,
+            f2u_weight_decay.u,
+            f2u_biascorr1.u,
+            f2u_biascorr2.u,
+        };
         if (core_group_1.core_coord_in_core_ranges(core)) {
-            tt_metal::SetRuntimeArgs(program, compute_kernel_1_id, core, {step});
+            tt_metal::SetRuntimeArgs(program, compute_kernel_1_id, core, compute_runtime_args);
         } else if (core_group_2.core_coord_in_core_ranges(core)) {
-            tt_metal::SetRuntimeArgs(program, compute_kernel_2_id, core, {step});
+            tt_metal::SetRuntimeArgs(program, compute_kernel_2_id, core, compute_runtime_args);
         } else {
             TT_ASSERT(false, "Core not in specified core ranges.");
         }
