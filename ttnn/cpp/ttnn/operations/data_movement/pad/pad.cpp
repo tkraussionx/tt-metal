@@ -88,15 +88,7 @@ static ttnn::Tensor pad_impl(
     auto pad_back = padding | std::views::transform([](const auto& p) { return p.second; });
 
     const bool front_padding_is_zero = std::accumulate(pad_front.begin(), pad_front.end(), 0) == 0;
-    const bool input_is_sharded = std::ranges::any_of({TensorMemoryLayout::HEIGHT_SHARDED,
-                                                       TensorMemoryLayout::BLOCK_SHARDED,
-                                                       TensorMemoryLayout::WIDTH_SHARDED},
-                                                      [&](auto layout) {return input_tensor.memory_config().memory_layout == layout; });
-    TT_FATAL(
-        front_padding_is_zero
-        || (input_tensor.get_layout() == ttnn::ROW_MAJOR_LAYOUT
-            && input_is_sharded),
-        "ttnn.pad: on device padding currently supports front padding only for sharded row major tensors");
+    TT_FATAL(front_padding_is_zero, "ttnn.pad: on device padding does not support front padding");
 
     if (input_tensor.get_layout() == ttnn::TILE_LAYOUT) {
         const int target_height = output_padded_shape[padding.size() - 2];
