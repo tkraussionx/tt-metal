@@ -8,30 +8,36 @@
 #include "hostdevcommon/common_values.hpp"
 #include "debug/dprint.h"
 
-FORCE_INLINE void set(uint32_t addr1, uint32_t addr2, uint32_t val) {
-    volatile tt_l1_ptr uint32_t* l1_addr1 = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr1);
-    *l1_addr1 = val;
-
-    volatile tt_l1_ptr uint32_t* l1_addr2 = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr2);
-    *l1_addr2 = val;
+FORCE_INLINE void set(uint32_t addr, uint32_t val) {
+    volatile tt_l1_ptr uint32_t* l1_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
+    l1_addr[0] = val;
+    l1_addr[1] = val;
 }
 
 FORCE_INLINE void spin_wait_min(uint32_t addr, uint32_t val) {
     volatile tt_l1_ptr uint32_t* l1_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
     while (*l1_addr < val) { // The first byte contains the local semaphore value
+        // DPRINT << "Waiting for " << val << " at " << addr << " current value: " << *l1_addr << ENDL();
         invalidate_l1_cache();
     }
 }
 
 FORCE_INLINE void inc(uint32_t addr) {
     volatile tt_l1_ptr uint32_t* l1_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
-    (*l1_addr)++;
+    (*l1_addr)++; // The second byte contains the value used to update the remote semaphore value
 }
 
 // A function that calls increment, and then uses the new value to write it into the remote address of another core
 FORCE_INLINE void inc_and_write(uint32_t addr, uint64_t remote_addr, uint32_t size) {
-    inc(addr);
-    noc_async_write(addr, remote_addr, size);
+    uint32_t val_addr = addr + size;
+
+    inc(val_addr);
+
+    volatile tt_l1_ptr uint32_t* l1_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
+    noc_async_write(val_addr, get_noc_addr(addr), size);
+    DPRINT << "State before write: " << l1_addr[0] << " and " << l1_addr[1] << ENDL();
+    DPRINT << "Writing " << l1_addr[1] << " to " << remote_addr << ENDL();
+    noc_async_write(val_addr, remote_addr, size);
 }
 
 void kernel_main() {
@@ -65,7 +71,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in2 = 2;  // Sharded cb
     constexpr uint32_t cb_id_in3 = 3;  // Signal cb
-    constexpr uint32_t cb_id_in4 = 4;  // Signal val cb
+
 
     constexpr uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
     constexpr uint32_t shard_size_in_tiles = shard_width_in_tiles * shard_height_in_tiles;
@@ -89,20 +95,20 @@ void kernel_main() {
     cb_reserve_back(cb_id_in2, batch * shard_size_in_tiles);
     cb_reserve_back(cb_id_in0, batch * ring_size * shard_size_in_tiles);
     cb_reserve_back(cb_id_in3, 1);
-    cb_reserve_back(cb_id_in4, 1);
-
 
     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
     uint32_t local_shard_read_addr = get_read_ptr(cb_id_in2);
 
-    uint32_t local_signal_addr = get_read_ptr(cb_id_in3);
-    uint64_t remote_signal_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, local_signal_addr);
-    uint32_t local_signal_val_addr = get_read_ptr(cb_id_in4);
+    uint32_t local_signal_read_addr = get_read_ptr(cb_id_in3);
+    uint64_t remote_signal_read_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, local_signal_read_addr);
 
-    // Set the signal semaphore to 0
-    set(local_signal_addr, local_signal_val_addr, 0);
+    DPRINT << "[" << ring_idx << "] local_signal_read_addr: " << local_signal_read_addr << ENDL();
+
+    set(local_signal_read_addr, 0);
+    DPRINT << "[" << ring_idx << "] Set local signal to 0" << ENDL();
 
     for (uint32_t b = 0; b < batch; ++b) {
+        DeviceZoneScopedN("batch");
 
         for (uint32_t shard_cnt = 0; shard_cnt < ring_size && !SKIP; shard_cnt++) {
 
@@ -111,15 +117,18 @@ void kernel_main() {
             uint32_t curr_shard_read_addr = l1_write_addr_in0 + shard_size_bytes * shard_cnt;
 
             // Wait for signal from previous core that data has been added to this core's in0
-            spin_wait_min(local_signal_addr, shard_cnt);
+            spin_wait_min(local_signal_read_addr, shard_cnt);
+            DPRINT << "[" << ring_idx << "] Got signal from previous core" << ENDL();
+
 
             if (shard_cnt == 0) { // Need to load the local shard from cb2 to cb0 in the correct place
                 noc_async_read(get_noc_addr(local_shard_read_addr), curr_shard_read_addr, shard_size_bytes);
                 noc_async_read_barrier();
+
+                // noc_async_write_one_packet_set_state(remote_curr_shard_write_addr, shard_size_bytes);
             }
 
             // Do stuff for matmul fusion here
-            cb_push_back(cb_id_in0, shard_size_in_tiles);
 
 
             /* Here, assume cb0 has the data the data ready in the correct place. */
@@ -129,8 +138,10 @@ void kernel_main() {
                 noc_async_write(curr_shard_read_addr, remote_curr_shard_write_addr, shard_size_bytes);
 
                 // Signal the next core that data is ready
-                inc_and_write(local_signal_val_addr, remote_signal_addr, 4); // uint32_t is 4 bytes
+                inc_and_write(local_signal_read_addr, remote_signal_read_addr, 4); // uint32_t is 4 bytes
+                DPRINT << "[" << ring_idx << "] Signaled next core" << ENDL();
             }
        }
+        cb_push_back(cb_id_in0, shard_size_in_tiles * ring_size);
     }
 }
