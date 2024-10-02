@@ -19,7 +19,8 @@ TEST_F(BasicFixture, TestL1BuffersAllocatedTopDown) {
 
     const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(device->id());
     const uint32_t interleaved_l1_bank_size = device->bank_size(BufferType::L1);
-    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + ALLOCATOR_ALIGNMENT - 1) / ALLOCATOR_ALIGNMENT) * ALLOCATOR_ALIGNMENT;
+    const uint32_t allocator_alignment = device->get_allocator_alignment();
+    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + allocator_alignment - 1) / allocator_alignment) * allocator_alignment;
     uint64_t alloc_limit = interleaved_l1_bank_size - storage_core_unreserved_base;
 
     std::vector<std::unique_ptr<Buffer>> buffers;
@@ -47,7 +48,8 @@ TEST_F(BasicFixture, TestL1BuffersDoNotGrowBeyondBankSize) {
 
     const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(device->id());
     const uint32_t interleaved_l1_bank_size = device->bank_size(BufferType::L1);
-    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + ALLOCATOR_ALIGNMENT - 1) / ALLOCATOR_ALIGNMENT) * ALLOCATOR_ALIGNMENT;
+    const uint32_t allocator_alignment = device->get_allocator_alignment();
+    uint32_t storage_core_unreserved_base = ((MEM_MAILBOX_BASE + allocator_alignment - 1) / allocator_alignment) * allocator_alignment;
     uint64_t alloc_limit = interleaved_l1_bank_size - storage_core_unreserved_base;
 
     tt::tt_metal::InterleavedBufferConfig l1_config{
