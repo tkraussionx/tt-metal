@@ -2259,14 +2259,14 @@ void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
         this->physical_enqueue_program_dispatch_core,
         this->manager,
         expected_workers_completed,
-        this->multicast_cores_launch_message_wptr,
-        this->unicast_cores_launch_message_wptr);
+        HWCommandQueue::multicast_cores_launch_message_wptr,
+        HWCommandQueue::unicast_cores_launch_message_wptr);
     // Update wptrs for tensix and eth launch message
     if (program.runs_on_noc_multicast_only_cores()) {
-        this->multicast_cores_launch_message_wptr = (this->multicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
+        HWCommandQueue::multicast_cores_launch_message_wptr = (HWCommandQueue::multicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
     }
     if (program.runs_on_noc_unicast_only_cores()) {
-        this->unicast_cores_launch_message_wptr = (this->unicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
+        HWCommandQueue::unicast_cores_launch_message_wptr = (HWCommandQueue::unicast_cores_launch_message_wptr + 1) & (launch_msg_buffer_num_entries - 1);
     }
     this->enqueue_command(command, blocking);
 
@@ -2346,8 +2346,8 @@ void HWCommandQueue::enqueue_trace(const uint32_t trace_id, bool blocking) {
 
     // Increment the expected worker cores counter due to trace programs completion
     this->expected_num_workers_completed += trace_inst->desc->num_completion_worker_cores;
-    this->multicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_multicast & (launch_msg_buffer_num_entries - 1);
-    this->unicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_unicast & (launch_msg_buffer_num_entries - 1);
+    HWCommandQueue::multicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_multicast & (launch_msg_buffer_num_entries - 1);
+    HWCommandQueue::unicast_cores_launch_message_wptr = trace_inst->desc->num_traced_programs_needing_go_signal_unicast & (launch_msg_buffer_num_entries - 1);
 
     if (blocking) {
         this->finish();
@@ -2666,8 +2666,8 @@ void HWCommandQueue::record_begin(const uint32_t tid, std::shared_ptr<detail::Tr
     this->tid = tid;
     this->trace_ctx = ctx;
     // Record original value of launch msg wptr
-    this->multicast_cores_launch_message_wptr_reset = this->multicast_cores_launch_message_wptr;
-    this->unicast_cores_launch_message_wptr_reset = this->unicast_cores_launch_message_wptr;
+    HWCommandQueue::multicast_cores_launch_message_wptr_reset = HWCommandQueue::multicast_cores_launch_message_wptr;
+    HWCommandQueue::unicast_cores_launch_message_wptr_reset = HWCommandQueue::unicast_cores_launch_message_wptr;
     // Set launch msg wptr to 0. Every time trace runs on device, it will ensure that the workers
     // reset their rptr to be in sync with device.
     this->multicast_cores_launch_message_wptr = 0;
@@ -2680,8 +2680,8 @@ void HWCommandQueue::record_end() {
     this->trace_ctx = nullptr;
     // Reset the launch msg wptrs to their original value, so device can run programs after a trace
     // was captured
-    this->multicast_cores_launch_message_wptr = this->multicast_cores_launch_message_wptr_reset;
-    this->unicast_cores_launch_message_wptr = this->unicast_cores_launch_message_wptr_reset;
+    HWCommandQueue::multicast_cores_launch_message_wptr = HWCommandQueue::multicast_cores_launch_message_wptr_reset;
+    HWCommandQueue::unicast_cores_launch_message_wptr = HWCommandQueue::unicast_cores_launch_message_wptr_reset;
     this->manager.set_bypass_mode(false, false);  // stop
 }
 

@@ -2367,8 +2367,10 @@ void Device::init_command_queue_device() {
         }
     }
     // TODO: Move this inside the command queue
-    for (auto& hw_cq : this->hw_command_queues_) {
-        hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->dispatch_s_enabled() ? NOC::NOC_1 : NOC::NOC_0));
+    if (this->num_eth_worker_cores()) {
+        for (auto& hw_cq : this->hw_command_queues_) {
+            hw_cq->set_unicast_only_cores_on_dispatch(this->get_noc_encoding_for_active_eth_cores(this->dispatch_s_enabled() ? NOC::NOC_1 : NOC::NOC_0));
+        }
     }
     // Added this for safety while debugging hangs with FD v1.3 tunnel to R, should experiment with removing it
     // tt::Cluster::instance().l1_barrier(this->id());
