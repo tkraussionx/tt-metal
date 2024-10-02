@@ -150,8 +150,13 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
                 num_shardes_per_height = 1;
             } else { // block sharded
                 auto bbox = core_group_1.bounding_box();
-                num_shardes_per_height = bbox.end_coord.y - bbox.start_coord.y + 1;
-                num_shardes_per_width = bbox.end_coord.x - bbox.start_coord.x + 1;
+                if (shard_spec.value().orientation == ShardOrientation::ROW_MAJOR) {
+                    num_shardes_per_height = bbox.end_coord.y - bbox.start_coord.y + 1;
+                    num_shardes_per_width = bbox.end_coord.x - bbox.start_coord.x + 1;
+                } else {
+                    num_shardes_per_height = bbox.end_coord.x - bbox.start_coord.x + 1;
+                    num_shardes_per_width = bbox.end_coord.y - bbox.start_coord.y + 1;
+                }
             }
             start_id = (i / num_shardes_per_width) * (block_height * block_width * num_shardes_per_width) +
                                 (i % num_shardes_per_width) * block_width;
