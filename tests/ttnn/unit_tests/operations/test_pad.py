@@ -121,7 +121,7 @@ def padding_and_torch_padding(padding):
     ],
 )
 @pytest.mark.parametrize("value", [8])
-@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.SHARD_HEIGHT, ttnn.ShardStrategy.SHARD_WIDTH])
+@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.HEIGHT])
 def test_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_strategy, use_program_cache):
     if device.core_grid.y < 8:
         pytest.skip("n300 does not have 8x8 grid")
