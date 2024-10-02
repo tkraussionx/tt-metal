@@ -22,6 +22,26 @@ class MeshDeviceView;
 struct MeshDeviceConfig {
     MeshShape mesh_shape;
     MeshOffset offset;
+    std::vector<chip_id_t> physical_device_ids;
+    MeshType mesh_type;
+
+    MeshDeviceConfig(
+        const MeshShape &mesh_shape,
+        MeshType mesh_type = MeshType::RowMajor) :
+        mesh_shape(mesh_shape),
+        offset(MeshOffset{0, 0}),
+        physical_device_ids(std::vector<chip_id_t>()),
+        mesh_type(mesh_type) {}
+
+    MeshDeviceConfig(
+        const MeshShape &mesh_shape,
+        const MeshOffset &offset = MeshOffset{0, 0},
+        const std::vector<chip_id_t> &physical_device_ids = {},
+        MeshType mesh_type = MeshType::RowMajor) :
+        mesh_shape(mesh_shape),
+        offset(offset),
+        physical_device_ids(physical_device_ids),
+        mesh_type(mesh_type) {}
 };
 
 // SystemMesh creates a virtualization over the physical devices in the system.
@@ -80,8 +100,7 @@ class SystemMesh {
         std::size_t l1_small_size,
         std::size_t trace_region_size,
         DispatchCoreType dispatch_core_type,
-        const std::pair<std::size_t, std::size_t> &offset = {0, 0},
-        const std::vector<chip_id_t> &physical_device_ids = {});
+        const MeshDeviceConfig &config);
 
     // Unmap MeshDevice, releasing the associated physical devices.
     void unmap_mesh_device(const MeshDevice* mesh_device);
@@ -93,6 +112,7 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
   private:
     MeshDeviceID mesh_id;
     MeshShape mesh_device_shape;
+    MeshType order;
     std::shared_ptr<MeshDeviceView> primary_view;
     std::vector<Device *> devices;
     std::shared_ptr<MeshDevice> parent_mesh;
@@ -103,11 +123,10 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
         std::size_t trace_region_size,
         std::size_t num_command_queues,
         DispatchCoreType dispatch_core_type,
-        const std::pair<std::size_t, std::size_t> &offset,
-        const std::vector<chip_id_t> &physical_device_ids);
+        const MeshDeviceConfig &config);
 
    public:
-    MeshDevice(const MeshShape &mesh_device_shape, std::shared_ptr<MeshDevice> parent_mesh = nullptr);
+    MeshDevice(const MeshShape &mesh_device_shape, MeshType order, std::shared_ptr<MeshDevice> parent_mesh = nullptr);
     ~MeshDevice();
 
     MeshDevice(const MeshDevice &) = delete;
@@ -146,17 +165,22 @@ class MeshDevice : public std::enable_shared_from_this<MeshDevice> {
     std::vector<std::shared_ptr<MeshDeviceView>> get_submesh_views();
     std::shared_ptr<MeshDeviceView> get_view(const Device* device);
 
-    std::shared_ptr<MeshDevice> create_submesh(const MeshShape &submesh_shape, const MeshOffset &offset = {0, 0});
+    std::shared_ptr<MeshDevice> create_submesh(
+        const MeshShape &submesh_shape,
+        const MeshOffset &offset = MeshOffset{0, 0},
+        MeshType order = MeshType::RowMajor);
+
+    std::vector<std::shared_ptr<MeshDevice>> create_submeshes(
+        const MeshShape &submesh_shape,
+        MeshType order = MeshType::RowMajor);
 
     static std::shared_ptr<MeshDevice> fetch_mesh_device(const std::vector<Device*>& devices);
     static std::shared_ptr<MeshDevice> create(
-        const MeshShape &mesh_device_shape,
         std::size_t l1_small_size,
         std::size_t trace_region_size,
         std::size_t num_command_queues,
         DispatchCoreType dispatch_core_type,
-        const std::pair<std::size_t, std::size_t> &offset = {0, 0},
-        const std::vector<chip_id_t> &physical_device_ids = {});
+        const MeshDeviceConfig &config);
 };
 
 std::ostream &operator<<(std::ostream &os, const MeshDevice &mesh_device);

@@ -243,11 +243,14 @@ std::vector<Coordinate> MeshDeviceView::get_ring_coordinates(const MeshShape& ri
 
     // Traverse the bottom row from right to left, if there is more than one row
     if (ring_rows > 1 and ring_cols > 1) {
-        for (std::size_t col = end_col - 1; col >= start_col; --col) {
-            boundary_coords.emplace_back(Coordinate{end_row, col});
+        // Traverse the bottom row from right to left
+        for (int col = static_cast<int>(end_col - 1); col >= static_cast<int>(start_col); --col) {
+            boundary_coords.emplace_back(Coordinate{end_row, static_cast<std::size_t>(col)});
         }
-        for (std::size_t row = end_row - 1; row >= start_row; --row) {
-            boundary_coords.emplace_back(Coordinate{row, start_col});
+
+        // Traverse the leftmost column from bottom-1 to top+1
+        for (int row = static_cast<int>(end_row - 1); row > static_cast<int>(start_row); --row) {
+            boundary_coords.emplace_back(Coordinate{static_cast<std::size_t>(row), start_col});
         }
     }
 
@@ -271,13 +274,13 @@ std::vector<MeshDeviceView::device_pointer> MeshDeviceView::get_ring_devices() {
     return get_devices_from_coordinates(*this, boundary_coords);
 }
 
-MeshDeviceView::DeviceView MeshDeviceView::get_devices(IterationOrder order) {
+MeshDeviceView::DeviceView MeshDeviceView::get_devices(MeshType order) {
     switch (order) {
-        case IterationOrder::ROW_MAJOR:
+        case MeshType::RowMajor:
             return this->devices_;
-        case IterationOrder::RING:
+        case MeshType::Ring:
             return this->get_ring_devices();
-        case IterationOrder::LINE:
+        case MeshType::Line:
             return this->get_line_devices();
         default:
             TT_THROW("Unsupported iteration order: {}", order);

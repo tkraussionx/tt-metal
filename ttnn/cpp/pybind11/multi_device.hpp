@@ -16,9 +16,16 @@ namespace ttnn {
 
 namespace multi_device {
 
-void py_module_types(py::module& module) { py::class_<MeshDevice, std::shared_ptr<MeshDevice>>(module, "MeshDevice"); }
+void py_module_types(py::module& module) {
+    py::class_<MeshDevice, std::shared_ptr<MeshDevice>>(module, "MeshDevice");
+}
 
 void py_module(py::module& module) {
+    py::enum_<MeshType>(module, "MeshType")
+        .value("RowMajor", MeshType::RowMajor)
+        .value("Ring", MeshType::Ring)
+        .value("Line", MeshType::Line)
+        .export_values();
     auto py_mesh_device = static_cast<py::class_<MeshDevice, std::shared_ptr<MeshDevice>>>(module.attr("MeshDevice"));
     py_mesh_device
         .def(
@@ -28,15 +35,15 @@ void py_module(py::module& module) {
                         std::size_t num_command_queues,
                         DispatchCoreType dispatch_core_type,
                         const std::pair<std::size_t, std::size_t>& offset,
-                        const std::vector<chip_id_t>& physical_device_ids) {
+                        const std::vector<chip_id_t>& physical_device_ids,
+                        MeshType mesh_type) {
+                auto config = MeshDeviceConfig(mesh_device_shape, offset, physical_device_ids, mesh_type);
                 return MeshDevice::create(
-                    mesh_device_shape,
                     l1_small_size,
                     trace_region_size,
                     num_command_queues,
                     dispatch_core_type,
-                    offset,
-                    physical_device_ids);
+                    config);
             }),
             py::kw_only(),
             py::arg("mesh_shape"),
@@ -45,7 +52,8 @@ void py_module(py::module& module) {
             py::arg("num_command_queues"),
             py::arg("dispatch_core_type"),
             py::arg("offset"),
-            py::arg("physical_device_ids"))
+            py::arg("physical_device_ids"),
+            py::arg("mesh_type"))
         .def("get_num_devices", &MeshDevice::num_devices)
         .def("get_mesh_id", &MeshDevice::get_mesh_id)
         .def("get_device_ids", &MeshDevice::get_device_ids)
@@ -63,7 +71,12 @@ void py_module(py::module& module) {
             Returns:
                 List[Device]: The devices in the device mesh.
         )doc")
-        .def("create_submesh", &MeshDevice::create_submesh, py::arg("submesh_shape"), py::arg("offset") = std::pair<size_t, size_t>{0, 0}, py::return_value_policy::reference_internal, py::keep_alive<0, 1>())
+        .def("create_submesh", &MeshDevice::create_submesh,
+            py::arg("submesh_shape"), py::arg("offset"), py::arg("mesh_type"),
+            py::keep_alive<1, 0>())  // Keep MeshDevice alive as long as SubmeshDevice is alive
+        .def("create_submeshes", &MeshDevice::create_submeshes,
+            py::arg("submesh_shape"), py::arg("mesh_type"),
+            py::keep_alive<1, 0>())  // Keep MeshDevice alive as long as SubmeshDevices are alive
         .def(
             "compute_with_storage_grid_size",
             &MeshDevice::compute_with_storage_grid_size,
@@ -108,7 +121,9 @@ void py_module(py::module& module) {
         py::arg("trace_region_size"),
         py::arg("num_command_queues"),
         py::arg("dispatch_core_type"),
-        py::arg("physical_device_ids"));
+        py::arg("offset"),
+        py::arg("physical_device_ids"),
+        py::arg("mesh_type"));
 
     module.def("close_mesh_device", &close_mesh_device, py::arg("mesh_device"), py::kw_only());
     module.def(

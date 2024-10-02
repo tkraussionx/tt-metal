@@ -54,10 +54,10 @@ struct Coordinate {
  *    (CCL-ops), such as line all-gather, which require column or row views of the device mesh.
  */
 
-enum class IterationOrder {
-    ROW_MAJOR,
-    RING,
-    LINE
+enum class MeshType {
+    RowMajor,
+    Ring,
+    Line
 };
 
 class MeshDeviceView {
@@ -79,7 +79,7 @@ public:
     // devices are returned in row-major order with start/end coordinates inclusive
     [[nodiscard]] DeviceView get_devices(const Coordinate& start, const Coordinate& end);
     [[nodiscard]] DeviceView get_devices(const MeshShape& shape);
-    [[nodiscard]] DeviceView get_devices(IterationOrder order = IterationOrder::ROW_MAJOR);
+    [[nodiscard]] DeviceView get_devices(MeshType order = MeshType::RowMajor);
 
     [[nodiscard]] DeviceView get_devices_on_row(std::size_t row) const;
     [[nodiscard]] DeviceView get_devices_on_column(std::size_t col) const;
@@ -110,10 +110,10 @@ public:
     // The current support only provides left-to-right and right-to-left snaking of the line.
     [[nodiscard]] static std::vector<Coordinate> get_line_coordinates(std::size_t length, const Coordinate& offset, std::size_t num_rows, std::size_t num_cols);
     [[nodiscard]] std::vector<Coordinate> get_ring_coordinates(const MeshShape& ring_shape, const Coordinate& offset, std::size_t num_rows, std::size_t num_cols);
-
-private:
     [[nodiscard]] std::vector<device_pointer> get_ring_devices();
     [[nodiscard]] std::vector<device_pointer> get_line_devices();
+
+private:
     std::vector<device_pointer> devices_;
     std::unordered_map<chip_id_t, Coordinate> device_coordinates_;
     Coordinate top_left_;

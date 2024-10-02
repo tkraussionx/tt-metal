@@ -155,21 +155,20 @@ std::vector<Device*> SystemMesh::map_mesh_device(
     std::size_t l1_small_size,
     std::size_t trace_region_size,
     DispatchCoreType dispatch_core_type,
-    const std::pair<std::size_t, std::size_t>& offset,
-    const std::vector<chip_id_t>& user_provided_physical_device_ids) {
+    const MeshDeviceConfig& config) {
 
     auto [requested_num_rows, requested_num_cols] = mesh_device->shape();
     auto [max_num_rows, max_num_cols] = this->logical_mesh_shape;
-    auto [row_offset, col_offset] = offset;
+    auto [row_offset, col_offset] = config.offset;
 
     log_debug(LogMetal, "Mapping MeshDevice ({}x{}) with offset: {}, {}", requested_num_rows, requested_num_cols, row_offset, col_offset);
     TT_FATAL(requested_num_rows <= max_num_rows, "Requested too many rows: {} > {}", requested_num_rows, max_num_rows);
     TT_FATAL(requested_num_rows*requested_num_cols <= max_num_rows*max_num_cols, "Requested submesh is too big: {}x{}", requested_num_rows, requested_num_cols);
 
 
-    auto physical_device_ids = user_provided_physical_device_ids.empty() ?
-        this->get_mapped_physical_device_ids(MeshDeviceConfig{mesh_device->shape(), offset}) :
-        user_provided_physical_device_ids;
+    auto physical_device_ids = config.physical_device_ids.empty() ?
+        this->get_mapped_physical_device_ids(config) :
+        config.physical_device_ids;
 
     this->opened_devices[mesh_device->get_mesh_id()] = tt::tt_metal::detail::CreateDevices(
         physical_device_ids, num_command_queues, l1_small_size, trace_region_size, dispatch_core_type);
@@ -181,7 +180,7 @@ std::vector<Device*> SystemMesh::map_mesh_device(
         this->assigned_physical_id_to_device.insert({physical_device_id, mapped_device});
     }
 
-    this->register_mesh_device(mesh_device, mapped_devices); // TODO: change this
+    this->register_mesh_device(mesh_device, mapped_devices); // here
     return mapped_devices;
 }
 
@@ -213,25 +212,27 @@ static MeshDeviceID generate_unique_mesh_id() {
     return next_id++;
 }
 
-MeshDevice::MeshDevice(const MeshShape& mesh_device_shape, std::shared_ptr<MeshDevice> parent_mesh)
-    : mesh_device_shape(mesh_device_shape), mesh_id(generate_unique_mesh_id()), parent_mesh(parent_mesh) {}
+MeshDevice::MeshDevice(const MeshShape& mesh_device_shape, MeshType order, std::shared_ptr<MeshDevice> parent_mesh)
+    : mesh_device_shape(mesh_device_shape), order(order), mesh_id(generate_unique_mesh_id()), parent_mesh(parent_mesh) {}
 
 std::shared_ptr<MeshDevice> MeshDevice::create(
-    const MeshShape& mesh_device_shape,
     std::size_t l1_small_size,
     std::size_t trace_region_size,
     std::size_t num_command_queues,
     DispatchCoreType dispatch_core_type,
-    const std::pair<std::size_t, std::size_t>& offset,
-    const std::vector<chip_id_t>& user_provided_physical_device_ids)
+    const MeshDeviceConfig& config)
 {
-    auto mesh_device = std::make_shared<MeshDevice>(mesh_device_shape);
-    mesh_device->initialize(l1_small_size, trace_region_size, num_command_queues, dispatch_core_type, offset, user_provided_physical_device_ids);
+    auto mesh_device = std::make_shared<MeshDevice>(config.mesh_shape, config.mesh_type);
+    mesh_device->initialize(l1_small_size, trace_region_size, num_command_queues, dispatch_core_type, config);
 
     return mesh_device;
 }
 
-std::shared_ptr<MeshDevice> MeshDevice::create_submesh(const MeshShape &submesh_shape, const MeshOffset &offset) {
+std::shared_ptr<MeshDevice> MeshDevice::create_submesh(
+    const MeshShape &submesh_shape,
+    const MeshOffset &offset,
+    MeshType order)
+{
     if (submesh_shape.first <= 0 || submesh_shape.second <= 0) {
         TT_THROW("Invalid submesh shape: ({}, {}). Both dimensions must be positive.", submesh_shape.first, submesh_shape.second);
     }
@@ -248,7 +249,7 @@ std::shared_ptr<MeshDevice> MeshDevice::create_submesh(const MeshShape &submesh_
                  this->mesh_device_shape.first, this->mesh_device_shape.second);
     }
 
-    auto submesh = std::make_shared<MeshDevice>(submesh_shape, shared_from_this());
+    auto submesh = std::make_shared<MeshDevice>(submesh_shape, order, shared_from_this());
     auto start_coordinate = Coordinate{offset.first, offset.second};
     auto end_coordinate = Coordinate{offset.first + submesh_shape.first - 1, offset.second + submesh_shape.second - 1};
     submesh->primary_view = std::make_shared<MeshDeviceView>(*this, start_coordinate, end_coordinate);
@@ -261,13 +262,26 @@ std::shared_ptr<MeshDevice> MeshDevice::create_submesh(const MeshShape &submesh_
     return submesh;
 }
 
+std::vector<std::shared_ptr<MeshDevice>> MeshDevice::create_submeshes(
+    const MeshShape &submesh_shape,
+    MeshType order)
+{
+    std::vector<std::shared_ptr<MeshDevice>> submeshes;
+    for (int row = 0; row < this->num_rows(); row += submesh_shape.first) {
+        for (int col = 0; col < this->num_cols(); col += submesh_shape.second) {
+            auto submesh = this->create_submesh(submesh_shape, MeshOffset{row, col}, order);
+            submeshes.push_back(submesh);
+        }
+    }
+    return submeshes;
+}
+
 void MeshDevice::initialize(
     std::size_t l1_small_size,
     std::size_t trace_region_size,
     std::size_t num_command_queues,
     DispatchCoreType dispatch_core_type,
-    const std::pair<std::size_t, std::size_t>& offset,
-    const std::vector<chip_id_t>& physical_device_ids)
+    const MeshDeviceConfig& config)
 {
     auto [num_rows, num_cols] = this->shape();
     auto num_requested_devices = num_rows * num_cols;
@@ -279,7 +293,7 @@ void MeshDevice::initialize(
 
     auto& instance = SystemMesh::instance();
     this->devices = instance.map_mesh_device(
-        shared_from_this(), num_command_queues, l1_small_size, trace_region_size, dispatch_core_type, offset, physical_device_ids);
+        shared_from_this(), num_command_queues, l1_small_size, trace_region_size, dispatch_core_type, config);
     this->primary_view = std::make_shared<tt::tt_metal::MeshDeviceView>(*this);
 }
 
@@ -304,7 +318,7 @@ Device* MeshDevice::get_device(chip_id_t physical_device_id) const {
     return SystemMesh::instance().get_device(physical_device_id);
 }
 
-std::vector<Device*> MeshDevice::get_devices() const { return this->primary_view->get_devices(IterationOrder::LINE); }
+std::vector<Device*> MeshDevice::get_devices() const { return this->primary_view->get_devices(this->order); }
 
 Device* MeshDevice::get_device(std::size_t row_idx, std::size_t col_idx) const {
     return this->get_device_index(row_idx * num_cols() + col_idx);
@@ -417,7 +431,7 @@ std::vector<int> get_t3k_physical_device_ids_ring() {
     TT_FATAL(num_devices == 8, "T3000 ring topology only works with 8 devices");
 
     auto physical_device_ids = instance.get_mapped_physical_device_ids(
-        MeshDeviceConfig{MeshShape{1, 8}, MeshOffset{0, 0}});
+        MeshDeviceConfig(MeshShape{1, 8}, MeshOffset{0, 0}));
     return physical_device_ids;
 }
 
