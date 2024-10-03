@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_mux_queue_start_addr = 0x80000;
     constexpr uint32_t default_mux_queue_size_bytes = 0x10000;
     constexpr uint32_t default_demux_queue_start_addr = 0x90000;
-    constexpr uint32_t default_demux_queue_size_bytes = 0x8000;
+    constexpr uint32_t default_demux_queue_size_bytes = 0x20000;
 
     constexpr uint32_t default_test_results_addr = 0x100000;
     constexpr uint32_t default_test_results_size = 0x1000;

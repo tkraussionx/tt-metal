@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_tunneler_y = 0;
 
     constexpr uint32_t default_prng_seed = 0x100;
-    constexpr uint32_t default_data_kb_per_tx = 16*1024;
+    constexpr uint32_t default_data_kb_per_tx = 1024*1024;
     constexpr uint32_t default_max_packet_size_words = 0x100;
 
     constexpr uint32_t default_tx_queue_start_addr = 0x80000;
