@@ -508,7 +508,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         B,                       // batch
         out_block_tiles,         // out_block_num_tiles
 
-        untilize_out  // untilize_out
+        untilize_out,  // untilize_out
+
+        // Gather in0 args
+        gather_in0,
+        ring_size,
     };
 
     // Create compute kernel
@@ -842,6 +846,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
             tt_metal::SetRuntimeArgs(
                 program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args);  // RISCV_0_default
+
+            // Push runtime args to compute kernel
+            std::vector<uint32_t> mm_kernel_compute_args = {
+                i,  // ring_idx
+            };
+
+            tt_metal::SetRuntimeArgs(program, mm_kernel, core, mm_kernel_compute_args);
         }
     }
 

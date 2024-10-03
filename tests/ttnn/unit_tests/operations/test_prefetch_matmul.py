@@ -182,6 +182,20 @@ def run_prefetch_matmul_on_t3000_impl(
         mem_config_weights = mem_config
     elif mem_config_weights == "dram":
         mem_config_weights = ttnn.DRAM_MEMORY_CONFIG
+    elif mem_config_weights == "l1":
+        mem_config_weights = ttnn.MemoryConfig(
+            ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+            ttnn.BufferType.L1,
+            ttnn.ShardSpec(
+                shard_spec_24_cores_grid,
+                [
+                    K,
+                    N // mem_config_input.shard_spec.num_cores(),
+                ],
+                ttnn.ShardOrientation.ROW_MAJOR,
+                False,
+            ),
+        )
     else:
         raise ValueError(f"Unsupported mem_config_weights: {mem_config_weights}")
 
@@ -490,7 +504,7 @@ def run_prefetch_matmul_on_t3000_impl(
                     False,
                 ),
             ),
-            "dram",
+            "l1",
             ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
         ),
         # (  # FF1/3 matmul1d
