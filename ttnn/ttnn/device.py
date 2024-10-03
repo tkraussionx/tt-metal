@@ -50,6 +50,7 @@ def close_device(device: "ttnn.device.Device"):
 
 enable_program_cache = ttnn._ttnn.device.enable_program_cache
 disable_and_clear_program_cache = ttnn._ttnn.device.disable_and_clear_program_cache
+register_parent_thread_for_async_mode = ttnn._ttnn.device.register_parent_thread_for_async_mode
 
 synchronize_device = ttnn._ttnn.device.synchronize_device
 GetDefaultDevice = ttnn._ttnn.device.GetDefaultDevice

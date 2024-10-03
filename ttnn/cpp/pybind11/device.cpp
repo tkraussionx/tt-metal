@@ -62,6 +62,8 @@ void ttnn_device(py::module& module) {
 
     module.def("disable_and_clear_program_cache", &ttnn::disable_and_clear_program_cache, py::arg("device"));
 
+    module.def("register_parent_thread_for_async_mode", &ttnn::register_parent_thread_for_async_mode, py::arg("device"));
+
     module.def("deallocate_buffers", &ttnn::deallocate_buffers, py::arg("device"), R"doc(
         Deallocate all buffers associated with Device handle
     )doc");
@@ -113,6 +115,10 @@ void device_module(py::module& m_device) {
             "disable_and_clear_program_cache",
             &Device::disable_and_clear_program_cache,
             "Disable and clear program cache for this device")
+        .def(
+            "register_parent_thread_for_async_mode",
+            &Device::register_parent_thread_for_async_mode,
+            "Register a new parent thread for a workload running in async mode")
         .def(
             "num_program_cache_entries",
             &Device::num_program_cache_entries,
