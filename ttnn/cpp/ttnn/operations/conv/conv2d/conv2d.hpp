@@ -134,7 +134,9 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_an
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 template<typename T>
 std::tuple<ttnn::Tensor, sliding_window::ParallelConfig, bool> shard_or_reshard_tensor_if_required(
@@ -145,7 +147,9 @@ std::tuple<ttnn::Tensor, sliding_window::ParallelConfig, bool> shard_or_reshard_
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 void validate_weight_and_bias_tensors(const ttnn::Tensor& weight_tensor, std::optional<const ttnn::Tensor>& bias_tensor);
 

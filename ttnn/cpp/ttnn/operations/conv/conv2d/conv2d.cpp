@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <cstdint>
 
+#include "impl/buffers/buffer_constants.hpp"
 #include "ttnn/operations/pool/downsample/device/downsample_op.hpp"
 #include "tt_metal/detail/reports/memory_reporter.hpp"
 #include "ttnn/operations/core/to_dtype/to_dtype_op.hpp"
@@ -312,16 +313,56 @@ OptimizedConvBlockConfig determine_per_core_conv_block_config(
         .out_subblock_w_ntiles = out_subblock_w_ntiles};
 }
 
-template<typename T>
+static TensorMemoryLayout select_shard_spec(
+    const Conv2dConfig& conv_config,
+    uint32_t batch_size,
+    uint32_t height,
+    uint32_t width,
+    uint32_t in_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride) {
+    TensorMemoryLayout shard_layout;
+
+    bool is_conv1d = width == 1 && kernel_size[1] == 1;
+    bool is_width_or_block_sharding_valid =
+        (kernel_size[0] == 3 && kernel_size[1] == 3 && (stride[0] == 1 || stride[0] == 2)) ||
+        (kernel_size[0] == 1 && kernel_size[1] == 1 && stride[0] == 2);
+
+    if (!is_conv1d && !is_width_or_block_sharding_valid) {
+        log_info(LogOp, "2d conv which can only be supported by Shard layout: HEIGHT_SHARDED");
+        shard_layout = TensorMemoryLayout::HEIGHT_SHARDED;
+    } else {
+        float nhw = height * width * batch_size;
+        float ratio = nhw / in_channels;
+        log_info(LogOp, "NHW: {}, C: {}, ratio: {}", nhw, in_channels, ratio);
+
+        if (ratio > 8.0f) {
+            shard_layout = TensorMemoryLayout::HEIGHT_SHARDED;
+            log_info(LogOp, "Shard layout: HEIGHT_SHARDED");
+        } else if (ratio < 0.4f) {
+            shard_layout = TensorMemoryLayout::WIDTH_SHARDED;
+            log_info(LogOp, "Shard layout: WIDTH_SHARDED");
+        } else {
+            log_info(LogOp, "Shard layout: BLOCK_SHARDED");
+            shard_layout = TensorMemoryLayout::BLOCK_SHARDED;
+        }
+    }
+
+    return shard_layout;
+}
+
+template <typename T>
 std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_and_mem_config(
-    T * device,
+    T* device,
     const ttnn::Tensor& input_tensor_,
     const Conv2dConfig& conv_config,
     uint32_t batch_size,
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels) {
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride) {
     ttnn::Tensor input_tensor = input_tensor_;  // tensor to return
     bool input_tensor_on_device = ttnn::is_tensor_on_device_or_multidevice(input_tensor_);
     bool needs_shard_or_reshard = false;
@@ -372,25 +413,9 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_an
     }
     ParallelConfig parallel_config = input_tensor_parallel_config;
     if (conv_config.reshard_if_not_optimal || needs_shard_or_reshard) {
-        auto block_shard_orientation =
-            conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
-        TensorMemoryLayout shard_layout;
-        float nhw = height * width * batch_size;
-        float ratio = nhw / in_channels;
-        log_info(LogOp, "NHW: {}, C: {}, ratio: {}", nhw, in_channels, ratio);
-        if (ratio > 8.0f) {
-            shard_layout = TensorMemoryLayout::HEIGHT_SHARDED;
-            log_info(LogOp, "Shard layout: HEIGHT_SHARDED");
-        } else if (ratio < 0.4f) {
-            shard_layout = TensorMemoryLayout::WIDTH_SHARDED;
-            log_info(LogOp, "Shard layout: WIDTH_SHARDED");
-        } else {
-            log_info(LogOp, "Shard layout: BLOCK_SHARDED");
-            shard_layout = TensorMemoryLayout::BLOCK_SHARDED;
-        }
-
+       auto block_shard_orientation = conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
         const ParallelConfig& optimal_parallel_config = determine_parallel_config(
-            shard_layout,
+            select_shard_spec(conv_config, batch_size, height, width, in_channels, kernel_size, stride),
             batch_size,
             in_channels,
             height,
@@ -443,20 +468,24 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_an
     }
 }
 
-template<typename T>
+template <typename T>
 std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_required(
-    T * device,
+    T* device,
     const ttnn::Tensor& input_tensor_,
     const Conv2dConfig& conv_config,
     uint32_t batch_size,
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels) {
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride) {
     ttnn::Tensor input_tensor = input_tensor_;  // tensor to return
     bool input_tensor_on_device = ttnn::is_tensor_on_device_or_multidevice(input_tensor_);
 
-    auto [input_padded_shape, input_tensor_sharded_memory_config, needs_shard_or_reshard] = get_conv_padded_input_shape_and_mem_config(device, input_tensor_, conv_config, batch_size, height, width, in_channels, out_channels);
+    auto [input_padded_shape, input_tensor_sharded_memory_config, needs_shard_or_reshard] =
+        get_conv_padded_input_shape_and_mem_config(
+            device, input_tensor_, conv_config, batch_size, height, width, in_channels, out_channels, kernel_size, stride);
     ParallelConfig parallel_config = {
         .grid = input_tensor_sharded_memory_config.shard_spec.value().grid,
         .shard_scheme = input_tensor_sharded_memory_config.memory_layout,
@@ -690,7 +719,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     uint32_t output_height = ((input_height - kernel_size[0] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[0]) / stride[0]) + 1;
     uint32_t output_width = ((input_width - kernel_size[1] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[1]) / stride[1]) + 1;
     auto [input_tensor_post_tm, parallel_config, tensor_manipulated] = shard_or_reshard_tensor_if_required(
-        device, input_tensor, conv_config, batch_size, output_height, output_width, in_channels, out_channels);
+        device, input_tensor, conv_config, batch_size, output_height, output_width, in_channels, out_channels, kernel_size, stride);
     if (tensor_manipulated) {
         if (conv_config.deallocate_activation) {
             ttnn::Tensor input_tensor_ = input_tensor;  // TODO: allow in place modification of inputs to the op
@@ -926,14 +955,16 @@ template ParallelConfig determine_parallel_config<MeshDevice>(
     bool is_out_tiled);
 
 template std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_and_mem_config<Device>(
-    Device * device,
+    Device* device,
     const ttnn::Tensor& input_tensor_,
     const Conv2dConfig& conv_config,
     uint32_t batch_size,
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 template std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input_shape_and_mem_config<MeshDevice>(
     MeshDevice * device,
@@ -943,17 +974,21 @@ template std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool> get_conv_padded_input
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 template std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_required<Device>(
-    Device * device,
+    Device* device,
     const ttnn::Tensor& input_tensor_,
     const Conv2dConfig& conv_config,
     uint32_t batch_size,
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 template std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_if_required<MeshDevice>(
     MeshDevice * device,
@@ -963,7 +998,9 @@ template std::tuple<ttnn::Tensor, ParallelConfig, bool> shard_or_reshard_tensor_
     uint32_t height,
     uint32_t width,
     uint32_t in_channels,
-    uint32_t out_channels);
+    uint32_t out_channels,
+    std::array<uint32_t, 2> kernel_size,
+    std::array<uint32_t, 2> stride);
 
 template std::pair<ttnn::Tensor, std::optional<ttnn::Tensor>> prepare_conv_weights_biases_and_move_to_device<Device>(
     const ttnn::Tensor& weight_tensor,
