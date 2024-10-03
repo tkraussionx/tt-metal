@@ -269,6 +269,12 @@ struct registered_operation_t {
         std::cout << "outputs: " << std::endl;
         for (auto& output : output_tensors) {
             std::cout << output.tensor_attributes.get() << std::endl;
+
+            auto workers = output.get_workers();
+            std::cout << "workers for invoke composite outputs: " << std::endl;
+            for (const auto& worker : workers) {
+                std::cout << worker->id() << std::endl;
+            }
         }
         const OptionalTensors optional_output_tensors =
             detail::extract_args_to_vector<std::optional<ttnn::Tensor>>(std::forward<args_t>(args)...);

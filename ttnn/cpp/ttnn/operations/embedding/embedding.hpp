@@ -51,6 +51,7 @@ struct EmbeddingOperation {
                               {input_tensor, weight})
                               .at(0);
         std::cout << "EmbeddingOperation::invoke" << std::endl;
+        std::cout << "Embeddingop invoke tensor: " << embeddings.tensor_attributes.get() << std::endl;
         auto workers = embeddings.get_workers();
         std::cout << "workers for embedding outputs: " << std::endl;
         for (const auto& worker : workers) {
