@@ -82,10 +82,6 @@ void kernel_main() {
                 noc_async_write_one_packet_set_state(remote_curr_shard_write_addr, shard_size_bytes);
             }
 
-            // Do stuff for matmul fusion here
-            cb_push_back(cb_id_in0, shard_size_in_tiles);
-
-
             /* Here, assume cb0 has the data the data ready in the correct place. */
 
             // Send data to next core
@@ -95,6 +91,10 @@ void kernel_main() {
                 // Signal the next core that data is ready
                 noc_semaphore_inc(remote_signal_semaphore_addr, 1);
             }
+
+
+            // Do stuff for matmul fusion here
+            cb_push_back(cb_id_in0, shard_size_in_tiles);
        }
     }
 }
