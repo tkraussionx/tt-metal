@@ -1716,7 +1716,7 @@ HWCommandQueue::HWCommandQueue(Device* device, uint32_t id, NOC noc_index) :
     std::thread completion_queue_thread = std::thread(&HWCommandQueue::read_completion_queue, this);
     this->completion_queue_thread = std::move(completion_queue_thread);
     // Set the affinity of the completion queue reader.
-    set_device_thread_affinity(this->completion_queue_thread, device->worker_thread_core);
+    set_device_thread_affinity(this->completion_queue_thread, (device->id() + 2) % sysconf(_SC_NPROCESSORS_ONLN));
     this->expected_num_workers_completed = 0;
 }
 
