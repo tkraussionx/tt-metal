@@ -1367,10 +1367,11 @@ void EnqueueProgramCommand::process() {
         TT_ASSERT(
             this->cached_program_command_sequences.find(program.id) != this->cached_program_command_sequences.end(),
             "Program cache hit, but no stored command sequence");
-
+        // This waits for latest number of workers. Should wait for sync count returned by config buffer manager.
         this->cached_program_command_sequences[program.id].stall_command_sequence.update_cmd_sequence(
             wait_count_offset, &this->expected_num_workers_completed, sizeof(uint32_t));
-
+        // update launch_message_stall_command_sequence. Gets created when program is created for the first time, but not
+        // used until program is cached
         this->cached_program_command_sequences[program.id].preamble_command_sequence.update_cmd_sequence(
             tensix_l1_write_offset_offset,
             &kernel_config_addrs[hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX)],
@@ -1391,6 +1392,9 @@ void EnqueueProgramCommand::process() {
 
     uint32_t preamble_fetch_size_bytes = cached_program_command_sequence.preamble_command_sequence.size_bytes();
 
+    // When computing the stall_command_sequence size, we need to know where the stall will be inserted.
+    // If stalling on kernel_config_buffer or program not cached, stall size = cached_program_command_sequence.stall_command_sequence.size_bytes() <---- This can include prefetch stall
+    // If stalling before sending launch message, stall size = cached_program_command_sequence.launch_message_stall_command_sequence.size_bytes(); <--- Does not include a prefetch stall
     uint32_t stall_fetch_size_bytes = cached_program_command_sequence.stall_command_sequence.size_bytes();
 
     uint32_t runtime_args_fetch_size_bytes = cached_program_command_sequence.runtime_args_fetch_size_bytes;
@@ -1415,7 +1419,8 @@ void EnqueueProgramCommand::process() {
         this->manager.cq_write(
             cached_program_command_sequence.preamble_command_sequence.data(), preamble_fetch_size_bytes, write_ptr);
         write_ptr += preamble_fetch_size_bytes;
-
+        // stall_first -> stall_on_kernel_config_buffer, comes from worker_config_buffer_manager which tells us whether we need to stall or not
+        // if binaries not downloaded or need to stall_on_kernel_config_buffer, stall here (easier to have one stall)
         if (stall_first) {
             // Must stall before writing runtime args
             this->manager.cq_write(
@@ -1435,12 +1440,20 @@ void EnqueueProgramCommand::process() {
                 write_ptr += program_config_buffer_data_size_bytes;
             }
 
-            // Didn't stall before kernel config data, stall before remaining commands
+            // With binaries in the kernel_config_ring_buffer, this gets subsumed in the stall using cached_program_command_sequence.stall_command_sequence.size_bytes(),
+            // if a stall is required
             this->manager.cq_write(
                 cached_program_command_sequence.stall_command_sequence.data(), stall_fetch_size_bytes, write_ptr);
             write_ptr += stall_fetch_size_bytes;
-
+            // Write binaries
             this->manager.cq_write(program_command_sequence_data, program_rem_fetch_size_bytes, write_ptr);
+
+            // Get offset to program command sequence after binaries are written (launch message write + dispatch_s interfacing + go signal send)
+            // check if we didn't stall above. Stall for workers 4 entries behind (be careful with t6 and eth -> need to maintain a running counter thats
+            // 4 entries behind).
+            // if ((not stalled_on_kernel_config_binaries) or program_cached and manager.launch_message_buffer_sync_count)
+                // insert stall
+            // Send launch message + dispatch_d <-> dispatch_s <-> worker syncs (need to compute offset)
         } else {
             this->manager.cq_write(program_command_sequence_data, program_fetch_size_bytes, write_ptr);
         }
