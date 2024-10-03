@@ -156,6 +156,7 @@ from ttnn.device import (
     close_device,
     enable_program_cache,
     disable_and_clear_program_cache,
+    register_parent_thread_for_async_mode,
     manage_device,
     synchronize_device,
     dump_device_memory_state,

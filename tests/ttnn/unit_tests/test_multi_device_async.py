@@ -28,6 +28,7 @@ def test_ttnn_to_and_from_multi_device_shard(pcie_mesh_device, layout, memory_co
 
     for device in pcie_mesh_device.get_device_ids():
         pcie_mesh_device.get_device(device).enable_async(True)
+        pcie_mesh_device.get_device(device).register_parent_thread_for_async_mode()
 
     for i in range(100):
         torch_tensor = torch.rand((1, 1, 256, 512), dtype=torch.bfloat16)
@@ -57,6 +58,7 @@ def test_multi_device_check_per_device_shard(pcie_mesh_device, layout, memory_co
 
     for device in pcie_mesh_device.get_device_ids():
         pcie_mesh_device.get_device(device).enable_async(True)
+        pcie_mesh_device.get_device(device).register_parent_thread_for_async_mode()
 
     num_loops = 50
     if dtype == ttnn.bfloat8_b:

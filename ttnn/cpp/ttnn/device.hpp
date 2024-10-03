@@ -15,6 +15,7 @@ Device &open_device(int device_id, size_t l1_small_size = DEFAULT_L1_SMALL_SIZE,
 void close_device(Device &device);
 void enable_program_cache(Device &device);
 void disable_and_clear_program_cache(Device &device);
+void register_parent_thread_for_async_mode(Device &device);
 bool is_wormhole_or_blackhole(tt::ARCH arch);
 void deallocate_buffers(Device *device);
 

@@ -316,6 +316,12 @@ class Device {
         return (std::hash<std::thread::id>{}(std::this_thread::get_id()) == this->work_executor.get_parent_thread_id())
                 or get_worker_mode() == WorkExecutorMode::SYNCHRONOUS;
     }
+
+    inline void register_parent_thread_for_async_mode() {
+        this->synchronize();
+        this->work_executor.update_parent_thread();
+    }
+
    uint32_t trace_buffers_size = 0;
    void update_dispatch_cores_for_multi_cq_eth_dispatch();
 

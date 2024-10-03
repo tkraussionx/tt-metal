@@ -226,6 +226,10 @@ class WorkExecutor {
 
     inline std::size_t get_parent_thread_id() { return this->worker_queue.parent_thread_id; }
 
+    inline void update_parent_thread() {
+        this->worker_queue.parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    }
+
    private:
     std::thread worker_thread;
     WorkerState worker_state;

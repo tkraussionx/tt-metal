@@ -26,6 +26,10 @@ void disable_and_clear_program_cache(Device &device) {
     device.disable_and_clear_program_cache();
 }
 
+void register_parent_thread_for_async_mode(Device &device) {
+    device.register_parent_thread_for_async_mode();
+}
+
 void close_device(Device &device) {
     tt::DevicePool::instance().close_device(device.id());
 
