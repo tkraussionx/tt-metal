@@ -78,7 +78,6 @@ std::vector<tt::tt_metal::LegacyShape> UntilizeWithUnpadding::compute_output_sha
     out_shape.reserve(rank);
     for (uint32_t i = 0; i < rank; i++) {
         out_shape.push_back(this->output_tensor_end[i] + 1);
-        std::cout << "out_shape[" << i << "] = " << out_shape[i] << std::endl;
     }
     tt::tt_metal::LegacyShape output_tensor_shape(out_shape);
     return {output_tensor_shape};

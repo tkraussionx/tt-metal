@@ -130,7 +130,7 @@ def test_untilize_with_unpadding_W_16(device, in_dtype, use_multicore, use_pack_
 
 # sharded fails
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
-def test_to_layout_rm(device, use_program_cache):
+def test_to_layout_rm_sharded(device, use_program_cache):
     torch.manual_seed(0)
     torch_input = torch.rand([1, 1, 337920, 1], dtype=torch.bfloat16)
     print("torch input", torch_input)
@@ -166,7 +166,7 @@ def test_to_layout_rm_int(device, use_program_cache):
     print()
     print(x)
 
-    x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)  # This fails
+    x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
     print("output shape:", x.shape)
 
     torch_output = ttnn.to_torch(x)
@@ -186,7 +186,32 @@ def test_to_layout_rm_creation_int(device, use_program_cache):
     print()
     print(x)
 
-    x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)  # This fails
+    x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
+    print("output shape:", x.shape)
+
+    torch_output = ttnn.to_torch(x)
+    assert_with_pcc(torch_input, torch_output)
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+def test_to_layout_rm_s2i(device, use_program_cache):
+    torch.manual_seed(0)
+    torch_input = torch.rand([1, 1, 337920, 1], dtype=torch.bfloat16)
+    print("torch input", torch_input)
+    x = ttnn.from_torch(torch_input, dtype=ttnn.bfloat16)
+    x = ttnn.to_layout(x, ttnn.TILE_LAYOUT)
+    x = ttnn.to_device(x, device)
+
+    sharded_memory_config = ttnn.create_sharded_memory_config(
+        [1, 1, 337920, 32], ttnn.CoreGrid(x=8, y=8), ttnn.ShardStrategy.HEIGHT
+    )
+    x = ttnn.to_memory_config(x, sharded_memory_config)
+    print("input_shape:", x.shape)
+    print()
+    print(x)
+
+    x = ttnn.to_memory_config(x, ttnn.L1_MEMORY_CONFIG)
+    x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
     print("output shape:", x.shape)
 
     torch_output = ttnn.to_torch(x)

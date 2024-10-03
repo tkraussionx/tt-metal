@@ -52,7 +52,7 @@ uint32_t get_page_size(DataType dtype, Layout layout, uint32_t total_size_bytes,
     switch (layout) {
         case Layout::ROW_MAJOR: {
             uint32_t size_of_element = element_size_bytes(dtype);
-            page_size = std::max(W * size_of_element, (uint32_t)sizeof(uint32_t));
+            page_size = (W * size_of_element + sizeof(uint32_t) - 1) & ~(sizeof(uint32_t) - 1);
         } break;
         case Layout::TILE: {
             // TODO: Update to be generic for data type (issue 462)

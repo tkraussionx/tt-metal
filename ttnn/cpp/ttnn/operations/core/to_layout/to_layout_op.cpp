@@ -146,7 +146,8 @@ Tensor to_layout_impl(
             std::vector<uint32_t> padded_shape;
             for (auto index = 0; index < tensor.get_shape().rank(); ++index) {
                 if (index == tensor.get_shape().rank() - 1) {
-                    output_tensor_end.push_back(tensor.get_shape()[index] + tensor.get_shape()[index] % 2);
+                    uint32_t round_to_4B = ((tensor.get_shape()[index]*tensor.element_size() )% sizeof(uint32_t)) / tensor.element_size();
+                    output_tensor_end.push_back(tensor.get_shape()[index] + round_to_4B - 1);
                 } else {
                     output_tensor_end.push_back(tensor.get_shape()[index] - 1);
                 }
