@@ -515,7 +515,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // Create circular buffers
     uint32_t src0_cb_index = 0;
     tt_metal::CircularBufferConfig src0_cb_config =
-        tt_metal::CircularBufferConfig(in0_CB_size, {{src0_cb_index, in0_data_format}})
+        tt_metal::CircularBufferConfig(in0_CB_size + in0_single_tile_size, {{src0_cb_index, in0_data_format}})
             .set_page_size(src0_cb_index, in0_single_tile_size);
     auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src0_cb_config);
     log_debug(
@@ -561,18 +561,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             CircularBufferConfig(32 * 2, {{l1_cb_index, tt::DataFormat::Float16_b}}).set_page_size(l1_cb_index, 32 * 2);
         tt_metal::CreateCircularBuffer(program, all_cores, cb_for_l1_array_config);
     }
-
-    uint32_t signal_cb_index = 3;
-    tt_metal::CircularBufferConfig signal_cb_config =
-        tt_metal::CircularBufferConfig(1 * in0_single_tile_size, {{signal_cb_index, in0_data_format}})
-            .set_page_size(signal_cb_index, in0_single_tile_size);
-    auto cb_signal = tt_metal::CreateCircularBuffer(program, all_cores, signal_cb_config);
-
-    uint32_t signal_val_cb_index = 4;
-    tt_metal::CircularBufferConfig signal_val_cb_config =
-        tt_metal::CircularBufferConfig(1 * in0_single_tile_size, {{signal_val_cb_index, in0_data_format}})
-            .set_page_size(signal_val_cb_index, in0_single_tile_size);
-    auto cb_signal_val = tt_metal::CreateCircularBuffer(program, all_cores, signal_val_cb_config);
 
     uint32_t output_cb_index = 16;  // output operands start at index 16
     uint32_t interm0_cb_index = 24;
