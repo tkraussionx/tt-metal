@@ -50,6 +50,12 @@ struct EmbeddingOperation {
                                   .output_dtype = dtype.value_or(weight.get_dtype())},
                               {input_tensor, weight})
                               .at(0);
+        std::cout << "EmbeddingOperation::invoke" << std::endl;
+        auto workers = embeddings.get_workers();
+        std::cout << "workers for embedding outputs: " << std::endl;
+        for (const auto& worker : workers) {
+            std::cout << worker->id() << std::endl;
+        }
         embeddings = ttnn::reshape(
             embeddings, ttnn::Shape{std::array<uint32_t, 3>{batch_size, sentence_size, hidden_embedding_dim}});
         return embeddings;

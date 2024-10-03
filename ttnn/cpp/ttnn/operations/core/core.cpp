@@ -11,6 +11,14 @@
 namespace ttnn::operations::core {
 
 ttnn::Tensor reshape(const ttnn::Tensor& tensor, const ttnn::Shape& shape) {
+    std::cout << "core.cpp: reshape" << std::endl;
+
+    auto workers = tensor.get_workers();
+    std::cout << "workers for reshape inputs: " << std::endl;
+    for (const auto& worker : workers) {
+        std::cout << worker->id() << std::endl;
+    }
+
     auto tensor_shape = tensor.get_shape();
     if (tensor_shape == shape) {
         return tensor;

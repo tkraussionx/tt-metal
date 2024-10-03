@@ -363,6 +363,7 @@ Tensor tensor_reshape(const Tensor& input_tensor, int N, int C, int H, int W) {
 }
 
 Tensor tensor_reshape(const Tensor& input_tensor, const tt::tt_metal::LegacyShape& new_shape) {
+    std::cout << "tensor_ops.cpp::tensor_reshape" << std::endl;
     ZoneScoped;
     GraphTracker::instance().track_function_start("Tensor::reshape", input_tensor, new_shape);
     TT_ASSERT(
@@ -380,6 +381,7 @@ Tensor tensor_reshape(const Tensor& input_tensor, const tt::tt_metal::LegacyShap
             using T = std::decay_t<decltype(storage)>;
             const auto& tensor = input_tensor;
             if constexpr (std::is_same_v<T, MultiDeviceHostStorage>) {
+                std::cout << "tensor_ops.cpp::tensor_reshape::MultiDeviceHostStorage" << std::endl;
                 auto updated_storage = std::get<T>(tensor.get_storage());
                 for (int i = 0; i < updated_storage.shapes.size(); i++) {
                     updated_storage.shapes[i] = new_shape;
@@ -387,16 +389,26 @@ Tensor tensor_reshape(const Tensor& input_tensor, const tt::tt_metal::LegacyShap
                 return Tensor(updated_storage, new_shape, tensor.get_dtype(), tensor.get_layout());
             }
             if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                std::cout << "tensor_ops.cpp::tensor_reshape::MultiDeviceStorage" << std::endl;
                 MultiDeviceStorage updated_storage = std::get<T>(tensor.get_storage());
                 std::unordered_map<int, tt::tt_metal::LegacyShape> new_shapes;
 
                 for (auto device_id : updated_storage.ordered_device_ids) {
+                    // std::cout << "tensor_ops.cpp::tensor_reshape::MultiDeviceStorage::device_id: " << device_id << std::endl;
                     new_shapes.insert({device_id, new_shape});
                 }
+
                 updated_storage.shapes = new_shapes;
-                return Tensor(updated_storage, new_shape, tensor.get_dtype(), tensor.get_layout());
+                Tensor rval = Tensor(updated_storage, new_shape, tensor.get_dtype(), tensor.get_layout());
+                rval.workers = tensor.workers;
+                std::cout << "Workers for reshaped tensor: " << std::endl;
+                for (auto& worker : tensor.get_workers()) {
+                    std::cout << worker->id() << std::endl;
+                }
+                return rval;
             }
             if constexpr (std::is_same_v<T, DeviceStorage>) {
+                std::cout << "tensor_ops.cpp::tensor_reshape::DeviceStorage" << std::endl;
                 if (input_tensor.get_layout() == Layout::ROW_MAJOR) {
                     if (tensor.memory_config().memory_layout != TensorMemoryLayout::HEIGHT_SHARDED) {
                         DeviceStorage device_storage = std::get<T>(tensor.get_storage());
