@@ -10,7 +10,7 @@
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 #include "kernels/traffic_gen_test.hpp"
-#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_setting.hpp"
+#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/test_common.hpp"
 
 using namespace tt;
 using json = nlohmann::json;
