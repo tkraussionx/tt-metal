@@ -10,7 +10,7 @@
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 #include "kernels/traffic_gen_test.hpp"
-#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen_setting.hpp"
+#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/test_common.hpp"
 
 using namespace tt;
 using json = nlohmann::json;
@@ -45,13 +45,13 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_queue_size_bytes = 0x10000;
 
     constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
-    constexpr uint32_t default_tunneler_queue_size_bytes = 0x4000;
+    constexpr uint32_t default_tunneler_queue_size_bytes = 0x8000;
 
     constexpr uint32_t default_test_results_addr = 0x100000;
     constexpr uint32_t default_test_results_size = 0x40000;
 
-    constexpr uint32_t default_tunneler_test_results_addr = 0x29000;
-    constexpr uint32_t default_tunneler_test_results_size = 0x8000;
+    constexpr uint32_t default_tunneler_test_results_addr = 0x39000;// 0x8000 * 4 + 0x19000
+    constexpr uint32_t default_tunneler_test_results_size = 0x7000; // 256kB total L1 in ethernet core - 0x39000
 
     constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
@@ -625,6 +625,12 @@ int main(int argc, char **argv) {
 
         if (pass) {
             json summary, config, stat;
+            log_phys_coord_to_json(config, tx_phys_core, "tx_phys_core");
+            log_phys_coord_to_json(config, rx_phys_core, "rx_phys_core");
+            log_phys_coord_to_json(config, mux_phys_core, "mux_phys_core");
+            log_phys_coord_to_json(config, demux_phys_core, "demux_phys_core");
+            log_phys_coord_to_json(config, tunneler_phys_core, "tunneler_phys_core");
+            log_phys_coord_to_json(config, r_tunneler_phys_core, "r_tunneler_phys_core");
             config["tx_x"] = tx_x;
             config["tx_y"] = tx_y;
             config["rx_x"] = rx_x;
