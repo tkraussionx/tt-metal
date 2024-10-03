@@ -309,7 +309,6 @@ def to_torch(
     tensor = tensor.to_torch()
     slices = [slice(None, x) for x in shape_without_tile_padding]
     tensor = tensor[slices]
-
     if torch_rank is not None:
         while len(tensor.shape) != torch_rank:
             if tensor.shape[0] != 1:

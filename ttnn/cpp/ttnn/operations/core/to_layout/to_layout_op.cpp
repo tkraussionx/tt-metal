@@ -143,13 +143,19 @@ Tensor to_layout_impl(
                     tt::tt_metal::MemoryConfig{memory_config.memory_layout, memory_config.buffer_type};
             }
             std::vector<uint32_t> output_tensor_end;
+            std::vector<uint32_t> padded_shape;
             for (auto index = 0; index < tensor.get_shape().rank(); ++index) {
-                output_tensor_end.push_back(tensor.get_shape()[index] - 1);
+                if (index == tensor.get_shape().rank() - 1) {
+                    output_tensor_end.push_back(tensor.get_shape()[index] + tensor.get_shape()[index] % 2);
+                } else {
+                    output_tensor_end.push_back(tensor.get_shape()[index] - 1);
+                }
+                padded_shape.push_back(output_tensor_end[index] + 1);
             }
 
             tensor =
                 ttnn::untilize_with_unpadding(tensor, output_tensor_end, output_memory_config, use_multicore_untilize);
-            return reshape(tensor, ttnn::Shape(tt::tt_metal::LegacyShape{output_shape}));
+            return reshape(tensor, ttnn::Shape(tt::tt_metal::LegacyShape{output_shape, padded_shape}));
 
         } else if (layout == ttnn::TILE_LAYOUT) {
             std::vector<uint32_t> padded_output_shape;

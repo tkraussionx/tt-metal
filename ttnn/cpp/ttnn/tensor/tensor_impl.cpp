@@ -52,7 +52,7 @@ uint32_t get_page_size(DataType dtype, Layout layout, uint32_t total_size_bytes,
     switch (layout) {
         case Layout::ROW_MAJOR: {
             uint32_t size_of_element = element_size_bytes(dtype);
-            page_size = W * size_of_element;
+            page_size = std::max(W * size_of_element, (uint32_t)sizeof(uint32_t));
         } break;
         case Layout::TILE: {
             // TODO: Update to be generic for data type (issue 462)
@@ -262,12 +262,6 @@ void validate_on_device_dtype_and_layout(Device* device, const tt::tt_metal::Leg
                 break;
             case DataType::UINT16:
             case DataType::BFLOAT16:
-                if (layout == Layout::ROW_MAJOR) {
-                    TT_ASSERT(
-                        shape[-1] % 2 == 0,
-                        "For ROW_MAJOR layout tensors with dtype BFLOAT16 or UINT16, tensor width must be divisible by "
-                        "2 since data is packed as uint32_t when creating buffers on device!");
-                }
                 break;
             case DataType::BFLOAT8_B:
             case DataType::BFLOAT4_B:
