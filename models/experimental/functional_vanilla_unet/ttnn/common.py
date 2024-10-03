@@ -68,8 +68,11 @@ class Conv:
             conv_config=conv_config,
             groups=self.groups,
         )
-        output_tensor = ttnn.from_device(output_tensor)  # commenting this works good until encoder3
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        to_device = False
+        if _out_width % 32 != 0 or output_tensor.shape[3] % 32 != 0:
+            output_tensor = ttnn.from_device(output_tensor)  # commenting this works good until encoder3
+            output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+            to_device = True
 
         output_tensor = ttnn.reshape(
             output_tensor, (input_tensor.shape[0], _out_height, _out_width, output_tensor.shape[3])
@@ -80,7 +83,8 @@ class Conv:
             # output_tensor=ttnn.from_torch(output_tensor,dtype=ttnn.bfloat16)
             # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
             # output_tensor = ttnn.to_device(output_tensor, device=device)
-        else:
+        elif to_device:
+            # output_tensor=ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
             output_tensor = ttnn.to_device(output_tensor, device=device)  # commenting this works good until encoder3
         del _out_height, _out_width
 

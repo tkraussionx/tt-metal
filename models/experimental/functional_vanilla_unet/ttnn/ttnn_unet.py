@@ -46,21 +46,18 @@ class TtUnet:
         self.enc3_1 = Conv([1, 1, 1, 1], parameters["encoder3"][0])
         self.enc3_2 = Conv([1, 1, 1, 1], parameters["encoder3"][1], act_block_h=32)
 
-        self.enc4_1 = Conv([1, 1, 1, 1], parameters["encoder4"][0], reshard=True, act_block_h=64)
-        self.enc4_2 = Conv(
-            [1, 1, 1, 1],
-            parameters["encoder4"][1],
-        )
+        self.enc4_1 = Conv([1, 1, 1, 1], parameters["encoder4"][0], reshard=True, height_sharding=False, act_block_h=64)
+        self.enc4_2 = Conv([1, 1, 1, 1], parameters["encoder4"][1], height_sharding=False, act_block_h=64)
 
         self.bottleneck_1 = Conv([1, 1, 1, 1], parameters["bottleneck"][0], height_sharding=False)
-        self.bottleneck_2 = Conv([1, 1, 1, 1], parameters["bottleneck"][1], height_sharding=False)
+        self.bottleneck_2 = Conv([1, 1, 1, 1], parameters["bottleneck"][1], height_sharding=False, act_block_h=32)
 
         self.upconv4 = model.upconv4
         self.dec4_1 = Conv([1, 1, 1, 1], parameters["decoder4"][0], height_sharding=False, act_block_h=32)
         self.dec4_2 = Conv([1, 1, 1, 1], parameters["decoder4"][1], height_sharding=False, act_block_h=32)
 
         self.upconv3 = model.upconv3
-        self.dec3_1 = Conv([1, 1, 1, 1], parameters["decoder3"][0], act_block_h=32)
+        self.dec3_1 = Conv([1, 1, 1, 1], parameters["decoder3"][0], height_sharding=False, act_block_h=32 * 4)
         self.dec3_2 = Conv([1, 1, 1, 1], parameters["decoder3"][1])
 
         self.upconv2 = model.upconv2
@@ -94,7 +91,7 @@ class TtUnet:
             pool_1,
             ttnn.L1_MEMORY_CONFIG,
         )
-        pool_1 = ttnn.from_device(pool_1)
+        # pool_1 = ttnn.from_device(pool_1)
 
         enc2 = self.enc2_1(device, pool_1)
         enc2 = self.enc2_2(device, enc2)
@@ -115,7 +112,7 @@ class TtUnet:
             pool_2,
             ttnn.L1_MEMORY_CONFIG,
         )
-        pool_2 = ttnn.from_device(pool_2)
+        # pool_2 = ttnn.from_device(pool_2)
 
         enc3 = self.enc3_1(device, pool_2)
         enc3 = self.enc3_2(device, enc3)
@@ -136,7 +133,7 @@ class TtUnet:
             pool_3,
             ttnn.L1_MEMORY_CONFIG,
         )
-        pool_3 = ttnn.from_device(pool_3)
+        # pool_3 = ttnn.from_device(pool_3)
 
         enc4 = self.enc4_1(device, pool_3)
         enc4 = self.enc4_2(device, enc4)
@@ -180,6 +177,7 @@ class TtUnet:
         enc4 = ttnn.to_device(enc4, device=device)
 
         dec4 = ttnn.concat([dec4, enc4], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.deallocate(enc4)
 
         dec4 = ttnn.from_device(dec4)
         dec4 = ttnn.to_layout(dec4, layout=ttnn.ROW_MAJOR_LAYOUT)
@@ -195,6 +193,7 @@ class TtUnet:
         dec3 = dec3.permute(0, 2, 3, 1)
         dec3 = torch_to_ttnn(dec3)
 
+        enc3 = ttnn.sharded_to_interleaved(enc3, ttnn.L1_MEMORY_CONFIG)
         enc3 = ttnn.to_layout(enc3, ttnn.TILE_LAYOUT)
 
         dec3 = ttnn.to_layout(dec3, layout=ttnn.TILE_LAYOUT)
@@ -202,6 +201,7 @@ class TtUnet:
 
         dec3 = ttnn.concat([dec3, enc3], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)  # 0.98
         dec3 = ttnn.from_device(dec3)
+        ttnn.deallocate(enc3)
         dec3 = ttnn.to_layout(dec3, layout=ttnn.ROW_MAJOR_LAYOUT)
 
         dec3 = self.dec3_1(device, dec3)
@@ -214,7 +214,7 @@ class TtUnet:
         dec2 = dec2.permute(0, 2, 3, 1)
         dec2 = torch_to_ttnn(dec2)
 
-        enc2 = ttnn.to_layout(enc2, ttnn.TILE_LAYOUT)
+        # enc2 = ttnn.to_layout(enc2, ttnn.TILE_LAYOUT)
 
         dec2 = ttnn.to_layout(dec2, layout=ttnn.TILE_LAYOUT)
         dec2 = ttnn.to_device(dec2, device=device)
@@ -233,7 +233,7 @@ class TtUnet:
         dec1 = dec1.permute(0, 2, 3, 1)
         dec1 = torch_to_ttnn(dec1)
 
-        enc1 = ttnn.to_layout(enc1, ttnn.TILE_LAYOUT)
+        # enc1 = ttnn.to_layout(enc1, ttnn.TILE_LAYOUT)
 
         dec1 = ttnn.to_layout(dec1, layout=ttnn.TILE_LAYOUT)
         dec1 = ttnn.to_device(dec1, device=device)
