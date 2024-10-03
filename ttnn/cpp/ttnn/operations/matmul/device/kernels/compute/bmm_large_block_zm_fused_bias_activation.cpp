@@ -14,6 +14,8 @@
 #endif
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "tools/profiler/kernel_profiler.hpp"
+#include "debug/dprint.h"
 
 
 // Please update
@@ -155,8 +157,8 @@ void MAIN {
             }
 #endif
 
-            cb_wait_front(in0_cb_id, in0_block_num_tiles);
-            cb_wait_front(in1_cb_id, in1_block_num_tiles);
+            // cb_wait_front(in0_cb_id, in0_block_num_tiles);
+            // cb_wait_front(in1_cb_id, in1_block_num_tiles);
 
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
@@ -180,7 +182,11 @@ void MAIN {
                     uint32_t in0_index = in0_index_subblock_offset;  // offset into in0 block
                     uint32_t in1_index = in1_index_subblock_offset;  // offset into in1 block
                     // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
-                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
+                    constexpr uint32_t num_cores = 24;
+                    for (uint32_t shard_cnt = 1; shard_cnt <= num_cores; shard_cnt++) {
+                    cb_wait_front(in0_cb_id, shard_cnt * (in0_block_num_tiles / num_cores));
+                    cb_wait_front(in1_cb_id, shard_cnt * (in1_block_num_tiles / num_cores));
+                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w / num_cores; ++inner_dim_idx) {
                         // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                         // accumulation is done by iterating matmul_block across inner dim
                         // in0_block_w is passed as innder dim (kt) to matmul_block, interally used to stride in0
@@ -193,12 +199,12 @@ void MAIN {
                             false,
                             out_subblock_w,
                             out_subblock_h,
-                            in0_block_w);
+                            in0_block_w / num_cores);
                         in0_index++;                  // stride right by 1
                         in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                       // called in1_block_w)
                     }
-
+                    }
 #endif  // SKIP_COMPUTE
 
                     if (last_out) {

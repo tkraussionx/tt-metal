@@ -49,6 +49,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(
     bool fuse_batch,
     std::optional<UnaryWithParam> fused_activation,
     bool mcast_in0,
+    bool gather_in0,
     bool untilize_out);
 operation::ProgramWithCallbacks matmul_multi_core_reuse_dram_sharded_optimized(
     const Tensor &input_tensor_a,
@@ -131,6 +132,7 @@ struct MatmulMultiCoreReuseMultiCast1DProgramConfig {
     bool fuse_batch;
     std::optional<UnaryWithParam> fused_activation;
     bool mcast_in0;
+    bool gather_in0 = false;
 };
 
 struct MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig {
