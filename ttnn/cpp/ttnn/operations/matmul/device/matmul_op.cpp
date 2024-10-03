@@ -1058,7 +1058,11 @@ void Matmul::validate(
                         TT_FATAL(M == per_core_M, "Error");
                         TT_FATAL(per_core_M == (shard_shape[0] / in0_tile_shape[0]), "Error");
                         TT_FATAL(K % program_config.in0_block_w == 0, "Error");
-                        TT_FATAL((shard_shape[1] / in0_tile_shape[1]) % program_config.in0_block_w == 0, "Error");
+                        if (program_config.gather_in0) {
+                            TT_FATAL((shard_shape[1] / in0_tile_shape[1] * input_tensor_a.shard_spec()->num_cores()) % program_config.in0_block_w == 0, "Error");
+                        } else {
+                            TT_FATAL((shard_shape[1] / in0_tile_shape[1]) % program_config.in0_block_w == 0, "Error");
+                        }
                     }
                     if (this->output_mem_config.is_sharded()) {
                         TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::WIDTH_SHARDED, "Error");
@@ -1549,6 +1553,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     program_config.fuse_batch,
                     program_config.fused_activation,
                     program_config.mcast_in0,
+                    program_config.gather_in0,
                     this->untilize_out);
             } else if constexpr (std::is_same_v<
                                      ProgramConfigType,

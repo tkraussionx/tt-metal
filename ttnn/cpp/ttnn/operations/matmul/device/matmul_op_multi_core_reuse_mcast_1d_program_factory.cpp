@@ -36,6 +36,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     uint32_t N,
     uint32_t K,
     bool bcast_batch,
+    bool gather_in0,
     uint32_t in0_block_w,
     uint32_t out_subblock_h,
     uint32_t out_subblock_w,
@@ -78,7 +79,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     uint32_t output_single_tile_size = output_tile.get_tile_size(output_data_format);
     uint32_t interm0_single_tile_size = output_tile.get_tile_size(interm0_data_format);
 
-    uint32_t in0_block_tiles = per_core_M * in0_block_w;
+    uint32_t in0_block_tiles = per_core_M * in0_block_w * num_blocks;
     uint32_t in0_CB_tiles = in0_block_tiles;
     if (B * num_blocks > 1) {
         in0_CB_tiles = in0_CB_tiles * 2;  // double buffer
@@ -129,6 +130,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t in0_sender_num_cores = in0_is_sharded ? a.shard_spec().value().grid.num_cores() : 1;
     uint32_t num_cores = in0_is_sharded ? std::max(num_cores_with_work, in0_sender_num_cores) : num_cores_with_work;
+    uint32_t ring_size = in0_sender_num_cores;
 
     constexpr bool row_major = true;
     CoreRangeSet all_cores =
@@ -203,6 +205,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto all_gather_signal_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, VALID); // Signal to start processing local data
 
     CoreCoord top_left_core = in0_mcast_receiver_cores_bounding_box.start_coord;
     CoreCoord bottom_right_core = in0_mcast_receiver_cores_bounding_box.end_coord;
@@ -222,29 +225,46 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     std::vector<uint32_t> in0_sender_compile_time_args;
     if (in0_is_sharded) {
-        in0_sender_compile_time_args = {
-            (std::uint32_t)1,  // core_has_output_block_work
-            (std::uint32_t)1,  // core_in_in0_receiver_mcast_grid
+        if (gather_in0) {
+            in0_sender_compile_time_args = {
 
-            (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
-            (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
-            // in0/in1 common args
-            (std::uint32_t)num_blocks,  // num_blocks
-            // in0 mcast args
-            (std::uint32_t)in0_mcast_sender_semaphore_id,
-            (std::uint32_t)in0_mcast_receiver_semaphore_id,
-            (std::uint32_t)in0_mcast_receiver_num_dests,  // in0_mcast_num_dests
-            (std::uint32_t)in0_mcast_receiver_num_cores,  // in0_mcast_num_cores
-            (std::uint32_t)(in0_mcast_sender_cores_grid.x),
-            (std::uint32_t)(in0_mcast_sender_cores_grid.y),
-            (std::uint32_t)(false),
-            (std::uint32_t)(in0_shard_width_in_tiles),
-            (std::uint32_t)(in0_shard_height_in_tiles),
-            (std::uint32_t)(in0_block_w),
+                (std::uint32_t)(in0_shard_width_in_tiles),
+                (std::uint32_t)(in0_shard_height_in_tiles),
 
-            // batch args
-            (std::uint32_t)B  // batch
-        };
+                // batch args
+                (std::uint32_t)B,  // batch
+
+                // all gather args
+                (std::uint32_t)(ring_size),
+                (std::uint32_t)(all_gather_signal_semaphore_id)
+            };
+
+        } else {
+            in0_sender_compile_time_args = {
+                (std::uint32_t)1,  // core_has_output_block_work
+                (std::uint32_t)1,  // core_in_in0_receiver_mcast_grid
+
+                (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
+                (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
+                // in0/in1 common args
+                (std::uint32_t)num_blocks,  // num_blocks
+                // in0 mcast args
+                (std::uint32_t)in0_mcast_sender_semaphore_id,
+                (std::uint32_t)in0_mcast_receiver_semaphore_id,
+                (std::uint32_t)in0_mcast_receiver_num_dests,  // in0_mcast_num_dests
+                (std::uint32_t)in0_mcast_receiver_num_cores,  // in0_mcast_num_cores
+                (std::uint32_t)(in0_mcast_sender_cores_grid.x),
+                (std::uint32_t)(in0_mcast_sender_cores_grid.y),
+                (std::uint32_t)(false),
+                (std::uint32_t)(in0_shard_width_in_tiles),
+                (std::uint32_t)(in0_shard_height_in_tiles),
+                (std::uint32_t)(in0_block_w),
+
+                // batch args
+                (std::uint32_t)B,  // batch
+                (std::uint32_t)(gather_in0)
+            };
+        }
     } else {
         in0_sender_compile_time_args = {
             // interleaved accessor args
@@ -275,6 +295,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     }
     in0_sender_compile_time_args.push_back((std::uint32_t)fuse_op);
 
+    uint32_t in1_core_granularity = gather_in0 ? num_cores : 1;
     std::vector<uint32_t> in1_sender_writer_compile_time_args = {
         // interleaved accessor args
         (std::uint32_t)in1_is_dram,
@@ -284,13 +305,13 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         // in1 tensor args
         (std::uint32_t)1,                // in1_tensor_stride_w
         (std::uint32_t)N,                // in1_tensor_stride_h
-        (std::uint32_t)in0_block_w * N,  // in1_tensor_next_block_stride
+        (std::uint32_t)in0_block_w * N / in1_core_granularity,  // in1_tensor_next_block_stride
         // in1 block args
         (std::uint32_t)per_core_N,                // in1_block_w
-        (std::uint32_t)in0_block_w,               // in1_block_h
-        (std::uint32_t)per_core_N * in0_block_w,  // in1_block_num_tiles
+        (std::uint32_t)in0_block_w / in1_core_granularity,               // in1_block_h
+        (std::uint32_t)per_core_N * in0_block_w / in1_core_granularity,  // in1_block_num_tiles
         // in0/in1 common args
-        (std::uint32_t)num_blocks,  // num_blocks
+        (std::uint32_t)num_blocks * in1_core_granularity,  // num_blocks
         // in1 mcast args
         (std::uint32_t)0,
         (std::uint32_t)0,
@@ -322,7 +343,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         in1_sender_writer_compile_time_args.push_back(0);  // Placeholder; not used
     }
 
-    in1_sender_writer_compile_time_args.push_back((std::uint32_t)fuse_op);
+    in1_sender_writer_compile_time_args.push_back((std::uint32_t)(fuse_op || gather_in0));
 
     std::vector<uint32_t> in0_receiver_compile_time_args = {
         // in0 block args
@@ -394,8 +415,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     auto mm_kernel_in0_mcast_cores_with_work_and_in_receiver_grid_id = tt_metal::CreateKernel(
         program,
         in0_is_sharded
-            ? "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
-              "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp"
+            ? (gather_in0 ? "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_ring_all_gather.cpp" : "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
+              "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp")
             : "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
         in0_mcast_cores_with_work_and_in_receiver_grid,
         tt_metal::DataMovementConfig{
@@ -406,7 +427,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_in_receiver_grid_id = 0;
     KernelHandle mm_kernel_in0_mcast_cores_without_work_and_not_in_receiver_grid_id = 0;
-    if (in0_is_sharded) {
+    if (in0_is_sharded && !gather_in0) {
         if (in0_mcast_cores_without_work_and_in_receiver_grid.num_cores() > 0) {
             in0_sender_compile_time_args[0] = 0;  // core_has_output_block_work
             in0_sender_compile_time_args[1] = 1;  // core_in_in0_receiver_mcast_grid
@@ -669,17 +690,30 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
         if (in0_is_sharded) {
             std::vector<uint32_t> mm_in0_sender_args;
-            mm_in0_sender_args.reserve(5 + in0_mcast_noc_x.size() + in0_mcast_noc_y.size());
-            mm_in0_sender_args.push_back(i);
-            mm_in0_sender_args.push_back(start_core_noc.x);
-            mm_in0_sender_args.push_back(start_core_noc.y);
-            mm_in0_sender_args.push_back(end_core_noc.x);
-            mm_in0_sender_args.push_back(end_core_noc.y);
-            mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
-            mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
 
-            if (fuse_op) {
-                fused_op_signaler->push_matmul_fused_op_rt_args(mm_in0_sender_args, false);
+            if (gather_in0) {
+                uint32_t next_i = i == 0 ? num_cores - 1 : i - 1;
+                const auto& next_core_in_ring = cores[next_i % num_cores];
+                const auto& next_core_in_ring_noc = device->worker_core_from_logical_core(next_core_in_ring);
+
+                mm_in0_sender_args = {
+                    i, // ring_index
+                    next_core_in_ring_noc.x, // next_core_in_ring_noc_x
+                    next_core_in_ring_noc.y, // next_core_in_ring_noc_y
+                };
+            } else {
+                mm_in0_sender_args.reserve(5 + in0_mcast_noc_x.size() + in0_mcast_noc_y.size());
+                mm_in0_sender_args.push_back(i);
+                mm_in0_sender_args.push_back(start_core_noc.x);
+                mm_in0_sender_args.push_back(start_core_noc.y);
+                mm_in0_sender_args.push_back(end_core_noc.x);
+                mm_in0_sender_args.push_back(end_core_noc.y);
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
+                mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
+
+                if (fuse_op) {
+                    fused_op_signaler->push_matmul_fused_op_rt_args(mm_in0_sender_args, false);
+                }
             }
 
             if (i < num_cores_with_work) {
@@ -794,6 +828,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
             if (fuse_op) {
                 fused_op_signaler->push_matmul_fused_op_rt_args(mm_in1_sender_writer_args, true);
+            } else if (gather_in0) {
+                uint32_t in1_stride_per_shard = in0_shard_width_in_tiles * N;
+
+                mm_in1_sender_writer_args.push_back(1); // Core ring all gather is unidirectional
+                mm_in1_sender_writer_args.push_back(ring_size);
+                mm_in1_sender_writer_args.push_back(i);
+                mm_in1_sender_writer_args.push_back(in0_shard_width_in_tiles); // tensor slice width in tiles
+                mm_in1_sender_writer_args.push_back(in1_stride_per_shard);
+                mm_in1_sender_writer_args.push_back((ring_size - 1) * in1_stride_per_shard);
+                mm_in1_sender_writer_args.push_back(ttnn::experimental::ccl::Direction::CCW);
             }
 
             tt_metal::SetRuntimeArgs(
@@ -1595,6 +1639,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
     bool fuse_batch,
     std::optional<UnaryWithParam> fused_activation,
     bool mcast_in0,
+    bool gather_in0,
     bool untilize_out,
     std::optional<ttnn::experimental::ccl::MatmulFusedOpSignaler> &fused_op_signaler) {
     const auto &ashape = a.get_legacy_shape(), bshape = b.get_legacy_shape();
@@ -1645,7 +1690,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
 
     if (fp32_dest_acc_en) {
         TT_FATAL(
-            out_subblock_h * out_subblock_w <= 4,
+            out_subblock_h * out_subblock_w <= 8,
             "Total number of tiles in a subblock must be less than 4 when in fp32_dest_acc mode");
     }
 
@@ -1743,6 +1788,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
             Nt,
             Kt,
             bcast_batch,
+            gather_in0,
             in0_block_w,
             out_subblock_h,
             out_subblock_w,
@@ -1783,6 +1829,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(
     bool fuse_batch,
     std::optional<UnaryWithParam> fused_activation,
     bool mcast_in0,
+    bool gather_in0,
     bool untilize_out) {
 
     tt_metal::Program program{}; /* Create a program */
@@ -1805,6 +1852,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(
         fuse_batch,
         fused_activation,
         mcast_in0,
+        gather_in0,
         untilize_out,
         empty_fused_op_signaler);
 }
@@ -1840,6 +1888,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_helpe
         config.fuse_batch,
         config.fused_activation,
         config.mcast_in0,
+        config.gather_in0,
         untilize_out,
         fused_op_signaler);
 }
