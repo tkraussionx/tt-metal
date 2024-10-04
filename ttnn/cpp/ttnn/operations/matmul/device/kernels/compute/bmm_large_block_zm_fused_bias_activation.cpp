@@ -153,7 +153,9 @@ void MAIN {
             PACK((pack_reconfig_data_format(mm_partials_cb_id)));
         }
 
-        cb_wait_front(in1_cb_id, in1_block_num_tiles * num_blocks);
+        if constexpr (gather_in0) {
+            cb_wait_front(in1_cb_id, in1_block_num_tiles * num_blocks);
+        }
         const uint32_t in1_block_num_tiles_per_core = in1_block_num_tiles / ring_size;
 
         for (uint32_t block = 0; block < num_blocks; block++) {
@@ -166,8 +168,10 @@ void MAIN {
             }
 #endif
 
-            // cb_wait_front(in0_cb_id, in0_block_num_tiles);
-            // cb_wait_front(in1_cb_id, in1_block_num_tiles);
+            if constexpr (!gather_in0) {
+                cb_wait_front(in0_cb_id, in0_block_num_tiles);
+                cb_wait_front(in1_cb_id, in1_block_num_tiles);
+            }
 
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
@@ -192,8 +196,10 @@ void MAIN {
                     uint32_t in1_index = in1_index_subblock_offset;  // offset into in1 block
                     // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
                     for (uint32_t shard_cnt = 1; shard_cnt <= ring_size; shard_cnt++) {
-                    cb_wait_front(in0_cb_id, shard_cnt * (in0_block_num_tiles / ring_size));
-                    in1_index = in1_index_subblock_offset + in1_block_num_tiles_per_core * ((ring_idx + shard_cnt - 1) % ring_size);
+                    if constexpr (gather_in0) {
+                        cb_wait_front(in0_cb_id, shard_cnt * (in0_block_num_tiles / ring_size));
+                        in1_index = in1_index_subblock_offset + in1_block_num_tiles_per_core * ((ring_idx + shard_cnt - 1) % ring_size);
+                    }
                     for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w / ring_size; ++inner_dim_idx) {
                         // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                         // accumulation is done by iterating matmul_block across inner dim
