@@ -317,3 +317,19 @@ def test_add_with_different_batch(device, shape_a, shape_b):
 
     assert ttnn.pearson_correlation_coefficient(torch_output_tensor, output_tensor) >= 0.99988
     assert output_tensor.shape == shape_a
+
+
+@pytest.mark.parametrize("bs", [8])
+@pytest.mark.parametrize("h", [1500])
+@pytest.mark.parametrize("w", [512])
+def test_whisper_add(device, bs, h, w, reset_seeds):
+    torch_input_tensor_a = torch.rand((bs, h, w), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((h, w), dtype=torch.bfloat16)
+    torch_output_tensor = torch.add(torch_input_tensor_a, torch_input_tensor_b)
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    output_tensor = ttnn.add(input_tensor_a, input_tensor_b)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
