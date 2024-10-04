@@ -131,6 +131,7 @@ void WorkerConfigBufferMgr::free(uint32_t free_up_to_sync_count) {
     }
 }
 
+// uint32_t WorkerConfigBufferMgr::alloc(uint32_t when_freeable_sync_count) {
 void WorkerConfigBufferMgr::alloc(uint32_t when_freeable_sync_count) {
 
     size_t num_core_types = this->reservation_.size();
@@ -143,9 +144,15 @@ void WorkerConfigBufferMgr::alloc(uint32_t when_freeable_sync_count) {
 
         uint32_t old_alloc_index = alloc_index;
         // ring buffer of launch message sync counts initialized to 0 (num entries in this buffer reflects
-        // num entries in launch message buffer). Get curr value at sync_count_ring_buffer and increment by when_freeable_sync_count
+        // num entries in launch message buffer). Get curr value at launch_msg_buf_sync_count and increment by when_freeable_sync_count
         // even if curr launch_msg is only going to tensix, I still want to sync on ethernet, since we don't differentiate between
         // worker updates for tensix vs eth on device
+        // uint32_t curr_sync_value = launch_msg_buf_sync_count[launch_msg_buf_idx];
+        // launch_msg_buf_sync_count[launch_msg_buf_idx] = when_freeable_sync_count;
+        // launch_msg_buf_idx;
+        // if (launch_msg_buf_idx == launch_msg_buf_num_entries) {
+            // launch_msg_buf_idx = 0;
+        // }
         alloc_index++;
         if (alloc_index == kernel_config_entry_count) {
             alloc_index = 0;
@@ -156,6 +163,7 @@ void WorkerConfigBufferMgr::alloc(uint32_t when_freeable_sync_count) {
         this->entries_[alloc_index][idx].sync_count = 0xbabababa; // debug
 
         this->alloc_index_[idx] = alloc_index;
+        // return curr_sync_value
     }
 }
 
