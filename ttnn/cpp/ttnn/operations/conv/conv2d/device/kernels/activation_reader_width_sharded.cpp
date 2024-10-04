@@ -108,7 +108,7 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* act_mcast_sender_semaphore_valid_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_write_ptr(cb_l1_array));
 
     // Set up local VALID value, to be mcasted to destinations flag address after the data has been mcasted
-    act_mcast_sender_semaphore_valid_addr_ptr[0] = 1; // Load const 1 to be used as semaphore valid value sent from sender to receivers
+    // act_mcast_sender_semaphore_valid_addr_ptr[0] = 1; // Load const 1 to be used as semaphore valid value sent from sender to receivers
 
     uint32_t act_mcast_sender_semaphore_valid_addr = reinterpret_cast<uint32_t>(act_mcast_sender_semaphore_valid_addr_ptr);
 

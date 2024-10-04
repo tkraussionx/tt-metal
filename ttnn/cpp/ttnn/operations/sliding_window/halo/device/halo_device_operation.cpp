@@ -87,6 +87,12 @@ operation::ProgramWithCallbacks HaloDeviceOperation::create_program(const std::v
     const auto& local_config = std::get<1>(kernel_config);
     const auto& remote_config = std::get<2>(kernel_config);
 
+    #if 1
+    log_debug(tt::LogOp, "pad_config: {}", pad_config);
+    log_debug(tt::LogOp, "local_config: {}", local_config);
+    log_debug(tt::LogOp, "remote_config: {}", remote_config);
+    #endif
+
     auto pad_config_tensor = sliding_window::construct_on_host_config_tensor(pad_config, this->config_, this->parallel_config_);
     auto local_config_tensor = sliding_window::construct_on_host_config_tensor(local_config, this->config_, this->parallel_config_);
     auto remote_config_tensor = sliding_window::construct_on_host_config_tensor(remote_config, this->config_, this->parallel_config_);
