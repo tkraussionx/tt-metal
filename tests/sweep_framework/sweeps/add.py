@@ -61,6 +61,189 @@ parameters = {
             )
         ],
     },
+    "suite_3": {
+        "batch_sizes": [(1,)],
+        "height": [1024],
+        "width": [1024],
+        "broadcast": [None],
+        "input_a_dtype": [ttnn.bfloat16],
+        "input_b_dtype": [ttnn.bfloat16],
+        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_b_layout": [ttnn.TILE_LAYOUT],
+        "input_b_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 8, 1024],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "input_a_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 8, 1024],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "output_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 8, 1024],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+    },
+    "suite_4": {
+        "batch_sizes": [(1,)],
+        "height": [1024],
+        "width": [1024],
+        "broadcast": [None],
+        "input_a_dtype": [ttnn.bfloat16],
+        "input_b_dtype": [ttnn.bfloat16],
+        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_b_layout": [ttnn.TILE_LAYOUT],
+        "input_b_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024, 1024 // 8],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "input_a_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024, 1024 // 8],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "output_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024, 1024 // 8],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+    },
+    "suite_5": {
+        "batch_sizes": [(1,)],
+        "height": [1024],
+        "width": [1024],
+        "broadcast": [None],
+        "input_a_dtype": [ttnn.bfloat16],
+        "input_b_dtype": [ttnn.bfloat16],
+        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_b_layout": [ttnn.TILE_LAYOUT],
+        "input_b_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 4, 1024 // 2],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "input_a_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 4, 1024 // 2],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+        "output_memory_config": [
+            ttnn.L1_MEMORY_CONFIG,
+            ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+                ttnn.BufferType.L1,
+                ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 3)),
+                        }
+                    ),
+                    [1024 // 4, 1024 // 2],
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ],
+    },
 }
 
 
