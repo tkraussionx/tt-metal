@@ -43,12 +43,11 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_queue_start_addr = 0x90000;
     constexpr uint32_t default_demux_queue_size_bytes = 0x10000;
 
-    constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
-    constexpr uint32_t default_tunneler_queue_size_bytes = 0x4000;
-
     constexpr uint32_t default_test_results_addr = 0x100000;
     constexpr uint32_t default_test_results_size = 0x40000;
 
+    constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
+    constexpr uint32_t default_tunneler_queue_size_bytes = 0x4000; // * 8 as it is birectional, maximum queue size for ecore L1 (power of 2)
     constexpr uint32_t default_tunneler_test_results_addr = 0x39000;
     constexpr uint32_t default_tunneler_test_results_size = 0x7000;
 
@@ -207,7 +206,7 @@ int main(int argc, char **argv) {
 
         CoreCoord demux_phys_core_r = device_r->worker_core_from_logical_core(demux_core);
 
-        CoreCoord loopback_mux_core = {mux_x, mux_y};
+        CoreCoord loopback_mux_core = {0, 0};
         CoreCoord loopback_mux_phys_core = device_r->worker_core_from_logical_core(loopback_mux_core);
 
         if (check_txrx_timeout) {
