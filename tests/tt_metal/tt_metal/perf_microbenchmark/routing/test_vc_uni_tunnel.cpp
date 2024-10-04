@@ -44,13 +44,12 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_queue_start_addr = 0x90000;
     constexpr uint32_t default_demux_queue_size_bytes = 0x10000;
 
-    constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
-    constexpr uint32_t default_tunneler_queue_size_bytes = 0x8000;
-
     constexpr uint32_t default_test_results_addr = 0x100000;
     constexpr uint32_t default_test_results_size = 0x40000;
 
-    constexpr uint32_t default_tunneler_test_results_addr = 0x39000;// 0x8000 * 4 + 0x19000
+    constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
+    constexpr uint32_t default_tunneler_queue_size_bytes = 0x8000; // maximum queue (power of 2)
+    constexpr uint32_t default_tunneler_test_results_addr = 0x39000; // 0x8000 * 4 + 0x19000; 0x10000 * 4 + 0x19000 = 0x59000 > 0x40000 (256kB)
     constexpr uint32_t default_tunneler_test_results_size = 0x7000; // 256kB total L1 in ethernet core - 0x39000
 
     constexpr uint32_t default_timeout_mcycles = 1000;
