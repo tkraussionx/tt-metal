@@ -379,6 +379,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     if (fp32_dest_acc_en) {
         mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
     }
+    if (gather_in0) {
+        mm_kernel_defines["GATHER_IN0"] = "1";
+    }
 
     bmm_op_utils::add_stagger_defines_if_needed(device->arch(), num_cores, mm_kernel_defines);
 
