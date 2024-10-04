@@ -112,8 +112,13 @@ void MAIN {
     constexpr uint32_t out_block_num_tiles = get_compile_time_arg_val(12);     // number of tiles in out_block
     constexpr bool untilize_out = get_compile_time_arg_val(13);                // untilize output
 
+#ifdef GATHER_IN0
     constexpr bool gather_in0 = get_compile_time_arg_val(14);
     constexpr uint32_t ring_size = get_compile_time_arg_val(15);
+#else
+    constexpr bool gather_in0 = false;
+    constexpr uint32_t ring_size = 1;
+#endif
 
     constexpr uint32_t out_block_w = out_subblock_w * in1_num_subblocks;
 
