@@ -127,9 +127,6 @@ def run_pad_rm_sharded(dtype, device, n, c, h, w, padding, torch_padding, value,
     )
 
     tt_output_tensor = ttnn.pad(tt_input_tensor, padding=padding, value=value, memory_config=output_shard_config)
-
-    tt_output_tensor = ttnn.to_memory_config(tt_output_tensor, ttnn.L1_MEMORY_CONFIG)
-    tt_output_tensor = ttnn.from_device(tt_output_tensor)
     tt_output_tensor = ttnn.to_torch(tt_output_tensor)
 
     assert tt_output_tensor.shape == torch_output_tensor.shape
