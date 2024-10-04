@@ -282,6 +282,11 @@ void launch_on_worker_thread(auto cq_id, auto device_operation_id, const auto& o
     }
 
     const auto enqueue_or_launch_program = [=](Program& program) {
+        // hack
+        if (std::getenv("TT_NO_FIRMWARE"))
+        {
+            return;
+        }
         if (USE_FAST_DISPATCH) {
             ZoneScopedN("EnqueueProgram");
             auto& queue = device->command_queue(cq_id);
