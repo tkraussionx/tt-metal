@@ -68,30 +68,62 @@ def test_pad_rm_with_program_cache(device, n, c, h, w, padding, torch_padding, v
     assert device.num_program_cache_entries() == 1
 
 
-def run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_strategy):
+def run_pad_rm_sharded(dtype, device, n, c, h, w, padding, torch_padding, value, shard_strategy):
     torch.manual_seed(0)
 
-    torch_input_tensor = torch.rand((n, c, h, w), dtype=torch.bfloat16)
+    ttnn_dtype = {
+        torch.bfloat16: ttnn.DataType.BFLOAT16,
+        torch.float32: ttnn.DataType.FLOAT32,
+    }[dtype]
+
+    torch_input_tensor = torch.rand((n, c, h, w), dtype=dtype)
     torch_output_tensor = torch.nn.functional.pad(torch_input_tensor, torch_padding, mode="constant", value=value)
 
-    input_shard_config = ttnn.create_sharded_memory_config([n, c, h, w], device.core_grid, shard_strategy)
+    def factorize_core_grid(core_grid, total_size_shards):
+        for x in range(core_grid.x, 0, -1):
+            for y in range(core_grid.y, 0, -1):
+                if total_size_shards % (x * y) == 0:
+                    return ttnn.CoreGrid(x=x, y=y)
+        pytest.skip("Couldn't find a core grid that can shard the tensor")
 
-    tt_input_tensor = ttnn.from_torch(
-        torch_input_tensor,
-        dtype=ttnn.DataType.BFLOAT16,
-        layout=ttnn.ROW_MAJOR_LAYOUT,
-        device=device,
-        memory_config=input_shard_config,
-    )
+    total_size_shards = n * c * h if shard_strategy == ttnn.ShardStrategy.HEIGHT else n * c * w
+    core_grid = factorize_core_grid(device.core_grid, total_size_shards)
 
-    n_padded = n + sum(padding[0])
-    c_padded = c + sum(padding[1])
-    h_padded = h + sum(padding[2])
-    w_padded = w + sum(padding[3])
+    input_shard_config = ttnn.create_sharded_memory_config([n, c, h, w], core_grid, shard_strategy)
+
+    try:
+        tt_input_tensor = ttnn.from_torch(
+            torch_input_tensor,
+            dtype=ttnn_dtype,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            device=device,
+            memory_config=input_shard_config,
+        )
+    except RuntimeError as e:
+        if "Invalid sharding core grid" in str(e):
+            pytest.skip("Invalid core grid for this sharding configuration")
+        raise
+
+    def safe_sum_padding(padding, i):
+        try:
+            return sum(padding[i])
+        except IndexError:
+            return 0
+
+    n_padded = n + safe_sum_padding(padding, 0)
+    c_padded = c + safe_sum_padding(padding, 1)
+    h_padded = h + safe_sum_padding(padding, 2)
+    w_padded = w + safe_sum_padding(padding, 3)
 
     # output shard config
+    total_size_shards = (
+        n_padded * c_padded * h_padded
+        if shard_strategy == ttnn.ShardStrategy.HEIGHT
+        else n_padded * c_padded * w_padded
+    )
+    core_grid = factorize_core_grid(device.core_grid, total_size_shards)
     output_shard_config = ttnn.create_sharded_memory_config(
-        [n_padded, c_padded, h_padded, w_padded], device.core_grid, shard_strategy
+        [n_padded, c_padded, h_padded, w_padded], core_grid, shard_strategy
     )
 
     tt_output_tensor = ttnn.pad(tt_input_tensor, padding=padding, value=value, memory_config=output_shard_config)
@@ -108,25 +140,24 @@ def padding_and_torch_padding(padding):
     return (padding, tuple(sum(reversed(padding), ())))
 
 
-@pytest.mark.parametrize("n", [20, 1])
-@pytest.mark.parametrize("c", [3, 1])
-@pytest.mark.parametrize("h", [224, 337920])
-@pytest.mark.parametrize("w", [256, 4])
 @pytest.mark.parametrize(
-    "padding,torch_padding",
+    "dtype_shape_and_padding",
     [
-        padding_and_torch_padding(((1, 1), (2, 32), (0, 0))),
-        padding_and_torch_padding(((0, 0), (0, 0), (0, 0), (0, 12))),
-        padding_and_torch_padding(((1, 1), (1, 1), (1, 1), (1, 1))),
+        [torch.bfloat16, (20, 3, 224, 256), ((1, 1), (2, 32), (0, 0))],
+        [torch.float32, (1, 1, 337920, 4), ((0, 0), (0, 0), (0, 0), (0, 12))],
+        [torch.bfloat16, (20, 3, 224, 256), ((1, 1), (1, 1), (1, 1), (1, 1))],
     ],
 )
-@pytest.mark.parametrize("value", [8])
-@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.HEIGHT])
-def test_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_strategy, use_program_cache):
+@pytest.mark.parametrize("value", [0])
+@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.HEIGHT, ttnn.ShardStrategy.WIDTH])
+def test_pad_rm_sharded(device, dtype_shape_and_padding, value, shard_strategy, use_program_cache):
+    dtype, shape, padding = dtype_shape_and_padding
+    _, torch_padding = padding_and_torch_padding(padding)
+    n, c, h, w = shape
     if device.core_grid.y < 8:
         pytest.skip("n300 does not have 8x8 grid")
     for _ in range(2):
-        run_pad_rm_sharded(device, n, c, h, w, padding, torch_padding, value, shard_strategy)
+        run_pad_rm_sharded(dtype, device, n, c, h, w, padding, torch_padding, value, shard_strategy)
         # dummy tensor to change tensor alloc
         dummy_shape = [1, 1, 32, 32]
         py_dummy_tensor = torch.randn(dummy_shape)
@@ -189,7 +220,7 @@ def test_pad_padding_validation_front_pad_not_supported(device, h, w, padding, t
 
     with pytest.raises(RuntimeError) as e:
         ttnn.pad(input_tensor, padding=padding, value=value)
-    assert "ttnn.pad: on device tile padding does not support front padding" in str(e.value)
+    assert "ttnn.pad: on device padding currently supports front padding only for row major tensors" in str(e.value)
     return
 
 

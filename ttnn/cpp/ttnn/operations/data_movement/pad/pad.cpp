@@ -88,7 +88,8 @@ static ttnn::Tensor pad_impl(
     auto pad_back = padding | std::views::transform([](const auto& p) { return p.second; });
 
     const bool front_padding_is_zero = std::accumulate(pad_front.begin(), pad_front.end(), 0) == 0;
-    TT_FATAL(front_padding_is_zero, "ttnn.pad: on device padding does not support front padding");
+    TT_FATAL(front_padding_is_zero || input_tensor.get_layout() == ttnn::ROW_MAJOR_LAYOUT,
+             "ttnn.pad: on device padding currently supports front padding only for row major tensors");
 
     if (input_tensor.get_layout() == ttnn::TILE_LAYOUT) {
         const int target_height = output_padded_shape[padding.size() - 2];

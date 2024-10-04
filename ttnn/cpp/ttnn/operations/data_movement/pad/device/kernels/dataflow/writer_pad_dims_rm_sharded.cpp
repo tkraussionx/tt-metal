@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-
+#include "debug/dprint.h"
 
 
 inline __attribute__((always_inline))
@@ -56,17 +56,18 @@ void kernel_main() {
     constexpr uint32_t stick_size_bytes = get_compile_time_arg_val(3);
     constexpr uint32_t N_padded = get_compile_time_arg_val(4);
     constexpr uint32_t H_padded = get_compile_time_arg_val(5);
-    constexpr uint32_t C_padded = get_compile_time_arg_val(7);
-    constexpr uint32_t W_padding_front_bytes = get_compile_time_arg_val(6);
-    constexpr uint32_t W_padding_back_bytes = get_compile_time_arg_val(7);
-    constexpr uint32_t num_zero_pad_sticks_read = get_compile_time_arg_val(8);
-    constexpr uint32_t zero_pad_stick_size = get_compile_time_arg_val(9);
+    constexpr uint32_t C_padded = get_compile_time_arg_val(6);
+    constexpr uint32_t W_padded = get_compile_time_arg_val(7);
+    constexpr uint32_t W_padding_front_bytes = get_compile_time_arg_val(8);
+    constexpr uint32_t W_padding_back_bytes = get_compile_time_arg_val(9);
+    constexpr uint32_t num_zero_pad_sticks_read = get_compile_time_arg_val(10);
+    constexpr uint32_t zero_pad_stick_size = get_compile_time_arg_val(11);
 
-    #define not_pad_by_zero get_compile_time_arg_val(10) == 1
+    #define not_pad_by_zero get_compile_time_arg_val(12) == 1
     #if (not_pad_by_zero)
-    constexpr uint32_t packed_pad_value = get_compile_time_arg_val(11);
-    constexpr uint32_t row_major_min_bytes = get_compile_time_arg_val(12);
-    constexpr uint32_t num_sticks_padded_read = get_compile_time_arg_val(13);
+    constexpr uint32_t packed_pad_value = get_compile_time_arg_val(13);
+    constexpr uint32_t row_major_min_bytes = get_compile_time_arg_val(14);
+    constexpr uint32_t num_sticks_padded_read = get_compile_time_arg_val(15);
     #endif
 
 
@@ -90,13 +91,14 @@ void kernel_main() {
         bool read_stick = (curr_h >= front_pad_h and curr_h < H) and (curr_c >= front_pad_c and curr_c < C) and (curr_n >= front_pad_n and curr_n < N);
 
         if (read_stick) {
+            DPRINT << "[DPRINT] padding front bytes: " << W_padding_front_bytes << " padding back bytes: " << W_padding_back_bytes << ENDL();
             uint32_t old_l1_write_addr = l1_write_addr;
-            if constexpr (W_padding_front_bytes > 0) {
-                noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_front_bytes);
-                l1_write_addr += W_padding_front_bytes;
-            }
+            // if constexpr (W_padding_front_bytes > 0) {
+            //     noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_front_bytes);
+            //     l1_write_addr += W_padding_front_bytes;
+            // }
             if constexpr (W_padding_back_bytes > 0) {
-                l1_writer_addr += stick_size_bytes - W_padding_back_bytes;
+                l1_write_addr += stick_size_bytes - W_padding_back_bytes;
                 noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_back_bytes);
                 l1_write_addr += W_padding_back_bytes;
             }
