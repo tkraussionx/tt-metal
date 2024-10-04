@@ -44,13 +44,14 @@ jobs:
       matrix:
         os: ["ubuntu-20.04"]
         test-group: [
-          {name: eager unit tests 1, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 1 },
-          {name: eager unit tests 2, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 2 },
-          {name: eager unit tests 3, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 3 },
-          {name: eager unit tests 4, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 4 },
-          {name: eager unit tests 5, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 5 },
-          {name: eager unit tests 6, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 6 },
-          {name: eager unit tests 7, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 7 --group 7 },
+          {name: eager unit tests 1, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 1 },
+          {name: eager unit tests 2, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 2 },
+          {name: eager unit tests 3, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 3 },
+          {name: eager unit tests 4, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 4 },
+          {name: eager unit tests 5, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 5 },
+          {name: eager unit tests 6, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 6 },
+          {name: eager unit tests 7, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 7 },
+          {name: eager unit tests 7, cmd: pytest tests/tt_eager/python_api_testing/unit_testing/ -xvvv --splits 8 --group 8 },
           {name: eager trace tests, cmd: pytest tests/tt_eager/python_api_testing/trace_testing/ -xvvv},
           {name: sweep, cmd: pytest tests/tt_eager/python_api_testing/sweep_tests/pytests/ -xvvv},
         ]
