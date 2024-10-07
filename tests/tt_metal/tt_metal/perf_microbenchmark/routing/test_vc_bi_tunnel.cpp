@@ -460,28 +460,28 @@ int main(int argc, char **argv) {
                 num_src_endpoints, // 3: mux_fan_in
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
-                                      0,
+                                      4,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
-                                      1,
+                                      5,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
-                                      2,
+                                      6,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: dest 0 info
                 packet_switch_4B_pack((uint32_t)r_tunneler_phys_core.x,
                                       (uint32_t)r_tunneler_phys_core.y,
-                                      3,
+                                      7,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: dest 0 info
 
-                (tunneler_queue_start_addr >> 4), // 8: remote_tx_queue_start_addr_words
+                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 8: remote_tx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
-                ((tunneler_queue_start_addr + tunneler_queue_size_bytes) >> 4), // 10: remote_tx_queue_start_addr_words
+                ((tunneler_queue_start_addr + 5 * tunneler_queue_size_bytes) >> 4), // 10: remote_tx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 11: remote_tx_queue_size_words
-                ((tunneler_queue_start_addr + 2 * tunneler_queue_size_bytes) >> 4), // 12: remote_tx_queue_start_addr_words
+                ((tunneler_queue_start_addr + 6 * tunneler_queue_size_bytes) >> 4), // 12: remote_tx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 13: remote_tx_queue_size_words
-                ((tunneler_queue_start_addr + 3 * tunneler_queue_size_bytes) >> 4), // 14: remote_tx_queue_start_addr_words
+                ((tunneler_queue_start_addr + 7 * tunneler_queue_size_bytes) >> 4), // 14: remote_tx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 15: remote_tx_queue_size_words
                 packet_switch_4B_pack((uint32_t)tx_phys_core_r[0].x,
                                       (uint32_t)tx_phys_core_r[0].y,
@@ -528,19 +528,19 @@ int main(int argc, char **argv) {
 
                 packet_switch_4B_pack(r_tunneler_phys_core.x,
                                       r_tunneler_phys_core.y,
-                                      4,
+                                      0,
                                       (uint32_t)DispatchRemoteNetworkType::ETH), // 4: remote_receiver_0_info
                 packet_switch_4B_pack(r_tunneler_phys_core.x,
                                       r_tunneler_phys_core.y,
-                                      5,
+                                      1,
                                       (uint32_t)DispatchRemoteNetworkType::ETH), // 5: remote_receiver_1_info
                 packet_switch_4B_pack(r_tunneler_phys_core.x,
                                       r_tunneler_phys_core.y,
-                                      6,
+                                      2,
                                       (uint32_t)DispatchRemoteNetworkType::ETH), // 6: remote_receiver_2_info
                 packet_switch_4B_pack(r_tunneler_phys_core.x,
                                       r_tunneler_phys_core.y,
-                                      7,
+                                      3,
                                       (uint32_t)DispatchRemoteNetworkType::ETH), // 7: remote_receiver_3_info
 
                 packet_switch_4B_pack(demux_phys_core.x,
@@ -561,13 +561,13 @@ int main(int argc, char **argv) {
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 11: remote_receiver_1_info
                 0, 0, // 12 - 13: remote_receiver 8 - 9
 
-                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 14: remote_receiver_queue_start_addr_words 0
+                (tunneler_queue_start_addr >> 4), // 14: remote_receiver_queue_start_addr_words 0
                 (tunneler_queue_size_bytes >> 4), // 15: remote_receiver_queue_size_words 0
-                ((tunneler_queue_start_addr + 5 * tunneler_queue_size_bytes) >> 4), // 16: remote_receiver_queue_start_addr_words 1
+                ((tunneler_queue_start_addr + tunneler_queue_size_bytes) >> 4), // 16: remote_receiver_queue_start_addr_words 1
                 (tunneler_queue_size_bytes >> 4), // 17: remote_receiver_queue_size_words 1
-                ((tunneler_queue_start_addr + 6 * tunneler_queue_size_bytes) >> 4), // 18: remote_receiver_queue_start_addr_words 2
+                ((tunneler_queue_start_addr + 2 * tunneler_queue_size_bytes) >> 4), // 18: remote_receiver_queue_start_addr_words 2
                 (tunneler_queue_size_bytes >> 4), // 19: remote_receiver_queue_size_words 2
-                ((tunneler_queue_start_addr + 7 * tunneler_queue_size_bytes) >> 4), // 20: remote_receiver_queue_start_addr_words 3
+                ((tunneler_queue_start_addr + 3 * tunneler_queue_size_bytes) >> 4), // 20: remote_receiver_queue_start_addr_words 3
                 (tunneler_queue_size_bytes >> 4), // 21: remote_receiver_queue_size_words 3
                 (demux_queue_start_addr >> 4), // 22: remote_receiver_queue_start_addr_words 4
                 (demux_queue_size_bytes >> 4), // 23: remote_receiver_queue_size_words 4
@@ -643,94 +643,93 @@ int main(int argc, char **argv) {
                 (tunneler_queue_start_addr >> 4), // 2: rx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 3: rx_queue_size_words
 
-                packet_switch_4B_pack(tunneler_phys_core.x,
-                                      tunneler_phys_core.y,
-                                      4,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 4: remote_receiver_0_info
-                packet_switch_4B_pack(tunneler_phys_core.x,
-                                      tunneler_phys_core.y,
-                                      5,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 5: remote_receiver_1_info
-                packet_switch_4B_pack(tunneler_phys_core.x,
-                                      tunneler_phys_core.y,
-                                      6,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 6: remote_receiver_2_info
-                packet_switch_4B_pack(tunneler_phys_core.x,
-                                      tunneler_phys_core.y,
-                                      7,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 7: remote_receiver_3_info
-
                 packet_switch_4B_pack(demux_phys_core_r.x,
                                       demux_phys_core_r.y,
                                       0,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 8: remote_receiver_1_info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: remote_receiver_0_info
                 packet_switch_4B_pack(demux_phys_core_r.x,
                                       demux_phys_core_r.y,
                                       1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 9: remote_receiver_1_info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: remote_receiver_1_info
                 packet_switch_4B_pack(demux_phys_core_r.x,
                                       demux_phys_core_r.y,
                                       2,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 10: remote_receiver_1_info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: remote_receiver_2_info
                 packet_switch_4B_pack(demux_phys_core_r.x,
                                       demux_phys_core_r.y,
                                       3,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 11: remote_receiver_1_info
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: remote_receiver_3_info
+                packet_switch_4B_pack(tunneler_phys_core.x,
+                                      tunneler_phys_core.y,
+                                      4,
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 8: remote_receiver_4_info
+                packet_switch_4B_pack(tunneler_phys_core.x,
+                                      tunneler_phys_core.y,
+                                      5,
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 9: remote_receiver_5_info
+                packet_switch_4B_pack(tunneler_phys_core.x,
+                                      tunneler_phys_core.y,
+                                      6,
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 10: remote_receiver_6_info
+                packet_switch_4B_pack(tunneler_phys_core.x,
+                                      tunneler_phys_core.y,
+                                      7,
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 11: remote_receiver_7_info
                 0, 0, // 12 - 13: remote_receiver 8 - 9
 
-                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 14: remote_receiver_queue_start_addr_words 0
-                (tunneler_queue_size_bytes >> 4), // 15: remote_receiver_queue_size_words 0
-                ((tunneler_queue_start_addr + 5 * tunneler_queue_size_bytes) >> 4), // 16: remote_receiver_queue_start_addr_words 1
-                (tunneler_queue_size_bytes >> 4), // 17: remote_receiver_queue_size_words 1
-                ((tunneler_queue_start_addr + 6 * tunneler_queue_size_bytes) >> 4), // 18: remote_receiver_queue_start_addr_words 2
-                (tunneler_queue_size_bytes >> 4), // 19: remote_receiver_queue_size_words 2
-                ((tunneler_queue_start_addr + 7 * tunneler_queue_size_bytes) >> 4), // 20: remote_receiver_queue_start_addr_words 3
-                (tunneler_queue_size_bytes >> 4), // 21: remote_receiver_queue_size_words 3
-                (demux_queue_start_addr >> 4), // 22: remote_receiver_queue_start_addr_words 4
-                (demux_queue_size_bytes >> 4), // 23: remote_receiver_queue_size_words 4
-                ((demux_queue_start_addr + demux_queue_size_bytes) >> 4), // 24: remote_receiver_queue_start_addr_words 5
-                (demux_queue_size_bytes >> 4), // 25: remote_receiver_queue_size_words 5
-                ((demux_queue_start_addr + 2 * demux_queue_size_bytes) >> 4), // 26: remote_receiver_queue_start_addr_words 6
-                (demux_queue_size_bytes >> 4), // 27: remote_receiver_queue_size_words 6
-                ((demux_queue_start_addr + 3 * demux_queue_size_bytes) >> 4), // 28: remote_receiver_queue_start_addr_words 7
-                (demux_queue_size_bytes >> 4), // 29: remote_receiver_queue_size_words 7
+                (demux_queue_start_addr >> 4), // 14: remote_receiver_queue_start_addr_words 0
+                (demux_queue_size_bytes >> 4), // 15: remote_receiver_queue_size_words 0
+                ((demux_queue_start_addr + demux_queue_size_bytes) >> 4), // 16: remote_receiver_queue_start_addr_words 1
+                (demux_queue_size_bytes >> 4), // 17: remote_receiver_queue_size_words 1
+                ((demux_queue_start_addr + 2 * demux_queue_size_bytes) >> 4), // 18: remote_receiver_queue_start_addr_words 2
+                (demux_queue_size_bytes >> 4), // 19: remote_receiver_queue_size_words 2
+                ((demux_queue_start_addr + 3 * demux_queue_size_bytes) >> 4), // 20: remote_receiver_queue_start_addr_words 3
+                (demux_queue_size_bytes >> 4), // 21: remote_receiver_queue_size_words 3
+                ((tunneler_queue_start_addr + 4 * tunneler_queue_size_bytes) >> 4), // 22: remote_receiver_queue_start_addr_words 4
+                (tunneler_queue_size_bytes >> 4), // 23: remote_receiver_queue_size_words 4
+                ((tunneler_queue_start_addr + 5 * tunneler_queue_size_bytes) >> 4), // 24: remote_receiver_queue_start_addr_words 5
+                (tunneler_queue_size_bytes >> 4), // 25: remote_receiver_queue_size_words 5
+                ((tunneler_queue_start_addr + 6 * tunneler_queue_size_bytes) >> 4), // 26: remote_receiver_queue_start_addr_words 6
+                (tunneler_queue_size_bytes >> 4), // 27: remote_receiver_queue_size_words 6
+                ((tunneler_queue_start_addr + 7 * tunneler_queue_size_bytes) >> 4), // 28: remote_receiver_queue_start_addr_words 7
+                (tunneler_queue_size_bytes >> 4), // 29: remote_receiver_queue_size_words 7
                 0, 2, // 30 - 31 Settings for remote reciver 8
                 0, // 32: remote_receiver_queue_start_addr_words 9
                 2, // 33: remote_receiver_queue_size_words 9.
                    // Unused. Setting to 2 to get around size check assertion that does not allow 0.
 
-                packet_switch_4B_pack(mux_phys_core_r.x,
-                                      mux_phys_core_r.y,
-                                      num_dest_endpoints,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 34: remote_sender_0_info
-                packet_switch_4B_pack(mux_phys_core_r.x,
-                                      mux_phys_core_r.y,
-                                      num_dest_endpoints + 1,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 35: remote_sender_1_info
-                packet_switch_4B_pack(mux_phys_core_r.x,
-                                      mux_phys_core_r.y,
-                                      num_dest_endpoints + 2,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 36: remote_sender_2_info
-                packet_switch_4B_pack(mux_phys_core_r.x,
-                                      mux_phys_core_r.y,
-                                      num_dest_endpoints + 3,
-                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 37: remote_sender_3_info
                 packet_switch_4B_pack(tunneler_phys_core.x,
                                       tunneler_phys_core.y,
                                       8,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 38: remote_sender_4_info
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 34: remote_sender_0_info
                 packet_switch_4B_pack(tunneler_phys_core.x,
                                       tunneler_phys_core.y,
                                       9,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 39: remote_sender_5_info
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 35: remote_sender_1_info
                 packet_switch_4B_pack(tunneler_phys_core.x,
                                       tunneler_phys_core.y,
                                       10,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 40: remote_sender_6_info
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 36: remote_sender_2_info
                 packet_switch_4B_pack(tunneler_phys_core.x,
                                       tunneler_phys_core.y,
                                       11,
-                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 41: remote_sender_7_info
+                                      (uint32_t)DispatchRemoteNetworkType::ETH), // 37: remote_sender_3_info
+                packet_switch_4B_pack(mux_phys_core_r.x,
+                                      mux_phys_core_r.y,
+                                      4,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 38: remote_sender_4_info
+                packet_switch_4B_pack(mux_phys_core_r.x,
+                                      mux_phys_core_r.y,
+                                      5,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 39: remote_sender_5_info
+                packet_switch_4B_pack(mux_phys_core_r.x,
+                                      mux_phys_core_r.y,
+                                      6,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 40: remote_sender_6_info
+                packet_switch_4B_pack(mux_phys_core_r.x,
+                                      mux_phys_core_r.y,
+                                      7,
+                                      (uint32_t)DispatchRemoteNetworkType::NOC0), // 41: remote_sender_7_info
                 0, 0, // 42 - 43: remote_sender 8 - 9
 
                 tunneler_test_results_addr, // 44: test_results_addr
@@ -1058,6 +1057,30 @@ int main(int argc, char **argv) {
             log_info(LogTest, "Total TX BW = {:.2f} B/cycle", total_tx_bw);
             stat["total_tx_bw (B/cycle)"] = total_tx_bw;
 
+            double total_rx_bw = 0.0;
+            for (uint32_t i = 0; i < num_dest_endpoints; i++) {
+                uint64_t rx_words_checked = get_64b_result(rx_results_r[i], PQ_TEST_WORD_CNT_INDEX);
+                total_rx_words_checked += rx_words_checked;
+                uint64_t rx_elapsed_cycles = get_64b_result(rx_results_r[i], PQ_TEST_CYCLES_INDEX);
+                double rx_bw = ((double)rx_words_checked) * PACKET_WORD_SIZE_BYTES / rx_elapsed_cycles;
+                total_rx_bw += rx_bw;
+
+                log_info(LogTest,
+                         "R RX {} words checked = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
+                         i, rx_words_checked, rx_elapsed_cycles, rx_bw);
+                stat[fmt::format("r_rx_words_checked_{}", i)] = rx_words_checked;
+                stat[fmt::format("r_rx_elapsed_cycles_{}", i)] = rx_elapsed_cycles;
+                stat[fmt::format("r_rx_bw_{}", i)] = rx_bw;
+            }
+            log_info(LogTest, "R Total RX BW = {:.2f} B/cycle", total_rx_bw);
+            stat["r_total_rx_bw (B/cycle)"] = total_rx_bw;
+            if (total_tx_words_sent != total_rx_words_checked) {
+                log_error(LogTest, "R Total TX words sent = {} != Total RX words checked = {}", total_tx_words_sent, total_rx_words_checked);
+                pass = false;
+            } else {
+                log_info(LogTest, "R Total TX words sent = {} == Total RX words checked = {} -> OK", total_tx_words_sent, total_rx_words_checked);
+            }
+
             total_tx_bw = 0.0;
             total_tx_words_sent = 0;
             total_rx_words_checked = 0;
@@ -1090,7 +1113,7 @@ int main(int argc, char **argv) {
             log_info(LogTest, "R Total TX BW = {:.2f} B/cycle", total_tx_bw);
             stat["r_total_tx_bw (B/cycle)"] = total_tx_bw;
 
-            double total_rx_bw = 0.0;
+            total_rx_bw = 0.0;
             for (uint32_t i = 0; i < num_dest_endpoints; i++) {
                 uint64_t rx_words_checked = get_64b_result(rx_results[i], PQ_TEST_WORD_CNT_INDEX);
                 total_rx_words_checked += rx_words_checked;
@@ -1112,30 +1135,6 @@ int main(int argc, char **argv) {
                 pass = false;
             } else {
                 log_info(LogTest, "Total TX words sent = {} == Total RX words checked = {} -> OK", total_tx_words_sent, total_rx_words_checked);
-            }
-
-            total_rx_bw = 0.0;
-            for (uint32_t i = 0; i < num_dest_endpoints; i++) {
-                uint64_t rx_words_checked = get_64b_result(rx_results_r[i], PQ_TEST_WORD_CNT_INDEX);
-                total_rx_words_checked += rx_words_checked;
-                uint64_t rx_elapsed_cycles = get_64b_result(rx_results_r[i], PQ_TEST_CYCLES_INDEX);
-                double rx_bw = ((double)rx_words_checked) * PACKET_WORD_SIZE_BYTES / rx_elapsed_cycles;
-                total_rx_bw += rx_bw;
-
-                log_info(LogTest,
-                         "R RX {} words checked = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
-                         i, rx_words_checked, rx_elapsed_cycles, rx_bw);
-                stat[fmt::format("r_rx_words_checked_{}", i)] = rx_words_checked;
-                stat[fmt::format("r_rx_elapsed_cycles_{}", i)] = rx_elapsed_cycles;
-                stat[fmt::format("r_rx_bw_{}", i)] = rx_bw;
-            }
-            log_info(LogTest, "R Total RX BW = {:.2f} B/cycle", total_rx_bw);
-            stat["r_total_rx_bw (B/cycle)"] = total_rx_bw;
-            if (total_tx_words_sent != total_rx_words_checked) {
-                log_error(LogTest, "R Total TX words sent = {} != Total RX words checked = {}", total_tx_words_sent, total_rx_words_checked);
-                pass = false;
-            } else {
-                log_info(LogTest, "R Total TX words sent = {} == Total RX words checked = {} -> OK", total_tx_words_sent, total_rx_words_checked);
             }
 
             uint64_t mux_words_sent = get_64b_result(mux_results, PQ_TEST_WORD_CNT_INDEX);
