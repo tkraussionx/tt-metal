@@ -870,6 +870,18 @@ void add_stagger_defines_if_needed(
     }
 }
 
+void add_precision_defines_if_needed(const tt::ARCH arch, std::map<string, string>& mm_kernel_defines) {
+    const bool half_lofi = std::getenv("TT_ENABLE_HALF_LOFI");
+    if (half_lofi && arch == tt::ARCH::WORMHOLE_B0) {
+        mm_kernel_defines["HALF_LOFI"] = "1";
+    }
+
+    const bool quarter_lofi = std::getenv("TT_ENABLE_QUARTER_LOFI");
+    if (quarter_lofi && arch == tt::ARCH::WORMHOLE_B0) {
+        mm_kernel_defines["QUARTER_LOFI"] = "1";
+    }
+}
+
 }  // namespace bmm_op_utils
 
 namespace ttnn {
