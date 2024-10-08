@@ -20,11 +20,13 @@ void MAIN {
     constexpr auto cb_add = tt::CB::c_intermed2;
     constexpr auto cb_max = tt::CB::c_intermed3;
     constexpr auto cb_tmp = tt::CB::c_intermed4;
+    constexpr auto cb_x_m_max = tt::CB::c_intermed5;
 
     binary_op_init_common(cb_in0, cb_bcast_scaler);
 
     constexpr uint32_t onetile = 1;
     constexpr int dst0 = 0;
+    constexpr int dst1 = 1;
 
     uint32_t N = get_compile_time_arg_val(0);
     uint32_t Wt = get_compile_time_arg_val(1);
@@ -112,20 +114,38 @@ void MAIN {
                 #endif
             } else {
                 #ifdef SOFTMAX
-                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_tmp, 0, 0, /*pop0=*/1, /*pop1=*/0);
-
-                    exp_tile_to_cb(cb_tmp, cb_exps);
+                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_x_m_max, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    exp_tile_to_cb(cb_x_m_max, cb_exps);
                 #else
-                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_tmp, 0, 0, /*pop0=*/1, /*pop1=*/0);
-
-                    rexp_tile_to_cb(cb_tmp, cb_exps);
+                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_x_m_max, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    rexp_tile_to_cb(cb_x_m_max, cb_exps);
                 #endif
             }
 
             if (w == 0) {
                 copy_tile_to_cb(cb_exps, cb_add);
             } else {
-                add_tiles_to_cb(cb_add, cb_exps, cb_add);
+                cb_wait_front(cb_add, onetile);
+                cb_wait_front(cb_exps, onetile);
+
+                tile_regs_acquire();
+                copy_tile_init_with_dt(cb_add);
+                copy_tile(cb_add, 0, dst0);
+                copy_tile_init_with_dt(cb_exps);
+                copy_tile(cb_exps, 0, dst1);
+                moreh_binary_op_init();
+                moreh_binary_add(dst0);
+                tile_regs_commit();
+
+                cb_pop_front(cb_add, onetile);
+                cb_pop_front(cb_exps, onetile);
+                cb_reserve_back(cb_add, onetile);
+
+                tile_regs_wait();
+                pack_tile_with_dt(dst0, cb_add);
+                tile_regs_release();
+
+                cb_push_back(cb_add, onetile);
             }
         }
 
@@ -141,12 +161,24 @@ void MAIN {
 
         // step 3, compute final result
         for (uint32_t w = 0; w < Wt; w += onetile) {
+            sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_x_m_max, 0, 0, /*pop0=*/1, /*pop1=*/0);
+            cb_wait_front(cb_recipsumexps, onetile);
+            cb_wait_front(cb_x_m_max, onetile);
             #ifdef LOG
                 #ifdef SOFTMAX
                     // x - max - log(sum)
-                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_tmp, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    tile_regs_acquire();
+                    copy_tile_init_with_dt(cb_x_m_max);
+                    copy_tile(cb_x_m_max, 0, dst0);
+                    copy_tile_init_with_dt(cb_recipsumexps);
+                    copy_tile(cb_recipsumexps, 0, dst1);
+                    moreh_binary_op_init();
+                    moreh_binary_sub(dst0);
+                    tile_regs_commit();
 
-                    sub_tiles_bcast_cols_to_cb(cb_tmp, cb_recipsumexps, cb_out0, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    tile_regs_wait();
+                    pack_tile_with_dt(dst0, cb_out0);
+                    tile_regs_release();
                 #else
                     // -x + max - log(sum)
                     // logsoftmin not implemented
@@ -154,20 +186,44 @@ void MAIN {
             #else
                 #ifdef SOFTMAX
                     // exp(x - max) / sum
-                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_tmp, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    exp_tile_to_cb(cb_x_m_max, cb_exps);
 
-                    exp_tile_to_cb(cb_tmp, cb_exps);
+                    tile_regs_acquire();
+                    copy_tile_init_with_dt(cb_exps);
+                    copy_tile(cb_exps, 0, dst0);
+                    copy_tile_init_with_dt(cb_recipsumexps);
+                    copy_tile(cb_recipsumexps, 0, dst1);
+                    moreh_binary_op_init();
+                    moreh_binary_mul(dst0);
+                    tile_regs_commit();
 
-                    mul_tiles_bcast_cols_to_cb(cb_exps, cb_recipsumexps, cb_out0, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    tile_regs_wait();
+                    pack_tile_with_dt(dst0, cb_out0);
+                    tile_regs_release();
+
+                    cb_pop_front(cb_exps, onetile);
                 #else
                     // rexp(x - max) / sum
-                    sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_tmp, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    rexp_tile_to_cb(cb_x_m_max, cb_exps);
 
-                    rexp_tile_to_cb(cb_tmp, cb_exps);
+                    tile_regs_acquire();
+                    copy_tile_init_with_dt(cb_exps);
+                    copy_tile(cb_exps, 0, dst0);
+                    copy_tile_init_with_dt(cb_recipsumexps);
+                    copy_tile(cb_recipsumexps, 0, dst1);
+                    moreh_binary_op_init();
+                    moreh_binary_mul(dst0);
+                    tile_regs_commit();
 
-                    mul_tiles_bcast_cols_to_cb(cb_exps, cb_recipsumexps, cb_out0, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                    tile_regs_wait();
+                    pack_tile_with_dt(dst0, cb_out0);
+                    tile_regs_release();
+
+                    cb_pop_front(cb_exps, onetile);
                 #endif
             #endif
+            cb_pop_front(cb_x_m_max, onetile);
+            cb_push_back(cb_out0, onetile);
         }
 
         cb_pop_front(cb_recipsumexps, onetile);

@@ -23,6 +23,7 @@
 #include "compute_kernel_api/eltwise_unary/negative.h"
 #include "compute_kernel_api/eltwise_unary/exp.h"
 #include "compute_kernel_api/eltwise_unary/recip.h"
+#include "compute_kernel_api/eltwise_unary/layernorm.h"
 #include "compute_kernel_api/eltwise_unary/moreh_binary.h"
 #include "compute_kernel_api/mask.h"
 #include "compute_kernel_api/reduce.h"
@@ -908,31 +909,39 @@ ALWI void reduce_and_recip_tile_to_cb(
     uint32_t pop1 = 1) {
     constexpr uint32_t onetile = 1;
     constexpr int dst0 = 0;
+    constexpr int dst1 = 1;
+    constexpr int dst2 = 2;
 
     cb_reserve_back(ocb, onetile);
+    cb_wait_front(icb0, size);
     cb_wait_front(icb1, onetile);
 
     tile_regs_acquire();
-    reduce_init_delta_with_dt<at_start, reduce_type, reduce_dim>(ocb, icb0, icb1);
     for (uint32_t x = 0; x < size; ++x) {
-        cb_wait_front(icb0, x + 1);  // must be a cumulative wait for correctness
-
-        constexpr uint32_t bcast_scaler0 = 0;  // 0th index from bcast_scaler CB
-        reduce_tile<reduce_type, reduce_dim>(icb0, icb1, x, bcast_scaler0, dst0);
+        copy_tile_init_with_dt(icb0);
+        copy_tile(icb0, x, dst0);
+        layernorm_acc_tile_init();
+        layernorm_acc_tile(dst0, x == 0);
     }
+    if constexpr (reduce_dim == ReduceDim::REDUCE_ROW) {
+        layernorm_reduce_sum_w_tile_init();
+        layernorm_reduce_sum_w_tile(dst2, 0x3F800000);
+    } else if constexpr (reduce_dim == ReduceDim::REDUCE_COL) {
+        layernorm_reduce_sum_h_tile_init();
+        layernorm_reduce_sum_h_tile(dst2, 0x3F800000);
+    }
+
     if (pop0)
         cb_pop_front(icb0, pop0);
     if (pop1)
         cb_pop_front(icb1, pop1);
 
-    reduce_revert_delta();
-
     recip_tile_init();
-    recip_tile(dst0);
+    recip_tile(dst2);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile_with_dt(dst0, ocb);
+    pack_tile_with_dt(dst2, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);
@@ -949,31 +958,39 @@ ALWI void reduce_and_log_tile_to_cb(
     uint32_t pop1 = 1) {
     constexpr uint32_t onetile = 1;
     constexpr int dst0 = 0;
+    constexpr int dst1 = 1;
+    constexpr int dst2 = 2;
 
     cb_reserve_back(ocb, onetile);
+    cb_wait_front(icb0, size);
     cb_wait_front(icb1, onetile);
 
     tile_regs_acquire();
-    reduce_init_delta_with_dt<at_start, reduce_type, reduce_dim>(ocb, icb0, icb1);
     for (uint32_t x = 0; x < size; ++x) {
-        cb_wait_front(icb0, x + 1);  // must be a cumulative wait for correctness
-
-        constexpr uint32_t bcast_scaler0 = 0;  // 0th index from bcast_scaler CB
-        reduce_tile<reduce_type, reduce_dim>(icb0, icb1, x, bcast_scaler0, dst0);
+        copy_tile_init_with_dt(icb0);
+        copy_tile(icb0, x, dst0);
+        layernorm_acc_tile_init();
+        layernorm_acc_tile(dst0, x == 0);
     }
+    if constexpr (reduce_dim == ReduceDim::REDUCE_ROW) {
+        layernorm_reduce_sum_w_tile_init();
+        layernorm_reduce_sum_w_tile(dst2, 0x3F800000);
+    } else if constexpr (reduce_dim == ReduceDim::REDUCE_COL) {
+        layernorm_reduce_sum_h_tile_init();
+        layernorm_reduce_sum_h_tile(dst2, 0x3F800000);
+    }
+
     if (pop0)
         cb_pop_front(icb0, pop0);
     if (pop1)
         cb_pop_front(icb1, pop1);
 
-    reduce_revert_delta();
-
     log_tile_init();
-    log_tile(dst0);
+    log_tile(dst2);
     tile_regs_commit();
 
     tile_regs_wait();
-    pack_tile_with_dt(dst0, ocb);
+    pack_tile_with_dt(dst2, ocb);
     tile_regs_release();
 
     cb_push_back(ocb, onetile);

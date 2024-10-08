@@ -70,6 +70,12 @@ operation::ProgramWithCallbacks moreh_softmax_w_small(const Tensor &input, const
 
     auto arch = input.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc] = get_compute_kernel_config_args(arch, compute_kernel_config);
+    vector<PreserveFP32Target> preserve_fp32_precision(NUM_CIRCULAR_BUFFERS, PreserveFP32Target::Disabled);
+    if (fp32_dest_acc_en) {
+        preserve_fp32_precision[CB::c_intermed0] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed1] = PreserveFP32Target::DEST;
+        preserve_fp32_precision[CB::c_intermed3] = PreserveFP32Target::DEST;
+    }
 
     Program program = Program();
 
@@ -128,7 +134,8 @@ operation::ProgramWithCallbacks moreh_softmax_w_small(const Tensor &input, const
         compute_defines,
         math_fidelity,
         fp32_dest_acc_en,
-        math_approx_mode);
+        math_approx_mode,
+        preserve_fp32_precision);
 
     // Set Runtime Args
     auto core_x_offset = core_range.start_coord.x;

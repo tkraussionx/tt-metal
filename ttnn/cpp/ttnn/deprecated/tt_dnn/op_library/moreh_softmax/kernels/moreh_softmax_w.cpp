@@ -8,6 +8,7 @@
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
+#include "compute_kernel_api/eltwise_unary/typecast.h"
 
 namespace NAMESPACE {
 
@@ -142,8 +143,14 @@ void MAIN {
 #ifdef LOG
             // x - max - log(sum)
             tile_regs_acquire();
-            sub_bcast_cols_init_short_with_dt(cb_x_m_max, cb_recipsumexps);
-            sub_tiles_bcast<BroadcastType::COL>(cb_x_m_max, cb_recipsumexps, w, 0, dst0);
+            copy_tile_init_with_dt(cb_x_m_max);
+            copy_tile(cb_x_m_max, w, dst0);
+            copy_tile_init_with_dt(cb_recipsumexps);
+            copy_tile(cb_recipsumexps, 0, dst1);
+            moreh_binary_op_init();
+            moreh_binary_sub(dst0);
+            typecast_tile_init();
+            typecast_tile<(uint32_t)DataFormat::Float32, (uint32_t)DataFormat::Float16_b>(dst0);
             tile_regs_commit();
 
             tile_regs_wait();
@@ -152,8 +159,14 @@ void MAIN {
 #else
             // exp(x - max) / psum
             tile_regs_acquire();
-            mul_bcast_cols_init_short_with_dt(cb_exps, cb_recipsumexps);
-            mul_tiles_bcast_cols(cb_exps, cb_recipsumexps, w, 0, dst0);
+            copy_tile_init_with_dt(cb_exps);
+            copy_tile(cb_exps, w, dst0);
+            copy_tile_init_with_dt(cb_recipsumexps);
+            copy_tile(cb_recipsumexps, 0, dst1);
+            moreh_binary_op_init();
+            moreh_binary_mul(dst0);
+            typecast_tile_init();
+            typecast_tile<(uint32_t)DataFormat::Float32, (uint32_t)DataFormat::Float16_b>(dst0);
             tile_regs_commit();
 
             tile_regs_wait();
