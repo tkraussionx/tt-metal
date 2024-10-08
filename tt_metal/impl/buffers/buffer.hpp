@@ -225,7 +225,7 @@ class Buffer {
 
     DeviceAddr page_address(uint32_t bank_id, uint32_t page_index) const;
 
-    uint32_t alignment() const { return ALLOCATOR_ALIGNMENT; }
+    uint32_t alignment() const { return is_l1() ? L1_ALIGNMENT : DRAM_ALIGNMENT; }
 
     DeviceAddr aligned_page_size() const { return align(page_size_, this->alignment());}
 

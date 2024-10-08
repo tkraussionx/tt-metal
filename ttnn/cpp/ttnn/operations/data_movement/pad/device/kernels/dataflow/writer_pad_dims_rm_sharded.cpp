@@ -91,12 +91,11 @@ void kernel_main() {
         bool read_stick = (curr_h >= front_pad_h and curr_h < H) and (curr_c >= front_pad_c and curr_c < C) and (curr_n >= front_pad_n and curr_n < N);
 
         if (read_stick) {
-            DPRINT << "[DPRINT] padding front bytes: " << W_padding_front_bytes << " padding back bytes: " << W_padding_back_bytes << ENDL();
             uint32_t old_l1_write_addr = l1_write_addr;
-            // if constexpr (W_padding_front_bytes > 0) {
-            //     noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_front_bytes);
-            //     l1_write_addr += W_padding_front_bytes;
-            // }
+            if constexpr (W_padding_front_bytes > 0) {
+                noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_front_bytes);
+                l1_write_addr += W_padding_front_bytes;
+            }
             if constexpr (W_padding_back_bytes > 0) {
                 l1_write_addr += stick_size_bytes - W_padding_back_bytes;
                 noc_async_read(pad_val_noc_addr, l1_write_addr, W_padding_back_bytes);
