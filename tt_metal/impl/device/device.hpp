@@ -17,6 +17,7 @@
 #include "llrt/tt_cluster.hpp"
 #include "llrt/hal.hpp"
 #include "dev_msgs.h"
+#include "tt_metal/impl/dispatch/program_command_sequence.hpp"
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
 #include "program_cache.hpp"
 
@@ -297,7 +298,12 @@ class Device {
 
     std::vector<std::unique_ptr<Program>> command_queue_programs;
     bool using_fast_dispatch;
-    program_cache::detail::ProgramCache program_cache;
+    program_cache::detail::ProgramCache<program_cache::detail::CachedProgramFactory> program_cache;
+    // TODO: Currently the program_command_cache is enabled when program_cache is enabled
+    // We can have it as a separate toggle if needed for testing cached program with/without cached commands for debug/performance metrics
+    // There is currently a single cache map per device so it is one to one with program cache, but this won't be the case in the future
+    // where there will be multiple command caches for a single device, and a program can have an entry in multiple command cache maps
+    program_cache::detail::ProgramCache<ProgramCommandSequence> program_command_cache;
     uint32_t num_worker_cores_;
     uint32_t num_eth_worker_cores_;
     // Program cache interface. Syncrhonize with worker worker threads before querying or
@@ -306,6 +312,7 @@ class Device {
         log_info(tt::LogMetal, "Enabling program cache on device {}", this->id_);
         this->synchronize();
         program_cache.enable();
+        program_command_cache.enable();
     }
     void disable_and_clear_program_cache() {
         log_info(tt::LogMetal, "Disabling and clearing program cache on device {}", this->id_);
@@ -313,15 +320,19 @@ class Device {
         if (this->program_cache.is_enabled()) {
             program_cache.disable();
         }
+        if (this->program_command_cache.is_enabled()) {
+            program_command_cache.disable();
+        }
         program_cache.clear();
+        program_command_cache.clear();
     }
     std::size_t num_program_cache_entries() {
         this->synchronize();
         return program_cache.num_entries();
     }
 
-   uint32_t trace_buffers_size = 0;
-   void update_dispatch_cores_for_multi_cq_eth_dispatch();
+    uint32_t trace_buffers_size = 0;
+    void update_dispatch_cores_for_multi_cq_eth_dispatch();
 
     HalProgrammableCoreType get_programmable_core_type(CoreCoord phys_core) const;
     template <typename T = DeviceAddr>

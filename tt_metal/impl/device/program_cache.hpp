@@ -36,12 +36,13 @@ struct CachedProgramFactory {
 
 // Generic Program Cache: This data structure is tied to a device handle and can store generic program types from
 // TT-Metal and TT-Eager using tt::stl::concepts::unique_any.
+template <typename cached_program>
 struct ProgramCache {
-    bool contains(uint64_t program_hash) { return this->cache_.count(program_hash) > 0; }
+    bool contains(uint64_t program_hash) { return this->cache_.contains(program_hash); }
 
-    CachedProgramFactory& get(uint64_t program_hash) { return this->cache_.at(program_hash); }
+    cached_program& get(uint64_t program_hash) { return this->cache_.at(program_hash); }
 
-    void insert(uint64_t program_hash, CachedProgramFactory&& program) {
+    void insert(uint64_t program_hash, cached_program&& program) {
         this->cache_.insert({program_hash, std::move(program)});
     }
 
@@ -57,7 +58,7 @@ struct ProgramCache {
 
    private:
     inline static bool is_enabled_ = false;
-    std::unordered_map<uint64_t, CachedProgramFactory> cache_{};
+    std::unordered_map<uint64_t, cached_program> cache_{};
 };
 
 }  // namespace tt::tt_metal::program_cache
