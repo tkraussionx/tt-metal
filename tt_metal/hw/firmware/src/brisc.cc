@@ -449,10 +449,12 @@ int main() {
                     1,
                     31 /*wrap*/,
                     false /*linked*/);
-                mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
-                // Only executed if watcher is enabled. Ensures that we don't report stale data due to invalid launch messages in the ring buffer
-                CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
             }
+            DPRINT << "before brisc.cc: " << mailboxes->launch_msg_rd_ptr << ENDL();
+            mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
+            DPRINT << "after brisc.cc: " << mailboxes->launch_msg_rd_ptr << ENDL();
+            // Only executed if watcher is enabled. Ensures that we don't report stale data due to invalid launch messages in the ring buffer
+            CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
         }
     }
 

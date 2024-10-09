@@ -698,7 +698,21 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
 
                 auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
                 not_done_cores.insert(physical_core);
-                tt::llrt::write_launch_msg_to_core(device->id(), physical_core, msg, go_msg, device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH));
+                std::vector<uint32_t> launch_msg_rd_ptr = tt::llrt::read_hex_vec_from_core(
+                        device->id(),
+                        physical_core,
+                        device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH_MSG_BUFFER_RD_PTR),
+                        sizeof(uint32_t));
+
+                tt::llrt::write_launch_msg_to_core(device->id(),
+                        physical_core,
+                        msg,
+                        go_msg,
+                        device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) + launch_msg_rd_ptr[0] * sizeof(launch_msg_t));
+
+                std::cout << device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) + launch_msg_rd_ptr[0] * sizeof(launch_msg_t) << ", ";
+                std::cout << "host: " << device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) << ", ";
+                std::cout << launch_msg_rd_ptr[0]  << std::endl;
             }
         }
         if (wait_until_cores_done) {
