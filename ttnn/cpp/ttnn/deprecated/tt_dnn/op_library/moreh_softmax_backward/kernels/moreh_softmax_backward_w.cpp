@@ -8,6 +8,7 @@
 #define REDUCE_DIM ReduceDim::REDUCE_ROW
 
 #include "ttnn/cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
+#include "compute_kernel_api/eltwise_unary/typecast.h"
 
 namespace NAMESPACE {
 void MAIN {
@@ -23,76 +24,142 @@ void MAIN {
     constexpr auto cb_sum = tt::CB::c_intermed1;
     constexpr auto cb_inter2 = tt::CB::c_intermed2;
 
+    constexpr int dst0 = 0;
+    constexpr int dst1 = 1;
+    constexpr int dst2 = 2;
+
     binary_op_init_common(cb_y, cb_bcast_scaler);
 
     uint32_t N = get_compile_time_arg_val(0);
     uint32_t Wt = get_compile_time_arg_val(1);
 
-    for (uint32_t n = 0; n < N; ++n) {
+    cb_wait_front(cb_mask, onetile);
 
+    for (uint32_t n = 0; n < N; ++n) {
         #ifdef LOG
             // sum(dy)
-            if (Wt == 1) {
-                // apply mask
-                mask_tile_to_cb(cb_dy, cb_mask, cb_inter2, /*itile=*/0, /*mtile=*/0, /*pop=*/0, /*popm=*/0);
+            cb_wait_front(cb_dy, Wt);
+            cb_reserve_back(cb_sum, onetile);
 
-                reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_inter2, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop=1*/0);
-            } else {
-                constexpr auto cb_inter0 = tt::CB::c_intermed0;
-                reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_dy, cb_bcast_scaler, cb_inter0, Wt - 1, /*pop0=*/0, /*pop=1*/0);
-
-                constexpr auto cb_inter1 = tt::CB::c_intermed1;
-                mask_tile_to_cb(cb_dy, cb_mask, cb_inter1, /*itile=*/Wt - 1, /*mtile=*/0, /*pop=*/0, /*popm=*/0);
-
-                constexpr auto cb_inter2 = tt::CB::c_intermed2;
-                reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_inter1, cb_bcast_scaler, cb_inter2, 1, /*pop0=*/1, /*pop=1*/0);
-
-                add_tiles_to_cb(cb_inter0, cb_inter2, cb_sum);
+            tile_regs_acquire();
+            for (uint32_t w = 0; w < Wt; ++w) {
+                copy_tile_init_with_dt(cb_dy);
+                copy_tile(cb_dy, w, dst0);
+                if (w == Wt - 1) {
+                    copy_tile_init_with_dt(cb_mask);
+                    copy_tile(cb_mask, 0, dst1);
+                    mask_tile_init();
+                    mask_tile(dst0, dst1);
+                }
+                layernorm_acc_tile_init();
+                layernorm_acc_tile(dst0, w == 0);
             }
+            layernorm_reduce_sum_w_tile_init();
+            layernorm_reduce_sum_w_tile(dst2, 0x3F800000);
+            tile_regs_commit();
+
+            tile_regs_wait();
+            pack_tile_with_dt(dst2, cb_sum);
+            tile_regs_release();
+
+            cb_push_back(cb_sum, onetile);
 
             // dy - sum * exp(y)
-            constexpr auto cb_exp = tt::CB::c_intermed0;  // y * dy
+            cb_wait_front(cb_y, Wt);
+            cb_wait_front(cb_sum, onetile);
 
-            for (uint32_t w = 0; w < Wt; w += onetile) {
-                // exp(y)
-                exp_tile_to_cb(cb_y, cb_exp, w, /*dst=*/0, /*pop=*/0);
+            for (uint32_t w = 0; w < Wt; ++w) {
+                cb_reserve_back(cb_dx, onetile);
 
-                // sum * exp(y)
-                mul_tiles_bcast_cols_to_cb(cb_exp, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
+                tile_regs_acquire();
+                copy_tile_init_with_dt(cb_dy);
+                copy_tile(cb_dy, w, dst0);
+                copy_tile_init_with_dt(cb_y);
+                copy_tile(cb_y, w, dst1);
+                copy_tile_init_with_dt(cb_sum);
+                copy_tile(cb_sum, 0, dst2);
+                exp_tile_init();
+                exp_tile(dst1);
+                moreh_binary_op_init();
+                moreh_binary_mul(dst1);
+                moreh_binary_op_init();
+                moreh_binary_sub(dst0);
+                typecast_tile_init();
+                typecast_tile<(uint32_t)DataFormat::Float32, (uint32_t)DataFormat::Float16_b>(dst0);
+                tile_regs_commit();
 
-                // dy - sum * exp(y)
-                sub_tiles_to_cb(cb_dy, cb_inter2, cb_dx, w, 0, /*pop0=*/0, /*pop1=*/1);
+                tile_regs_wait();
+                pack_tile_with_dt(dst0, cb_dx);
+                tile_regs_release();
+
+                cb_push_back(cb_dx, onetile);
             }
 
             cb_pop_front(cb_sum, onetile);
             cb_pop_front(cb_y, Wt);
             cb_pop_front(cb_dy, Wt);
         #else
-            // step 1, compute y * dy
+            // compute sum(y * dy)
+            cb_wait_front(cb_y, Wt);
+            cb_wait_front(cb_dy, Wt);
+            cb_reserve_back(cb_sum, onetile);
+
+            tile_regs_acquire();
             for (uint32_t w = 0; w < Wt; ++w) {
+                copy_tile_init_with_dt(cb_y);
+                copy_tile(cb_y, w, dst0);
+                copy_tile_init_with_dt(cb_dy);
+                copy_tile(cb_dy, w, dst1);
+                moreh_binary_op_init();
+                moreh_binary_mul(dst0);
                 if (w == Wt - 1) {
-                    mul_tiles_and_mask_tile_to_cb(
-                        cb_y, cb_dy, cb_mask, cb_ydy, w, w, 0, /*pop0=*/0, /*pop1=*/0, /*popm=*/0);
-                } else {
-                    mul_tiles_to_cb(cb_y, cb_dy, cb_ydy, w, w, /*pop0=*/0, /*pop1=*/0);
+                    copy_tile_init_with_dt(cb_mask);
+                    copy_tile(cb_mask, 0, dst1);
+                    mask_tile_init();
+                    mask_tile(dst0, dst1);
                 }
+                layernorm_acc_tile_init();
+                layernorm_acc_tile(dst0, w == 0);
             }
+            layernorm_reduce_sum_w_tile_init();
+            layernorm_reduce_sum_w_tile(dst2, 0x3F800000);
+            tile_regs_commit();
 
-            // step 2, compute sum(y * dy)
-            reduce_tile_to_cb<false, REDUCE_OP, REDUCE_DIM>(cb_ydy, cb_bcast_scaler, cb_sum, Wt, /*pop0=*/Wt, /*pop=1*/0);
+            tile_regs_wait();
+            pack_tile_with_dt(dst2, cb_sum);
+            tile_regs_release();
 
-            // step 3, compute final result
-            for (uint32_t w = 0; w < Wt; w += onetile) {
-                // dy - sum
-                sub_tiles_bcast_cols_to_cb(cb_dy, cb_sum, cb_inter2, w, 0, /*pop0=*/0, /*pop1=*/0);
+            cb_push_back(cb_sum, onetile);
 
-                #ifdef SOFTMAX
-                    // (dy - sum) * y
-                    mul_tiles_to_cb(cb_y, cb_inter2, cb_dx, w, 0, /*pop0=*/0, /*pop1=*/1);
-                #else
-                    // -(dy - sum) * y
-                    mul_tiles_and_negative_to_cb(cb_y, cb_inter2, cb_dx, w, 0, /*pop0=*/0, /*pop1=*/1);
+            // softmax: (dy - sum) * y
+            // softmin: -(dy - sum) * y
+            cb_wait_front(cb_sum, onetile);
+
+            for (uint32_t w = 0; w < Wt; ++w) {
+                cb_reserve_back(cb_dx, onetile);
+
+                tile_regs_acquire();
+                copy_tile_init_with_dt(cb_dy);
+                copy_tile(cb_dy, w, dst0);
+                copy_tile_init_with_dt(cb_sum);
+                copy_tile(cb_sum, 0, dst1);
+                moreh_binary_op_init();
+                moreh_binary_sub(dst0);
+                copy_tile_init_with_dt(cb_y);
+                copy_tile(cb_y, w, dst1);
+                moreh_binary_op_init();
+                moreh_binary_mul(dst0);
+                #ifndef SOFTMAX
+                    negative_tile_init();
+                    negative_tile(dst0);
                 #endif
+                tile_regs_commit();
+
+                tile_regs_wait();
+                pack_tile_with_dt(dst0, cb_dx);
+                tile_regs_release();
+
+                cb_push_back(cb_dx, onetile);
             }
 
             cb_pop_front(cb_sum, onetile);
@@ -100,5 +167,7 @@ void MAIN {
             cb_pop_front(cb_y, Wt);
         #endif
     }
+
+    cb_pop_front(cb_mask, onetile);
 }
 }  // namespace NAMESPACE
