@@ -13,8 +13,8 @@
 namespace ttnn::graph {
 
 template <class Callable>
-auto query_trace(Callable&& callable) {
-    GraphProcessor::begin_graph_capture(tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH);
+auto query_trace(Callable&& callable, tt::tt_metal::IGraphProcessor::RunMode mode = tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH) {
+    GraphProcessor::begin_graph_capture(mode);
     {
         auto output = callable();
     }
@@ -23,8 +23,8 @@ auto query_trace(Callable&& callable) {
 }
 
 template <class Callable>
-auto query_peak_L1_memory_usage(Callable&& callable) {
-    GraphProcessor::begin_graph_capture(tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH);
+auto query_peak_L1_memory_usage(Callable&& callable, tt::tt_metal::IGraphProcessor::RunMode mode = tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH) {
+    GraphProcessor::begin_graph_capture(mode);
     {
         auto output = callable();
     }
@@ -33,7 +33,7 @@ auto query_peak_L1_memory_usage(Callable&& callable) {
 }
 
 template <class Callable>
-auto query_output_info(Callable&& callable) {
+auto query_output_info(Callable&& callable, tt::tt_metal::IGraphProcessor::RunMode mode = tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH) {
     GraphProcessor::begin_graph_capture(tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH);
     {
         auto output = callable();
