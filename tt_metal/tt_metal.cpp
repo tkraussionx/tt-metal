@@ -690,25 +690,36 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
         std::vector<std::vector<CoreCoord>> logical_cores_used_in_program = program.logical_cores();
         std::unordered_set<CoreCoord> not_done_cores;
         for (uint32_t programmable_core_type_index = 0; programmable_core_type_index < logical_cores_used_in_program.size(); programmable_core_type_index++) {
+            std::vector<CoreCoord> all_worker_cores;
+            uint32_t launch_msg_rd_ptr = 0;
             CoreType core_type = hal.get_core_type(programmable_core_type_index);
+            if (core_type == CoreType::ETH)
+            {
+                for (const CoreCoord& core : device->get_active_ethernet_cores(true)){
+                    auto physicalCore = device->physical_core_from_logical_core(core, CoreType::ETH);
+                    all_worker_cores.push_back(physicalCore);
+                }
+                launch_msg_rd_ptr = device->worker_launch_message_buffer_state.get_mcast_wptr();
+            }
+            else
+            {
+                auto device_num_hw_cqs = device->num_hw_cqs();
+                CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device_id);
+                for (const CoreCoord& core : tt::get_logical_compute_cores(device_id, device_num_hw_cqs, dispatch_core_type)) {
+                    const CoreCoord curr_core = device->worker_core_from_logical_core(core);
+                    all_worker_cores.push_back(curr_core);
+                }
+                launch_msg_rd_ptr = device->worker_launch_message_buffer_state.get_unicast_wptr();
+            }
+            bool do_all_cores = false;
             for (const auto &logical_core : logical_cores_used_in_program[programmable_core_type_index]) {
+                do_all_cores = true;
                 launch_msg_t *msg = &program.kernels_on_core(logical_core, programmable_core_type_index)->launch_msg;
                 go_msg_t* go_msg = &program.kernels_on_core(logical_core, programmable_core_type_index)->go_msg;
                 msg->kernel_config.host_assigned_id = program.get_runtime_id();
 
                 auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
                 not_done_cores.insert(physical_core);
-                uint32_t launch_msg_rd_ptr = 0;
-                if (core_type == CoreType::ETH)
-                {
-                    launch_msg_rd_ptr = device->worker_launch_message_buffer_state.get_mcast_wptr();
-                    device->worker_launch_message_buffer_state.inc_mcast_wptr(1);
-                }
-                else
-                {
-                    launch_msg_rd_ptr = device->worker_launch_message_buffer_state.get_unicast_wptr();
-                    device->worker_launch_message_buffer_state.inc_unicast_wptr(1);
-                }
 
                 tt::llrt::write_launch_msg_to_core(device->id(),
                         physical_core,
@@ -717,9 +728,32 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
                         device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) + launch_msg_rd_ptr * sizeof(launch_msg_t),
                         device->get_dev_addr(physical_core, HalMemAddrType::GO_MSG));
 
-                std::cout << device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) + launch_msg_rd_ptr * sizeof(launch_msg_t) << ", ";
-                std::cout << "host: " << device->get_dev_addr(physical_core, HalMemAddrType::LAUNCH) << ", ";
-                std::cout << launch_msg_rd_ptr  << std::endl;
+                std::cout << physical_core.x << "p" << physical_core.y << std::endl;
+            }
+            if (do_all_cores){
+                if (core_type == CoreType::ETH) {
+                    device->worker_launch_message_buffer_state.inc_mcast_wptr(1);
+                    std::cout << "eTHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH" << std::endl;
+                }
+                else
+                {
+                    device->worker_launch_message_buffer_state.inc_unicast_wptr(1);
+                    std::cout << "TEEEEEEENSSSSSIXXX" << std::endl;
+                }
+                for (const auto &worker_core : all_worker_cores) {
+                    if (not_done_cores.find(worker_core) == not_done_cores.end())
+                    {
+                        go_msg_t go_msg;
+                        std::memset(&go_msg, 0, sizeof(go_msg_t));
+                        go_msg.signal = RUN_MSG_GO;
+                        tt::Cluster::instance().write_core(&go_msg, sizeof(go_msg_t),
+                                tt_cxy_pair(device_id, worker_core),
+                                device->get_dev_addr(worker_core, HalMemAddrType::GO_MSG));
+                        std::unordered_set<CoreCoord> not_done_core({worker_core});
+                        std::cout << worker_core.x << "w" << worker_core.y << std::endl;
+                        llrt::internal_::wait_until_cores_done(device_id, RUN_MSG_GO, not_done_core);
+                    }
+                }
             }
         }
         if (wait_until_cores_done) {

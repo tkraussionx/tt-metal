@@ -433,10 +433,10 @@ int main() {
 
             mailboxes->go_message.signal = RUN_MSG_DONE;
 
+            launch_msg_address->kernel_config.enables = 0;
             // Notify dispatcher core that tensix has completed running kernels, if the launch_msg was populated
             if (launch_msg_address->kernel_config.mode == DISPATCH_MODE_DEV) {
                 // Set launch message to invalid, so that the next time this slot is encountered, kernels are only run if a valid launch message is sent.
-                launch_msg_address->kernel_config.enables = 0;
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(mailboxes->go_message.master_x),
                         NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR);
@@ -450,9 +450,7 @@ int main() {
                     31 /*wrap*/,
                     false /*linked*/);
             }
-            DPRINT << "before brisc.cc: " << mailboxes->launch_msg_rd_ptr << ENDL();
             mailboxes->launch_msg_rd_ptr = (launch_msg_rd_ptr + 1) & (launch_msg_buffer_num_entries - 1);
-            DPRINT << "after brisc.cc: " << mailboxes->launch_msg_rd_ptr << ENDL();
             // Only executed if watcher is enabled. Ensures that we don't report stale data due to invalid launch messages in the ring buffer
             CLEAR_PREVIOUS_LAUNCH_MESSAGE_ENTRY_FOR_WATCHER();
         }
