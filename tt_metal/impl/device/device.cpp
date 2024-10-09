@@ -439,7 +439,8 @@ void Device::reset_cores() {
                 physical_core.str(),
                 this->id());
             launch_msg->kernel_config.exit_erisc_kernel = 1;
-            llrt::write_launch_msg_to_core(this->id(), physical_core, launch_msg, &go_msg, launch_addr, false);
+            llrt::write_launch_msg_to_core(this->id(), physical_core, launch_msg, &go_msg, launch_addr,
+                    this->get_dev_addr(physical_core, HalMemAddrType::GO_MSG), false);
             device_to_early_exit_cores[this->id()].insert(physical_core);
         }
     }
@@ -470,7 +471,8 @@ void Device::reset_cores() {
                         phys_core.str(),
                         id_and_cores.first);
                     launch_msg->kernel_config.exit_erisc_kernel = 1;
-                    llrt::write_launch_msg_to_core(id_and_cores.first, phys_core, launch_msg, &go_msg, launch_addr, false);
+                    llrt::write_launch_msg_to_core(id_and_cores.first, phys_core, launch_msg, &go_msg, launch_addr,
+                            this->get_dev_addr(phys_core, HalMemAddrType::GO_MSG), false);
                     device_to_early_exit_cores[id_and_cores.first].insert(phys_core);
                 }
             }
@@ -2763,7 +2765,9 @@ void Device::init_command_queue_device() {
             launch_msg_t msg = command_queue_program.kernels_on_core(logical_dispatch_core, index)->launch_msg;
             go_msg_t go_msg = command_queue_program.kernels_on_core(logical_dispatch_core, index)->go_msg;
             CoreCoord phys_core = this->physical_core_from_logical_core(logical_dispatch_core, core_type);
-            tt::llrt::write_launch_msg_to_core(this->id(), phys_core, &msg, &go_msg, this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+            tt::llrt::write_launch_msg_to_core(this->id(), phys_core, &msg, &go_msg,
+                    this->get_dev_addr(phys_core, HalMemAddrType::LAUNCH),
+                    this->get_dev_addr(phys_core, HalMemAddrType::GO_MSG));
         }
     }
 
@@ -2780,7 +2784,9 @@ void Device::init_command_queue_device() {
                     launch_msg_t msg = mmio_command_queue_program.kernels_on_core(logical_dispatch_core, index)->launch_msg;
                     go_msg_t go_msg = mmio_command_queue_program.kernels_on_core(logical_dispatch_core, index)->go_msg;
                     CoreCoord phys_core = mmio_device->physical_core_from_logical_core(logical_dispatch_core, core_type);
-                    tt::llrt::write_launch_msg_to_core(mmio_device_id, phys_core, &msg, &go_msg, mmio_device->get_dev_addr(phys_core, HalMemAddrType::LAUNCH));
+                    tt::llrt::write_launch_msg_to_core(mmio_device_id, phys_core, &msg, &go_msg,
+                            mmio_device->get_dev_addr(phys_core, HalMemAddrType::LAUNCH),
+                            mmio_device->get_dev_addr(phys_core, HalMemAddrType::GO_MSG));
                 }
             }
         }
