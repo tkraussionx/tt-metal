@@ -47,6 +47,8 @@ TEST_P(AddOpGraphTestFixture, AddGraphTrace) {
     auto run_mode = std::get<1>(param_combination);
 
     {
+        ttnn::graph::GraphProcessor::begin_graph_capture(run_mode);
+
         const auto input_tensor_a = ttnn::zeros(params.a_Shape, ttnn::bfloat16, ttnn::TILE_LAYOUT, this->getDevice(), params.memory_config);
         const auto input_tensor_b = ttnn::zeros(params.b_Shape, ttnn::bfloat16, ttnn::TILE_LAYOUT, this->getDevice(), params.memory_config);
 
@@ -55,17 +57,23 @@ TEST_P(AddOpGraphTestFixture, AddGraphTrace) {
             return output_tensor;
         };
 
-        auto json_trace = graph::query_trace(call);
+        auto inner_trace = graph::query_trace(call, run_mode);
 
-        tt::log_info("Trace: {}", json_trace.dump(4));
+        auto outer_trace = ttnn::graph::GraphProcessor::end_graph_capture();
+
+        tt::log_info("====================================");
+        tt::log_info("outer: {}", outer_trace.dump(4));
+        tt::log_info("====================================");
+        tt::log_info("inner: {}", inner_trace.dump(4));
+        tt::log_info("====================================");
 
         // Direct calls
         {
-            EXPECT_EQ(graph::extract_calltrace(json_trace), params.expected_calltrace);
-            EXPECT_EQ(graph::extract_peak_L1_memory_usage(json_trace), params.expected_peak_L1_memory_usage);
-            EXPECT_EQ(graph::extract_output_tensors(json_trace).size(), 1);
+            EXPECT_EQ(graph::extract_calltrace(inner_trace), params.expected_calltrace);
+            EXPECT_EQ(graph::extract_peak_L1_memory_usage(inner_trace), params.expected_peak_L1_memory_usage);
+            EXPECT_EQ(graph::extract_output_tensors(inner_trace).size(), 1);
 
-            auto [intermediate_tensors_count, output_tensors_count] = graph::count_intermediate_and_output_tensors(json_trace);
+            auto [intermediate_tensors_count, output_tensors_count] = graph::count_intermediate_and_output_tensors(inner_trace);
             EXPECT_EQ(intermediate_tensors_count, params.expected_intermediate_tensors_count);
             EXPECT_EQ(output_tensors_count, 1);
         }
