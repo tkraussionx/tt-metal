@@ -314,13 +314,13 @@ class EnqueueProgramCommand : public Command {
 
     void assemble_preamble_commands(ProgramCommandSequence& program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(ProgramCommandSequence& program_command_sequence, bool prefetch_stall);
-    void assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence);
+    void assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence, bool override_rta_ptrs);
     void assemble_device_commands(ProgramCommandSequence& program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void update_device_commands(ProgramCommandSequence& cached_program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
 
     void write_program_command_sequence(bool stall_first, const ProgramCommandSequence& program_command_sequence);
 
-    ProgramCommandSequence generate_program_command_sequence(std::vector<ConfigBufferEntry>& kernel_config_addrs);
+    ProgramCommandSequence generate_program_command_sequence(std::vector<ConfigBufferEntry>& kernel_config_addrs, bool override_rta_ptrs);
 
     void process();
 

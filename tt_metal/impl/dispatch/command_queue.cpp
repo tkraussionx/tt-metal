@@ -446,7 +446,8 @@ void generate_runtime_args_cmds(
     const uint32_t max_prefetch_command_size,
     const uint32_t packed_write_max_unicast_sub_cmds,
     bool no_stride,
-    enum DispatchWriteOffsets write_offset_index) {
+    enum DispatchWriteOffsets write_offset_index,
+    bool override_rta_ptrs) {
     static_assert(
         std::is_same<PackedSubCmd, CQDispatchWritePackedUnicastSubCmd>::value or
         std::is_same<PackedSubCmd, CQDispatchWritePackedMulticastSubCmd>::value);
@@ -506,17 +507,19 @@ void generate_runtime_args_cmds(
 
         // Update kernel RTA pointers to point into the generated command
         // Future RTA updates through the API will update the command sequence directly
-        uint32_t data_offset = (uint32_t)get_runtime_args_data_offset(num_packed_cmds, max_runtime_args_len, unicast);
-        const uint32_t data_inc = align(max_runtime_args_len * sizeof(uint32_t), l1_alignment);
-        uint32_t num_data_copies = no_stride ? 1 : num_packed_cmds;
-        for (uint32_t i = offset_idx; i < offset_idx + num_data_copies; ++i) {
-            uint32_t offset = 0;
-            for (auto& data : rt_args_data[i]) {
-                data.get().rt_args_data =
-                    (uint32_t*)((char*)runtime_args_command_sequences.back().data() + data_offset + offset);
-                offset += data.get().rt_args_count * sizeof(uint32_t);
+        if (override_rta_ptrs) {
+            uint32_t data_offset = (uint32_t)get_runtime_args_data_offset(num_packed_cmds, max_runtime_args_len, unicast);
+            const uint32_t data_inc = align(max_runtime_args_len * sizeof(uint32_t), l1_alignment);
+            uint32_t num_data_copies = no_stride ? 1 : num_packed_cmds;
+            for (uint32_t i = offset_idx; i < offset_idx + num_data_copies; ++i) {
+                uint32_t offset = 0;
+                for (auto& data : rt_args_data[i]) {
+                    data.get().rt_args_data =
+                        (uint32_t*)((char*)runtime_args_command_sequences.back().data() + data_offset + offset);
+                    offset += data.get().rt_args_count * sizeof(uint32_t);
+                }
+                data_offset += data_inc;
             }
-            data_offset += data_inc;
         }
         num_packed_cmds_in_seq -= num_packed_cmds;
         offset_idx += num_packed_cmds;
@@ -524,7 +527,7 @@ void generate_runtime_args_cmds(
 }
 
 // Generate command sequence for unique (unicast) and common (multicast) runtime args
-void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence) {
+void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence, bool override_rta_ptrs) {
     CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(this->device->id());
     const uint32_t max_prefetch_command_size = dispatch_constants::get(dispatch_core_type).max_prefetch_command_size();
 
@@ -614,7 +617,8 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                     packed_write_max_unicast_sub_cmds,
                     false,
                     core_type == CoreType::WORKER ? DISPATCH_WRITE_OFFSET_TENSIX_L1_CONFIG_BASE
-                                                  : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE);
+                                                  : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE,
+                    override_rta_ptrs);
                 for (auto& data_per_kernel : unique_rt_data_and_sizes) {
                     for (auto& data_and_sizes : data_per_kernel) {
                         RecordDispatchData(program, DISPATCH_DATA_RTARGS, std::get<1>(data_and_sizes));
@@ -697,7 +701,8 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                             packed_write_max_unicast_sub_cmds,
                             true,
                             core_type == CoreType::WORKER ? DISPATCH_WRITE_OFFSET_TENSIX_L1_CONFIG_BASE
-                                                          : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE);
+                                                          : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE,
+                            override_rta_ptrs);
                         sub_cmds.clear();
                     },
                     common_sub_cmds);
@@ -1314,12 +1319,12 @@ void EnqueueProgramCommand::update_device_commands(ProgramCommandSequence& cache
     cached_program_command_sequence.mcast_go_signal_cmd_ptr->wait_count = this->expected_num_workers_completed;
 }
 
-ProgramCommandSequence EnqueueProgramCommand::generate_program_command_sequence(std::vector<ConfigBufferEntry>& kernel_config_addrs) {
+ProgramCommandSequence EnqueueProgramCommand::generate_program_command_sequence(std::vector<ConfigBufferEntry>& kernel_config_addrs, bool override_rta_ptrs) {
     ProgramCommandSequence program_command_sequence;
     this->assemble_preamble_commands(program_command_sequence, kernel_config_addrs);
     this->assemble_stall_commands(program_command_sequence, true);
     // Runtime Args Command Sequence
-    this->assemble_runtime_args_commands(program_command_sequence);
+    this->assemble_runtime_args_commands(program_command_sequence, override_rta_ptrs);
 
     // Record kernel groups in this program, only need to do it once.
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
@@ -1501,7 +1506,7 @@ void EnqueueProgramCommand::process() {
     // Preamble, some waits and stalls
     // can be written directly to the issue queue
     if (!is_cached) {
-        ProgramCommandSequence program_command_sequence = generate_program_command_sequence(kernel_config_addrs);
+        ProgramCommandSequence program_command_sequence = generate_program_command_sequence(kernel_config_addrs, use_cache);
         this->write_program_command_sequence(stall_first, program_command_sequence);
         if (use_cache) {
             this->assemble_stall_commands(program_command_sequence, false);
