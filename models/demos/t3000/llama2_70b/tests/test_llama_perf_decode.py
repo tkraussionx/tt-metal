@@ -8,6 +8,7 @@ import torch
 import ttnn
 from ttnn import ConcatMeshToTensor
 import time
+from collections import defaultdict
 
 from models.demos.t3000.llama2_70b.reference.llama.llama import Llama
 
@@ -103,58 +104,78 @@ def run_test_LlamaModel_end_to_end(
     # Clear global profiler state before starting measurements
     profiler.clear()
 
-    # Set up model -----------------------------------------------------------------------
-    logger.info("Moving weights to devices; might take some time...")
-    profiler.start("TT_llama_model_setup")
-    tt_model = TtLlamaModel_optimized(
-        mesh_device,
-        state_dict,
-        BASE_URL,
-        n_layers,
-        model_config,
-        configuration,
-        cache_path=cache_path,
-        read_cache=True,
-    )
+    submesh_to_metadata = defaultdict(dict)
+    submeshes = mesh_device.create_submeshes((2, 4), ttnn.MeshType.Ring)
+    for submesh in submeshes:
+        # Set up model -----------------------------------------------------------------------
+        logger.info("Moving weights to devices; might take some time...")
+        profiler.start("TT_llama_model_setup")
+        tt_model = TtLlamaModel_optimized(
+            submesh,
+            state_dict,
+            BASE_URL,
+            n_layers,
+            model_config,
+            configuration,
+            cache_path=cache_path,
+            read_cache=True,
+        )
 
-    for i in mesh_device.get_device_ids():
-        device = mesh_device.get_device(i)
-        ttnn.synchronize_device(device)
+        for i in submesh.get_device_ids():
+            device = submesh.get_device(i)
+            ttnn.synchronize_device(device)
 
-    profiler.end("TT_llama_model_setup")
+        profiler.end("TT_llama_model_setup")
 
-    del state_dict
+        ##### Prepare Inputs #####
+        prev_pos = total_len - 1
+        tt_inp_emb, prev_pos, rot_mat, cache_idxs = tt_model.prepare_inputs(tokens, prev_pos)
+        tt_inp_emb = ttnn.to_device(tt_inp_emb, submesh, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        tt_inp_emb = tt_model.tt_embd(tt_inp_emb)
+        tt_inp_emb = ttnn.interleaved_to_sharded(tt_inp_emb, tt_model.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"])
 
-    ##### Prepare Inputs #####
-    prev_pos = total_len - 1
-    tt_inp_emb, prev_pos, rot_mat, cache_idxs = tt_model.prepare_inputs(tokens, prev_pos)
-    tt_inp_emb = ttnn.to_device(tt_inp_emb, mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    tt_inp_emb = tt_model.tt_embd(tt_inp_emb)
-    tt_inp_emb = ttnn.interleaved_to_sharded(tt_inp_emb, tt_model.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"])
+        rot_mat = ttnn.to_device(rot_mat, submesh, memory_config=tt_model.model_config["ROT_MAT_MM_IN1_MEMCFG"])
+        cache_idxs = ttnn.to_device(cache_idxs, submesh, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
-    rot_mat = ttnn.to_device(rot_mat, mesh_device, memory_config=tt_model.model_config["ROT_MAT_MM_IN1_MEMCFG"])
-    cache_idxs = ttnn.to_device(cache_idxs, mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        ##### Compile Model #####
+        logger.info("Compiling model")
+        profiler.start(f"compile_time")
+        tt_logits = tt_model(tt_inp_emb, rot_mat, prev_pos, cache_idxs=cache_idxs, mode="decode")
+        tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
+        logits = ttnn.to_torch(logits_rm)
+        profiler.end(f"compile_time")
+        profiler.print()
+        compile_iter_time = profiler.get("compile_time")
+        logger.info(f"decode with compile time, single iter latency: {compile_iter_time}")
 
-    ##### Compile Model #####
-    logger.info("Compiling model")
-    profiler.start(f"compile_time")
-    tt_logits = tt_model(tt_inp_emb, rot_mat, prev_pos, cache_idxs=cache_idxs, mode="decode")
-    tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
-    logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
-    logits = ttnn.to_torch(logits_rm)
-    profiler.end(f"compile_time")
-    profiler.print()
-    compile_iter_time = profiler.get("compile_time")
-    logger.info(f"decode with compile time, single iter latency: {compile_iter_time}")
+        submesh_to_metadata[submesh.get_mesh_id()] = {
+            "submesh": submesh,
+            "logits_rm": logits_rm,
+            "tt_model": tt_model,
+            "prev_pos": prev_pos,
+            "tt_inp_emb": tt_inp_emb,
+            "rot_mat": rot_mat,
+            "cache_idxs": cache_idxs,
+        }
 
     ##### Capture Trace #####
     logger.info("Capturing trace")
     trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
-    tt_logits = tt_model(tt_inp_emb, rot_mat, prev_pos, cache_idxs=cache_idxs, mode="decode")
-    tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
-    logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
+
+    for submesh in submeshes:
+        mesh_id = submesh.get_mesh_id()
+        tt_model = submesh_to_metadata[mesh_id]["tt_model"]
+        tt_inp_emb = submesh_to_metadata[mesh_id]["tt_inp_emb"]
+        rot_mat = submesh_to_metadata[mesh_id]["rot_mat"]
+        cache_idxs = submesh_to_metadata[mesh_id]["cache_idxs"]
+        prev_pos = submesh_to_metadata[mesh_id]["prev_pos"]
+
+        tt_logits = tt_model(tt_inp_emb, rot_mat, prev_pos, cache_idxs=cache_idxs, mode="decode")
+        tt_logits = ttnn.all_gather(tt_logits, dim=3, num_links=1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        tt_logits_tensors = ttnn.get_device_tensors(tt_logits)
+        logits_rm = ttnn.to_layout(tt_logits_tensors[0], ttnn.ROW_MAJOR_LAYOUT)
     ttnn.end_trace_capture(mesh_device, trace_id, cq_id=0)
 
     ##### Execute Trace #####
@@ -184,7 +205,7 @@ def run_test_LlamaModel_end_to_end(
     )
 
     tokens_per_s_per_user = 1 / iter_time
-    tokens_per_s_overall = tokens_per_s_per_user * batch
+    tokens_per_s_overall = tokens_per_s_per_user * batch * len(submeshes)
 
     logger.info(f"Time per iteration: {iter_time}")
     logger.info(f"Tokens per s per user: {tokens_per_s_per_user}")
