@@ -188,6 +188,8 @@ def from_torch(
     """
 
     shape_with_padding = None
+    if tensor.dim() == 0 or len(tensor.shape) == 0:
+        raise RuntimeError("ttnn.from_torch: 0-dimension Tensor support not available!")
     if dtype == ttnn.bfloat8_b or dtype == ttnn.bfloat4_b:
         if len(tensor.shape) < 2:
             raise RuntimeError("ttnn.from_torch: bfloat8_b/bfloat4_b requires at least 2 dimensions!")
