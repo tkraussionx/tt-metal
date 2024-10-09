@@ -183,6 +183,10 @@ def run_conv(
         pcc = 0.9969
     else:
         pcc = 0.998
+
+    # Reduce pcc threshold for long dot products
+    if input_channels * filter_height * filter_width > 5000:
+        pcc = 0.985
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
     logger.info(f"PCC = {pcc_msg}. Threshold = {pcc}")
     assert passing
@@ -904,7 +908,7 @@ def test_resnet50_conv_wh_fp32(
 
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
-    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, shard_layout, config_override",
     (
         # sd convs with HxW=32x32
         # (1, 320, 320, 32, 32, 3, 3, 1, 1, 1, 1, False, None),
@@ -916,43 +920,44 @@ def test_resnet50_conv_wh_fp32(
         # (1, 1280, 1280, 8, 8, 3, 3, 2, 2, 1, 1, False, None), #fails to parallelize with sharding
         # (1, 1280, 1280, 4, 4, 3, 3, 1, 1, 1, 1, False, None), #fails to parallelize with sharding
         # (1, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None), # slightly low pcc with 0.99698. bfloat16 weights doesnt fit
+        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.WIDTH_SHARDED, None),
         # (1, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, None), # doesnt fit at all.. for all data types
         # sd convs with HxW=64x64 with batch size = 1
-        (1, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None),
-        (1, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (1, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),
-        (1, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  #
-        (1, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
-        (1, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 weights doesnt fit
-        (1, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit.
-        (1, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 weights doesnt fit
-        # (1, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        (1, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        (1, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.HEIGHT_SHARDED, None),
+        (1, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}),
+        (1, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (1, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}),
+        (1, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (1, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (1, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (1, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        # (1, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        (1, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}),
+        # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
         # sd convs with HxW=64x64 with batch size=2
-        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, True, None), Hangs on WH
-        (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
-        (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
-        (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
-        # (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
-        # (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        # (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 320, 16, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.HEIGHT_SHARDED, None), Hangs on WH
+        (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 64}),
+        (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),  # fits with bfloat8_b
+        (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 64}),
+        (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None),
+        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}),
+        (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}),
+        # (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        (2, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 64}),
+        # (2, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 1280, 1920, 16, 16, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 640, 1920, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 640, 1280, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 640, 960, 32, 32, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
+        # (2, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, ttnn.TensorMemoryLayout.BLOCK_SHARDED, {"act_block_h": 32}), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
         # 1x1 conv
-        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, True, None),
+        (2, 320, 960, 64, 64, 1, 1, 1, 1, 0, 0, ttnn.TensorMemoryLayout.HEIGHT_SHARDED, None),
         # Small conv
-        # (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, True, None),  ## batch = 1 is currently not supported
+        # (1, 32, 32, 16, 16, 3, 3, 2, 2, 1, 1, ttnn.TensorMemoryLayout.HEIGHT_SHARDED, None),  ## batch = 1 is currently not supported
     ),
 )
 @pytest.mark.parametrize(
@@ -982,7 +987,7 @@ def test_sd_conv(
     stride_w,
     pad_h,
     pad_w,
-    use_1d_systolic_array,
+    shard_layout,
     config_override,
     enable_auto_formatting,
 ):
@@ -1005,9 +1010,10 @@ def test_sd_conv(
             stride_w,
             pad_h,
             pad_w,
-            use_1d_systolic_array,
+            True,
             config_override,
             split_factor=3 if input_channels == 1920 else 2,
+            shard_layout=shard_layout,
         )
     else:
         run_conv(
@@ -1026,11 +1032,12 @@ def test_sd_conv(
             stride_w,
             pad_h,
             pad_w,
-            use_1d_systolic_array,
+            True,
             config_override,
             use_shallow_conv_variant=(input_channels == 16),
             enable_auto_formatting=enable_auto_formatting,
             padded_input_channels=16 if input_channels == 16 else None,
+            shard_layout=shard_layout,
         )
 
 
