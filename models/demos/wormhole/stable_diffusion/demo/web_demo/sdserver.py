@@ -25,14 +25,15 @@ from models.utility_functions import (
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.demos.wormhole.stable_diffusion.sd_pndm_scheduler import TtPNDMScheduler
 from models.demos.wormhole.stable_diffusion.custom_preprocessing import custom_preprocessor
-from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_unet_2d_condition_model_new_conv import (
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_unet_2d_condition_model_new_conv import (
     UNet2DConditionModel as UNet2D,
 )
-from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_utility_functions import round_up_to_tile_dim
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import round_up_to_tile_dim
 from torchvision.transforms import ToTensor
 from torchmetrics.multimodal.clip_score import CLIPScore
 from torchmetrics.image.fid import FrechetInceptionDistance
 from scipy import integrate
+
 
 def constant_prop_time_embeddings(timesteps, sample, time_proj):
     timesteps = timesteps[None]
@@ -43,18 +44,19 @@ def constant_prop_time_embeddings(timesteps, sample, time_proj):
 
 def tt_guide(noise_pred, guidance_scale):  # will return latents
     noise_pred_uncond = noise_pred[:1, :, :, :]
-    noise_pred_text = ttnn.experimental.tensor.unpad(
+    noise_pred_text = ttnn.slice(
         noise_pred,
         [1, 0, 0, 0],
         [
-            noise_pred.shape[0] - 1,
-            noise_pred.shape[1] - 1,
-            noise_pred.shape[2] - 1,
-            noise_pred.shape[3] - 1,
+            noise_pred.shape[0],
+            noise_pred.shape[1],
+            noise_pred.shape[2],
+            noise_pred.shape[3],
         ],
     )
     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
     return noise_pred
+
 
 def run_interactive_demo_inference(device, num_inference_steps, image_size=(256, 256)):
     disable_persistent_kernel_cache()
@@ -136,7 +138,7 @@ def run_interactive_demo_inference(device, num_inference_steps, image_size=(256,
     time_step = ttnn_scheduler.timesteps.tolist()
 
     prevPrompt = ""
-    json_file_path = 'models/demos/wormhole/stable_diffusion/demo/web_demo/input_prompts.json'
+    json_file_path = "models/demos/wormhole/stable_diffusion/demo/web_demo/input_prompts.json"
 
     while True:
         while not os.path.exists(json_file_path):
@@ -145,7 +147,7 @@ def run_interactive_demo_inference(device, num_inference_steps, image_size=(256,
 
         ttnn_scheduler.set_timesteps(num_inference_steps)
 
-        with open(json_file_path, 'r') as f:
+        with open(json_file_path, "r") as f:
             data = json.load(f)
             input_prompts = data["prompts"]
 
@@ -175,7 +177,7 @@ def run_interactive_demo_inference(device, num_inference_steps, image_size=(256,
         logger.info(f"input prompt : {input_prompt}")
         batch_size = len(input_prompt)
 
-        with open(json_file_path, 'w') as f:
+        with open(json_file_path, "w") as f:
             json.dump({"prompts": input_prompts}, f, indent=4)
 
         ## First, we get the text_embeddings for the prompt. These embeddings will be used to condition the UNet model.
@@ -206,7 +208,6 @@ def run_interactive_demo_inference(device, num_inference_steps, image_size=(256,
 
         total_accum = 0
         for index in tqdm(range(len(time_step))):
-
             t0 = time.time()
             ttnn_latent_model_input = ttnn.concat([ttnn_latents, ttnn_latents], dim=0)
             _t = _tlist[index]
@@ -245,12 +246,13 @@ def run_interactive_demo_inference(device, num_inference_steps, image_size=(256,
         pil_images.save(ttnn_output_path)
 
         input_prompts[currInd]["status"] = "done"
-        input_prompts[currInd]["total_acc"] = total_accum 
+        input_prompts[currInd]["total_acc"] = total_accum
         input_prompts[currInd]["batch_size"] = batch_size
         input_prompts[currInd]["steps"] = num_inference_steps
 
-        with open(json_file_path, 'w') as f:
+        with open(json_file_path, "w") as f:
             json.dump({"prompts": input_prompts}, f, indent=4)
+
 
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
