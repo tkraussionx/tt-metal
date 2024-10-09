@@ -21,8 +21,8 @@ TIMEOUT = 30
 parameters = {
     "suite_1": {
         "batch_sizes": [(1,)],
-        "height": [384, 1024],
-        "width": [1024, 4096],
+        "height": [32, 64, 128, 384, 1024],
+        "width": [32, 64, 128, 1024, 4096],
         "broadcast": [None, "h", "w", "hw"],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
@@ -34,32 +34,32 @@ parameters = {
     },
     "suite_2": {
         "batch_sizes": [(1,)],
-        "height": [1024, 4096],
-        "width": [1024, 2048],
-        "broadcast": [None, "h", "hw"],
+        "height": [32, 64, 128, 384, 1024],
+        "width": [32, 64, 128, 1024, 4096],
+        "broadcast": [None, "h", "w", "hw"],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
-        "input_a_layout": [ttnn.ROW_MAJOR_LAYOUT],
-        "input_b_layout": [ttnn.ROW_MAJOR_LAYOUT],
+        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_b_layout": [ttnn.TILE_LAYOUT],
         "input_b_memory_config": [ttnn.L1_MEMORY_CONFIG],
         "input_a_memory_config": [ttnn.L1_MEMORY_CONFIG],
-        "output_memory_config": [
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    ttnn.CoreRangeSet(
-                        {
-                            ttnn.CoreRange(ttnn.CoreCoord(1, 3), ttnn.CoreCoord(1, 4)),
-                            ttnn.CoreRange(ttnn.CoreCoord(2, 3), ttnn.CoreCoord(2, 5)),
-                        }
-                    ),
-                    [64, 64],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            )
-        ],
+        "output_memory_config": [ttnn.L1_MEMORY_CONFIG],
+        #     ttnn.MemoryConfig(
+        #         ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        #         ttnn.BufferType.L1,
+        #         ttnn.ShardSpec(
+        #             ttnn.CoreRangeSet(
+        #                 {
+        #                     ttnn.CoreRange(ttnn.CoreCoord(1, 3), ttnn.CoreCoord(1, 4)),
+        #                     ttnn.CoreRange(ttnn.CoreCoord(2, 3), ttnn.CoreCoord(2, 5)),
+        #                 }
+        #             ),
+        #             [64, 64],
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     )
+        # ],
     },
 }
 

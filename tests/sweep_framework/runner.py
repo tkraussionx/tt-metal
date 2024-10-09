@@ -50,7 +50,13 @@ def gather_single_test_perf(device, test_passed):
         return None
     ttnn.DumpDeviceProfiler(device)
     opPerfData = get_device_data_generate_report(
-        PROFILER_LOGS_DIR, None, None, None, export_csv=False, cleanup_device_log=True
+        PROFILER_LOGS_DIR,
+        None,
+        None,
+        None,
+        export_csv=False,
+        cleanup_device_log=True
+        # PROFILER_LOGS_DIR, None, None, None, export_csv=True, cleanup_device_log=False
     )
     if not test_passed:
         return None
