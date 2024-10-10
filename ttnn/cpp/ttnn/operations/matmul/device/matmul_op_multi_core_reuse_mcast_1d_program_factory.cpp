@@ -192,6 +192,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
     CoreCoord top_left_core = in0_mcast_receiver_cores_bounding_box.start_coord;
     CoreCoord bottom_right_core = in0_mcast_receiver_cores_bounding_box.end_coord;
@@ -281,10 +283,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         // in0/in1 common args
         (std::uint32_t)num_blocks,  // num_blocks
         // in1 mcast args
-        (std::uint32_t)0,
-        (std::uint32_t)0,
-        (std::uint32_t)0,  // in1_mcast_num_dests
-        (std::uint32_t)0,  // in1_mcast_num_cores
+        (std::uint32_t)in1_mcast_sender_semaphore_id,
+        (std::uint32_t)in1_mcast_receiver_semaphore_id,
+        (std::uint32_t)num_cores - 1,  // in1_mcast_num_dests
+        (std::uint32_t)num_cores - 1,  // in1_mcast_num_cores
         // batch args
         (std::uint32_t)K * N,        // KtNt
         (std::uint32_t)B,            // batch
@@ -360,7 +362,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         mm_kernel_in0_sender_writer_defines["SKIP_MCAST"] = "1";
     }
 
-    mm_kernel_in1_sender_writer_defines["SKIP_MCAST"] = "1";
+    // mm_kernel_in1_sender_writer_defines["SKIP_MCAST"] = "1";
 
     // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
     tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
@@ -622,6 +624,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         std::swap(start_core_noc, end_core_noc);
     }
 
+    CoreCoord in1_mcast_start = bottom_right_core_physical;
+    CoreCoord in1_mcast_end = top_left_core_physical;
+    if (in1_noc == NOC::NOC_0) {
+        std::swap(in1_mcast_start, in1_mcast_end);
+    }
+
     const auto& cores = corerange_to_cores(all_cores, std::nullopt, row_major);
     for (uint32_t i = 0; i < num_cores; ++i) {
         const auto& core = cores[i];
@@ -706,10 +714,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 (std::uint32_t)in1_buffer->address(),
                 (std::uint32_t)per_core_N * output_idx_x,  // in1_tensor_start_tile_id
                 // in1 mcast args
-                (std::uint32_t)0,  // in1_mcast_dest_noc_start_x
-                (std::uint32_t)0,  // in1_mcast_dest_noc_start_y
-                (std::uint32_t)0,  // in1_mcast_dest_noc_end_x
-                (std::uint32_t)0,  // in1_mcast_dest_noc_end_y
+                (std::uint32_t)in1_mcast_start.x,  // in0_mcast_dest_noc_start_x
+                (std::uint32_t)in1_mcast_start.y,  // in0_mcast_dest_noc_start_y
+                (std::uint32_t)in1_mcast_end.x,    // in0_mcast_dest_noc_end_x
+                (std::uint32_t)in1_mcast_end.y,    // in0_mcast_dest_noc_end_y
 
                 // WRITER
                 // out tensor args
@@ -742,6 +750,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 mm_in1_sender_writer_args.push_back(0);
                 mm_in1_sender_writer_args.push_back(0);
             }
+
+            mm_in1_sender_writer_args.push_back(i); // core id
 
             if (bias_buffer != nullptr) {
                 mm_in1_sender_writer_args.push_back((std::uint32_t)bias_buffer->address());

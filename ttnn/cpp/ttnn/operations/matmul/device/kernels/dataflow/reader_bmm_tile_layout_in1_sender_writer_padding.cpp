@@ -7,6 +7,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // READER
@@ -35,6 +36,8 @@ void kernel_main() {
     const uint32_t out_last_subblock_w = get_arg_val<uint32_t>(rt_args_idx++);
     const uint32_t padded_subblock_tiles_addr_skip = get_arg_val<uint32_t>(rt_args_idx++);
     const uint32_t padded_block_tiles_w_skip = get_arg_val<uint32_t>(rt_args_idx++);
+
+    const uint32_t core_id = get_arg_val<uint32_t>(rt_args_idx++);
 
     // COMPILE TIME ARGS
     // interleaved accessor args
@@ -153,11 +156,22 @@ void kernel_main() {
     // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
     volatile tt_l1_ptr uint32_t* in1_mcast_receiver_semaphore_addr_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_mcast_receiver_semaphore_addr);
-    *(in1_mcast_receiver_semaphore_addr_ptr) = VALID;
+    if (core_id == 0) {
+        DPRINT << "SETTING VALID" << ENDL();
+        *(in1_mcast_receiver_semaphore_addr_ptr) = VALID;
+    }
+
     // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
     // to receive the mcast
     volatile tt_l1_ptr uint32_t* in1_mcast_sender_semaphore_addr_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_mcast_sender_semaphore_addr);
+
+    const uint64_t in1_mcast_sender_semaphore_addr_to_increment =
+        get_noc_addr(1, 1, in1_mcast_sender_semaphore_addr);
+
+
+    // DPRINT << in1_mcast_dest_noc_start_x << ", " << in1_mcast_dest_noc_start_y << ", " << in1_mcast_dest_noc_end_x
+    //        << ", " << in1_mcast_dest_noc_end_y << ENDL();
 
     const uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
         in1_mcast_dest_noc_start_x,
@@ -262,25 +276,33 @@ void kernel_main() {
 #ifndef SKIP_MCAST
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value
             // should be in0_mcast_num_dests), then reset the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-            noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+
+            if (core_id == 0) {
+                noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+                noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+
+                noc_semaphore_set_multicast(
+                    in1_mcast_receiver_semaphore_addr,
+                    in1_mcast_receiver_semaphore_noc_addr,
+                    in1_mcast_num_cores);
+            } else {
+                noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
+                noc_semaphore_inc(in1_mcast_sender_semaphore_addr_to_increment, 1);
+                noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
+            }
 
             // Now we have the block in the CB address, we can mcast to dests!
-            uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
+            // uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_async_write_multicast(
-                in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true, true);
+            // noc_async_write_multicast(
+            //     in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true, true);
 
             // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same
             // cmd_buf Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast(
-                in1_mcast_receiver_semaphore_addr,
-                in1_mcast_receiver_semaphore_noc_addr,
-                in1_mcast_num_cores);
 #endif
 
 #ifndef IN1_SHARDED
@@ -372,6 +394,7 @@ void kernel_main() {
 
 #ifndef OUT_SHARDED
         // WRITER
+        DPRINT << "i am writing stufff now " << ENDL();
         uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
         for (uint32_t sbh = 0; sbh < out_num_nonzero_subblocks_h; ++sbh) {
             uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
