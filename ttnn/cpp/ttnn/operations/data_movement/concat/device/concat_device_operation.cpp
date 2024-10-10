@@ -9,6 +9,7 @@
 #include "ttnn/tensor/tensor_utils.hpp"
 #include "ttnn/operations/experimental/auto_format/auto_format.hpp"
 #include "ttnn/run_operation.hpp"
+#include "tt_metal/common/logger.hpp"
 
 using namespace tt::constants;
 namespace ttnn::operations::data_movement {
@@ -40,7 +41,12 @@ void ConcatDeviceOperation::validate(const std::vector<Tensor> &input_tensors) c
         TT_FATAL(curr_shape.rank() == shape_first.rank(), "Input tensor ranks must be equal");
         curr_shape[this->dim] = 0;
             // last tensor can support without any kernel changes
-        TT_FATAL(!in_ref.get_shape().has_tile_padding(this->dim), "Tile padding along concatenated dim ({}) not supported for concat yet (tensor: {}).",this->dim, i);
+        if(!in_ref.get_shape().has_tile_padding(this->dim)) {
+            tt::log_warning("ttnn.concat: Tile padding along concatenated dim ({}) is not "
+                "directly supported (tensor: {}). ttnn.concat will proceed by converting to "
+                "row-major then retilizing. This may have adverse performance impacts.",
+                this->dim, i);
+        }
         TT_FATAL(curr_shape == shape_first, "concat tensors differ in shape across non-concat dimensions.");
         if (in_ref.get_layout() == Layout::ROW_MAJOR && this->dim == shape_first.rank() - 1) {
             TT_FATAL(
