@@ -76,6 +76,7 @@ def run(test_module, input_queue, output_queue):
         while True:
             test_vector = input_queue.get(block=True, timeout=1)
             test_vector = deserialize_vector(test_vector)
+            print("test_vector=", test_vector)
             try:
                 results = test_module.run(**test_vector, device=device)
                 if type(results) == list:

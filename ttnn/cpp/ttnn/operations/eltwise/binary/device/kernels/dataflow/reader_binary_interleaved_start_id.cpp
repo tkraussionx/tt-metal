@@ -50,14 +50,14 @@ void kernel_main() {
     for (uint32_t i=start_id; i<start_id + num_tiles; i ++) {
         #ifndef IN0_SHARDED
         cb_reserve_back(cb_id_in0, onetile);
-        l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-        noc_async_read_tile(i, s0, l1_write_addr_in0);
+        //l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+        //noc_async_read_tile(i, s0, l1_write_addr_in0);
         #endif
 
         #ifndef IN1_SHARDED
         cb_reserve_back(cb_id_in1, onetile);
-        l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-        noc_async_read_tile(i, s1, l1_write_addr_in1);
+        //l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+        //noc_async_read_tile(i, s1, l1_write_addr_in1);
         #endif
 
         noc_async_read_barrier();

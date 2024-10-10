@@ -36,11 +36,11 @@ void kernel_main() {
         for (uint32_t i = 0; i < Ht; i++) {
             for (uint32_t j = 0; j < Wt; j++) {
                 cb_wait_front(cb_id_out0, onetile);
-                uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                //uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
-                noc_async_write_tile(tile_id, s, l1_read_addr);
+                //noc_async_write_tile(tile_id, s, l1_read_addr);
 
-                noc_async_write_barrier();
+                //noc_async_write_barrier();
 
                 cb_pop_front(cb_id_out0, onetile);
 

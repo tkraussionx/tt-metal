@@ -19,11 +19,12 @@ TIMEOUT = 30
 # Each suite has a key name (in this case "suite_1" and "suite_2") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "suite_1": {
+    "suite_ajakovljevic2": {
         "batch_sizes": [(1,)],
         "height": [384, 1024],
         "width": [1024, 4096],
-        "broadcast": [None, "h", "w", "hw"],
+        # "broadcast": [None, "h", "w", "hw"],
+        "broadcast": ["h"],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
         "input_a_layout": [ttnn.TILE_LAYOUT],
@@ -31,36 +32,7 @@ parameters = {
         "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
         "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
-    },
-    "suite_2": {
-        "batch_sizes": [(1,)],
-        "height": [1024, 4096],
-        "width": [1024, 2048],
-        "broadcast": [None, "h", "hw"],
-        "input_a_dtype": [ttnn.bfloat16],
-        "input_b_dtype": [ttnn.bfloat16],
-        "input_a_layout": [ttnn.ROW_MAJOR_LAYOUT],
-        "input_b_layout": [ttnn.ROW_MAJOR_LAYOUT],
-        "input_b_memory_config": [ttnn.L1_MEMORY_CONFIG],
-        "input_a_memory_config": [ttnn.L1_MEMORY_CONFIG],
-        "output_memory_config": [
-            ttnn.MemoryConfig(
-                ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-                ttnn.BufferType.L1,
-                ttnn.ShardSpec(
-                    ttnn.CoreRangeSet(
-                        {
-                            ttnn.CoreRange(ttnn.CoreCoord(1, 3), ttnn.CoreCoord(1, 4)),
-                            ttnn.CoreRange(ttnn.CoreCoord(2, 3), ttnn.CoreCoord(2, 5)),
-                        }
-                    ),
-                    [64, 64],
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            )
-        ],
-    },
+    }
 }
 
 
@@ -92,6 +64,7 @@ def run(
     *,
     device,
 ) -> list:
+    # zone_name = f"run: batch_sizes={batch_sizes}, height={height}, width={width}, broadcast={broadcast}, input_a_dtype={input_a_dtype}, input_b_dtype={input_b_dtype}, input_a_layout={input_a_layout}, input_b_layout={input_b_layout}"
     input_shape_a = (*batch_sizes, height, width)
     input_shape_b = (*batch_sizes, height, width)
     if broadcast == "hw":
@@ -119,9 +92,7 @@ def run(
         device=device,
         memory_config=input_a_memory_config,
     )
-    start_time = start_measuring_time()
     output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
     output_tensor = ttnn.to_torch(output_tensor)
-    e2e_perf = stop_measuring_time(start_time)
 
-    return [check_with_pcc(torch_output_tensor, output_tensor, 0.999), e2e_perf]
+    return [check_with_pcc(torch_output_tensor, output_tensor, 0.999), 0]
