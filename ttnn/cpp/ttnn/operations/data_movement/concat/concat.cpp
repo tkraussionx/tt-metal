@@ -53,13 +53,13 @@ namespace data_movement {
 
     template<typename OpOutputType, typename... OpInputTypes>
     struct MassagedOperationParams {
-        using ArgsType = std::tuple<OpInputTypes...>;
+        using OwnedArgsType = std::tuple<std::decay_t<OpInputTypes>...>;
         using PredicateFunc = std::function<bool(OpInputTypes...)>;
-        using PreTransformFunc = std::function<ArgsType(OpInputTypes...)>;
+        using PreTransformFunc = std::function<OwnedArgsType(OpInputTypes...)>;
         using PostTransformFuncWithArgs = std::function<OpOutputType(const OpOutputType&, OpInputTypes...)>;
         using PostTransformFunctWithoutArgs = std::function<OpOutputType(const OpOutputType&)>;
         using PostTransformFunc = std::variant<PostTransformFuncWithArgs, PostTransformFunctWithoutArgs>;
-        using PrecompFunc = std::function<ArgsType(OpInputTypes...)>;
+        using PrecompFunc = std::function<OwnedArgsType(OpInputTypes...)>;
         using OpType = std::function<OpOutputType(OpInputTypes...)>;
 
         PredicateFunc predicate;      // Function to determine if formatting should be applied
@@ -72,15 +72,15 @@ namespace data_movement {
     template<typename OpOutputType, typename... OpInputTypes>
     class MassagedOperation {
     public:
-        using ArgsType = std::tuple<OpInputTypes...>;
+        using OwnedArgsType = std::tuple<std::decay_t<OpInputTypes>...>;
         using PredicateFunc = std::function<bool(OpInputTypes...)>;
-        using PreTransformFunc = std::function<ArgsType(OpInputTypes...)>;
+        using PreTransformFunc = std::function<OwnedArgsType(OpInputTypes...)>;
         // post transform takes the output and optionally the args; it may use
         // the args in order to know if it needs to post process the output.
         using PostTransformFuncWithArgs = std::function<OpOutputType(const OpOutputType&, OpInputTypes...)>;
         using PostTransformFunctWithoutArgs = std::function<OpOutputType(const OpOutputType&)>;
         using PostTransformFunc = std::variant<PostTransformFuncWithArgs, PostTransformFunctWithoutArgs>;
-        using PrecompFunc = std::function<ArgsType(OpInputTypes...)>;
+        using PrecompFunc = std::function<OwnedArgsType(OpInputTypes...)>;
         using OpType = std::function<OpOutputType(OpInputTypes...)>;
 
         MassagedOperation(MassagedOperationParams<OpOutputType, OpInputTypes...> params)
@@ -94,7 +94,7 @@ namespace data_movement {
             return predicate_(args...);
         }
 
-        inline ArgsType pre_format(OpInputTypes... args) const {
+        inline OwnedArgsType pre_format(OpInputTypes... args) const {
             return pre_transform_(args...);
         }
 
@@ -108,7 +108,7 @@ namespace data_movement {
             }, post_transform_);
         }
 
-        inline ArgsType precomp(OpInputTypes... args) const {
+        inline OwnedArgsType precomp(OpInputTypes... args) const {
             return precomp_(args...);
         }
 
@@ -129,9 +129,9 @@ namespace data_movement {
             auto merged_pre_transform = [t1 = this->pre_transform_,
                                          t2 = other.pre_transform_,
                                          p1 = this->predicate_,
-                                         p2 = other.predicate_](OpInputTypes... args) -> ArgsType {
+                                         p2 = other.predicate_](OpInputTypes... args) -> OwnedArgsType {
                 // this is ugly, but I couldn't find a way around it since
-                // ArgsType may contain consts/refs.
+                // the OpInputTypes may contain consts/refs.
                 if (p1(args...) && std::apply(p2, t1(args...))) {
                     return std::apply(t2, t1(args...));
                 } else if (p1(args...)) {
@@ -185,7 +185,7 @@ namespace data_movement {
                                    pc2 = other.precomp_,
                                    p1 = this->predicate_,
                                    p2 = other.predicate_,
-                                   t1 = this->pre_transform_](OpInputTypes... args) -> ArgsType {
+                                   t1 = this->pre_transform_](OpInputTypes... args) -> OwnedArgsType {
                 if (p1(args...) && std::apply(p2, t1(args...))) {
                     return std::apply(pc2, pc1(args...));
                 }
@@ -225,6 +225,7 @@ namespace data_movement {
     };
 
     using ConcatArgs = std::tuple<const std::vector<ttnn::Tensor>&, int>;
+    using OwnedConcatArgs = std::tuple<std::vector<ttnn::Tensor>, int>;
     MassagedOperation<ttnn::Tensor,
                       const std::vector<ttnn::Tensor>&,
                       int> build_unsqueeze_concat(int input_rank, ttnn::MemoryConfig& output_memory_config) {
@@ -237,7 +238,7 @@ namespace data_movement {
                 .predicate = [input_rank](const std::vector<ttnn::Tensor>& tensors, int dim) -> bool {
                     return input_rank < 4;
                 },
-                .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> ConcatArgs {
+                .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
                     std::vector<ttnn::Tensor> itensor;
                     itensor.reserve(tensors.size());
                     std::transform(
@@ -252,21 +253,22 @@ namespace data_movement {
                 },
                 .post_transform = [input_rank](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
                     ttnn::Tensor res = output;
-                    while (output.get_shape().rank() > input_rank) {
-                        const auto shape = output.get_shape();
-                        const auto full_shape = output.get_shape().with_tile_padding();
+                    while (res.get_shape().rank() > input_rank) {
+                        const auto shape = res.get_shape();
+                        const auto full_shape = res.get_shape().with_tile_padding();
                         std::vector<uint32_t> shape_vec{};
                         std::vector<uint32_t> full_shape_vec{};
                         for (int i = 1; i < shape.rank(); i++) {
                             shape_vec.push_back(shape[i]);
                             full_shape_vec.push_back(full_shape[i]);
                         }
-                        res = ttnn::reshape(output, ttnn::Shape(shape_vec, full_shape_vec));
+                        res = ttnn::reshape(res, ttnn::Shape(shape_vec, full_shape_vec));
                     }
                     return res;
                 },
-                .precomp = [input_rank](const std::vector<ttnn::Tensor>& tensors, int dim) -> ConcatArgs {
-                    return std::make_tuple(tensors, dim + 4 - input_rank);
+                .precomp = [input_rank](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    auto owned_tensors = std::vector<ttnn::Tensor>(tensors);
+                    return std::make_tuple(owned_tensors, dim + 4 - input_rank);
                 },
                 .operation = [output_memory_config](const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
                     std::vector<ttnn::Tensor> itensors(tensors);
@@ -288,7 +290,7 @@ namespace data_movement {
                     auto first = tensors.front();
                     return first.get_layout() == ttnn::TILE_LAYOUT and first.get_logical_shape()[dim] != first.get_padded_shape()[dim];
                 },
-                .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> ConcatArgs {
+                .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
                     std::vector<ttnn::Tensor> itensors;
                     itensors.reserve(tensors.size());
                     std::transform(
@@ -314,8 +316,9 @@ namespace data_movement {
                                                         true,
                                                         output.memory_config()));
                 },
-                .precomp = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> ConcatArgs {
-                    return std::make_tuple(tensors, dim);
+                .precomp = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    auto owned_tensors = std::vector<ttnn::Tensor>(tensors);
+                    return std::make_tuple(owned_tensors, dim);
                 },
                 .operation = [output_memory_config](const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
                     std::vector<ttnn::Tensor> itensors(tensors);
@@ -383,8 +386,8 @@ namespace data_movement {
         auto output_memory_config = memory_config.value_or(first_tensor.memory_config());
         auto unsqueeze_concat = build_unsqueeze_concat(rank, output_memory_config);
         auto untilize_rm_retilize_concat = build_untilize_rm_retilize_concat(queue_id, output_memory_config);
-        auto degankifier = unsqueeze_concat.merge(untilize_rm_retilize_concat);
-        return degankifier(input_tensors, dim);
+        auto massaged_concat = unsqueeze_concat.merge(untilize_rm_retilize_concat);
+        return massaged_concat(input_tensors, dim);
     }
 
     ttnn::Tensor ConcatOperation::invoke (
