@@ -38,6 +38,7 @@ class DevicePool {
     bool close_device(chip_id_t device_id);
     void close_devices(std::vector<Device *> devices);
     bool is_device_active(chip_id_t id) const;
+    bool is_device_initialized(chip_id_t id) const;
     void register_worker_thread_for_device(Device* device, std::thread::id worker_thread_id);
     void unregister_worker_thread_for_device(Device* device);
     const std::unordered_set<std::thread::id>& get_worker_thread_ids() const;

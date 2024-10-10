@@ -173,7 +173,9 @@ TEST_F(FDBasicFixture, DevicePoolShutdownSubmesh) {
 }
 
 TEST_F(FDBasicFixture, DevicePoolReopenSubmesh) {
-     GTEST_SKIP();
+    if (tt::tt_metal::GetNumAvailableDevices() != 32) {
+        GTEST_SKIP();
+    }
 
     chip_id_t mmio_device_id = 0;
     std::vector<chip_id_t> device_ids{mmio_device_id};

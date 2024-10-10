@@ -404,6 +404,8 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg, 
     uint64_t launch_msg_buffer_read_ptr_addr = this->get_dev_addr(phys_core, HalL1MemAddrType::LAUNCH_MSG_BUFFER_RD_PTR);
     std::vector<uint32_t> zero = {0};
     tt::Cluster::instance().write_core(zero.data(), sizeof(uint32_t), tt_cxy_pair(this->id(), phys_core), launch_msg_buffer_read_ptr_addr);
+
+    this->initialized_ = true;
 }
 
 void Device::reset_cores() {
@@ -2840,7 +2842,6 @@ bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, size_t t
 
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
     this->work_executor.initialize();
-    this->initialized_ = true;
 
     return true;
 }

@@ -226,8 +226,13 @@ bool DevicePool::is_device_active(chip_id_t id) const {
     if (this->devices.size() < id + 1 || this->devices[id] == nullptr) {
         return false;
     } else {
-        return this->devices[id]->is_initialized();
+        return true;
+       // return this->devices[id]->is_initialized();
     }
+}
+
+bool DevicePool::is_device_initialized(chip_id_t id) const {
+    return (this->is_device_active(id)) && (this->devices[id]->is_initialized());
 }
 
 void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids) {
@@ -235,7 +240,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids) {
         for (const auto& device_id : device_ids) {
             const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             TT_ASSERT(device_id == mmio_device_id, "Skipping remote devices is only available for mmio devices");
-            if (not this->is_device_active(device_id)) {
+            if (not this->is_device_initialized(device_id)) {
                 this->activate_device(device_id);
             }
         }
@@ -246,7 +251,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids) {
             const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             for (const auto& mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                if (not this->is_device_active(mmio_controlled_device_id)) {
+                if (not this->is_device_initialized(mmio_controlled_device_id)) {
                     this->activate_device(mmio_controlled_device_id);
                 }
             }
@@ -281,6 +286,7 @@ const std::unordered_set<std::thread::id>& DevicePool::get_worker_thread_ids() c
 }
 
 void DevicePool::init_firmware_on_active_devices() const {
+    // Initialize FW on active devices that are uninitialized
     for (const auto& dev : this->get_all_active_devices()) {
         // For Galaxy init, we only need to loop over mmio devices
         const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(dev->id());
@@ -304,14 +310,20 @@ void DevicePool::init_firmware_on_active_devices() const {
             tt::Cluster::instance().get_device_tunnel_depth(mmio_device_id));
 
         auto tunnels_from_mmio = tt::Cluster::instance().get_tunnels_from_mmio_device(mmio_device_id);
-        this->initialize_device(dev);
+        if (not this->is_device_initialized(dev->id())) {
+            // Initialize mmio device if it is not already initialized
+            this->initialize_device(dev);
+        }
         if (not this->skip_remote_devices) {
             for (uint32_t t = 0; t < tunnels_from_mmio.size(); t++) {
                 // Need to create devices from farthest to the closest.
                 for (uint32_t ts = tunnels_from_mmio[t].size() - 1; ts > 0; ts--) {
                     uint32_t mmio_controlled_device_id = tunnels_from_mmio[t][ts];
                     log_debug(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
-                    this->initialize_device(this->devices[mmio_controlled_device_id].get());
+                    if (not this->is_device_initialized(mmio_controlled_device_id)) {
+                        // Initialize non-mmio device if it is not already initialized
+                        this->initialize_device(this->devices[mmio_controlled_device_id].get());
+                    }
                 }
             }
         }
@@ -425,8 +437,8 @@ void DevicePool::close_devices(std::vector<Device *> devices) {
             for (auto t : tunnels_from_mmio) {
                 //iterate over all tunneled devices (tunnel stops) in this tunnel
                 for (uint32_t ts = t.size() - 1; ts > 0; ts--) {
-                    // If the device is active and not in the list of devices to close, don't auto close mmio
-                    if (this->is_device_active(t[ts]) and std::find(devices_to_close.begin(), devices_to_close.end(), t[ts]) == devices_to_close.end()) {
+                    // If the device is initialized and not in the list of devices to close, don't auto close mmio
+                    if (this->is_device_initialized(t[ts]) and std::find(devices_to_close.begin(), devices_to_close.end(), t[ts]) == devices_to_close.end()) {
                         auto_close_mmio = false;
                         break;
                     }
