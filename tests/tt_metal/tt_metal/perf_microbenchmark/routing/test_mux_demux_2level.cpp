@@ -86,6 +86,11 @@ int main(int argc, char **argv) {
                  "MAX_SWITCH_FAN_IN and MAX_SWITCH_FAN_OUT expected to be 4");
 
     bool pass = true;
+
+    std::map<string, string> defines = {
+        {"FD_CORE_TYPE", std::to_string(0)}, // todo, support dispatch on eth
+    };
+
     try {
         int device_id = 0;
         tt_metal::Device *device = tt_metal::CreateDevice(device_id);
@@ -175,14 +180,14 @@ int main(int argc, char **argv) {
                     .processor = tt_metal::DataMovementProcessor::RISCV_0,
                     .noc = tt_metal::NOC::RISCV_0_default,
                     .compile_args = compile_args,
-                    .defines = {}
+                    .defines = defines,
                 }
             );
         }
 
         for (uint32_t i = 0; i < num_dest_endpoints; i++) {
             uint32_t demux_index = i / MAX_SWITCH_FAN_OUT;
-            uint32_t demux_queue_index = i % MAX_SWITCH_FAN_OUT;
+            uint32_t demux_queue_index = 1 + i % MAX_SWITCH_FAN_OUT;
             std::vector<uint32_t> compile_args =
                 {
                     dest_endpoint_start_id + i, // 0: dest_endpoint_id
@@ -214,7 +219,7 @@ int main(int argc, char **argv) {
                     .processor = tt_metal::DataMovementProcessor::RISCV_0,
                     .noc = tt_metal::NOC::RISCV_0_default,
                     .compile_args = compile_args,
-                    .defines = {}
+                    .defines = defines,
                 }
             );
         }
@@ -265,7 +270,7 @@ int main(int argc, char **argv) {
                     .processor = tt_metal::DataMovementProcessor::RISCV_0,
                     .noc = tt_metal::NOC::RISCV_0_default,
                     .compile_args = mux_l1_compile_args,
-                    .defines = {}
+                    .defines = defines,
                 }
             );
         }
@@ -296,7 +301,7 @@ int main(int argc, char **argv) {
                 (demux_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words
                 (uint32_t)demux_l1_phys_core.x, // 10: remote_tx_x
                 (uint32_t)demux_l1_phys_core.y, // 11: remote_tx_y
-                MAX_SWITCH_FAN_OUT, // 12: remote_tx_queue_id
+                0, // 12: remote_tx_queue_id
                 (uint32_t)DispatchRemoteNetworkType::NOC0, // 13: tx_network_type
                 test_results_addr, // 14: test_results_addr
                 test_results_size, // 15: test_results_size
@@ -313,7 +318,7 @@ int main(int argc, char **argv) {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = mux_l2_compile_args,
-                .defines = {}
+                .defines = defines,
             }
         );
 
@@ -330,19 +335,19 @@ int main(int argc, char **argv) {
                 MAX_SWITCH_FAN_OUT, // 3: demux_fan_out
                 packet_switch_4B_pack(demux_l2_phys_core[0].x,
                                       demux_l2_phys_core[0].y,
-                                      MAX_SWITCH_FAN_OUT,
+                                      0,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 4: remote_tx_0_info
                 packet_switch_4B_pack(demux_l2_phys_core[1].x,
                                       demux_l2_phys_core[1].y,
-                                      MAX_SWITCH_FAN_OUT,
+                                      0,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 5: remote_tx_1_info
                 packet_switch_4B_pack(demux_l2_phys_core[2].x,
                                       demux_l2_phys_core[2].y,
-                                      MAX_SWITCH_FAN_OUT,
+                                      0,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 6: remote_tx_2_info
                 packet_switch_4B_pack(demux_l2_phys_core[3].x,
                                       demux_l2_phys_core[3].y,
-                                      MAX_SWITCH_FAN_OUT,
+                                      0,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 7: remote_tx_3_info
                 (demux_queue_start_addr >> 4), // 8: remote_tx_queue_start_addr_words 0
                 (demux_queue_size_bytes >> 4), // 9: remote_tx_queue_size_words 0
@@ -374,7 +379,7 @@ int main(int argc, char **argv) {
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
                 .compile_args = demux_l1_compile_args,
-                .defines = {}
+                .defines = defines,
             }
         );
 
@@ -419,7 +424,7 @@ int main(int argc, char **argv) {
                     (rx_queue_size_bytes >> 4), // 15: remote_tx_queue_size_words 3
                     (uint32_t)demux_l1_phys_core.x, // 16: remote_rx_x
                     (uint32_t)demux_l1_phys_core.y, // 17: remote_rx_y
-                    i, // 18: remote_rx_queue_id
+                    i + 1, // 18: remote_rx_queue_id
                     (uint32_t)DispatchRemoteNetworkType::NOC0, // 19: tx_network_type
                     (uint32_t)(demux_l2_dest_endpoint_output_map >> 32), // 20: dest_endpoint_output_map_hi
                     (uint32_t)(demux_l2_dest_endpoint_output_map & 0xFFFFFFFF), // 21: dest_endpoint_output_map_lo
@@ -439,7 +444,7 @@ int main(int argc, char **argv) {
                     .processor = tt_metal::DataMovementProcessor::RISCV_0,
                     .noc = tt_metal::NOC::RISCV_0_default,
                     .compile_args = demux_l2_compile_args,
-                    .defines = {}
+                    .defines = defines,
                 }
             );
 

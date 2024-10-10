@@ -22,9 +22,11 @@ from tests.tt_eager.python_api_testing.conv.conv_unit_test_utils import (
     create_conv_bias_tensor,
     create_conv_weight_tensor_special_padding,
 )
+from models.utility_functions import skip_for_blackhole
 import torch
 
 
+@skip_for_blackhole("Mismatching on BH, see #12349")
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 8192}], indirect=True)
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, stride_h, stride_w, num_cores, grid_size, height_sharded",
@@ -94,16 +96,13 @@ def test_run_downsample(
     A_cl_host = A_cl_host.pad(input_shape, (0, 0, 0, 0), 0.0)
     A_interleaved = A_cl_host.to(ttnn.TILE_LAYOUT).to(
         device,
-        ttnn.MemoryConfig(
-            memory_layout=ttnn.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=ttnn.BufferType.L1,
-        ),
+        ttnn.L1_MEMORY_CONFIG,
     )
-    assert A_interleaved.get_legacy_shape()[0] == 1 and A_interleaved.get_legacy_shape()[1] == 1
+    assert A_interleaved.shape.with_tile_padding()[0] == 1 and A_interleaved.shape.with_tile_padding()[1] == 1
 
     # image flattened params
-    input_2d_height = A_interleaved.get_legacy_shape()[2]
-    input_2d_width = A_interleaved.get_legacy_shape()[3]
+    input_2d_height = A_interleaved.shape.with_tile_padding()[2]
+    input_2d_width = A_interleaved.shape.with_tile_padding()[3]
     input_2d_height_padded = _nearest_y(input_2d_height, num_cores_height_slices * 32)
     input_shard_height = (int)(input_2d_height_padded / num_cores_height_slices)
     output_2d_height_padded = _nearest_y(batch_size * output_height * output_width, num_cores_height_slices * 32)
@@ -119,7 +118,7 @@ def test_run_downsample(
     logger.debug(f"shard_memory_layout={sharded_memory_layout}")
     logger.debug(f"input_shard_height={input_shard_height}, input_shard_width={input_shard_width}")
 
-    A_sharded = ttnn.experimental.tensor.interleaved_to_sharded(
+    A_sharded = ttnn.interleaved_to_sharded(
         A_interleaved,
         grid_size,
         [input_shard_height, input_shard_width],
@@ -140,16 +139,16 @@ def test_run_downsample(
     sharded_memory_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1)
     # Run downsample op
     A_downampled_sharded = ttnn.downsample(A_sharded, downsample_params, dtype=dtype)
-    A_downsampled = ttnn.experimental.tensor.sharded_to_interleaved(
+    A_downsampled = ttnn.sharded_to_interleaved(
         A_downampled_sharded,
-        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.L1),
+        ttnn.L1_MEMORY_CONFIG,
     )
     out = A_downsampled
     out_shape = [1, 1, _nearest_y(batch_size * output_height * output_width, 32), input_channels]
-    assert out_shape == list(out.get_legacy_shape())
+    assert out_shape == list(out.shape.with_tile_padding())
     out_shape_unpadded = [1, 1, batch_size * output_height * output_width, input_channels]
-    assert out_shape_unpadded == list(out.shape_without_padding())
-    out = ttnn.experimental.tensor.format_output_tensor(out, out.shape_without_padding(), device, ttnn.ROW_MAJOR_LAYOUT)
+    assert out_shape_unpadded == list(out.shape)
+    out = ttnn.format_output_tensor(out, out.shape, device, ttnn.ROW_MAJOR_LAYOUT)
     out = out.cpu()
 
     out_debug = out

@@ -28,7 +28,9 @@ struct address_map {
   static constexpr std::int32_t DATA_BUFFER_SIZE_ETH = 4 * 1024;
   static constexpr std::int32_t DATA_BUFFER_SIZE_NOC = 16 * 1024;
   static constexpr std::int32_t DATA_BUFFER_SIZE = 24 * 1024;
-  static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_SIZE = 96 * 4;
+  // Kernel config buffer is WIP
+  // Size is presently based on the old sizes of the RTAs + CB config + Sems
+  static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_SIZE = 96 * 4 + 8 * 16;
 
   // Base addresses
   static constexpr std::int32_t FIRMWARE_BASE = 0x9040;
@@ -50,23 +52,17 @@ struct address_map {
   static constexpr std::int32_t ERISC_BARRIER_BASE = MAX_SIZE;
   static constexpr std::int32_t ERISC_APP_ROUTING_INFO_BASE = TILE_HEADER_BUFFER_BASE;
   static constexpr std::int32_t ERISC_APP_SYNC_INFO_BASE = ERISC_APP_ROUTING_INFO_BASE + ERISC_APP_ROUTING_INFO_SIZE;
-  static constexpr std::uint32_t SEMAPHORE_BASE = ERISC_APP_SYNC_INFO_BASE + ERISC_APP_SYNC_INFO_SIZE;
 
-  static constexpr uint32_t ISSUE_CQ_CB_BASE = SEMAPHORE_BASE + SEMAPHORE_SIZE;  // SIZE from shared common addr
+  static constexpr uint32_t ISSUE_CQ_CB_BASE = ERISC_APP_SYNC_INFO_BASE + ERISC_APP_SYNC_INFO_SIZE;
   static constexpr uint32_t COMPLETION_CQ_CB_BASE = ISSUE_CQ_CB_BASE + 7 * L1_ALIGNMENT;
 
   static constexpr std::int32_t ERISC_MEM_MAILBOX_BASE = COMPLETION_CQ_CB_BASE + 7 * L1_ALIGNMENT;
   // erisc early exit functionality re-uses mailboxes_t::ncrisc_halt_msg_t::stack_save memory
   static constexpr std::int32_t ERISC_MEM_MAILBOX_STACK_SAVE = ERISC_MEM_MAILBOX_BASE + 4;
 
-  static constexpr std::uint32_t PROFILER_L1_BUFFER_ER = ERISC_MEM_MAILBOX_BASE + 288 + 256 + 16;
-  static constexpr std::uint32_t PROFILER_L1_BUFFER_CONTROL = PROFILER_L1_BUFFER_ER + PROFILER_L1_BUFFER_SIZE;
+  static constexpr std::uint32_t ERISC_MEM_MAILBOX_END = ERISC_MEM_MAILBOX_BASE + 288 + 256 + 16 + (32 + 512) * 4 + 224 + 160;
 
-  static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_BASE = PROFILER_L1_BUFFER_CONTROL + PROFILER_L1_CONTROL_BUFFER_SIZE;
-
-  static_assert((PROFILER_L1_BUFFER_ER % 32) == 0);
-  static_assert((PROFILER_L1_BUFFER_CONTROL % 32) == 0);
-
+  static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_BASE = ERISC_MEM_MAILBOX_END;
   static constexpr std::int32_t ERISC_L1_UNRESERVED_BASE = ERISC_L1_KERNEL_CONFIG_BASE + ERISC_L1_KERNEL_CONFIG_SIZE;
   static constexpr std::int32_t ERISC_L1_UNRESERVED_SIZE = MAX_L1_LOADING_SIZE - ERISC_L1_UNRESERVED_BASE;
 
@@ -89,5 +85,7 @@ struct address_map {
                                                                    // at RISC_LOCAL_MEM_BASE address
 
   static constexpr std::uint32_t FW_VERSION_ADDR = 0x210;
+  static constexpr std::uint32_t RETRAIN_COUNT_ADDR = 0x1EDC; // Not implemented for BH yet!
+  static constexpr std::uint32_t RETRAIN_FORCE_ADDR = 0x1EFC;
 };
 }  // namespace eth_l1_mem

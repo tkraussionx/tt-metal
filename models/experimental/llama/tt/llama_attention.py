@@ -8,7 +8,6 @@ import torch
 from torch import nn
 
 import ttnn
-import tt_lib
 from typing import Optional, Tuple
 from loguru import logger
 
@@ -21,7 +20,7 @@ from models.utility_functions import (
 
 
 def shape_tt(
-    states: tt_lib.tensor.Tensor,
+    states: ttnn.Tensor,
     batch_size: int,
     seq_len: int,
     n_heads: int,
@@ -39,7 +38,7 @@ def shape_pt(tensor: torch.Tensor, seq_len: int, bsz: int):
     return tensor.view(bsz, seq_len, num_heads, head_dim).transpose(1, 2).contiguous()
 
 
-def test_lamma_shape(device: tt_lib.device.Device):
+def test_lamma_shape(device: ttnn.Device):
     batch_size = 1
     n_heads = 32
     seq_len = 128
@@ -169,16 +168,16 @@ class TtLlamaAttention(nn.Module):
         self.rotary_emb = LlamaRotaryEmbedding(self.head_dim, max_position_embeddings=self.max_position_embeddings)
 
         self.query_linear = TTLinear(
-            self.q_weights.get_legacy_shape()[-1], self.q_weights.get_legacy_shape()[-2], self.q_weights
+            self.q_weights.shape.with_tile_padding()[-1], self.q_weights.shape.with_tile_padding()[-2], self.q_weights
         )
         self.key_linear = TTLinear(
-            self.k_weights.get_legacy_shape()[-1], self.k_weights.get_legacy_shape()[-2], self.k_weights
+            self.k_weights.shape.with_tile_padding()[-1], self.k_weights.shape.with_tile_padding()[-2], self.k_weights
         )
         self.value_linear = TTLinear(
-            self.v_weights.get_legacy_shape()[-1], self.v_weights.get_legacy_shape()[-2], self.v_weights
+            self.v_weights.shape.with_tile_padding()[-1], self.v_weights.shape.with_tile_padding()[-2], self.v_weights
         )
         self.attn_linear = TTLinear(
-            self.o_weights.get_legacy_shape()[-1], self.o_weights.get_legacy_shape()[-2], self.o_weights
+            self.o_weights.shape.with_tile_padding()[-1], self.o_weights.shape.with_tile_padding()[-2], self.o_weights
         )
 
         self.scalar = pad_by_zero(torch.Tensor([1 / math.sqrt(self.head_dim)]), self.device)[0]
@@ -188,7 +187,7 @@ class TtLlamaAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: tt_lib.tensor.Tensor,
+        hidden_states: ttnn.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -197,8 +196,8 @@ class TtLlamaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz = hidden_states.get_legacy_shape()[0]
-        q_len = hidden_states.get_legacy_shape()[2]
+        bsz = hidden_states.shape.with_tile_padding()[0]
+        q_len = hidden_states.shape.with_tile_padding()[2]
         query = self.query_linear(hidden_states)
         query_states = shape_tt(query, bsz, q_len, self.num_heads, self.head_dim)
 
@@ -250,17 +249,17 @@ class TtLlamaAttention(nn.Module):
         # TODO: Fuse into softmax
         attn_weights = ttnn.multiply(mul, self.scalar)
 
-        if attn_weights.get_legacy_shape() != [bsz, self.num_heads, q_len, kv_seq_len]:
+        if attn_weights.shape.with_tile_padding() != [bsz, self.num_heads, q_len, kv_seq_len]:
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.get_legacy_shape()}"
+                f" {attn_weights.shape.with_tile_padding()}"
             )
 
         # change attention_mask to TT tensor
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.get_legacy_shape()}"
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape.with_tile_padding()}"
                 )
             # TT eltwise add operation, expand attention_mask shape
             attention_mask = attention_mask.repeat(1, self.num_heads, 1, 1)
@@ -270,17 +269,17 @@ class TtLlamaAttention(nn.Module):
             attn_weights = tt_to_torch_tensor(attn_weights)
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
 
-        if not isinstance(attn_weights, tt_lib.tensor.Tensor):
+        if not isinstance(attn_weights, ttnn.Tensor):
             attn_weights = pad_by_zero(attn_weights, self.device)[0]
         value_states = torch_to_tt_tensor_rm(value_states, self.device)
 
         attn_weights = ttnn.softmax_in_place(attn_weights)
         attn_output = ttnn.matmul(attn_weights, value_states)
 
-        if attn_output.get_legacy_shape() != [bsz, self.num_heads, q_len, self.head_dim]:
+        if attn_output.shape.with_tile_padding() != [bsz, self.num_heads, q_len, self.head_dim]:
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.get_legacy_shape()}"
+                f" {attn_output.shape.with_tile_padding()}"
             )
 
         attn_output = ttnn.transpose(attn_output, 1, -2)

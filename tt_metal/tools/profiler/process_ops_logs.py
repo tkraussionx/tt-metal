@@ -61,9 +61,9 @@ OPS_CSV_HEADER = [
     "DEVICE COMPUTE CB RESERVE BACK [ns]",
     "INPUTS",
     "OUTPUTS",
-    "COMPUTE KERNEL PATH",
+    "COMPUTE KERNEL SOURCE",
     "COMPUTE KERNEL HASH",
-    "DATA MOVEMENT KERNEL PATH",
+    "DATA MOVEMENT KERNEL SOURCE",
     "DATA MOVEMENT KERNEL HASH",
     "PM IDEAL [ns]",
     "PM COMPUTE [ns]",
@@ -177,6 +177,18 @@ def get_device_op_data(ops):
     return deviceOps
 
 
+def device_log_ops_compare(op):
+    if (
+        "timeseries" in op
+        and len(op["timeseries"]) > 0
+        and len(op["timeseries"][0]) > 0
+        and "run_host_id" in op["timeseries"][0][0]
+    ):
+        return int(op["timeseries"][0][0]["run_host_id"])
+    else:
+        return 0
+
+
 # Append device data to device ops and return the list of mapped device op ref list
 def append_device_data(ops, deviceLogFolder):
     deviceOps = get_device_op_data(ops)
@@ -190,9 +202,28 @@ def append_device_data(ops, deviceLogFolder):
         for device in deviceOps:
             assert device in deviceData["devices"].keys()
             deviceOpsTime = deviceData["devices"][device]["cores"]["DEVICE"]["riscs"]["TENSIX"]["ops"]
-            assert len(deviceOps[device]) == len(
-                deviceOpsTime
-            ), f"Device data mismatch. Expected {len(deviceOps[device])} but received {len(deviceOpsTime)} ops on device {device}"
+            deviceOpsTime.sort(key=device_log_ops_compare)
+            if len(deviceOps[device]) != len(deviceOpsTime):
+                deviceOPId = None
+                hostOPId = None
+                for deviceOp, deviceOpTime in zip(deviceOps[device], deviceOpsTime):
+                    if len(deviceOpTime["timeseries"]) > 0:
+                        timeID, ts, statData, risc, core = deviceOpTime["timeseries"][0]
+                        if "zone_name" in timeID.keys() and "FW" in timeID["zone_name"]:
+                            if "run_host_id" in timeID.keys():
+                                if timeID["run_host_id"] != deviceOp["global_call_count"]:
+                                    deviceOPId = timeID["run_host_id"]
+                                    hostOPId = deviceOp["global_call_count"]
+                                    break
+
+                if deviceOPId and hostOPId:
+                    assert (
+                        False
+                    ), f"Device data mismatch: Expected {len(deviceOps[device])} but received {len(deviceOpsTime)} ops on device {device}. Device is showing op ID {deviceOPId} when host is showing op ID {hostOPId}"
+                else:
+                    assert (
+                        False
+                    ), f"Device data mismatch: Expected {len(deviceOps[device])} but received {len(deviceOpsTime)} ops on device {device}"
             for deviceOp, deviceOpTime in zip(deviceOps[device], deviceOpsTime):
                 cores = set()
                 for timeID, ts, statData, risc, core in deviceOpTime["timeseries"]:
@@ -213,7 +244,9 @@ def append_device_data(ops, deviceLogFolder):
     return deviceOps
 
 
-def get_device_data_generate_report(deviceLogFolder, outputFolder, date, nameAppend):
+def get_device_data_generate_report(
+    deviceLogFolder, outputFolder, date, nameAppend, export_csv=True, cleanup_device_log=False
+):
     deviceTimesLog = os.path.join(deviceLogFolder, PROFILER_DEVICE_SIDE_LOG)
     devicePreOpTime = {}
     deviceOps = {}
@@ -236,11 +269,12 @@ def get_device_data_generate_report(deviceLogFolder, outputFolder, date, nameApp
         name += f"_{dateStr}"
         outFolder = os.path.join(outFolder, dateStr)
 
-    allOpsCSVPath = os.path.join(outFolder, f"{name}.csv")
-    logger.info(f"Copying runtime artifacts")
-    os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
-    if os.path.isfile(f"{PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG}"):
-        os.system(f"cp {PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG} {outFolder}")
+    if export_csv:
+        allOpsCSVPath = os.path.join(outFolder, f"{name}.csv")
+        logger.info(f"Copying runtime artifacts")
+        os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
+        if os.path.isfile(f"{PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG}"):
+            os.system(f"cp {PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG} {outFolder}")
 
     if os.path.isfile(deviceTimesLog):
         logger.info(f"Getting device only ops data")
@@ -291,21 +325,25 @@ def get_device_data_generate_report(deviceLogFolder, outputFolder, date, nameApp
                         devicePreOpTime[device] = analysisData[0]["end_cycle"]
                 rowDicts.append(rowDict)
 
-        with open(allOpsCSVPath, "w") as allOpsCSV:
-            allHeaders = []
-            for header in OPS_CSV_HEADER:
-                if header in rowDicts[-1].keys():
-                    allHeaders.append(header)
-            writer = csv.DictWriter(allOpsCSV, fieldnames=allHeaders)
-            writer.writeheader()
-            for rowDict in rowDicts:
-                for field, fieldData in rowDict.items():
-                    rowDict[field] = str(fieldData).replace(",", ";")
-                writer.writerow(rowDict)
-        logger.info(f"Device only OPs csv generated at: {allOpsCSVPath}")
+        if export_csv:
+            with open(allOpsCSVPath, "w") as allOpsCSV:
+                allHeaders = []
+                for header in OPS_CSV_HEADER:
+                    if header in rowDicts[-1].keys():
+                        allHeaders.append(header)
+                writer = csv.DictWriter(allOpsCSV, fieldnames=allHeaders)
+                writer.writeheader()
+                for rowDict in rowDicts:
+                    for field, fieldData in rowDict.items():
+                        rowDict[field] = str(fieldData).replace(",", ";")
+                    writer.writerow(rowDict)
+            logger.info(f"Device only OPs csv generated at: {allOpsCSVPath}")
+
+        if cleanup_device_log:
+            os.remove(deviceTimesLog)
     else:
         logger.info("No device logs found")
-    return deviceOps
+    return rowDicts
 
 
 def generate_reports(ops, deviceOps, signposts, outputFolder, date, nameAppend):
@@ -452,17 +490,17 @@ def generate_reports(ops, deviceOps, signposts, outputFolder, date, nameAppend):
                 rowDict["HOST DURATION [ns]"] = int(opData["host_time"]["exec_time_ns"])
 
                 if "kernel_info" in opData.keys():
-                    rowDict["COMPUTE KERNEL PATH"] = []
+                    rowDict["COMPUTE KERNEL SOURCE"] = []
                     rowDict["COMPUTE KERNEL HASH"] = []
-                    rowDict["DATA MOVEMENT KERNEL PATH"] = []
+                    rowDict["DATA MOVEMENT KERNEL SOURCE"] = []
                     rowDict["DATA MOVEMENT KERNEL HASH"] = []
                     for computeKernel in opData["kernel_info"]["compute_kernels"]:
                         rowDict["MATH FIDELITY"] = computeKernel["math_fidelity"]
-                        rowDict["COMPUTE KERNEL PATH"].append(computeKernel["path"])
+                        rowDict["COMPUTE KERNEL SOURCE"].append(computeKernel["source"])
                         rowDict["COMPUTE KERNEL HASH"].append(computeKernel["name"])
 
                     for dmKernel in opData["kernel_info"]["datamovement_kernels"]:
-                        rowDict["DATA MOVEMENT KERNEL PATH"].append(dmKernel["path"])
+                        rowDict["DATA MOVEMENT KERNEL SOURCE"].append(dmKernel["source"])
                         rowDict["DATA MOVEMENT KERNEL HASH"].append(dmKernel["name"])
 
                 if "core_usage" in opData.keys():

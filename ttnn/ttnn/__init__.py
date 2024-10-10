@@ -93,7 +93,12 @@ def manage_config(name, value):
     logger.debug(f"Restored ttnn.CONFIG.{name} to {original_value}")
 
 
-from ttnn._ttnn.multi_device import get_device_tensor, get_device_tensors, aggregate_as_tensor
+from ttnn._ttnn.multi_device import (
+    get_device_tensor,
+    get_device_tensors,
+    aggregate_as_tensor,
+    get_t3k_physical_device_ids_ring,
+)
 
 from ttnn._ttnn.events import create_event, record_event, wait_for_event
 
@@ -123,6 +128,7 @@ from ttnn.types import (
     CoreRangeSet,
     CoreRange,
     CoreCoord,
+    Tile,
     Layout,
     ROW_MAJOR_LAYOUT,
     TILE_LAYOUT,
@@ -135,10 +141,12 @@ from ttnn.types import (
     DeviceComputeKernelConfig,
     WormholeComputeKernelConfig,
     GrayskullComputeKernelConfig,
-    DeviceGrid,
+    MeshShape,
     UnaryWithParam,
     UnaryOpType,
     BinaryOpType,
+    BcastOpMath,
+    BcastOpDim,
 )
 
 from ttnn.device import (
@@ -151,29 +159,25 @@ from ttnn.device import (
     manage_device,
     synchronize_device,
     dump_device_memory_state,
+    GetPCIeDeviceID,
+    GetNumPCIeDevices,
+    GetNumAvailableDevices,
+    CreateDevice,
+    CreateDevices,
+    CloseDevice,
+    CloseDevices,
+    DumpDeviceProfiler,
+    SetDefaultDevice,
+    GetDefaultDevice,
+    format_input_tensor,
+    format_output_tensor,
+    pad_to_tile_shape,
 )
 
-from ttnn.multi_device import (
-    DeviceMesh,
-    DispatchCoreType,
-    open_device_mesh,
-    close_device_mesh,
-    get_num_pcie_devices,
-    get_num_devices,
-    get_pcie_device_ids,
-    get_device_ids,
-    create_device_mesh,
-    synchronize_devices,
-    TensorToMesh,
-    ShardTensorToMesh,
-    ShardTensor2dMesh,
-    ReplicateTensorToMesh,
-    MeshToTensor,
-    ConcatMeshToTensor,
-    ListMeshToTensor,
-    visualize_device_mesh,
-    ConcatMesh2dToTensor,
-)
+from ttnn.profiler import start_tracy_zone, stop_tracy_zone, tracy_message, tracy_frame
+
+# TODO: remove this after the distributed module is fully integrated
+from ttnn.distributed import *
 
 from ttnn.core import (
     set_printoptions,
@@ -187,6 +191,7 @@ from ttnn.core import (
     dump_memory_config,
     load_memory_config,
     dump_stack_trace_on_segfault,
+    num_cores_to_corerange_set,
 )
 
 import ttnn.reflection
@@ -200,15 +205,16 @@ release_trace = ttnn._ttnn.operations.core.release_trace
 
 
 from ttnn.decorators import (
-    register_python_operation,
-    register_cpp_operation,
     attach_golden_function,
-    query_registered_operations,
+    create_module_if_not_exists,
     dump_operations,
-    register_pre_operation_hook,
-    register_post_operation_hook,
     get_golden_function,
     get_fallback_function,
+    query_registered_operations,
+    register_cpp_operation,
+    register_post_operation_hook,
+    register_pre_operation_hook,
+    register_python_operation,
 )
 
 
@@ -216,7 +222,10 @@ def auto_register_ttnn_cpp_operations(module):
     for attribute_name in dir(module):
         attribute = getattr(module, attribute_name)
         if hasattr(attribute, "__ttnn_operation__") and attribute.__ttnn_operation__ is None:
-            setattr(module, attribute_name, ttnn.register_cpp_operation()(attribute))
+            full_name = attribute.python_fully_qualified_name
+            module_path, _, func_name = full_name.rpartition(".")
+            target_module = create_module_if_not_exists(module_path)
+            register_cpp_operation(target_module, func_name, attribute)
         elif isinstance(attribute, ModuleType):
             auto_register_ttnn_cpp_operations(attribute)
 
@@ -282,13 +291,17 @@ from ttnn.operations.reduction import (
     ReduceType,
 )
 
-from ttnn.operations.conv2d import Conv2d, Conv2dConfig, get_conv_output_dim, get_conv_padded_input_shape_and_mem_config
-from ttnn.operations.pool import TTPyMaxPool, max_pool2d, max_pool2d_legacy, MaxPool2d, global_avg_pool2d, avg_pool2d
+from ttnn.operations.ccl import (
+    Topology,
+)
+
+from ttnn.operations.conv2d import Conv2dConfig, get_conv_output_dim, get_conv_padded_input_shape_and_mem_config
+from ttnn.operations.pool import avg_pool2d
 from ttnn.operations.conv1d import Conv1d, Conv1dConfig
 
 from ttnn.operations.transformer import SDPAProgramConfig
 
-import ttnn._ttnn.graph as graph
+import ttnn.graph
 
 if importlib.util.find_spec("torch") is not None:
     import ttnn.tracer

@@ -4,7 +4,7 @@
 
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_softmax/moreh_softmax_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_helper_functions.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 #include "ttnn/run_operation.hpp"
 
 #include "tt_metal/host_api.hpp"
@@ -18,10 +18,10 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, const Tensor &output, const CoreRange core_range, const MorehSoftmaxOp op, const DeviceComputeKernelConfig compute_kernel_config) {
+operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, const Tensor &output, const CoreRange core_range, const MorehSoftmaxOp op, const ttnn::DeviceComputeKernelConfig compute_kernel_config) {
     log_info(LogTest, "Large tensor algorithm selected");
     // split work
-    auto shape = input.get_legacy_shape();
+    auto shape = input.get_padded_shape();
     auto H = shape[-2];
     auto W = shape[-1];
     auto Ht = H / TILE_HEIGHT;
@@ -114,7 +114,7 @@ operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, const
         }
 
         float scaler = 1.0f;
-        uint32_t mask_w = shape.without_padding()[-1] % TILE_WIDTH;
+        uint32_t mask_w = input.get_logical_shape()[-1] % TILE_WIDTH;
         if(mask_w == 0) mask_w = TILE_WIDTH;
         vector<uint32_t> reader_args = {
             input.buffer()->address(), num_tiles_per_core, tile_offset, Wt, *reinterpret_cast<uint32_t *>(&scaler), mask_w};

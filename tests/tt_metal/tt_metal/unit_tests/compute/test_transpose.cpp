@@ -31,6 +31,7 @@ enum TransposeType : uint8_t {
 };
 
 struct TransposeConfig {
+    bool short_init;
     uint32_t single_tile_size;
     std::vector<uint32_t> shape;
     TransposeType transpose_type;
@@ -51,13 +52,13 @@ void validate_transpose_wh(const std::vector<uint32_t> &src_vec, const std::vect
 
     // recover a linear view of input vector for consumption by gold_ function
     auto u16_src0_vec = u16_from_u32_vector(src_vec);
-    vector<uint16_t> src_linear = convert_layout<uint16_t>(u16_src0_vec, shape, TensorLayout::TILED32_4FACES, TensorLayout::LIN_ROW_MAJOR);
+    vector<uint16_t> src_linear = convert_layout<uint16_t>(u16_src0_vec, shape, TensorLayout::TILED_NFACES, TensorLayout::LIN_ROW_MAJOR);
     vector<uint16_t> gold_reduced = gold_transpose_wh(src_linear, shape); // result is uint16_t untilized
 
     // Tilize from row major and convert to pairs (uint32_t)
-    TT_FATAL(shape.size() == 4);
+    TT_FATAL(shape.size() == 4, "Error");
     vector<uint32_t> shapeR{shape[0], shape[1], shape[3], shape[2]};
-    auto gold_4f_u32 = u32_from_u16_vector(convert_layout<uint16_t>(gold_reduced, shapeR, TensorLayout::LIN_ROW_MAJOR, TensorLayout::TILED32_4FACES));
+    auto gold_4f_u32 = u32_from_u16_vector(convert_layout<uint16_t>(gold_reduced, shapeR, TensorLayout::LIN_ROW_MAJOR, TensorLayout::TILED_NFACES));
 
     bool pass = packed_uint32_t_vector_comparison(result_vec, gold_4f_u32, comparison_function, &argfail);
     if (not pass) {
@@ -67,7 +68,7 @@ void validate_transpose_wh(const std::vector<uint32_t> &src_vec, const std::vect
 }
 
 void run_single_core_transpose(tt_metal::Device* device, const TransposeConfig& test_config) {
-    TT_FATAL(test_config.shape.size() == 4);
+    TT_FATAL(test_config.shape.size() == 4, "Error");
 
     Program program = tt_metal::CreateProgram();
 
@@ -75,11 +76,11 @@ void run_single_core_transpose(tt_metal::Device* device, const TransposeConfig& 
 
     uint32_t W = test_config.shape[3], H = test_config.shape[2], NC = test_config.shape[1]*test_config.shape[0];
     uint32_t HW = H*W;
-    TT_FATAL(W % 32 == 0 && H % 32 == 0);
-    TT_FATAL(H > 0 && W > 0 && NC > 0);
+    TT_FATAL(W % 32 == 0 && H % 32 == 0, "Error");
+    TT_FATAL(H > 0 && W > 0 && NC > 0, "Error");
     uint32_t Wt = W/32;
     // size of DST register, with unary r/w this currently only works if the entire Wt fits into DST for reduce
-    TT_FATAL(Wt <= 16);
+    TT_FATAL(Wt <= 16, "Error");
     uint32_t Ht = H/32;
     float scaler = 1.0f/W;
     uint32_t num_tensor_tiles = NC*H*W / (32*32);
@@ -130,11 +131,18 @@ void run_single_core_transpose(tt_metal::Device* device, const TransposeConfig& 
         uint(Ht*Wt*NC)
     };
 
+    std::map<string, string> defines = {};
+
+    if (test_config.short_init)
+    {
+        defines["SHORT_INIT"] = "1";
+    }
+
     auto transpose_compute_kernel = tt_metal::CreateKernel(
         program,
         "tests/tt_metal/tt_metal/test_kernels/compute/transpose_wh.cpp",
         core,
-        tt_metal::ComputeConfig{.compile_args = compute_kernel_args}
+        tt_metal::ComputeConfig{.compile_args = compute_kernel_args, .defines = defines}
     );
 
     tt_metal::SetRuntimeArgs(
@@ -180,6 +188,16 @@ void run_single_core_transpose(tt_metal::Device* device, const TransposeConfig& 
 
 TEST_F(DeviceFixture, ComputeTransposeWH) {
     unit_tests::compute::transpose::TransposeConfig test_config = {
+        .short_init = false,
+        .single_tile_size = 2 * 1024,
+        .shape = {1, 3, 3*32*1, 4*32*1},
+        .transpose_type = unit_tests::compute::transpose::TransposeType::WH};
+    unit_tests::compute::transpose::run_single_core_transpose(this->devices_.at(0), test_config);
+}
+
+TEST_F(DeviceFixture, ComputeTransposeWHShortInit) {
+    unit_tests::compute::transpose::TransposeConfig test_config = {
+        .short_init = true,
         .single_tile_size = 2 * 1024,
         .shape = {1, 3, 3*32*1, 4*32*1},
         .transpose_type = unit_tests::compute::transpose::TransposeType::WH};

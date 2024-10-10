@@ -13,7 +13,7 @@
 #include "ttnn/tensor/tensor_impl.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_helper_functions.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_layernorm_backward/moreh_layernorm_backward_op.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
 
@@ -31,8 +31,9 @@ operation::ProgramWithCallbacks moreh_layernorm_backward_input_grad_impl(
     const Tensor& rstd,
     uint32_t normalized_dims,
     const tt_metal::Tensor& input_grad,
-    const DeviceComputeKernelConfig compute_kernel_config,
+    const ttnn::DeviceComputeKernelConfig compute_kernel_config,
     const std::optional<const Tensor> gamma) {
+    using namespace tt::constants;
     ////////////////////////////////////////////////////////////////////////////
     //                      Device Setup
     ////////////////////////////////////////////////////////////////////////////
@@ -126,7 +127,7 @@ operation::ProgramWithCallbacks moreh_layernorm_backward_input_grad_impl(
 
     const uint32_t cb_usage = (in0_t + in1_t + in2_t + in3_t + in4_t + in5_t + in6_t + in7_t + out0_t) *
                               single_tile_size + (im0_t + im1_t + im2_t + im3_t + im4_t + im5_t + im6_t + im7_t) * intermed_single_tile_size;
-    const uint32_t available_L1 = device->l1_size_per_core() - L1_UNRESERVED_BASE;
+    const uint32_t available_L1 = device->l1_size_per_core() - device->get_base_allocator_addr(HalMemType::L1);
     const bool use_large_algorithm = cb_usage >= available_L1;
 
     if (use_large_algorithm) {

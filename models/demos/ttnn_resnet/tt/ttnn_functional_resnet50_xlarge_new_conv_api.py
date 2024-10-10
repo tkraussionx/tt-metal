@@ -75,9 +75,9 @@ def ResnetLinear(
     """
 
     matmul_config = hardcoded_matmul_config_linear[batch_size]
-    weight_shape = weight.get_legacy_shape()
+    weight_shape = weight.shape.with_tile_padding()
     weight = weight.reshape(1, 1, weight_shape[-2], weight_shape[-1])
-    bias_shape = bias.get_legacy_shape()
+    bias_shape = bias.shape.with_tile_padding()
     bias = bias.reshape(1, 1, bias_shape[-2], bias_shape[-1])
 
     def linear_(act):
@@ -181,7 +181,9 @@ class resnet50Bottleneck:
                     dtype=self.model_config["ACTIVATIONS_DTYPE"],
                     weights_dtype=self.model_config["WEIGHTS_DTYPE"],
                     math_fidelity=self.model_config["MATH_FIDELITY"],
-                    height_sharding=height_sharding,
+                    shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+                    if height_sharding
+                    else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
                     deallocate_activation=True,
                     reallocate_halo_output=True,
                     reshard_if_not_optimal=reshard_if_not_optimal,
@@ -227,7 +229,9 @@ class resnet50Bottleneck:
                 weights_dtype=self.model_config["WEIGHTS_DTYPE"],
                 math_fidelity=self.model_config["MATH_FIDELITY"],
                 activation="relu",
-                height_sharding=height_sharding,
+                shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+                if height_sharding
+                else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
                 reshard_if_not_optimal=reshard_if_not_optimal,
             ),
             conv_op_cache=conv_op_cache,
@@ -289,7 +293,9 @@ class resnet50Bottleneck:
                 deallocate_activation=True,
                 reallocate_halo_output=reallocate_halo_output,
                 act_block_h_override=act_block_h_override,
-                height_sharding=height_sharding,
+                shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+                if height_sharding
+                else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
                 reshard_if_not_optimal=reshard_if_not_optimal,
             ),
             conv_op_cache=conv_op_cache,
@@ -314,7 +320,9 @@ class resnet50Bottleneck:
                 dtype=self.model_config["ACTIVATIONS_DTYPE"],
                 weights_dtype=self.model_config["WEIGHTS_DTYPE"],
                 math_fidelity=self.model_config["MATH_FIDELITY"],
-                height_sharding=height_sharding,
+                shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+                if height_sharding
+                else ttnn.TensorMemoryLayout.BLOCK_SHARDED,
                 reshard_if_not_optimal=reshard_if_not_optimal,
             ),
             conv_op_cache=conv_op_cache,
@@ -332,7 +340,6 @@ class resnet50Bottleneck:
                 out,
                 ds_out,
                 activations=[ttnn.UnaryWithParam(ttnn.UnaryOpType.RELU)],
-                memory_config=ttnn.get_memory_config(out),
             )
         else:
             out = ttnn.add(
@@ -382,25 +389,6 @@ class resnet50:
         self.conv1_input_channels = self.conv1_weight_tensor.shape[1]
         self.conv1_output_channels = self.conv1_weight_tensor.shape[0]
         assert self.conv1_weight_tensor.shape[2] == 4
-
-        self.max_pool_reader_patterns_cache = {}
-        max_pool_parallel_config_override = {}
-
-        self.max_pool = ttnn.MaxPool2d(
-            kernel_size=(3, 3),
-            stride=(2, 2),
-            padding=(1, 1),
-            dilation=(1, 1),
-            dtype=ttnn.bfloat16,
-            device=self.device,
-            batch_size=self.batch_size,
-            input_height=448,
-            input_width=448,
-            reader_patterns_cache=self.max_pool_reader_patterns_cache,
-            deallocate_activation=True,
-            parallel_config_override=max_pool_parallel_config_override,
-            channels=self.conv1_output_channels,
-        )
 
         self.layer1 = self._make_layer(
             parameters=parameters.layer1,
@@ -469,7 +457,6 @@ class resnet50:
     def __del__(self):
         # Need to clear global configs for each Resnet run
         self.conv_op_cache.clear()
-        self.max_pool_reader_patterns_cache.clear()
 
     def _make_layer(
         self,
@@ -560,12 +547,18 @@ class resnet50:
         if self.batch_size == 20 or self.batch_size == 1:
             x = ttnn.reallocate(x)
 
-        if is_wormhole_b0() and self.batch_size == 20:
-            # TODO: fix the need to do the reshard here
-            x = ttnn.to_memory_config(x, ttnn.L1_MEMORY_CONFIG)
-            x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
-            x = ttnn.to_memory_config(x, self.max_pool.max_pool.input_sharded_memory_config)
-        x = self.max_pool(x)
+        x = ttnn.max_pool2d(
+            input_tensor=x,
+            batch_size=self.batch_size,
+            input_h=x_height,
+            input_w=x_width,
+            channels=self.conv1_output_channels,
+            kernel_size=[3, 3],
+            stride=[2, 2],
+            padding=[1, 1],
+            dilation=[1, 1],
+            device=device,
+        )
 
         x_height = 224
         x_width = 224
@@ -578,10 +571,10 @@ class resnet50:
 
         print(f"=================================== layer: 1, module: 1")
         layer1_module1_input_shape = [
-            x.get_legacy_shape()[0],
-            x.get_legacy_shape()[1],
-            x.get_legacy_shape()[2],
-            x.get_legacy_shape()[3],
+            x.shape.with_tile_padding()[0],
+            x.shape.with_tile_padding()[1],
+            x.shape.with_tile_padding()[2],
+            x.shape.with_tile_padding()[3],
         ]
         if is_wormhole_b0() and self.batch_size == 20:
             x, x_height, x_width = self.layer1_module1(
@@ -612,10 +605,10 @@ class resnet50:
             x = ttnn.reallocate(x)
 
         layer2_module1_input_shape = [
-            x.get_legacy_shape()[0],
-            x.get_legacy_shape()[1],
-            x.get_legacy_shape()[2],
-            x.get_legacy_shape()[3],
+            x.shape.with_tile_padding()[0],
+            x.shape.with_tile_padding()[1],
+            x.shape.with_tile_padding()[2],
+            x.shape.with_tile_padding()[3],
         ]
         print(f"=================================== layer: 2, module: 1")
         if is_wormhole_b0() and self.batch_size == 20:
@@ -648,10 +641,10 @@ class resnet50:
 
         print(f"=================================== layer: 3, module: 1")
         layer3_module1_input_shape = [
-            x.get_legacy_shape()[0],
-            x.get_legacy_shape()[1],
-            x.get_legacy_shape()[2],
-            x.get_legacy_shape()[3],
+            x.shape.with_tile_padding()[0],
+            x.shape.with_tile_padding()[1],
+            x.shape.with_tile_padding()[2],
+            x.shape.with_tile_padding()[3],
         ]
         x, x_height, x_width = self.layer3_module1(
             x, device, batch_size, x_height, x_width, conv_op_cache, reshard_if_not_optimal=True, height_sharding=False
@@ -685,10 +678,10 @@ class resnet50:
 
         print(f"=================================== layer: 4, module: 1")
         layer4_module1_input_shape = [
-            x.get_legacy_shape()[0],
-            x.get_legacy_shape()[1],
-            x.get_legacy_shape()[2],
-            x.get_legacy_shape()[3],
+            x.shape.with_tile_padding()[0],
+            x.shape.with_tile_padding()[1],
+            x.shape.with_tile_padding()[2],
+            x.shape.with_tile_padding()[3],
         ]
         x, x_height, x_width = self.layer4_module1(
             x, device, batch_size, x_height, x_width, conv_op_cache, reshard_if_not_optimal=True, height_sharding=False
@@ -706,7 +699,7 @@ class resnet50:
         print(f"=================================== layer: 4, module: 3")
         x, x_height, x_width = self.layer4_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
 
-        unpadded_shape = x.shape_without_padding()
+        unpadded_shape = x.shape
         x = ttnn.untilize_with_unpadding(
             x,
             output_tensor_end=(
@@ -721,33 +714,31 @@ class resnet50:
             x,
             (
                 self.batch_size,
-                x.get_legacy_shape()[1],
-                (int)(x.get_legacy_shape()[2] / self.batch_size),
-                x.get_legacy_shape()[3],
+                x.shape.with_tile_padding()[1],
+                (int)(x.shape.with_tile_padding()[2] / self.batch_size),
+                x.shape.with_tile_padding()[3],
             ),
         )
 
         grid_size = (8, 4)
-        shard_grid = ttnn.experimental.tensor.CoreRangeSet(
+        shard_grid = ttnn.CoreRangeSet(
             {
-                ttnn.experimental.tensor.CoreRange(
-                    ttnn.experimental.tensor.CoreCoord(0, 0),
-                    ttnn.experimental.tensor.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
+                ttnn.CoreRange(
+                    ttnn.CoreCoord(0, 0),
+                    ttnn.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
                 )
             }
         )
         shard_shape = [
-            x.volume() // x.get_legacy_shape()[-1],
-            x.get_legacy_shape()[-1] // (grid_size[0] * grid_size[1]),
+            x.volume() // x.shape.with_tile_padding()[-1],
+            x.shape.with_tile_padding()[-1] // (grid_size[0] * grid_size[1]),
         ]
-        shard_spec = ttnn.experimental.tensor.ShardSpec(
-            shard_grid, shard_shape, ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
-        )
-        width_sharded_mem_config = ttnn.types.MemoryConfig(
-            ttnn.types.TensorMemoryLayout.WIDTH_SHARDED, ttnn.types.BufferType.L1, shard_spec
+        shard_spec = ttnn.ShardSpec(shard_grid, shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        width_sharded_mem_config = ttnn.MemoryConfig(
+            ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.L1, shard_spec
         )
         x = ttnn.to_memory_config(x, width_sharded_mem_config)
-        unpadded_shape = x.get_legacy_shape()
+        unpadded_shape = x.shape.with_tile_padding()
         padded_shape = [
             unpadded_shape[0],
             unpadded_shape[1],
@@ -765,20 +756,26 @@ class resnet50:
         x = self.avgpool(x, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG)
 
         unpadded_shape_end = [
-            x.get_legacy_shape()[0] - 1,
-            x.get_legacy_shape()[1] - 1,
+            x.shape.with_tile_padding()[0] - 1,
+            x.shape.with_tile_padding()[1] - 1,
             1 - 1,
-            x.get_legacy_shape()[3] - 1,
+            x.shape.with_tile_padding()[3] - 1,
         ]
         x = ttnn.untilize_with_unpadding(
             x, output_tensor_end=unpadded_shape_end, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG
         )
 
         x = ttnn.reshape(
-            x, (1, x.get_legacy_shape()[1], self.batch_size * x.get_legacy_shape()[2], x.get_legacy_shape()[3])
+            x,
+            (
+                1,
+                x.shape.with_tile_padding()[1],
+                self.batch_size * x.shape.with_tile_padding()[2],
+                x.shape.with_tile_padding()[3],
+            ),
         )
 
-        unpadded_shape = x.get_legacy_shape()
+        unpadded_shape = x.shape.with_tile_padding()
         padded_shape = [
             unpadded_shape[0],
             unpadded_shape[1],
@@ -795,7 +792,7 @@ class resnet50:
         )
 
         x = self.fc(x)
-        desired_shape = list(x.shape_without_padding())
+        desired_shape = list(x.shape)
         desired_shape[-1] = 1000
         x = ttnn.untilize_with_unpadding(
             x,
@@ -806,9 +803,9 @@ class resnet50:
             x,
             (
                 self.batch_size,
-                x.get_legacy_shape()[1],
-                (int)(x.get_legacy_shape()[2] / self.batch_size),
-                x.get_legacy_shape()[3],
+                x.shape.with_tile_padding()[1],
+                (int)(x.shape.with_tile_padding()[2] / self.batch_size),
+                x.shape.with_tile_padding()[3],
             ),
         )
 
@@ -854,12 +851,18 @@ class resnet50:
         if self.batch_size == 20 or self.batch_size == 1:
             x = ttnn.reallocate(x)
 
-        if is_wormhole_b0() and self.batch_size == 20:
-            # TODO: fix the need to do the reshard here
-            x = ttnn.to_memory_config(x, ttnn.L1_MEMORY_CONFIG)
-            x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
-            x = ttnn.to_memory_config(x, self.max_pool.max_pool.input_sharded_memory_config)
-        x = self.max_pool(x)
+        x = ttnn.max_pool2d(
+            input_tensor=x,
+            batch_size=self.batch_size,
+            input_h=x_height,
+            input_w=x_width,
+            channels=self.conv1_output_channels,
+            kernel_size=[3, 3],
+            stride=[2, 2],
+            padding=[1, 1],
+            dilation=[1, 1],
+            device=device,
+        )
 
         x_height = 224
         x_width = 224
@@ -913,7 +916,7 @@ class resnet50:
         x, x_height, x_width = self.layer4_module2(x, device, batch_size, x_height, x_width, conv_op_cache)
         x, x_height, x_width = self.layer4_module3(x, device, batch_size, x_height, x_width, conv_op_cache)
 
-        unpadded_shape = x.shape_without_padding()
+        unpadded_shape = x.shape
         x = ttnn.untilize_with_unpadding(
             x,
             output_tensor_end=(
@@ -929,33 +932,31 @@ class resnet50:
             x,
             (
                 self.batch_size,
-                x.get_legacy_shape()[1],
-                (int)(x.get_legacy_shape()[2] / self.batch_size),
-                x.get_legacy_shape()[3],
+                x.shape.with_tile_padding()[1],
+                (int)(x.shape.with_tile_padding()[2] / self.batch_size),
+                x.shape.with_tile_padding()[3],
             ),
         )
 
         grid_size = (8, 4)
-        shard_grid = ttnn.experimental.tensor.CoreRangeSet(
+        shard_grid = ttnn.CoreRangeSet(
             {
-                ttnn.experimental.tensor.CoreRange(
-                    ttnn.experimental.tensor.CoreCoord(0, 0),
-                    ttnn.experimental.tensor.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
+                ttnn.CoreRange(
+                    ttnn.CoreCoord(0, 0),
+                    ttnn.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
                 )
             }
         )
         shard_shape = [
-            x.volume() // x.get_legacy_shape()[-1],
-            x.get_legacy_shape()[-1] // (grid_size[0] * grid_size[1]),
+            x.volume() // x.shape.with_tile_padding()[-1],
+            x.shape.with_tile_padding()[-1] // (grid_size[0] * grid_size[1]),
         ]
-        shard_spec = ttnn.experimental.tensor.ShardSpec(
-            shard_grid, shard_shape, ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
-        )
-        width_sharded_mem_config = ttnn.types.MemoryConfig(
-            ttnn.types.TensorMemoryLayout.WIDTH_SHARDED, ttnn.types.BufferType.L1, shard_spec
+        shard_spec = ttnn.ShardSpec(shard_grid, shard_shape, ttnn.ShardOrientation.ROW_MAJOR, False)
+        width_sharded_mem_config = ttnn.MemoryConfig(
+            ttnn.TensorMemoryLayout.WIDTH_SHARDED, ttnn.BufferType.L1, shard_spec
         )
         x = ttnn.to_memory_config(x, width_sharded_mem_config)
-        unpadded_shape = x.get_legacy_shape()
+        unpadded_shape = x.shape.with_tile_padding()
         padded_shape = [
             unpadded_shape[0],
             unpadded_shape[1],
@@ -973,20 +974,26 @@ class resnet50:
         x = self.avgpool(x, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG)
 
         unpadded_shape_end = [
-            x.get_legacy_shape()[0] - 1,
-            x.get_legacy_shape()[1] - 1,
+            x.shape.with_tile_padding()[0] - 1,
+            x.shape.with_tile_padding()[1] - 1,
             1 - 1,
-            x.get_legacy_shape()[3] - 1,
+            x.shape.with_tile_padding()[3] - 1,
         ]
         x = ttnn.untilize_with_unpadding(
             x, output_tensor_end=unpadded_shape_end, memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG
         )
 
         x = ttnn.reshape(
-            x, (1, x.get_legacy_shape()[1], self.batch_size * x.get_legacy_shape()[2], x.get_legacy_shape()[3])
+            x,
+            (
+                1,
+                x.shape.with_tile_padding()[1],
+                self.batch_size * x.shape.with_tile_padding()[2],
+                x.shape.with_tile_padding()[3],
+            ),
         )
 
-        unpadded_shape = x.get_legacy_shape()
+        unpadded_shape = x.shape.with_tile_padding()
         padded_shape = [
             unpadded_shape[0],
             unpadded_shape[1],
@@ -1003,7 +1010,7 @@ class resnet50:
         )
 
         x = self.fc(x)
-        desired_shape = list(x.shape_without_padding())
+        desired_shape = list(x.shape)
         desired_shape[-1] = 1000
         x = ttnn.untilize_with_unpadding(
             x,
@@ -1014,9 +1021,9 @@ class resnet50:
             x,
             (
                 self.batch_size,
-                x.get_legacy_shape()[1],
-                (int)(x.get_legacy_shape()[2] / self.batch_size),
-                x.get_legacy_shape()[3],
+                x.shape.with_tile_padding()[1],
+                (int)(x.shape.with_tile_padding()[2] / self.batch_size),
+                x.shape.with_tile_padding()[3],
             ),
         )
 

@@ -7,59 +7,11 @@
 #include "tt_metal/impl/dispatch/command_queue.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/move/move.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/sharded/sharded_op.hpp"
+#include "ttnn/cpp/ttnn/operations/data_movement/reshape_on_device/reshape.hpp"
+#include "ttnn/cpp/ttnn/operations/data_movement/reshape_view/reshape.hpp"
+#include "ttnn/operations/data_movement/data_transfer/data_transfer.hpp"
 
 namespace ttnn::operations::core {
-
-ttnn::Tensor reshape(const ttnn::Tensor& tensor, const ttnn::Shape& shape) {
-    auto tensor_shape = tensor.get_shape();
-    if (tensor_shape == shape) {
-        return tensor;
-    }
-
-    const auto layout = tensor.get_layout();
-
-    if (layout == ttnn::Layout::ROW_MAJOR) {
-        if (tensor.is_contiguous()) {
-            if (ttnn::has_storage_type_of(tensor, ttnn::StorageType::DEVICE)) {
-                // Page size depends on the width, so only modify the shape if the width is the same
-                if (tensor_shape.with_tile_padding()[-1] == shape.with_tile_padding()[-1]) {
-                    return tensor.reshape(shape.value);
-                }
-            } else {
-                return tensor.reshape(shape.value);
-            }
-        } else if (tensor_shape.rank() >= 2 and shape.rank() >= 2) {
-            // Handle the case when the tensor is not contiguous but the last two dimensions are the same and so reshape
-            // is possible
-            if (tensor_shape[-1] == shape[-1] and tensor_shape[-2] == shape[-2] and
-                tensor_shape.with_tile_padding()[-1] == shape.with_tile_padding()[-1] and
-                tensor_shape.with_tile_padding()[-2] == shape.with_tile_padding()[-2]) {
-                return tensor.reshape(shape.value);
-            }
-        }
-    } else if (layout == ttnn::Layout::TILE) {
-        const auto new_shape_with_tile_padding = shape.with_tile_padding();
-        const auto new_height = new_shape_with_tile_padding[-2];
-        const auto new_width = new_shape_with_tile_padding[-1];
-
-        const auto is_tile_multiple = (new_height % ttnn::TILE_SIZE == 0 && new_width % ttnn::TILE_SIZE == 0);
-        if (not is_tile_multiple) {
-            TT_THROW(
-                "Unable to reshape a tensor in TILE_LAYOUT to non-tile height and width! Please convert the tensor to "
-                "ROW_MAJOR_LAYOUT first.");
-        }
-
-        if (ttnn::has_storage_type_of(tensor, ttnn::StorageType::DEVICE)) {
-            if (tensor_shape.with_tile_padding()[-1] == new_width) {
-                return tensor.reshape(shape.value);
-            }
-        } else {
-            return tensor.reshape(shape.value);
-        }
-    }
-    TT_THROW("Unable to reshape given tensor!");
-}
 
 ttnn::Tensor unsqueeze_to_4D(const ttnn::Tensor& tensor) {
     if (is_multi_device_tensor(tensor)) {
@@ -76,7 +28,7 @@ ttnn::Tensor unsqueeze_to_4D(const ttnn::Tensor& tensor) {
     }
 
     const auto tensor_shape_4D = tensor_shape.to_rank<4>();
-    return ttnn::operations::core::reshape(tensor, tensor_shape_4D);
+    return ttnn::reshape(tensor, tensor_shape_4D);
 }
 
 ttnn::Tensor squeeze_from_4D(const ttnn::Tensor& tensor, const int rank) {
@@ -95,9 +47,9 @@ ttnn::Tensor squeeze_from_4D(const ttnn::Tensor& tensor, const int rank) {
     }
 
     switch (rank) {
-        case 1: return ttnn::operations::core::reshape(tensor, shape.to_rank<1>());
-        case 2: return ttnn::operations::core::reshape(tensor, shape.to_rank<2>());
-        case 3: return ttnn::operations::core::reshape(tensor, shape.to_rank<3>());
+        case 1: return ttnn::reshape(tensor, shape.to_rank<1>());
+        case 2: return ttnn::reshape(tensor, shape.to_rank<2>());
+        case 3: return ttnn::reshape(tensor, shape.to_rank<3>());
         case 4: return tensor;
         default: TT_THROW("Invalid choice!");
     }
@@ -108,8 +60,8 @@ ttnn::Tensor to_device(const ttnn::Tensor& tensor, Device* device, const std::op
 }
 
 ttnn::Tensor to_device(
-    const ttnn::Tensor& tensor, DeviceMesh* device_mesh, const std::optional<MemoryConfig>& memory_config) {
-    return tensor.to(device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+    const ttnn::Tensor& tensor, MeshDevice* mesh_device, const std::optional<MemoryConfig>& memory_config) {
+    return tensor.to(mesh_device, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
 }
 
 ttnn::Tensor allocate_tensor_on_device(
@@ -126,10 +78,10 @@ ttnn::Tensor allocate_tensor_on_device(
     const Shape& shape,
     DataType data_type,
     Layout layout,
-    DeviceMesh* device_mesh,
+    MeshDevice* mesh_device,
     const std::optional<MemoryConfig>& memory_config) {
     return tt::tt_metal::allocate_tensor_on_device(
-        shape, data_type, layout, device_mesh, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
+        shape, data_type, layout, mesh_device, memory_config.value_or(ttnn::DRAM_MEMORY_CONFIG));
 }
 
 void copy_host_to_device_tensor(ttnn::Tensor host_tensor, ttnn::Tensor device_tensor, uint8_t cq_id) {
@@ -169,7 +121,7 @@ void release_trace(Device* device, const uint32_t tid) {
 }
 
 // Trace APIs - Multi Device
-uint32_t begin_trace_capture(DeviceMesh* device, const uint8_t cq_id) {
+uint32_t begin_trace_capture(MeshDevice* device, const uint8_t cq_id) {
     auto workers = device->get_devices();
     uint32_t tid = Trace::next_id();
     for (auto& worker : workers) {
@@ -178,14 +130,14 @@ uint32_t begin_trace_capture(DeviceMesh* device, const uint8_t cq_id) {
     return tid;
 }
 
-void end_trace_capture(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id) {
+void end_trace_capture(MeshDevice* device, const uint32_t tid, const uint8_t cq_id) {
     auto workers = device->get_devices();
     for (auto& worker : workers) {
         worker->push_work([worker, cq_id, tid]() mutable { worker->end_trace(cq_id, tid); });
     }
 }
 
-void execute_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id, bool blocking) {
+void execute_trace(MeshDevice* device, const uint32_t tid, const uint8_t cq_id, bool blocking) {
     auto workers = device->get_devices();
     // If blocking, ensure that each worker thread blocks until device-local trace is completed
     for (auto& worker : workers) {
@@ -199,7 +151,7 @@ void execute_trace(DeviceMesh* device, const uint32_t tid, const uint8_t cq_id, 
     }
 }
 
-void release_trace(DeviceMesh* device, const uint32_t tid) {
+void release_trace(MeshDevice* device, const uint32_t tid) {
     auto workers = device->get_devices();
     for (auto& worker : workers) {
         worker->push_work([worker, tid]() mutable { worker->release_trace(tid); });

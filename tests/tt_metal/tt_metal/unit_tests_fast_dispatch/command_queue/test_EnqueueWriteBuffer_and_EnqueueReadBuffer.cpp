@@ -81,7 +81,7 @@ class BufferStressTestConfigSharded {
 namespace local_test_functions {
 
 vector<uint32_t> generate_arange_vector(uint32_t size_bytes) {
-    TT_FATAL(size_bytes % sizeof(uint32_t) == 0);
+    TT_FATAL(size_bytes % sizeof(uint32_t) == 0, "Error");
     vector<uint32_t> src(size_bytes / sizeof(uint32_t), 0);
 
     for (uint32_t i = 0; i < src.size(); i++) {
@@ -96,10 +96,12 @@ void test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device *device, CommandQueue 
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device->id());
     uint32_t cq_size = device->sysmem_manager().get_cq_size();
+    CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
+    uint32_t cq_start = dispatch_constants::get(dispatch_core_type).get_host_command_queue_addr(CommandQueueHostAddrType::UNRESERVED);
 
-    std::vector<uint32_t> cq_zeros((cq_size - CQ_START) / sizeof(uint32_t), 0);
+    std::vector<uint32_t> cq_zeros((cq_size - cq_start) / sizeof(uint32_t), 0);
 
-    tt::Cluster::instance().write_sysmem(cq_zeros.data(), (cq_size - CQ_START), get_absolute_cq_offset(channel, 0, cq_size) + CQ_START, mmio_device_id, channel);
+    tt::Cluster::instance().write_sysmem(cq_zeros.data(), (cq_size - cq_start), get_absolute_cq_offset(channel, 0, cq_size) + cq_start, mmio_device_id, channel);
 
     for (const bool cq_write : {true, false}) {
         for (const bool cq_read : {true, false}) {
@@ -356,7 +358,7 @@ TEST_F(CommandQueueSingleCardFixture, WriteOneTileAcrossAllDramBanksTwiceRoundRo
 TEST_F(CommandQueueSingleCardFixture, Sending131072Pages) {
     for (Device *device : devices_) {
         TestBufferConfig config = {.num_pages = 131072, .page_size = 128, .buftype = BufferType::DRAM};
-
+        tt::log_info("Running On Device {}", device->id());
         local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(device, device->command_queue(), config);
     }
 }
@@ -433,8 +435,10 @@ TEST_F(CommandQueueSingleCardFixture, TestWrapHostHugepageOnEnqueueReadBuffer) {
         tt::log_info("Running On Device {}", device->id());
         uint32_t page_size = 2048;
         uint32_t command_issue_region_size = device->sysmem_manager().get_issue_queue_size(0);
+        CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device->id());
+        uint32_t cq_start = dispatch_constants::get(dispatch_core_type).get_host_command_queue_addr(CommandQueueHostAddrType::UNRESERVED);
 
-        uint32_t max_command_size = command_issue_region_size - CQ_START;
+        uint32_t max_command_size = command_issue_region_size - cq_start;
         uint32_t buffer = 14240;
         uint32_t buffer_size = max_command_size - buffer;
         uint32_t num_pages = buffer_size / page_size;
@@ -710,7 +714,7 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferL1ReadWrites) {
                             config.num_iterations = num_iterations;
                             config.mem_config = shard_strategy;
                             config.page_shape = page_shape;
-                            tt::log_info(tt::LogTest, fmt::format("Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", device->id(), cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations).c_str());
+                            tt::log_info(tt::LogTest, "Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", device->id(), cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations);
                             local_test_functions::stress_test_EnqueueWriteBuffer_and_EnqueueReadBuffer_sharded(
                                 device, device->command_queue(), config, BufferType::L1, false);
                         }
@@ -758,7 +762,6 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferDRAMReadWrites) {
                             config.page_shape = page_shape;
                             tt::log_info(
                                 tt::LogTest,
-                                fmt::format(
                                     "Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: "
                                     "{}, num_iterations: {}",
                                     device->id(),
@@ -769,8 +772,7 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferDRAMReadWrites) {
                                     page_shape[0],
                                     page_shape[1],
                                     magic_enum::enum_name(shard_strategy).data(),
-                                    num_iterations)
-                                    .c_str());
+                                    num_iterations);
                             local_test_functions::stress_test_EnqueueWriteBuffer_and_EnqueueReadBuffer_sharded(
                                 device, device->command_queue(), config, BufferType::DRAM, false);
                         }
@@ -812,7 +814,7 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferLargeL1ReadWrites) {
                             config.num_iterations = num_iterations;
                             config.mem_config = shard_strategy;
                             config.page_shape = page_shape;
-                            tt::log_info(tt::LogTest, fmt::format("Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", device->id(), cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations).c_str());
+                            tt::log_info(tt::LogTest, "Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: {}, num_iterations: {}", device->id(), cores[0],cores[1], num_pages[0],num_pages[1], page_shape[0],page_shape[1], magic_enum::enum_name(shard_strategy).data(), num_iterations);
                             local_test_functions::stress_test_EnqueueWriteBuffer_and_EnqueueReadBuffer_sharded(
                                 device, device->command_queue(), config, BufferType::L1, true);
                         }
@@ -856,7 +858,6 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferLargeDRAMReadWrites) {
                             config.page_shape = page_shape;
                             tt::log_info(
                                 tt::LogTest,
-                                fmt::format(
                                     "Device: {} cores: [{},{}] num_pages: [{},{}] page_shape: [{},{}], shard_strategy: "
                                     "{}, num_iterations: {}",
                                     device->id(),
@@ -867,8 +868,7 @@ TEST_F(CommandQueueSingleCardFixture, ShardedBufferLargeDRAMReadWrites) {
                                     page_shape[0],
                                     page_shape[1],
                                     magic_enum::enum_name(shard_strategy).data(),
-                                    num_iterations)
-                                    .c_str());
+                                    num_iterations);
                             local_test_functions::stress_test_EnqueueWriteBuffer_and_EnqueueReadBuffer_sharded(
                                 device, device->command_queue(), config, BufferType::DRAM, true);
                         }

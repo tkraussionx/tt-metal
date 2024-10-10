@@ -18,7 +18,7 @@
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/tt_metal/perf_microbenchmark/common/util.hpp"
-#include "tt_metal/tt_metal/perf_microbenchmark/common/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 #include <yaml-cpp/yaml.h>
 
 using namespace tt;
@@ -101,7 +101,7 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
     uint32_t page_size, num_pages;
     get_max_page_size_and_num_pages(block_num_tiles, single_tile_size, page_size, num_pages);
 
-    uint32_t cb_addr = L1_UNRESERVED_BASE;
+    uint32_t cb_addr = device->get_base_allocator_addr(HalMemType::L1);
     tt_metal::CircularBufferConfig cb_config =
         tt_metal::CircularBufferConfig(cb_size, {{cb_index, tile_format}})
             .set_page_size(cb_index, single_tile_size);
@@ -598,7 +598,7 @@ int main(int argc, char **argv) {
             input_size = k * n * 2;
             tile_format = tt::DataFormat::Float16_b;
         } else {
-            TT_FATAL("input data format invalid");
+            TT_THROW("Input data format {} is invalid. Please change.", df);
         }
         uint32_t kt = k / 32;
         uint32_t nt = n / 32;

@@ -8,7 +8,7 @@ import torch
 
 import ttnn
 
-from models.utility_functions import tt2torch_tensor, torch2tt_tensor, skip_for_grayskull
+from models.utility_functions import tt2torch_tensor, torch2tt_tensor, skip_for_grayskull, skip_for_blackhole
 
 from loguru import logger
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
@@ -91,12 +91,12 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_e
         )
 
         if is_rmsnorm:
-            tt_lnp2_out = ttnn.experimental.operations.primary.rmsnorm_post_allgather(
-                tt_inp, tt_stats, epsilon, tt_gamma, compute_kernel_config=kernel_config
+            tt_lnp2_out = ttnn.rms_norm_post_all_gather(
+                tt_inp, tt_stats, epsilon=epsilon, weight=tt_gamma, compute_kernel_config=kernel_config
             )
         else:
-            tt_lnp2_out = ttnn.experimental.operations.primary.layernorm_post_allgather(
-                tt_inp, tt_stats, epsilon, tt_gamma, tt_beta, compute_kernel_config=kernel_config
+            tt_lnp2_out = ttnn.layer_norm_post_all_gather(
+                tt_inp, tt_stats, epsilon=epsilon, weight=tt_gamma, bias=tt_beta, compute_kernel_config=kernel_config
             )
 
         tt_lnp2_out_cpu = tt2torch_tensor(tt_lnp2_out)
@@ -107,6 +107,7 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_e
     assert all_pass
 
 
+@skip_for_blackhole("Mismatching on BH, see #12349")
 @skip_for_grayskull("Requires wormhole")
 @pytest.mark.parametrize(
     "dtype",
@@ -141,6 +142,7 @@ def test_layernorm_part_2_with_program_cache(
     run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled)
 
 
+@skip_for_blackhole("Mismatching on BH, see #12349")
 @skip_for_grayskull("Requires wormhole")
 @pytest.mark.parametrize(
     "dtype",

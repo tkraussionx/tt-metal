@@ -26,7 +26,7 @@
 #include "tt_metal/test_utils/deprecated/tensor.hpp"
 #include "tests/tt_metal/test_utils/tilization.hpp"
 #include "tests/tt_metal/tt_metal/unit_tests_common/compute/matmul/matmul_utils.hpp"
-#include "tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 
 using namespace tt;
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,7 +83,7 @@ double get_tt_npu_rpeak_tflops(tt::ARCH arch, CoreCoord grid_size, int tt_npu_cl
 std::tuple<uint32_t, uint32_t, uint32_t> get_aligned_input_tile_num(uint32_t M, uint32_t N, uint32_t K);
 
 uint32_t get_in0_block_w(
-    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t Kt, uint32_t single_tile_size, uint32_t l1_size);
+    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t Kt, uint32_t single_tile_size, uint32_t l1_size, uint32_t l1_unreserved_base);
 
 CoreCoord get_core_range(
     uint32_t num_blocks_rows, uint32_t num_blocks_cols, uint32_t max_num_rows, uint32_t max_num_cols);
@@ -93,7 +93,7 @@ std::tuple<MathFidelity, bool> get_compute_params(tt::ARCH arch);
 std::tuple<uint32_t, uint32_t> get_out_subblock_params(uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t choice);
 
 std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> get_all_buffers_addresses(
-    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t in0_block_w, uint32_t single_tile_size);
+    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t in0_block_w, uint32_t single_tile_size, uint32_t l1_unreserved_base);
 
 std::vector<float> generate_fp32_random(uint32_t num_elems, int32_t rand_max_val);
 
@@ -305,6 +305,7 @@ int main(int argc, char** argv) {
 
         int pci_express_slot = 0;
         tt_metal::Device* device = tt_metal::CreateDevice(pci_express_slot);
+        uint32_t l1_unreserved_base = device->get_base_allocator_addr(HalMemType::L1);
         const tt::ARCH arch = device->arch();
         ////////////////////////////////////////////////////////////////////////////
         //                      Check Input Args
@@ -330,7 +331,7 @@ int main(int argc, char** argv) {
         uint32_t num_cores_x = grid_size.x;
         uint32_t per_core_Mt = (Mt - 1) / num_cores_y + 1;
         uint32_t per_core_Nt = (Nt - 1) / num_cores_x + 1;
-        uint32_t in0_block_w = get_in0_block_w(per_core_Mt, per_core_Nt, Kt, single_tile_size, l1_size);
+        uint32_t in0_block_w = get_in0_block_w(per_core_Mt, per_core_Nt, Kt, single_tile_size, l1_size, l1_unreserved_base);
         if (in0_block_w == 0) {
             log_error(
                 LogTest,
@@ -362,11 +363,11 @@ int main(int argc, char** argv) {
         std::shared_ptr<tt::tt_metal::Buffer> input_buffer1;
         std::shared_ptr<tt::tt_metal::Buffer> output_buffer;
         SHAPE shape_in0 = {1, 1, M, K};
-        tt::deprecated::Tensor<bfloat16> tensor_in0_fp16 = tt::deprecated::initialize_tensor<bfloat16>(shape_in0, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());;
-        tt::deprecated::Tensor<float> tensor_in0_fp8 = tt::deprecated::initialize_tensor<float>(shape_in0, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());;
+        tt::deprecated::Tensor<bfloat16> tensor_in0_fp16 = tt::deprecated::initialize_tensor<bfloat16>(shape_in0, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());
+        tt::deprecated::Tensor<float> tensor_in0_fp8 = tt::deprecated::initialize_tensor<float>(shape_in0, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());
         SHAPE shape_in1 = {1, 1, K, N};
-        tt::deprecated::Tensor<bfloat16> tensor_in1_fp16 = tt::deprecated::initialize_tensor<bfloat16>(shape_in1, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());;
-        tt::deprecated::Tensor<float> tensor_in1_fp8 = tt::deprecated::initialize_tensor<float>(shape_in1, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());;
+        tt::deprecated::Tensor<bfloat16> tensor_in1_fp16 = tt::deprecated::initialize_tensor<bfloat16>(shape_in1, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());
+        tt::deprecated::Tensor<float> tensor_in1_fp8 = tt::deprecated::initialize_tensor<float>(shape_in1, tt::deprecated::Initialize::ONES, 100, std::chrono::system_clock::now().time_since_epoch().count());
 
         if (single_core) {
             if (dtype == 1) {
@@ -384,7 +385,7 @@ int main(int argc, char** argv) {
 
                 // output
                 SHAPE output_hsape = {1, 1, M, N};
-                tt::deprecated::Tensor<bfloat16> out_tensor = tt::deprecated::initialize_tensor<bfloat16>(output_hsape, tt::deprecated::Initialize::ZEROS, 100, std::chrono::system_clock::now().time_since_epoch().count());;
+                tt::deprecated::Tensor<bfloat16> out_tensor = tt::deprecated::initialize_tensor<bfloat16>(output_hsape, tt::deprecated::Initialize::ZEROS, 100, std::chrono::system_clock::now().time_since_epoch().count());
                 vector<uint32_t> outputs = pack_bfloat16_vec_into_uint32_vec(out_tensor.get_values());
                 output_buffer = create_and_transfer_data_sharded_cb(device, outputs, Mt, Nt);
 
@@ -401,7 +402,7 @@ int main(int argc, char** argv) {
 
                 // output
                 SHAPE output_hsape = {1, 1, M, N};
-                tt::deprecated::Tensor<float> out_tensor = tt::deprecated::initialize_tensor<float>(output_hsape, tt::deprecated::Initialize::ZEROS, 100, std::chrono::system_clock::now().time_since_epoch().count());;
+                tt::deprecated::Tensor<float> out_tensor = tt::deprecated::initialize_tensor<float>(output_hsape, tt::deprecated::Initialize::ZEROS, 100, std::chrono::system_clock::now().time_since_epoch().count());
                 auto output_tilized = tilize(out_tensor.get_values(), M, N);
                 auto outputs = pack_fp32_vec_as_bfp8_tiles(output_tilized, true, false);
                 output_buffer = create_and_transfer_data_sharded_cb_fp8(device, outputs, Mt, Nt);
@@ -418,16 +419,16 @@ int main(int argc, char** argv) {
         }
         auto [out_subblock_h, out_subblock_w] = get_out_subblock_params(per_core_Mt, per_core_Nt, subblock_choice);
         auto [in0_cb_addr, in1_cb_addr, in2_cb_addr, out_cb_addr, in0_addr, in1_addr, out_addr] =
-            get_all_buffers_addresses(per_core_Mt, per_core_Nt, in0_block_w, single_tile_size);
+            get_all_buffers_addresses(per_core_Mt, per_core_Nt, in0_block_w, single_tile_size, l1_unreserved_base);
 
         if (fp32_dest_acc_en and (out_subblock_h * out_subblock_w > 4)) {
             if (out_subblock_w >= 4) {
                 out_subblock_h = 1;
-                out_subblock_w = find_max_block_size(out_subblock_w, 4);
+                out_subblock_w = tt::tt_metal::find_max_block_size(out_subblock_w, 4);
             } else {
                 while (out_subblock_h * out_subblock_w > 4) {
-                    uint32_t div = find_max_divisor(out_subblock_h, out_subblock_h-1);
-                    out_subblock_h = find_max_block_size(out_subblock_h, div);
+                    uint32_t div = tt::tt_metal::find_max_divisor(out_subblock_h, out_subblock_h-1);
+                    out_subblock_h = tt::tt_metal::find_max_block_size(out_subblock_h, div);
                 }
             }
         }
@@ -732,11 +733,11 @@ std::tuple<uint32_t, uint32_t, uint32_t> get_aligned_input_tile_num(uint32_t M, 
 }
 
 uint32_t get_in0_block_w(
-    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t Kt, uint32_t single_tile_size, uint32_t l1_size) {
+    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t Kt, uint32_t single_tile_size, uint32_t l1_size, uint32_t l1_unreserved_base) {
     std::vector<uint32_t> in0_block_w_choices = {4, 2, 1};
     uint32_t num_buffer = 2;  // double buffering
     uint32_t in0_block_w = 0;
-    uint32_t base_addr = L1_UNRESERVED_BASE;
+    uint32_t base_addr = l1_unreserved_base;
     for (auto choice : in0_block_w_choices) {
         if (Kt % choice != 0)
             continue;
@@ -811,9 +812,9 @@ std::tuple<uint32_t, uint32_t> get_out_subblock_params(uint32_t per_core_Mt, uin
 }
 
 std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> get_all_buffers_addresses(
-    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t in0_block_w, uint32_t single_tile_size) {
+    uint32_t per_core_Mt, uint32_t per_core_Nt, uint32_t in0_block_w, uint32_t single_tile_size, uint32_t l1_unreserved_base) {
     uint32_t num_buffer = 2;  // double buffering
-    uint32_t in0_cb_addr = L1_UNRESERVED_BASE;
+    uint32_t in0_cb_addr = l1_unreserved_base;
     uint32_t in0_cb_size = per_core_Mt * in0_block_w * num_buffer * single_tile_size;
     uint32_t in1_cb_addr = in0_cb_addr + in0_cb_size;
     uint32_t in1_cb_size = per_core_Nt * in0_block_w * num_buffer * single_tile_size;

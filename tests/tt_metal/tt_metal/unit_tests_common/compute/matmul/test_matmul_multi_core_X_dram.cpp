@@ -41,9 +41,9 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle , tt_metal::KernelHandle> c
     uint32_t in1_CB_size = in1_block_tiles * 2 * single_tile_size;  // double buffer
     uint32_t out_CB_tiles = per_core_M * per_core_N;
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
-    TT_FATAL(in0_CB_size <= 130 * 1024);
-    TT_FATAL(in1_CB_size <= 130 * 1024);
-    TT_FATAL(out_CB_size <= 540 * 1024);
+    TT_FATAL(in0_CB_size <= 130*1024, "in0_CB_size {} too large", in0_CB_size);
+    TT_FATAL(in1_CB_size <= 130*1024, "in1_CB_size {} too large", in1_CB_size);
+    TT_FATAL(out_CB_size <= 540*1024, "out_CB_size {} too large", out_CB_size);
 
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {(std::size_t)num_cores_c - 1, (std::size_t)num_cores_r - 1};
@@ -152,6 +152,7 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
     int per_core_M = M / num_cores_r;
     int per_core_N = N / num_cores_c;
     uint32_t single_tile_size = 2 * 1024;
+    uint32_t dram_unreserved_base = device->get_base_allocator_addr(HalMemType::DRAM);
     log_info(LogTest, "M = {}, N = {}, K = {}", M, N, K);
     log_info(LogTest, "Activation = {}x{}", M * 32, K * 32);
     log_info(LogTest, "Weights = {}x{}", K * 32, N * 32);
@@ -186,20 +187,32 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
             int core_index = i * num_cores_c + j;
             CoreCoord core = {(std::size_t) j, (std::size_t) i};
 
-            uint32_t dram_buffer_src0_addr = (  core_index * per_core_M * K * single_tile_size) + DRAM_UNRESERVED_BASE;
+            uint32_t dram_buffer_src0_addr = (  core_index * per_core_M * K * single_tile_size) + dram_unreserved_base;
             int dram_src0_channel_id = 0;
-            uint32_t dram_buffer_src1_addr = (core_index * K * per_core_N * single_tile_size) + DRAM_UNRESERVED_BASE;
+            uint32_t dram_buffer_src1_addr = (core_index * K * per_core_N * single_tile_size) + dram_unreserved_base;
             int dram_src1_channel_id = 1;
-            uint32_t dram_buffer_dst_addr = (core_index * per_core_M * per_core_N * single_tile_size) + DRAM_UNRESERVED_BASE;
+            uint32_t dram_buffer_dst_addr = (core_index * per_core_M * per_core_N * single_tile_size) + dram_unreserved_base;
             int dram_dst_channel_id = 2;
 
             uint32_t dram_buffer_size_act = single_tile_size * per_core_M * K; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
             uint32_t dram_buffer_size_weights = single_tile_size * K * per_core_N; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
             uint32_t dram_buffer_size_out = single_tile_size * per_core_M * per_core_N; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-            TT_FATAL(dram_buffer_src0_addr + dram_buffer_size_act < 1024 * 1024 * 1024);
-            TT_FATAL(dram_buffer_src1_addr + dram_buffer_size_weights < 1024 * 1024 * 1024);
-            TT_FATAL(dram_buffer_dst_addr + dram_buffer_size_out < 1024 * 1024 * 1024);
+            TT_FATAL(
+                dram_buffer_src0_addr + dram_buffer_size_act < 1024 * 1024 * 1024,
+                "addr {} + size {} too large",
+                dram_buffer_src0_addr,
+                dram_buffer_size_act);
+            TT_FATAL(
+                dram_buffer_src1_addr + dram_buffer_size_weights < 1024 * 1024 * 1024,
+                "addr {} + size {} too large",
+                dram_buffer_src1_addr,
+                dram_buffer_size_weights);
+            TT_FATAL(
+                dram_buffer_dst_addr + dram_buffer_size_out < 1024 * 1024 * 1024,
+                "addr {} + size {} too large",
+                dram_buffer_dst_addr,
+                dram_buffer_size_out);
 
             auto dram_src0_noc_xy = device->dram_core_from_dram_channel(dram_src0_channel_id);
             auto dram_src1_noc_xy = device->dram_core_from_dram_channel(dram_src1_channel_id);
@@ -259,7 +272,7 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
             auto per_core_golden = get_col_slice(golden_row, num_cores_c, j, per_core_M * 32, N * 32);
             std::vector<uint32_t> result_vec;
             int core_index = i * num_cores_c + j;
-            uint32_t dram_buffer_dst_addr = (core_index * per_core_M * per_core_N * single_tile_size) + DRAM_UNRESERVED_BASE;
+            uint32_t dram_buffer_dst_addr = (core_index * per_core_M * per_core_N * single_tile_size) + dram_unreserved_base;
             int dram_dst_channel_id = 2;
             tt_metal::detail::ReadFromDeviceDRAMChannel(device, dram_dst_channel_id, dram_buffer_dst_addr, per_core_M * per_core_N * single_tile_size, result_vec);
             auto result_bfp16 = unpack_uint32_vec_into_bfloat16_vec(result_vec);
@@ -300,9 +313,9 @@ bool assign_runtime_args_to_program(
     uint32_t dram_buffer_size_out =
         single_tile_size * M * N;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-    TT_FATAL(in0_dram_addr + dram_buffer_size_act < 1024 * 1024 * 1024);
-    TT_FATAL(in1_dram_addr + dram_buffer_size_weights < 1024 * 1024 * 1024);
-    TT_FATAL(out_dram_addr + dram_buffer_size_out < 1024 * 1024 * 1024);
+    TT_FATAL(in0_dram_addr + dram_buffer_size_act < 1024 * 1024 * 1024, "addr {} + size {} too large", in0_dram_addr, dram_buffer_size_act);
+    TT_FATAL(in1_dram_addr + dram_buffer_size_weights < 1024 * 1024 * 1024, "addr {} + size {} too large", in1_dram_addr, dram_buffer_size_weights);
+    TT_FATAL(out_dram_addr + dram_buffer_size_out < 1024 * 1024 * 1024, "addr {} + size {} too large", out_dram_addr, dram_buffer_size_out);
 
     for (int core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {

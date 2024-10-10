@@ -8,7 +8,6 @@ import torch.nn as nn
 from typing import Optional, Tuple, Union
 from dataclasses import dataclass
 
-import tt_lib
 import ttnn
 
 from models.experimental.roberta.tt.roberta_model import TtRobertaModel
@@ -18,10 +17,10 @@ from models.experimental.roberta.roberta_common import torch2tt_tensor
 
 @dataclass
 class TtMultipleChoiceModelOutput:
-    loss: tt_lib.tensor.Tensor = None
-    logits: tt_lib.tensor.Tensor = None
-    hidden_states: tt_lib.tensor.Tensor = None
-    attentions: tt_lib.tensor.Tensor = None
+    loss: ttnn.Tensor = None
+    logits: ttnn.Tensor = None
+    hidden_states: ttnn.Tensor = None
+    attentions: ttnn.Tensor = None
 
 
 class TtRobertaForMultipleChoice(nn.Module):
@@ -32,9 +31,7 @@ class TtRobertaForMultipleChoice(nn.Module):
 
     def __init__(self, config, state_dict, base_address, device, reference_model):
         super().__init__()
-        self.mem_config = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
-        )
+        self.mem_config = ttnn.L1_MEMORY_CONFIG
         self.config = config
         self.device = device
 
@@ -68,15 +65,15 @@ class TtRobertaForMultipleChoice(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[tt_lib.tensor.Tensor] = None,
+        attention_mask: Optional[ttnn.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[tt_lib.tensor.Tensor] = None,
-        inputs_embeds: Optional[tt_lib.tensor.Tensor] = None,
+        head_mask: Optional[ttnn.Tensor] = None,
+        inputs_embeds: Optional[ttnn.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[tt_lib.tensor.Tensor], TtMultipleChoiceModelOutput]:
+    ) -> Union[Tuple[ttnn.Tensor], TtMultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -90,12 +87,12 @@ class TtRobertaForMultipleChoice(nn.Module):
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = (
-            fallback_ops.reshape(attention_mask, 1, 1, -1, attention_mask.get_legacy_shape()[-1])
+            fallback_ops.reshape(attention_mask, 1, 1, -1, attention_mask.shape.with_tile_padding()[-1])
             if attention_mask is not None
             else None
         )
         flat_inputs_embeds = (
-            fallback_ops.reshape(inputs_embeds, 1, 1, -1, inputs_embeds.get_legacy_shape()[-2])
+            fallback_ops.reshape(inputs_embeds, 1, 1, -1, inputs_embeds.shape.with_tile_padding()[-2])
             if inputs_embeds is not None
             else None
         )

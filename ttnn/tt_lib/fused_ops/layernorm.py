@@ -5,7 +5,6 @@
 import torch
 
 import ttnn
-from tt_lib import tensor, device
 from tt_lib.utils import (
     pad_activation,
     pad_weight,
@@ -61,26 +60,26 @@ def Layernorm(gamma: float, beta: float, epsilon: float, H, W, device, num_dims=
     if num_dims == 1:
         padded_h = 32
     padded_w = roundup32(W)
-    gamma_ = tensor.Tensor(gamma, [1, 1, padded_h, padded_w], tensor.DataType.BFLOAT16, tensor.Layout.TILE, device)
+    gamma_ = ttnn.Tensor(gamma, [1, 1, padded_h, padded_w], ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
 
     beta_ = None
     if beta is not None:
-        beta_ = tensor.Tensor(beta, [1, 1, padded_h, padded_w], tensor.DataType.BFLOAT16, tensor.Layout.TILE, device)
+        beta_ = ttnn.Tensor(beta, [1, 1, padded_h, padded_w], ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
 
-    epsilon_ = tensor.Tensor(
+    epsilon_ = ttnn.Tensor(
         [epsilon] + [0.0 for _ in range(32 * 32 - 1)],
         [1, 1, 32, 32],
-        tensor.DataType.BFLOAT16,
-        tensor.Layout.TILE,
+        ttnn.bfloat16,
+        ttnn.TILE_LAYOUT,
         device,
     )
 
     if num_dims == 2:
-        var_scaler_ = tensor.Tensor(
+        var_scaler_ = ttnn.Tensor(
             [1 / (H * W)] + [0.0 for _ in range(32 * 32 - 1)],
             [1, 1, 32, 32],
-            tensor.DataType.BFLOAT16,
-            tensor.Layout.TILE,
+            ttnn.bfloat16,
+            ttnn.TILE_LAYOUT,
             device,
         )
     else:
@@ -90,10 +89,10 @@ def Layernorm(gamma: float, beta: float, epsilon: float, H, W, device, num_dims=
     # 1D variant
     # TODO(AP): merge with 2d? refactor.
     def layernorm_1d_(x, overrideH=None, refx=None, refgamma=None, refbeta=None):
-        N = x.get_legacy_shape()[0]
-        C = x.get_legacy_shape()[1]
-        H = x.get_legacy_shape()[2]
-        W = x.get_legacy_shape()[3]
+        N = x.shape.with_tile_padding()[0]
+        C = x.shape.with_tile_padding()[1]
+        H = x.shape.with_tile_padding()[2]
+        W = x.shape.with_tile_padding()[3]
 
         H_ = 1
         if overrideH is not None:
@@ -133,10 +132,10 @@ def Layernorm(gamma: float, beta: float, epsilon: float, H, W, device, num_dims=
             return x_gamma
 
     def layernorm_2d_(x):
-        N = x.get_legacy_shape()[0]
-        C = x.get_legacy_shape()[1]
-        H = x.get_legacy_shape()[2]
-        W = x.get_legacy_shape()[3]
+        N = x.shape.with_tile_padding()[0]
+        C = x.shape.with_tile_padding()[1]
+        H = x.shape.with_tile_padding()[2]
+        W = x.shape.with_tile_padding()[3]
 
         # first compute the mean (m)
         redW = ttnn.sum(x, 3, scalar=1.0 / W)  # -> NCH1
@@ -186,7 +185,7 @@ def ref_layernorm(x, eps, gamma, beta, H, W):
 
 if __name__ == "__main__":
     # Initialize the device
-    device = device.CreateDevice(0)
+    device = ttnn.CreateDevice(0)
 
     H = 64
     W = 96
@@ -200,7 +199,7 @@ if __name__ == "__main__":
     gamma = pad_weight(torch.full((1, 1, 1, W), gammaf))
     beta = pad_weight(torch.full((1, 1, 1, W), betaf))
 
-    t0 = tensor.Tensor(tilize_to_list(x), [1, 1, H, W], tensor.DataType.BFLOAT16, tensor.Layout.TILE, device)
+    t0 = ttnn.Tensor(tilize_to_list(x), [1, 1, H, W], ttnn.bfloat16, ttnn.TILE_LAYOUT, device)
     ttgamma = tilize_to_list(gamma)
     ttbeta = tilize_to_list(beta)
     func = Layernorm(ttgamma, ttbeta, epsf, 1, W, device, num_dims=1)
@@ -213,4 +212,4 @@ if __name__ == "__main__":
     print("Layernorm max absdiff=")
     print_diff_argmax(tt_got_back, ref_lnorm)
 
-    device.CloseDevice(device)
+    ttnn.CloseDevice(device)

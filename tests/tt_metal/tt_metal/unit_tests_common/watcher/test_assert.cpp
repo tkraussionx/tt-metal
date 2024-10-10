@@ -154,7 +154,7 @@ static void RunTest(WatcherFixture *fixture, Device *device, riscv_id_t riscv_ty
     // We should be able to find the expected watcher error in the log as well,
     // expected error message depends on the risc we're running on.
     string kernel = "tests/tt_metal/tt_metal/test_kernels/misc/watcher_asserts.cpp";
-    int line_num = 57;
+    int line_num = 56;
 
     string expected = fmt::format(
         "Device {} {} core(x={:2},y={:2}) phys(x={:2},y={:2}): {} tripped an assert on line {}. Current kernel: {}.",
@@ -235,7 +235,7 @@ TEST_F(WatcherFixture, TestWatcherAssertErisc) {
 
 TEST_F(WatcherFixture, TestWatcherAssertIErisc) {
     if (!this->IsSlowDispatch()) {
-        log_info(tt::LogTest, "Skip due to #7771");
+        log_info(tt::LogTest, "FD-on-idle-eth not supported.");
         GTEST_SKIP();
     }
     if (this->slow_dispatch_)

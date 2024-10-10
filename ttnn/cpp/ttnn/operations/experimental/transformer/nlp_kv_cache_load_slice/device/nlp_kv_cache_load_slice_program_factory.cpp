@@ -6,7 +6,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "nlp_kv_cache_load_slice_device_operation.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 #include "ttnn/operations/data_movement/slice/device/slice_op.hpp"
 
 namespace ttnn::operations::experimental::transformer {
@@ -17,7 +17,7 @@ using namespace tt;
 std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> get_unpad_runtime_args_tile_sharded(
     const Tensor &input_tensor,
     Tensor &output_tensor,
-    const tt::tt_metal::Shape &output_tensor_start,
+    const tt::tt_metal::LegacyShape &output_tensor_start,
     uint32_t num_cores_total,
     uint32_t num_cores_x,
     uint32_t num_tiles_per_core) {
@@ -49,9 +49,9 @@ std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> get_unpad_r
 }
 
 operation::ProgramWithCallbacks multi_core_nlp_kv_cache_load_slice(
-    const Tensor &a, Tensor &output, const tt::tt_metal::Shape &output_tensor_start, const tt::tt_metal::Shape &output_tensor_end) {
-    const tt::tt_metal::Shape output_shape = output.get_legacy_shape();
-    const tt::tt_metal::Shape input_shape = a.get_legacy_shape();
+    const Tensor &a, Tensor &output, const tt::tt_metal::LegacyShape &output_tensor_start, const tt::tt_metal::LegacyShape &output_tensor_end) {
+    const tt::tt_metal::LegacyShape output_shape = output.get_legacy_shape();
+    const tt::tt_metal::LegacyShape input_shape = a.get_legacy_shape();
 
     tt_metal::Program program = tt_metal::CreateProgram();
 
@@ -111,7 +111,7 @@ operation::ProgramWithCallbacks multi_core_nlp_kv_cache_load_slice(
     std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t)src0_cb_index};
     tt_metal::KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
         program,
-        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/sharded/kernels/dataflow/writer_unary_sharded.cpp",
+        "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/writer_unary_sharded.cpp",
         all_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args));
 

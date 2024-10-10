@@ -6,17 +6,15 @@ import pytest
 from loguru import logger
 import torch
 import ttnn
-from ttnn import ReplicateTensorToMesh, ListMeshToTensor, ConcatMeshToTensor
+from ttnn import ReplicateTensorToMesh
 import gc
 
 from models.demos.t3000.llama2_70b.reference.llama.llama import Llama
 from models.demos.tg.llama3_70b.tt.llama_attention_galaxy import TtLlamaAttention_galaxy
+from models.demos.tg.llama3_70b.tt.llama_common import setup_llama_env
 from models.demos.t3000.llama2_70b.reference.llama.llama.model import precompute_freqs_cis
-
-from models.utility_functions import skip_for_grayskull
 from models.demos.t3000.llama2_70b.tt.llama_common import (
-    setup_llama_env,
-    check_device_mesh,
+    check_mesh_device,
     extract_pcc_from_log,
     generate_rot_emb,
     get_rotation_mat,
@@ -37,14 +35,15 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
     ConcatMesh2DToTensor,
     ShardTensor2dMesh,
 )
-from models.utility_functions import nearest_32
+
+from models.utility_functions import skip_for_grayskull
 
 
 class PytorchLlamaAttentionModel(torch.nn.Module):
-    def __init__(self, hf_reference_model, layer_num):
+    def __init__(self, hf_reference_model, layer_num, rope_theta):
         super().__init__()
         self.attention = hf_reference_model.layers[layer_num].attention
-
+        self.rope_theta = rope_theta
         # Disable dropout
         self.attention.eval()
 
@@ -60,7 +59,7 @@ class PytorchLlamaAttentionModel(torch.nn.Module):
         start_pos, and KV cache has valid data up to start_pos.
         """
         batch = x.size(0)
-        freqs_cis = precompute_freqs_cis(self.head_dim, self.max_seq_len * 2)
+        freqs_cis = precompute_freqs_cis(self.head_dim, self.max_seq_len * 2, self.rope_theta)
         freqs_cis = freqs_cis[start_pos : start_pos + 1]
 
         attn_mask = torch.zeros(batch, 1, 1, start_pos + 1)
@@ -76,7 +75,7 @@ class PytorchLlamaAttentionModel(torch.nn.Module):
         """
         batch = x.size(0)
         seq_len = x.size(1)
-        freqs_cis = precompute_freqs_cis(self.head_dim, self.max_seq_len * 2)
+        freqs_cis = precompute_freqs_cis(self.head_dim, self.max_seq_len * 2, self.rope_theta)
         freqs_cis = freqs_cis[start_pos : start_pos + seq_len]
 
         attn_mask = torch.full((seq_len, seq_len), float("-inf"))
@@ -103,13 +102,13 @@ class PytorchLlamaAttentionModel(torch.nn.Module):
         return result
 
 
-def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos):
+def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, rope_theta, mode="decode"):
     assert len(x.size()) == 3
     batch, seq_len, _ = x.shape
 
     cache_name = lambda name: llama_attention_model.cache_path / (f"{name}")
 
-    if llama_attention_model.model_config["LLM_MODE"] == "decode":
+    if mode == "decode":
         assert seq_len == 1, "Only supporting decode mode"
         x = x.transpose(0, 1).unsqueeze(1)
         assert x.shape == (seq_len, 1, batch, llama_attention_model.hidden_size)
@@ -126,15 +125,15 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos):
             dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
             memory_config=ACT_MEMCFG,
-            device=llama_attention_model.device_mesh,
+            device=llama_attention_model.mesh_device,
             mesh_mapper=ShardTensor2dMesh(
-                llama_attention_model.device_mesh, dims=(3, None), cluster_shape=llama_attention_model.cluster_shape
+                llama_attention_model.mesh_device, dims=(3, None), cluster_shape=llama_attention_model.cluster_shape
             ),
         )
 
         batch_size_per_group = llama_attention_model.batch_size_per_device_group
 
-        rot_emb = generate_rot_emb(llama_attention_model.head_dim, llama_attention_model.max_seq_len * 2)
+        rot_emb = generate_rot_emb(llama_attention_model.head_dim, llama_attention_model.max_seq_len * 2, rope_theta)
         rot_mat = get_rotation_mat(rot_emb, start_pos, seq_len, batch=batch_size_per_group)
         assert rot_mat.size() == (
             1,
@@ -162,11 +161,71 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos):
             dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
             memory_config=ROT_MAT_MEMCFG,
-            device=llama_attention_model.device_mesh,
-            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.device_mesh),
+            device=llama_attention_model.mesh_device,
+            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
         )
 
         attn_masks = None
+
+    elif mode == "prefill":
+        assert (
+            seq_len % 256 == 0 and seq_len > 0 and seq_len <= 8192
+        ), "Prefill mode only supports seqlen as a multiple of 256 up to 8k"
+        assert batch == 1, "prefill mode only supports batch size 1"
+        x = x.unsqueeze(0)
+        assert x.shape == (1, batch, seq_len, llama_attention_model.hidden_size)
+        xs = ttnn.as_tensor(
+            x,
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            device=llama_attention_model.mesh_device,
+            mesh_mapper=ShardTensor2dMesh(
+                llama_attention_model.mesh_device, dims=(3, None), cluster_shape=llama_attention_model.cluster_shape
+            ),
+        )
+
+        cos, sin = precompute_freqs(
+            llama_attention_model.head_dim, llama_attention_model.max_seq_len * 2, rope_theta, use_scaled=False
+        )
+        cos_gathered, sin_gathered = gather_cos_sin(torch.arange(start_pos, start_pos + seq_len), cos, sin)
+        assert cos_gathered.size() == (1, 1, seq_len, llama_attention_model.head_dim)
+        assert sin_gathered.size() == (1, 1, seq_len, llama_attention_model.head_dim)
+
+        cos_gathereds = ttnn.as_tensor(
+            cos_gathered,
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            # cache_file_name=cache_name(f"cos_gathered_prefill_{seq_len}"),
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            device=llama_attention_model.mesh_device,
+            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
+        )
+        sin_gathereds = ttnn.as_tensor(
+            sin_gathered,
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            # cache_file_name=cache_name(f"sin_gathered_prefill_{seq_len}"),
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            device=llama_attention_model.mesh_device,
+            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
+        )
+
+        rot_mats = [cos_gathereds, sin_gathereds]
+
+        attn_mask = torch.full((seq_len, seq_len), torch.finfo(torch.float32).min)
+        attn_mask = torch.triu(attn_mask, diagonal=1)
+        attn_mask = attn_mask.expand(1, batch, -1, -1)
+        attn_masks = ttnn.as_tensor(
+            attn_mask,
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            # cache_file_name=cache_name(f"attn_mask_prefill_{seq_len}"),
+            mesh_mapper=ReplicateTensorToMesh(llama_attention_model.mesh_device),
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            device=llama_attention_model.mesh_device,
+        )
+
     return (
         xs,
         start_pos,
@@ -176,7 +235,7 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos):
 
 
 def run_test_LlamaAttention_inference(
-    device_mesh,
+    mesh_device,
     cluster_shape,
     batch,
     seq_len,
@@ -206,7 +265,9 @@ def run_test_LlamaAttention_inference(
     configuration = hugging_face_reference_model.params
 
     # PyTorch model --------------------------------------------------------------------
-    pytorch_LlamaAttention_model = PytorchLlamaAttentionModel(hugging_face_reference_model, UNIT_TEST_LAYER_NUM)
+    pytorch_LlamaAttention_model = PytorchLlamaAttentionModel(
+        hugging_face_reference_model, UNIT_TEST_LAYER_NUM, configuration.rope_theta
+    )
     # TT model -------------------------------------------------------------------------
     transformation_mat_torch = get_rot_transformation_mat(32)  # 32 for tile size
 
@@ -215,12 +276,12 @@ def run_test_LlamaAttention_inference(
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        device=device_mesh,
-        mesh_mapper=ReplicateTensorToMesh(device_mesh),
+        device=mesh_device,
+        mesh_mapper=ReplicateTensorToMesh(mesh_device),
     )
 
     tt_LlamaAttention_model = TtLlamaAttention_galaxy(
-        device_mesh,
+        mesh_device,
         cluster_shape,
         state_dict,
         BASE_URL,
@@ -231,8 +292,10 @@ def run_test_LlamaAttention_inference(
         cache_path=cache_path,
     )
 
+    mode = "decode" if seq_len == 1 else "prefill"
+
     all_tests_pass, all_pccs = True, []
-    if model_config["LLM_MODE"] == "prefill":
+    if mode == "prefill":
         generation_start_pos = 0
         generation_length = 1
     else:
@@ -248,7 +311,7 @@ def run_test_LlamaAttention_inference(
         start_pos = generation_start_pos + i
 
         # PyTorch output --------------------------------------------------------------------
-        if model_config["LLM_MODE"] == "prefill":
+        if mode == "prefill":
             attention_input, start_pos, freqs_cis, attn_mask = pytorch_LlamaAttention_model.prepare_inputs_prefill(
                 pt_inp_normed, start_pos
             )
@@ -266,26 +329,26 @@ def run_test_LlamaAttention_inference(
 
         # TT hardware execution -------------------------------------------------------------
         attention_input, start_pos, rot_mat, attn_mask = tt_llama_attention_prepare_inputs(
-            tt_LlamaAttention_model, tt_input, start_pos
+            tt_LlamaAttention_model, tt_input, start_pos, configuration.rope_theta, mode=mode
         )
         tt_out = tt_LlamaAttention_model(
             attention_input,
             rot_mat,
             start_pos,
             attn_mask,
+            mode=mode,
         )
-
-        # tt_out = ttnn.to_torch(tt_out, mesh_composer=ListMeshToTensor(device_mesh))[0]
+        # tt_out = ttnn.to_torch(tt_out, mesh_composer=ListMeshToTensor(mesh_device))[0]
 
         tt_out = ttnn.to_torch(
-            tt_out, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(3, 1), cluster_shape=cluster_shape)
+            tt_out, mesh_composer=ConcatMesh2DToTensor(mesh_device, dims=(3, 1), cluster_shape=cluster_shape)
         )
         tt_out = tt_out[:, 0:1, :, :]
         tt_out = tt_out.permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
-        # check outputs ----------------------------------------------------------------------
         does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
         logger.info(f"Output: {output_pcc}")
+
         all_pccs.append(extract_pcc_from_log(output_pcc))
 
         if does_pass:
@@ -314,9 +377,9 @@ def run_test_LlamaAttention_inference(
     tt_layer_present_all = [ttnn.from_device(lp) for lp in tt_LlamaAttention_model.layer_past]
 
     tt_layer_present_all = [
-        ttnn.to_torch(
-            lp, mesh_composer=ConcatMesh2DToTensor(device_mesh, dims=(1, 0), cluster_shape=cluster_shape)
-        ).transpose(0, 1)[:batch, ...]
+        ttnn.to_torch(lp, mesh_composer=ConcatMesh2DToTensor(mesh_device, dims=(0, 1), cluster_shape=cluster_shape))[
+            :batch, ...
+        ]
         for lp in tt_layer_present_all
     ]
 
@@ -326,7 +389,7 @@ def run_test_LlamaAttention_inference(
         generation_start_pos,
         generation_length,
         seq_len,
-        model_config["LLM_MODE"] == "prefill",
+        mode == "prefill",
         pcc,
     )
 
@@ -342,7 +405,7 @@ def run_test_LlamaAttention_inference(
 
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
-    "cluster_shape, device_mesh", [pytest.param((4, 8), (8, 4), id="4x8_grid")], indirect=["device_mesh"]
+    "cluster_shape, mesh_device", [pytest.param((4, 8), (8, 4), id="4x8_grid")], indirect=["mesh_device"]
 )
 @pytest.mark.parametrize(
     "llama_version",
@@ -350,8 +413,14 @@ def run_test_LlamaAttention_inference(
 )
 @pytest.mark.parametrize(
     "batch, seq_len, pcc",
-    [(32, 1, 0.9995)],
-    ids=["decode"],
+    [
+        (32, 1, 0.9995),
+        (1, 256, 0.999),
+    ],
+    ids=[
+        "decode",
+        "prefill",
+    ],
 )
 @pytest.mark.parametrize(
     "max_batch_size, max_context_len",
@@ -368,7 +437,7 @@ def test_LlamaAttention_inference(
     batch,
     seq_len,
     pcc,
-    device_mesh,
+    mesh_device,
     max_batch_size,
     max_context_len,
     llama_version,
@@ -386,15 +455,12 @@ def test_LlamaAttention_inference(
 
     model_config, ckpt_dir, tokenizer_path, cache_path = setup_llama_env(
         llama_version=llama_version,
-        batch=batch,
-        seq_len=seq_len,
         max_batch_size=max_batch_size,
         max_context_len=max_context_len,
     )
-
-    check_device_mesh(device_mesh, model_config)
+    check_mesh_device(mesh_device, model_config)
     run_test_LlamaAttention_inference(
-        device_mesh,
+        mesh_device,
         cluster_shape,
         batch,
         seq_len,

@@ -14,7 +14,7 @@
 #include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
 
-#include "debug/status.h"
+#include "debug/waypoint.h"
 #include "debug/dprint.h"
 #include "debug/stack_usage.h"
 // clang-format on
@@ -37,6 +37,7 @@ CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 uint32_t tt_l1_ptr *rta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *crta_l1_base __attribute__((used));
+uint32_t tt_l1_ptr *sem_l1_base[ProgrammableCoreType::COUNT] __attribute__((used));
 
 #if defined(PROFILE_KERNEL)
 namespace kernel_profiler {
@@ -44,10 +45,6 @@ namespace kernel_profiler {
     uint32_t stackSize __attribute__((used));
     uint32_t sums[SUM_COUNT] __attribute__((used));
     uint32_t sumIDs[SUM_COUNT] __attribute__((used));
-    uint16_t core_flat_id __attribute__((used));
-    uint32_t nocWriteSize __attribute__((used));
-    uint32_t *nocWriteBuffer __attribute__((used));
-    uint32_t *nocWriteIndex __attribute__((used));
 }
 #endif
 
@@ -75,13 +72,12 @@ inline __attribute__((always_inline)) void signal_ncrisc_completion() {
 }
 
 int main(int argc, char *argv[]) {
+    conditionally_disable_l1_cache();
     DIRTY_STACK_MEMORY();
-    DEBUG_STATUS("I");
-
-    disable_lowcache();
+    WAYPOINT("I");
 
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
-    l1_to_local_mem_copy((uint *)__ldm_data_start, (uint tt_l1_ptr *)MEM_NCRISC_INIT_LOCAL_L1_BASE, num_words);
+    l1_to_local_mem_copy((uint *)__ldm_data_start, (uint tt_l1_ptr *)MEM_NCRISC_INIT_LOCAL_L1_BASE_SCRATCH, num_words);
 
     risc_init();
 
@@ -91,22 +87,19 @@ int main(int argc, char *argv[]) {
 
     // Cleanup profiler buffer incase we never get the go message
     while (1) {
-        DEBUG_STATUS("W");
+        WAYPOINT("W");
         notify_brisc_and_wait();
         DeviceZoneScopedMainN("NCRISC-FW");
 
-        setup_cb_read_write_interfaces(0, mailboxes->launch.kernel_config.max_cb_index, true, true);
+        uint32_t kernel_config_base = firmware_config_init(mailboxes, ProgrammableCoreType::TENSIX, DISPATCH_CLASS_TENSIX_DM1);
+        uint32_t tt_l1_ptr *cb_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
+            mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.cb_offset);
+        setup_cb_read_write_interfaces(cb_l1_base, 0, mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.max_cb_index, true, true, false);
 
-        uint32_t kernel_config_base = mailboxes->launch.kernel_config.kernel_config_base;
-        rta_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
-            mailboxes->launch.kernel_config.mem_map[DISPATCH_CLASS_TENSIX_DM1].rta_offset);
-        crta_l1_base = (uint32_t tt_l1_ptr *)(kernel_config_base +
-            mailboxes->launch.kernel_config.mem_map[DISPATCH_CLASS_TENSIX_DM1].crta_offset);
-
-        DEBUG_STATUS("R");
+        WAYPOINT("R");
         kernel_init();
         RECORD_STACK_USAGE();
-        DEBUG_STATUS("D");
+        WAYPOINT("D");
 
         signal_ncrisc_completion();
     }

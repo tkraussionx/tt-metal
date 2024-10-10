@@ -5,11 +5,11 @@
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn_multi_command_queue_fixture.hpp"
 #include "ttnn/operations/eltwise/binary/binary.hpp"
-#include "ttnn/operations/eltwise/unary/device/unary_op.hpp"
+#include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_op.hpp"
 #include "common/bfloat16.hpp"
 #include "ttnn/async_runtime.hpp"
-#include "tt_numpy/functions.hpp"
+#include "ttnn/operations/numpy/functions.hpp"
 #include "tt_metal/impl/event/event.hpp"
 #include <cmath>
 
@@ -21,20 +21,15 @@ Tensor dispatch_ops_to_device(Device* dev, Tensor input_tensor, uint8_t cq_id) {
     using ttnn::operations::unary::UnaryWithParam;
     using ttnn::operations::unary::UnaryOpType;
 
-    auto op0 = ttnn::operations::unary::Unary{std::vector{UnaryWithParam{UnaryOpType::MUL_UNARY_SFPU, 2}}};
-    auto op1 = ttnn::operations::unary::Unary{std::vector{UnaryWithParam{UnaryOpType::NEG}}};
-    auto op2 = ttnn::operations::unary::Unary{std::vector{UnaryWithParam{UnaryOpType::ADD_UNARY_SFPU, 500}}};
-
-
-    Tensor output_tensor = ttnn::run_operation(cq_id, op0, {input_tensor}).at(0);
+    Tensor output_tensor = ttnn::mul_sfpu(cq_id, input_tensor, 2);
     for (int i = 0; i < 3; i++) {
-        output_tensor = ttnn::run_operation(cq_id, op1, {output_tensor}).at(0);
-        output_tensor = ttnn::run_operation(cq_id, op1, {output_tensor}).at(0);
-        output_tensor = ttnn::run_operation(cq_id, op0, {output_tensor}).at(0);
+        output_tensor = ttnn::neg(cq_id, output_tensor);
+        output_tensor = ttnn::neg(cq_id, output_tensor);
+        output_tensor = ttnn::mul_sfpu(cq_id, output_tensor, 2);
     }
-    output_tensor = ttnn::run_operation(cq_id, op1, {output_tensor}).at(0);
-    output_tensor = ttnn::run_operation(cq_id, op0, {output_tensor}).at(0);
-    output_tensor = ttnn::run_operation(cq_id, op2, {output_tensor}).at(0);
+    output_tensor = ttnn::neg(cq_id, output_tensor);
+    output_tensor = ttnn::mul_sfpu(cq_id, output_tensor, 2);
+    output_tensor = ttnn::add_sfpu(cq_id, output_tensor, 500);
     return output_tensor;
 }
 
@@ -49,7 +44,7 @@ TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceProgramsOnCQ1) {
         .buffer_type = BufferType::DRAM,
         .shard_spec = std::nullopt};
 
-    ttnn::Shape shape = ttnn::Shape(Shape({1, 3, 2048, 2048}));
+    ttnn::Shape shape = ttnn::Shape(tt::tt_metal::LegacyShape({1, 3, 2048, 2048}));
     uint32_t buf_size_datums = 2048 * 2048 * 3;
     uint32_t datum_size_bytes = 2;
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
@@ -78,7 +73,7 @@ TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceProgramsOnCQ1) {
                 ttnn::record_event(device->command_queue(1), workload_event);
                 ttnn::wait_for_event(device->command_queue(0), workload_event);
 
-                ttnn::read_buffer(1, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
+                ttnn::read_buffer(0, output_tensor, {readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data, readback_data});
 
                 for (int j = 0; j < 3 * 2048 * 2048; j++) {
                     ASSERT_EQ(readback_data[j].to_float(), -1 * (i + dev_idx) * 32 + 500);
@@ -99,7 +94,7 @@ TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceProgramsOnCQ0) {
         .buffer_type = BufferType::DRAM,
         .shard_spec = std::nullopt};
 
-    ttnn::Shape shape = ttnn::Shape(Shape({1, 3, 2048, 2048}));
+    ttnn::Shape shape = ttnn::Shape(tt::tt_metal::LegacyShape({1, 3, 2048, 2048}));
     uint32_t buf_size_datums = 2048 * 2048 * 3;
     uint32_t datum_size_bytes = 2;
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);
@@ -150,7 +145,7 @@ TEST_F(MultiCommandQueueT3KFixture, Test2CQMultiDeviceWithCQ1Only) {
         .buffer_type = BufferType::DRAM,
         .shard_spec = std::nullopt};
 
-    ttnn::Shape shape = ttnn::Shape(Shape({1, 3, 2048, 2048}));
+    ttnn::Shape shape = ttnn::Shape(tt::tt_metal::LegacyShape({1, 3, 2048, 2048}));
     uint32_t buf_size_datums = 2048 * 2048 * 3;
     uint32_t datum_size_bytes = 2;
     auto host_data = std::shared_ptr<bfloat16 []>(new bfloat16[buf_size_datums]);

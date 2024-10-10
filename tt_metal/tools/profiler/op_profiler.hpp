@@ -25,12 +25,6 @@ namespace tt {
 
 namespace tt_metal {
 
-extern std::atomic<uint32_t> operation_id_atomic_count;
-
-inline uint32_t assign_operation_id() {
-    return operation_id_atomic_count.fetch_add(1);
-}
-
 namespace op_profiler {
 
 enum class OpType { python_fallback, tt_dnn_cpu, tt_dnn_device, unknown };
@@ -160,12 +154,12 @@ static inline json get_kernels_json(const Program& program) {
             MathFidelity mathFidelity = std::get<ComputeConfig>(computeKernel->config()).math_fidelity;
             json computeKernelObj;
             computeKernelObj["math_fidelity"] = fmt::format("{}", magic_enum::enum_name(mathFidelity));
-            computeKernelObj["path"] = computeKernel->kernel_path_file_name();
+            computeKernelObj["source"] = computeKernel->kernel_source().source_;
             computeKernelObj["name"] = computeKernel->get_full_kernel_name();
             computeKernels.push_back(computeKernelObj);
         } else {
             json datamovementKernelObj;
-            datamovementKernelObj["path"] = kernel->kernel_path_file_name();
+            datamovementKernelObj["source"] = kernel->kernel_source().source_;
             datamovementKernelObj["name"] = kernel->get_full_kernel_name();
             datamovementKernels.push_back(datamovementKernelObj);
         }
@@ -323,7 +317,7 @@ inline std::string op_meta_data_serialized_json(
     auto j = get_base_json<true>(opID, op, input_tensors);
     j["op_type"] = magic_enum::enum_name(OpType::python_fallback);
     std::string ser = j.dump(4);
-    return fmt::format("`TT_DNN_FALL_BACK_OP:{} ->\n{}`", j["op_code"], ser);
+    return fmt::format("`TT_DNN_FALL_BACK_OP:{} ->\n{}`", j["op_code"].dump(), ser);
 }
 
 template <typename device_operation_t>
@@ -335,7 +329,6 @@ inline std::string op_meta_data_serialized_json(
     const auto& operation_attributes,
     const auto& tensor_args,
     auto& tensor_return_value) {
-
     const bool useCachedOps = std::getenv("TT_METAL_PROFILER_NO_CACHE_OP_INFO") == nullptr;
     auto program_hash = compute_program_hash<device_operation_t>(operation_attributes, tensor_args);
 
@@ -362,7 +355,7 @@ inline std::string op_meta_data_serialized_json(
         j["performance_model"]["input_bws"] = perfModel.get_input_bws();
         j["performance_model"]["output_bws"] = perfModel.get_output_bws();
 
-        std::string short_str = fmt::format("`TT_DNN_DEVICE_OP: {}, {}, {}, ", j["op_code"], program_hash, device_id);
+        std::string short_str = fmt::format("`TT_DNN_DEVICE_OP: {}, {}, {}, ", j["op_code"].dump(), program_hash, device_id);
         if (cached_ops.find(device_id) == cached_ops.end()) {
             cached_ops.emplace(
                 device_id, (std::unordered_map<tt::tt_metal::operation::Hash, std::string>){{program_hash, short_str}});

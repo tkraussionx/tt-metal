@@ -8,7 +8,7 @@
 #include "ttnn/deprecated/tt_dnn/op_library/cb_utils.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/math.hpp"
 #include "ttnn/operation.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split_tilize.hpp"
+#include "ttnn/operations/core/work_split/work_split_tilize.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
@@ -58,7 +58,7 @@ operation::ProgramWithCallbacks tilize_with_val_padding_single_core(
 
     uint32_t num_tiles_in_row = output_x / TILE_WIDTH;
     // Ensure we don't intrude into storage space
-    uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - L1_UNRESERVED_BASE;
+    uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - a.device()->get_base_allocator_addr(HalMemType::L1);
     // Memory usage is 2 CBs of width W, plus buffer of size alignment + (W * datum size)
     uint32_t max_X = (max_l1_size - alignment) / (a.element_size() * TILE_HEIGHT * 2 + a.element_size());
     uint32_t max_tiles = max_X / TILE_WIDTH;
@@ -211,7 +211,7 @@ operation::ProgramWithCallbacks tilize_with_val_padding_multi_core_interleaved(
     uint32_t num_tiles_per_row = output.get_legacy_shape()[-1] / TILE_WIDTH;
 
     auto [ncores, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff] =
-        split_blocks_for_tilize(grid_size, num_blocks);
+        ttnn::split_blocks_for_tilize(grid_size, num_blocks);
 
     bool has_cliff = core_range_cliff.size() > 0;
 
@@ -274,9 +274,9 @@ operation::ProgramWithCallbacks tilize_with_val_padding_multi_core_interleaved(
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_pad_value, bfloat_pad_value});
 
     // 1D distribution of blocks across cores
-    auto core_assignments = distribute_work(
-        output.get_legacy_shape().without_padding(),
-        output.get_legacy_shape().padding(),
+    auto core_assignments = ttnn::distribute_work(
+        output.get_logical_shape(),
+        output.get_padding(),
         ncores,
         nblocks_per_core,
         has_cliff,
@@ -430,7 +430,7 @@ operation::ProgramWithCallbacks tilize_with_val_padding_multi_core_sharded(
     };
     unary_writer_kernel_id = CreateKernel(
         program,
-        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/sharded/kernels/dataflow/writer_unary_sharded.cpp",
+        "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/writer_unary_sharded.cpp",
         all_cores,
         WriterDataMovementConfig(writer_ct_args));
 

@@ -15,6 +15,7 @@ from serialize import serialize
 from elasticsearch import Elasticsearch, NotFoundError
 from statuses import VectorValidity, VectorStatus
 from elastic_config import *
+from sweeps_logger import sweeps_logger as logger
 
 SWEEPS_DIR = pathlib.Path(__file__).parent
 SWEEP_SOURCES_DIR = SWEEPS_DIR / "sweeps"
@@ -26,7 +27,7 @@ def generate_vectors(module_name):
     parameters = test_module.parameters
 
     for suite in parameters:
-        print(f"SWEEPS: Generating test vectors for suite {suite}.")
+        logger.info(f"Generating test vectors for suite {suite}.")
         suite_vectors = list(permutations(parameters[suite]))
         for v in suite_vectors:
             v["suite_name"] = suite
@@ -64,7 +65,8 @@ def export_suite_vectors(module_name, suite_name, vectors):
             query={
                 "bool": {
                     "must": [
-                        {"match": {"status": str(VectorStatus.CURRENT)}},
+                        {"match": {"tag.keyword": SWEEPS_TAG}},
+                        {"match": {"status.keyword": str(VectorStatus.CURRENT)}},
                         {"match": {"suite_name.keyword": suite_name}},
                     ]
                 }
@@ -72,37 +74,49 @@ def export_suite_vectors(module_name, suite_name, vectors):
             size=10000,
         )["hits"]["hits"]
         old_vector_ids = set(vector["_id"] for vector in response)
+        old_vector_hashes = set(vector["_source"]["input_hash"] for vector in response)
     except NotFoundError as e:
         old_vector_ids = set()
+        old_vector_hashes = set()
         pass
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    new_vector_ids = set()
+    new_vector_hashes = set()
     serialized_vectors = dict()
     for i in range(len(vectors)):
         vector = dict()
         for elem in vectors[i].keys():
             vector[elem] = serialize(vectors[i][elem], warnings)
-        id = hashlib.sha224(str(vectors[i]).encode("utf-8")).hexdigest()
-        new_vector_ids.add(id)
+        input_hash = hashlib.sha224(str(vector).encode("utf-8")).hexdigest()
+        new_vector_hashes.add(input_hash)
         vector["timestamp"] = current_time
-        serialized_vectors[id] = vector
+        vector["input_hash"] = input_hash
+        vector["tag"] = SWEEPS_TAG
+        serialized_vectors[input_hash] = vector
 
-    if old_vector_ids == new_vector_ids:
-        print(
-            f"SWEEPS: Vectors generated for module {module_name}, suite {suite_name} already exist, and have not changed. Skipping..."
+    if old_vector_hashes == new_vector_hashes:
+        logger.info(
+            f"Vectors generated for module {module_name}, suite {suite_name} already exist with tag {SWEEPS_TAG}, and have not changed. ({len(old_vector_hashes)} existing tests). Skipping..."
         )
         return
     else:
-        print(
-            f"SWEEPS: New vectors found for module {module_name}, suite {suite_name}. Archiving old vectors and saving new suite. This step may take several minutes."
+        logger.info(
+            f"New vectors found for module {module_name}, suite {suite_name}, with tag {SWEEPS_TAG}. Archiving old vectors and saving new suite. This step may take several minutes."
         )
         for old_vector_id in old_vector_ids:
-            client.update(index=index_name, id=old_vector_id, doc={"status.keyword": str(VectorStatus.ARCHIVED)})
-        for new_vector_id in serialized_vectors.keys():
-            client.index(index=index_name, id=new_vector_id, body=serialized_vectors[new_vector_id])
-        print(f"SWEEPS: Generated {len(serialized_vectors)} test vectors for suite {suite_name}.")
+            client.update(index=index_name, id=old_vector_id, doc={"status": str(VectorStatus.ARCHIVED)})
+        serialized_vectors = list(serialized_vectors.values())
+        while serialized_vectors != []:
+            bulk = serialized_vectors[: min(200, len(serialized_vectors))]
+            serialized_vectors = serialized_vectors[min(200, len(serialized_vectors)) :]
+            bulk_query = []
+            for vector in bulk:
+                bulk_query.append({"create": {"_index": index_name}})
+                bulk_query.append(vector)
+            client.bulk(index=index_name, body=bulk_query)
+
+        logger.info(f"SWEEPS: Generated {len(new_vector_hashes)} test vectors for suite {suite_name}.")
 
 
 # Generate one or more sets of test vectors depending on module_name
@@ -110,11 +124,11 @@ def generate_tests(module_name):
     if not module_name:
         for file_name in sorted(SWEEP_SOURCES_DIR.glob("**/*.py")):
             module_name = str(pathlib.Path(file_name).relative_to(SWEEP_SOURCES_DIR))[:-3].replace("/", ".")
-            print(f"SWEEPS: Generating test vectors for module {module_name}.")
+            logger.info(f"Generating test vectors for module {module_name}.")
             generate_vectors(module_name)
-            print(f"SWEEPS: Finished generating test vectors for module {module_name}.\n\n")
+            logger.info(f"Finished generating test vectors for module {module_name}.\n\n")
     else:
-        print(f"SWEEPS: Generating test vectors for module {module_name}.")
+        logger.info(f"Generating test vectors for module {module_name}.")
         generate_vectors(module_name)
 
 
@@ -123,12 +137,16 @@ def clean_module(module_name):
     vector_index = VECTOR_INDEX_PREFIX + module_name
 
     if not client.indices.exists(index=vector_index):
-        print(f"SWEEPS: Could not clean vectors for module {module_name} as there is no corresponding index.")
+        logger.error(f"Could not clean vectors for module {module_name} as there is no corresponding index.")
         exit(1)
 
     update_script = {"source": f"ctx._source.status = '{str(VectorStatus.ARCHIVED)}'", "lang": "painless"}
-    client.update_by_query(index=vector_index, query={"match_all": {}}, script=update_script, refresh=True)
-    print(f"SWEEPS: Marked all vectors in index {vector_index} as archived. Proceeding with generation...")
+    client.update_by_query(
+        index=vector_index, query={"match": {"tag.keyword": SWEEPS_TAG}}, script=update_script, refresh=True
+    )
+    logger.info(
+        f"Marked all vectors with tag {SWEEPS_TAG} in index {vector_index} as archived. Proceeding with generation..."
+    )
 
     client.close()
 
@@ -153,14 +171,30 @@ if __name__ == "__main__":
         default="corp",
         help="Elastic Connection String for vector database. Available presets are ['corp', 'cloud']",
     )
+    parser.add_argument(
+        "--tag",
+        required=False,
+        default=os.getenv("USER"),
+        help="Custom tag for the vectors you are generating. This is to keep copies seperate from other people's test vectors. By default, this will be your username. You are able to specify a tag when running tests using the runner.",
+    )
+    parser.add_argument("--explicit", required=False, action="store_true")
 
     args = parser.parse_args(sys.argv[1:])
 
     global ELASTIC_CONNECTION_STRING
     ELASTIC_CONNECTION_STRING = get_elastic_url(args.elastic)
 
+    global SWEEPS_TAG
+    SWEEPS_TAG = args.tag
+
+    if args.tag == "ci-main" and not args.explicit:
+        logger.error("The ci-main tag is reserved for CI only.")
+        exit(1)
+
+    logger.info(f"Running current generation with tag: {SWEEPS_TAG}.")
+
     if args.clean and not args.module_name:
-        print("SWEEPS: The clean flag must be set in conjunction with a module name.")
+        logger.error("The clean flag must be set in conjunction with a module name.")
         exit(1)
     elif args.clean:
         clean_module(args.module_name)

@@ -9,7 +9,6 @@ import torch.nn as nn
 from functools import partial
 
 import ttnn
-import tt_lib
 
 from models.helper_funcs import Linear as TTLinear
 from models.utility_functions import (
@@ -27,9 +26,7 @@ class TtRobertaOutput(nn.Module):
         device,
     ):
         super().__init__()
-        self.mem_config = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
-        )
+        self.mem_config = ttnn.L1_MEMORY_CONFIG
         self.device = device
 
         self.dense_weight = pad_by_zero(state_dict[f"{base_address}.dense.weight"], self.device)[0]
@@ -45,8 +42,8 @@ class TtRobertaOutput(nn.Module):
         # TODO: Add dropout when supported
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.dense_linear = TTLinear(
-            self.dense_weight.get_legacy_shape()[-1],
-            self.dense_weight.get_legacy_shape()[-2],
+            self.dense_weight.shape.with_tile_padding()[-1],
+            self.dense_weight.shape.with_tile_padding()[-2],
             self.dense_weight,
             self.dense_bias,
         )

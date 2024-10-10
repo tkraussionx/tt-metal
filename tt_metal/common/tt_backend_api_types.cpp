@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_backend_api_types.hpp"
+#include "third_party/magic_enum/magic_enum.hpp"
 
 std::string tt::get_string(tt::ARCH arch) {
     switch (arch) {
-        case tt::ARCH::JAWBRIDGE: return "JAWBRIDGE"; break;
         case tt::ARCH::GRAYSKULL: return "GRAYSKULL"; break;
         case tt::ARCH::WORMHOLE: return "WORMHOLE"; break;
         case tt::ARCH::WORMHOLE_B0: return "WORMHOLE_B0"; break;
@@ -18,7 +18,6 @@ std::string tt::get_string(tt::ARCH arch) {
 
 std::string tt::get_string_lowercase(tt::ARCH arch) {
     switch (arch) {
-        case tt::ARCH::JAWBRIDGE: return "jawbridge"; break;
         case tt::ARCH::GRAYSKULL: return "grayskull"; break;
         case tt::ARCH::WORMHOLE: return "wormhole"; break;
         case tt::ARCH::WORMHOLE_B0: return "wormhole_b0"; break;
@@ -30,10 +29,7 @@ std::string tt::get_string_lowercase(tt::ARCH arch) {
 
 tt::ARCH tt::get_arch_from_string(const std::string &arch_str) {
     tt::ARCH arch;
-
-    if ((arch_str == "jawbridge") || (arch_str == "JAWBRIDGE")) {
-        arch = tt::ARCH::JAWBRIDGE;
-    } else if ((arch_str == "grayskull") || (arch_str == "GRAYSKULL")) {
+    if ((arch_str == "grayskull") || (arch_str == "GRAYSKULL")) {
         arch = tt::ARCH::GRAYSKULL;
     } else if ((arch_str == "wormhole") || (arch_str == "WORMHOLE")) {
         arch = tt::ARCH::WORMHOLE;
@@ -48,4 +44,13 @@ tt::ARCH tt::get_arch_from_string(const std::string &arch_str) {
     }
 
     return arch;
+}
+
+auto fmt::formatter<tt::DataFormat>::format(tt::DataFormat df, format_context &ctx) const -> format_context::iterator {
+    const auto name = magic_enum::enum_name(df);
+
+    if (name.empty()) {
+        throw std::invalid_argument("Unknown format");
+    }
+    return formatter<string_view>::format(name, ctx);
 }

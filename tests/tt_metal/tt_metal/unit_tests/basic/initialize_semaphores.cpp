@@ -71,6 +71,8 @@ void create_and_read_max_num_semaphores(
         ASSERT_TRUE(semaphore_id == i);
     }
 
+    program.finalize();
+
     ASSERT_TRUE(tt_metal::detail::ConfigureDeviceWithProgram(device, program));
 
     for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
@@ -79,7 +81,7 @@ void create_and_read_max_num_semaphores(
             std::vector<uint32_t> res;
             for (uint32_t i = 0; i < NUM_SEMAPHORES; i++) {
                 std::vector<uint32_t> single_val;
-                uint32_t semaphore_addr = SEMAPHORE_BASE + (L1_ALIGNMENT * i);
+                uint32_t semaphore_addr = program.get_sem_base_addr(device, logical_core, CoreType::WORKER) + (hal.get_alignment(HalMemType::L1) * i);
                 uint32_t semaphore_size = sizeof(uint32_t);
                 tt_metal::detail::ReadFromDeviceL1(device, logical_core, semaphore_addr, semaphore_size, single_val);
                 ASSERT_TRUE(single_val.size() == 1);

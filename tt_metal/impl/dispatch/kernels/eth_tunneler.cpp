@@ -4,10 +4,7 @@
 
 // clang-format off
 #include "dataflow_api.h"
-#include "debug/dprint.h"
-#include "debug/ring_buffer.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
-#include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen.hpp"
 // clang-format on
 
 #define NUM_BIDIR_TUNNELS 1
@@ -73,7 +70,6 @@ constexpr uint32_t inner_stop_mux_d_bypass = get_compile_time_arg_val(15);
 
 void kernel_main() {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
-    noc_init();
 
     write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
@@ -151,8 +147,8 @@ void kernel_main() {
             }
             all_outputs_finished &= output_finished;
         }
-
-        tt_l1_ptr launch_msg_t * const launch_msg = GET_MAILBOX_ADDRESS_DEV(launch);
+        uint32_t launch_msg_rd_ptr = *GET_MAILBOX_ADDRESS_DEV(launch_msg_rd_ptr);
+        tt_l1_ptr launch_msg_t * const launch_msg = GET_MAILBOX_ADDRESS_DEV(launch[launch_msg_rd_ptr]);
         if (launch_msg->kernel_config.exit_erisc_kernel) {
             return;
         }

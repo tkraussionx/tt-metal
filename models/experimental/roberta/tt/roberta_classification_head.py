@@ -5,7 +5,6 @@
 import torch
 import torch.nn as nn
 
-import tt_lib
 import ttnn
 
 from models.helper_funcs import Linear as TTLinear
@@ -19,9 +18,7 @@ class TtRobertaClassificationHead(nn.Module):
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
         self.device = device
-        self.mem_config = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
-        )
+        self.mem_config = ttnn.L1_MEMORY_CONFIG
 
         self.dense_weight = pad_by_zero(state_dict[f"{base_address}.dense.weight"], self.device)[0]
         self.dense_bias = pad_by_zero(state_dict[f"{base_address}.dense.bias"], self.device)[0]
@@ -35,14 +32,14 @@ class TtRobertaClassificationHead(nn.Module):
         self.out_proj_weight = torch2tt_tensor(state_dict[f"{base_address}.out_proj.weight"], self.device)
         self.out_proj_bias = torch2tt_tensor(state_dict[f"{base_address}.out_proj.bias"], self.device)
         self.dense_linear = TTLinear(
-            self.dense_weight.get_legacy_shape()[-1],
-            self.dense_weight.get_legacy_shape()[-2],
+            self.dense_weight.shape.with_tile_padding()[-1],
+            self.dense_weight.shape.with_tile_padding()[-2],
             self.dense_weight,
             self.dense_bias,
         )
         self.out_proj_linear = TTLinear(
-            self.out_proj_weight.get_legacy_shape()[-1],
-            self.out_proj_weight.get_legacy_shape()[-2],
+            self.out_proj_weight.shape.with_tile_padding()[-1],
+            self.out_proj_weight.shape.with_tile_padding()[-2],
             self.out_proj_weight,
             self.out_proj_bias,
         )

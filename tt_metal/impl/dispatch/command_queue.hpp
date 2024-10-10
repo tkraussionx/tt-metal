@@ -241,7 +241,7 @@ class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
     void add_dispatch_write(HugepageDeviceCommand& command) override;
     void add_buffer_data(HugepageDeviceCommand& command) override;
 
-    const std::optional<BufferPageMapping>& buffer_page_mapping;
+    const std::shared_ptr<const BufferPageMapping>& buffer_page_mapping;
     const CoreCoord core;
 
    public:
@@ -255,7 +255,7 @@ class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
         bool issue_wait,
         uint32_t expected_num_workers_completed,
         uint32_t bank_base_address,
-        const std::optional<BufferPageMapping>& buffer_page_mapping,
+        const std::shared_ptr<const BufferPageMapping>& buffer_page_mapping,
         const CoreCoord& core,
         uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
@@ -290,6 +290,9 @@ class EnqueueProgramCommand : public Command {
     CoreType dispatch_core_type;
     uint32_t expected_num_workers_completed;
     uint32_t packed_write_max_unicast_sub_cmds;
+    uint32_t dispatch_message_addr;
+    uint32_t multicast_cores_launch_message_wptr = 0;
+    uint32_t unicast_cores_launch_message_wptr = 0;
 
    public:
     struct CachedProgramCommandSequence {
@@ -301,6 +304,10 @@ class EnqueueProgramCommand : public Command {
         std::vector<uint32_t*> cb_configs_payloads;
         std::vector<std::vector<std::shared_ptr<CircularBuffer>>> circular_buffers_on_core_ranges;
         std::vector<launch_msg_t*> go_signals;
+        uint32_t program_config_buffer_data_size_bytes;
+        std::vector<CQDispatchWritePackedCmd*> launch_msg_write_packed_cmd_ptrs;
+        std::vector<CQDispatchWritePackedCmd*> unicast_launch_msg_write_packed_cmd_ptrs;
+        CQDispatchGoSignalMcastCmd* mcast_go_signal_cmd_ptr;
     };
     thread_local static std::unordered_map<uint64_t, CachedProgramCommandSequence> cached_program_command_sequences;
 
@@ -311,11 +318,13 @@ class EnqueueProgramCommand : public Command {
         Program& program,
         CoreCoord& dispatch_core,
         SystemMemoryManager& manager,
-        uint32_t expected_num_workers_completed);
+        uint32_t expected_num_workers_completed,
+        uint32_t multicast_cores_launch_message_wptr,
+        uint32_t unicast_cores_launch_message_wptr);
 
-    void assemble_preamble_commands(uint32_t tensix_l1_config_base, uint32_t eth_l1_config_base);
+    void assemble_preamble_commands(std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(bool prefetch_stall);
-    void assemble_device_commands(bool is_cached, uint32_t tensix_l1_kernel_config_base, uint32_t eth_l1_kernel_config_base);
+    void assemble_device_commands(bool is_cached, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_runtime_args_commands();
 
     void process();
@@ -384,16 +393,21 @@ class EnqueueTraceCommand : public Command {
     Buffer& buffer;
     Device* device;
     SystemMemoryManager& manager;
+    std::shared_ptr<detail::TraceDescriptor>& desc;
     uint32_t& expected_num_workers_completed;
     bool clear_count;
-
+    NOC noc_index;
+    CoreCoord dispatch_core;
    public:
     EnqueueTraceCommand(
         uint32_t command_queue_id,
         Device* device,
         SystemMemoryManager& manager,
+        std::shared_ptr<detail::TraceDescriptor>& desc,
         Buffer& buffer,
-        uint32_t& expected_num_workers_completed);
+        uint32_t& expected_num_workers_completed,
+        NOC noc_index,
+        CoreCoord dispatch_core);
 
     void process();
 
@@ -428,7 +442,7 @@ struct ReadBufferDescriptor {
     TensorMemoryLayout buffer_layout;
     uint32_t page_size;
     uint32_t padded_page_size;
-    std::vector<std::optional<uint32_t>> dev_page_to_host_page_mapping;
+    std::shared_ptr<const BufferPageMapping> buffer_page_mapping;
     void* dst;
     uint32_t dst_offset;
     uint32_t num_pages_read;
@@ -442,11 +456,11 @@ struct ReadBufferDescriptor {
         uint32_t dst_offset,
         uint32_t num_pages_read,
         uint32_t cur_dev_page_id,
-        const std::vector<std::optional<uint32_t>>& dev_page_to_host_page_mapping = {}) :
+        const std::shared_ptr<const BufferPageMapping>& buffer_page_mapping = nullptr) :
         buffer_layout(buffer_layout),
         page_size(page_size),
         padded_page_size(padded_page_size),
-        dev_page_to_host_page_mapping(dev_page_to_host_page_mapping),
+        buffer_page_mapping(buffer_page_mapping),
         dst(dst),
         dst_offset(dst_offset),
         num_pages_read(num_pages_read),
@@ -499,7 +513,7 @@ class HWCommandQueue {
 
     void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
-
+    void set_unicast_only_cores_on_dispatch(const std::vector<uint32_t>& unicast_only_noc_encodings);
    private:
     uint32_t id;
     uint32_t size_B;
@@ -520,7 +534,12 @@ class HWCommandQueue {
     volatile uint32_t num_completed_completion_q_reads;  // completion queue reader thread increments this after reading
                                                          // an entry out of the completion queue
     detail::CompletionReaderQueue issued_completion_q_reads;
-
+    // These values are used to reset the host side launch message wptr after a trace is captured
+    // Trace capture is a fully host side operation, but it modifies the state of the wptrs above
+    // To ensure that host and device are not out of sync, we reset the wptrs to their original values
+    // post trace capture.
+    uint32_t multicast_cores_launch_message_wptr_reset = 0;
+    uint32_t unicast_cores_launch_message_wptr_reset = 0;
     Device* device;
 
     std::condition_variable reader_thread_cv;
@@ -537,16 +556,14 @@ class HWCommandQueue {
     template <typename T>
     void enqueue_command(T& command, bool blocking);
 
-    void enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* dst, bool blocking);
+    void enqueue_read_buffer(std::shared_ptr<Buffer>& buffer, void* dst, bool blocking);
     void enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking);
     void enqueue_write_buffer(
-        std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<const Buffer>> buffer,
-        HostDataType src,
-        bool blocking);
-    void enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking);
+        std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, HostDataType src, bool blocking);
+    void enqueue_write_buffer(Buffer& buffer, const void* src, bool blocking);
     void enqueue_program(Program& program, bool blocking);
-    void enqueue_record_event(std::shared_ptr<Event> event, bool clear_count = false);
-    void enqueue_wait_for_event(std::shared_ptr<Event> sync_event, bool clear_count = false);
+    void enqueue_record_event(const std::shared_ptr<Event>& event, bool clear_count = false);
+    void enqueue_wait_for_event(const std::shared_ptr<Event>& sync_event, bool clear_count = false);
     void enqueue_trace(const uint32_t trace_id, bool blocking);
     void finish();
     void terminate();
@@ -555,7 +572,7 @@ class HWCommandQueue {
     friend void EnqueueTraceImpl(CommandQueue& cq, uint32_t trace_id, bool blocking);
     friend void EnqueueProgramImpl(
         CommandQueue& cq,
-        std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program,
+        Program& program,
         bool blocking);
     friend void EnqueueReadBufferImpl(
         CommandQueue& cq,
@@ -570,10 +587,10 @@ class HWCommandQueue {
     friend void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueDeallocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer);
-    friend void EnqueueRecordEventImpl(CommandQueue& cq, std::shared_ptr<Event> event);
-    friend void EnqueueWaitForEventImpl(CommandQueue& cq, std::shared_ptr<Event> event);
+    friend void EnqueueRecordEventImpl(CommandQueue& cq, const std::shared_ptr<Event>& event);
+    friend void EnqueueWaitForEventImpl(CommandQueue& cq, const std::shared_ptr<Event>& event);
     friend void FinishImpl(CommandQueue& cq);
-    friend void EnqueueRecordEvent(CommandQueue& cq, std::shared_ptr<Event> event);
+    friend void EnqueueRecordEvent(CommandQueue& cq, const std::shared_ptr<Event>& event);
     friend class CommandQueue;
     friend class Device;
 };
@@ -583,7 +600,7 @@ struct CommandInterface {
     EnqueueCommandType type;
     std::optional<bool> blocking;
     std::optional<std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>>> buffer;
-    std::optional<std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>>> program;
+    Program* program;
     std::optional<AllocBufferMetadata> alloc_md;
     std::optional<RuntimeArgsMetadata> runtime_args_md;
     std::optional<const Buffer*> shadow_buffer;
@@ -695,7 +712,7 @@ void EnqueueSetRuntimeArgs(
 void EnqueueAddBufferToProgram(
     CommandQueue& cq,
     std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
-    std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program,
+    Program& program,
     bool blocking);
 
 }  // namespace tt::tt_metal

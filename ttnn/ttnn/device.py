@@ -3,11 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import contextlib
-import os
-from typing import Optional
+from typing import Optional, List
 
 import ttnn
-from ttnn._ttnn.deprecated.device import Arch
 
 
 def get_device_core_grid(device):
@@ -16,65 +14,110 @@ def get_device_core_grid(device):
 
 
 # TODO: Device = ttnn._ttnn.Device
-Device = ttnn._ttnn.deprecated.device.Device
+Device = ttnn._ttnn.device.Device
 Device.core_grid = property(get_device_core_grid)
-DispatchCoreType = ttnn._ttnn.deprecated.device.DispatchCoreType
+DispatchCoreType = ttnn._ttnn.device.DispatchCoreType
+Arch = ttnn._ttnn.device.Arch
+EPS_GS = ttnn._ttnn.device.EPS_GS
+EPS_WHB0 = ttnn._ttnn.device.EPS_WHB0
+EPS_BH = ttnn._ttnn.device.EPS_BH
+DEFAULT_L1_SMALL_SIZE = ttnn._ttnn.device.DEFAULT_L1_SMALL_SIZE
+DEFAULT_TRACE_REGION_SIZE = ttnn._ttnn.device.DEFAULT_TRACE_REGION_SIZE
+
+open_device = ttnn._ttnn.device.open_device
 
 
-def open_device(
-    device_id: int,
-    l1_small_size: int = ttnn._ttnn.deprecated.device.DEFAULT_L1_SMALL_SIZE,
-    trace_region_size: int = ttnn._ttnn.deprecated.device.DEFAULT_TRACE_REGION_SIZE,
-    dispatch_core_type: int = DispatchCoreType.WORKER,
-):
+def close_device(device: "ttnn.device.Device"):
     """
-    open_device(device_id: int) -> ttnn.Device:
-
-    Open a device with the given device_id. If the device is already open, return the existing device.
-    """
-    return ttnn._ttnn.device.open_device(
-        device_id=device_id,
-        l1_small_size=l1_small_size,
-        trace_region_size=trace_region_size,
-        dispatch_core_type=dispatch_core_type,
-    )
-
-
-def close_device(device):
-    """
-    close_device(device: ttnn.Device) -> None:
-
     Close the device and remove it from the device cache.
+
+    Args:
+        device (ttnn.device.Device): The device to close.
+
+    Returns:
+        `None`: the device is closed.
+
+    Example:
+        >>> device_id = 0
+        >>> device = ttnn.open_device(device_id = device_id)
+        >>> success = ttnn.close_device(device)
+        Closing device 0
+
     """
     synchronize_device(device)
     ttnn._ttnn.device.close_device(device)
 
 
-def enable_program_cache(device):
-    ttnn._ttnn.device.enable_program_cache(device)
+enable_program_cache = ttnn._ttnn.device.enable_program_cache
+disable_and_clear_program_cache = ttnn._ttnn.device.disable_and_clear_program_cache
+
+synchronize_device = ttnn._ttnn.device.synchronize_device
+GetDefaultDevice = ttnn._ttnn.device.GetDefaultDevice
+SetDefaultDevice = ttnn._ttnn.device.SetDefaultDevice
+GetPCIeDeviceID = ttnn._ttnn.device.GetPCIeDeviceID
+GetNumPCIeDevices = ttnn._ttnn.device.GetNumPCIeDevices
 
 
-def disable_and_clear_program_cache(device):
-    ttnn._ttnn.device.disable_and_clear_program_cache(device)
+def CreateDevice(
+    device_id: int,
+    num_command_queues: int = 1,
+    l1_small_size: int = ttnn._ttnn.device.DEFAULT_L1_SMALL_SIZE,
+    trace_region_size: int = ttnn._ttnn.device.DEFAULT_TRACE_REGION_SIZE,
+    dispatch_core_type: int = DispatchCoreType.WORKER,
+):
+    return ttnn._ttnn.device.CreateDevice(
+        device_id, num_command_queues, l1_small_size, trace_region_size, dispatch_core_type
+    )
 
 
-def synchronize_device(device: "ttnn.Device", queue_id: Optional[int] = None) -> None:
-    """
-    synchronize_device(device: ttnn.Device, queue_id: Optional[int] = None) -> None:
+def CreateDevices(
+    device_ids: List[int],
+    num_command_queues: int = 1,
+    l1_small_size: int = ttnn._ttnn.device.DEFAULT_L1_SMALL_SIZE,
+    trace_region_size: int = ttnn._ttnn.device.DEFAULT_TRACE_REGION_SIZE,
+    dispatch_core_type: int = DispatchCoreType.WORKER,
+):
+    return ttnn._ttnn.device.CreateDevices(
+        device_ids, num_command_queues, l1_small_size, trace_region_size, dispatch_core_type
+    )
 
-    Synchronize the device with host by waiting for all operations to complete.
-    If queue_id is provided then only the operations associated with that queue_id are waited for,
-    otherwise operations for all command queues are waited on.
-    """
-    ttnn._ttnn.deprecated.device.Synchronize(device, queue_id)
+
+CloseDevice = ttnn._ttnn.device.CloseDevice
+CloseDevices = ttnn._ttnn.device.CloseDevices
+
+
+def DumpDeviceProfiler(device, last_dump: bool = False):
+    ttnn._ttnn.device.DumpDeviceProfiler(device, last_dump)
+
+
+GetNumAvailableDevices = ttnn._ttnn.device.GetNumAvailableDevices
+EnablePersistentKernelCache = ttnn._ttnn.device.EnablePersistentKernelCache
+DisablePersistentKernelCache = ttnn._ttnn.device.DisablePersistentKernelCache
+EnableCompilationReports = ttnn._ttnn.device.EnableCompilationReports
+DisableCompilationReports = ttnn._ttnn.device.DisableCompilationReports
+EnableMemoryReports = ttnn._ttnn.device.EnableMemoryReports
+DisableMemoryReports = ttnn._ttnn.device.DisableMemoryReports
+SetLazyCommandQueueMode = ttnn._ttnn.device.SetLazyCommandQueueMode
+DeallocateBuffers = ttnn._ttnn.device.deallocate_buffers
 
 
 @contextlib.contextmanager
-def manage_device(device_id: int):
+def manage_device(device_id: int) -> "ttnn.device.Device":
     """
-    manage_device(device_id: int) -> ttnn.Device:
-
     Context manager for opening and closing a device.
+
+    Args:
+        device_id (int): The device ID to open.
+
+    Returns:
+        ttnn.device.Device: the opened device. The device will be closed automatically when the block is exited, even if an error occurs.
+
+    Example:
+        >>> with manage_device(device_id=0) as device:
+            >>> # Perform operations with the device
+            >>> tensor = ttnn.zeros((2, 3), device=device)
+            >>> print(tensor)
+        ttnn.Tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
     """
     device = open_device(device_id=device_id)
     try:
@@ -84,15 +127,22 @@ def manage_device(device_id: int):
 
 
 def dump_device_memory_state(device, prefix=""):
-    ttnn._ttnn.deprecated.device.DumpDeviceMemoryState(device, prefix)
+    ttnn._ttnn.device.DumpDeviceMemoryState(device, prefix)
 
 
 def is_wormhole_b0(device):
-    return device.arch() == Arch.WORMHOLE_B0
+    return device.arch() == ttnn._ttnn.device.Arch.WORMHOLE_B0
 
 
 def is_grayskull(device):
-    return device.arch() == Arch.GRAYSKULL
+    return device.arch() == ttnn._ttnn.device.Arch.GRAYSKULL
+
+
+SetDefaultDevice = ttnn._ttnn.device.SetDefaultDevice
+GetDefaultDevice = ttnn._ttnn.device.GetDefaultDevice
+format_input_tensor = ttnn._ttnn.device.format_input_tensor
+format_output_tensor = ttnn._ttnn.device.format_output_tensor
+pad_to_tile_shape = ttnn._ttnn.device.pad_to_tile_shape
 
 
 __all__ = []

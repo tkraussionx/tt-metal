@@ -8,7 +8,7 @@
 #include <ttnn/tensor/tensor_utils.hpp>
 
 #include "ttnn/operation.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
+#include "ttnn/operations/experimental/auto_format/auto_format.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 #include "tt_metal/tt_stl/reflection.hpp"
@@ -61,7 +61,7 @@ auto& get_workers(auto& output_tensors) {
             return output_tensor->workers;
         }
     }
-    TT_FATAL(false, "Workers not found in output tensors.");
+    TT_THROW("Workers not found in output tensors.");
 }
 
 
@@ -78,7 +78,7 @@ void launch_op(
     ZoneScopedN("LaunchOp");
     auto& workers = get_workers(output_tensors);
     std::size_t workers_size = workers.size();
-    if (not enable_autoformat_device and workers.empty() or not workers.at(0)->in_main_thread()) {
+    if (not enable_autoformat_device and workers.empty() or tt::tt_metal::detail::InWorkerThread()) {
         // Run in main thread or immediately in worker thread
         output_tensors = op_func(input_tensors, optional_input_tensors, optional_output_tensors);
         return;
@@ -216,6 +216,12 @@ void launch_op(
                         if (!output_tensor || !local_tensor) {
                             continue;
                         }
+
+                        // The return type is vector<optional<Tensor>>, and this refers to the case where the i-th value is nullopt.
+                        if (output_tensor->tensor_attributes.use_count() != 0 && local_tensor->tensor_attributes.use_count() == 0) {
+                            continue;
+                        }
+
                         if (std::holds_alternative<OwnedStorage>(local_tensor->tensor_attributes->storage)) {
                             TT_ASSERT(
                                 output_tensor->tensor_attributes->dynamic_storage,
@@ -232,6 +238,7 @@ void launch_op(
                             output_tensor->tensor_attributes->shape = local_tensor->tensor_attributes->shape;
                             output_tensor->tensor_attributes->dtype = local_tensor->tensor_attributes->dtype;
                             output_tensor->tensor_attributes->layout = local_tensor->tensor_attributes->layout;
+                            output_tensor->tensor_attributes->tile = local_tensor->tensor_attributes->tile;
                             output_tensor->tensor_attributes->metadata_populated = true;
                         }
                     }

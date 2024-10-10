@@ -6,8 +6,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
+
 #include <cstring>
+#include <string>
 
 #include "impl/debug/dprint_server.hpp"
 #include "tools/profiler/profiler_state.hpp"
@@ -23,7 +24,13 @@ const char *RunTimeDebugFeatureNames[RunTimeDebugFeatureCount] = {
     "READ_DEBUG_DELAY",
     "WRITE_DEBUG_DELAY",
     "ATOMIC_DEBUG_DELAY",
+    "DISABLE_L1_DATA_CACHE",
 };
+
+const char *RunTimeDebugClassNames[RunTimeDebugClassCount] = {"N/A", "worker", "dispatch", "all"};
+
+static const char *TT_METAL_HOME_ENV_VAR = "TT_METAL_HOME";
+static const char *TT_METAL_KERNEL_PATH_ENV_VAR = "TT_METAL_KERNEL_PATH";
 
 // Note: global initialization order is non-deterministic
 // This is ok so long as this gets initialized before decisions are based on
@@ -31,8 +38,16 @@ const char *RunTimeDebugFeatureNames[RunTimeDebugFeatureCount] = {
 RunTimeOptions OptionsG;
 
 RunTimeOptions::RunTimeOptions() {
-    if (const char *root_dir_ptr = std::getenv("TT_METAL_HOME")) {
-        root_dir = std::string(root_dir_ptr) + "/";
+    const char *root_dir_str = std::getenv(TT_METAL_HOME_ENV_VAR);
+    if (root_dir_str != nullptr) {
+        this->is_root_dir_env_var_set = true;
+        this->root_dir = std::string(root_dir_str) + "/";
+    }
+
+    const char *kernel_dir_str = std::getenv(TT_METAL_KERNEL_PATH_ENV_VAR);
+    if (kernel_dir_str != nullptr) {
+        this->is_kernel_dir_env_var_set = true;
+        this->kernel_dir = std::string(kernel_dir_str) + "/";
     }
 
     build_map_enabled = (getenv("TT_METAL_KERNEL_MAP") != nullptr);
@@ -88,7 +103,7 @@ RunTimeOptions::RunTimeOptions() {
     if (num_cqs != nullptr) {
         try {
             set_num_hw_cqs(std::stoi(num_cqs));
-        } catch (const std::invalid_argument& ia) {
+        } catch (const std::invalid_argument &ia) {
             TT_THROW("Invalid TT_METAL_GTEST_NUM_HW_CQS: {}", num_cqs);
         }
     }
@@ -102,14 +117,25 @@ RunTimeOptions::RunTimeOptions() {
         this->dispatch_core_type = tt_metal::DispatchCoreType::ETH;
     }
 
+    if (getenv("TT_METAL_SKIP_LOADING_FW")) {
+        this->skip_loading_fw = true;
+    }
 }
 
 const std::string &RunTimeOptions::get_root_dir() {
-    if (root_dir == "") {
-        TT_THROW("Env var " + std::string("TT_METAL_HOME") + " is not set.");
+    if (!this->is_root_dir_specified()) {
+        TT_THROW("Env var {} is not set.", TT_METAL_HOME_ENV_VAR);
     }
 
     return root_dir;
+}
+
+const std::string &RunTimeOptions::get_kernel_dir() const {
+    if (!this->is_kernel_dir_specified()) {
+        TT_THROW("Env var {} is not set.", TT_METAL_KERNEL_PATH_ENV_VAR);
+    }
+
+    return this->kernel_dir;
 }
 
 void RunTimeOptions::ParseWatcherEnv() {
@@ -139,12 +165,13 @@ void RunTimeOptions::ParseWatcherEnv() {
 
     // Any watcher features to disabled based on env var.
     std::set all_features = {
-        watcher_status_str,
+        watcher_waypoint_str,
         watcher_noc_sanitize_str,
         watcher_assert_str,
         watcher_pause_str,
         watcher_ring_buffer_str,
-        watcher_stack_usage_str};
+        watcher_stack_usage_str,
+        watcher_dispatch_str};
     for (std::string feature : all_features) {
         std::string env_var("TT_METAL_WATCHER_DISABLE_");
         env_var += feature;
@@ -174,19 +201,20 @@ void RunTimeOptions::ParseFeatureEnv(RunTimeDebugFeatures feature) {
     ParseFeatureChipIds(feature, feature_env_prefix + "_CHIPS");
     ParseFeatureRiscvMask(feature, feature_env_prefix + "_RISCVS");
     ParseFeatureFileName(feature, feature_env_prefix + "_FILE");
+    ParseFeatureOneFilePerRisc(feature, feature_env_prefix + "_ONE_FILE_PER_RISC");
 
     // Set feature enabled if the user asked for any feature cores
     feature_targets[feature].enabled = false;
     for (auto &core_type_and_all_flag : feature_targets[feature].all_cores)
-        if (core_type_and_all_flag.second)
+        if (core_type_and_all_flag.second != RunTimeDebugClassNoneSpecified)
             feature_targets[feature].enabled = true;
     for (auto &core_type_and_cores : feature_targets[feature].cores)
         if (core_type_and_cores.second.size() > 0)
             feature_targets[feature].enabled = true;
 
-    const char *print_noc_xfers = std::getenv("TT_METAL_DPRINT_NOC_TRANSFER_DATA");
+    const char *print_noc_xfers = std::getenv("TT_METAL_RECORD_NOC_TRANSFER_DATA");
     if (print_noc_xfers != nullptr)
-        dprint_noc_transfer_data = true;
+        record_noc_transfer_data = true;
 };
 
 void RunTimeOptions::ParseFeatureCoreRange(
@@ -195,9 +223,14 @@ void RunTimeOptions::ParseFeatureCoreRange(
     vector<CoreCoord> cores;
 
     // Check if "all" is specified, rather than a range of cores.
-    if (str != nullptr && strcmp(str, "all") == 0) {
-        feature_targets[feature].all_cores[core_type] = true;
-        return;
+    feature_targets[feature].all_cores[core_type] = RunTimeDebugClassNoneSpecified;
+    if (str != nullptr) {
+        for (int idx = 0; idx < RunTimeDebugClassCount; idx++) {
+            if (strcmp(str, RunTimeDebugClassNames[idx]) == 0) {
+                feature_targets[feature].all_cores[core_type] = idx;
+                return;
+            }
+        }
     }
     if (str != nullptr) {
         if (isdigit(str[0])) {
@@ -269,30 +302,48 @@ void RunTimeOptions::ParseFeatureChipIds(RunTimeDebugFeatures feature, const std
 }
 
 void RunTimeOptions::ParseFeatureRiscvMask(RunTimeDebugFeatures feature, const std::string &env_var) {
-    // Default is all RISCVs enabled for printing.
-    uint32_t riscv_mask = DPRINT_RISCV_BR | DPRINT_RISCV_TR0 | DPRINT_RISCV_TR1 | DPRINT_RISCV_TR2 | DPRINT_RISCV_NC;
+    uint32_t riscv_mask = 0;
     char *env_var_str = std::getenv(env_var.c_str());
+
     if (env_var_str != nullptr) {
-        if (strcmp(env_var_str, "BR") == 0) {
-            riscv_mask = DPRINT_RISCV_BR;
-        } else if (strcmp(env_var_str, "NC") == 0) {
-            riscv_mask = DPRINT_RISCV_NC;
-        } else if (strcmp(env_var_str, "TR0") == 0) {
-            riscv_mask = DPRINT_RISCV_TR0;
-        } else if (strcmp(env_var_str, "TR1") == 0) {
-            riscv_mask = DPRINT_RISCV_TR1;
-        } else if (strcmp(env_var_str, "TR2") == 0) {
-            riscv_mask = DPRINT_RISCV_TR2;
-        } else {
-            TT_THROW("Invalid TT_DEBUG_PRINT_RISCV");
+        if (strstr(env_var_str, "BR")) {
+            riscv_mask |= RISCV_BR;
         }
+        if (strstr(env_var_str, "NC")) {
+            riscv_mask |= RISCV_NC;
+        }
+        if (strstr(env_var_str, "TR0")) {
+            riscv_mask |= RISCV_TR0;
+        }
+        if (strstr(env_var_str, "TR1")) {
+            riscv_mask |= RISCV_TR1;
+        }
+        if (strstr(env_var_str, "TR2")) {
+            riscv_mask |= RISCV_TR2;
+        }
+        if (strstr(env_var_str, "TR")) {
+            riscv_mask |= (RISCV_TR0 | RISCV_TR1 | RISCV_TR2);
+        }
+        if (strstr(env_var_str, "ER")) {
+            riscv_mask |= RISCV_ER;
+        }
+    } else {
+        // Default is all RISCVs enabled.
+        bool default_disabled = (feature == RunTimeDebugFeatures::RunTimeDebugFeatureDisableL1DataCache);
+        riscv_mask = default_disabled ? 0 : (RISCV_ER | RISCV_BR | RISCV_TR0 | RISCV_TR1 | RISCV_TR2 | RISCV_NC);
     }
+
     feature_targets[feature].riscv_mask = riscv_mask;
 }
 
 void RunTimeOptions::ParseFeatureFileName(RunTimeDebugFeatures feature, const std::string &env_var) {
     char *env_var_str = std::getenv(env_var.c_str());
     feature_targets[feature].file_name = (env_var_str != nullptr) ? std::string(env_var_str) : "";
+}
+
+void RunTimeOptions::ParseFeatureOneFilePerRisc(RunTimeDebugFeatures feature, const std::string &env_var) {
+    char *env_var_str = std::getenv(env_var.c_str());
+    feature_targets[feature].one_file_per_risc = (env_var_str != nullptr);
 }
 
 }  // namespace llrt

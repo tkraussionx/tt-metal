@@ -66,12 +66,11 @@ Padding::Padding(const std::vector<PadDimension>& pad_dimensions, PadValue pad_v
 const uint32_t Padding::get_normalized_index(std::int64_t index) const {
     std::int64_t rank = static_cast<std::int64_t>(this->rank_);
     std::uint64_t normalized_index = index >= 0 ? index : rank + index;
-    TT_ASSERT(
+    TT_FATAL(
         normalized_index >= 0 and normalized_index < rank,
-        fmt::format(
             "Index is out of bounds for the rank, should be between 0 and {} however is {}",
             rank - 1,
-            normalized_index));
+            normalized_index);
     return normalized_index;
 }
 
@@ -105,51 +104,51 @@ bool operator==(const Padding& padding_a, const Padding& padding_b) {
 
 bool operator!=(const Padding& padding_a, const Padding& padding_b) { return not(padding_a == padding_b); }
 
-Shape::Shape(const std::initializer_list<uint32_t> dimensions) :
+LegacyShape::LegacyShape(const std::initializer_list<uint32_t> dimensions) :
     rank_(dimensions.size()), dimensions_{}, padding_(dimensions.size()) {
     std::copy(std::begin(dimensions), std::end(dimensions), std::begin(this->dimensions_));
 }
-Shape::Shape(const std::vector<uint32_t>& dimensions) :
+LegacyShape::LegacyShape(const std::vector<uint32_t>& dimensions) :
     rank_(dimensions.size()), dimensions_{}, padding_(dimensions.size()) {
     std::copy(std::begin(dimensions), std::end(dimensions), std::begin(this->dimensions_));
 }
 
-Shape::Shape(const std::initializer_list<uint32_t> dimensions, const Padding& padding) :
+LegacyShape::LegacyShape(const std::initializer_list<uint32_t> dimensions, const Padding& padding) :
     rank_(dimensions.size()), dimensions_{}, padding_(padding) {
     TT_ASSERT(this->padding_.rank_ == this->rank_);
     std::copy(std::begin(dimensions), std::end(dimensions), std::begin(this->dimensions_));
 }
-Shape::Shape(const std::vector<uint32_t>& dimensions, const Padding& padding) :
+LegacyShape::LegacyShape(const std::vector<uint32_t>& dimensions, const Padding& padding) :
     rank_(dimensions.size()), dimensions_{}, padding_(padding) {
     TT_ASSERT(this->padding_.rank_ == this->rank_);
     std::copy(std::begin(dimensions), std::end(dimensions), std::begin(this->dimensions_));
 }
 
-Shape::Shape(const Shape& other, const Padding& padding) :
+LegacyShape::LegacyShape(const LegacyShape& other, const Padding& padding) :
     dimensions_(other.dimensions_), rank_(other.rank_), padding_(padding) {
     TT_ASSERT(this->padding_.rank_ == this->rank_);
 }
 
-std::size_t Shape::rank() const { return this->rank_; }
-std::size_t Shape::size() const { return this->rank_; }
+std::size_t LegacyShape::rank() const { return this->rank_; }
+std::size_t LegacyShape::size() const { return this->rank_; }
 
-uint32_t& Shape::operator[](const std::int64_t index) {
+uint32_t& LegacyShape::operator[](const std::int64_t index) {
     auto normalized_index = this->get_normalized_index(index);
     return this->dimensions_[normalized_index];
 }
-const uint32_t Shape::operator[](const std::int64_t index) const {
+const uint32_t LegacyShape::operator[](const std::int64_t index) const {
     auto normalized_index = this->get_normalized_index(index);
     return this->dimensions_[normalized_index];
 }
 
-const uint32_t* Shape::begin() const { return this->dimensions_.data(); }
-const uint32_t* Shape::end() const { return this->dimensions_.data() + this->rank_; }
+const uint32_t* LegacyShape::begin() const { return this->dimensions_.data(); }
+const uint32_t* LegacyShape::end() const { return this->dimensions_.data() + this->rank_; }
 
-const Padding& Shape::padding() const {
+const Padding& LegacyShape::padding() const {
     return this->padding_;
 }
 
-const Shape Shape::without_padding() const {
+const LegacyShape LegacyShape::without_padding() const {
     auto padding = this->padding_;
     std::vector<std::uint32_t> shape_without_padding;
     for (auto index = 0; index < this->rank(); index++) {
@@ -158,18 +157,28 @@ const Shape Shape::without_padding() const {
         const auto new_dimension = dimension - (front_pad + back_pad);
         shape_without_padding.push_back(new_dimension);
     }
-    return Shape(shape_without_padding);
+    return LegacyShape(shape_without_padding);
 }
 
-const uint32_t Shape::get_normalized_index(std::int64_t index) const {
+ttnn::SimpleShape LegacyShape::logical_shape() const
+{
+    const LegacyShape logical = without_padding();
+
+    std::vector<uint32_t> values(rank());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = logical[i];
+    }
+    return ttnn::SimpleShape(std::move(values));
+}
+
+const uint32_t LegacyShape::get_normalized_index(std::int64_t index) const {
     std::int64_t rank = static_cast<std::int64_t>(this->rank_);
     std::uint64_t normalized_index = index >= 0 ? index : rank + index;
-    TT_ASSERT(
+    TT_FATAL(
         normalized_index >= 0 and normalized_index < rank,
-        fmt::format(
             "Index is out of bounds for the rank, should be between 0 and {} however is {}",
             rank - 1,
-            normalized_index));
+            normalized_index);
     return normalized_index;
 }
 
@@ -186,7 +195,7 @@ bool operator==(const ShardTensor2D& lhs, const ShardTensor2D& rhs) {
     return lhs.shard_mesh == rhs.shard_mesh; // Equal if they have the same shard_mesh.
 }
 
-bool operator==(const Shape& shape_a, const Shape& shape_b) {
+bool operator==(const tt::tt_metal::LegacyShape& shape_a, const tt::tt_metal::LegacyShape& shape_b) {
     if (shape_a.rank() != shape_b.rank()) {
         return false;
     }
@@ -199,7 +208,7 @@ bool operator==(const Shape& shape_a, const Shape& shape_b) {
     return true;  // Ignore the padding when comparing shapes
 }
 
-bool operator!=(const Shape& shape_a, const Shape& shape_b) { return not(shape_a == shape_b); }
+bool operator!=(const tt::tt_metal::LegacyShape& shape_a, const tt::tt_metal::LegacyShape& shape_b) { return not(shape_a == shape_b); }
 
 bool MemoryConfig::is_sharded() const {
     switch (this->memory_layout) {
@@ -295,3 +304,52 @@ MemoryConfig load_memory_config(const std::string& file_name) {
 }  // namespace tt_metal
 
 }  // namespace tt
+
+namespace ttnn {
+
+namespace {
+int32_t normalized_index(int32_t index, size_t container_size) {
+    int32_t size = static_cast<int32_t>(container_size);
+
+    if (index < 0) {
+        index += size;
+    }
+
+    if (index < 0 || index >= size) {
+        throw std::out_of_range("SimpleShape index out of range.");
+    }
+
+    return index;
+}
+}
+
+bool SimpleShape::operator==(const SimpleShape &other) const {
+    return this->value == other.value;
+}
+
+bool SimpleShape::operator==(const std::vector<uint32_t> &other) const {
+    return this->value == other;
+}
+
+uint32_t SimpleShape::operator[](int32_t index) const {
+    auto norm_index = normalized_index(index, value.size());
+    return value[norm_index];
+}
+
+uint32_t& SimpleShape::operator[](int32_t index) {
+    auto norm_index = normalized_index(index, value.size());
+    return value[norm_index];
+}
+
+uint64_t SimpleShape::volume() const {
+    return std::accumulate(this->value.begin(), this->value.end(),
+                           uint64_t{1}, std::multiplies<uint64_t>());
+}
+
+} // namespace ttnn
+
+namespace ttnn::types {
+
+uint32_t Shape::operator[](std::int64_t index) const { return this->value.without_padding()[index]; }
+
+}  // namespace ttnn::types

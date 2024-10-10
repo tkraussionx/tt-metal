@@ -15,10 +15,16 @@
 #include "jit_build/settings.hpp"
 #include "hostdevcommon/common_values.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/tt_stl/aligned_allocator.hpp"
 #include "llrt/rtoptions.hpp"
 
 
 namespace tt::tt_metal {
+
+static constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
+
+template <typename T>
+using vector_cache_aligned = std::vector<T, tt::stl::aligned_allocator<T, CACHE_LINE_ALIGNMENT>>;
 
 class JitBuildSettings;
 
@@ -26,6 +32,12 @@ enum class JitBuildProcessorType {
     DATA_MOVEMENT,
     COMPUTE,
     ETHERNET
+};
+
+struct JitBuiltStateConfig {
+    int processor_id = 0;
+    bool is_fw = false;
+    uint32_t dispatch_message_addr = 0;
 };
 
 // The build environment
@@ -71,12 +83,13 @@ class JitBuildEnv {
 
 // All the state used for a build in an abstract base class
 // Contains everything needed to do a build (all settings, methods, etc)
-class JitBuildState {
+class alignas(CACHE_LINE_ALIGNMENT) JitBuildState {
   protected:
     const JitBuildEnv& env_;
 
     int core_id_;
     int is_fw_;
+    uint32_t dispatch_message_addr_;
     bool process_defines_at_compile;
 
     string out_path_;
@@ -88,26 +101,23 @@ class JitBuildState {
     string includes_;
     string lflags_;
 
-    vector<string> srcs_;
-    vector<string> objs_;
+    vector_cache_aligned<std::string> srcs_;
+    vector_cache_aligned<std::string> objs_;
 
     string link_objs_;
 
     void compile(const string& log_file, const string& out_path, const JitBuildSettings *settings) const;
     void compile_one(const string& log_file, const string& out_path, const JitBuildSettings *settings, const string& src, const string &obj) const;
     void link(const string& log_file, const string& out_path) const;
-    void elf_to_hex8(const string& log_file, const string& out_path) const;
-    void hex8_to_hex32(const string& log_file, const string& out_path) const;
     void weaken(const string& log_file, const string& out_path) const;
     void copy_kernel( const string& kernel_in_path, const string& op_out_path) const;
     void extract_zone_src_locations(const string& log_file) const;
 
   public:
-    JitBuildState(const JitBuildEnv& env, int which, bool is_fw = false);
+    JitBuildState(const JitBuildEnv& env, const JitBuiltStateConfig &build_config);
     virtual ~JitBuildState() = default;
     void finish_init();
 
-    virtual void pre_compile(const string& kernel_in_path, const string& op_out_path) const;
     void build(const JitBuildSettings *settings) const;
 
     const string& get_out_path() const { return this->out_path_; };
@@ -132,19 +142,19 @@ class JitBuildDataMovement : public JitBuildState {
   private:
 
   public:
-    JitBuildDataMovement(const JitBuildEnv& env, int which, bool is_fw = false);
+    JitBuildDataMovement(const JitBuildEnv& env, const JitBuiltStateConfig &build_config);
 };
 
 class JitBuildCompute : public JitBuildState {
   private:
   public:
-    JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw = false);
+    JitBuildCompute(const JitBuildEnv& env, const JitBuiltStateConfig &build_config);
 };
 
 class JitBuildEthernet : public JitBuildState {
   private:
   public:
-    JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw = false);
+    JitBuildEthernet(const JitBuildEnv& env, const JitBuiltStateConfig &build_config);
 };
 
 // Abstract base class for kernel specialization
@@ -159,9 +169,9 @@ class JitBuildSettings {
     bool use_multi_threaded_compile = true;
 };
 
-void jit_build(const JitBuildState& build, const JitBuildSettings *settings, const string& kernel_in_path);
-void jit_build_set(const JitBuildStateSet& builds, const JitBuildSettings *settings, const string& kernel_in_path);
-void jit_build_subset(const JitBuildStateSubset& builds, const JitBuildSettings *settings, const string& kernel_in_path);
+void jit_build(const JitBuildState& build, const JitBuildSettings* settings);
+void jit_build_set(const JitBuildStateSet& builds, const JitBuildSettings* settings);
+void jit_build_subset(const JitBuildStateSubset& builds, const JitBuildSettings* settings);
 
 inline const string jit_build_get_kernel_compile_outpath(int build_key) {
     // TODO(pgk), get rid of this

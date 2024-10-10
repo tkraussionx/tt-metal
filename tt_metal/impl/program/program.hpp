@@ -43,6 +43,7 @@ struct KernelGroup {
     uint32_t rta_sizes[DISPATCH_CLASS_MAX];
     uint32_t total_rta_size;
     launch_msg_t launch_msg;
+    go_msg_t go_msg;
 
     KernelGroup();
     KernelGroup(
@@ -63,6 +64,10 @@ struct ProgramConfig {
     uint32_t rta_offset;
     std::array<uint32_t, DISPATCH_CLASS_MAX> crta_offsets;
     std::array<uint32_t, DISPATCH_CLASS_MAX> crta_sizes;
+    uint32_t sem_offset;
+    uint32_t sem_size;
+    uint32_t cb_offset;
+    uint32_t cb_size;
 };
 
 class Program {
@@ -119,7 +124,7 @@ class Program {
 
     size_t num_semaphores ( const CoreCoord & core ) const;
     size_t num_semaphores () const;
-    void init_semaphores ( const Device & device, const CoreCoord &logical_core, CoreType core_type) const;
+    void init_semaphores ( const Device & device, const CoreCoord &logical_core, uint32_t programmable_core_type_index) const;
     // XXXXX TODO: this should return a const reference
     std::vector<std::vector<CoreCoord>> logical_cores() const;
 
@@ -132,14 +137,19 @@ class Program {
 
     void invalidate_circular_buffer_allocation();
 
-    void allocate_circular_buffers();
+    void allocate_circular_buffers(const Device *device);
 
     bool is_finalized() const { return this->finalized_; }
     void finalize();
     std::shared_ptr<Kernel> get_kernel(KernelHandle kernel_id) const;
 
-    void capture_multi_device_dependencies() { capture_multi_device_dependencies_ = true; }
-    bool has_multi_device_dependencies() { return capture_multi_device_dependencies_; }
+    ProgramConfig& get_program_config(uint32_t programmable_core_type_index);
+
+    // debug/test
+    uint32_t get_sem_base_addr(Device *device, CoreCoord logical_core, CoreType core_type) const;
+    uint32_t get_cb_base_addr(Device *device, CoreCoord logical_core, CoreType core_type) const;
+    uint32_t get_sem_size(Device *device, CoreCoord logical_core, CoreType core_type) const;
+    uint32_t get_cb_size(Device *device, CoreCoord logical_core, CoreType core_type) const;
 
    private:
     void populate_dispatch_data(Device *device);
@@ -152,6 +162,7 @@ class Program {
     ProgramTransferInfo program_transfer_info;
 
     bool finalized_;
+
     struct CircularBufferAllocator {
         CircularBufferAllocator(const CoreRange &core_range_) : core_range(core_range_) {}
 
@@ -162,20 +173,20 @@ class Program {
         // There are multiple ranges because per core L1 regions are not in lockstep but circular buffers spanning multiple cores must share the same address
         // To enable this, circular buffer address is the maximum address amongst all of its target cores
         // This vector is sorted from lower to higher address spaces
-        std::vector<std::pair<uint64_t, uint64_t>> l1_regions = {{L1_UNRESERVED_BASE, L1_UNRESERVED_BASE}};
+        std::vector<std::pair<uint64_t, uint64_t>> l1_regions;
 
         // Returns address for next circular buffer
         // Circular buffers are placed sequentially on a core so the next available address gets appended to the last L1 region
         uint64_t get_cb_region_end() const {
-            return this->l1_regions.back().second;
+            return this->l1_regions.empty() ? 0 : this->l1_regions.back().second;
         }
 
         // If address is the end of the last L1 region, the last region is extended by size bytes,
         //  otherwise address must be higher than existing regions and a new L1 region [address, size) is added
-        void mark_address(uint64_t address, uint64_t size);
+        void mark_address(uint64_t address, uint64_t size, uint64_t base_address);
 
         // Reset when circular buffer allocation is invalidated
-        void reset_available_addresses() { this->l1_regions = {{L1_UNRESERVED_BASE, L1_UNRESERVED_BASE}}; }
+        void reset_available_addresses() { this->l1_regions.clear(); }
     };
 
     uint64_t id; // Need to make non-const due to move constructor
@@ -206,7 +217,6 @@ class Program {
 
     std::vector<ProgramConfig> program_configs_;
     std::vector<uint32_t> program_config_sizes_;
-    bool capture_multi_device_dependencies_ = false;
     friend CBHandle CreateCircularBuffer(Program &program, const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec, const CircularBufferConfig &config);
     friend std::shared_ptr<CircularBuffer> detail::GetCircularBuffer(const Program &program, CBHandle id);
     friend void detail::ValidateCircularBufferRegion(const Program &program, const Device *device);
@@ -230,12 +240,19 @@ class Program {
 
     void set_cb_data_fmt( Device *device, const std::vector<CoreRange> & crs, JitBuildOptions& build_options) const;
 
+    void set_cb_tile_dims( Device *device, const std::vector<CoreRange> & crs, JitBuildOptions& build_options) const;
+
     void update_kernel_groups(uint32_t programmable_core_type_index);
 
-    ProgramConfig& get_program_config(uint32_t programmable_core_type_index);
     uint32_t& get_program_config_size(uint32_t programmable_core_type_index);
 
     uint32_t finalize_rt_args(uint32_t programmable_core_type_index, uint32_t base_offset);
+    uint32_t finalize_sems(uint32_t programmable_core_type_index, uint32_t base_offset);
+    uint32_t finalize_cbs(uint32_t programmable_core_type_index, uint32_t base_offset);
+    void set_launch_msg_sem_offsets();
+
+    bool runs_on_noc_unicast_only_cores();
+    bool runs_on_noc_multicast_only_cores();
 
     friend class HWCommandQueue;
     friend class EnqueueProgramCommand;

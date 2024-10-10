@@ -56,6 +56,13 @@ def gen_func_with_cast_tt(gen_func, dtype):
 
             x = ttnn.to_torch(tt_tensor)
 
+        elif dtype == ttnn.bfloat4_b:
+            tt_tensor = ttnn.from_torch(
+                x, dtype=ttnn.bfloat4_b, layout=ttnn.TILE_LAYOUT, device=None, memory_config=None
+            )
+
+            x = ttnn.to_torch(tt_tensor)
+
         elif dtype == ttnn.uint16:
             x = x.to(torch.int16)
 
@@ -64,6 +71,9 @@ def gen_func_with_cast_tt(gen_func, dtype):
 
         elif dtype == ttnn.int32:
             x = x.to(torch.int32)
+
+        elif dtype == ttnn.float32:
+            pass
 
         else:
             logger.warning(f"Unknown dtype {dtype} passed to gen_func_with_cast_tt")
@@ -302,7 +312,7 @@ def gen_tensor_unpad_args(
     assert len(input_shapes[0]) == 4
     test_args = {}
     output_tensor_start = [random.randint(0, input_shapes[0][i] - 1) for i in range(4)]
-    output_tensor_end = [random.randint(output_tensor_start[i], input_shapes[0][i] - 1) for i in range(4)]
+    output_tensor_end = [random.randint(output_tensor_start[i] + 1, input_shapes[0][i]) for i in range(4)]
 
     test_args.update(
         {
@@ -917,8 +927,10 @@ def gen_unpad_args(
         if input_info is not None:
             if input_info["layout"][0] == ttnn.ROW_MAJOR_LAYOUT:
                 output_tensor_start = [0, 0, 0, 0]
-                output_tensor_end = [random.randrange(output_tensor_start[i], input_shapes[0][i], 1) for i in range(4)]
-                if output_tensor_end[-1] % 2 == 0:
+                output_tensor_end = [
+                    random.randrange(output_tensor_start[i] + 1, input_shapes[0][i], 1) for i in range(4)
+                ]
+                if output_tensor_end[-1] % 2 != 0:
                     output_tensor_end[-1] += 1
                 input_info.update(
                     {
@@ -928,9 +940,11 @@ def gen_unpad_args(
                 )
             elif input_info["layout"][0] == ttnn.TILE_LAYOUT:
                 output_tensor_start = [0, 0, 0, 0]
-                output_tensor_end = [random.randrange(output_tensor_start[i], input_shapes[0][i], 1) for i in range(4)]
-                output_tensor_end[-2] = max(nearest_32(output_tensor_end[-2]), 32) - 1
-                output_tensor_end[-1] = max(nearest_32(output_tensor_end[-1]), 32) - 1
+                output_tensor_end = [
+                    random.randrange(output_tensor_start[i] + 1, input_shapes[0][i], 1) for i in range(4)
+                ]
+                output_tensor_end[-2] = max(nearest_32(output_tensor_end[-2]), 32)
+                output_tensor_end[-1] = max(nearest_32(output_tensor_end[-1]), 32)
                 input_info.update(
                     {
                         "output_tensor_start": output_tensor_start,
@@ -2248,3 +2262,35 @@ def gen_div_no_nan_args(
         input_info.update({"value": random.uniform(low, high)})
 
         yield input_info
+
+
+def gen_topk_args(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=True, coregrid=[]):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=do_sanitize_args
+    ):
+        if input_info is not None:
+            # max_dim = len(input_shapes[0]) - 1
+            # dim = random.randint(0, max_dim)
+            # max_k = input_shapes[0][dim]
+            # k = random.randint(1, max_k-1)
+            # largest = random.choice([True, False])
+
+            # input_info.update({"dim": dim})
+            # input_info.update({"k": k})
+            # input_info.update({"largest": largest})
+
+            input_info.update({"dim": -1})
+            input_info.update({"k": 32})
+            input_info.update({"largest": True})
+            yield input_info
+
+
+def gen_argmax_args(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=True, coregrid=[]):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=do_sanitize_args
+    ):
+        if input_info is not None:
+            max_dim = len(input_shapes[0]) - 1
+            dim = random.choice([max_dim, None])
+            input_info.update({"dim": dim})
+            yield input_info

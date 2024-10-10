@@ -5,8 +5,6 @@
 import torch
 import torch.nn as nn
 import ttnn
-import tt_lib
-import ttnn
 from typing import Optional, Tuple, Union
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
@@ -58,47 +56,47 @@ class TtWhisperAttention(nn.Module):
         self.v_proj_bias = torch2tt_tensor(
             state_dict[f"{base_address}.v_proj.bias"],
             self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_layout=ttnn.ROW_MAJOR_LAYOUT,
         )
         self.q_proj_weight = torch2tt_tensor(
             state_dict[f"{base_address}.q_proj.weight"],
             self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_layout=ttnn.ROW_MAJOR_LAYOUT,
         )
         self.q_proj_bias = torch2tt_tensor(
             state_dict[f"{base_address}.q_proj.bias"],
             self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_layout=ttnn.ROW_MAJOR_LAYOUT,
         )
         self.out_proj_weight = torch2tt_tensor(
             state_dict[f"{base_address}.out_proj.weight"],
             self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_layout=ttnn.ROW_MAJOR_LAYOUT,
         )
         self.out_proj_bias = torch2tt_tensor(
             state_dict[f"{base_address}.out_proj.bias"],
             self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_layout=ttnn.ROW_MAJOR_LAYOUT,
         )
 
         self.cached_q_proj_shape = None
         self.q_proj_mul_const = None
 
     # Copied from transformers.models.bart.modeling_bart.BartAttention._shape with BART->whisper
-    def _shape(self, tt_tensor: tt_lib.tensor.Tensor, seq_len: int, bsz: int):
+    def _shape(self, tt_tensor: ttnn.Tensor, seq_len: int, bsz: int):
         tt_tensor = fallback_ops.reshape(tt_tensor, bsz, seq_len, self.num_heads, self.head_dim)
         tt_tensor = ttnn.transpose(tt_tensor, 1, -2)
         return tt_tensor
 
     def forward(
         self,
-        hidden_states: tt_lib.tensor.Tensor,
-        key_value_states: Optional[tt_lib.tensor.Tensor] = None,
-        past_key_value: Optional[Tuple[tt_lib.tensor.Tensor]] = None,
-        attention_mask: Optional[tt_lib.tensor.Tensor] = None,
+        hidden_states: ttnn.Tensor,
+        key_value_states: Optional[ttnn.Tensor] = None,
+        past_key_value: Optional[Tuple[ttnn.Tensor]] = None,
+        attention_mask: Optional[ttnn.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[tt_lib.tensor.Tensor, Optional[tt_lib.tensor.Tensor], Optional[Tuple[tt_lib.tensor.Tensor]],]:
+    ) -> Tuple[ttnn.Tensor, Optional[ttnn.Tensor], Optional[Tuple[ttnn.Tensor]],]:
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
@@ -107,11 +105,11 @@ class TtWhisperAttention(nn.Module):
             bsz,
             tgt_len,
             _,
-        ) = hidden_states.get_legacy_shape()
+        ) = hidden_states.shape.with_tile_padding()
 
         q_proj_output = linear(hidden_states, self.q_proj_weight, self.q_proj_bias)
 
-        q_proj_shape = q_proj_output.get_legacy_shape()
+        q_proj_shape = q_proj_output.shape.with_tile_padding()
 
         if q_proj_shape == self.cached_q_proj_shape:
             q_proj_mul_const = self.q_proj_mul_const
@@ -125,7 +123,7 @@ class TtWhisperAttention(nn.Module):
         if (
             is_cross_attention
             and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.get_legacy_shape()[1]
+            and past_key_value[0].shape[2] == key_value_states.shape.with_tile_padding()[1]
         ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
@@ -168,19 +166,19 @@ class TtWhisperAttention(nn.Module):
         value_states = fallback_ops.reshape(value_states, *proj_shape)
 
         key_states_transposed = ttnn.transpose(key_states, -2, -1)
-        src_len = key_states.get_legacy_shape()[-2]
+        src_len = key_states.shape.with_tile_padding()[-2]
         attn_weights = ttnn.matmul(query_states, key_states_transposed)
 
-        if attn_weights.get_legacy_shape() != [1, bsz * self.num_heads, tgt_len, src_len]:
+        if attn_weights.shape.with_tile_padding() != [1, bsz * self.num_heads, tgt_len, src_len]:
             raise ValueError(
                 f"Attention weights should be of size {(1, bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.get_legacy_shape()}"
+                f" {attn_weights.shape.with_tile_padding()}"
             )
 
         if attention_mask is not None:
-            if attention_mask.get_legacy_shape() != [bsz, 1, tgt_len, src_len]:
+            if attention_mask.shape.with_tile_padding() != [bsz, 1, tgt_len, src_len]:
                 raise ValueError(
-                    f"Attention mask should be of size {[bsz, 1, tgt_len, src_len]}, but is {attention_mask.get_legacy_shape()}"
+                    f"Attention mask should be of size {[bsz, 1, tgt_len, src_len]}, but is {attention_mask.shape.with_tile_padding()}"
                 )
             # TTM implementation. Doesn't work for now
             torch_attn_weights = tt2torch_tensor(attn_weights)
@@ -192,10 +190,10 @@ class TtWhisperAttention(nn.Module):
         attn_weights = fallback_ops.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            if layer_head_mask.get_legacy_shape() != [1, 1, 1, self.num_heads]:
+            if layer_head_mask.shape.with_tile_padding() != [1, 1, 1, self.num_heads]:
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.get_legacy_shape()}"
+                    f" {layer_head_mask.shape.with_tile_padding()}"
                 )
 
             layer_head_mask_reshaped = fallback_ops.reshape(layer_head_mask, 1, -1, 1, 1)
@@ -226,10 +224,10 @@ class TtWhisperAttention(nn.Module):
         attn_output = ttnn.matmul(attn_probs, value_states)
         value_states.deallocate()
 
-        if attn_output.get_legacy_shape() != [1, bsz * self.num_heads, tgt_len, self.head_dim]:
+        if attn_output.shape.with_tile_padding() != [1, bsz * self.num_heads, tgt_len, self.head_dim]:
             raise ValueError(
                 f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.get_legacy_shape()}"
+                f" {attn_output.shape.with_tile_padding()}"
             )
         attn_output = ttnn.reshape_on_device(attn_output, bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = ttnn.transpose(attn_output, 1, -2)

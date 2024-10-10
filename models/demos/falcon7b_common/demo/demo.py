@@ -11,9 +11,8 @@ import torch
 import torch.nn.functional as F
 import ttnn
 from loguru import logger
-from models.demos.falcon7b_common.reference.hf_modeling_falcon import FalconConfig
 from models.demos.falcon7b_common.tt.falcon_causallm import TtFalconCausalLM
-from models.demos.falcon7b_common.tt.model_config import get_model_config, model_config_entries
+from models.demos.falcon7b_common.tt.model_config import get_model_config
 from models.demos.falcon7b_common.tests.test_utils import (
     initialize_kv_cache,
     load_hf_model,
@@ -110,6 +109,7 @@ def top_pk_logits_efficient(logits, p=0.9, k=10, temperature=1.0, return_probs=F
     top_k_values, top_k_indices = torch.topk(logits, k=k)
     top_p_values = top_k_top_p_filtering(top_k_values, top_p=p)
     probs = F.softmax(top_p_values / temperature, dim=-1)
+    probs = torch.nan_to_num(probs)  # convert nan to num to prevent error in multinomial
     top_k_id = torch.multinomial(probs, num_samples=1).squeeze(-1)
     token = top_k_indices.gather(-1, top_k_id.unsqueeze(-1)).squeeze(-1)
     if return_probs:
@@ -125,7 +125,7 @@ def run_falcon_demo_kv(
     model_config_strs_prefill_decode,
     model_location_generator,
     get_tt_cache_path,
-    device_mesh,  # can be ttnn.Device or ttnn.DeviceMesh
+    mesh_device,  # can be ttnn.Device or ttnn.MeshDevice
     model_version="tiiuae/falcon-7b-instruct",
     num_layers=32,
     perf_mode=False,  # Option to measure perf using max seq length (with invalid outputs)
@@ -157,15 +157,13 @@ def run_falcon_demo_kv(
     disable_persistent_kernel_cache()
     disable_compilation_reports()
 
-    num_devices = get_num_devices(device_mesh)
+    num_devices = get_num_devices(mesh_device)
     global_batch = batch_size * num_devices
 
     torch.manual_seed(0)
 
     if perf_mode:
         logger.info("Running in performance measurement mode (invalid outputs)!")
-
-    configuration = FalconConfig(**model_config_entries)
 
     profiler.start(f"loading_inputs")
     if num_devices > 1:
@@ -194,17 +192,18 @@ def run_falcon_demo_kv(
     # State dict is needed for embeddings
     logger.info("Loading huggingface weights...")
     profiler.start(f"loading_weights")
-    _, state_dict = load_hf_model(model_location_generator, model_version)
+    hugging_face_reference_model, state_dict = load_hf_model(model_location_generator, model_version)
+    configuration = hugging_face_reference_model.config
     logger.info("Loading weights finished!")
     profiler.end(f"loading_weights")
 
-    synchronize_devices(device_mesh)
+    synchronize_devices(mesh_device)
 
     logger.info("Moving weights (single layer) to device...")
     base_url = ""
 
     tt_FalconCausalLM_singlelayer = TtFalconCausalLM(
-        device_mesh,
+        mesh_device,
         state_dict,
         base_url,
         1,
@@ -216,7 +215,7 @@ def run_falcon_demo_kv(
     )  # single layer only used for compile
     logger.info("Moved weights (single layer) to device!")
 
-    synchronize_devices(device_mesh)
+    synchronize_devices(mesh_device)
 
     logger.info("Initializing KV cache...")
     profiler.start(f"initializing_KV_cache")
@@ -225,9 +224,9 @@ def run_falcon_demo_kv(
         1,
         batch_size,
         max_seq_len,
-        device_mesh,
+        mesh_device,
     )  # only used for compile
-    kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device_mesh)
+    kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, mesh_device)
     profiler.end(f"initializing_KV_cache")
 
     ### First prefill run with compile ###
@@ -253,7 +252,7 @@ def run_falcon_demo_kv(
             layer_past_len=0,
             use_cache=use_cache,
         )
-        synchronize_devices(device_mesh)
+        synchronize_devices(mesh_device)
 
         tt_prefill_input_ids.deallocate()
         if tt_prefill_attention_mask is not None:
@@ -268,7 +267,7 @@ def run_falcon_demo_kv(
 
     profiler.end("compile_prefill")
 
-    synchronize_devices(device_mesh)
+    synchronize_devices(mesh_device)
     logger.info("Finished 1st run prefill stage with compile!")
 
     ### First run decode stage with compile ###
@@ -297,7 +296,7 @@ def run_falcon_demo_kv(
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
         )
-        synchronize_devices(device_mesh)
+        synchronize_devices(mesh_device)
 
         tt_decode_input_ids.deallocate()
         if tt_decode_attention_mask is not None:
@@ -307,7 +306,7 @@ def run_falcon_demo_kv(
     profiler.end("compile_decode")
 
     logger.info("Finished 1st run decode stage with compile!")
-    synchronize_devices(device_mesh)
+    synchronize_devices(mesh_device)
 
     del tt_logits
     del tt_prefill_input_ids
@@ -320,7 +319,7 @@ def run_falcon_demo_kv(
     logger.info("Moving weights (all layers) to device; might take some time...")
     profiler.start(f"moving_to_device")
     tt_FalconCausalLM = TtFalconCausalLM(
-        device_mesh,
+        mesh_device,
         state_dict,
         base_url,
         num_layers,
@@ -368,7 +367,7 @@ def run_falcon_demo_kv(
             layer_past_len=0,
             use_cache=use_cache,
         )
-        synchronize_devices(device_mesh)
+        synchronize_devices(mesh_device)
 
         if tt_prefill_attention_mask is not None:
             if isinstance(tt_prefill_attention_mask, ttnn.Tensor):
@@ -379,7 +378,7 @@ def run_falcon_demo_kv(
             else:
                 raise ValueError("Invalid type for tt_attention_mask")
 
-        logits = tt_tensors_to_torch_tensors(tt_logits, device_mesh, concat_dim=0).squeeze(1)
+        logits = tt_tensors_to_torch_tensors(tt_logits, mesh_device, concat_dim=0).squeeze(1)
 
         tt_prefill_input_ids.deallocate()
         tt_logits.deallocate()
@@ -440,9 +439,9 @@ def run_falcon_demo_kv(
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
         )
-        synchronize_devices(device_mesh)
+        synchronize_devices(mesh_device)
 
-        logits = tt_tensors_to_torch_tensors(tt_logits, device_mesh, concat_dim=2).squeeze(1)
+        logits = tt_tensors_to_torch_tensors(tt_logits, mesh_device, concat_dim=2).squeeze(1)
 
         tt_decode_input_ids.deallocate()
         if tt_decode_attention_mask is not None:

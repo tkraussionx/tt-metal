@@ -14,35 +14,35 @@ Basic Examples
 1. Converting from and to torch tensor
 --------------------------------------
 
-.. literalinclude:: ../../../../ttnn/examples/usage/convert_to_from_torch.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/convert_to_from_torch.py
    :language: python
 
 
 2. Running an operation on the device
 --------------------------------------
 
-.. literalinclude:: ../../../../ttnn/examples/usage/run_op_on_device.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/run_op_on_device.py
    :language: python
 
 
 3. Using __getitem__ to slice the tensor
 ----------------------------------------
 
-.. literalinclude:: ../../../../ttnn/examples/usage/get_item.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/get_item.py
    :language: python
 
 
 4. Enabling program cache
 --------------------------------------
 
-.. literalinclude:: ../../../../ttnn/examples/usage/program_cache.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/program_cache.py
    :language: python
 
 
 5. Debugging intermediate tensors
 ---------------------------------
 
-.. literalinclude:: ../../../../ttnn/examples/usage/debugging_intermediate_tensors.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/debugging_intermediate_tensors.py
    :language: python
 
 
@@ -77,7 +77,7 @@ Basic Examples
 
 `tt_lib` operations are missing some of the features of ttnn operations such as graph tracing and in order to support these features, ttnn provides a different to call `tt_lib` operations that enabled the missing features.
 
-.. literalinclude:: ../../../../ttnn/examples/usage/using_tt_lib.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/using_tt_lib.py
    :language: python
 
 
@@ -88,9 +88,6 @@ Basic Examples
 
     # To print currently executing ttnn operations
     export TTNN_CONFIG_OVERRIDES='{"enable_fast_runtime_mode": false, "enable_logging": true}'
-
-    # To generate a csv with all of the ttnn and tt_lib operations, their attributes and their input tensors:
-    export OPERATION_HISTORY_CSV=operation_history.csv
 
     # To print the currently executing ttnn and tt_lib operation and its input tensors to stdout
     export TT_METAL_LOGGER_TYPES=Op
@@ -157,7 +154,7 @@ Please refer to :doc:`Profiling ttnn Operations </ttnn/profiling_ttnn_operations
 .. note::
    This basic snippet is under construction, and may not work on all hardware architectures.
 
-.. literalinclude:: ../../../../ttnn/examples/usage/string_repr.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/string_repr.py
    :language: python
 
 
@@ -207,7 +204,7 @@ Set the following environment variables as needed
 
 Run the code. i.e.:
 
-.. literalinclude:: ../../../../ttnn/examples/usage/visualizer_example.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/visualizer_example.py
    :language: python
 
 Open the visualizer by running the following command:
@@ -257,12 +254,17 @@ Open the visualizer by running the following command:
     ttnn.query_registered_operations()
 
 
-
 14. Falling back to torch
 -------------------------
 
-
 .. code-block:: python
 
-.. literalinclude:: ../../../../ttnn/examples/usage/falling_back_to_torch.py
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/falling_back_to_torch.py
+   :language: python
+
+
+15. Capturing graph of C++ functions, buffer allocations, etc
+-------------------------------------------------------------
+
+.. literalinclude:: ../../../../ttnn/ttnn/examples/usage/graph_capture.py
    :language: python

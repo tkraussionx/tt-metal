@@ -72,6 +72,7 @@ def test_mamba_reference_perplexity(
     expected_top1: int,
     expected_top5: int,
     is_ci_env,
+    reset_seeds,
 ):
     torch.manual_seed(0)
 
@@ -124,16 +125,16 @@ def test_mamba_reference_perplexity(
     verify_acc_metrics(calculated_acc_metrics, expected_acc_metrics)
 
 
-@pytest.mark.timeout(1000)
+@pytest.mark.timeout(1200)
 @skip_for_grayskull("Mamba not supported on Grayskull")
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "model_version, mode, batch_size, max_seq_len, num_samples, expected_ppl, expected_top1, expected_top5",
     (
-        ("state-spaces/mamba-2.8b", ModelMode.DECODE, 32, 64, 64, 28.8, 0.365, 0.605),
-        ("state-spaces/mamba-2.8b", ModelMode.DECODE, 32, 128, 64, 20.7, 0.395, 0.655),
-        ("state-spaces/mamba-2.8b", ModelMode.PREFILL, 1, 64, 64, 27.1, 0.355, 0.615),
-        ("state-spaces/mamba-2.8b", ModelMode.PREFILL, 1, 128, 64, 20.5, 0.395, 0.645),
+        ("state-spaces/mamba-2.8b", ModelMode.DECODE, 32, 64, 64, 28.8, 0.369, 0.619),
+        ("state-spaces/mamba-2.8b", ModelMode.DECODE, 32, 128, 64, 20.6, 0.402, 0.661),
+        ("state-spaces/mamba-2.8b", ModelMode.PREFILL, 1, 64, 64, 27.0, 0.365, 0.623),
+        ("state-spaces/mamba-2.8b", ModelMode.PREFILL, 1, 128, 64, 20.4, 0.401, 0.659),
     ),
 )
 def test_mamba_perplexity(
@@ -148,6 +149,7 @@ def test_mamba_perplexity(
     expected_top5: int,
     use_program_cache,
     get_tt_cache_path,
+    reset_seeds,
 ):
     torch.manual_seed(0)
 

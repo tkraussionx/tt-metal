@@ -15,6 +15,7 @@
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
+
 // Please update
 // tests/tt_metal/tt_metal/perf_microbenchmark/1_compute_mm/kernels/bmm_large_block_zm_fused_bias_activation_copy.cpp
 // when making any changes to this file.
@@ -156,6 +157,7 @@ void MAIN {
 
             cb_wait_front(in0_cb_id, in0_block_num_tiles);
             cb_wait_front(in1_cb_id, in1_block_num_tiles);
+
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
@@ -196,6 +198,7 @@ void MAIN {
                         in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                       // called in1_block_w)
                     }
+
 #endif  // SKIP_COMPUTE
 
                     if (last_out) {
@@ -211,6 +214,10 @@ void MAIN {
                         cb_reserve_back(mm_out_cb_id, out_subblock_num_tiles);
                         tile_regs_wait();
 
+#if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
+                        PACK((pack_reconfig_data_format(mm_out_cb_id)));
+#endif
+
 #ifdef PACKER_L1_ACC
 #ifdef FUSE_BIAS
                         if (block == 0) {  // no accumulation for first iteration
@@ -221,10 +228,6 @@ void MAIN {
 #else
                         PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
-#endif
-
-#if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
-                        PACK((pack_reconfig_data_format(mm_out_cb_id)));
 #endif
 
                         uint32_t start_dst_index = 0;
@@ -299,11 +302,11 @@ void MAIN {
         // if last block we pack the final result with relu enabled
         PACK((llk_pack_relu_config(ReluType::ZERO_RELU)));
 #endif
-#ifdef PACKER_L1_ACC
-        PACK((llk_pack_reconfig_l1_acc(0)));
-#endif
 #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
         PACK((pack_reconfig_data_format(out_cb_id)));
+#endif
+#ifdef PACKER_L1_ACC
+        PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
 
         unpack_reconfig_data_format(in1_cb_id, mm_partials_cb_id, in0_cb_id, bias_cb_id);
@@ -357,11 +360,11 @@ void MAIN {
 #endif  // PACK_RELU
 #ifndef FUSE_BIAS
             unpack_reconfig_data_format_srca(in1_cb_id, mm_partials_cb_id);
-#ifdef PACKER_L1_ACC
-            PACK((llk_pack_reconfig_l1_acc(0)));
-#endif
 #if defined FP32_DEST_ACC_EN or defined PACKER_L1_ACC
             PACK((pack_reconfig_data_format(out_cb_id)));
+#endif
+#ifdef PACKER_L1_ACC
+            PACK((llk_pack_reconfig_l1_acc(0)));
 #endif
 #endif  // FUSE_BIAS
             pack_untilize_dst_init_short<out_subblock_w, out_block_w>(out_cb_id);

@@ -5,7 +5,6 @@
 import torch
 import torch.nn as nn
 
-import tt_lib
 import ttnn
 
 from models.helper_funcs import Linear as TTLinear
@@ -26,16 +25,14 @@ class TtRobertaPooler(nn.Module):
         device,
     ):
         super().__init__()
-        self.mem_config = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
-        )
+        self.mem_config = ttnn.L1_MEMORY_CONFIG
         self.device = device
 
         self.dense_weight = pad_by_zero(state_dict[f"{base_address}.dense.weight"], self.device)[0]
         self.dense_bias = pad_by_zero(state_dict[f"{base_address}.dense.bias"], self.device)[0]
         self.dense_linear = TTLinear(
-            self.dense_weight.get_legacy_shape()[-1],
-            self.dense_weight.get_legacy_shape()[-2],
+            self.dense_weight.shape.with_tile_padding()[-1],
+            self.dense_weight.shape.with_tile_padding()[-2],
             self.dense_weight,
             self.dense_bias,
         )

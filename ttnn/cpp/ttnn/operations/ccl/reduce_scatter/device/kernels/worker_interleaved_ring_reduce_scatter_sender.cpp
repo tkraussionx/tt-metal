@@ -11,23 +11,73 @@
 
 using ttnn::ccl::coord_t;
 
-void kernel_main() {
-    constexpr bool is_sharded = get_compile_time_arg_val(0) == 1;
-    constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;
+template <bool is_line>
+struct reader_signaler {
+    bool enabled;
+    uint64_t noc_semaphore_address;
 
+    FORCE_INLINE static reader_signaler build(std::size_t &arg_idx) {
+        if constexpr (is_line) {
+            bool signal_reader_on_output_tensor_write = get_arg_val<uint32_t>(arg_idx++) != 0;
+            if (!signal_reader_on_output_tensor_write) {
+                return {signal_reader_on_output_tensor_write, get_noc_addr(0, 0, 0)};
+            } else {
+                uint32_t noc_x = get_arg_val<uint32_t>(arg_idx++);
+                uint32_t noc_y = get_arg_val<uint32_t>(arg_idx++);
+                uint32_t addr = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
+                return {signal_reader_on_output_tensor_write, get_noc_addr(noc_x,noc_y,addr)};
+            }
+        } else {
+            return {0};
+        }
+    }
+
+    FORCE_INLINE std::size_t get_args_consumed() const {
+        if constexpr (is_line) {
+            if (enabled) {
+                return 4;
+            } else {
+                return 1;
+            }
+        } else {
+            return 0;
+        }
+    }
+
+    FORCE_INLINE void notify() const {
+        if constexpr (is_line) {
+            if (enabled) {
+                noc_semaphore_inc(noc_semaphore_address, 1);
+            }
+        }
+    }
+
+};
+
+void kernel_main() {
+    constexpr bool dst_is_dram = get_compile_time_arg_val(0) == 1;
+    constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(1);
     constexpr tt::tt_metal::TensorMemoryLayout output_tensor_memory_layout =
         static_cast<tt::tt_metal::TensorMemoryLayout>(get_compile_time_arg_val(2));
+
+    /*
+     * Indicates to another reader core that we have written out a unit of data to the output tensor and
+     * that unit of data can be readback for accumulation with the outputs from the opposite line directoin
+     */
+    constexpr bool is_line_reduce_scatter = get_compile_time_arg_val(3) != 0;
+
     #ifdef SHARDED_MEM_LAYOUT
-    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(3);
-    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(4);
-    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(5);
-    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(6);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(7);
-    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(8);
-    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(9) != 0;
+    constexpr uint32_t output_tensor_shard_grid_height = get_compile_time_arg_val(4);
+    constexpr uint32_t output_tensor_shard_grid_width = get_compile_time_arg_val(5);
+    constexpr uint32_t output_tensor_shard_grid_start_y_logical = get_compile_time_arg_val(6);
+    constexpr uint32_t output_tensor_shard_grid_start_x_logical = get_compile_time_arg_val(7);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_y = get_compile_time_arg_val(8);
+    constexpr uint32_t output_tensor_shard_pages_per_shard_x = get_compile_time_arg_val(9);
+    constexpr bool output_tensor_shard_grid_transposed = get_compile_time_arg_val(10) != 0;
     #endif
 
-    uint32_t arg_idx = 0;
+
+    std::size_t arg_idx = 0;
     uint32_t const dst_addr = get_arg_val<uint32_t>(arg_idx++);
     uint32_t const eth_sender_l1_base_addr = get_arg_val<uint32_t>(arg_idx++);
     uint32_t const eth_sender_l1_sem_addr = get_arg_val<uint32_t>(arg_idx++);
@@ -46,6 +96,8 @@ void kernel_main() {
 
     uint32_t total_eltwise_kernel_num_pages = get_arg_val<uint32_t>(arg_idx++);
 
+    auto readback_accumulation_signaler = reader_signaler<is_line_reduce_scatter>::build(arg_idx);
+    arg_idx += readback_accumulation_signaler.get_args_consumed();
 
     #ifdef SHARDED_MEM_LAYOUT
     uint32_t output_shard_grid_nrows = get_arg_val<uint32_t>(arg_idx++);
@@ -57,7 +109,6 @@ void kernel_main() {
     #endif
 
     // Argument validation
-    ASSERT(half_cb_n_pages >= full_chunk_num_pages);
     ASSERT(full_chunk_num_pages > 0);
     ASSERT(page_size > 0);
     ASSERT(half_cb_n_pages > 0);
@@ -111,12 +162,14 @@ void kernel_main() {
     // Used to wait until eth sender has space available
     volatile tt_l1_ptr uint32_t* writer_send_semaphore_addr_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(writer_send_sem_addr);
-    // This is different per writer core
-    const uint64_t eth_l1_sender_base_noc_addr =
-        get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_base_addr);
-    // Used to signal eth sender that data is available. This is different per writer core
-    const uint64_t eth_l1_sender_semaphore_addr =
-        get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_sem_addr);
+
+    ccl::edm::WorkerToEdmSender<ttnn::ccl::EriscDataMoverTerminationMode::WORKER_INITIATED> sender(
+        ttnn::ccl::WorkerXY(eth_sender_noc_x, eth_sender_noc_y),
+        eth_sender_l1_base_addr,
+        num_buffers_per_channel,
+        eth_sender_l1_sem_addr,
+        full_chunk_num_pages * page_size,
+        writer_send_semaphore_addr_ptr);
 
     uint32_t total_lifetime_cb_pages_popped_from_math = 0;
     while (worker_slice_base_offset.x < output_tensor_shape.x && worker_slice_base_offset.y < output_tensor_shape.y) {
@@ -132,17 +185,16 @@ void kernel_main() {
 
         ASSERT(total_lifetime_cb_pages_popped_from_math + num_pages_to_write <= total_eltwise_kernel_num_pages);
         for (uint32_t i = 0; i < num_transfers; ++i) {
-            const uint32_t cb_in = i == 0 ? cb_id_in_short_circuit : cb_id_in0;
+            const uint32_t cb_in = ((i == 0) && !is_line_reduce_scatter) ? cb_id_in_short_circuit : cb_id_in0;
             for (uint32_t p = 0; p < num_pages_to_write; p += full_chunk_num_pages) {
                 uint32_t n_pages = std::min(full_chunk_num_pages, num_pages_to_write - p);
+                ASSERT(half_cb_n_pages >= n_pages);
                 ASSERT(n_pages > 0);
-                noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
-                noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-                send_chunk(cb_in, n_pages, page_size, eth_l1_sender_base_noc_addr);
-                noc_semaphore_inc(
-                    eth_l1_sender_semaphore_addr,
-                    ttnn::ccl::EriscDataMoverWorkerSignal::NEXT_MESSAGE_AVAILABLE);
-                if (i != 0) {
+                sender.wait_for_empty_write_slot();
+                sender.send_payload_blocking(cb_in, n_pages, page_size);
+
+                if (i != 0 || is_line_reduce_scatter) {
+                    // Line reduce scatter never forwards through short circuit CB
                     total_lifetime_cb_pages_popped_from_math += n_pages;
                 }
                 if (n_pages < half_cb_n_pages) {
@@ -150,7 +202,8 @@ void kernel_main() {
 
                     ASSERT(p + n_pages == num_pages_to_write);
                     pop_filler_pages_from_cb(cb_in, num_filler_pages);
-                    if (i != 0) {
+                    if (i != 0 || is_line_reduce_scatter) {
+                        // Line reduce scatter never forwards through short circuit CB
                         total_lifetime_cb_pages_popped_from_math += num_filler_pages;
                     }
                 }
@@ -173,7 +226,6 @@ void kernel_main() {
             ASSERT(!last_page_of_worker);
             uint32_t n_pages = std::min(full_chunk_num_pages, num_pages_to_write - p);
             ASSERT(n_pages <= half_cb_n_pages);
-            ASSERT(full_chunk_num_pages <= half_cb_n_pages);
             write_wrapped_chunk(
                 curr_tile_id,
                 offset_into_worker_slice,
@@ -187,6 +239,10 @@ void kernel_main() {
                 page_size,
                 last_page_of_worker);
             total_lifetime_cb_pages_popped_from_math += n_pages;
+
+            // Nop when doesn't need to notify - only used for lines
+            readback_accumulation_signaler.notify();
+
             if (n_pages < half_cb_n_pages) {
                 uint32_t num_filler_pages = half_cb_n_pages - n_pages;
                 ASSERT(p + n_pages == num_pages_to_write);
@@ -205,8 +261,7 @@ void kernel_main() {
         pop_filler_pages_from_cb(cb_id_in0, 1);
     }
 
-    noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
-    noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-    noc_semaphore_inc(
-        eth_l1_sender_semaphore_addr, ttnn::ccl::EriscDataMoverWorkerSignal::TERMINATE_IMMEDIATELY);
+    if (num_transfers > 0) {
+        sender.close();
+    }
 }

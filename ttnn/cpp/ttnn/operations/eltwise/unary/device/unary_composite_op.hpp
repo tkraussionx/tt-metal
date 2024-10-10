@@ -10,6 +10,7 @@
 #include "ttnn/cpp/ttnn/operations/eltwise/ternary/where.hpp"
 #include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operations/data_movement/bcast/bcast.hpp"
 
 namespace ttnn::operations::unary{
 
@@ -30,7 +31,6 @@ enum class UnaryCompositeOpType {
     SOFTSIGN,
     SWISH,
     TANHSHRINK,
-    TRUNC,
     VAR_HW,
     STD_HW,
     NORMALIZE_HW,
@@ -73,7 +73,6 @@ Tensor _multigammaln(const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _sinh(const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _softsign(const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _swish(const Tensor&, const std::optional<MemoryConfig>&);
-Tensor _trunc(const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _variance_impl(const Tensor&, const Tensor&, Tensor&, const std::optional<MemoryConfig>&);
 Tensor _variance_impl(const Tensor&, const Tensor&, const std::optional<MemoryConfig>&);
 Tensor _variance(const Tensor&, const std::optional<MemoryConfig>&);
@@ -229,13 +228,6 @@ template <>
 struct OpHandler<UnaryCompositeOpType::SWISH> {
     static Tensor handle(const Tensor& t1, const std::optional<MemoryConfig>& mem_cfg ) {
         return _swish(t1, mem_cfg);
-    }
-};
-
-template <>
-struct OpHandler<UnaryCompositeOpType::TRUNC> {
-    static Tensor handle(const Tensor& t1, const std::optional<MemoryConfig>& mem_cfg ) {
-        return _trunc(t1, mem_cfg);
     }
 };
 

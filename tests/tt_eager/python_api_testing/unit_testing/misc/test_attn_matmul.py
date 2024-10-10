@@ -8,7 +8,7 @@ import torch
 
 import ttnn
 from models.utility_functions import comp_pcc
-from models.utility_functions import is_grayskull
+from models.utility_functions import is_grayskull, skip_for_blackhole
 import ttnn
 
 
@@ -30,6 +30,7 @@ def generate_input_shapes():
     yield [q_len, q_heads, batch_size, K], [batch_size, kv_heads, K, seq_len]
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.parametrize("in0_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("in1_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("out_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
@@ -55,7 +56,7 @@ def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, d
                 tt_input_tensor_a,
                 tt_input_tensor_b,
                 compute_with_storage_grid_size=ttnn.CoreCoord(compute_grid_size.x, compute_grid_size.y),
-                memory_config=ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.L1),
+                memory_config=ttnn.L1_MEMORY_CONFIG,
                 dtype=out_dtype,
             )
             tt_input_tensor_a.deallocate()
@@ -70,6 +71,7 @@ def test_attn_matmul(num_loops, enable_async, in0_dtype, in1_dtype, out_dtype, d
     device.enable_async(False)
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")
 @pytest.mark.parametrize("in_dtype", [ttnn.float32, ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize(
@@ -101,7 +103,7 @@ def test_attn_matmul_fp32(num_loops, enable_async, in_dtype, device):
                 tt_input_tensor_a,
                 tt_input_tensor_b,
                 compute_with_storage_grid_size=ttnn.CoreCoord(compute_grid_size.x, compute_grid_size.y),
-                memory_config=ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.L1),
+                memory_config=ttnn.L1_MEMORY_CONFIG,
                 dtype=in_dtype,
                 compute_kernel_config=compute_kernel_config,
             )
@@ -115,6 +117,7 @@ def test_attn_matmul_fp32(num_loops, enable_async, in_dtype, device):
     device.enable_async(False)
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.parametrize("in0_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("in1_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("out_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
@@ -141,7 +144,7 @@ def test_attn_matmul_with_program_cache(
                 tt_input_tensor_a,
                 tt_input_tensor_b,
                 compute_with_storage_grid_size=ttnn.CoreCoord(compute_grid_size.x, compute_grid_size.y),
-                memory_config=ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.L1),
+                memory_config=ttnn.L1_MEMORY_CONFIG,
                 dtype=out_dtype,
             )
             tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
@@ -153,6 +156,7 @@ def test_attn_matmul_with_program_cache(
     device.enable_async(False)
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.parametrize(
     "shard_orientation",
     (ttnn.ShardOrientation.ROW_MAJOR, ttnn.ShardOrientation.COL_MAJOR),
@@ -201,7 +205,7 @@ def test_group_attn_matmul(
 
     compute_grid_size = device.compute_with_storage_grid_size()
 
-    interleaved_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
+    interleaved_mem_config = ttnn.DRAM_MEMORY_CONFIG
 
     # NOTE: Mixed precision is supported as well; but might not have enough space for larger seq_len with BFLOAT16
     in0_dtype = ttnn.bfloat8_b
@@ -223,7 +227,7 @@ def test_group_attn_matmul(
         )
 
         if in0_sharded:
-            tt_input_tensor_a = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input_tensor_a = ttnn.interleaved_to_sharded(
                 tt_input_tensor_a,
                 compute_grid_size,
                 [q_len * batch, K],
@@ -232,7 +236,7 @@ def test_group_attn_matmul(
             )
 
         if in1_sharded:
-            tt_input_tensor_b = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input_tensor_b = ttnn.interleaved_to_sharded(
                 tt_input_tensor_b,
                 compute_grid_size,
                 [kv_heads * K, seq_len],
@@ -260,9 +264,7 @@ def test_group_attn_matmul(
         tt_input_tensor_b.deallocate()
 
         if output_sharded:
-            tt_output_tensor_on_device = ttnn.experimental.tensor.sharded_to_interleaved(
-                tt_output_tensor_on_device, interleaved_mem_config
-            )
+            tt_output_tensor_on_device = ttnn.sharded_to_interleaved(tt_output_tensor_on_device, interleaved_mem_config)
 
         tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
         tt_output_tensor_on_device.deallocate()
@@ -276,6 +278,7 @@ def test_group_attn_matmul(
     device.enable_async(False)
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.parametrize("sharded", [False, True])
 @pytest.mark.parametrize("output_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 @pytest.mark.parametrize("in1_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
@@ -293,7 +296,7 @@ def test_group_attn_matmul_with_program_cache(
 
     compute_grid_size = device.compute_with_storage_grid_size()
 
-    interleaved_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
+    interleaved_mem_config = ttnn.DRAM_MEMORY_CONFIG
 
     shard_orientation = ttnn.ShardOrientation.COL_MAJOR  # Only used if sharded
 
@@ -318,7 +321,7 @@ def test_group_attn_matmul_with_program_cache(
             )
 
             if sharded:
-                tt_input_tensor_a = ttnn.experimental.tensor.interleaved_to_sharded(
+                tt_input_tensor_a = ttnn.interleaved_to_sharded(
                     tt_input_tensor_a,
                     compute_grid_size,
                     [q_len * batch, K],
@@ -326,7 +329,7 @@ def test_group_attn_matmul_with_program_cache(
                     shard_orientation,
                 )
 
-                tt_input_tensor_b = ttnn.experimental.tensor.interleaved_to_sharded(
+                tt_input_tensor_b = ttnn.interleaved_to_sharded(
                     tt_input_tensor_b,
                     compute_grid_size,
                     [kv_heads * K, seq_len],
@@ -352,7 +355,7 @@ def test_group_attn_matmul_with_program_cache(
             num_cache_entries += device.num_program_cache_entries() - num_cache_entries_start
 
             if sharded:
-                tt_output_tensor_on_device = ttnn.experimental.tensor.sharded_to_interleaved(
+                tt_output_tensor_on_device = ttnn.sharded_to_interleaved(
                     tt_output_tensor_on_device, interleaved_mem_config
                 )
 
@@ -370,6 +373,7 @@ def test_group_attn_matmul_with_program_cache(
     device.enable_async(False)
 
 
+@skip_for_blackhole("Hanging on BH, see #12349")
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")
 @pytest.mark.parametrize("in_dtype", [ttnn.float32, ttnn.bfloat16])
 @pytest.mark.parametrize(
@@ -421,7 +425,7 @@ def test_group_attn_matmul_fp32(
 
     compute_grid_size = device.compute_with_storage_grid_size()
 
-    interleaved_mem_config = ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM)
+    interleaved_mem_config = ttnn.DRAM_MEMORY_CONFIG
 
     # NOTE: Mixed precision is supported as well; but might not have enough space for larger seq_len with BFLOAT16
     in0_dtype = in_dtype
@@ -443,7 +447,7 @@ def test_group_attn_matmul_fp32(
         )
 
         if in0_sharded:
-            tt_input_tensor_a = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input_tensor_a = ttnn.interleaved_to_sharded(
                 tt_input_tensor_a,
                 compute_grid_size,
                 [q_len * batch, K],
@@ -452,7 +456,7 @@ def test_group_attn_matmul_fp32(
             )
 
         if in1_sharded:
-            tt_input_tensor_b = ttnn.experimental.tensor.interleaved_to_sharded(
+            tt_input_tensor_b = ttnn.interleaved_to_sharded(
                 tt_input_tensor_b,
                 compute_grid_size,
                 [kv_heads * K, seq_len],
@@ -484,9 +488,7 @@ def test_group_attn_matmul_fp32(
             compute_kernel_config=compute_kernel_config,
         )
         if output_sharded:
-            tt_output_tensor_on_device = ttnn.experimental.tensor.sharded_to_interleaved(
-                tt_output_tensor_on_device, interleaved_mem_config
-            )
+            tt_output_tensor_on_device = ttnn.sharded_to_interleaved(tt_output_tensor_on_device, interleaved_mem_config)
 
         tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch()
 

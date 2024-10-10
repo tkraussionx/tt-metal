@@ -4,7 +4,7 @@
 
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_softmax_backward/moreh_softmax_backward_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_helper_functions.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 #include "ttnn/run_operation.hpp"
 
 #include "tt_metal/host_api.hpp"
@@ -39,14 +39,14 @@ bool is_moreh_softmax_backward_w_small_available(const Tensor &tensor) {
     cb_usage += 1 * tile_size;   // reduce
     cb_usage += 1 * tile_size;   // dy - sum
 
-    return (L1_UNRESERVED_BASE + cb_usage <= L1_512KB);
+    return (tensor.device()->get_base_allocator_addr(HalMemType::L1) + cb_usage <= L1_512KB);
 }
 
-operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &output, const Tensor &output_grad, const Tensor &input_grad, const CoreRange core_range, const MorehSoftmaxBackwardOp op, const DeviceComputeKernelConfig compute_kernel_config) {
+operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &output, const Tensor &output_grad, const Tensor &input_grad, const CoreRange core_range, const MorehSoftmaxBackwardOp op, const ttnn::DeviceComputeKernelConfig compute_kernel_config) {
     log_info(LogTest, "Small tensor algorithm selected");
 
     // split work
-    auto shape = input_grad.get_legacy_shape();
+    auto shape = input_grad.get_padded_shape();
     auto H = shape[-2];
     auto W = shape[-1];
     auto Ht = H / TILE_HEIGHT;
@@ -138,7 +138,7 @@ operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &out
         }
 
         float scaler = 1.0f;
-        uint32_t mask_w = shape.without_padding()[-1] % TILE_WIDTH;
+        uint32_t mask_w = input_grad.get_logical_shape()[-1] % TILE_WIDTH;
         if(mask_w == 0) mask_w = TILE_WIDTH;
         vector<uint32_t> reader_args = {
             output.buffer()->address(),

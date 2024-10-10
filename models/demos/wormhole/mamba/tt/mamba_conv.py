@@ -55,7 +55,7 @@ class MambaConv:
             dtype=self.config.output_dtype,
             weights_dtype=self.config.weights_dtype,
             math_fidelity=self.config.math_fidelity,
-            height_sharding=True,
+            shard_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
             input_channels_alignment=32,
             deallocate_activation=True,
         )
@@ -76,7 +76,7 @@ class MambaConv:
             split_size = self.config.input_channels // self.config.channels_split_factor
             for i in range(self.config.channels_split_factor):
                 slice_start = ttnn.Shape((0, 0, 0, i * split_size))
-                slice_end = ttnn.Shape((0, self.config.input_length - 1, 0, (i + 1) * split_size - 1))
+                slice_end = ttnn.Shape((1, self.config.input_length, 1, (i + 1) * split_size))
                 input_tensor_splits.append(ttnn.slice(input_tensor, slice_start, slice_end))
             ttnn.deallocate(input_tensor)
             return input_tensor_splits
@@ -103,7 +103,7 @@ class MambaConv:
                 groups=self.config.groups // self.config.channels_split_factor,
             )
             self.tt_weight_tensor_splits[i] = weights_device
-            output_tensor_splits.append(ttnn.experimental.tensor.sharded_to_interleaved(tt_output_tensor_on_device))
+            output_tensor_splits.append(ttnn.sharded_to_interleaved(tt_output_tensor_on_device))
         if self.config.channels_split_factor == 1:
             return output_tensor_splits[0]
         else:

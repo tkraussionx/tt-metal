@@ -6,7 +6,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "nlp_create_qkv_heads_falcon7b_device_operation.hpp"
-#include "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/work_split.hpp"
 
 namespace ttnn::operations::experimental::transformer {
 
@@ -48,7 +48,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_falcon7b(const T
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     // Block is a unit of work; ie. num of per_tensor_tiles per core
     uint32_t num_blocks = ashape[0] * ashape[1] * ashape[2] / TILE_HEIGHT;
-    auto [num_cores, all_cores, core_group_1, core_group_2, num_blocks_per_core_group_1, num_blocks_per_core_group_2] = split_work_to_cores(compute_with_storage_grid_size, num_blocks);
+    auto [num_cores, all_cores, core_group_1, core_group_2, num_blocks_per_core_group_1, num_blocks_per_core_group_2] = tt::tt_metal::split_work_to_cores(compute_with_storage_grid_size, num_blocks);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -152,8 +152,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_falcon7b(const T
         ]
     (
         const Program &program,
-        const std::vector<Buffer*>& input_buffers,
-        const std::vector<Buffer*>& output_buffers
+        const std::vector<tt::tt_metal::Buffer*>& input_buffers,
+        const std::vector<tt::tt_metal::Buffer*>& output_buffers
     ) {
 
         auto src_dram_buffer = input_buffers.at(0);

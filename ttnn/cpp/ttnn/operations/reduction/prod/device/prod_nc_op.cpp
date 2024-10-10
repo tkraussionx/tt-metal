@@ -25,8 +25,8 @@ void Prod::validate(const std::vector<Tensor>& inputs) const {
     auto input_shape = input.get_legacy_shape();
     TT_FATAL((input_shape.rank() == 4), "rank should be 4");
     const auto& output_shape = output.get_legacy_shape();
-    auto input_shape_wo_padding = input.get_legacy_shape().without_padding();
-    const auto& output_shape_wo_padding = output.get_legacy_shape().without_padding();
+    auto input_shape_wo_padding = input.get_logical_shape();
+    const auto& output_shape_wo_padding = output.get_logical_shape();
 
     if (dim == 0 || dim == 1) {
         input_shape[dim] = 1;
@@ -34,8 +34,8 @@ void Prod::validate(const std::vector<Tensor>& inputs) const {
     }
 
     for (int i = 0; i < input_shape.rank(); ++i) {
-        TT_FATAL(input_shape[i] == output_shape[i]);
-        // TT_FATAL(input_shape_wo_padding[i] == output_shape_wo_padding[i]);
+        TT_FATAL(input_shape[i] == output_shape[i], "Error");
+        // TT_FATAL(input_shape_wo_padding[i] == output_shape_wo_padding[i], "Error");
     }
 }
 
@@ -44,7 +44,7 @@ std::vector<Tensor> Prod::create_output_tensors(const std::vector<Tensor>& input
     return {};
 }
 
-std::vector<Shape> Prod::compute_output_shapes(const std::vector<Tensor>& inputs) const {
+std::vector<tt::tt_metal::LegacyShape> Prod::compute_output_shapes(const std::vector<Tensor>& inputs) const {
     // Inplace
     return {};
 
@@ -58,7 +58,7 @@ operation::ProgramWithCallbacks Prod::create_program(
     return prod_nc_format(input, output, dim);
 }
 
-inline Shape compute_output_shape(const Shape& input_shape, const int64_t& dim) {
+tt::tt_metal::LegacyShape compute_output_shape(const tt::tt_metal::LegacyShape& input_shape, const int64_t& dim) {
     auto output_shape = input_shape;
     auto padding = output_shape.padding();
     switch (dim) {
@@ -67,11 +67,11 @@ inline Shape compute_output_shape(const Shape& input_shape, const int64_t& dim) 
         break;
     }
 
-    return {Shape(output_shape, padding)};
+    return {tt::tt_metal::LegacyShape(output_shape, padding)};
 }
 
 inline Tensor create_output_tensor(
-    const Tensor& input_tensor, const Shape& output_shape, const MemoryConfig& mem_config) {
+    const Tensor& input_tensor, const tt::tt_metal::LegacyShape& output_shape, const MemoryConfig& mem_config) {
     TT_ASSERT(input_tensor.storage_type() == StorageType::DEVICE);
     return create_device_tensor(output_shape, input_tensor.get_dtype(), Layout::TILE, input_tensor.device(), mem_config);
 }

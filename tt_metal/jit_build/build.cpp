@@ -19,6 +19,7 @@
 #include "tools/profiler/common.hpp"
 #include "tools/profiler/profiler_state.hpp"
 #include "tt_metal/impl/kernels/kernel.hpp"
+#include "tt_metal/impl/dispatch/command_queue_interface.hpp"
 
 namespace fs = std::filesystem;
 
@@ -105,7 +106,11 @@ void JitBuildEnv::init(uint32_t build_key, tt::ARCH arch) {
     }
 
     if (tt::llrt::OptionsG.get_feature_enabled(tt::llrt::RunTimeDebugFeatureDprint)) {
-        this->defines_ += "-DDEBUG_PRINT_ENABLED ";
+        this->defines_ += "-DDEBUG_PRINT_ENABLED -DL1_UNRESERVED_BASE=" + to_string(hal.get_dev_addr(HalProgrammableCoreType::TENSIX, HalMemAddrType::UNRESERVED)) + " ";
+    }
+
+    if (tt::llrt::OptionsG.get_record_noc_transfers()) {
+        this->defines_ += "-DNOC_LOGGING_ENABLED ";
     }
 
     if (tt::llrt::OptionsG.get_kernels_nullified()) {
@@ -135,8 +140,8 @@ void JitBuildEnv::init(uint32_t build_key, tt::ARCH arch) {
     this->lflags_ += "-fno-exceptions -Wl,-z,max-page-size=16 -Wl,-z,common-page-size=16 -nostartfiles ";
 }
 
-JitBuildState::JitBuildState(const JitBuildEnv& env, int which, bool is_fw) :
-    env_(env), core_id_(which), is_fw_(is_fw) {}
+JitBuildState::JitBuildState(const JitBuildEnv& env, const JitBuiltStateConfig &build_config) :
+    env_(env), core_id_(build_config.processor_id), is_fw_(build_config.is_fw), dispatch_message_addr_(build_config.dispatch_message_addr) {}
 
 // Fill in common state derived from the default state set up in the constructors
 void JitBuildState::finish_init() {
@@ -145,6 +150,7 @@ void JitBuildState::finish_init() {
     } else {
         this->defines_ += "-DKERNEL_BUILD ";
     }
+    this->defines_ += "-DDISPATCH_MESSAGE_ADDR=" + to_string(this->dispatch_message_addr_) + " ";
 
     // Create the objs from the srcs
     for (string src : srcs_) {
@@ -168,23 +174,31 @@ void JitBuildState::finish_init() {
     // Append hw build objects compiled offline
     std::string build_dir = llrt::OptionsG.get_root_dir() + "runtime/hw/lib/";
     if (this->is_fw_) {
+        if (this->target_name_ == "brisc") {
+            this->link_objs_ += build_dir + "tdma_xmov.o ";
+        }
         if (this->target_name_ != "erisc") {
             this->link_objs_ += build_dir + "tmu-crt0.o ";
         }
-        if (this->target_name_ == "ncrisc" and ((this->env_.arch_ == tt::ARCH::GRAYSKULL or this->env_.arch_ == tt::ARCH::WORMHOLE_B0))) {
+        if (this->target_name_ == "ncrisc" and
+            ((this->env_.arch_ == tt::ARCH::GRAYSKULL or this->env_.arch_ == tt::ARCH::WORMHOLE_B0))) {
             this->link_objs_ += build_dir + "ncrisc-halt.o ";
         }
     } else {
         this->link_objs_ += build_dir + "tmu-crt0k.o ";
     }
+    if (this->target_name_ == "brisc" or this->target_name_ == "idle_erisc") {
+        this->link_objs_ += build_dir + "noc.o ";
+    }
+    this->link_objs_ += build_dir + "substitutes.o ";
 
     // Note the preceding slash which defies convention as this gets appended to
     // the kernel name used as a path which doesn't have a slash
-    this->target_full_path_ = "/" + this->target_name_ + "/" + this->target_name_ + ".hex";
+    this->target_full_path_ = "/" + this->target_name_ + "/" + this->target_name_ + ".elf";
 }
 
-JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bool is_fw) :
-    JitBuildState(env, which, is_fw) {
+JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, const JitBuiltStateConfig &build_config) :
+    JitBuildState(env, build_config) {
     TT_ASSERT(this->core_id_ >= 0 && this->core_id_ < 2, "Invalid data movement processor");
 
     this->out_path_ = this->is_fw_ ? env_.out_firmware_root_ : env_.out_kernel_root_;
@@ -196,8 +210,8 @@ JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bo
 
     this->defines_ = env_.defines_;
 
-    // TODO(pgk): build these once at init into built/libs!
-    this->srcs_.push_back("tt_metal/hw/toolchain/substitutes.cpp");
+    uint32_t l1_cache_disable_mask =
+        tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDisableL1DataCache);
 
     this->lflags_ = env_.lflags_ + "-Os ";
 
@@ -206,16 +220,20 @@ JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bo
             this->target_name_ = "brisc";
 
             this->defines_ += "-DCOMPILE_FOR_BRISC ";
-
-            this->srcs_.push_back("tt_metal/hw/firmware/src/tdma_xmov.c");
-            this->srcs_.push_back("tt_metal/hw/firmware/src/" + env_.aliased_arch_name_ + "/noc.c");
+            if ((l1_cache_disable_mask & tt::llrt::DebugHartFlags::RISCV_BR) == tt::llrt::DebugHartFlags::RISCV_BR) {
+                this->defines_ += "-DDISABLE_L1_DATA_CACHE ";
+            }
             if (this->is_fw_) {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/brisc.cc");
             } else {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/brisck.cc");
             }
 
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/brisc.ld ";
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_brisc.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_brisc.ld ";
+            }
 
             break;
 
@@ -223,6 +241,9 @@ JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bo
             this->target_name_ = "ncrisc";
 
             this->defines_ += "-DCOMPILE_FOR_NCRISC ";
+            if ((l1_cache_disable_mask & tt::llrt::DebugHartFlags::RISCV_NC) == tt::llrt::DebugHartFlags::RISCV_NC) {
+                this->defines_ += "-DDISABLE_L1_DATA_CACHE ";
+            }
 
             if (this->is_fw_) {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/ncrisc.cc");
@@ -230,7 +251,11 @@ JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bo
                 this->srcs_.push_back("tt_metal/hw/firmware/src/ncrisck.cc");
             }
 
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/ncrisc.ld ";
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_ncrisc.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_ncrisc.ld ";
+            }
 
             break;
     }
@@ -240,7 +265,7 @@ JitBuildDataMovement::JitBuildDataMovement(const JitBuildEnv& env, int which, bo
     finish_init();
 }
 
-JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) : JitBuildState(env, which, is_fw) {
+JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, const JitBuiltStateConfig &build_config) : JitBuildState(env, build_config) {
     TT_ASSERT(this->core_id_ >= 0 && this->core_id_ < 3, "Invalid compute processor");
 
     this->out_path_ = this->is_fw_ ? env_.out_firmware_root_ : env_.out_kernel_root_;
@@ -248,6 +273,14 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
     this->cflags_ = env_.cflags_ + "-O3 ";
 
     this->defines_ = env_.defines_;
+    uint32_t l1_cache_disable_mask =
+        tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDisableL1DataCache);
+    uint32_t debug_compute_mask =
+        (tt::llrt::DebugHartFlags::RISCV_TR0 | tt::llrt::DebugHartFlags::RISCV_TR1 |
+         tt::llrt::DebugHartFlags::RISCV_TR2);
+    if ((l1_cache_disable_mask & debug_compute_mask) == debug_compute_mask) {
+        this->defines_ += "-DDISABLE_L1_DATA_CACHE ";
+    }
 
     this->includes_ = env_.includes_ + "-I" + env_.root_ + "tt_metal/hw/ckernels/" + env.arch_name_ + "/inc " + "-I" +
                       env_.root_ + "tt_metal/hw/ckernels/" + env.arch_name_ + "/metal/common " + "-I" + env_.root_ +
@@ -257,7 +290,6 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
                       "tt_metal/third_party/sfpi/include " + "-I" + env_.root_ + "tt_metal/hw/firmware/src " + "-I" +
                       env_.root_ + "tt_metal/third_party/tt_llk_" + env.arch_name_ + "/llk_lib ";
 
-    this->srcs_.push_back("tt_metal/hw/toolchain/substitutes.cpp");
     if (this->is_fw_) {
         this->srcs_.push_back("tt_metal/hw/firmware/src/trisc.cc");
     } else {
@@ -274,7 +306,11 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
             this->defines_ += "-DNAMESPACE=chlkc_unpack ";
             this->defines_ += "-DCOMPILE_FOR_TRISC=0 ";
 
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/trisc0.ld ";
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_trisc0.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_trisc0.ld ";
+            }
 
             break;
 
@@ -285,7 +321,11 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
             this->defines_ += "-DNAMESPACE=chlkc_math ";
             this->defines_ += "-DCOMPILE_FOR_TRISC=1 ";
 
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/trisc1.ld ";
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_trisc1.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_trisc1.ld ";
+            }
 
             break;
 
@@ -296,7 +336,11 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
             this->defines_ += "-DNAMESPACE=chlkc_pack ";
             this->defines_ += "-DCOMPILE_FOR_TRISC=2 ";
 
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/trisc2.ld ";
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_trisc2.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_trisc2.ld ";
+            }
 
             break;
     }
@@ -306,7 +350,7 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
     finish_init();
 }
 
-JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw) : JitBuildState(env, which, is_fw) {
+JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, const JitBuiltStateConfig &build_config) : JitBuildState(env, build_config) {
     TT_ASSERT(this->core_id_ >= 0 && this->core_id_ < 2, "Invalid ethernet processor");
     this->out_path_ = this->is_fw_ ? env_.out_firmware_root_ : env_.out_kernel_root_;
 
@@ -315,6 +359,11 @@ JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw
                       "/metal/llk_io ";
 
     this->defines_ = env_.defines_;
+    uint32_t l1_cache_disable_mask =
+        tt::llrt::OptionsG.get_feature_riscv_mask(tt::llrt::RunTimeDebugFeatureDisableL1DataCache);
+    if ((l1_cache_disable_mask & tt::llrt::DebugHartFlags::RISCV_ER) == tt::llrt::DebugHartFlags::RISCV_ER) {
+        this->defines_ += "-DDISABLE_L1_DATA_CACHE ";
+    }
 
     switch (this->core_id_) {
         case 0: {
@@ -331,10 +380,8 @@ JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw
 
             this->includes_ += "-I " + env_.root_ + "tt_metal/hw/inc/ethernet ";
 
-            this->srcs_.push_back("tt_metal/hw/toolchain/substitutes.cpp");
             if (this->is_fw_) {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/erisc.cc");
-                this->srcs_.push_back("tt_metal/hw/toolchain/erisc-early-exit.S");
             } else {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/erisck.cc");
             }
@@ -366,16 +413,19 @@ JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw
 
             this->includes_ += "-I " + env_.root_ + "tt_metal/hw/firmware/src ";
 
-            // TODO(pgk): build these once at init into built/libs!
-            this->srcs_.push_back("tt_metal/hw/toolchain/substitutes.cpp");
-            this->srcs_.push_back("tt_metal/hw/firmware/src/" + env_.aliased_arch_name_ + "/noc.c");
             if (this->is_fw_) {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/idle_erisc.cc");
             } else {
                 this->srcs_.push_back("tt_metal/hw/firmware/src/idle_erisck.cc");
             }
             this->lflags_ = env_.lflags_ + "-Os ";
-            this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/ierisc.ld ";
+
+            if (this->is_fw_) {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/firmware_ierisc.ld ";
+            } else {
+                this->lflags_ += "-T" + env_.root_ + "runtime/hw/toolchain/kernel_ierisc.ld ";
+            }
+
             break;
     }
     this->process_defines_at_compile = true;
@@ -395,14 +445,13 @@ static void build_failure(const string& target_name, const string& op, const str
     TT_THROW("{} build failed", target_name);
 }
 
-void JitBuildState::pre_compile(const string& kernel_in_path, const string& op_out_path) const {}
-
 void JitBuildState::compile_one(
     const string& log_file,
     const string& out_dir,
     const JitBuildSettings* settings,
     const string& src,
     const string& obj) const {
+    ZoneScoped;
     fs::create_directories(out_dir);
 
     // Add kernel specific defines
@@ -439,6 +488,7 @@ void JitBuildState::compile_one(
 }
 
 void JitBuildState::compile(const string& log_file, const string& out_dir, const JitBuildSettings* settings) const {
+    ZoneScoped;
     std::vector<std::shared_future<void>> events;
     for (size_t i = 0; i < this->srcs_.size(); ++i) {
         launch_build_step(
@@ -455,6 +505,7 @@ void JitBuildState::compile(const string& log_file, const string& out_dir, const
 }
 
 void JitBuildState::link(const string& log_file, const string& out_dir) const {
+    ZoneScoped;
     string lflags = this->lflags_;
     if (tt::llrt::OptionsG.get_build_map_enabled()) {
         lflags += "-Wl,-Map=" + out_dir + "linker.map ";
@@ -479,74 +530,12 @@ void JitBuildState::link(const string& log_file, const string& out_dir) const {
     }
 }
 
-void JitBuildState::elf_to_hex8(const string& log_file, const string& out_dir) const {
-    string cmd;
-    cmd = "cd " + out_dir + " && ";
-    cmd += env_.objcopy_;
-    cmd += " -O verilog " + this->target_name_ + ".elf" + " " + this->target_name_ + ".hex.tmp";
-
-    log_debug(tt::LogBuildKernels, "    objcopy cmd: {}", cmd);
-    if (!tt::utils::run_command(cmd, log_file, false)) {
-        build_failure(this->target_name_, "objcopy", cmd, log_file);
-    }
-}
-
-void JitBuildState::hex8_to_hex32(const string& log_file, const string& out_dir) const {
-    ZoneScoped;
-    auto write_data = [](std::ofstream& outf, std::vector<uint64_t>& data, uint64_t& ptr) {
-        if (!data.empty()) {
-            outf << "@" << std::setfill('0') << std::setw(8) << std::hex << (ptr >> 2) << "\n";
-            for (size_t i = 0; i < data.size(); i += 4) {
-                for (int j = 3; j >= 0; --j) {
-                    if (i + j < data.size()) {
-                        outf << std::setfill('0') << std::setw(2) << std::hex << data[i + j];
-                    }
-                }
-                outf << "\n";
-            }
-        }
-        data.clear();
-    };
-
-    auto pad_zeroes = [](std::vector<uint64_t>& data, uint32_t num) {
-        for (unsigned int i = 0; i < num; i++) {
-            data.push_back(0);
-        }
-    };
-
-    std::ifstream inf(out_dir + this->target_name_ + ".hex.tmp");
-    std::ofstream outf(out_dir + this->target_name_ + ".hex");
-    std::string line;
-    std::vector<uint64_t> data;
-    uint64_t ptr = 0;
-
-    while (std::getline(inf, line)) {
-        if (line[0] == '@') {
-            uint64_t addr = std::stol(line.substr(1), nullptr, 16);
-            if (addr > ptr + 4) {
-                write_data(outf, data, ptr);
-                ptr = addr;
-                pad_zeroes(data, (ptr % 4));
-                ptr -= ptr % 4;
-            } else {
-                pad_zeroes(data, (addr - ptr - data.size()));
-            }
-        } else {
-            std::istringstream iss(line);
-            std::string tok;
-            while (iss >> tok) {
-                data.push_back(std::stol(tok, nullptr, 16));
-            }
-        }
-    }
-    write_data(outf, data, ptr);
-}
-
 // Given this elf (A) and a later elf (B):
 // weakens symbols in A so that it can be used as a "library" for B. B imports A's weakened symbols, B's symbols of the
 // same name don't result in duplicate symbols but B can reference A's symbols. Force the fw_export symbols to remain
 // strong so to propogate link addresses
 void JitBuildState::weaken(const string& log_file, const string& out_dir) const {
+    ZoneScoped;
     string cmd;
     cmd = "cd " + out_dir + " && ";
     cmd += env_.objcopy_;
@@ -560,6 +549,7 @@ void JitBuildState::weaken(const string& log_file, const string& out_dir) const 
 }
 
 void JitBuildState::extract_zone_src_locations(const string& log_file) const {
+    ZoneScoped;
     static std::atomic<bool> new_log = true;
     if (tt::tt_metal::getDeviceProfilerState()) {
         if (new_log.exchange(false) && std::filesystem::exists(tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONS_LOG)) {
@@ -578,6 +568,7 @@ void JitBuildState::extract_zone_src_locations(const string& log_file) const {
 }
 
 void JitBuildState::build(const JitBuildSettings* settings) const {
+    ZoneScoped;
     string out_dir = (settings == nullptr)
                          ? this->out_path_ + this->target_name_ + "/"
                          : this->out_path_ + settings->get_full_kernel_name() + this->target_name_ + "/";
@@ -589,8 +580,6 @@ void JitBuildState::build(const JitBuildSettings* settings) const {
 
     compile(log_file, out_dir, settings);
     link(log_file, out_dir);
-    elf_to_hex8(log_file, out_dir);
-    hex8_to_hex32(log_file, out_dir);
     if (this->is_fw_) {
         weaken(log_file, out_dir);
     }
@@ -598,47 +587,29 @@ void JitBuildState::build(const JitBuildSettings* settings) const {
     extract_zone_src_locations(log_file);
 }
 
-void jit_build(const JitBuildState& build, const JitBuildSettings* settings, const string& kernel_in_path) {
+void jit_build(const JitBuildState& build, const JitBuildSettings* settings) {
     ZoneScoped;
-
-    if (settings != nullptr) {
-        build.pre_compile(kernel_in_path, settings->get_full_kernel_name());
-    }
 
     build.build(settings);
 }
 
-void jit_build_set(const JitBuildStateSet& build_set, const JitBuildSettings* settings, const string& kernel_in_path) {
+void jit_build_set(const JitBuildStateSet& build_set, const JitBuildSettings* settings) {
+    ZoneScoped;
     std::vector<std::shared_future<void>> events;
     for (size_t i = 0; i < build_set.size(); ++i) {
         // Capture the necessary objects by reference
         auto& build = build_set[i];
-        launch_build_step(
-            [build, settings, &kernel_in_path] {
-                if (settings != nullptr) {
-                    build->pre_compile(kernel_in_path, settings->get_full_kernel_name());
-                }
-                build->build(settings);
-            },
-            events);
+        launch_build_step([build, settings] { build->build(settings); }, events);
     }
     sync_build_step(events);
 }
 
-void jit_build_subset(
-    const JitBuildStateSubset& build_subset, const JitBuildSettings* settings, const string& kernel_in_path) {
+void jit_build_subset(const JitBuildStateSubset& build_subset, const JitBuildSettings* settings) {
     std::vector<std::shared_future<void>> events;
     for (size_t i = 0; i < build_subset.size; ++i) {
         // Capture the necessary objects by reference
         auto& build = build_subset.build_ptr[i];
-        launch_build_step(
-            [build, settings, &kernel_in_path] {
-                if (settings != nullptr) {
-                    build->pre_compile(kernel_in_path, settings->get_full_kernel_name());
-                }
-                build->build(settings);
-            },
-            events);
+        launch_build_step([build, settings] { build->build(settings); }, events);
     }
     sync_build_step(events);
 }

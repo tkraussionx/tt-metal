@@ -9,11 +9,11 @@
 // 0 and immediately use it as an index for the first write.
 constexpr static int16_t DEBUG_RING_BUFFER_STARTING_INDEX = -1;
 
-#if defined(KERNEL_BUILD)
+#if defined(KERNEL_BUILD) || defined(FW_BUILD)
 
 #include "dev_msgs.h"
 
-#if defined(WATCHER_ENABLED) && !defined(WATCHER_DISABLE_RING_BUFFER)
+#if defined(WATCHER_ENABLED) && !defined(WATCHER_DISABLE_RING_BUFFER) && !defined(FORCE_WATCHER_OFF)
 
 void push_to_ring_buffer(uint32_t val) {
     auto buf = GET_MAILBOX_ADDRESS_DEV(watcher.debug_ring_buf);
@@ -34,4 +34,4 @@ void push_to_ring_buffer(uint32_t val) {
 #define WATCHER_RING_BUFFER_PUSH(x)
 #endif  // defined(WATCHER_ENABLED)
 
-#endif // KERNEL_BUILD
+#endif  // KERNEL_BUILD || FW_BUILD

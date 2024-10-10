@@ -35,15 +35,6 @@ inline void llk_unpack_reduce_hw_configure(
         unpA_num_faces,
         unpA_num_faces
     );
-
-    if constexpr (type != PoolType::MAX) {
-        union {
-            float f;
-            uint32_t u;
-        } f2u = {.f = const_mult};
-
-        for (uint i = 0; i < 16; i++) l1_buffer[i] = f2u.u;  // Load const into L1 buffer
-    }
 }
 
 template <PoolType type, ReduceDim dim, bool is_fp32_dest_acc_en=false, StochRndType stoch_rnd_mode = StochRndType::None>
@@ -88,9 +79,9 @@ inline void llk_unpack_reduce(const std::uint32_t operand, const std::uint32_t t
     std::uint32_t offset_address = cb_interface[operand_id].fifo_page_size * tile_index;
     std::uint32_t address = base_address + offset_address;
 
-    DEBUG_STATUS("UPRW");
+    WAYPOINT("UPRW");
     _llk_unpack_reduce_<type, dim>(
         address
     );
-    DEBUG_STATUS("UPRD");
+    WAYPOINT("UPRD");
 }

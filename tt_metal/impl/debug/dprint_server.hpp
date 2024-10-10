@@ -10,17 +10,6 @@
 
 namespace tt {
 
-enum DebugPrintHartFlags : unsigned int {
-    DPRINT_RISCV_NC  = 1,
-    DPRINT_RISCV_TR0 = 2,
-    DPRINT_RISCV_TR1 = 4,
-    DPRINT_RISCV_TR2 = 8,
-    DPRINT_RISCV_BR  = 16,
-};
-
-constexpr int DPRINT_NRISCVS = 5;
-constexpr int DPRINT_NRISCVS_ETH = 1;
-
 namespace tt_metal {
     class Device;
 }
@@ -97,5 +86,10 @@ void DPrintServerClearLogFile();
 @brief Clears any RAISE signals in the print server, so they can be used again in a later run.
 */
 void DPrintServerClearSignals();
+
+/**
+@brief Returns true if the DPRINT server reads any dispatch cores on a given device.
+*/
+bool DPrintServerReadsDispatchCores(tt::tt_metal::Device* device);
 
 } // namespace tt

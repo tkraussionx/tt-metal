@@ -46,7 +46,7 @@ std::pair<std::vector<uint32_t>, std::vector<uint32_t>> create_runtime_args(bool
 
     // Generate Unique Runtime Args. Common RT args starting address must be L1 Aligned, so account for that here via padding
     uint32_t num_rt_args_unique = num_rt_args_unique = rand() % (MAX_RUNTIME_ARGS + 1);
-    uint32_t num_rt_args_unique_padded = align(num_rt_args_unique, L1_ALIGNMENT / sizeof(uint32_t));
+    uint32_t num_rt_args_unique_padded = align(num_rt_args_unique, hal.get_alignment(HalMemType::L1) / sizeof(uint32_t));
     uint32_t num_rt_args_common = num_rt_args_unique_padded < MAX_RUNTIME_ARGS ? rand() % (MAX_RUNTIME_ARGS - num_rt_args_unique_padded + 1) : 0;
 
     if (force_max_size) {
@@ -235,7 +235,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestRandomizedProgram) {
                 SetRuntimeArgs(program, dummy_trisc_kernel, cr_set, trisc_unique_rtargs);
                 SetCommonRuntimeArgs(program, dummy_trisc_kernel, trisc_common_rtargs);
             } else {
-                TT_ASSERT("Invalid");
+                TT_THROW("Invalid");
             }
         }
 

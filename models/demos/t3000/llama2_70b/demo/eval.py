@@ -24,7 +24,7 @@ from models.demos.t3000.llama2_70b.demo.demo import (
 from datetime import datetime
 from models.demos.t3000.llama2_70b.tt.llama_common import (
     setup_llama_env,
-    check_device_mesh,
+    check_mesh_device,
 )
 
 
@@ -170,7 +170,14 @@ def run_forward(
     for cur_pos in range(eval_data_args.sample_len, eval_data_args.sample_len + output_tokens):
         logger.info(f"EVAL: Inference from token {prev_pos} to {cur_pos}")
         input_tokens = tokens[:, prev_pos:cur_pos]
-        logits = model.forward(input_tokens, prev_pos)
+
+        if prev_pos == 0:  # Prefill
+            logits = []
+            for b in range(bsz):
+                logits.append(model.prefill_forward_single_user(input_tokens[b : b + 1], prev_pos, b))
+            logits = torch.cat(logits, dim=0)
+        else:  # Decode
+            logits = model.forward(input_tokens, prev_pos)
 
         next_logits = logits[:, -1, :]  # batch, vocab of last token
         next_token = sampling_func(next_logits)
@@ -351,7 +358,7 @@ def test_LlamaModel_demo(
     top_k,
     temperature,
     # TT args
-    t3k_device_mesh,
+    t3k_mesh_device,
     n_devices,
     # Dataset args
     dataset,
@@ -370,11 +377,9 @@ def test_LlamaModel_demo(
         llama_version=llama_version,
     )
 
-    check_device_mesh(t3k_device_mesh, model_config)
+    check_mesh_device(t3k_mesh_device, model_config)
 
-    for i in t3k_device_mesh.get_device_ids():
-        device = t3k_device_mesh.get_device(i)
-        device.enable_async(True)
+    t3k_mesh_device.enable_async(True)
 
     args = construct_arg(
         implementation=implementation,
@@ -388,7 +393,7 @@ def test_LlamaModel_demo(
         top_k=top_k,
         temperature=temperature,
         chat=False,
-        device_mesh=t3k_device_mesh,
+        mesh_device=t3k_mesh_device,
         n_devices=n_devices,
         cache_path=cache_path,
         decode_only=False,

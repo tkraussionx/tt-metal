@@ -18,14 +18,14 @@ def falcon_lm_head_matmul_2d(
     weights: List[ttnn.Tensor],
     num_slices: int,
     lm_head_padding: ttnn.Tensor,
-    out_mem_config: ttnn.experimental.tensor.MemoryConfig,
-    out_dtype: ttnn.experimental.tensor.DataType,
+    out_mem_config: ttnn.MemoryConfig,
+    out_dtype: ttnn.DataType,
 ):
     assert (
         hidden_states.device().arch() == ttnn.device.Arch.WORMHOLE_B0
     ), "Falcon LM head is only supported for Wormhole BO arch"
 
-    seq_len = hidden_states.get_legacy_shape()[-2]
+    seq_len = hidden_states.shape.with_tile_padding()[-2]
 
     assert seq_len % 32 == 0, f"Sequence length must be a multiple of 32, instead it is {seq_len}"
     assert seq_len > 512, f"Falcon lm head 2d is only supported for sequence length > 512, instead it is {seq_len}"
@@ -34,15 +34,15 @@ def falcon_lm_head_matmul_2d(
     assert (
         len(weights) == num_slices
     ), f"Weights are expected to be split into {num_slices} slices, instead there are {len(weights)}"
-    weights_inner_dim_in_tiles = weights[0].get_legacy_shape()[-2] // 32
+    weights_inner_dim_in_tiles = weights[0].shape.with_tile_padding()[-2] // 32
     assert (
         weights_inner_dim_in_tiles == 144
     ), f"Weights are expected to be padded to the inner dim 144 in tiles, instead they are {weights_inner_dim_in_tiles}"
 
     hidden_states = ttnn.concat([hidden_states, lm_head_padding], -1)
 
-    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
+    compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
@@ -50,7 +50,7 @@ def falcon_lm_head_matmul_2d(
 
     grid = hidden_states.device().compute_with_storage_grid_size()
     activations_m_in_tiles = seq_len // 32
-    weights_n_in_tiles = weights[0].get_legacy_shape()[-1] // 32
+    weights_n_in_tiles = weights[0].shape.with_tile_padding()[-1] // 32
 
     # calculate parameters for the given sequence length
     grid = hidden_states.device().compute_with_storage_grid_size()

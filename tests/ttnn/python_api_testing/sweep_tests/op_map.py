@@ -802,6 +802,10 @@ op_map = {
         "tt_op": ttnn_ops.addalpha_bw,
         "pytorch_op": pytorch_ops.addalpha_bw,
     },
+    "subalpha-bw": {
+        "tt_op": ttnn_ops.subalpha_bw,
+        "pytorch_op": pytorch_ops.subalpha_bw,
+    },
     "relu-bw": {
         "tt_op": ttnn_ops.relu_bw,
         "pytorch_op": pytorch_ops.relu_bw,
@@ -1001,5 +1005,73 @@ op_map = {
     "eltwise-bias_gelu_unary": {
         "tt_op": ttnn_ops.eltwise_bias_gelu_unary,
         "pytorch_op": pytorch_ops.bias_gelu_unary,
+    },
+    "eltwise-identity": {
+        "tt_op": ttnn_ops.eltwise_identity,
+        "pytorch_op": pytorch_ops.eltwise_identity,
+    },
+    "unary-remainder": {
+        "tt_op": ttnn_ops.unary_remainder,
+        "pytorch_op": pytorch_ops.unary_remainder,
+    },
+    "eltwise-remainder": {
+        "tt_op": ttnn_ops.eltwise_remainder,
+        "pytorch_op": pytorch_ops.remainder,
+    },
+    "backward-unary-remainder": {
+        "tt_op": ttnn_ops.unary_remainder_bw,
+        "pytorch_op": pytorch_ops.unary_remainder_bw,
+    },
+    "topk": {
+        "tt_op": ttnn_ops.topk,
+        "pytorch_op": pytorch_ops.topk,
+    },
+    "eltwise-trunc": {
+        "tt_op": ttnn_ops.eltwise_trunc,
+        "pytorch_op": pytorch_ops.trunc,
+    },
+    "eltwise-frac": {
+        "tt_op": ttnn_ops.eltwise_frac,
+        "pytorch_op": pytorch_ops.frac,
+    },
+    "eltwise-ceil": {
+        "tt_op": ttnn_ops.eltwise_ceil,
+        "pytorch_op": pytorch_ops.ceil,
+    },
+    "argmax": {
+        "tt_op": ttnn_ops.argmax,
+        "pytorch_op": pytorch_ops.argmax,
+    },
+    "complex-imag": {
+        "tt_op": ttnn_ops.complex_imag,
+        "pytorch_op": pytorch_ops.complex_imag,
+    },
+    "complex-imag-bw": {
+        "tt_op": ttnn_ops.complex_imag_bw,
+        "pytorch_op": pytorch_ops.complex_imag_bw,
+    },
+    "complex-real": {
+        "tt_op": ttnn_ops.complex_real,
+        "pytorch_op": pytorch_ops.complex_real,
+    },
+    "complex-real-bw": {
+        "tt_op": ttnn_ops.complex_real_bw,
+        "pytorch_op": pytorch_ops.complex_real_bw,
+    },
+    "complex-angle-bw": {
+        "tt_op": ttnn_ops.complex_angle_bw,
+        "pytorch_op": pytorch_ops.complex_angle_bw,
+    },
+    "complex-is-imag": {
+        "tt_op": ttnn_ops.complex_is_imag,
+        "pytorch_op": pytorch_ops.complex_is_imag,
+    },
+    "complex-is-real": {
+        "tt_op": ttnn_ops.complex_is_real,
+        "pytorch_op": pytorch_ops.complex_is_real,
+    },
+    "logiteps-bw": {
+        "tt_op": ttnn_ops.logiteps_bw,
+        "pytorch_op": pytorch_ops.logiteps_bw,
     },
 }

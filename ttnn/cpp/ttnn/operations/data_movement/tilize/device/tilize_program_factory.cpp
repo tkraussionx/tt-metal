@@ -8,7 +8,7 @@
 #include "ttnn/deprecated/tt_dnn/op_library/cb_utils.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/math.hpp"
 #include "ttnn/operation.hpp"
-#include "ttnn/deprecated/tt_dnn/op_library/work_split_tilize.hpp"
+#include "ttnn/operations/core/work_split/work_split_tilize.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
@@ -46,7 +46,7 @@ operation::ProgramWithCallbacks tilize_single_core(const Tensor& a, Tensor& outp
 
     uint32_t num_tiles_in_row = stick_s / TILE_WIDTH;
     // Ensure we don't intrude into storage space
-    uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - L1_UNRESERVED_BASE;
+    uint32_t max_l1_size = a.device()->l1_size_per_core() / 2 - a.device()->get_base_allocator_addr(HalMemType::L1);
     uint32_t max_tiles = max_l1_size / (input_single_tile_size + output_single_tile_size);  // 2 CBs
     // Currently need the number of tiles in a row to be divisible by tiles in a block
     uint32_t num_tiles_per_block = 1;
@@ -171,7 +171,7 @@ operation::ProgramWithCallbacks tilize_multi_core_interleaved(const Tensor& a, T
     Device* device = a.device();
     auto grid_size = device->compute_with_storage_grid_size();
     auto [ncores, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff] =
-        split_blocks_for_tilize(grid_size, nblocks);
+        ttnn::split_blocks_for_tilize(grid_size, nblocks);
 
     create_cb(tt::CB::c_in0, program, all_cores, input_single_tile_size, ntiles_per_block, input_cb_data_format);
 
@@ -366,7 +366,7 @@ operation::ProgramWithCallbacks tilize_multi_core_sharded(const Tensor& input, T
 
     tt::tt_metal::KernelHandle unary_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
-        "ttnn/cpp/ttnn/deprecated/tt_dnn/op_library/sharded/kernels/dataflow/writer_unary_sharded.cpp",
+        "ttnn/cpp/ttnn/operations/data_movement/sharded/device/kernels/dataflow/writer_unary_sharded.cpp",
         all_cores,
         tt::tt_metal::WriterDataMovementConfig(writer_compile_time_args));
 

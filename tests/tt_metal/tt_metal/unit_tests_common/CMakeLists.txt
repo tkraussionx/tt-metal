@@ -2,6 +2,7 @@
 set(UNIT_TESTS_COMMON_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/basic/test_device_init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/common/test_bit_utils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/test_dispatch.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/compute/test_flatten.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/compute/matmul/test_matmul_large_block.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/compute/matmul/test_matmul_multi_core_multi_dram_in0_mcast_in1_mcast.cpp
@@ -25,6 +26,7 @@ set(UNIT_TESTS_COMMON_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/watcher/test_pause.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/watcher/test_ringbuf.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/watcher/test_waypoint.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/watcher/test_link_training.cpp
 )
 add_library(unit_tests_common_o OBJECT ${UNIT_TESTS_COMMON_SRC})
 target_link_libraries(unit_tests_common_o PUBLIC compiler_flags metal_header_directories gtest gtest_main)

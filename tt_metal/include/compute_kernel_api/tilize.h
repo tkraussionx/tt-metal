@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -30,10 +30,8 @@ ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb = 16)
 
     PACK(( llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE, ReluType::NO_RELU, 0, true/*tilize en*/>(ocb) ));
     PACK(( llk_pack_init<false, false, true/*tilize en*/>(ocb) ));
-    PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<false, DST_ACCUM_MODE>(ocb) ));
 
-    UNPACK(( llk_setup_operands() ));
     UNPACK(( llk_unpack_tilize_hw_configure_disaggregated<DST_ACCUM_MODE>(icb) ));
     UNPACK(( llk_unpack_tilize_init(icb, block) ));
 }
@@ -42,18 +40,17 @@ ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb = 16)
 /**
  * Initialize the tilize operation. To be called once at beginning of a kernel.
  */
+template<bool neginf_srcA = true, bool zero_srcA_reduce = false>
 ALWI void tilizeA_B_reduce_init(uint32_t icb0, uint32_t icb1_scaler, uint32_t block, uint32_t ocb = 16, uint32_t num_faces = 4, uint32_t face_r_dim = 16)
 {
-    UNPACK(( llk_setup_operands() ));
     UNPACK(( llk_unpack_tilizeA_B_hw_configure_disaggregated<DST_ACCUM_MODE>(icb0, icb1_scaler) ));
-    UNPACK(( llk_unpack_tilizeA_B_init<true, true>(icb0, icb1_scaler, block, num_faces, face_r_dim, 1) ));
+    UNPACK(( llk_unpack_tilizeA_B_init<neginf_srcA, true, false, zero_srcA_reduce>(icb0, icb1_scaler, block, num_faces, face_r_dim, 1) ));
 
     MATH(( llk_math_reduce_init<REDUCE_OP, REDUCE_DIM, MATH_FIDELITY>() ));
     MATH(( llk_math_pack_sync_init() ));
 
     PACK(( llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE>(ocb) ));
     PACK(( llk_pack_init(ocb) ));
-    PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<false, DST_ACCUM_MODE>(ocb) ));
 }
 #endif
@@ -76,7 +73,6 @@ ALWI void tilizeA_B_reduce_init(uint32_t icb0, uint32_t icb1_scaler, uint32_t bl
 
 ALWI void tilizeA_B_dot_product_init(uint32_t icb0, uint32_t icb1, uint32_t block, uint32_t ocb = 16, uint32_t num_faces = 4, uint32_t face_r_dim = 16)
 {
-    UNPACK(( llk_setup_operands() ));
     UNPACK(( llk_unpack_tilizeA_B_hw_configure_disaggregated<DST_ACCUM_MODE>(icb0, icb1) ));
     UNPACK(( llk_unpack_tilizeA_B_init<false, false, true>(icb0, icb1, block, num_faces, face_r_dim, face_r_dim) ));
 
@@ -85,7 +81,6 @@ ALWI void tilizeA_B_dot_product_init(uint32_t icb0, uint32_t icb1, uint32_t bloc
 
     PACK(( llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE>(ocb) ));
     PACK(( llk_pack_init(ocb) ));
-    PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<false, DST_ACCUM_MODE>(ocb) ));
 }
 
@@ -105,11 +100,6 @@ ALWI void tilize_init_short(uint32_t icb, uint32_t block, uint32_t ocb = 16)
 ALWI void tilize_init_unpack(uint32_t icb, uint32_t block)
 {
     UNPACK(( llk_unpack_tilize_init(icb, block) ));
-}
-
-ALWI void tilizeA_B_init_unpack(uint32_t icb0, uint32_t icb1, uint32_t block)
-{
-    UNPACK(( llk_unpack_tilizeA_B_init(icb0, icb1, block) ));
 }
 
 /**
@@ -155,9 +145,9 @@ ALWI void unpack_tilize_block(uint32_t icb, uint32_t block)
     UNPACK(( llk_unpack_tilize_block(icb, block) ));
 }
 
-ALWI void unpack_tilizeA_B_block(uint32_t icb0, uint32_t icb1, uint32_t block, uint32_t tile_idx_b, uint32_t num_faces = 4)
+ALWI void unpack_tilizeA_B_block(uint32_t icb0, uint32_t icb1, uint32_t block, uint32_t tile_idx_b, uint32_t num_faces = 4, uint32_t srca_face_r_dim = 16)
 {
-    UNPACK(( llk_unpack_tilizeA_B_block(icb0, icb1, block, tile_idx_b, num_faces) ));
+    UNPACK(( llk_unpack_tilizeA_B_block<true, true>(icb0, icb1, block, tile_idx_b, num_faces, srca_face_r_dim) ));
 }
 
 /**
@@ -185,7 +175,7 @@ ALWI void unpack_tilizeA_B_block(uint32_t icb0, uint32_t icb1, uint32_t block, u
 
 ALWI void unpack_tilizeA_B_dot_product_block(uint32_t icb0, uint32_t icb1, uint32_t block, uint32_t tile_idx_b, uint32_t num_faces = 4)
 {
-    UNPACK(( llk_unpack_tilizeA_B_block<true>(icb0, icb1, block, tile_idx_b, num_faces) ));
+    UNPACK(( llk_unpack_tilizeA_B_block<false, false, true>(icb0, icb1, block, tile_idx_b, num_faces) ));
 }
 
 /**
