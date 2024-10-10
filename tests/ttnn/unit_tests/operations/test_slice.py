@@ -573,3 +573,14 @@ def test_ttnn_slice_optimized_shapes(input_shape, input_start, input_ends, layou
 
     ttnn_output = ttnn.to_torch(ttnn_output)
     assert_with_pcc(torch_output, ttnn_output, 0.99)
+
+
+def test_slice_whisper(device):
+    torch_input = torch.randn(8, 1500, 2, 6, 64)
+    ttnn_input = ttnn.from_torch(torch_input, device=device, dtype=ttnn.bfloat16)
+
+    torch_output = torch_input[..., ::2, :, :]
+    ttnn_output = ttnn_input[..., ::2, :, :]
+    ttnn_output = ttnn.to_torch(ttnn_output)
+
+    assert_with_pcc(torch_output, ttnn_output, 0.99)
