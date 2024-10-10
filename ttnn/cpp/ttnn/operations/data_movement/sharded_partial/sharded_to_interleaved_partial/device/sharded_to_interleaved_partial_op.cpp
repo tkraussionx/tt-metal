@@ -37,9 +37,9 @@ void ShardedToInterleavedPartialDeviceOperation::validate(const std::vector<Tens
 }
 
 
-std::vector<tt::tt_metal::LegacyShape> ShardedToInterleavedPartialDeviceOperation::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+std::vector<ttnn::SimpleShape> ShardedToInterleavedPartialDeviceOperation::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     const auto& output_tensor = input_tensors.at(1);
-    return {output_tensor.get_legacy_shape()};
+    return {output_tensor.get_logical_shape()};
 }
 
 

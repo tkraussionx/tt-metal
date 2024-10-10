@@ -84,7 +84,7 @@ void SliceDeviceOperation::validate_with_output_tensors(
     if(!output_tensors.empty() && output_tensors[0].has_value()){
         const auto output_shape_required = this->compute_output_shapes(input_tensors)[0];
         const auto& out_tensor = output_tensors[0].value();
-        TT_FATAL(out_tensor.get_legacy_shape() == output_shape_required, "The input tensors need a shape of {}, however the output tensor is only {}", output_shape_required,  out_tensor.get_legacy_shape());
+        TT_FATAL(out_tensor.get_logical_shape() == output_shape_required, "The input tensors need a shape of {}, however the output tensor is only {}", output_shape_required,  out_tensor.get_legacy_shape());
     }
     auto output_tensor_shape = this->compute_output_shapes(input_tensors)[0];
     if (has_step) { // if all ones modify before passing in to function
@@ -117,9 +117,9 @@ void SliceDeviceOperation::validate_with_output_tensors(
     }
 }
 
-std::vector<tt::tt_metal::LegacyShape> SliceDeviceOperation::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+std::vector<ttnn::SimpleShape> SliceDeviceOperation::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     std::vector<uint32_t> out_shape;
-    auto rank = input_tensors[0].get_legacy_shape().rank();
+    auto rank = input_tensors[0].get_logical_shape().rank();
     out_shape.reserve(rank);
 
     auto output_dim_i = [this] (size_t i) {
@@ -128,8 +128,7 @@ std::vector<tt::tt_metal::LegacyShape> SliceDeviceOperation::compute_output_shap
     for (uint32_t i = 0; i < rank; i++) {
         out_shape.push_back(output_dim_i(i));
     }
-    tt::tt_metal::LegacyShape output_tensor_shape(out_shape);
-    return {output_tensor_shape};
+    return {ttnn::SimpleShape(std::move(out_shape))};
 }
 
 std::vector<Tensor> SliceDeviceOperation::create_output_tensors(

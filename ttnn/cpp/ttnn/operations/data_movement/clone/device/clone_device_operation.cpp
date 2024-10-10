@@ -37,7 +37,7 @@ void CloneOperation::validate_on_program_cache_hit(
 
 CloneOperation::shape_return_value_t CloneOperation::compute_output_shapes(
     const operation_attributes_t& operation_attributes, const tensor_args_t& tensor_args) {
-    return tensor_args.input.get_shape();
+    return tensor_args.input.get_logical_shape();
 };
 
 CloneOperation::tensor_return_value_t CloneOperation::create_output_tensors(
