@@ -91,9 +91,6 @@ void MAIN {
     }
 #endif
 
-    uint32_t rt_args_idx = 0;
-    const uint32_t ring_idx = get_arg_val<uint32_t>(rt_args_idx++);
-
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(0);        // inner block size in tiles
     constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1);  // outer row block size (in inner row blocks)
     constexpr uint32_t in0_block_num_tiles =
@@ -113,11 +110,11 @@ void MAIN {
     constexpr bool untilize_out = get_compile_time_arg_val(13);                // untilize output
 
 #ifdef GATHER_IN0
-    constexpr bool gather_in0 = get_compile_time_arg_val(14);
-    constexpr uint32_t ring_size = get_compile_time_arg_val(15);
+    constexpr bool gather_in0 = true;
+    const uint32_t start_block = get_arg_val<uint32_t>(0);
 #else
     constexpr bool gather_in0 = false;
-    constexpr uint32_t ring_size = 1;
+    const uint32_t start_block = 0;
 #endif
 
     constexpr uint32_t out_block_w = out_subblock_w * in1_num_subblocks;
@@ -140,7 +137,7 @@ void MAIN {
     SFPU_OP_INIT_ACTIVATION
 #endif
 
-    constexpr bool spill = num_blocks > 1;
+    constexpr bool spill = num_blocks > 1 && !gather_in0;
 
     mm_block_init(in0_cb_id, in1_cb_id, mm_partials_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
     for (uint32_t b = 0; b < batch; b++) {
@@ -158,12 +155,12 @@ void MAIN {
             PACK((pack_reconfig_data_format(mm_partials_cb_id)));
         }
 
-        if constexpr (gather_in0) {
+        if constexpr(gather_in0) {
             cb_reserve_back(in1_cb_id, in1_block_num_tiles * num_blocks);
             cb_push_back(in1_cb_id, in1_block_num_tiles * num_blocks);
             cb_wait_front(in1_cb_id, in1_block_num_tiles * num_blocks);
         }
-        const uint32_t in1_block_num_tiles_per_core = in1_block_num_tiles / ring_size;
+
 
         for (uint32_t block = 0; block < num_blocks; block++) {
             bool last_out = block == (num_blocks - 1);
@@ -175,7 +172,13 @@ void MAIN {
             }
 #endif
 
-            if constexpr (!gather_in0) {
+            if constexpr (gather_in0) {
+                if (block == 0) {
+                    cb_reserve_back(in0_cb_id, in0_block_num_tiles);
+                    cb_push_back(in0_cb_id, in0_block_num_tiles);
+                }
+                cb_wait_front(in0_cb_id, (block + 1) * in0_block_num_tiles);
+            } else {
                 cb_wait_front(in0_cb_id, in0_block_num_tiles);
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
             }
@@ -202,12 +205,12 @@ void MAIN {
                     uint32_t in0_index = in0_index_subblock_offset;  // offset into in0 block
                     uint32_t in1_index = in1_index_subblock_offset;  // offset into in1 block
                     // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
-                    for (uint32_t shard_cnt = 1; shard_cnt <= ring_size; shard_cnt++) {
                     if constexpr (gather_in0) {
-                        cb_wait_front(in0_cb_id, shard_cnt * (in0_block_num_tiles / ring_size));
-                        in1_index = in1_index_subblock_offset + in1_block_num_tiles_per_core * ((ring_idx + shard_cnt - 1) % ring_size);
+                        in0_index = in0_index_subblock_offset + block * in0_block_num_tiles;
+                        in1_index = in1_index_subblock_offset + in1_block_num_tiles * ((start_block + block) % num_blocks);
                     }
-                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w / ring_size; ++inner_dim_idx) {
+                    // inner dim that we accumualte is the inner dim of in0/in1, which is in0_block_w
+                    for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; ++inner_dim_idx) {
                         // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                         // accumulation is done by iterating matmul_block across inner dim
                         // in0_block_w is passed as innder dim (kt) to matmul_block, interally used to stride in0
@@ -220,11 +223,10 @@ void MAIN {
                             false,
                             out_subblock_w,
                             out_subblock_h,
-                            in0_block_w / ring_size);
+                            in0_block_w);
                         in0_index++;                  // stride right by 1
                         in1_index += in1_per_core_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                       // called in1_block_w)
-                    }
                     }
 #endif  // SKIP_COMPUTE
 
@@ -263,7 +265,7 @@ void MAIN {
                         tile_regs_release();
                         cb_push_back(mm_out_cb_id, out_subblock_num_tiles);
 
-                    } else {
+                    } else if (!gather_in0) {
                         tile_regs_commit();
                         // Wait for tiles in output buffer to be written out since interm and output share memory
                         if (block == 0) {
@@ -319,11 +321,15 @@ void MAIN {
                 enable_reload = true;
             }
 #endif
-
-            cb_pop_front(in0_cb_id, in0_block_num_tiles);
-            cb_pop_front(in1_cb_id, in1_block_num_tiles);
+            if (!gather_in0) {
+                cb_pop_front(in0_cb_id, in0_block_num_tiles);
+                cb_pop_front(in1_cb_id, in1_block_num_tiles);
+            }
         }
-
+        if (gather_in0) {
+            cb_pop_front(in0_cb_id, in0_block_num_tiles * num_blocks);
+            cb_pop_front(in1_cb_id, in1_block_num_tiles * num_blocks);
+        }
 #ifdef FUSE_BIAS
 #ifdef PACK_RELU
         // if last block we pack the final result with relu enabled

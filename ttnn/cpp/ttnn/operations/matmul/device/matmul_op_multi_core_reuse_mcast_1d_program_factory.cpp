@@ -79,7 +79,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     uint32_t output_single_tile_size = output_tile.get_tile_size(output_data_format);
     uint32_t interm0_single_tile_size = output_tile.get_tile_size(interm0_data_format);
 
-    uint32_t in0_block_tiles = per_core_M * in0_block_w * num_blocks;
+    uint32_t in0_block_tiles = per_core_M * in0_block_w;
     uint32_t in0_CB_tiles = in0_block_tiles;
     if (B * num_blocks > 1) {
         in0_CB_tiles = in0_CB_tiles * 2;  // double buffer
@@ -130,7 +130,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t in0_sender_num_cores = in0_is_sharded ? a.shard_spec().value().grid.num_cores() : 1;
     uint32_t num_cores = in0_is_sharded ? std::max(num_cores_with_work, in0_sender_num_cores) : num_cores_with_work;
-    uint32_t ring_size = in0_sender_num_cores;
 
     constexpr bool row_major = true;
     CoreRangeSet all_cores =
@@ -205,7 +204,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-    auto all_gather_signal_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, VALID); // Signal to start processing local data
+    auto all_gather_signal_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
     CoreCoord top_left_core = in0_mcast_receiver_cores_bounding_box.start_coord;
     CoreCoord bottom_right_core = in0_mcast_receiver_cores_bounding_box.end_coord;
@@ -235,7 +234,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 (std::uint32_t)B,  // batch
 
                 // all gather args
-                (std::uint32_t)(ring_size),
+                (std::uint32_t)(num_cores), // ring size
                 (std::uint32_t)(all_gather_signal_semaphore_id)
             };
 
@@ -493,17 +492,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
+    uint32_t compute_granularity = gather_in0 ? num_cores : 1;
     vector<uint32_t> compute_kernel_args = {
-        in0_block_w,             // in0_block_w
+        in0_block_w / compute_granularity,             // in0_block_w
         in0_num_subblocks,       // in0_num_subblocks
-        in0_block_num_tiles,     // in0_block_num_tiles
+        in0_block_num_tiles / compute_granularity,     // in0_block_num_tiles
         in0_subblock_num_tiles,  // in0_subblock_num_tiles
 
         in1_num_subblocks,    // in1_num_subblocks
-        in1_block_num_tiles,  // in1_block_num_tiles
+        in1_block_num_tiles / compute_granularity,  // in1_block_num_tiles
         in1_per_core_w,       // in1_per_core_w
 
-        num_blocks,  // num_blocks
+        num_blocks * compute_granularity,  // num_blocks
 
         out_subblock_h,          // out_subblock_h
         out_subblock_w,          // out_subblock_w
@@ -512,10 +512,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
         out_block_tiles,         // out_block_num_tiles
 
         untilize_out,  // untilize_out
-
-        // Gather in0 args
-        gather_in0,
-        ring_size,
     };
 
     // Create compute kernel
@@ -840,11 +836,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 uint32_t in1_stride_per_shard = in0_shard_width_in_tiles * N;
 
                 mm_in1_sender_writer_args.push_back(1); // Core ring all gather is unidirectional
-                mm_in1_sender_writer_args.push_back(ring_size);
+                mm_in1_sender_writer_args.push_back(num_cores); // ring size
                 mm_in1_sender_writer_args.push_back(i);
                 mm_in1_sender_writer_args.push_back(in0_shard_width_in_tiles); // tensor slice width in tiles
                 mm_in1_sender_writer_args.push_back(in1_stride_per_shard);
-                mm_in1_sender_writer_args.push_back((ring_size - 1) * in1_stride_per_shard);
+                mm_in1_sender_writer_args.push_back((num_cores - 1) * in1_stride_per_shard);
                 mm_in1_sender_writer_args.push_back(ttnn::experimental::ccl::Direction::CCW);
             }
 
@@ -1766,6 +1762,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
             Nt,
             Kt,
             bcast_batch,
+            gather_in0,
             in0_block_w,
             out_subblock_h,
             out_subblock_w,
@@ -1803,7 +1800,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(
             Nt,
             Kt,
             bcast_batch,
-            gather_in0,
             in0_block_w,
             out_subblock_h,
             out_subblock_w,

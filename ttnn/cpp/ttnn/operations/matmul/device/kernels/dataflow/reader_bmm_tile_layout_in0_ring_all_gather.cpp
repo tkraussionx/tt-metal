@@ -37,17 +37,8 @@ void kernel_main() {
     constexpr uint32_t shard_size_in_tiles = shard_width_in_tiles * shard_height_in_tiles;
     constexpr uint32_t shard_size_bytes = shard_size_in_tiles * in0_single_tile_size_bytes;
 
-    // // Dprint some info
-    // DPRINT << "[" << ring_idx << "] ring_size: " << ring_size << ENDL();
-    // DPRINT << "[" << ring_idx << "] signal_semaphore_addr: " << signal_semaphore_addr << ENDL();
-    // DPRINT << "[" << ring_idx << "] to: (" << next_core_noc_x << ", " << next_core_noc_y << ")" << ENDL();
-    // DPRINT << "[" << ring_idx << "] in0_single_tile_size_bytes: " << in0_single_tile_size_bytes << ENDL();
-    // DPRINT << "[" << ring_idx << "] shard_width_in_tiles: " << shard_width_in_tiles << ENDL();
-    // DPRINT << "[" << ring_idx << "] shard_height_in_tiles: " << shard_height_in_tiles << ENDL();
-    // DPRINT << "[" << ring_idx << "] shard_size_bytes: " << shard_size_bytes << ENDL();
-
     cb_reserve_back(cb_id_in2, batch * shard_size_in_tiles);
-    cb_reserve_back(cb_id_in0, batch * ring_size * shard_size_in_tiles);
+    cb_reserve_back(cb_id_in0, batch * (ring_size - 1) * shard_size_in_tiles);
 
     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
     uint32_t local_shard_read_addr = get_read_ptr(cb_id_in2);
@@ -60,15 +51,12 @@ void kernel_main() {
             uint64_t remote_curr_shard_write_addr = get_noc_addr(next_core_noc_x, next_core_noc_y, curr_shard_write_addr);
             uint32_t curr_shard_read_addr = l1_write_addr_in0 + shard_size_bytes * shard_cnt;
 
-            // Wait for signal from previous core that data has been added to this core's in0
-            noc_semaphore_wait_min(l1_signal_sem_addr, shard_cnt + 1);
-
-            if (shard_cnt == 0) { // Need to load the local shard from cb2 to cb0 in the correct place
-                // noc_async_read(get_noc_addr(local_shard_read_addr), curr_shard_read_addr, shard_size_bytes);
-                // noc_async_read_barrier();
-
+            if (shard_cnt == 0) {
                 noc_async_write_one_packet_set_state(remote_curr_shard_write_addr, shard_size_bytes);
             }
+
+            // Wait for signal from previous core that data has been added to this core's in0
+            noc_semaphore_wait_min(l1_signal_sem_addr, shard_cnt);
 
             // Send data to next core
             if (shard_cnt < ring_size - 1) { // Skip sending the last shard
@@ -79,7 +67,9 @@ void kernel_main() {
             }
 
             // Do stuff for matmul fusion here
-            cb_push_back(cb_id_in0, shard_size_in_tiles);
+            if (shard_cnt > 0) {
+                cb_push_back(cb_id_in0, shard_size_in_tiles);
+            }
         }
     }
 }
