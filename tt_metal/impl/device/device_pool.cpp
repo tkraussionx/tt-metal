@@ -349,7 +349,7 @@ const std::unordered_set<std::thread::id>& DevicePool::get_worker_thread_ids() c
 
 void DevicePool::init_firmware_on_active_devices() const {
     for (const auto& key : this->get_all_active_devices()) {
-        const auto dev = this->devices[key.index()].get();
+        auto *const dev = this->devices[key.index()].get();
         // For Galaxy init, we only need to loop over mmio devices
         const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(dev->id());
         if (mmio_device_id != dev->id()) {

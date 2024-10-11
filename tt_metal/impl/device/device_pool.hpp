@@ -62,6 +62,7 @@ class DevicePool {
     size_t trace_region_size;
     std::vector<uint32_t> l1_bank_remap;
     std::mutex lock;
+    // TODO replace std::vector<std::unique_ptr<Device>> with stl::SlotMap<v1::DeviceKey, Device> when removing v0
     std::vector<std::unique_ptr<Device>> devices;
     // Used to track worker thread handles (1 worker thread created per device)
     // when we need to check if a call is made from an application thread or a
