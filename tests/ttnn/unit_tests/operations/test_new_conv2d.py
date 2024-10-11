@@ -2131,3 +2131,135 @@ def test_conv_for_vanilla_unet(
         output_layout=output_layout,
         has_bias=False,
     )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, groups, bias, dilation",
+    (
+        # (1, 1024, 1024, 19, 19, 1, 1, 1, 1, 0, 0, 1, True, 1),          ## H X, B X, W X :: #13732
+        (1, 1024, 3, 224, 224, 16, 16, 16, 16, 0, 0, 1, True, 1),  ## H X, B X, W X
+        # (1, 1024, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, True, 1),   ## H X, B X, W X
+        # (1, 1024, 512, 19, 19, 3, 3, 1, 1, 6, 6, 1, True, 6),       ## H X, B Y, W Y
+        # (1, 1056, 1056, 48, 48, 3, 3, 1, 1, 1, 1, 4, False, 1),
+        # (1, 1056, 1056, 96, 96, 3, 3, 2, 2, 1, 1, 4, False, 1),
+        # (1, 128, 128, 180, 320, 3, 3, 2, 2, 1, 1, 1, False, 1),
+        # (1, 128, 128, 200, 272, 3, 3, 2, 2, 1, 1, 1, False, 1),
+        # (1, 128, 64, 150, 150, 1, 1, 1, 1, 0, 0, 1, False, 1),
+        # (1, 1280, 1280, 30, 40, 3, 3, 1, 1, 1, 1, 1280, True, 1),
+        # (1, 1280, 3, 518, 518, 14, 14, 14, 14, 0, 0, 1, True, 1),
+        # (1, 1392, 1392, 14, 14, 3, 3, 1, 1, 1, 1, 6, False, 1),
+        # (1, 1392, 1392, 28, 28, 3, 3, 2, 2, 1, 1, 6, False, 1),
+        # (1, 144, 144, 191, 191, 3, 3, 2, 2, 0, 0, 144, False, 1),
+        # (1, 192, 192, 95, 95, 3, 3, 1, 1, 1, 1, 192, False, 1),
+        # (1, 192, 3, 512, 672, 16, 16, 16, 16, 0, 0, 1, True, 1),
+        # (1, 1920, 1920, 14, 14, 3, 3, 2, 2, 1, 1, 16, False, 1),
+        # (1, 2016, 2016, 14, 14, 3, 3, 2, 2, 1, 1, 36, False, 1),
+        # (1, 2048, 1024, 7, 7, 1, 1, 1, 1, 0, 0, 1, True, 1),
+        # (1, 2048, 2048, 14, 14, 3, 3, 2, 2, 1, 1, 16, False, 1),
+        # (1, 24, 32, 190, 190, 1, 1, 1, 1, 0, 0, 1, False, 1),
+        # (1, 2520, 2520, 14, 14, 3, 3, 2, 2, 1, 1, 15, False, 1),
+        # (1, 256, 1024, 128, 128, 1, 1, 1, 1, 0, 0, 1, False, 1),
+        # (1, 256, 2048, 25, 34, 3, 3, 2, 2, 1, 1, 1, True, 1),
+        # (1, 256, 256, 120, 160, 3, 3, 1, 1, 1, 1, 256, True, 1),
+        # (1, 2904, 2904, 24, 24, 3, 3, 1, 1, 1, 1, 11, False, 1),
+        # (1, 2904, 2904, 48, 48, 3, 3, 2, 2, 1, 1, 11, False, 1),
+        # (1, 3024, 3024, 14, 14, 3, 3, 2, 2, 1, 1, 27, False, 1),
+        # (1, 32, 3, 299, 299, 3, 3, 2, 2, 0, 0, 1, False, 1),
+        # (1, 32, 3, 381, 381, 3, 3, 2, 2, 0, 0, 1, False, 1),
+        # (1, 32, 32, 190, 190, 3, 3, 1, 1, 1, 1, 32, False, 1),
+        # (1, 336, 336, 112, 112, 3, 3, 2, 2, 1, 1, 2, False, 1),
+        # (1, 336, 336, 48, 48, 5, 5, 1, 1, 2, 2, 336, False, 1),
+        # (1, 528, 528, 17, 17, 5, 5, 1, 1, 2, 2, 528, False, 1),
+        # (1, 528, 528, 192, 192, 3, 3, 2, 2, 1, 1, 2, False, 1),
+        # (1, 528, 528, 96, 96, 3, 3, 1, 1, 1, 1, 2, False, 1),
+        # (1, 64, 3, 300, 300, 3, 3, 1, 1, 1, 1, 1, True, 1),
+        # (1, 64, 3, 720, 1280, 7, 7, 2, 2, 3, 3, 1, False, 1),
+        # (1, 64, 3, 800, 1088, 7, 7, 2, 2, 3, 3, 1, False, 1),
+        # (1, 64, 64, 73, 73, 1, 7, 1, 1, 0, 3, 1, False, 1),
+        # (1, 64, 64, 73, 73, 7, 1, 1, 1, 3, 0, 1, False, 1),
+        # (1, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, 640, True, 1),
+        # (1, 696, 696, 56, 56, 3, 3, 2, 2, 1, 1, 3, False, 1),
+        # (1, 720, 720, 17, 17, 5, 5, 1, 1, 2, 2, 720, False, 1),
+        # (1, 728, 728, 38, 38, 3, 3, 1, 1, 1, 1, 728, False, 1),
+        # (1, 7392, 7392, 24, 24, 3, 3, 2, 2, 1, 1, 28, False, 1),
+        # (1, 768, 3, 224, 224, 16, 16, 16, 16, 0, 0, 1, True, 1),
+        # (1, 768, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, False, 1),
+        # (1, 768, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, True, 1),
+        # (1, 768, 3, 384, 512, 32, 32, 32, 32, 0, 0, 1, True, 1),
+        # (1, 960, 960, 24, 24, 5, 5, 1, 1, 2, 2, 960, False, 1),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    # [ttnn.bfloat16, ttnn.bfloat8_b],
+    [
+        ttnn.bfloat16,
+    ],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    # [ttnn.bfloat16, ttnn.bfloat8_b],
+    [
+        ttnn.bfloat16,
+    ],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize(
+    "shard_layout",
+    [
+        ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+    ],
+)
+@skip_for_grayskull()
+def test_short_sweep_failures(
+    device,
+    use_program_cache,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    groups,
+    bias,
+    dilation,
+    activations_dtype,
+    weights_dtype,
+    math_fidelity,
+    output_layout,
+    shard_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        False,  ## use_1d_systolic_array
+        dilation=dilation,
+        config_override=None,
+        has_bias=bias,
+        use_shallow_conv_variant=False,
+        groups=groups,
+        output_layout=output_layout,
+        shard_layout=shard_layout,
+    )
