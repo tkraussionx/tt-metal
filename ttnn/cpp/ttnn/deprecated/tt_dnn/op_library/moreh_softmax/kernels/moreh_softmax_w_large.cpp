@@ -162,8 +162,10 @@ void MAIN {
         // step 3, compute final result
         for (uint32_t w = 0; w < Wt; w += onetile) {
             sub_tiles_bcast_cols_to_cb(cb_in0, cb_max, cb_x_m_max, 0, 0, /*pop0=*/1, /*pop1=*/0);
-            cb_wait_front(cb_recipsumexps, onetile);
+
             cb_wait_front(cb_x_m_max, onetile);
+            cb_reserve_back(cb_out0, onetile);
+
             #ifdef LOG
                 #ifdef SOFTMAX
                     // x - max - log(sum)
@@ -186,13 +188,13 @@ void MAIN {
             #else
                 #ifdef SOFTMAX
                     // exp(x - max) / sum
-                    exp_tile_to_cb(cb_x_m_max, cb_exps);
-
                     tile_regs_acquire();
-                    copy_tile_init_with_dt(cb_exps);
-                    copy_tile(cb_exps, 0, dst0);
+                    copy_tile_init_with_dt(cb_x_m_max);
+                    copy_tile(cb_x_m_max, 0, dst0);
                     copy_tile_init_with_dt(cb_recipsumexps);
                     copy_tile(cb_recipsumexps, 0, dst1);
+                    exp_tile_init();
+                    exp_tile(dst0);
                     moreh_binary_op_init();
                     moreh_binary_mul(dst0);
                     tile_regs_commit();
@@ -200,17 +202,17 @@ void MAIN {
                     tile_regs_wait();
                     pack_tile_with_dt(dst0, cb_out0);
                     tile_regs_release();
-
-                    cb_pop_front(cb_exps, onetile);
                 #else
                     // rexp(x - max) / sum
-                    rexp_tile_to_cb(cb_x_m_max, cb_exps);
-
                     tile_regs_acquire();
-                    copy_tile_init_with_dt(cb_exps);
-                    copy_tile(cb_exps, 0, dst0);
+                    copy_tile_init_with_dt(cb_x_m_max);
+                    copy_tile(cb_x_m_max, 0, dst0);
                     copy_tile_init_with_dt(cb_recipsumexps);
                     copy_tile(cb_recipsumexps, 0, dst1);
+                    negative_tile_init();
+                    negative_tile(dst0);
+                    exp_tile_init();
+                    exp_tile(dst0);
                     moreh_binary_op_init();
                     moreh_binary_mul(dst0);
                     tile_regs_commit();
@@ -218,11 +220,11 @@ void MAIN {
                     tile_regs_wait();
                     pack_tile_with_dt(dst0, cb_out0);
                     tile_regs_release();
-
-                    cb_pop_front(cb_exps, onetile);
                 #endif
             #endif
+
             cb_push_back(cb_out0, onetile);
+            cb_pop_front(cb_x_m_max, onetile);
         }
 
         cb_pop_front(cb_recipsumexps, onetile);
