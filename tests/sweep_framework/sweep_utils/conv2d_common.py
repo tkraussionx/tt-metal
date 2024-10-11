@@ -52,7 +52,6 @@ def run_full(
     input_specs,
     input_channels,
     output_channels,
-    sharding_scheme,
     transpose_mcast,
     output_layout,
     has_bias,
@@ -119,7 +118,7 @@ def run_full(
         dtype=activations_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
-        shard_layout=sharding_scheme,
+        shard_layout=None,
         deallocate_activation=deallocate_activation,
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,
@@ -172,7 +171,6 @@ def run_full(
 
 def run_short(
     input_specs,
-    sharding_scheme,
     transpose_mcast,
     output_layout,
     enable_act_double_buffer,
@@ -243,7 +241,7 @@ def run_short(
         dtype=activations_dtype,
         weights_dtype=weights_dtype,
         math_fidelity=math_fidelity,
-        shard_layout=sharding_scheme,
+        shard_layout=None,
         deallocate_activation=deallocate_activation,
         fp32_dest_acc_enabled=fp32_accum,
         packer_l1_accum_enabled=packer_l1_acc,

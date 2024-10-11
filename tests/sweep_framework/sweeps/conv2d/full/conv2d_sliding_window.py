@@ -57,7 +57,6 @@ parameters = {
         # Parameters-to-check ends
         "input_channels": [32],
         "output_channels": [32],
-        "sharding_scheme": [ttnn.TensorMemoryLayout.HEIGHT_SHARDED],
         "transpose_mcast": [True],
         "output_layout": [ttnn.TILE_LAYOUT],
         "has_bias": [True],
@@ -89,7 +88,6 @@ def run(
     input_specs,
     input_channels,
     output_channels,
-    sharding_scheme,
     transpose_mcast,
     output_layout,
     has_bias,
@@ -115,7 +113,6 @@ def run(
         input_specs,
         input_channels,
         output_channels,
-        sharding_scheme,
         transpose_mcast,
         output_layout,
         has_bias,

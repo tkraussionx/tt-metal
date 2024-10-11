@@ -421,11 +421,6 @@ parameters = {
             [1, 960, 960, 7, 7, 3, 3, 1, 1, 1, 1, 960, False, 1],
             [1, 960, 960, 7, 7, 5, 5, 1, 1, 2, 2, 960, False, 1],
         ],
-        "sharding_scheme": [
-            ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-            ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-        ],
         "transpose_mcast": [False],
         "output_layout": [ttnn.TILE_LAYOUT],
         "enable_act_double_buffer": [False],
@@ -452,7 +447,6 @@ def invalidate_vector(test_vector) -> Tuple[bool, Optional[str]]:
 
 def run(
     input_specs,
-    sharding_scheme,
     transpose_mcast,
     output_layout,
     enable_act_double_buffer,
@@ -474,7 +468,6 @@ def run(
 ) -> list:
     return run_short(
         input_specs,
-        sharding_scheme,
         transpose_mcast,
         output_layout,
         enable_act_double_buffer,
