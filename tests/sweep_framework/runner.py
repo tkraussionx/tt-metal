@@ -76,8 +76,6 @@ def run(test_module, input_queue, output_queue):
         while True:
             test_vector = input_queue.get(block=True, timeout=1)
             test_vector = deserialize_vector(test_vector)
-            with open("helper_add.txt", "a") as f:
-                f.write(f"test_vector= {test_vector}\n")
             try:
                 results = test_module.run(**test_vector, device=device)
                 if type(results) == list:
@@ -93,6 +91,9 @@ def run(test_module, input_queue, output_queue):
                 perf_result = gather_single_test_perf(device, status)
                 output_queue.put([status, message, e2e_perf, perf_result])
             else:
+                if status:
+                    with open("helper_add.txt", "a") as f:
+                        f.write(f"test_vector= {test_vector}\n")
                 output_queue.put([status, message, e2e_perf, None])
     except Empty as e:
         try:
