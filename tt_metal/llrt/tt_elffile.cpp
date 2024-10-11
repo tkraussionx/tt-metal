@@ -419,8 +419,8 @@ void ElfFile::Impl::XIPify() {
             log_debug(tt::LogLLRuntime, "{}: Relocation at {x} is not relaxed", path_, reloc.r_offset);
     };
 
-    // TODO:We'll eventually place at zero, but this allows the null transformation
-    const address_t text_placement = GetSegments().front().address;
+    // Place text at 0 for XIP
+    const address_t text_placement = 0;
     unsigned num_reloc_sections = 0;
     for (auto const &relocHdr : GetShdrs()) {
         if (relocHdr.sh_type != SHT_RELA)
