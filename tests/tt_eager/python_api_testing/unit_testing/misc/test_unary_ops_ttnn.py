@@ -469,7 +469,7 @@ def test_unary_leaky_relu_ttnn(input_shapes, negative_slope, device):
     _, output_tensor = data_gen_with_range(input_shapes, -1, 1, device)
 
     cq_id = 0
-    ttnn.leaky_relu(input_tensor, negative_slope=negative_slope, output_tensor=output_tensor, queue_id=cq_id)
+    ttnn.leaky_relu(input_tensor, slope=negative_slope, output_tensor=output_tensor, queue_id=cq_id)
     golden_tensor = torch.nn.functional.leaky_relu(in_data, negative_slope)
 
     comp_pass = compare_pcc([output_tensor], [golden_tensor])
