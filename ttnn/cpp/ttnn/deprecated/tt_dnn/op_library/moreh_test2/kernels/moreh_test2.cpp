@@ -27,26 +27,21 @@ void MAIN {
         cb_wait_front(cb_input2, onetile);
         cb_reserve_back(cb_output, onetile);
 
-        // since input cbs may have different data formats, source register must be reconfigured each time
-
         tile_regs_acquire();
-        unpack_reconfig_data_format_srca(cb_input1);
-        math_reconfig_data_format_srca(cb_input1);
+        reconfig_data_format_srca(cb_input1);
         copy_tile_to_dst_init_short(cb_input1);
         copy_tile(cb_input1, 0, input1_dst_reg);
 
-        unpack_reconfig_data_format_srca(cb_cond);
-        math_reconfig_data_format_srca(cb_cond);
+        reconfig_data_format_srca<true>(cb_cond);
         copy_tile_to_dst_init_short(cb_cond);
         copy_tile(cb_cond, 0, cond_dst_reg);
 
-        unpack_reconfig_data_format_srca(cb_input2);
-        math_reconfig_data_format_srca(cb_input2);
+        reconfig_data_format_srca<true>(cb_input2);
         copy_tile_to_dst_init_short(cb_input2);
         copy_tile(cb_input2, 0, input2_dst_reg);
 
         simple_tile_init();
-        simple_tile(input1_dst_reg, cond_dst_reg, input2_dst_reg);
+        simple_tile<data_float>(input1_dst_reg, cond_dst_reg, input2_dst_reg);
         tile_regs_commit();
 
         tile_regs_wait();

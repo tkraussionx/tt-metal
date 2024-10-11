@@ -17,8 +17,18 @@ def get_tensors(input_shape, data_npu_dtype, data_cpu_dtype, device):
     npu_layout = ttnn.Layout.TILE
 
     torch_condition = torch.randint(0, 2, input_shape, dtype=condition_cpu_dtype)
-    torch_input = torch.rand(input_shape, dtype=data_cpu_dtype)
-    torch_other = torch.rand(input_shape, dtype=data_cpu_dtype)
+    # torch_input = torch.full(input_shape, 1.1111, dtype=data_cpu_dtype)
+    # torch_other = torch.full(input_shape, 2.2222, dtype=data_cpu_dtype)
+    torch_input = (
+        torch.rand(input_shape, dtype=data_cpu_dtype)
+        if data_cpu_dtype != torch.int32
+        else torch.randint(-100, 100, input_shape, dtype=data_cpu_dtype)
+    )
+    torch_other = (
+        torch.rand(input_shape, dtype=data_cpu_dtype)
+        if data_cpu_dtype != torch.int32
+        else torch.randint(-100, 100, input_shape, dtype=data_cpu_dtype)
+    )
     torch_output = torch.zeros(input_shape, dtype=data_cpu_dtype)
 
     tt_condition = ttnn.Tensor(torch_condition, condition_npu_dtype).pad_to_tile(0).to(npu_layout).to(device)
@@ -51,13 +61,11 @@ def get_tensors_backward(input_shape, data_npu_dtype, data_cpu_dtype, device):
     "input_shape",
     (
         ([TILE_HEIGHT, TILE_WIDTH]),
-        # ([TILE_HEIGHT // 2, TILE_WIDTH // 2]),
-        # ([2, 3, 4, TILE_HEIGHT * 5 + TILE_HEIGHT // 2, TILE_WIDTH * 5 + TILE_WIDTH // 2]),
+        ([2, 3, 4, TILE_HEIGHT * 5 + TILE_HEIGHT // 2, TILE_WIDTH * 5 + TILE_WIDTH // 2]),
     ),
     ids=[
         "0",
-        # "1",
-        # "2",
+        "1",
     ],
 )
 @pytest.mark.parametrize(
@@ -65,10 +73,12 @@ def get_tensors_backward(input_shape, data_npu_dtype, data_cpu_dtype, device):
     [
         (ttnn.DataType.BFLOAT16, torch.bfloat16),
         (ttnn.DataType.FLOAT32, torch.float32),
+        (ttnn.DataType.INT32, torch.int32),
     ],
     ids=[
         "bfloat16",
         "float32",
+        "int32",
     ],
 )
 def test_moreh_where(input_shape, npu_dtype, cpu_dtype, device):
@@ -83,9 +93,11 @@ def test_moreh_where(input_shape, npu_dtype, cpu_dtype, device):
     ttnn.experimental.operations.primary.moreh_test2(tt_input, tt_condition, tt_other, output=tt_output)
     tt_output_cpu = tt_output.cpu().to(cpu_layout).unpad_from_tile(input_shape).to_torch()
 
-    # torch.set_printoptions(threshold=1000000, linewidth=100000000, sci_mode=False, precision=2)
-    # print (tt_other)
-    # print (torch_output)
-    # print (tt_output_cpu)
-    # print (torch_output - tt_output_cpu)
-    assert torch.equal(torch_output, tt_output_cpu)
+    ret = torch.equal(torch_output, tt_output_cpu)
+    if ret == False and len(input_shape) == 2:
+        torch.set_printoptions(threshold=1000000, linewidth=100000000, sci_mode=False, precision=2)
+        print(f"torch_condition {torch_condition}")
+        print(f"torch_output {torch_output}")
+        print(f"tt_output_cpu {tt_output_cpu}")
+
+    assert ret

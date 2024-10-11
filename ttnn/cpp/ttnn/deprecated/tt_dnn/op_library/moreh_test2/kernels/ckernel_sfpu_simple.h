@@ -14,7 +14,7 @@ using namespace sfpi;
 namespace ckernel {
 namespace sfpu {
 
-template <bool APPROXIMATION_MODE, int ITERATIONS = 8>
+template <bool DATA_FLOAT, bool APPROXIMATION_MODE, int ITERATIONS = 8>
 inline void calculate_simple() {
     constexpr int cond_val_idx = 32;
     constexpr int other_val_idx = 64;
@@ -24,11 +24,15 @@ inline void calculate_simple() {
         vUInt cond = dst_reg[cond_val_idx];
         vInt flag = cond == 0;
 
-        vFloat other = dst_reg[other_val_idx];
-        v_if (flag) {
-            dst_reg[0] = other;
+        if constexpr (DATA_FLOAT) {
+            vFloat other = dst_reg[other_val_idx];
+            v_if(flag) { dst_reg[0] = other; }
+            v_endif;
+        } else {
+            vInt other = dst_reg[other_val_idx];
+            v_if(flag) { dst_reg[0] = other; }
+            v_endif;
         }
-        v_endif;
         dst_reg++;
     }
 }

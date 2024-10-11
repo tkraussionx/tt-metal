@@ -15,6 +15,7 @@
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_matmul/moreh_matmul_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_matmul_backward/moreh_matmul_backward_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_test2/moreh_test2_op.hpp"
+#include "ttnn/deprecated/tt_dnn/op_library/moreh_test3/moreh_test3_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_sum/moreh_sum_op.hpp"
 #include "ttnn/deprecated/tt_dnn/op_library/moreh_sum_backward/moreh_sum_backward_op.hpp"
 
@@ -90,6 +91,17 @@ void py_module(py::module& m_primary) {
         &moreh_test2,
         py::arg("input1").noconvert(),
         py::arg("cond").noconvert(),
+        py::arg("input2").noconvert(),
+        py::kw_only(),
+        py::arg("output").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        "Performs test2 operaion. Returns an output tensor.");
+
+	    m_primary.def(
+        "moreh_test3",
+        &moreh_test3,
+        py::arg("input").noconvert(),
         py::arg("input2").noconvert(),
         py::kw_only(),
         py::arg("output").noconvert() = std::nullopt,

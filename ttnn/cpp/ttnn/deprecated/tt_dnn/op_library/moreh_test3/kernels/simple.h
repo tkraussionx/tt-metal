@@ -15,11 +15,10 @@
 
 namespace ckernel {
 
-ALWI void simple_tile_init() { MATH((llk_math_eltwise_unary_sfpu_simple_tile_init<APPROX>())); }
-
-template <bool DATA_FLOAT>
-ALWI void simple_tile(uint32_t idst_data, uint32_t idst2_cond, uint32_t idst3_other) {
-    MATH((llk_math_eltwise_unary_sfpu_simple_tile<DATA_FLOAT, APPROX>(idst_data)));
+ALWI void simple_tile(uint32_t idst, uint32_t bit_index = 0) {
+    MATH((llk_math_eltwise_unary_sfpu_simple_tile<APPROX>(idst, bit_index)));
 }
+
+ALWI void simple_tile_init() { MATH((llk_math_eltwise_unary_sfpu_simple_tile_init<APPROX>())); }
 
 }  // namespace ckernel

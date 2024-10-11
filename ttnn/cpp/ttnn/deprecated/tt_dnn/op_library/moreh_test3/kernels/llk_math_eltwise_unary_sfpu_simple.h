@@ -11,13 +11,13 @@
 namespace ckernel {
 template <bool APPROXIMATE>
 inline void llk_math_eltwise_unary_sfpu_simple_tile_init() {
-    llk_math_eltwise_unary_sfpu_init<SfpuType::unused, APPROXIMATE>();
+    llk_math_eltwise_unary_sfpu_init<SfpuType::unused, APPROXIMATE>(sfpu::simple_tile_init<APPROXIMATE>);
 }
 
-template <bool DATA_FLOAT, bool APPROXIMATE>
-inline void llk_math_eltwise_unary_sfpu_simple_tile(uint dst_index, int vector_mode = (int)VectorMode::RC) {
+template <bool APPROXIMATE>
+inline void llk_math_eltwise_unary_sfpu_simple_tile(uint dst_index, uint bit_index = 0) {
     llk_math_eltwise_unary_sfpu_params<APPROXIMATE>(
-        ckernel::sfpu::calculate_simple<DATA_FLOAT, APPROXIMATE, 8>, dst_index, (int)VectorMode::RC);
+        ckernel::sfpu::calculate_simple_tile<APPROXIMATE, 8>, dst_index, (int)VectorMode::RC, bit_index);
 }
 
 }  // namespace ckernel
