@@ -76,7 +76,8 @@ def run(test_module, input_queue, output_queue):
         while True:
             test_vector = input_queue.get(block=True, timeout=1)
             test_vector = deserialize_vector(test_vector)
-            print("test_vector=", test_vector)
+            with open("helper_add.txt", "a") as f:
+                f.write(f"test_vector= {test_vector}\n")
             try:
                 results = test_module.run(**test_vector, device=device)
                 if type(results) == list:
@@ -281,13 +282,16 @@ def run_sweeps(module_name, suite_name, vector_id):
                     continue
 
                 module_pbar = pbar_manager.counter(total=len(suites), desc=f"Module: {sweep_name}", leave=False)
+                one_item_vectors = [[item] for item in test_vectors]
                 for suite in suites:
                     logger.info(f"Executing tests for module {sweep_name}, suite {suite}.")
                     header_info, test_vectors = get_suite_vectors(client, vector_index, suite)
-                    results = execute_suite(test_module, test_vectors, pbar_manager, suite)
-                    logger.info(f"Completed tests for module {sweep_name}, suite {suite}.")
-                    logger.info(f"Tests Executed - {len(results)}")
-                    export_test_results(header_info, results)
+                    one_item_vectors = [[item] for item in test_vectors]
+                    for one_item_vector in one_item_vectors:
+                        results = execute_suite(test_module, one_item_vector, pbar_manager, suite)
+                        logger.info(f"Completed tests for module {sweep_name}, suite {suite}.")
+                        logger.info(f"Tests Executed - {len(results)}")
+                        export_test_results(header_info, results)
                     module_pbar.update()
                 module_pbar.close()
             except NotFoundError as e:

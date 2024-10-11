@@ -5,7 +5,8 @@
 from typing import Optional, Tuple
 
 import torch
-
+import tracy
+import os
 import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
@@ -19,7 +20,7 @@ TIMEOUT = 30
 # Each suite has a key name (in this case "suite_1" and "suite_2") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "suite_ajakovljevic2": {
+    "suite_ajakovljevic4": {
         "batch_sizes": [(1,)],
         "height": [384, 1024],
         "width": [1024, 4096],
@@ -44,11 +45,7 @@ def invalidate_vector(test_vector) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-# This is the run instructions for the test, defined by the developer.
-# The run function must take the above-defined parameters as inputs.
-# The runner will call this run function with each test vector, and the returned results from this function will be stored.
-# If you defined a mesh_device_fixture above, the object you yielded will be passed into this function as 'device'. Otherwise, it will be the default ttnn device opened by the infra.
-def run(
+def tracy_testing(
     batch_sizes,
     height,
     width,
@@ -60,10 +57,11 @@ def run(
     input_b_memory_config,
     input_a_memory_config,
     output_memory_config,
-    *,
     device,
-) -> list:
-    # zone_name = f"run: batch_sizes={batch_sizes}, height={height}, width={width}, broadcast={broadcast}, input_a_dtype={input_a_dtype}, input_b_dtype={input_b_dtype}, input_a_layout={input_a_layout}, input_b_layout={input_b_layout}"
+):
+    zone_name = (
+        f"{batch_sizes}_{height}_{width}_{broadcast}_{input_a_dtype}_{input_b_dtype}_{input_a_layout}_{input_b_layout}"
+    )
     input_shape_a = (*batch_sizes, height, width)
     input_shape_b = (*batch_sizes, height, width)
     if broadcast == "hw":
@@ -93,5 +91,46 @@ def run(
     )
     output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
     output_tensor = ttnn.to_torch(output_tensor)
-
     return [check_with_pcc(torch_output_tensor, output_tensor, 0.999), 0]
+
+
+# This is the run instructions for the test, defined by the developer.
+# The run function must take the above-defined parameters as inputs.
+# The runner will call this run function with each test vector, and the returned results from this function will be stored.
+# If you defined a mesh_device_fixture above, the object you yielded will be passed into this function as 'device'. Otherwise, it will be the default ttnn device opened by the infra.
+def run(
+    batch_sizes,
+    height,
+    width,
+    broadcast,
+    input_a_dtype,
+    input_b_dtype,
+    input_a_layout,
+    input_b_layout,
+    input_b_memory_config,
+    input_a_memory_config,
+    output_memory_config,
+    *,
+    device,
+) -> list:
+    profiler = tracy.Profiler()
+    profiler.enable()
+
+    tracy_testing(
+        batch_sizes,
+        height,
+        width,
+        broadcast,
+        input_a_dtype,
+        input_b_dtype,
+        input_a_layout,
+        input_b_layout,
+        input_b_memory_config,
+        input_a_memory_config,
+        output_memory_config,
+        device,
+    )
+    ttnn.DumpDeviceProfiler(device)
+    ttnn.synchronize_device(device)
+    profiler.disable()
+    return [(True, "OK"), 0]
