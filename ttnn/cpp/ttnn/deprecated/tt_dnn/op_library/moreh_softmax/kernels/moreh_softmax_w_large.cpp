@@ -222,7 +222,6 @@ void MAIN {
                     cb_pop_front(cb_exps, onetile);
                 #endif
             #endif
-            cb_pop_front(cb_x_m_max, onetile);
             cb_push_back(cb_out0, onetile);
         }
 
