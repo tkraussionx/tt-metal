@@ -114,7 +114,7 @@ void DevicePool::initialize(
     size_t trace_region_size,
     DispatchCoreType dispatch_core_type,
     const std::vector<uint32_t> &l1_bank_remap) noexcept {
-    log_debug(tt::LogMetal, "DevicePool initialize");
+    log_info(tt::LogMetal, "DevicePool initialize");
     tt::tt_metal::dispatch_core_manager::initialize(dispatch_core_type, num_hw_cqs);
 
     if (_inst == nullptr) {
@@ -169,7 +169,7 @@ void DevicePool::initialize_device(Device* dev) const {
 
     // TODO: as optimization, investigate removing all this call for already initialized devivces
     if (!llrt::OptionsG.get_skip_reset_cores_on_init()) {
-        dev->reset_cores();
+       // dev->reset_cores();
     }
     dev->initialize_and_launch_firmware();
 
@@ -192,7 +192,7 @@ void DevicePool::activate_device(chip_id_t id) {
         this->devices.resize(id + 1);
     }
     if (this->devices[id] == nullptr) {
-        log_debug(tt::LogMetal, "DevicePool new device {}", id);
+        log_info(tt::LogMetal, "DevicePool new device {}", id);
         int core_assigned_to_device = this->device_to_core_map.at(id);
         auto dev =
             new Device(id, this->num_hw_cqs, this->l1_small_size, this->trace_region_size, this->l1_bank_remap, false, core_assigned_to_device);
@@ -204,7 +204,7 @@ void DevicePool::activate_device(chip_id_t id) {
         this->devices[id] = std::unique_ptr<Device>(dev);
     } else {
         const auto& dev = this->devices[id];
-        log_debug(tt::LogMetal, "DevicePool re-initialize device {}", id);
+        log_info(tt::LogMetal, "DevicePool re-initialize device {}", id);
         if (not dev->is_initialized()) {
             if (dev->num_hw_cqs() != num_hw_cqs) {
                 // The dispatch core manager was reset, since the number of CQs was toggled.
@@ -240,7 +240,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids) {
         for (const auto& device_id : device_ids) {
             const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             TT_ASSERT(device_id == mmio_device_id, "Skipping remote devices is only available for mmio devices");
-            if (not this->is_device_initialized(device_id)) {
+            if (not this->is_device_active(device_id)) {
                 this->activate_device(device_id);
             }
         }
@@ -251,7 +251,7 @@ void DevicePool::add_devices_to_pool(std::vector<chip_id_t> device_ids) {
             const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             for (const auto& mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                if (not this->is_device_initialized(mmio_controlled_device_id)) {
+                if (not this->is_device_active(mmio_controlled_device_id)) {
                     this->activate_device(mmio_controlled_device_id);
                 }
             }
@@ -293,17 +293,17 @@ void DevicePool::init_firmware_on_active_devices() const {
         if (mmio_device_id != dev->id()) {
             continue;
         }
-        log_debug(
+        log_info(
             tt::LogMetal,
             "MMIO Device {} Tunnel Count: {}",
             mmio_device_id,
             tt::Cluster::instance().get_mmio_device_tunnel_count(mmio_device_id));
-        log_debug(
+        log_info(
             tt::LogMetal,
             "MMIO Device {} Tunnel Depth: {}",
             mmio_device_id,
             tt::Cluster::instance().get_mmio_device_max_tunnel_depth(mmio_device_id));
-        log_debug(
+        log_info(
             tt::LogMetal,
             "MMIO Device {} Tunnel Stop: {}",
             mmio_device_id,
@@ -319,7 +319,7 @@ void DevicePool::init_firmware_on_active_devices() const {
                 // Need to create devices from farthest to the closest.
                 for (uint32_t ts = tunnels_from_mmio[t].size() - 1; ts > 0; ts--) {
                     uint32_t mmio_controlled_device_id = tunnels_from_mmio[t][ts];
-                    log_debug(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
+                    log_info(tt::LogMetal, "Tunnel {} Device {} Tunnel Stop: {}", t, mmio_controlled_device_id, ts);
                     if (not this->is_device_initialized(mmio_controlled_device_id)) {
                         // Initialize non-mmio device if it is not already initialized
                         this->initialize_device(this->devices[mmio_controlled_device_id].get());
@@ -337,7 +337,7 @@ DevicePool::DevicePool(
     size_t trace_region_size,
     const std::vector<uint32_t>& l1_bank_remap) {
     ZoneScoped;
-    log_debug(tt::LogMetal, "DevicePool constructor");
+    log_info(tt::LogMetal, "DevicePool constructor");
     bool use_numa_node_based_thread_binding = parse_env("TT_METAL_NUMA_BASED_AFFINITY", false);
     std::vector<chip_id_t> all_device_ids;
     for (int i = 0; i < tt::Cluster::instance().number_of_devices(); i++) {
@@ -472,7 +472,7 @@ void DevicePool::close_devices(std::vector<Device *> devices) {
 }
 
 DevicePool::~DevicePool() {
-    log_debug(tt::LogMetal, "DevicePool destructor");
+    log_info(tt::LogMetal, "DevicePool destructor");
     for (const auto& dev : this->devices) {
         if (dev != nullptr and dev->is_initialized()) {
             // See FIXME in close_devices

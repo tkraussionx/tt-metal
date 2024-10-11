@@ -42,6 +42,8 @@ class DevicePool {
     void register_worker_thread_for_device(Device* device, std::thread::id worker_thread_id);
     void unregister_worker_thread_for_device(Device* device);
     const std::unordered_set<std::thread::id>& get_worker_thread_ids() const;
+    void initialize_device(Device *dev) const; // move back to private
+    void activate_device(chip_id_t id); // move back to private
    private:
     ~DevicePool();
     DevicePool(
@@ -70,8 +72,6 @@ class DevicePool {
     std::unordered_map<uint32_t, uint32_t> device_to_core_map;
 
     void init_firmware_on_active_devices() const;
-    void activate_device(chip_id_t id);
-    void initialize_device(Device *dev) const;
     void deactivate_device(chip_id_t id);
     void add_devices_to_pool(std::vector<chip_id_t> device_ids);
     static DevicePool *_inst;

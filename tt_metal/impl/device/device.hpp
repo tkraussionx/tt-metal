@@ -339,6 +339,7 @@ class Device {
     void DisableAllocs();
     void EnableAllocs();
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
+    bool tunnel_setup_done_ = false;
 };
 
 }  // namespace v0

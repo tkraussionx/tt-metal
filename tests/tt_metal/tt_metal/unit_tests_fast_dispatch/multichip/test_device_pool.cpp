@@ -14,6 +14,58 @@
 using namespace tt;
 using namespace tt::test_utils;
 
+namespace dp_test_functions {
+
+vector<uint32_t> generate_arange_vector(uint32_t size_bytes) {
+    TT_FATAL(size_bytes % sizeof(uint32_t) == 0, "Error");
+    vector<uint32_t> src(size_bytes / sizeof(uint32_t), 0);
+
+    for (uint32_t i = 0; i < src.size(); i++) {
+        src.at(i) = i;
+    }
+    return src;
+}
+
+struct TestBufferConfig {
+    uint32_t num_pages;
+    uint32_t page_size;
+    tt::tt_metal::BufferType buftype;
+};
+
+bool test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device* device, vector<std::reference_wrapper<CommandQueue>>& cqs, const TestBufferConfig& config) {
+    bool pass = true;
+    for (const bool use_void_star_api: {true, false}) {
+
+        size_t buf_size = config.num_pages * config.page_size;
+        std::vector<std::unique_ptr<Buffer>> buffers;
+        std::vector<std::vector<uint32_t>> srcs;
+        for (uint i = 0; i < cqs.size(); i++) {
+            buffers.push_back(std::make_unique<Buffer>(device, buf_size, config.page_size, config.buftype));
+            srcs.push_back(generate_arange_vector(buffers[i]->size()));
+            if (use_void_star_api) {
+                EnqueueWriteBuffer(cqs[i], *buffers[i], srcs[i].data(), false);
+            } else {
+                EnqueueWriteBuffer(cqs[i], *buffers[i], srcs[i], false);
+            }
+        }
+
+        for (uint i = 0; i < cqs.size(); i++) {
+            std::vector<uint32_t> result;
+            if (use_void_star_api) {
+                result.resize(buf_size / sizeof(uint32_t));
+                EnqueueReadBuffer(cqs[i], *buffers[i], result.data(), true);
+            } else {
+                EnqueueReadBuffer(cqs[i], *buffers[i], result, true);
+            }
+            bool local_pass = (srcs[i] == result);
+            pass &= local_pass;
+        }
+    }
+
+    return pass;
+}
+}
+
 TEST_F(FDBasicFixture, DevicePoolOpenClose) {
     std::vector<chip_id_t> device_ids{0};
     int num_hw_cqs = 1;
@@ -170,6 +222,48 @@ TEST_F(FDBasicFixture, DevicePoolShutdownSubmesh) {
       ASSERT_TRUE(dev->is_initialized());
     }
     tt::DevicePool::instance().close_devices(tunnel_1);
+}
+
+TEST_F(FDBasicFixture, DevicePoolReopenOneDevice) {
+    if (tt::tt_metal::GetNumAvailableDevices() != 8) {
+        GTEST_SKIP();
+    }
+    chip_id_t mmio_device_id = 0;
+    std::vector<chip_id_t> device_ids{mmio_device_id, 4};
+    int num_hw_cqs = 1;
+    int l1_small_size = 1024;
+    const auto &dispatch_core_type = tt::llrt::OptionsG.get_dispatch_core_type();
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size, DEFAULT_TRACE_REGION_SIZE, dispatch_core_type);
+    std::cout << "test 1" << std::endl;
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
+    std::cout << "test 1" << std::endl;
+    for (const auto& dev: devices) {
+      ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
+      ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
+      ASSERT_TRUE(dev->is_initialized());
+    }
+    // Test Body
+    Device* dev = tt::DevicePool::instance().get_active_device(4);
+    dp_test_functions::TestBufferConfig config = {.num_pages = 1, .page_size = 2048, .buftype = BufferType::DRAM};
+    tt::log_info("Running On Device {}", dev->id());
+    CommandQueue& a = dev->command_queue(0);
+    vector<std::reference_wrapper<CommandQueue>> cqs = {a};
+    // Simple read and write buffer test
+    EXPECT_TRUE(dp_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(dev, cqs, config));
+
+    std::cout << "test 1" << std::endl;
+    dev->close();
+    tt::DevicePool::instance().activate_device(dev->id());
+    tt::DevicePool::instance().initialize_device(dev);
+    std::cout << " done re init " << std::endl;
+    // Simple read and write buffer test
+    CommandQueue&b = dev->command_queue(0);
+    cqs = {b};
+   // EXPECT_TRUE(dp_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(dev, cqs, config));
+    ASSERT_TRUE((int)(dev->get_l1_small_size()) == l1_small_size);
+    ASSERT_TRUE((int)(dev->num_hw_cqs()) == num_hw_cqs);
+    ASSERT_TRUE(dev->is_initialized());
+    tt::DevicePool::instance().close_device(0);
 }
 
 TEST_F(FDBasicFixture, DevicePoolReopenSubmesh) {

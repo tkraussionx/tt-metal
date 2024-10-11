@@ -501,7 +501,8 @@ void Device::reset_cores() {
             CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
 
             // Don't reset dispatch cores for other devices, in case they're still running.
-            if (other_dispatch_cores[this->id_].find(worker_core) == other_dispatch_cores[this->id_].end()) {
+            // Don't reset dispatch cores at all
+            if (dispatch_cores[this->id_].find(worker_core) == dispatch_cores[this->id_].end()) {
                 if (this->storage_only_cores_.find(logical_core) == this->storage_only_cores_.end()) {
                     tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
                 }
@@ -576,16 +577,25 @@ void Device::initialize_and_launch_firmware() {
     log_debug("Initializing firmware");
     CoreCoord grid_size = this->logical_grid_size();
     std::unordered_set<CoreCoord> not_done_cores;
+    std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> cores_to_skip;
+    std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> not_done_dispatch_cores;
+    if (this->tunnel_setup_done_) {
+        this->get_associated_dispatch_phys_cores(not_done_dispatch_cores, cores_to_skip);
+    } else {
+        this->tunnel_setup_done_ = true;
+    }
 
     for (uint32_t y = 0; y < grid_size.y; y++) {
         for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
-            if (!this->storage_only_cores_.count(logical_core)) {
-                CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
-                tt::llrt::write_hex_vec_to_core(
-                    this->id(), worker_core, core_info_vec, this->get_dev_addr(worker_core, HalL1MemAddrType::CORE_INFO));
-                this->initialize_firmware(worker_core, &launch_msg, &go_msg);
-                not_done_cores.insert(worker_core);
+            CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
+            if (not_done_dispatch_cores[this->id()].find(worker_core) == not_done_dispatch_cores[this->id()].end()) {
+                if (!this->storage_only_cores_.count(logical_core)) {
+                    tt::llrt::write_hex_vec_to_core(
+                        this->id(), worker_core, core_info_vec, this->get_dev_addr(worker_core, HalL1MemAddrType::CORE_INFO));
+                    this->initialize_firmware(worker_core, &launch_msg, &go_msg);
+                    not_done_cores.insert(worker_core);
+                }
             }
         }
     }
@@ -2754,6 +2764,10 @@ void Device::init_command_queue_host() {
 }
 
 void Device::init_command_queue_device() {
+  std::cout << " device init command qeueue " << std::endl;
+    if (this->tunnel_setup_done_) {
+      return;
+    }
 
     if (llrt::OptionsG.get_skip_loading_fw()) {
         detail::EnablePersistentKernelCache();
@@ -2856,7 +2870,7 @@ bool Device::close() {
         if (hw_command_queue->manager.get_bypass_mode()) {
             hw_command_queue->record_end();
         }
-        hw_command_queue->terminate();
+       // hw_command_queue->terminate();
     }
     this->work_executor.reset();
     tt_metal::detail::DumpDeviceProfileResults(this, true);
@@ -2869,15 +2883,43 @@ bool Device::close() {
     std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> not_done_dispatch_cores;
     std::unordered_map<chip_id_t, std::unordered_set<CoreCoord>> cores_to_skip;
     this->get_associated_dispatch_phys_cores(not_done_dispatch_cores, cores_to_skip);
+    for (const auto &[chip_id, cores] : not_done_dispatch_cores) {
+        for (const auto &core : cores) {
+          std::cout << "not done dispatch chip id " << chip_id << " core " << core.str() << std::endl;
+        }
+    }
+    for (const auto &[chip_id, cores] : cores_to_skip) {
+        for (const auto &core : cores) {
+          std::cout << "cores_to_skip dispatch chip id " << chip_id << " core " << core.str() << std::endl;
+        }
+    }
 
     auto mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
     std::unordered_set<CoreCoord> wait_for_cores = not_done_dispatch_cores[mmio_device_id];
 
-    llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
+   // llrt::internal_::wait_until_cores_done(mmio_device_id, RUN_MSG_GO, wait_for_cores);
 
     DprintServerDetach(this);
     watcher_detach(this);
 
+    // Assert non-dispatch worker cores
+    CoreCoord grid_size = this->logical_grid_size();
+    for (uint32_t y = 0; y < grid_size.y; y++) {
+        for (uint32_t x = 0; x < grid_size.x; x++) {
+            CoreCoord logical_core(x, y);
+            CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
+
+            if (not_done_dispatch_cores[this->id()].find(worker_core) == not_done_dispatch_cores[this->id()].end()) {
+                if (this->storage_only_cores_.find(logical_core) == this->storage_only_cores_.end()) {
+                    log_info(tt::LogMetal, "Resetting core {} on Device {} when closing Device {}", worker_core.str(), this->id(), this->id());
+                    tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
+                }
+            } else {
+                log_info(tt::LogMetal, "{} will not be Reset when closing Device {}", worker_core.str(), this->id());
+            }
+        }
+    }
+/*
     // Assert worker cores
     CoreCoord grid_size = this->logical_grid_size();
     for (uint32_t y = 0; y < grid_size.y; y++) {
@@ -2887,10 +2929,11 @@ bool Device::close() {
 
             if (cores_to_skip[mmio_device_id].find(worker_core) == cores_to_skip[mmio_device_id].end()) {
                 if (this->storage_only_cores_.find(logical_core) == this->storage_only_cores_.end()) {
+                    log_info(tt::LogMetal, "HERE Resetting core {} on Device {} when closing Device {}", worker_core.str(), this->id(), this->id());
                     tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
                 }
             } else {
-                log_debug(tt::LogMetal, "{} will not be Reset when closing Device {}", worker_core.str(), this->id());
+                log_info(tt::LogMetal, "{} will not be Reset when closing Device {}", worker_core.str(), this->id());
             }
         }
     }
@@ -2899,13 +2942,13 @@ bool Device::close() {
         for (auto it = not_done_dispatch_cores[mmio_device_id].begin(); it != not_done_dispatch_cores[mmio_device_id].end(); it++) {
             const auto &phys_core = *it;
             if(llrt::is_ethernet_core(phys_core, this->id_)) {
-                log_debug(tt::LogMetal, "Ethernet dispatch core {} on Device {} is idle. Closing Device {}", phys_core.str(), mmio_device_id, this->id());
+                log_info(tt::LogMetal, "Ethernet dispatch core {} on Device {} is idle. Closing Device {}", phys_core.str(), mmio_device_id, this->id());
             } else {
-                log_debug(tt::LogMetal, "Resetting core {} on Device {} when closing Device {}", phys_core.str(), mmio_device_id, this->id());
+                log_info(tt::LogMetal, "Resetting core {} on Device {} when closing Device {}", phys_core.str(), mmio_device_id, this->id());
                 tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(mmio_device_id, phys_core));
             }
         }
-    }
+    }*/
 
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
@@ -2920,13 +2963,14 @@ bool Device::close() {
     this->storage_only_cores_.clear();
     this->ethernet_cores_.clear();
     this->disable_and_clear_program_cache();
-    this->command_queue_programs.clear();
+ //   this->command_queue_programs.clear();
     this->sw_command_queues_.clear();
-    this->hw_command_queues_.clear();
+ //   this->hw_command_queues_.clear();
     this->sysmem_manager_.reset();
     this->allocator_.reset();
-    this->tunnel_device_dispatch_workers_.clear();
+//    this->tunnel_device_dispatch_workers_.clear();
     this->initialized_ = false;
+    std::cout << "done close this " << std::endl;
 
     return true;
 }
