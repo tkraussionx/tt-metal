@@ -25,7 +25,7 @@ def test_concat(device, height, width, dim, async_mode):
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
 
     if ttnn.has_tile_padding(input_tensor_a, dim=dim) or ttnn.has_tile_padding(input_tensor_b, dim=dim):
-        pytest.skip("Cannot concat tensors with tile padding")
+        print(f"WARNING: tensor has tile padding on dimension {dim}, poor performance expected for this test.")
 
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)
     output = ttnn.to_torch(output)
