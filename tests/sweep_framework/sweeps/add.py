@@ -20,10 +20,10 @@ TIMEOUT = 30
 # Each suite has a key name (in this case "suite_1" and "suite_2") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "suite_ajakovljevic_larger": {
+    "suite_ajakovljevic_larger_different_height_width": {
         "batch_sizes": [(1,)],
-        "height": [384, 1024],
-        "width": [1024, 4096],
+        "height": [256, 512, 1024, 2048],
+        "width": [256, 512, 1024, 2048],
         "broadcast": [None, "w", "h", "hw"],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
