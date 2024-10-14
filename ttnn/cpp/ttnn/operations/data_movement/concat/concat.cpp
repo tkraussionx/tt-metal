@@ -154,7 +154,6 @@ namespace data_movement {
                     // for post-transformation, we need to go in reverse order
                     auto pretransformed_args = this_pretransform(args...);
                     if (std::apply(p2, pretransformed_args)) {
-                        std::cout << "both pretransforms needed" << std::endl;
                         transformed_output = std::visit([&transformed_output, &pretransformed_args](auto&& f) -> OpOutputType {
                             if constexpr (std::is_same_v<std::decay_t<decltype(f)>, PostTransformFuncWithArgs>) {
                                 return std::apply(f, std::tuple_cat(std::make_tuple(transformed_output), pretransformed_args));
@@ -163,7 +162,6 @@ namespace data_movement {
                             }
                         }, t2);
                     }
-                    std::cout << "only need first pretransform" << std::endl;
                     transformed_output = std::visit([&transformed_output, &args...](auto&& f) -> OpOutputType {
                         if constexpr (std::is_same_v<std::decay_t<decltype(f)>, PostTransformFuncWithArgs>) {
                             return f(transformed_output, args...);
@@ -173,7 +171,6 @@ namespace data_movement {
                     }, t1);
                 }
                 else if (p2(args...)) {
-                    std::cout << "only need second pretransform" << std::endl;
                     transformed_output = std::visit([&transformed_output, &args...](auto&& f) -> OpOutputType {
                         if constexpr (std::is_same_v<std::decay_t<decltype(f)>, PostTransformFuncWithArgs>) {
                             return f(transformed_output, args...);
@@ -181,9 +178,6 @@ namespace data_movement {
                             return f(transformed_output);
                         }
                     }, t2);
-                }
-                else {
-                    std::cout << "no pretransforms needed" << std::endl;
                 }
                 return transformed_output;
             };
@@ -246,7 +240,6 @@ namespace data_movement {
                     return input_rank < 4;
                 },
                 .pre_transform = [input_rank](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
-                    std::cout << "performing unsqueeze concat pre-transform" << std::endl;
                     std::vector<ttnn::Tensor> itensor;
                     itensor.reserve(tensors.size());
                     std::transform(
@@ -257,10 +250,9 @@ namespace data_movement {
                             return ttnn::unsqueeze_to_4D(input_tensor);
                         }
                     );
-                    return std::make_tuple(itensor, dim + 4 - input_rank);
+                    return std::make_tuple(itensor, dim);
                 },
                 .post_transform = [input_rank](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
-                    std::cout << "performing unsqueeze concat post-transform" << std::endl;
                     ttnn::Tensor res = output;
                     while (res.get_shape().rank() > input_rank) {
                         const auto shape = res.get_shape();
@@ -300,7 +292,6 @@ namespace data_movement {
                     return first.get_layout() == ttnn::TILE_LAYOUT and first.get_logical_shape()[dim] != first.get_padded_shape()[dim];
                 },
                 .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
-                    std::cout << "performing untilize_rm_retilize concat pre-transform" << std::endl;
                     std::vector<ttnn::Tensor> itensors;
                     itensors.reserve(tensors.size());
                     std::transform(
@@ -319,8 +310,7 @@ namespace data_movement {
                     return std::make_tuple(itensors, dim);
                 },
                 .post_transform = [queue_id](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
-                    std::cout << "performing untilize_rm_retilize concat post-transform" << std::endl;
-                    // now we have a rm tensor, so we need ensure it's padded to tile size and re-tilize it
+                    // now we have a rm tensor, so we need ensure its's padded to tile size and re-tilize it
                     return ttnn::tilize(pad_to_tile_vol(queue_id,
                                                         output,
                                                         0.0f,
