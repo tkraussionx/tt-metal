@@ -92,6 +92,17 @@ def test_lm_head_matmul(mesh_device, iterations, determinism_check_iterations, u
         out_subblock_h = 1
         out_subblock_w = 1
 
+    fidelity_env = os.getenv("TT_MATH_FIDELITY", default=1)
+    math_fidelity = ttnn.MathFidelity.LoFi
+    if fidelity_env == 2:
+        math_fidelity = ttnn.MathFidelity.HiFi2
+    elif fidelity_env == 3:
+        math_fidelity = ttnn.MathFidelity.HiFi3
+    elif fidelity_env == 4:
+        math_fidelity = ttnn.MathFidelity.HiFi4
+    print(fidelity_env)
+    print(subblock_1x1)
+
     program_config = ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=grid_size,
         in0_block_w=2,
@@ -104,7 +115,7 @@ def test_lm_head_matmul(mesh_device, iterations, determinism_check_iterations, u
         mcast_in0=True,
     )
     compute_config = ttnn.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_fidelity=math_fidelity,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
