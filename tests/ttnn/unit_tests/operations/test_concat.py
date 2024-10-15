@@ -5,7 +5,7 @@
 import pytest
 
 import torch
-
+import functools
 import ttnn
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
@@ -115,12 +115,15 @@ def test_sharded_concat(
 
 
 def test_rm_concat(device):
-    torch_a = torch.arange(0, 20 * 4, dtype=torch.bfloat16).reshape(20, 4)
-    torch_b = torch.arange(0, 20 * 4, dtype=torch.bfloat16).reshape(20, 4)
+    test_shape = [1, 1, 1, 16]
+    shape_prod = lambda shape: functools.reduce(lambda x, y: x * y, shape)
+    torch_a = torch.arange(shape_prod(test_shape), dtype=torch.bfloat16).reshape(test_shape)
+    torch_b = torch.arange(shape_prod(test_shape), dtype=torch.bfloat16).reshape(test_shape)
     input_tensor_a = ttnn.from_torch(torch_a, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
     input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
-    output = ttnn.concat([input_tensor_a, input_tensor_b], dim=1)
+    output = ttnn.concat([input_tensor_a, input_tensor_b], dim=-1)
     output = ttnn.to_torch(output)
+<<<<<<< HEAD
 <<<<<<< HEAD
     assert_with_pcc(torch.cat([torch_a, torch_b], dim=1), output, 0.9999)
 
@@ -136,6 +139,9 @@ def test_concat_5d(device, dim):
     assert_with_pcc(torch_result, ttnn_result, 0.9999)
 =======
     assert_with_pcc(torch.cat([torch_a, torch_b], dim=0), output, 0.9999)
+=======
+    assert_with_pcc(torch.cat([torch_a, torch_b], dim=-1), output, 0.9999)
+>>>>>>> #0: make last dim alignment check more general
 
 
 def test_concat_tilize_fail_one(device):
