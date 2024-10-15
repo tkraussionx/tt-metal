@@ -32,14 +32,13 @@ def test_softmax_for_dim_hw(shape_dim, compute_kernel_options, device):
 
     compute_kernel_config = get_compute_kernel_options(compute_kernel_options)
 
-    x = torch.randint(low=0, high=4, size=shape).to(torch.bfloat16)
+    input = torch.randint(low=0, high=4, size=shape).to(torch.bfloat16)
 
-    dev_x = to_npu(x, device)
+    dev_x = to_npu(input, device)
 
-    tt_cpu = torch.softmax(x, dim)
     tt_npu = ttnn.operations.moreh.softmax(dev_x, dim, compute_kernel_config=compute_kernel_config)
 
-    tt_dev = to_cpu(tt_npu, shape)
+    output = to_cpu(tt_npu, shape)
 
-    print("x", x)
-    print("tt_dev", tt_dev)
+    print("input", input)
+    print("output", output)
