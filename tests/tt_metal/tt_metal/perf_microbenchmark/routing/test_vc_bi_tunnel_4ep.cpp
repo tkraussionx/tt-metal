@@ -522,7 +522,7 @@ int main(int argc, char **argv) {
         std::vector<uint32_t> tunneler_l_compile_args =
             {
                 dest_endpoint_start_id, // 0: endpoint_id_start_index
-                8, // 1: tunnel_lanes. 1 => Unidirectional. 2 => Bidirectional.
+                2*num_endpoints, // 1: tunnel_lanes. 1 => Unidirectional. 2 => Bidirectional.
                 (tunneler_queue_start_addr >> 4), // 2: rx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 3: rx_queue_size_words
 
@@ -639,7 +639,7 @@ int main(int argc, char **argv) {
         std::vector<uint32_t> tunneler_r_compile_args =
             {
                 dest_endpoint_start_id, // 0: endpoint_id_start_index
-                8, // 1: tunnel_lanes. 1 => Unidirectional. 2 => Bidirectional.
+                2*num_endpoints, // 1: tunnel_lanes. 1 => Unidirectional. 2 => Bidirectional.
                 (tunneler_queue_start_addr >> 4), // 2: rx_queue_start_addr_words
                 (tunneler_queue_size_bytes >> 4), // 3: rx_queue_size_words
 
