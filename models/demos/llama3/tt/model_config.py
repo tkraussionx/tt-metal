@@ -220,6 +220,8 @@ class TtModelArgs:
                 packer_l1_acc=False,
             )
 
+            self.model_config["COMPUTE_KERNEL_CONFIG_HIFI2"] = self.compute_kernel_config_hifi2
+
             # Chunk values based on what works best empirically
             self.model_config["SDPA_PROGCFG"] = lambda seqlen: ttnn.SDPAProgramConfig(
                 compute_with_storage_grid_size=(8, 8),

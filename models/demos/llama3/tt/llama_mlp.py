@@ -128,12 +128,20 @@ class TtLlamaMLP(LightweightModule):
 
         # All reduce
         if self.args.num_devices > 1:
-            w2_out_gathered = ttnn.all_gather(w2_out, dim=1, num_links=1, topology=ttnn.Topology.Linear)
-            w2_out_reduced = ttnn.experimental.fast_reduce_nc(
-                w2_out_gathered, dims=[1], output=None, compute_kernel_config=None
+            w2_out_reduced = ttnn.reduce_scatter(
+                w2_out,
+                scatter_dim=3,
+                math_op=ttnn.ReduceType.Sum,
+                num_links=1,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
-            ttnn.deallocate(w2_out)
-            ttnn.deallocate(w2_out_gathered)
+
+            # w2_out_gathered = ttnn.all_gather(w2_out, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+            # w2_out_reduced = ttnn.experimental.fast_reduce_nc(
+            #     w2_out_gathered, dims=[1], output=None, compute_kernel_config=None
+            # )
+            # ttnn.deallocate(w2_out)
+            # ttnn.deallocate(w2_out_gathered)
             return w2_out_reduced
         else:
             return w2_out

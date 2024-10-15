@@ -231,7 +231,7 @@ def get_rot_transformation_mat(dhead):
     return rot_emb_matrix
 
 
-def prepare_inputs_ttnn_prefill(x_bsh, mesh_device):
+def prepare_inputs_ttnn_prefill(x_bsh, mesh_device, model_config):
     """
     Prepare inputs for prefill mode.
     x: (batch, seq, hidden_dim)
@@ -244,6 +244,14 @@ def prepare_inputs_ttnn_prefill(x_bsh, mesh_device):
 
     x_1BSH = x_bsh.unsqueeze(0)
 
+    # if model_config:
+    #     # mesh_mapper = ttnn.ReplicateTensorToMesh(mesh_device)
+    #     mesh_mapper = ttnn.ShardTensorToMesh(mesh_device, dim=3)
+    # else:
+    #     mesh_mapper = ttnn.ReplicateTensorToMesh(mesh_device)
+
+    mesh_mapper = ttnn.ShardTensorToMesh(mesh_device, dim=3)
+
     # input goes to L1
     xs_1BSH = ttnn.from_torch(
         x_1BSH,
@@ -251,7 +259,7 @@ def prepare_inputs_ttnn_prefill(x_bsh, mesh_device):
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
+        mesh_mapper=mesh_mapper,
     )
     return xs_1BSH
 

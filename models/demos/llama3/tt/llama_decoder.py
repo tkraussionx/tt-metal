@@ -57,7 +57,7 @@ class TtTransformerBlock(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", layer_num),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="attention_norm",
         )
         self.ffn_norm = RMSNorm(
@@ -66,7 +66,7 @@ class TtTransformerBlock(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", layer_num),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="ffn_norm",
         )
 
@@ -84,10 +84,15 @@ class TtTransformerBlock(LightweightModule):
             skip_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
         else:
             skip_mem_cfg = self.model_config["DEC_SKIP_OUTPUT_MEMCFG"]
+
         attn_norm = self.attention_norm(x)
+
+        attn_norm_gathered = ttnn.all_gather(attn_norm, dim=3, num_links=1, topology=ttnn.Topology.Linear)
+        ttnn.deallocate(attn_norm)
+
         # Attention module expects a list of inputs (multi-device support)
         r = self.attention.forward(
-            attn_norm,
+            attn_norm_gathered,
             current_pos,
             rot_mat,
             transformation_mats,
@@ -95,11 +100,17 @@ class TtTransformerBlock(LightweightModule):
             mode,
             page_table,
         )
-        ttnn.deallocate(attn_norm)
+
         h = ttnn.add(x, r, memory_config=skip_mem_cfg)
         ttnn.deallocate(x)
-        r = self.feed_forward.forward(self.ffn_norm(h), mode)
-        out = ttnn.add(h, r, memory_config=skip_mem_cfg)
+
+        ff_normalized = self.ffn_norm(h)
+
+        ff_normalized_gathered = ttnn.all_gather(ff_normalized, dim=3, num_links=1, topology=ttnn.Topology.Linear)
+        ttnn.deallocate(ff_normalized)
+
+        ff_normalized_gathered = self.feed_forward.forward(ff_normalized_gathered, mode)
+        out = ttnn.add(h, ff_normalized_gathered, memory_config=skip_mem_cfg)
         ttnn.deallocate(h)
-        ttnn.deallocate(r)
+        ttnn.deallocate(ff_normalized_gathered)
         return out

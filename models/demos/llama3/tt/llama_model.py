@@ -51,7 +51,7 @@ class TtTransformer(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", None),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="norm",
         )
 
@@ -79,13 +79,15 @@ class TtTransformer(LightweightModule):
             x = layer(x, current_pos, rot_mat, transformation_mats, user_id, mode, page_table)
         if mode == "prefill" and get_last_token == -1:
             return x
-
         # Slicing the tensor to the nearest ceiling/floor multiples of 32 for the prefill_len, to get the last token
         if get_last_token != -1:
-            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, self.args.dim))
+            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, x.shape[-1]))
 
         x = self.norm(x)
-        output = self.lm_head(x)
+
+        x_gathered = ttnn.all_gather(x, dim=3, num_links=1, topology=ttnn.Topology.Linear)
+
+        output = self.lm_head(x_gathered)
 
         ttnn.deallocate(x)
 
