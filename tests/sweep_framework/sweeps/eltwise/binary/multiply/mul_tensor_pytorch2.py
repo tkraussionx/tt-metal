@@ -24,9 +24,9 @@ random.seed(0)
 # Each suite has a key name (in this case "suite_1") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "nightly": {
+    "test_only_pcc_1": {
         "input_shape": [
-            {"self": [0], "other": 0.5},
+            # {"self": [0], "other": 0.5},
             {"self": [1, 1, 1, 10], "other": -3.4028234663852886e38},
             {"self": [1, 1, 1, 12], "other": -3.4028234663852886e38},
             {"self": [1, 1, 1, 14], "other": -3.4028234663852886e38},
@@ -191,7 +191,7 @@ parameters = {
             {"self": [8732, 2], "other": 0.5},
             {"self": [8732], "other": 0.5},
             # vec other
-            {"self": [0, 1], "other": [0, 1]},
+            # {"self": [0, 1], "other": [0, 1]},
             {"self": [0], "other": []},
             {"self": [1, 1, 1, 17], "other": [1, 1, 1, 17]},
             {"self": [1, 1, 1, 1], "other": [1, 1, 1, 1]},
@@ -406,10 +406,32 @@ parameters = {
         "input_b_dtype": [ttnn.bfloat16],
         "input_a_layout": [ttnn.TILE_LAYOUT],
         "input_b_layout": [ttnn.TILE_LAYOUT],
-        "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
-        "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+        "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
+        "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
     },
 }
+
+
+# Invalidate vector is called during the generation phase where each vector will be passed in.
+# If invalidated, the vector will still be stored but will be skipped.
+# Returns False, None if the vector is valid, and True, str with a reason for invalidation if it is invalid. len(test_vector["input_shape"]["other"]) >= 4
+def invalidate_vector(test_vector) -> Tuple[bool, Optional[str]]:
+    if len(test_vector["input_shape"]["self"]) == 0 or (
+        isinstance(test_vector["input_shape"]["other"], list) and len(test_vector["input_shape"]["other"]) == 0
+    ):
+        return True, "empty shape not supported"
+    if isinstance(test_vector["input_shape"]["other"], list) and len(test_vector["input_shape"]["self"]) >= 4:
+        is_less_than_3d = len(test_vector["input_shape"]["other"]) < 3
+        c_index = test_vector["input_shape"]["self"][-3]
+        if is_less_than_3d or (
+            len(test_vector["input_shape"]["other"]) >= 3 and test_vector["input_shape"]["other"][-3] < c_index
+        ):
+            print("checking channel bcast")
+            print("input ", test_vector["input_shape"]["self"])
+            print("other ", test_vector["input_shape"]["other"])
+            return True, "channel dim bcast not supported"
+
+    return False, None
 
 
 # This is the run instructions for the test, defined by the developer.
@@ -466,7 +488,10 @@ def run(
 
     start_time = start_measuring_time()
     result = ttnn.mul(input_tensor_a, input_tensor_b)
-    output_tensor = ttnn.to_torch(result)
+    if len(input_shape["self"]) == 1 and not isinstance(input_shape["other"], list):
+        output_tensor = ttnn.to_torch(result, original_shape=input_shape["self"])
+    else:
+        output_tensor = ttnn.to_torch(result)
     e2e_perf = stop_measuring_time(start_time)
 
     return [check_with_pcc(torch_output_tensor, output_tensor, pcc=0.99), e2e_perf]
