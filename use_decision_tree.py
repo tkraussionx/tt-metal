@@ -6,6 +6,7 @@ from sklearn.metrics import r2_score, accuracy_score
 import matplotlib.pyplot as plt
 import pickle
 import pandas as pd
+import argparse
 
 
 def convert_to_numeric_dict(input_dict):
@@ -153,24 +154,33 @@ def check_tree(results):
             y_pred = loaded_model.predict(X_test)
 
             for i in range(len(y_binned)):
-                for j in range(len(X[i])):
-                    print(list(results[0].keys())[j], ":", X[i][j])
-                print(y_binned[i], y_pred[i], y[i])
+                if y_binned[i] != y_pred[i]:
+                    # for j in range(len(X[i])):
+                    #     print(list(results[0].keys())[j], ":", X[i][j])
+                    print(y_binned[i], y_pred[i], y[i])
             accuracy = accuracy_score(y_binned, y_pred)
-            print("bin_edges=", bin_edges)
             print(f"accuracy score: {accuracy}")
 
 
-file_path = "config_and_times.txt"  # Replace with the actual path to your .txt file
-results = process_txt_file(file_path)
-# Print the results to verify
-numeric_results = []
+def main():
+    parser = argparse.ArgumentParser()
 
-for result in results:
-    # print(result)
-    numeric_result = convert_to_numeric_dict(result)
-    numeric_results.append(numeric_result)
-    # print("pp=", numeric_result)
-    # print("-" * 80)
+    parser.add_argument("--file-path", type=str, required=True, help="Path to the .txt with merged configs and times.")
 
-check_tree(numeric_results)
+    args = parser.parse_args()
+
+    file_path = args.file_path
+
+    results = process_txt_file(file_path)
+
+    numeric_results = []
+
+    for result in results:
+        numeric_result = convert_to_numeric_dict(result)
+        numeric_results.append(numeric_result)
+
+    check_tree(numeric_results)
+
+
+if __name__ == "__main__":
+    main()

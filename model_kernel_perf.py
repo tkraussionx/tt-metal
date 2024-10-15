@@ -1,15 +1,62 @@
+import csv
 import re
-import numpy as np
+import argparse
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, accuracy_score
 import matplotlib.pyplot as plt
 import pickle
 import pandas as pd
+import numpy as np
+
+
+# Function to parse the second file as a dictionary with string values
+def parse_configurations_as_strings(config_file):
+    configurations = []
+    with open(config_file, "r") as file:
+        for line in file:
+            line = line.strip()
+            # Match the dictionary part after the assignment (if present)
+            match = re.search(r"=\s*(\{.*\})", line)
+            if match:
+                raw_pairs = match.group(1)
+                config_dict = {}
+                # Split on commas but avoid splitting inside parentheses or brackets
+                pairs = re.split(r",\s*(?![^()]*\))", raw_pairs)
+                for pair in pairs:
+                    key, value = map(str.strip, pair.split(":", 1))
+                    config_dict[key] = value
+                configurations.append(config_dict)
+    return configurations
+
+
+# Function to match CSV rows with configurations
+def match_configs_with_csv(csv_file, config_file):
+    configurations = parse_configurations_as_strings(config_file)
+    matches = []
+
+    with open(csv_file, "r") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for i, row in enumerate(reader):
+            if i < len(configurations):  # Ensure we have enough configurations
+                device_kernel_duration = int(float(row["DEVICE KERNEL DURATION [ns]"]))
+                config = configurations[i]
+                matches.append({"csv_row": row, "config": config, "device_kernel_duration": device_kernel_duration})
+
+    return matches
+
+
+# Print or save the matched configurations and CSV rows
+def print_matches(matches, output_file_path):
+    with open(output_file_path, "w") as output_file:
+        for match in matches:
+            output_file.write(f"CSV Row: {match['csv_row']}")
+            output_file.write(f"Configuration: {match['config']}")
+            output_file.write(f", Device Kernel Duration: {match['device_kernel_duration']}")
+            output_file.write("\n")
 
 
 def convert_to_numeric_dict(input_dict):
-    # Mapping for dtypes and layouts to integers
     dtype_mapping = {
         "<DataType.BFLOAT16: 0>": 0,
         # Add other data types as needed
@@ -31,18 +78,14 @@ def convert_to_numeric_dict(input_dict):
     numeric_dict = {}
 
     for key, value in input_dict.items():
-        # Convert DEVICE KERNEL DURATION [ns] directly to int
         if key == "DEVICE KERNEL DURATION [ns]":
             numeric_dict[key] = int(value)
-        # Convert data types using the mapping
         elif value in dtype_mapping:
             numeric_dict[key] = dtype_mapping[value]
-        # Convert layouts using the mapping
         elif value in layout_mapping:
             numeric_dict[key] = layout_mapping[value]
         elif value in broadcast_mapping:
             numeric_dict[key] = broadcast_mapping[value]
-        # Convert other numerical string values to int
         elif value in memory_config_mapping:
             numeric_dict[key] = memory_config_mapping[value]
         else:
@@ -53,13 +96,11 @@ def convert_to_numeric_dict(input_dict):
 
 # Function to clean and extract the configuration string into a dictionary of strings
 def parse_configuration_string(config_str):
-    # Clean the configuration string
     cleaned_str = config_str.replace("Configuration: ", "").strip().replace("'", '"')
-    # Remove unnecessary outer braces and quotes
-    cleaned_str = cleaned_str[1:-1]  # Remove the outer {}
 
-    # Fix the double quotes issue
-    cleaned_str = cleaned_str.replace('""', '"')  # Change "" to "
+    cleaned_str = cleaned_str[1:-1]
+
+    cleaned_str = cleaned_str.replace('""', '"')
 
     pattern = r'"(.*?)":\s*("[^"]*"|\{.*?\}|\(.*?\)|[^\s,]+)'
 
@@ -67,21 +108,18 @@ def parse_configuration_string(config_str):
 
     # Find all key-value pairs in the configuration string
     for match in re.finditer(pattern, cleaned_str):
-        key = match.group(1).strip()  # Extract key
-        value = match.group(2).strip()  # Extract value
+        key = match.group(1).strip()
+        value = match.group(2).strip()
         value = value.strip("<>")  # Removing <...> from complex types
 
-        # Remove surrounding whitespace and additional quotes
         value = value.strip('"')
 
-        # Add key-value pair to dictionary, all values as strings
         config_dict[key] = value
 
     return config_dict
 
 
 def modify_dictionary(input_dict):
-    # Create a new dictionary to store the modified keys and values
     modified_dict = {}
 
     for key, value in input_dict.items():
@@ -134,11 +172,7 @@ def process_txt_file(file_path):
     return results
 
 
-file_path = "config_and_times_test_average.txt"
-results = process_txt_file(file_path)
-
-
-def make_a_decision_tree(results):
+def make_a_decision_tree(results, print_tree=False, output_tree_file=None):
     X = []
     y = []
 
@@ -151,11 +185,12 @@ def make_a_decision_tree(results):
     y = np.array(y)
 
     y_binned, bin_edges = pd.cut(y, bins=3, labels=False, retbins=True)  # Create bins
+    bin_edges[-1] = 20000
     print(f"Bin edges: {bin_edges}")  # Optional: Show bin ranges
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
 
-    model = DecisionTreeClassifier(max_depth=6, random_state=42)
+    model = DecisionTreeClassifier(max_depth=5, random_state=42)
 
     model.fit(X_train, y_train)
 
@@ -165,10 +200,11 @@ def make_a_decision_tree(results):
     print(f"accuracy score: {accuracy}")
 
     # Plot the decision tree
-    plt.figure(figsize=(50, 50))  # Set figure size
-    plot_tree(model, feature_names=list(results[0].keys()), filled=True, rounded=True)
-    plt.title("Decision Tree for DEVICE KERNEL DURATION")
-    plt.savefig("decision_tree_plot.png", format="png")
+    if print_tree:
+        plt.figure(figsize=(50, 50))  # Set figure size
+        plot_tree(model, feature_names=list(results[0].keys()), filled=True, rounded=True)
+        plt.title("Decision Tree for DEVICE KERNEL DURATION")
+        plt.savefig(output_tree_file, format="png")
 
     with open("add_decision_tree_model.pkl", "wb") as model_file:
         pickle.dump(model, model_file)
@@ -176,10 +212,61 @@ def make_a_decision_tree(results):
         pickle.dump(bin_edges, bin_edges_file)
 
 
-# Print the results to verify
-numeric_results = []
-for result in results:
-    numeric_result = convert_to_numeric_dict(result)
-    numeric_results.append(numeric_result)
+def main():
+    parser = argparse.ArgumentParser()
 
-make_a_decision_tree(numeric_results)
+    parser.add_argument(
+        "--merge-config-files",
+        action="store_true",
+        help="Does the script first merge config generated files or just uses the existing output file",
+    )
+    parser.add_argument("--csv", type=str, required=False, help="Path of the .csv file with kernel times")
+    parser.add_argument("--config", type=str, required=False, help="Path of the .txt file with configurations")
+    parser.add_argument(
+        "--output", type=str, required=False, help="Path of the output file of times and configurations"
+    )
+    parser.add_argument(
+        "--make-tree", action="store_true", help="Does the script make the decision tree from the given configs."
+    )
+    parser.add_argument("--print-tree", action="store_true", help="Print the decision tree in the output file")
+    parser.add_argument("--output-tree-file", type=str, required=False, help="Output file for the decision tree")
+
+    args = parser.parse_args()
+
+    merge_config_files = args.merge_config_files
+    csv_file = args.csv
+    config_file = args.config
+    output_file = args.output
+    make_tree = args.make_tree
+    print_tree = args.print_tree
+    output_tree_file = args.output_tree_file
+
+    if merge_config_files:
+        if not csv_file or not config_file:
+            raise Exception("Please provide the config files.")
+
+    if make_tree:
+        if print_tree:
+            if not output_tree_file:
+                raise Exception("Please provide the file to output the decision tree diagram to.")
+
+    if merge_config_files:
+        # Match configurations with CSV rows
+        matches = match_configs_with_csv(csv_file, config_file)
+
+        # Print the matches
+        print_matches(matches, output_file)
+
+    if make_tree:
+        # Process the output file
+        results = process_txt_file(output_file)
+        numeric_results = []
+        for result in results:
+            numeric_result = convert_to_numeric_dict(result)
+            numeric_results.append(numeric_result)
+
+        make_a_decision_tree(numeric_results, print_tree, output_tree_file)
+
+
+if __name__ == "__main__":
+    main()
