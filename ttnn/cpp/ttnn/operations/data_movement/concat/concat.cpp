@@ -14,8 +14,11 @@
 #include "ttnn/cpp/ttnn/operations/data_movement/untilize/untilize.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/unsqueeze/unsqueeze.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/common/common.hpp"
+#include "ttnn/cpp/ttnn/operations/data_movement/transpose/transpose.hpp"
 
 #include <ranges>
+
+#define DEBUG_CONCAT 1
 
 namespace ttnn {
 namespace operations {
@@ -35,6 +38,9 @@ namespace data_movement {
                     return input_rank < 4;
                 },
                 .pre_transform = [input_rank](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] unsqueeze to 4D" << std::endl;
+                    #endif
                     std::vector<ttnn::Tensor> itensor;
                     itensor.reserve(tensors.size());
                     std::transform(
@@ -48,6 +54,9 @@ namespace data_movement {
                     return std::make_tuple(itensor, dim);
                 },
                 .post_transform = [input_rank](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] resqueeze from 4D" << std::endl;
+                    #endif
                     ttnn::Tensor res = output;
                     while (res.get_shape().rank() > input_rank) {
                         const auto shape = res.get_shape();
@@ -87,6 +96,9 @@ namespace data_movement {
                     return first.get_layout() == ttnn::TILE_LAYOUT and first.get_logical_shape()[dim] != first.get_padded_shape()[dim];
                 },
                 .pre_transform = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] untilize to rm" << std::endl;
+                    #endif
                     std::vector<ttnn::Tensor> itensors;
                     itensors.reserve(tensors.size());
                     std::transform(
@@ -105,12 +117,18 @@ namespace data_movement {
                     return std::make_tuple(itensors, dim);
                 },
                 .post_transform = [queue_id](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] re-tilize to tiled" << std::endl;
+                    #endif
                     // now we have a rm tensor, so we need ensure its's padded to tile size and re-tilize it
-                    return ttnn::tilize(pad_to_tile_vol(queue_id,
-                                                        output,
-                                                        0.0f,
-                                                        true,
-                                                        output.memory_config()));
+                    if (output.get_layout() != ttnn::TILE_LAYOUT) {
+                        return ttnn::tilize(pad_to_tile_vol(queue_id,
+                                                            output,
+                                                            0.0f,
+                                                            true,
+                                                            output.memory_config()));
+                    }
+                    return output;
                 },
                 .precomp = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
                     auto owned_tensors = std::vector<ttnn::Tensor>(tensors);
@@ -122,6 +140,98 @@ namespace data_movement {
                 }
             }
         );
+    }
+
+    MassagedOperation<ttnn::Tensor,
+                      const std::vector<ttnn::Tensor>&,
+                      int> build_prepost_transpose_concat(uint8_t queue_id, MemoryConfig &output_memory_config, int dim1, int dim2) {
+        return MassagedOperation<ttnn::Tensor,
+                                 const std::vector<ttnn::Tensor>&,
+                                 int>(
+            MassagedOperationParams<ttnn::Tensor, const std::vector<ttnn::Tensor>&, int> {
+                .predicate = [dim1, dim2](const std::vector<ttnn::Tensor>& tensors, int dim) -> bool {
+                    return dim1 != dim2;
+                },
+                .pre_transform = [dim1, dim2](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] pre-transpose" << std::endl;
+                    #endif
+                    std::vector<ttnn::Tensor> itensors;
+                    itensors.reserve(tensors.size());
+                    std::transform(
+                        tensors.begin(),
+                        tensors.end(),
+                        std::back_inserter(itensors),
+                        [dim1, dim2](const ttnn::Tensor& input_tensor) -> ttnn::Tensor {
+                            return ttnn::transpose(input_tensor, dim1, dim2, std::nullopt);
+                        }
+                    );
+                    return std::make_tuple(itensors, dim);
+                },
+                .post_transform = [dim1, dim2, &output_memory_config](const ttnn::Tensor& output, const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
+                    #ifdef DEBUG_CONCAT
+                    std::cout << "[DEBUG] post-transpose" << std::endl;
+                    #endif
+                    return ttnn::transpose(output, dim1, dim2, output_memory_config);
+                },
+                .precomp = [dim1, dim2](const std::vector<ttnn::Tensor>& tensors, int dim) -> OwnedConcatArgs {
+                    auto owned_tensors = std::vector<ttnn::Tensor>(tensors);
+                    int swapped_dim;
+                    if (dim == dim1) {
+                        swapped_dim = dim2;
+                    } else if (dim == dim2) {
+                        swapped_dim = dim1;
+                    } else {
+                        swapped_dim = dim;
+                    }
+                    return std::make_tuple(owned_tensors, swapped_dim);
+                },
+                .operation = [output_memory_config](const std::vector<ttnn::Tensor>& tensors, int dim) -> ttnn::Tensor {
+                    std::vector<ttnn::Tensor> itensors(tensors);
+                    return concat_impl(itensors, dim, output_memory_config);
+                }
+            }
+        );
+    }
+
+    MassagedOperation<ttnn::Tensor,
+                      const std::vector<ttnn::Tensor>&,
+                      int> build_non_aligned_last_dim_concat(const std::vector<ttnn::Tensor>& tensors, uint8_t queue_id, MemoryConfig &output_memory_config) {
+        // this is a special case of pre-post transpose concat
+        // where the last dim of the input tensors are not aligned
+        // we find a dimension for which all input tensors have aligned length
+        // tranpose to put that in the last dim, concat, then transpose back
+
+        auto predicate = [](const std::vector<ttnn::Tensor>& tensors, int dim) -> bool {
+            if (dim != tensors.front().get_shape().rank() - 1) {
+                return false; // only consider concat on last dim
+            }
+            auto first_tensor = tensors.front();
+            auto alignment = first_tensor.buffer()->alignment();
+
+            return std::any_of(tensors.begin(), tensors.end(), [&](const ttnn::Tensor& tensor) {
+                return tensor.get_shape()[dim] * tensor.element_size() % alignment != 0;
+            });
+        };
+
+        // we need to find a dimension along which all input tensors are aligned
+        std::optional<int> concat_dim = std::nullopt;
+        for (int i = 0; i < tensors.front().get_shape().rank(); i++) {
+            if (!predicate(tensors, i)) {
+                concat_dim = i;
+                break;
+            }
+        }
+        if (!concat_dim.has_value()) {
+            TT_FATAL(false, "ttnn.concat: concat along non-aligned last dim has been requested, but no dimension found along which all input tensors are aligned.");
+        }
+
+        auto transpose_concat = build_prepost_transpose_concat(queue_id,
+                                                               output_memory_config,
+                                                               concat_dim.value(),
+                                                               tensors.front().get_shape().rank() - 1);
+        transpose_concat.set_predicate(predicate);
+        return transpose_concat;
     }
 
     // Wrapper for TTDNN
@@ -182,7 +292,10 @@ namespace data_movement {
         auto output_memory_config = memory_config.value_or(first_tensor.memory_config());
         auto unsqueeze_concat = build_unsqueeze_concat(rank, output_memory_config);
         auto untilize_rm_retilize_concat = build_untilize_rm_retilize_concat(queue_id, output_memory_config);
-        auto massaged_concat = unsqueeze_concat.sequence(untilize_rm_retilize_concat);
+        auto non_aligned_last_dim_concat = build_non_aligned_last_dim_concat(input_tensors, queue_id, output_memory_config);
+
+        auto massaged_concat = unsqueeze_concat.sequence(untilize_rm_retilize_concat)
+                                               .sequence(non_aligned_last_dim_concat);
         return massaged_concat(input_tensors, dim);
     }
 

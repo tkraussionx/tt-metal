@@ -48,11 +48,6 @@ void ConcatDeviceOperation::validate(const std::vector<Tensor> &input_tensors) c
                 this->dim, i);
         }
         TT_FATAL(curr_shape == shape_first, "concat tensors differ in shape across non-concat dimensions.");
-        if (in_ref.get_layout() == Layout::ROW_MAJOR && this->dim == shape_first.rank() - 1) {
-            TT_FATAL(
-                (in_ref.get_legacy_shape()[this->dim] * in_ref.element_size()) % in_ref.buffer()->alignment() == 0,
-                "Current concat implementation requires aligned last dim when concatting on last dim");
-        }
         TT_FATAL(in_ref.is_sharded() == shard_first, "All tensors must be sharded or all must be interleaved");
         if (shard_first) {
             TT_FATAL((in_ref.get_layout() == Layout::ROW_MAJOR), "Only row major supported for sharded concat.");

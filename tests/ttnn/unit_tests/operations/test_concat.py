@@ -114,14 +114,14 @@ def test_sharded_concat(
     assert_with_pcc(torch_output_tensor, output)
 
 
-def test_rm_concat():
-    device = ttnn.open_device(device_id=0)
-    torch_a = torch.arange(0, 20 * 4).reshape(20, 4)
-    torch_b = torch.arange(0, 20 * 4).reshape(20, 4)
+def test_rm_concat(device):
+    torch_a = torch.arange(0, 20 * 4, dtype=torch.bfloat16).reshape(20, 4)
+    torch_b = torch.arange(0, 20 * 4, dtype=torch.bfloat16).reshape(20, 4)
     input_tensor_a = ttnn.from_torch(torch_a, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
     input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=1)
     output = ttnn.to_torch(output)
+<<<<<<< HEAD
     assert_with_pcc(torch.cat([torch_a, torch_b], dim=1), output, 0.9999)
 
 
@@ -134,3 +134,62 @@ def test_concat_5d(device, dim):
     ttnn_result = ttnn.concat([ttnn_input_tensor, ttnn_input_tensor], dim=dim)
     ttnn_result = ttnn.to_torch(ttnn_result)
     assert_with_pcc(torch_result, ttnn_result, 0.9999)
+=======
+    assert_with_pcc(torch.cat([torch_a, torch_b], dim=0), output, 0.9999)
+
+
+def test_concat_tilize_fail_one(device):
+    # Test case 1
+    shape_a = [1, 1, 1, 32]
+    shape_b = [1, 1, 1, 32]
+    dim = 2
+
+    torch_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_b = torch.rand(shape_b, dtype=torch.bfloat16)
+
+    input_tensor_a = ttnn.from_torch(torch_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    tt_res = ttnn.to_torch(ttnn.concat([input_tensor_a, input_tensor_b], dim=dim))
+    torch_res = torch.cat([torch_a, torch_b], dim=dim)
+
+    assert_with_pcc(tt_res, torch_res, 0.9999)
+
+
+def test_concat_tilize_fail_two(device):
+    # Test case 2
+    shape_a = [1, 12, 4, 64]
+    shape_b = [1, 12, 1, 64]
+    dim = 2
+
+    torch_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_b = torch.rand(shape_b, dtype=torch.bfloat16)
+
+    input_tensor_a = ttnn.from_torch(torch_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    assert_with_pcc(
+        ttnn.to_torch(ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)),
+        torch.cat([torch_a, torch_b], dim=dim),
+        0.9999,
+    )
+
+
+def test_concat_tilize_fail_three(device):
+    # Test case 3
+    shape_a = [1, 16, 59, 64]
+    shape_b = [1, 16, 1, 64]
+    dim = 2
+
+    torch_a = torch.rand(shape_a, dtype=torch.bfloat16)
+    torch_b = torch.rand(shape_b, dtype=torch.bfloat16)
+
+    input_tensor_a = ttnn.from_torch(torch_a, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    assert_with_pcc(
+        ttnn.to_torch(ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)),
+        torch.cat([torch_a, torch_b], dim=dim),
+        0.9999,
+    )
+>>>>>>> #0: Support non-aligned last-dim with transpose
