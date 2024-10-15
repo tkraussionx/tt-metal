@@ -123,8 +123,6 @@ def test_rm_concat(device):
     input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=-1)
     output = ttnn.to_torch(output)
-<<<<<<< HEAD
-<<<<<<< HEAD
     assert_with_pcc(torch.cat([torch_a, torch_b], dim=1), output, 0.9999)
 
 
@@ -137,11 +135,6 @@ def test_concat_5d(device, dim):
     ttnn_result = ttnn.concat([ttnn_input_tensor, ttnn_input_tensor], dim=dim)
     ttnn_result = ttnn.to_torch(ttnn_result)
     assert_with_pcc(torch_result, ttnn_result, 0.9999)
-=======
-    assert_with_pcc(torch.cat([torch_a, torch_b], dim=0), output, 0.9999)
-=======
-    assert_with_pcc(torch.cat([torch_a, torch_b], dim=-1), output, 0.9999)
->>>>>>> #0: make last dim alignment check more general
 
 
 def test_concat_tilize_fail_one(device):
@@ -198,4 +191,3 @@ def test_concat_tilize_fail_three(device):
         torch.cat([torch_a, torch_b], dim=dim),
         0.9999,
     )
->>>>>>> #0: Support non-aligned last-dim with transpose
