@@ -213,7 +213,7 @@ namespace data_movement {
             std::ranges::transform(tensors, std::back_inserter(buffer_alignments), [](const ttnn::Tensor& tensor) {
                 return tensor.buffer()->alignment();
             });
-            auto alignment = std::ranges::reduce(buffer_alignments, 1, std::gcd<uint32_t, uint32_t>);
+            auto alignment = std::accumulate(buffer_alignments.begin(), buffer_alignments.end(), 1u, std::gcd<uint32_t, uint32_t>);
             bool res = std::any_of(tensors.begin(), tensors.end(), [&](const ttnn::Tensor& tensor) {
                 return tensor.get_shape()[dim] * tensor.element_size() % alignment != 0;
             });
