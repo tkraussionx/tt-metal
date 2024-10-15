@@ -17,9 +17,6 @@ from llama_models.models.llama3.api.datatypes import ImageMedia
 
 from llama_models.models.llama3.reference_impl.generation import Llama
 
-from models.llama3.tt.llama_common import process_images
-
-
 DEFAULT_IMAGE_TOKEN = "<|image|>"
 
 
@@ -27,10 +24,11 @@ DEFAULT_IMAGE_TOKEN = "<|image|>"
 class LLamaEvalWrapper(lmms):
     def __init__(
         self,
-        ckpt_dir: str,
-        tokenizer_path: str,
+        ckpt_dir: str = "/proj_sw/user_dev/checkpoints/Llama3.2-11B-Vision-Instruct",
+        tokenizer_path: str = "/proj_sw/user_dev/checkpoints/Llama3.2-11B-Vision-Instruct/tokenizer.model",
         max_seq_len=2048,
-        mex_batch_size=1,
+        max_batch_size=1,
+        batch_size=1,
         device="cpu",
     ):
         lmms.__init__(self)
@@ -50,6 +48,14 @@ class LLamaEvalWrapper(lmms):
         pbar = tqdm(total=len(requests), disable=(self.rank != 0), desc="Model Responding")
 
         for contexts, doc_to_target, doc_to_visual, doc_id, task, split in [reg.args for reg in requests]:
+
+            print("CONTEXTS", contexts)
+            print("DOC_TO_TARGET", doc_to_target)
+            print("DOC_TO_VISUAL", doc_to_visual)
+            print("DOC_ID", doc_id)
+            print("TASK", task)
+            print("SPLIT", split)
+            print("TASK DICT", self.task_dict[task][split][doc_id])
             # encode, pad, and truncate contexts for this batch
             if type(doc_to_target) == str:
                 continuation = doc_to_target
@@ -58,8 +64,9 @@ class LLamaEvalWrapper(lmms):
             visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
             visuals = self.flatten(visuals)
             image_sizes = [[visual.size[0], visual.size[1]] for visual in visuals]
+            print(visuals)
             if visuals:
-                image = process_images(visuals, self._image_processor, self._config)
+                image = visuals #process_images(visuals, self._image_processor, self._config)
                 if type(image) is list:
                     image = [_image.to(dtype=torch.float16, device=self.device) for _image in image]
                 else:
@@ -69,6 +76,11 @@ class LLamaEvalWrapper(lmms):
 
             prompts_input = contexts[0] if isinstance(contexts, list) else contexts
             labels = continuation
+
+
+            print("Prompts Input: ", prompts_input)
+            print("Labels: ", labels)
+            print("Image: ", image)
             # Context part no need to calculate for loss
             labels[0, : contxt_id.shape[1]] = -100
             with torch.inference_mode():
@@ -92,7 +104,33 @@ class LLamaEvalWrapper(lmms):
         return new_list
 
     def generate_until(self, requests):
-        raise NotImplementedError()
+        res = []
+        pbar = tqdm(total=len(requests), disable=(self.rank != 0), desc="Model Responding")
+
+        for contexts, doc_to_target, doc_to_visual, doc_id, task, split in [reg.args for reg in requests]:
+            print("CONTEXTS", contexts)
+            print("DOC_TO_TARGET", doc_to_target)
+            print("DOC_TO_VISUAL", doc_to_visual)
+            print("DOC_ID", doc_id)
+            print("TASK", task)
+            print("SPLIT", split)
+            print("TASK DICT", self.task_dict[task][split][doc_id])
+            visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
+            visuals = self.flatten(visuals)
+            image_sizes = [[visual.size[0], visual.size[1]] for visual in visuals]
+            if visuals:
+                image = visuals
+            else:
+                image = None
+
+            prompts_input = contexts[0] if isinstance(contexts, list) else contexts
+            with torch.inference_mode():
+                dialog = [UserMessage(content=[ImageMedia(image=image), prompts_input])]
+                greedy_tokens = self.model.chat_completion(dialog, max_gen_len=None, temperature=0.6, top_p=0.9)
+            res.append(greedy_tokens)
+            pbar.update(1)
+        pbar.close()
+        return res
 
     def loglikelihood_rolling(self, requests: List[Instance]) -> List[Tuple[float, bool]]:
         raise NotImplementedError()
