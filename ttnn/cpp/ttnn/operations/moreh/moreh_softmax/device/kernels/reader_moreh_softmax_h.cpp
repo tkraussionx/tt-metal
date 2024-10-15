@@ -14,8 +14,6 @@ void kernel_main() {
     uint32_t mask_h = get_arg_val<uint32_t>(6);
 
     constexpr auto cb_in = tt::CB::c_in0;
-    constexpr auto cb_mask = tt::CB::c_in1;
-    constexpr auto cb_scaler = tt::CB::c_in2;
 
     uint32_t l1_write_addr_in;
 
@@ -29,9 +27,6 @@ void kernel_main() {
     const InterleavedAddrGenFast<in_is_dram> src_in = {
         .bank_base_address = src_addr, .page_size = src_in_tile_bytes, .data_format = src_in_data_format};
 
-    // TODO(AP): cleanup, probably with named args/param pack/reflection.
-    generate_bcast_scaler(cb_scaler, scaler);
-    generate_mask_h(cb_mask, mask_h);
 
     // read ublocks from src0 to CB0, then push ublocks to compute (unpacker)
     uint32_t curr_tile = tile_offset;

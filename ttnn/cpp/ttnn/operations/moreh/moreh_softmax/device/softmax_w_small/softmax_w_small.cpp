@@ -59,7 +59,8 @@ MorehSoftmaxOperation::MorehSoftmaxWSmallFactory::create(
             {tt::CB::c_intermed1, 1, intermed_data_format},   // reduce
             {tt::CB::c_intermed2, 1, intermed_data_format},   // max
             {tt::CB::c_intermed3, Wt, intermed_data_format},  // x - max
-            {tt::CB::c_intermed4, 1, intermed_data_format}    // tmp
+            {tt::CB::c_intermed4, 1, intermed_data_format},    // tmp,
+            {tt::CB::dataflow0, 1, intermed_data_format}    // tmp
         });
 
     // create read/wrtie kernel
@@ -95,18 +96,24 @@ MorehSoftmaxOperation::MorehSoftmaxWSmallFactory::create(
         compute_defines["FP32_DEST_ACC_EN"] = "1";
     }
 
-    // create compute kernel
-    tt::operations::primary::CreateComputeKernel(
+    vector<UnpackToDestMode> unpack_to_dest_mode(NUM_CIRCULAR_BUFFERS, UnpackToDestMode::Default);
+    if (fp32_dest_acc_en) {
+        unpack_to_dest_mode[tt::CB::c_intermed0] = UnpackToDestMode::UnpackToDestFp32;
+        unpack_to_dest_mode[tt::CB::dataflow0] = UnpackToDestMode::UnpackToDestFp32;
+        std::cout << "AAAAAAAAAAAAAAAAAAAAAAA unpack_to_dest_mode\n";
+    }
+    CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/moreh/moreh_softmax/device/kernels/moreh_softmax_w.cpp",
-        {
-            {core_group_1, num_tiles_per_core_group_1, {num_tiles_per_core_group_1, Wt}},
-            {core_group_2, num_tiles_per_core_group_2, {num_tiles_per_core_group_2, Wt}},
-        },
-        compute_defines,
-        math_fidelity,
-        fp32_dest_acc_en,
-        math_approx_mode);
+        core_group_1,
+        ComputeConfig{
+            .math_fidelity = math_fidelity,
+            .fp32_dest_acc_en = fp32_dest_acc_en,
+            .dst_full_sync_en = dst_full_sync_en,
+            .unpack_to_dest_mode = unpack_to_dest_mode,
+            .math_approx_mode = math_approx_mode,
+            .compile_args = {num_tiles_per_core_group_1, Wt},
+            .defines = compute_defines});
 
     // Set Runtime Args
     auto core_x_offset = core_range.start_coord.x;
