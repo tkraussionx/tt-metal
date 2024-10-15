@@ -59,31 +59,42 @@ class RMSNorm(LightweightModule):
             else:
                 weight_name = f"layers.{layer_num}.{weight_key}.weight"
 
-        torch_weight = state_dict[weight_name].unsqueeze(0).view(1, 1, dim).expand([1, SHARD_HEIGHT, dim])
-        cache_name = None if weight_cache_path is None else weight_cache_path / weight_name
+        torch_weight = (
+            state_dict[weight_name].unsqueeze(0).view(1, 1, dim).reshape([1, 1, dim // SHARD_HEIGHT, SHARD_HEIGHT])
+        )
 
         is_mesh_device = device.__class__.__name__ == "MeshDevice"
+
+        self.is_distributed_norm = model_config and model_config["IS_DISTRIBUTED_NORM"]
+        mesh_mapper = None
+        if self.is_distributed_norm:
+            mesh_mapper = ttnn.ShardTensorToMesh(device, dim=2)
+        elif is_mesh_device:
+            mesh_mapper = ttnn.ReplicateTensorToMesh(device)
+
+        cache_name = None if weight_cache_path is None else weight_cache_path / weight_name
+
         self.weight = ttnn.as_tensor(
             torch_weight,
             device=device,
             dtype=weight_dtype,
-            layout=ttnn.TILE_LAYOUT,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
             memory_config=weight_memory_config,
-            cache_file_name=cache_name,
-            mesh_mapper=ttnn.ReplicateTensorToMesh(device) if is_mesh_device else None,
+            # cache_file_name=cache_name,
+            mesh_mapper=mesh_mapper,
         )
 
         if model_config:
             self.sharded_input_config = model_config["SHARDED_NORM_INPUT_MEMCFG"]
             self.sharded_program_config = model_config["SHARDED_NORM_PRGM_CFG"]
             self.sharded_output_config = model_config["SHARDED_NORM_OUTPUT_MEMCFG"]
+            self.compute_kernel_config_hifi2 = model_config["COMPUTE_KERNEL_CONFIG_HIFI2"]
         else:
             assert (
                 dim % SHARD_HEIGHT == 0
             ), f"Input dimension dim ({dim}) must be a multiple of SHARD_HEIGHT ({SHARD_HEIGHT})"
             shard_width_hidden_dim_across_32_cores = dim // SHARD_HEIGHT
             core_grid = ttnn.CoreGrid(x=8, y=SHARD_HEIGHT // 8)
-            # core_grid = ttnn.CoreGrid(x=8, y=8)
             self.sharded_input_config = ttnn.create_sharded_memory_config(
                 shape=(SHARD_HEIGHT, shard_width_hidden_dim_across_32_cores),
                 core_grid=core_grid,
@@ -99,6 +110,12 @@ class RMSNorm(LightweightModule):
                 inplace=False,
             )
             self.sharded_output_config = self.sharded_input_config
+            self.compute_kernel_config_hifi2 = ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi2,
+                math_approx_mode=False,
+                fp32_dest_acc_en=True,
+                packer_l1_acc=True,
+            )
 
     def forward(self, x: ttnn.Tensor, in_sharded=False, out_sharded=False) -> ttnn.Tensor:
         # If input is sharded do sharded RMSNorm and optionally return sharded output
@@ -117,5 +134,34 @@ class RMSNorm(LightweightModule):
             return x_interleaved
         else:  # Interleaved rmsnorm does not need program or memory configs
             assert not out_sharded, "Non-sharded version of RMSNorm cannot output a sharded tensor"
-            x = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
-            return x
+            if self.is_distributed_norm:
+                return self._distributed_rmsnorm(x)
+            else:
+                return ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
+
+    def _distributed_rmsnorm(self, inp):
+        # Run distributed rmsnorm part 1
+        tt_stats = ttnn.rms_norm_pre_all_gather(
+            inp, compute_kernel_config=self.compute_kernel_config_hifi2, dtype=ttnn.bfloat16
+        )
+
+        # AllGather stats
+        tt_stats = ttnn.all_gather(
+            tt_stats,
+            dim=3,
+            num_links=1,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
+
+        # Run distributed rmsnorm part 2
+        tt_out = ttnn.rms_norm_post_all_gather(
+            inp,
+            tt_stats,
+            epsilon=self.eps,
+            weight=self.weight,
+            compute_kernel_config=self.compute_kernel_config_hifi2,
+        )
+
+        tt_stats.deallocate(True)
+
+        return tt_out

@@ -51,8 +51,9 @@ class TtTransformer(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", None),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="norm",
+            model_config=self.model_config,
         )
 
         self.lm_head = LMHead(
@@ -79,15 +80,32 @@ class TtTransformer(LightweightModule):
             x = layer(x, current_pos, rot_mat, transformation_mats, user_id, mode, page_table)
         if mode == "prefill" and get_last_token == -1:
             return x
-
         # Slicing the tensor to the nearest ceiling/floor multiples of 32 for the prefill_len, to get the last token
         if get_last_token != -1:
-            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, self.args.dim))
+            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, x.shape[-1]))
 
-        x = self.norm(x)
-        output = self.lm_head(x)
+        if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            x_gathered = ttnn.all_gather(x, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            ttnn.deallocate(x)
+        else:
+            x_gathered = x
 
-        ttnn.deallocate(x)
+        print(f"before last norm x_gather shape: {x_gathered.shape}")
+
+        x_norm = self.norm(x_gathered)
+        ttnn.deallocate(x_gathered)
+
+        print("after last norm")
+
+        if self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            x_norm_gathered = ttnn.all_gather(x_norm, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            ttnn.deallocate(x_norm)
+        else:
+            x_norm_gathered = x_norm
+
+        output = self.lm_head(x_norm_gathered)
+
+        ttnn.deallocate(x_norm_gathered)
 
         return output
 

@@ -486,13 +486,28 @@ class TtLlamaAttention(LightweightModule):
         ttnn.deallocate(attn_output_11SH)
 
         # All reduce
-        if self.num_devices > 1:
-            dense_out_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+        if self.model_config["CCL_TOPOLOGY"] == ttnn.Topology.Ring:
+            # Ring topology supports reduce scatter
+            dense_out_reduced = ttnn.reduce_scatter(
+                output_11SH,
+                scatter_dim=3,
+                math_op=ttnn.ReduceType.Sum,
+                num_links=1,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,  # TODO: why dram??
+            )
+            ttnn.deallocate(output_11SH)
+            return dense_out_reduced
+        elif self.model_config["IS_MULTICHIP"]:
+            dense_out_gathered = ttnn.all_gather(
+                output_11SH, dim=1, num_links=1, topology=self.model_config["CCL_TOPOLOGY"]
+            )
             dense_out_reduced = ttnn.experimental.fast_reduce_nc(
                 dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
             )
+            # TODO: selection matmul
             ttnn.deallocate(output_11SH)
             ttnn.deallocate(dense_out_gathered)
+
             return dense_out_reduced
         else:
             return output_11SH

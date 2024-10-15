@@ -57,8 +57,9 @@ class TtTransformerBlock(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", layer_num),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="attention_norm",
+            model_config=self.model_config,
         )
         self.ffn_norm = RMSNorm(
             device=mesh_device,
@@ -66,8 +67,9 @@ class TtTransformerBlock(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", layer_num),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="ffn_norm",
+            model_config=self.model_config,
         )
 
     def forward(
@@ -84,10 +86,27 @@ class TtTransformerBlock(LightweightModule):
             skip_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
         else:
             skip_mem_cfg = self.model_config["DEC_SKIP_OUTPUT_MEMCFG"]
-        attn_norm = self.attention_norm(x)
+
+        if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            x_gathered = ttnn.all_gather(x, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            ttnn.deallocate(x)
+        else:
+            x_gathered = x
+
+        attn_norm = self.attention_norm(x_gathered)
+        # ttnn.deallocate(x_gathered)
+
+        if self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            attn_norm_gathered = ttnn.all_gather(
+                attn_norm, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"]
+            )
+            ttnn.deallocate(attn_norm)
+        else:
+            attn_norm_gathered = attn_norm
+
         # Attention module expects a list of inputs (multi-device support)
         r = self.attention.forward(
-            attn_norm,
+            attn_norm_gathered,
             current_pos,
             rot_mat,
             transformation_mats,
@@ -95,11 +114,29 @@ class TtTransformerBlock(LightweightModule):
             mode,
             page_table,
         )
-        ttnn.deallocate(attn_norm)
+
         h = ttnn.add(x, r, memory_config=skip_mem_cfg)
         ttnn.deallocate(x)
-        r = self.feed_forward.forward(self.ffn_norm(h), mode)
-        out = ttnn.add(h, r, memory_config=skip_mem_cfg)
+
+        if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            h_gathered = ttnn.all_gather(h, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            ttnn.deallocate(h)
+        else:
+            h_gathered = h
+
+        ff_normalized = self.ffn_norm(h_gathered)
+        # ttnn.deallocate(h_gathered)
+
+        if self.model_config["IS_DISTRIBUTED_NORM"](mode):
+            ff_normalized_gathered = ttnn.all_gather(
+                ff_normalized, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"]
+            )
+            ttnn.deallocate(ff_normalized)
+        else:
+            ff_normalized_gathered = ff_normalized
+
+        ff_normalized_gathered = self.feed_forward.forward(ff_normalized_gathered, mode)
+        out = ttnn.add(h, ff_normalized_gathered, memory_config=skip_mem_cfg)
         ttnn.deallocate(h)
-        ttnn.deallocate(r)
+        ttnn.deallocate(ff_normalized_gathered)
         return out
