@@ -93,7 +93,7 @@ def run(test_module, input_queue, output_queue):
             else:
                 if status:
                     module_name = test_module.__name__.split(".")[-1]
-                    with open(f"helper_{module_name}.txt", "a") as f:
+                    with open(f"tests/sweep_framework/perf_modeling/helper_{module_name}.txt", "a") as f:
                         f.write(f"test_vector= {test_vector}\n")
                 output_queue.put([status, message, e2e_perf, None])
     except Empty as e:
@@ -120,7 +120,7 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
     timeout = get_timeout(test_module)
 
     module_name = test_module.__name__.split(".")[-1]
-    tracy_file_name = f"helper_{module_name}.txt"
+    tracy_file_name = f"tests/sweep_framework/perf_modeling/helper_{module_name}.txt"
     if os.path.exists(tracy_file_name):
         os.remove(tracy_file_name)
     suite_pbar = pbar_manager.counter(total=len(test_vectors), desc=f"Suite: {suite_name}", leave=False)

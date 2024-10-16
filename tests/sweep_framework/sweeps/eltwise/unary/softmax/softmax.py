@@ -25,10 +25,11 @@ random.seed(0)
 # Each suite has a key name (in this case "suite_1") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "softmax_test_suite": {
-        "input_shape": gen_shapes([1, 1, 32, 32], [1, 1, 1024, 1024], [1, 1, 32, 32]),
+    "softmax_test_suite_2048": {
+        "input_shape": gen_shapes([1, 1, 64, 64], [1, 1, 1024, 1024], [1, 1, 64, 64]),
+        # "input_shape" : gen_shapes([1, 1, 10, 10], [1, 1, 1000, 1000], [1, 1, 100, 100]),
         "input_a_dtype": [ttnn.bfloat16],
-        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_a_layout": [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
         "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
     },

@@ -63,13 +63,14 @@ def convert_to_numeric_dict(input_dict):
     }
 
     layout_mapping = {
+        "<Layout.ROW_MAJOR: 0>": 0,
         "<Layout.TILE: 1>": 1,
         # Add other layouts as needed
     }
 
     broadcast_mapping = {"None": 0, "h": 1, "w": 2, "hw": 3}
 
-    memory_config_mapping = {
+    memory_config_mapping = {  # Currently, all block sharded memory configs are under num 3, but that needs to be changed to accomodate differend sharding patterns.
         "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)": 0,
         "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)": 1,
     }
@@ -92,6 +93,11 @@ def convert_to_numeric_dict(input_dict):
             shape_values = list(map(int, value.strip("()").split(", ")))
             numeric_dict["height"] = shape_values[-2]
             numeric_dict["width"] = shape_values[-1]
+        elif "memory_layout=TensorMemoryLayout::BLOCK_SHARDED" in value:
+            numeric_dict[key] = 3
+        # This is a hack needed because of bad splitting, needs to be fixed.
+        elif value[0] == ":":
+            continue
         else:
             numeric_dict[key] = int(value) if value.isdigit() else value
 
@@ -184,21 +190,22 @@ def make_a_decision_tree(results, module_name, print_tree=False, output_tree_fil
         target_duration = entry.pop("DEVICE KERNEL DURATION [ns]")
         X.append(list(entry.values()))  # Features
         y.append(target_duration)  # Target
-
     X = np.array(X)
     y = np.array(y)
 
     # This needs to be done on a per-op basis, based on manual testing, this is for add
-    bin_edges = [0, 8000, 12000, 20000]
+    bin_edges = [0, 5000, 10000, 50000, 100000]
     y_binned = np.digitize(y, bin_edges, right=False) - 1
-
+    for i in range(len(y)):
+        print(y[i], y_binned[i])
     # y_binned, bin_edges = pd.cut(y, bins=3, labels=False, retbins=True)  # Create bins
 
     print(f"Bin edges: {bin_edges}")  # Optional: Show bin ranges
-
+    # print("y=", y)
+    # print("y_binned=", y_binned)
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
 
-    model = DecisionTreeClassifier(max_depth=5, random_state=42)
+    model = DecisionTreeClassifier(max_depth=6, random_state=42)
 
     model.fit(X_train, y_train)
 
@@ -214,9 +221,13 @@ def make_a_decision_tree(results, module_name, print_tree=False, output_tree_fil
         plt.title("Decision Tree for DEVICE KERNEL DURATION")
         plt.savefig(output_tree_file, format="png")
 
-    with open(f"{module_name}_decision_tree_model.pkl", "wb") as model_file:
+    with open(
+        f"tests/sweep_framework/perf_modeling/models_and_edges/{module_name}_decision_tree_model.pkl", "wb"
+    ) as model_file:
         pickle.dump(model, model_file)
-    with open(f"{module_name}_bin_edges.pkl", "wb") as bin_edges_file:
+    with open(
+        f"tests/sweep_framework/perf_modeling/models_and_edges/{module_name}_bin_edges.pkl", "wb"
+    ) as bin_edges_file:
         pickle.dump(bin_edges, bin_edges_file)
 
 

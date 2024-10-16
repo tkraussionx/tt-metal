@@ -6,10 +6,10 @@ from typing import Optional, Tuple
 
 import torch
 import tracy
-import os
 import ttnn
+import sys
 
-from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
+from tests.ttnn.utils_for_testing import get_per_core_size_and_num_cores
 from models.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
@@ -20,20 +20,21 @@ TIMEOUT = 30
 # Each suite has a key name (in this case "suite_1" and "suite_2") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "suite_ajakovljevic_test_height_width": {
+    "suite_ajakovljevic_add_sharding_using": {
         "batch_sizes": [(1,)],
-        # "height": [200, 256, 300, 400, 512, 750, 1024, 1300, 1600, 2048],
-        # "width": [200, 256, 300, 400, 512, 750, 1024, 1300, 1600, 2048],
-        "height": [600, 800],
-        "width": [600, 800],
-        "broadcast": [None, "w", "h", "hw"],
+        # "height": [224, 256, 416, 512, 768, 1024, 1600, 2048],
+        # "width": [224, 256, 416, 512, 768, 1024, 1600, 2048],
+        "height": [256, 384, 448, 576, 1280, 1792, 1856],
+        "width": [256, 384, 448, 576, 1280, 1792, 1856],
+        "broadcast": [None],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
         "input_a_layout": [ttnn.TILE_LAYOUT],
         "input_b_layout": [ttnn.TILE_LAYOUT],
         "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
-        "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+        "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG, ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG],
+        "num_cores": [None, 4],
     }
 }
 
@@ -42,6 +43,13 @@ parameters = {
 # If invalidated, the vector will still be stored but will be skipped.
 # Returns False, None if the vector is valid, and True, str with a reason for invalidation if it is invalid.
 def invalidate_vector(test_vector) -> Tuple[bool, Optional[str]]:
+    if test_vector["output_memory_config"] != ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG:
+        if test_vector["num_cores"] != None:
+            return True, "Num cores not needed for block sharding"
+    if test_vector["output_memory_config"] == ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG:
+        if test_vector["num_cores"] == None:
+            return True, "Block sharding has to have num cores"
+
     if test_vector["input_a_layout"] == ttnn.ROW_MAJOR_LAYOUT or test_vector["input_b_layout"] == ttnn.ROW_MAJOR_LAYOUT:
         return True, "Inputs to eltwise binary must be tilized"
     if test_vector["broadcast"] in {"w", "hw"} and test_vector["input_b_layout"] == ttnn.ROW_MAJOR_LAYOUT:
@@ -61,6 +69,7 @@ def tracy_testing(
     input_b_memory_config,
     input_a_memory_config,
     output_memory_config,
+    num_cores,
     device,
 ):
     input_shape_a = (*batch_sizes, height, width)
@@ -74,7 +83,6 @@ def tracy_testing(
 
     torch_input_tensor_a = torch_random(input_shape_a, -0.1, 0.1, dtype=torch.float32)
     torch_input_tensor_b = torch_random(input_shape_b, -0.1, 0.1, dtype=torch.float32)
-    torch_output_tensor = torch.add(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(
         torch_input_tensor_a,
@@ -90,8 +98,33 @@ def tracy_testing(
         device=device,
         memory_config=input_a_memory_config,
     )
-    output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
-    output_tensor = ttnn.to_torch(output_tensor)
+    if output_memory_config == ttnn.DRAM_MEMORY_CONFIG or output_memory_config == ttnn.L1_MEMORY_CONFIG:
+        output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
+        output_tensor = ttnn.to_torch(output_tensor)
+    else:
+        for per_core_height, num_cores_height in get_per_core_size_and_num_cores(
+            height, (num_cores,), max_per_core_size=1024
+        ):
+            for per_core_width, num_cores_width in get_per_core_size_and_num_cores(
+                width, (num_cores,), max_per_core_size=1024
+            ):
+                output_shard_spec = ttnn.ShardSpec(
+                    ttnn.CoreRangeSet(
+                        {
+                            ttnn.CoreRange(
+                                ttnn.CoreCoord(0, 0), ttnn.CoreCoord(num_cores_width - 1, num_cores_height - 1)
+                            )
+                        }
+                    ),
+                    (per_core_height, per_core_width),
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                )
+                output_memory_config.shard_spec = output_shard_spec
+                output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
+                output_tensor = ttnn.to_torch(output_tensor)
+                break
+            break
 
 
 # This is the run instructions for the test, defined by the developer.
@@ -110,6 +143,7 @@ def run(
     input_b_memory_config,
     input_a_memory_config,
     output_memory_config,
+    num_cores,
     *,
     device,
 ) -> list:
@@ -128,6 +162,7 @@ def run(
         input_b_memory_config,
         input_a_memory_config,
         output_memory_config,
+        num_cores,
         device,
     )
     ttnn.DumpDeviceProfiler(device)
