@@ -23,21 +23,19 @@ inline uint32_t packet_rnd_seed_to_size(uint32_t rnd_seed, uint32_t max_packet_s
     return packet_size;
 }
 
-typedef struct {
+struct input_queue_raw_state_t {
 
-    uint64_t data_words_input;
-    uint64_t num_packets;
-    uint32_t curr_packet_size_words;
-    uint32_t curr_packet_words_remaining;
-    uint32_t curr_packet_dest;
-    uint32_t curr_packet_flags;
-    uint32_t num_dests_sent_last_packet;
-    bool data_packets_done;
-    bool data_and_last_packets_done;
-
-    uint32_t packet_dest_diff; // difference from curr_packet_dest to dest_endpoint_start_id
-
-    uint32_t packet_rnd_seed;
+    uint64_t data_words_input = 0;
+    uint64_t num_packets = 0;
+    uint32_t curr_packet_size_words = 0;
+    uint32_t curr_packet_words_remaining = 0;
+    uint32_t curr_packet_dest = 0;
+    uint32_t curr_packet_flags = 0;
+    uint32_t num_dests_sent_last_packet = 0;
+    bool data_packets_done = false;
+    bool data_and_last_packets_done = false;
+    uint32_t packet_dest_diff = 0; // difference from curr_packet_dest to dest_endpoint_start_id
+    uint32_t packet_rnd_seed = 0;
 
     void init() {
         this->curr_packet_words_remaining = 0;
@@ -92,70 +90,69 @@ typedef struct {
         return this->num_packets;
     }
 
-} input_queue_raw_state_t;
+};
 
-typedef struct {
-    input_queue_raw_state_t input_queue_raw_state;
+struct input_queue_same_start_rndrobin_fix_size_state_t : public input_queue_raw_state_t{
 
     void init(uint32_t pkt_size_words, uint32_t) { // same args as the input_queue_rnd_state_t
-        input_queue_raw_state.init();
-        input_queue_raw_state.packet_dest_diff = 0;
-        input_queue_raw_state.curr_packet_size_words = pkt_size_words;
+        input_queue_raw_state_t::init();
+
+        packet_dest_diff = 0;
+        curr_packet_size_words = pkt_size_words;
     }
+
     inline void packet_update(uint32_t num_dest_endpoints,
                                   uint32_t dest_endpoint_start_id,
                                   uint32_t max_packet_size_words,
                                   uint64_t total_data_words) {
-        input_queue_raw_state.curr_packet_dest = input_queue_raw_state.packet_dest_diff + dest_endpoint_start_id;
-        input_queue_raw_state.packet_dest_diff = (input_queue_raw_state.packet_dest_diff + 1) & (num_dest_endpoints - 1);
-        input_queue_raw_state.packet_update(num_dest_endpoints, total_data_words);
+        curr_packet_dest = packet_dest_diff + dest_endpoint_start_id;
+        packet_dest_diff = (packet_dest_diff + 1) & (num_dest_endpoints - 1);
+        input_queue_raw_state_t::packet_update(num_dest_endpoints, total_data_words);
     }
     inline void next_packet(uint32_t num_dest_endpoints,
                                 uint32_t dest_endpoint_start_id,
                                 uint32_t max_packet_size_words,
                                 uint64_t total_data_words) {
-        if (!input_queue_raw_state.data_packets_done) {
+        if (!data_packets_done) {
             this->packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
         } else {
-            input_queue_raw_state.packet_rnd_seed = 0xffffffff;
-            input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
+            packet_rnd_seed = 0xffffffff;
+            this->gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
         }
     }
-} input_queue_same_start_rndrobin_fix_size_state_t;
+};
 
 
 
 // Structure used for randomizing packet sequences based on a starting random seed.
 // Used on the TX generator side to generate traffic and on the RX side to verify
 // the correcntess of received packets.
-typedef struct {
-
-    input_queue_raw_state_t input_queue_raw_state;
+struct input_queue_rnd_state_t : public input_queue_raw_state_t {
 
     void init(uint32_t endpoint_id, uint32_t prng_seed) {
-        input_queue_raw_state.packet_rnd_seed = prng_seed ^ endpoint_id;
-        input_queue_raw_state.init();
+        packet_rnd_seed = prng_seed ^ endpoint_id;
+        input_queue_raw_state_t::init();
     }
 
     inline void packet_update(uint32_t num_dest_endpoints,
                                   uint32_t dest_endpoint_start_id,
                                   uint32_t max_packet_size_words,
                                   uint64_t total_data_words) {
-        input_queue_raw_state.curr_packet_dest = ((input_queue_raw_state.packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
-        input_queue_raw_state.curr_packet_size_words = packet_rnd_seed_to_size(input_queue_raw_state.packet_rnd_seed, max_packet_size_words);
-        input_queue_raw_state.packet_update(num_dest_endpoints, total_data_words);
+        curr_packet_dest = ((packet_rnd_seed >> 16) & (num_dest_endpoints-1)) + dest_endpoint_start_id;
+        curr_packet_size_words = packet_rnd_seed_to_size(packet_rnd_seed, max_packet_size_words);
+        input_queue_raw_state_t::packet_update(num_dest_endpoints, total_data_words);
     }
 
     inline void next_packet(uint32_t num_dest_endpoints,
                                 uint32_t dest_endpoint_start_id,
                                 uint32_t max_packet_size_words,
                                 uint64_t total_data_words) {
-        if (!input_queue_raw_state.data_packets_done) {
-            input_queue_raw_state.packet_rnd_seed = prng_next(input_queue_raw_state.packet_rnd_seed);
+        if (!data_packets_done) {
+            packet_rnd_seed = prng_next(packet_rnd_seed);
             this->packet_update(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
         } else {
-            input_queue_raw_state.packet_rnd_seed = 0xffffffff;
-            input_queue_raw_state.gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
+            packet_rnd_seed = 0xffffffff;
+            this->gen_last_pkt(num_dest_endpoints, dest_endpoint_start_id, max_packet_size_words, total_data_words);
         }
     }
 
@@ -164,18 +161,18 @@ typedef struct {
                                         uint32_t dest_endpoint_start_id,
                                         uint32_t max_packet_size_words,
                                         uint64_t total_data_words) {
-        uint32_t rnd = input_queue_raw_state.packet_rnd_seed;
+        uint32_t rnd = packet_rnd_seed;
         uint32_t dest;
         do {
             rnd = prng_next(rnd);
             dest = (rnd >> 16) & (num_dest_endpoints-1);
         } while (dest != (dest_endpoint_id - dest_endpoint_start_id));
-        input_queue_raw_state.packet_rnd_seed = rnd;
+        packet_rnd_seed = rnd;
         this->packet_update(num_dest_endpoints, dest_endpoint_start_id,
                                 max_packet_size_words, total_data_words);
     }
 
-} input_queue_rnd_state_t;
+};
 
 template <pkt_dest_size_choices_t which_t>
 constexpr auto select_input_queue() {
