@@ -35,7 +35,8 @@ from models.utility_functions import skip_for_grayskull
     (
         # 128,
         # 1024,
-        4096,
+        16
+        * 1024,
     ),
 )
 @pytest.mark.parametrize(
