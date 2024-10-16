@@ -304,10 +304,12 @@ namespace data_movement {
         auto unsqueeze_concat = build_unsqueeze_concat(rank, output_memory_config);
         auto untilize_rm_retilize_concat = build_untilize_rm_retilize_concat(queue_id, output_memory_config);
         auto non_aligned_last_dim_concat = build_non_aligned_last_dim_concat(input_tensors, queue_id, output_memory_config);
-
-        auto massaged_concat = unsqueeze_concat.sequence(untilize_rm_retilize_concat)
-                                               .sequence(non_aligned_last_dim_concat);
-        return massaged_concat(input_tensors, dim);
+        std::vector<ttnn::Tensor> itensors(input_tensors);
+        auto concat_res = concat_impl(itensors, dim, output_memory_config);
+        return concat_res;
+        // auto massaged_concat = unsqueeze_concat.sequence(untilize_rm_retilize_concat)
+        //                                        .sequence(non_aligned_last_dim_concat);
+        // return massaged_concat(input_tensors, dim);
     }
 
     ttnn::Tensor ConcatOperation::invoke (
