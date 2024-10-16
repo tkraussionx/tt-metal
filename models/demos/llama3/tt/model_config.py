@@ -516,24 +516,17 @@ class TtModelArgs:
             )
 
             # RMS NORM
-            norm_shard_height = self.tile_size
-            shard_width_hidden_dim_across_32_cores = self.dim // norm_shard_height
-            norm_core_grid = ttnn.CoreGrid(x=8, y=norm_shard_height // 8)
-            self.model_config["SHARDED_NORM_INPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
-                shape=(norm_shard_height, shard_width_hidden_dim_across_32_cores),
-                core_grid=norm_core_grid,
-                strategy=ttnn.ShardStrategy.WIDTH,
-                orientation=ttnn.ShardOrientation.ROW_MAJOR,
-                use_height_and_width_as_shard_shape=True,
-            )
+            shard_width_hidden_dim_across_32_cores = self.dim // 32
+            norm_core_grid = ttnn.CoreGrid(x=8, y=4)
+            self.model_config["SHARDED_NORM_INPUT_MEMCFG"] = self.model_config["SHARDED_MLP_DECODE_INPUT_MEMCFG"]
             self.model_config["SHARDED_NORM_PRGM_CFG"] = ttnn.LayerNormShardedMultiCoreProgramConfig(
                 compute_with_storage_grid_size=[norm_core_grid.x, norm_core_grid.y],
                 subblock_w=shard_width_hidden_dim_across_32_cores // self.tile_size,
-                block_h=norm_shard_height // self.tile_size,
+                block_h=self.tile_padded_batch_rows // self.tile_size,
                 block_w=shard_width_hidden_dim_across_32_cores // self.tile_size,
                 inplace=False,
             )
-            self.model_config["SHARDED_NORM_OUTPUT_MEMCFG"] = self.model_config["SHARDED_ATTN_INPUT_MEMCFG"]
+            self.model_config["SHARDED_NORM_OUTPUT_MEMCFG"] = self.model_config["SHARDED_MLP_DECODE_INPUT_MEMCFG"]
 
             self.model_config["IS_DISTRIBUTED_NORM"] = lambda mode: self._is_distributed_norm(mode)
             self.model_config["IS_2D_FRACTURING"] = all([dim > 1 for dim in self.mesh_device.shape])

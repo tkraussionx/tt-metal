@@ -84,12 +84,19 @@ class TtTransformer(LightweightModule):
         if get_last_token != -1:
             x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, x.shape[-1]))
 
+        if mode == "prefill":
+            all_gather_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
+        else:
+            all_gather_mem_cfg = self.model_config["SHARDED_NORM_INPUT_MEMCFG"]
+
         if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
-            x_gathered = ttnn.all_gather(x, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            x_gathered = ttnn.all_gather(
+                x, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"], memory_config=all_gather_mem_cfg
+            )
         else:
             x_gathered = x
 
-        x_norm = self.norm(x_gathered)
+        x_norm = self.norm(x_gathered, in_sharded=(mode == "decode"), out_sharded=(mode == "decode"))
         ttnn.deallocate(x_gathered)
 
         if self.model_config["IS_DISTRIBUTED_NORM"](mode):

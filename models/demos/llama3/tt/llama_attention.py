@@ -332,7 +332,7 @@ class TtLlamaAttention(LightweightModule):
                 scatter_dim=3,
                 math_op=ttnn.ReduceType.Sum,
                 num_links=1,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,  # TODO: why dram??
+                memory_config=ttnn.L1_MEMORY_CONFIG,
             )
             ttnn.deallocate(dense_out)
             return dense_out_reduced
@@ -520,7 +520,7 @@ class TtLlamaAttention(LightweightModule):
                 scatter_dim=3,
                 math_op=ttnn.ReduceType.Sum,
                 num_links=1,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,  # TODO: why dram??
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
             ttnn.deallocate(output_11SH)
             return dense_out_reduced

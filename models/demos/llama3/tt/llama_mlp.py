@@ -59,7 +59,7 @@ class TtLlamaMLP(LightweightModule):
             pc_1 = self.model_config["DECODE_MLP_W1_W3_PRG_CONFIG"]
             pc_2 = self.model_config["DECODE_MLP_W2_PRG_CONFIG"]
             pc_3 = self.model_config["DECODE_MLP_W1_W3_PRG_CONFIG"]
-            x_in = ttnn.interleaved_to_sharded(x, self.model_config["SHARDED_MLP_DECODE_INPUT_MEMCFG"])
+            x_in = x
         else:  # Update the program configs based for prefill
             if seq_len >= 1024:  # Too big to compute. Set different program configs based on seqlen
                 # Reshape input to to fit on device and parallelize computation

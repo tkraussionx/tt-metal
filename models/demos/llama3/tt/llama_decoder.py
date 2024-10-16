@@ -99,6 +99,7 @@ class TtTransformerBlock(LightweightModule):
             # ttnn.deallocate(x)
         else:
             x_gathered = x
+            # TODO: interleaved to sharded for single device
 
         print(x_gathered.shape)
 
@@ -128,12 +129,14 @@ class TtTransformerBlock(LightweightModule):
         ttnn.deallocate(x)
 
         if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
-            h_gathered = ttnn.all_gather(h, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
+            h_gathered = ttnn.all_gather(
+                h, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"], memory_config=all_gather_mem_cfg
+            )
             ttnn.deallocate(h)
         else:
             h_gathered = h
 
-        ff_normalized = self.ffn_norm(h_gathered)
+        ff_normalized = self.ffn_norm(h_gathered, in_sharded=(mode == "decode"), out_sharded=(mode == "decode"))
         # ttnn.deallocate(h_gathered)
 
         if self.model_config["IS_DISTRIBUTED_NORM"](mode):
