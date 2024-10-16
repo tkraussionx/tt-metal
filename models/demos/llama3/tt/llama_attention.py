@@ -319,15 +319,11 @@ class TtLlamaAttention(LightweightModule):
         )  # seqlen, 1, batch, hidden_size
 
         ttnn.deallocate(attn_output_cat)
-        dense_out = ttnn.sharded_to_interleaved(dense_out_sharded, ttnn.L1_MEMORY_CONFIG)
-
-        ttnn.deallocate(attn_output_cat)
-        ttnn.deallocate(dense_out_sharded)
 
         # All reduce
         if self.num_devices > 1:
             dense_out_interleaved = ttnn.sharded_to_interleaved(dense_out_sharded, ttnn.L1_MEMORY_CONFIG)
-            ttnn.deallocate(dense_out_sharded)
+            # ttnn.deallocate(dense_out_sharded)
             dense_out_reduce_scattered = ttnn.reduce_scatter(
                 dense_out_interleaved,
                 scatter_dim=3,
@@ -337,24 +333,20 @@ class TtLlamaAttention(LightweightModule):
                 # memory_config=self.model_config["SHARDED_ATTN_DECODE_WO_OUT_REDUCE_SCATTER_MEMCFG"],
                 memory_config=ttnn.L1_MEMORY_CONFIG,
             )
-            ttnn.deallocate(dense_out_interleaved)
-            dense_out_reduce_scattered = ttnn.interleaved_to_sharded(
-                dense_out_reduce_scattered, self.model_config["SHARDED_ATTN_INPUT_MEMCFG"]
-            )
+
             dense_out_gathered = ttnn.all_gather(
                 dense_out_reduce_scattered,
                 dim=3,
                 num_links=1,
                 topology=ttnn.Topology.Linear,
-                memory_config=self.model_config["SHARDED_ATTN_DECODE_WO_OUT_GATHERED_MEMCFG"],
+                # memory_config=self.model_config["SHARDED_ATTN_DECODE_WO_OUT_GATHERED_MEMCFG"],
+                memory_config=ttnn.L1_MEMORY_CONFIG,
             )
-            # This sharded to interleaved call is needed as fast_reduce only supports interleaved inputs
-            dense_out_gathered = ttnn.sharded_to_interleaved(dense_out_gathered, ttnn.L1_MEMORY_CONFIG)
-
-            ttnn.deallocate(dense_out_sharded)
+            ttnn.deallocate(dense_out_interleaved)
             ttnn.deallocate(dense_out_reduce_scattered)
             return dense_out_gathered
         else:
+            dense_out = ttnn.sharded_to_interleaved(dense_out_sharded, ttnn.L1_MEMORY_CONFIG)
             return dense_out
 
     def forward_prefill(self, x_11SH, rot_mats, transformation_mats, user_id: int = 0, page_table=None):
