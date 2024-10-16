@@ -94,20 +94,36 @@ class TtLlamaMLP(LightweightModule):
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
         )
 
+        # print(f'{w1_out=}, {w3_out=}')
+
         ttnn.deallocate(x)
         ttnn.deallocate(x_in)
-
+        # print(f'16 cores model_config: {self.model_config["RESIDUAL_16_CORES_OUTPUT_MEMCFG"]}')
         w2_in = ttnn.multiply(
             w1_out,
             w3_out,
-            memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
+            memory_config=ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
             input_tensor_a_activation=ttnn.UnaryOpType.SILU,
             dtype=ttnn.bfloat8_b,
         )
+        # print(f'{w2_in=}')
 
         ttnn.deallocate(w3_out)
         ttnn.deallocate(w1_out)
         # This uses HiFi2 for full precision as it is dram-bound and uses bfp8 inputs
+        # print(f"w2_in: {w2_in.shape}, {w2_in.memory_config()}")
+        # print(f"pc_2: {pc_2}")
+        # shard this on 16 cores
+
+        if mode == "decode":
+            # print(f'{w2_in.shape=}')
+            # print(f'{w3_out.shape=}')
+            # w2_in_temp = ttnn.reshard(w2_in, self.model_config["RESIDUAL_16_CORES_OUTPUT_MEMCFG"], w2_in_temp)
+            # temp_w2 = ttnn.sharded_to_interleaved(w2_in, ttnn.L1_MEMORY_CONFIG)
+            # print(f'{w2_in=}')
+            w2_in = ttnn.interleaved_to_sharded(w2_in, self.model_config["RESIDUAL_16_CORES_OUTPUT_MEMCFG"])
+            # print(f'{w2_in=}')
+
         w2_out = ttnn.linear(
             w2_in,
             self.w2,
@@ -117,7 +133,11 @@ class TtLlamaMLP(LightweightModule):
             program_config=pc_2,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
         )
-
+        # if mode == "decode":
+        #     # w2_out_temp = ttnn.reshard(w2_out, initial_memory_config, w2_out_temp)
+        #     w2_out_temp = ttnn.sharded_to_interleaved(w2_out, ttnn.DRAM_MEMORY_CONFIG)
+        #     w2_out = ttnn.interleaved_to_sharded(w2_out_temp, initial_memory_config)
+        #     # print(f'{w2_out=}')
         ttnn.deallocate(w2_in)
 
         if mode == "decode":
@@ -134,9 +154,10 @@ class TtLlamaMLP(LightweightModule):
                 scatter_dim=3,
                 math_op=ttnn.ReduceType.Sum,
                 num_links=1,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG if mode == "prefill" else ttnn.L1_MEMORY_CONFIG,
             )
             ttnn.deallocate(w2_out)
+            # print(f"Reduce scatter in MLP completed: {w2_out_reduced}")
             return w2_out_reduced
         elif self.model_config["IS_MULTICHIP"]:
             # Line topology required all_gather and local reduction for now

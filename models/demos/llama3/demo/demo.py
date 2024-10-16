@@ -292,6 +292,7 @@ def run_llama_demo(user_input, batch_size, layers, mesh_device, instruct_mode, i
         # Compile
         decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
         tt_out = tt_model(decode_input, current_pos, rot_mat=current_rot_mat)
+        print(f"{tt_out=}")
         if tt_model.args.num_devices > 1:
             tt_out_gathered = ttnn.all_gather(tt_out, dim=3, num_links=1, topology=ttnn.Topology.Linear)
             ttnn.deallocate(tt_out)
@@ -304,7 +305,7 @@ def run_llama_demo(user_input, batch_size, layers, mesh_device, instruct_mode, i
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
         ttnn.plus_one(current_pos)
-
+        print("Capture trace")
         # Capture Trace
         trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
 
@@ -317,7 +318,11 @@ def run_llama_demo(user_input, batch_size, layers, mesh_device, instruct_mode, i
             tt_out_gathered = tt_out
         tt_out_rm = ttnn.untilize(tt_out_gathered, use_multicore=True)
         ttnn.deallocate(tt_out_gathered)
+        # print(f'traced tt_out_rm: {tt_out_rm.shape}')
+        # print(f'{tt_out_rm=}')
         tt_out_tok = ttnn.argmax(tt_out_rm, dim=3, use_multicore=True, output_tensor=tt_out_tok)
+        # print(f'traced tt_out_tok: {tt_out_tok.shape}')
+        # print(f'traced tt_out_tok value: {tt_out_tok}')
         ttnn.deallocate(tt_out_rm)
         new_rot_mat = ttnn.linear(rot_matrix, current_rot_mat)
         current_rot_mat = ttnn.copy(new_rot_mat, current_rot_mat)
@@ -345,7 +350,7 @@ def run_llama_demo(user_input, batch_size, layers, mesh_device, instruct_mode, i
         total_tokens_generated = 0  # Track total tokens generated
 
         ttnn.record_event(1, write_event)
-
+        print("START DECODE LOOP")
         while users_decoding:
             iteration_time_start = time()
 

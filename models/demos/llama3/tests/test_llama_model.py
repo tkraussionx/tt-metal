@@ -150,6 +150,8 @@ def test_llama_model_inference(mesh_device, weights, layers, use_program_cache, 
             model_args.dim,
             tt_model.mesh_device,
         )
+        print(f"decode_input: {decode_input.shape}")
+
         current_pos_tensor = ttnn.from_torch(
             torch.tensor([current_pos] * batch),
             device=mesh_device,

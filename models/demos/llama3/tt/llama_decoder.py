@@ -82,8 +82,8 @@ class TtTransformerBlock(LightweightModule):
         mode="decode",
         page_table=None,
     ) -> ttnn.Tensor:
-        print(f"mode: {mode}")
-        print(x.shape)
+        # print(f"mode: {mode}")
+        # print(x.shape)
 
         if mode == "prefill":
             skip_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
@@ -101,9 +101,12 @@ class TtTransformerBlock(LightweightModule):
             x_gathered = x
             # TODO: interleaved to sharded for single device
 
-        print(x_gathered.shape)
+        # print(f"x_gathered: {x_gathered.shape}")
+        # print(f"x_gathered: {x_gathered.memory_config()}")
+        # print(f"attn_norm.sharded_program_config: {self.attention_norm.sharded_program_config}")
 
         attn_norm = self.attention_norm(x_gathered, in_sharded=(mode == "decode"), out_sharded=(mode == "decode"))
+        # print(f"attn_norm: {attn_norm.shape}")
         # ttnn.deallocate(x_gathered)
 
         if self.model_config["IS_DISTRIBUTED_NORM"](mode):
@@ -126,13 +129,12 @@ class TtTransformerBlock(LightweightModule):
         )
 
         h = ttnn.add(x, r, memory_config=skip_mem_cfg)
-        ttnn.deallocate(x)
+        # ttnn.deallocate(x)
 
         if self.model_config["IS_MULTICHIP"] and not self.model_config["IS_DISTRIBUTED_NORM"](mode):
             h_gathered = ttnn.all_gather(
                 h, dim=3, num_links=1, topology=self.model_config["CCL_TOPOLOGY"], memory_config=all_gather_mem_cfg
             )
-            ttnn.deallocate(h)
         else:
             h_gathered = h
 
@@ -146,9 +148,11 @@ class TtTransformerBlock(LightweightModule):
             ttnn.deallocate(ff_normalized)
         else:
             ff_normalized_gathered = ff_normalized
-
+        # print(f'ff_normalized_gathered: {ff_normalized_gathered}')
         ff_normalized_gathered = self.feed_forward.forward(ff_normalized_gathered, mode)
+        # print(f'ff_normalized_gathered: {ff_normalized_gathered}')
         out = ttnn.add(h, ff_normalized_gathered, memory_config=skip_mem_cfg)
+        # print(f'out: {out}')
         ttnn.deallocate(h)
         ttnn.deallocate(ff_normalized_gathered)
         return out
