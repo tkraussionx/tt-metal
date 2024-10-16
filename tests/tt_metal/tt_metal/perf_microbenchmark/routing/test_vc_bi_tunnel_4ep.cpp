@@ -27,9 +27,6 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_x = 1;
     constexpr uint32_t default_demux_y = 1;
 
-    constexpr uint32_t default_tunneler_x = 0;
-    constexpr uint32_t default_tunneler_y = 0;
-
     constexpr uint32_t default_prng_seed = 0x100;
     constexpr uint32_t default_data_kb_per_tx = 1024*1024;
     constexpr uint32_t default_max_packet_size_words = 0x100;
@@ -117,8 +114,6 @@ int main(int argc, char **argv) {
     uint32_t mux_y = test_args::get_command_option_uint32(input_args, "--mux_y", default_mux_y);
     uint32_t demux_x = test_args::get_command_option_uint32(input_args, "--demux_x", default_demux_x);
     uint32_t demux_y = test_args::get_command_option_uint32(input_args, "--demux_y", default_demux_y);
-    uint32_t tunneler_x = test_args::get_command_option_uint32(input_args, "--tunneler_x", default_tunneler_x);
-    uint32_t tunneler_y = test_args::get_command_option_uint32(input_args, "--tunneler_y", default_tunneler_y);
     uint32_t prng_seed = test_args::get_command_option_uint32(input_args, "--prng_seed", default_prng_seed);
     uint32_t data_kb_per_tx = test_args::get_command_option_uint32(input_args, "--data_kb_per_tx", default_data_kb_per_tx);
     uint32_t max_packet_size_words = test_args::get_command_option_uint32(input_args, "--max_packet_size_words", default_max_packet_size_words);
@@ -1001,8 +996,6 @@ int main(int argc, char **argv) {
             config["mux_y"] = mux_y;
             config["demux_x"] = demux_x;
             config["demux_y"] = demux_y;
-            config["tunneler_x"] = tunneler_x;
-            config["tunneler_y"] = tunneler_y;
             config["num_endpoints"] = num_endpoints;
             config["prng_seed"] = prng_seed;
             config["data_kb_per_tx"] = data_kb_per_tx;
