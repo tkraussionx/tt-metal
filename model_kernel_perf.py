@@ -88,6 +88,10 @@ def convert_to_numeric_dict(input_dict):
             numeric_dict[key] = broadcast_mapping[value]
         elif value in memory_config_mapping:
             numeric_dict[key] = memory_config_mapping[value]
+        elif "input_shape" in key:
+            shape_values = list(map(int, value.strip("()").split(", ")))
+            numeric_dict["height"] = shape_values[-2]
+            numeric_dict["width"] = shape_values[-1]
         else:
             numeric_dict[key] = int(value) if value.isdigit() else value
 
@@ -172,7 +176,7 @@ def process_txt_file(file_path):
     return results
 
 
-def make_a_decision_tree(results, print_tree=False, output_tree_file=None):
+def make_a_decision_tree(results, module_name, print_tree=False, output_tree_file=None):
     X = []
     y = []
 
@@ -184,8 +188,12 @@ def make_a_decision_tree(results, print_tree=False, output_tree_file=None):
     X = np.array(X)
     y = np.array(y)
 
-    y_binned, bin_edges = pd.cut(y, bins=3, labels=False, retbins=True)  # Create bins
-    bin_edges[-1] = 20000
+    # This needs to be done on a per-op basis, based on manual testing, this is for add
+    bin_edges = [0, 8000, 12000, 20000]
+    y_binned = np.digitize(y, bin_edges, right=False) - 1
+
+    # y_binned, bin_edges = pd.cut(y, bins=3, labels=False, retbins=True)  # Create bins
+
     print(f"Bin edges: {bin_edges}")  # Optional: Show bin ranges
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
@@ -206,9 +214,9 @@ def make_a_decision_tree(results, print_tree=False, output_tree_file=None):
         plt.title("Decision Tree for DEVICE KERNEL DURATION")
         plt.savefig(output_tree_file, format="png")
 
-    with open("add_decision_tree_model.pkl", "wb") as model_file:
+    with open(f"{module_name}_decision_tree_model.pkl", "wb") as model_file:
         pickle.dump(model, model_file)
-    with open("bin_edges.pkl", "wb") as bin_edges_file:
+    with open(f"{module_name}_bin_edges.pkl", "wb") as bin_edges_file:
         pickle.dump(bin_edges, bin_edges_file)
 
 
@@ -230,6 +238,7 @@ def main():
     )
     parser.add_argument("--print-tree", action="store_true", help="Print the decision tree in the output file")
     parser.add_argument("--output-tree-file", type=str, required=False, help="Output file for the decision tree")
+    parser.add_argument("--module-name", type=str, required=False, help="Name of the module for the decision tree")
 
     args = parser.parse_args()
 
@@ -240,14 +249,14 @@ def main():
     make_tree = args.make_tree
     print_tree = args.print_tree
     output_tree_file = args.output_tree_file
-
+    module_name = args.module_name
     if merge_config_files:
         if not csv_file or not config_file:
             raise Exception("Please provide the config files.")
 
     if make_tree:
         if print_tree:
-            if not output_tree_file:
+            if not output_tree_file or not module_name:
                 raise Exception("Please provide the file to output the decision tree diagram to.")
 
     if merge_config_files:
@@ -265,7 +274,7 @@ def main():
             numeric_result = convert_to_numeric_dict(result)
             numeric_results.append(numeric_result)
 
-        make_a_decision_tree(numeric_results, print_tree, output_tree_file)
+        make_a_decision_tree(numeric_results, module_name, print_tree, output_tree_file)
 
 
 if __name__ == "__main__":
