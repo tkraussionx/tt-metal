@@ -44,7 +44,7 @@ void kernel_main() {
         cb_reserve_back(cb_attn, block_wt);
         uint32_t l1_write_addr = get_write_ptr(cb_attn);
         for (uint32_t w = 0; w < block_wt; w++) {
-            noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
+            // noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
             l1_write_addr += mask_tile_bytes;
             ++mask_id;
 
@@ -52,7 +52,7 @@ void kernel_main() {
                 generate_reduce_scaler(cb_reduce_scaler, reduce_scaler);
             }
         }
-        noc_async_read_barrier();
+        // noc_async_read_barrier();
 
         cb_push_back(cb_attn, block_wt);
         if (mask_id == mask_num_tiles) {

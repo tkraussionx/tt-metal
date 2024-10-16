@@ -135,7 +135,7 @@ def process_txt_file(file_path):
     return results
 
 
-def check_tree(results):
+def check_tree(results, module_name):
     X = []
     y = []
 
@@ -144,10 +144,10 @@ def check_tree(results):
         X.append(list(entry.values()))  # Features
         y.append(target_duration)  # Target
 
-    with open("add_decision_tree_model.pkl", "rb") as model_file:
+    with open(f"{module_name}_decision_tree_model.pkl", "rb") as model_file:
         loaded_model = pickle.load(model_file)
         X_test = X
-        with open("bin_edges.pkl", "rb") as bin_edges_file:
+        with open(f"{module_name}_bin_edges.pkl", "rb") as bin_edges_file:
             bin_edges = pickle.load(bin_edges_file)
             print(f"Bin edges: {bin_edges}")  # Optional: Show bin ranges
             y_binned = np.digitize(y, bin_edges, right=False) - 1
@@ -166,10 +166,12 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--file-path", type=str, required=True, help="Path to the .txt with merged configs and times.")
+    parser.add_argument("--module-name", type=str, required=True, help="Name of the module.")
 
     args = parser.parse_args()
 
     file_path = args.file_path
+    module_name = args.module_name
 
     results = process_txt_file(file_path)
 
@@ -179,7 +181,7 @@ def main():
         numeric_result = convert_to_numeric_dict(result)
         numeric_results.append(numeric_result)
 
-    check_tree(numeric_results)
+    check_tree(numeric_results, module_name)
 
 
 if __name__ == "__main__":

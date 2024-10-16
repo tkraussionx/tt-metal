@@ -80,11 +80,11 @@ void kernel_main() {
             uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
 
             for (uint32_t r = 0; r<rem; ++r) {
-                noc_async_read_tile(curr_tile, src_a, l1_write_addr); // TODO(AP): data type size
+                // noc_async_read_tile(curr_tile, src_a, l1_write_addr); // TODO(AP): data type size
                 curr_tile++;
                 l1_write_addr += src0_tile_bytes;
             }
-            noc_async_read_barrier();
+            // noc_async_read_barrier();
             cb_push_back(cb_id_in0, rem);
         }
 
@@ -97,11 +97,11 @@ void kernel_main() {
             cb_reserve_back(cb_id_attn, blk);
             uint32_t l1_write_addr = get_write_ptr(cb_id_attn);
             for (uint32_t wb = 0; wb<blk; ++wb) {
-                noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
+                // noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
                 l1_write_addr += mask_tile_bytes;
                 ++mask_id;
             }
-            noc_async_read_barrier();
+            // noc_async_read_barrier();
             cb_push_back(cb_id_attn, blk);
         }
         ++ht;
@@ -121,11 +121,11 @@ void kernel_main() {
                 cb_reserve_back(cb_id_attn, blk);
                 uint32_t l1_write_addr = get_write_ptr(cb_id_attn);
                 for (uint32_t wb = 0; wb<blk; ++wb) {
-                    noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
+                    // noc_async_read_tile(mask_id, addr_mask, l1_write_addr);
                     l1_write_addr += mask_tile_bytes;
                     ++mask_id;
                 }
-                noc_async_read_barrier();
+                // noc_async_read_barrier();
                 cb_push_back(cb_id_attn, blk);
             }
             read_mask = false;

@@ -92,7 +92,8 @@ def run(test_module, input_queue, output_queue):
                 output_queue.put([status, message, e2e_perf, perf_result])
             else:
                 if status:
-                    with open("helper_add.txt", "a") as f:
+                    module_name = test_module.__name__.split(".")[-1]
+                    with open(f"helper_{module_name}.txt", "a") as f:
                         f.write(f"test_vector= {test_vector}\n")
                 output_queue.put([status, message, e2e_perf, None])
     except Empty as e:

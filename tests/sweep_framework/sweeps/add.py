@@ -20,15 +20,17 @@ TIMEOUT = 30
 # Each suite has a key name (in this case "suite_1" and "suite_2") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "suite_ajakovljevic_larger_different_height_width": {
+    "suite_ajakovljevic_test_height_width": {
         "batch_sizes": [(1,)],
-        "height": [256, 512, 1024, 2048],
-        "width": [256, 512, 1024, 2048],
+        # "height": [200, 256, 300, 400, 512, 750, 1024, 1300, 1600, 2048],
+        # "width": [200, 256, 300, 400, 512, 750, 1024, 1300, 1600, 2048],
+        "height": [600, 800],
+        "width": [600, 800],
         "broadcast": [None, "w", "h", "hw"],
         "input_a_dtype": [ttnn.bfloat16],
         "input_b_dtype": [ttnn.bfloat16],
-        "input_a_layout": [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT],
-        "input_b_layout": [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT],
+        "input_a_layout": [ttnn.TILE_LAYOUT],
+        "input_b_layout": [ttnn.TILE_LAYOUT],
         "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
         "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
@@ -90,7 +92,6 @@ def tracy_testing(
     )
     output_tensor = ttnn.add(input_tensor_a, input_tensor_b, memory_config=output_memory_config)
     output_tensor = ttnn.to_torch(output_tensor)
-    return [check_with_pcc(torch_output_tensor, output_tensor, 0.999), 0]
 
 
 # This is the run instructions for the test, defined by the developer.

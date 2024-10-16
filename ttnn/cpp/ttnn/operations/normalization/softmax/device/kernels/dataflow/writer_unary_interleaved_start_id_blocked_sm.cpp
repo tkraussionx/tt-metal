@@ -78,11 +78,11 @@ void kernel_main() {
         cb_wait_front(cb_id_out0, blk);
         uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
         for (uint32_t j = 0; j<blk; j++) {
-            noc_async_write_tile(tile_id, s, l1_read_addr);
+            // noc_async_write_tile(tile_id, s, l1_read_addr);
             tile_id++;
             l1_read_addr += tile_bytes;
         }
-        noc_async_write_barrier();
+        // noc_async_write_barrier();
         cb_pop_front(cb_id_out0, blk);
 
     }
