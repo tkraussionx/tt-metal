@@ -414,6 +414,19 @@ class TtModelArgs:
                 ttnn.ShardOrientation.ROW_MAJOR,
                 use_height_and_width_as_shard_shape=True,
             )
+            self.model_config["SHARDED_ATTN_DECODE_WO_OUT_REDUCE_SCATTER_MEMCFG"] = ttnn.create_sharded_memory_config(
+                (
+                    self.tile_padded_batch_rows,
+                    (self.dim // attn_input_grid.num_cores) // self.num_devices,
+                ),  # Shard shape: [32 * self.num_devices, 128] -> 1 shard per core
+                attn_input_grid,
+                ttnn.ShardStrategy.WIDTH,
+                ttnn.ShardOrientation.ROW_MAJOR,
+                use_height_and_width_as_shard_shape=True,
+            )
+            self.model_config["SHARDED_ATTN_DECODE_WO_OUT_GATHERED_MEMCFG"] = self.model_config[
+                "SHARDED_ATTN_INPUT_MEMCFG"
+            ]
 
             # Vision model configs
             self.model_config["IMAGE_MLP_FC_PROGCFG"] = lambda seq_len, max_seq: self.matmul_config(
