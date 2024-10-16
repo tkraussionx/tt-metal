@@ -123,7 +123,7 @@ def test_rm_concat(device):
     input_tensor_b = ttnn.from_torch(torch_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=-1)
     output = ttnn.to_torch(output)
-    assert_with_pcc(torch.cat([torch_a, torch_b], dim=1), output, 0.9999)
+    assert_with_pcc(torch.cat([torch_a, torch_b], dim=-1), output, 0.9999)
 
 
 @pytest.mark.parametrize("dim", [0, 1, 2, 3])
