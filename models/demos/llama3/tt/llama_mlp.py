@@ -127,8 +127,20 @@ class TtLlamaMLP(LightweightModule):
             w2_out = ttnn.reshape(w2_out, [1, 1, seq_len, -1])
 
         # All reduce
-        if self.args.num_devices > 1:
-            w2_out_gathered = ttnn.all_gather(w2_out, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+        if self.model_config["CCL_TOPOLOGY"] == ttnn.Topology.Ring:
+            # Ring topology supports reduce scatter
+            w2_out_reduced = ttnn.reduce_scatter(
+                w2_out,
+                scatter_dim=3,
+                math_op=ttnn.ReduceType.Sum,
+                num_links=1,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+            ttnn.deallocate(w2_out)
+            return w2_out_reduced
+        elif self.model_config["IS_MULTICHIP"]:
+            # Line topology required all_gather and local reduction for now
+            w2_out_gathered = ttnn.all_gather(w2_out, dim=1, num_links=1, topology=self.model_config["CCL_TOPOLOGY"])
             w2_out_reduced = ttnn.experimental.fast_reduce_nc(
                 w2_out_gathered, dims=[1], output=None, compute_kernel_config=None
             )

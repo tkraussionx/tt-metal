@@ -95,6 +95,7 @@ class TtModelArgs:
 
     def __init__(self, mesh_device, instruct=False, dummy_weights=False, max_batch_size=1):
         # Add this near the top of the class, with other class attributes
+        self.mesh_device = mesh_device
         self.num_devices = mesh_device.get_num_devices()
         device = mesh_device.get_devices()[0]
         device_name = {1: "N150", 2: "N300", 8: "T3K", 32: "TG"}[self.num_devices]
@@ -152,6 +153,8 @@ class TtModelArgs:
             self._set_llama_params_from_dict(DEFAULT_LLAMA3_2_3B_PARAMS)
         else:
             self._set_llama_params(self.DEFAULT_CKPT_DIR)
+
+        self.n_local_heads = self.n_heads // self.num_devices
 
         # Some consumers like SentencePiece only accept str not Path for files
         self.model_base_path = Path(self.DEFAULT_CKPT_DIR)
@@ -219,6 +222,8 @@ class TtModelArgs:
                 fp32_dest_acc_en=False,
                 packer_l1_acc=False,
             )
+
+            self.model_config["COMPUTE_KERNEL_CONFIG_HIFI2"] = self.compute_kernel_config_hifi2
 
             # Chunk values based on what works best empirically
             self.model_config["SDPA_PROGCFG"] = lambda seqlen: ttnn.SDPAProgramConfig(
@@ -383,7 +388,7 @@ class TtModelArgs:
             )
 
             self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
-                shape=(math.ceil(self.n_heads / 32) * 32, self.head_dim),  # self.n_heads padded to tile size
+                shape=(math.ceil(self.n_local_heads / 32) * 32, self.head_dim),  # self.n_heads padded to tile size
                 core_grid=core_grid_by_batch,
                 strategy=ttnn.ShardStrategy.HEIGHT,
                 orientation=ttnn.ShardOrientation.ROW_MAJOR,
@@ -509,6 +514,50 @@ class TtModelArgs:
                 in0_block_w=1,
                 fuse_batch=False,
             )
+
+            # RMS NORM
+            norm_shard_height = self.tile_size
+            shard_width_hidden_dim_across_32_cores = self.dim // norm_shard_height
+            norm_core_grid = ttnn.CoreGrid(x=8, y=norm_shard_height // 8)
+            self.model_config["SHARDED_NORM_INPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
+                shape=(norm_shard_height, shard_width_hidden_dim_across_32_cores),
+                core_grid=norm_core_grid,
+                strategy=ttnn.ShardStrategy.WIDTH,
+                orientation=ttnn.ShardOrientation.ROW_MAJOR,
+                use_height_and_width_as_shard_shape=True,
+            )
+            self.model_config["SHARDED_NORM_PRGM_CFG"] = ttnn.LayerNormShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=[norm_core_grid.x, norm_core_grid.y],
+                subblock_w=shard_width_hidden_dim_across_32_cores // self.tile_size,
+                block_h=norm_shard_height // self.tile_size,
+                block_w=shard_width_hidden_dim_across_32_cores // self.tile_size,
+                inplace=False,
+            )
+            self.model_config["SHARDED_NORM_OUTPUT_MEMCFG"] = self.model_config["SHARDED_ATTN_INPUT_MEMCFG"]
+
+            self.model_config["IS_DISTRIBUTED_NORM"] = lambda mode: self._is_distributed_norm(mode)
+            self.model_config["IS_2D_FRACTURING"] = all([dim > 1 for dim in self.mesh_device.shape])
+            self.model_config["CCL_TOPOLOGY"] = self._ccl_topology()
+            self.model_config["IS_MULTICHIP"] = self.num_devices > 1
+
+            print(f'is distributed norm: {self.model_config["IS_DISTRIBUTED_NORM"]("prefill")}')
+            print(f'is 2d fracturing: {self.model_config["IS_2D_FRACTURING"]}')
+            print(f'is ccl topo: {self.model_config["CCL_TOPOLOGY"]}')
+            print(f'is multichip: {self.model_config["IS_MULTICHIP"]}')
+
+    def _is_distributed_norm(self, mode):
+        if all([dim > 1 for dim in self.mesh_device.shape]):  # 2D grid
+            return True
+        elif self.hidden_dim >= 8192 and mode == "prefill":
+            return True
+        return False
+
+    def _ccl_topology(self):
+        if self.num_devices == 8:  # T3K
+            return ttnn.Topology.Ring
+        elif self.num_devices > 1:  # All other multi chip devices
+            return ttnn.Topology.Linear
+        return None
 
     def _set_llama_params_from_dict(self, params):
         # Text params

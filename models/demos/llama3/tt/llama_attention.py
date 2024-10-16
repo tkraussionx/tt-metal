@@ -192,16 +192,16 @@ class TtLlamaAttention(LightweightModule):
         # QKV matmuls
         # Use HiFi2 for DRAM-sharded matmuls as they are otherwise flop-bound. Loses 1 bit of activation precision.
         ###
-        x_sharded = ttnn.interleaved_to_sharded(x, self.model_config["SHARDED_ATTN_INPUT_MEMCFG"])
+        # x_sharded = ttnn.interleaved_to_sharded(x, self.model_config["SHARDED_ATTN_INPUT_MEMCFG"])
         xqkv_fused_sharded = ttnn.linear(
-            x_sharded,
+            x,
             self.wqkv,
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
             program_config=self.model_config["XQKV_DECODE_PROGCFG"],
             compute_kernel_config=self.compute_kernel_config_hifi2,
             dtype=ttnn.bfloat16,
         )
-        ttnn.deallocate(x_sharded)
+        ttnn.deallocate(x)
 
         xqkv_fused = ttnn.sharded_to_interleaved(xqkv_fused_sharded, ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(xqkv_fused_sharded)
@@ -319,22 +319,49 @@ class TtLlamaAttention(LightweightModule):
         )  # seqlen, 1, batch, hidden_size
 
         ttnn.deallocate(attn_output_cat)
-        dense_out = ttnn.sharded_to_interleaved(dense_out_sharded, ttnn.L1_MEMORY_CONFIG)
+        dense_out = ttnn.sharded_to_interleaved(dense_out_sharded, ttnn.L1_MEMORY_CONFIG)  # TODO: Remove?
 
         ttnn.deallocate(attn_output_cat)
         ttnn.deallocate(dense_out_sharded)
 
         # All reduce
-        if self.num_devices > 1:
-            dense_out_gathered = ttnn.all_gather(dense_out, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+        if self.model_config["CCL_TOPOLOGY"] == ttnn.Topology.Ring:
+            # Ring topology supports reduce scatter
+            dense_out_reduced = ttnn.reduce_scatter(
+                dense_out,
+                scatter_dim=3,
+                math_op=ttnn.ReduceType.Sum,
+                num_links=1,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,  # TODO: why dram??
+            )
+            ttnn.deallocate(dense_out)
+            return dense_out_reduced
+        elif self.model_config["IS_MULTICHIP"]:
+            dense_out_gathered = ttnn.all_gather(
+                dense_out, dim=1, num_links=1, topology=self.model_config["CCL_TOPOLOGY"]
+            )
             dense_out_reduced = ttnn.experimental.fast_reduce_nc(
                 dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
             )
+            # TODO: selection matmul for N300 and TG
             ttnn.deallocate(dense_out)
             ttnn.deallocate(dense_out_gathered)
+
             return dense_out_reduced
         else:
             return dense_out
+
+        # # All reduce
+        # if self.num_devices > 1:
+        #     dense_out_gathered = ttnn.all_gather(dense_out, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+        #     dense_out_reduced = ttnn.experimental.fast_reduce_nc(
+        #         dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
+        #     )
+        #     ttnn.deallocate(dense_out)
+        #     ttnn.deallocate(dense_out_gathered)
+        #     return dense_out_reduced
+        # else:
+        #     return dense_out
 
     def forward_prefill(self, x_11SH, rot_mats, transformation_mats, user_id: int = 0, page_table=None):
         seq_len = x_11SH.shape[-2]
@@ -486,13 +513,28 @@ class TtLlamaAttention(LightweightModule):
         ttnn.deallocate(attn_output_11SH)
 
         # All reduce
-        if self.num_devices > 1:
-            dense_out_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1, topology=ttnn.Topology.Linear)
+        if self.model_config["CCL_TOPOLOGY"] == ttnn.Topology.Ring:
+            # Ring topology supports reduce scatter
+            dense_out_reduced = ttnn.reduce_scatter(
+                output_11SH,
+                scatter_dim=3,
+                math_op=ttnn.ReduceType.Sum,
+                num_links=1,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,  # TODO: why dram??
+            )
+            ttnn.deallocate(output_11SH)
+            return dense_out_reduced
+        elif self.model_config["IS_MULTICHIP"]:
+            dense_out_gathered = ttnn.all_gather(
+                output_11SH, dim=1, num_links=1, topology=self.model_config["CCL_TOPOLOGY"]
+            )
             dense_out_reduced = ttnn.experimental.fast_reduce_nc(
                 dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
             )
+            # TODO: selection matmul for N300 and TG
             ttnn.deallocate(output_11SH)
             ttnn.deallocate(dense_out_gathered)
+
             return dense_out_reduced
         else:
             return output_11SH

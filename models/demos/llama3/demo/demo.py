@@ -113,7 +113,7 @@ def preprocess_inputs_prefill(
     )
 
 
-def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_ci_env, num_batches, print_to_file):
+def run_llama_demo(user_input, batch_size, layers, mesh_device, instruct_mode, is_ci_env, num_batches, print_to_file):
     # Creat batch output file
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_directory = "models/demos/llama3/demo/output"
@@ -149,7 +149,7 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
     model_args = TtModelArgs(mesh_device, instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    # model_args.n_layers = 1
+    model_args.n_layers = layers
 
     logger.info("Loading weights...")
     state_dict = model_args.load_state_dict()
@@ -229,8 +229,7 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
                 ] = 0  # Zero out the tokens after the prefill length
 
             prefill_input = prepare_inputs_ttnn_prefill(
-                pt_prefill_input[batch_id],
-                mesh_device,
+                pt_prefill_input[batch_id], mesh_device, model_config=model_args.model_config
             )
 
             tt_out = tt_model(
@@ -455,6 +454,14 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
 
 
 @pytest.mark.parametrize(
+    "layers",
+    [
+        1,
+        2,
+        80,
+    ],
+)
+@pytest.mark.parametrize(
     "input_prompts, instruct_weights, num_batches",
     [
         ("models/demos/llama3/demo/input_data_prefill_128.json", False, 1),
@@ -479,15 +486,16 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
     ],
     indirect=True,
 )
-def test_llama_demo(mesh_device, use_program_cache, input_prompts, instruct_weights, is_ci_env, num_batches):
+def test_llama_demo(mesh_device, use_program_cache, input_prompts, instruct_weights, is_ci_env, num_batches, layers):
     if is_ci_env and instruct_weights == False:
         pytest.skip("CI demo test only runs instruct weights to reduce CI pipeline load (both are supported)")
 
     mesh_device.enable_async(True)
 
-    return run_llama_demo_n300(
+    return run_llama_demo(
         user_input=input_prompts,
         batch_size=1,
+        layers=layers,
         mesh_device=mesh_device,
         instruct_mode=instruct_weights,
         is_ci_env=is_ci_env,
