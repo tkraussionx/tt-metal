@@ -46,6 +46,10 @@ def convert_to_numeric_dict(input_dict):
         # Convert other numerical string values to int
         elif value in memory_config_mapping:
             numeric_dict[key] = memory_config_mapping[value]
+        elif "input_shape" in key:
+            shape_values = list(map(int, value.strip("()").split(", ")))
+            numeric_dict["height"] = shape_values[-2]
+            numeric_dict["width"] = shape_values[-1]
         else:
             numeric_dict[key] = int(value) if value.isdigit() else value
 
@@ -155,8 +159,8 @@ def check_tree(results, module_name):
 
             for i in range(len(y_binned)):
                 if y_binned[i] != y_pred[i]:
-                    # for j in range(len(X[i])):
-                    #     print(list(results[0].keys())[j], ":", X[i][j])
+                    for j in range(len(X[i])):
+                        print(list(results[0].keys())[j], ":", X[i][j])
                     print(y_binned[i], y_pred[i], y[i])
             accuracy = accuracy_score(y_binned, y_pred)
             print(f"accuracy score: {accuracy}")

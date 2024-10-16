@@ -118,6 +118,11 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
     output_queue = Queue()
     p = None
     timeout = get_timeout(test_module)
+
+    module_name = test_module.__name__.split(".")[-1]
+    tracy_file_name = f"helper_{module_name}.txt"
+    if os.path.exists(tracy_file_name):
+        os.remove(tracy_file_name)
     suite_pbar = pbar_manager.counter(total=len(test_vectors), desc=f"Suite: {suite_name}", leave=False)
     for test_vector in test_vectors:
         if DRY_RUN:
