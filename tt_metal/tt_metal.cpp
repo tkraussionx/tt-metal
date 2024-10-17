@@ -970,14 +970,18 @@ KernelHandle CreateEthernetKernel(
     const KernelSource &kernel_src,
     const CoreRangeSet &core_range_set,
     const EthernetConfig &config) {
-    KernelHandle kernel_handle;
+    HalProgrammableCoreType eth_core_type = config.eth_mode == Eth::IDLE ? HalProgrammableCoreType::IDLE_ETH : HalProgrammableCoreType::ACTIVE_ETH;
     std::shared_ptr<Kernel> kernel = std::make_shared<EthernetKernel>(kernel_src, core_range_set, config);
-    if (config.eth_mode == Eth::IDLE) {
-        kernel_handle = detail::AddKernel(program, kernel, HalProgrammableCoreType::IDLE_ETH);
-    } else {
-        kernel_handle = detail::AddKernel(program, kernel, HalProgrammableCoreType::ACTIVE_ETH);
-    }
-    return kernel_handle;
+
+    TT_FATAL(
+        utils::underlying_type<DataMovementProcessor>(config.processor) < hal.get_processor_classes_count(eth_core_type),
+        "EthernetKernel creation failure: {} kernel cannot target processor {} because Ethernet core only has {} processors. "
+        "Update DataMovementProcessor in the config.",
+        kernel->name(), magic_enum::enum_name(config.processor), hal.get_processor_classes_count(eth_core_type));
+
+
+
+    return detail::AddKernel(program, kernel, eth_core_type);;
 }
 
 KernelHandle CreateKernel(

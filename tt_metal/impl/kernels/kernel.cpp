@@ -326,7 +326,13 @@ void DataMovementKernel::generate_binaries(Device *device, JitBuildOptions &buil
 void EthernetKernel::generate_binaries(Device *device, JitBuildOptions &build_options) const {
     jit_build_genfiles_kernel_include(device->build_env(), *this, this->kernel_src_);
     device->generate_device_headers(build_options.path);
-    int erisc_id = this->config_.eth_mode == Eth::IDLE ? 1 : 0;
+    // TODO almeet: clean this up and use HAL
+    int erisc_id;
+    if (this->config_.eth_mode == Eth::IDLE) {
+        erisc_id = this->config_.processor == DataMovementProcessor::RISCV_0 ? 1 : 2;
+    } else {
+        erisc_id = 0;
+    }
     jit_build(device->build_kernel_state(JitBuildProcessorType::ETHERNET, erisc_id), this);
 }
 
