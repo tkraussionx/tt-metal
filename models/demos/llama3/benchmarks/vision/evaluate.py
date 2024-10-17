@@ -13,6 +13,9 @@ from mmmu_utils import (
     eval_multi_choice,
     eval_open,
     parse_multi_choice_response,
+    parse_open_response,
+    process_prompt_mmmu,
+    get_multi_choice_info,
 )
 
 
@@ -27,7 +30,7 @@ def main(args):
     else:
         dataset = load_dataset(args.dataset, args.setting, split=args.split)
 
-    print(f"Loaded dataset with {len(samples)} samples")
+    print(f"Loaded dataset with {len(dataset)} samples")
 
     # Load model
     model = Llama.build(
@@ -42,28 +45,32 @@ def main(args):
     # Evaluate model
     correct_sum = 0
     with torch.no_grad():
-        for sample in tqdm(samples):
+        for sample in tqdm(dataset):
             if args.dataset == "MMMU/MMMU_Pro":
                 prompt, images = process_prompt(sample, args.setting)
                 dialog = [UserMessage(content=[ImageMedia(image=image) for image in images] + [prompt])]
             else:
                 sample = process_single_sample(sample, args)
                 prompt, image = process_prompt_mmmu(sample)
+                print(prompt)
                 dialog = [UserMessage(content=[ImageMedia(image=image), prompt])]
             result = model.chat_completion(dialog, max_gen_len=None, temperature=0.0, top_p=0.0)
             response = result.generation.content
 
-            if args.dataset == "MMMU/MMMU_Pro" or sample["question_type"] == "multiple-choice":
+            if args.setting == "standard" or (
+                args.dataset == "MMMU/MMMU" and sample["question_type"] == "multiple-choice"
+            ):
                 index2ans, all_choices = get_multi_choice_info(sample["options"])
                 pred_ans = parse_multi_choice_response(response, all_choices, index2ans)
-                correct = eval_multi_choice(pred_ans, sample["ans"])
+                correct = eval_multi_choice(sample["answer"], pred_ans)
             else:
-                correct = eval_open(pred_ans, sample["ans"])
+                pred_ans = parse_open_response(response)
+                correct = eval_open(sample["answer"], pred_ans)
 
             correct_sum += int(correct)
 
     # Print accuracy
-    print(f"Accuracy: {correct_sum / len(samples):.2f}")
+    print(f"Accuracy: {correct_sum / len(dataset):.2f}")
 
 
 # Argument parser for command-line arguments
