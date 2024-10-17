@@ -1,13 +1,12 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-import torch
 import ttnn
-from typing import Optional
 from models.demos.llama3.tt.llama_attention import TtLlamaAttention
 from models.demos.llama3.tt.llama_mlp import TtLlamaMLP
 from models.common.rmsnorm import RMSNorm
 from models.common.lightweightmodule import LightweightModule
+from models.demos.llama3.tt.distributed_norm import DistributedNorm
 
 
 class TtTransformerBlock(LightweightModule):
@@ -48,48 +47,36 @@ class TtTransformerBlock(LightweightModule):
             dtype=dtype,
             model_config=self.model_config,
         )
-        self.attention_norm = RMSNorm(
-            device=mesh_device,
-            dim=args.dim,
-            state_dict=state_dict,
-            state_dict_prefix=args.get_state_dict_prefix("", layer_num),
-            weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=ttnn.bfloat16,
-            weight_key="attention_norm",
-            model_config=self.model_config,
-            is_distributed=self.args.is_distributed_norm,
+        self.attention_norm = DistributedNorm(
+            RMSNorm(
+                device=mesh_device,
+                dim=args.dim,
+                state_dict=state_dict,
+                state_dict_prefix=args.get_state_dict_prefix("", layer_num),
+                weight_cache_path=None if args.dummy_weights else weight_cache_path,
+                weight_dtype=ttnn.bfloat16,
+                weight_key="attention_norm",
+                is_distributed=self.args.is_distributed_norm,
+                sharded_program_config=self.model_config["SHARDED_NORM_ATTN_PRGM_CFG"],
+                sharded_output_config=self.model_config["SHARDED_ATTN_INPUT_MEMCFG"],
+            ),
+            args,
         )
-        self.ff_norm = RMSNorm(
-            device=mesh_device,
-            dim=args.dim,
-            state_dict=state_dict,
-            state_dict_prefix=args.get_state_dict_prefix("", layer_num),
-            weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=ttnn.bfloat16,
-            weight_key="ffn_norm",
-            model_config=self.model_config,
-            is_distributed=self.args.is_distributed_norm,
+        self.ff_norm = DistributedNorm(
+            RMSNorm(
+                device=mesh_device,
+                dim=args.dim,
+                state_dict=state_dict,
+                state_dict_prefix=args.get_state_dict_prefix("", layer_num),
+                weight_cache_path=None if args.dummy_weights else weight_cache_path,
+                weight_dtype=ttnn.bfloat16,
+                weight_key="ffn_norm",
+                is_distributed=self.args.is_distributed_norm,
+                sharded_program_config=self.model_config["SHARDED_NORM_MLP_PRGM_CFG"],
+                sharded_output_config=self.model_config["SHARDED_MLP_INPUT_MEMCFG"],
+            ),
+            args,
         )
-
-    def decoder_norm(self, x, norm, mode):
-        """Apply a norm, possibly gathering inputs if required."""
-        mem_cfg = self.model_config["SHARDED_NORM_INPUT_MEMCFG"] if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
-
-        # Distributed norm already performs a gather
-        if self.args.is_multichip and not self.args.is_distributed_norm(mode):
-            x = ttnn.all_gather(x, dim=3, num_links=1, topology=self.args.ccl_topology, memory_config=mem_cfg)
-        elif mode == "decode":
-            # Gathered norms will be sharded for decode mode, so single-chip should be too
-            x = ttnn.interleaved_to_sharded(x, mem_cfg)
-
-        # x sharded in decode mode here
-        x = norm(x, mode=mode, in_sharded=(mode == "decode"), out_sharded=(mode == "decode"))
-
-        # Distributed norm already performs a gather
-        if self.args.is_distributed_norm(mode):
-            x = ttnn.all_gather(x, dim=3, num_links=1, topology=self.args.ccl_topology)
-
-        return x
 
     def forward(
         self,
@@ -101,17 +88,12 @@ class TtTransformerBlock(LightweightModule):
         mode="decode",
         page_table=None,
     ) -> ttnn.Tensor:
-        # print(f"mode: {mode}")
-        # print(x.shape)
-
         # Use L1 interleaved for decode because self.decoder_norm's gather requires interleaved inputs
         # FIXME: move to sharded residuals once support for this is added
         skip_mem_cfg = self.model_config["DEC_SKIP_OUTPUT_MEMCFG"] if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
 
-        # Attention Norm
-        attn_in = self.decoder_norm(x, self.attention_norm, mode)
-
-        # Attention module expects a list of inputs (multi-device support)
+        # Attention Norm and layer
+        attn_in = self.attention_norm(x, mode)
         attn_out = self.attention.forward(
             attn_in,
             current_pos,
@@ -123,11 +105,14 @@ class TtTransformerBlock(LightweightModule):
         )
 
         # Residual Add
+        print(f"{x.shape=}, {x.memory_config()=}")
+        print(f"{attn_out.shape=}, {attn_out.memory_config()=}")
+        print(f"{skip_mem_cfg=}")
         h = ttnn.add(x, attn_out, memory_config=skip_mem_cfg)
         ttnn.deallocate(attn_out)
 
-        # FF Norm
-        ff_in = self.decoder_norm(h, self.ff_norm, mode)
+        # FF Norm and Layer
+        ff_in = self.ff_norm(h, mode)
         ff_out = self.feed_forward.forward(ff_in, mode)
 
         # Residual Add

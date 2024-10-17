@@ -49,7 +49,8 @@ class TtLlamaAttention(LightweightModule):
         self.compute_kernel_config_hifi4 = configuration.compute_kernel_config_hifi4
 
         self.model_config = configuration.get_model_config()
-        self.ccl_topology = configuration.ccl_topology
+        self.ccl_topology = configuration.ccl_topology()
+        self.is_multichip = configuration.is_multichip
 
         layer_name = configuration.get_state_dict_prefix(self.__class__.__name__, layer_num)
         if configuration.dummy_weights or (weight_cache_path is None):
@@ -185,7 +186,7 @@ class TtLlamaAttention(LightweightModule):
         page_table=None,
     ) -> ttnn.Tensor:
         """
-        x: (seq_len, 1, batch, hidden_dim)
+        x: (seq_len, 1, batch, dim)
         current_pos: (batch_size), current token position in the sequence for each user
         """
         assert self.max_batch_size * self.n_kv_heads < 64
@@ -338,7 +339,7 @@ class TtLlamaAttention(LightweightModule):
             )
             ttnn.deallocate(dense_out)
             return dense_out_reduced
-        elif self.configuration.is_multichip:
+        elif self.is_multichip:
             dense_out_gathered = ttnn.all_gather(dense_out, dim=1, num_links=1, topology=self.ccl_topology)
             dense_out_reduced = ttnn.experimental.fast_reduce_nc(
                 dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
@@ -512,12 +513,14 @@ class TtLlamaAttention(LightweightModule):
             )
             ttnn.deallocate(output_11SH)
             return dense_out_reduced
-        elif self.configuration.is_multichip:
+        elif self.is_multichip:
+            assert (
+                False
+            ), "n300 not supported. TODO: selection matmul for N300 and TG OR BETTER: use reduce scatter as soon as we have it working"
             dense_out_gathered = ttnn.all_gather(output_11SH, dim=1, num_links=1, topology=self.ccl_topology)
             dense_out_reduced = ttnn.experimental.fast_reduce_nc(
                 dense_out_gathered, dims=[1], output=None, compute_kernel_config=None
             )
-            # TODO: selection matmul for N300 and TG OR BETTER: use reduce scatter as soon as we have it working
             ttnn.deallocate(output_11SH)
             ttnn.deallocate(dense_out_gathered)
 
