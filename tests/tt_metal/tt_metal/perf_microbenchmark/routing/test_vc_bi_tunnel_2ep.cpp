@@ -51,6 +51,8 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
     constexpr uint32_t default_rx_disable_header_check = 0;
+    constexpr uint32_t default_tx_skip_pkt_content_gen = 0;
+    constexpr uint32_t default_check_txrx_timeout = 1;
 
     constexpr uint32_t src_endpoint_start_id = 0xaa;
     constexpr uint32_t dest_endpoint_start_id = 0xbb;
@@ -135,14 +137,14 @@ int main(int argc, char **argv) {
     uint32_t test_device_id = test_args::get_command_option_uint32(input_args, "--device_id", default_test_device_id);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
     uint32_t rx_disable_header_check = test_args::get_command_option_uint32(input_args, "--rx_disable_header_check", default_rx_disable_header_check);
-    bool tx_skip_pkt_content_gen = test_args::has_command_option(input_args, "--tx_skip_pkt_content_gen");
+    uint32_t tx_skip_pkt_content_gen = test_args::get_command_option_uint32(input_args, "--tx_skip_pkt_content_gen", default_tx_skip_pkt_content_gen);
     std::string output_dir = test_args::get_command_option(input_args, "--output_dir", std::string(default_output_dir));
-    bool check_txrx_timeout = test_args::has_command_option(input_args, "--check_txrx_timeout");
+    uint32_t check_txrx_timeout = test_args::get_command_option_uint32(input_args, "--check_txrx_timeout", default_check_txrx_timeout);
     uint8_t tx_pkt_dest_size_choice = (uint8_t) test_args::get_command_option_uint32(input_args, "--tx_pkt_dest_size_choice", default_tx_pkt_dest_size_choice);
     uint32_t tx_data_sent_per_iter_low = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_low", default_tx_data_sent_per_iter_low);
     uint32_t tx_data_sent_per_iter_high = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_high", default_tx_data_sent_per_iter_high);
 
-    assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
+    assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check == 1 || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
 
     bool pass = true;
 
@@ -201,7 +203,7 @@ int main(int argc, char **argv) {
         CoreCoord demux_phys_core = device->worker_core_from_logical_core(demux_core);
         CoreCoord demux_phys_core_r = device_r->worker_core_from_logical_core(demux_core);
 
-        if (check_txrx_timeout) {
+        if (check_txrx_timeout == 1u) {
             defines["CHECK_TIMEOUT"] = "";
         }
 
@@ -375,7 +377,7 @@ int main(int argc, char **argv) {
             );
         }
 
-        if (check_txrx_timeout) {
+        if (check_txrx_timeout == 1u) {
             defines.erase("CHECK_TIMEOUT");
         }
 
@@ -898,8 +900,8 @@ int main(int argc, char **argv) {
             config["tunneler_queue_size_bytes"] = tunneler_queue_size_bytes;
             config["rx_disable_data_check"] = rx_disable_data_check;
             config["rx_disable_header_check"] = rx_disable_header_check;
-            config["tx_skip_pkt_content_gen"] = static_cast<int>(tx_skip_pkt_content_gen);
-            config["check_txrx_timeout"] = static_cast<int>(check_txrx_timeout);
+            config["tx_skip_pkt_content_gen"] = tx_skip_pkt_content_gen;
+            config["check_txrx_timeout"] = check_txrx_timeout;
             config["tx_pkt_dest_size_choice"] = to_string(static_cast<pkt_dest_size_choices_t>(tx_pkt_dest_size_choice));
             config["tx_data_sent_per_iter_low"] = tx_data_sent_per_iter_low;
             config["tx_data_sent_per_iter_high"] = tx_data_sent_per_iter_high;
@@ -1107,7 +1109,7 @@ int main(int argc, char **argv) {
             if (pass) {
                 summary["config"] = config;
                 summary["stat"] = stat;
-                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}_pw{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, static_cast<int>(tx_skip_pkt_content_gen), static_cast<int>(check_txrx_timeout), tx_pkt_dest_size_choice, max_packet_size_words));
+                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}_pw{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, tx_skip_pkt_content_gen, check_txrx_timeout, tx_pkt_dest_size_choice, max_packet_size_words));
                 if (out.fail()) {
                     throw std::runtime_error("output file open failure");
                 }
