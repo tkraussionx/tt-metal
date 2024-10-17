@@ -51,8 +51,10 @@ class TtTransformer(LightweightModule):
             state_dict=state_dict,
             state_dict_prefix=args.get_state_dict_prefix("", None),
             weight_cache_path=None if args.dummy_weights else weight_cache_path,
-            weight_dtype=dtype,
+            weight_dtype=ttnn.bfloat16,
             weight_key="norm",
+            model_config=self.model_config,
+            is_distributed=self.args.is_distributed_norm,
         )
 
         self.lm_head = LMHead(
@@ -79,16 +81,35 @@ class TtTransformer(LightweightModule):
             x = layer(x, current_pos, rot_mat, transformation_mats, user_id, mode, page_table)
         if mode == "prefill" and get_last_token == -1:
             return x
-
         # Slicing the tensor to the nearest ceiling/floor multiples of 32 for the prefill_len, to get the last token
         if get_last_token != -1:
-            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, self.args.dim))
+            x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, x.shape[-1]))
 
-        x = self.norm(x)
-        output = self.lm_head(x)
+        if mode == "prefill":
+            all_gather_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
+        else:
+            all_gather_mem_cfg = self.model_config["SHARDED_NORM_INPUT_MEMCFG"]
 
-        ttnn.deallocate(x)
+        if self.args.is_multichip and not self.args.is_distributed_norm(mode):
+            x_norm_in = ttnn.all_gather(
+                x, dim=3, num_links=1, topology=self.args.ccl_topology, memory_config=all_gather_mem_cfg
+            )
+        else:
+            x_norm_in = x
+        x_norm = self.norm(x_norm_in, mode=mode, in_sharded=(mode == "decode"), out_sharded=(mode == "decode"))
+        ttnn.deallocate(x_norm_in)
 
+        if self.args.is_distributed_norm(mode):
+            x_lm_head_in = ttnn.all_gather(x_norm, dim=3, num_links=1, topology=self.args.ccl_topology)
+            ttnn.deallocate(x_norm)
+        else:
+            x_lm_head_in = x_norm
+
+        if mode == "prefill":
+            x_lm_head_in = ttnn.interleaved_to_sharded(x_lm_head_in, self.model_config["LM_HEAD_INPUT_MEMCFG"])
+
+        output = self.lm_head(x_lm_head_in)
+        ttnn.deallocate(x_lm_head_in)
         return output
 
 
@@ -169,7 +190,6 @@ class LMHead(nn.Module):
         ]
 
     def forward(self, x: ttnn.Tensor):
-        x = ttnn.interleaved_to_sharded(x, self.args.get_model_config()["LM_HEAD_INPUT_MEMCFG"])
         outputs = []
         for weight, pc in zip(self.output_weights, self.program_configs):
             output = ttnn.linear(
@@ -184,5 +204,4 @@ class LMHead(nn.Module):
 
         # Concatenate the outputs
         output = ttnn.concat(outputs, dim=-1, memory_config=ttnn.L1_MEMORY_CONFIG)
-
         return output
