@@ -136,6 +136,8 @@ on:
           - eltwise.unary_backward.hardsigmoid_bw.hardsigmoid_bw
           - eltwise.unary_backward.lgamma_bw.lgamma_bw
           - eltwise.unary_backward.multigammaln_bw.multigammaln_bw
+          - eltwise.unary_backward.silu_bw.silu_bw
+          - eltwise.unary_backward.selu_bw.selu_bw
           - eltwise.unary.lgamma
           - eltwise.unary.logit
           - eltwise.unary.mish
