@@ -212,7 +212,10 @@ def mesh_device(request, silicon_arch_name, silicon_arch_wormhole_b0, device_par
     logger.debug(f"multidevice with {mesh_device.get_num_devices()} devices is created")
     yield mesh_device
 
+    logger.info(f"Mesh devicec close")
+
     for device in mesh_device.get_devices():
+        logger.info(f"Dumping profiler for device {device}")
         ttnn.DumpDeviceProfiler(device)
 
     ttnn.close_mesh_device(mesh_device)
