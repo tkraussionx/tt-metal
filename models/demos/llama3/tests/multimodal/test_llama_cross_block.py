@@ -11,7 +11,7 @@ import importlib
 llama_reference_mod = importlib.import_module(
     "models.demos.t3000.llama2_70b.reference.llama-models.models.llama3.reference_impl.multimodal.model"
 )
-from models.demos.llama3.tt.llama_cross_block import TtLlamaCrossAttentionTransformerBlock
+from models.demos.llama3.tt.multimodal.llama_cross_block import TtLlamaCrossAttentionTransformerBlock
 from models.demos.llama3.tt.model_config import TtModelArgs
 from models.demos.llama3.tt.llama_common import (
     prepare_inputs_ttnn_prefill,
@@ -27,7 +27,7 @@ from models.utility_functions import skip_for_grayskull
 @skip_for_grayskull("Requires wormhole_b0 to run")
 @pytest.mark.parametrize(
     "vision_seq_len",
-    (5120,),
+    (4224,),
 )
 @pytest.mark.parametrize(
     "text_seq_len",

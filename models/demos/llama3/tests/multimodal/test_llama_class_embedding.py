@@ -26,7 +26,7 @@ from models.utility_functions import (
 from models.utility_functions import (
     nearest_32,
 )
-from models.demos.llama3.tt.llama_class_embedding import (
+from models.demos.llama3.tt.multimodal.llama_class_embedding import (
     TtLlamaClassEmbedding,
 )
 from models.demos.llama3.tt.model_config import TtModelArgs
@@ -137,7 +137,7 @@ def test_llama_class_embedding_inference(
     tt_output = tt_model(tt_input_tensor)
 
     ##### Check the outputs #####
-    print("Checking outputs")
+    logger.info("Checking outputs")
     out = ttnn.from_device(tt_output)
     tt_output_torch = ttnn.to_torch(out, mesh_composer=ConcatMeshToTensor(mesh_device, dim=-1))
 
