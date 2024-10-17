@@ -538,3 +538,35 @@ def test_pool_core_nondivis(
     assert isclose
     if dtype == ttnn.bfloat16:
         assert isequal
+
+
+@pytest.mark.parametrize(
+    "act_shape, kernel_size, padding, stride",
+    [((1, 128, 7, 7), (5, 5), (2, 2), (1, 1))],
+)
+@pytest.mark.parametrize(
+    "nblocks",
+    (1,),
+)
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16])
+@pytest.mark.parametrize("dilation", ((1, 1),))  ## default
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+def test_yolov11_maxpool(
+    act_shape,
+    kernel_size,
+    padding,
+    stride,
+    dilation,
+    nblocks,
+    device,
+    dtype,
+):
+    run_max_pool(
+        act_shape,
+        kernel_size,
+        padding,
+        stride,
+        dilation,
+        device,
+        dtype,
+    )
