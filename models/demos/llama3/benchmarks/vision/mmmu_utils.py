@@ -322,6 +322,13 @@ def parse_open_response(response):
 
     # content = content.strip("\n").strip(".").strip(" ")
     def get_key_subresponses(response):
+        last_answer_pos = response.rfind("Answer:")
+        if last_answer_pos != -1:
+            # Extract the string after "Answer:"
+            answer_str = response[last_answer_pos + len("Answer:") :].strip()
+
+            return [answer_str]
+
         key_responses = []
         response = response.strip().strip(".").lower()
         sub_responses = re.split(r"\.\s(?=[A-Z])|\n", response)

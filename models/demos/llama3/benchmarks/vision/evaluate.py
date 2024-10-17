@@ -52,7 +52,6 @@ def main(args):
             else:
                 sample = process_single_sample(sample, args)
                 prompt, image = process_prompt_mmmu(sample)
-                print(prompt)
                 dialog = [UserMessage(content=[ImageMedia(image=image), prompt])]
             result = model.chat_completion(dialog, max_gen_len=None, temperature=0.0, top_p=0.0)
             response = result.generation.content
