@@ -11,22 +11,24 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in {
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.mkShell.override { stdenv = pkgs.clang17Stdenv; } {
           buildInputs = with pkgs; [
             cmake
-            gcc
-            clang_17
             ninja
             gdb
             lldb
             libcxx
             numactl # for libnuma
+            glib
+            glibc
           ];
 
+          # export CMAKE_LIBRARY_PATH=$CMAKE_LIBRARY_PATH:${pkgs.libcxx}/lib
+          # export CMAKE_CXX_FLAGS="-stdlib=libc++"
+          # export CMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
           shellHook = ''
             echo "Welcome to the C++ development environment!"
             echo "CMake and necessary build tools are available."
-            export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:${pkgs.libcxx}/lib/cmake
           '';
         };
       }
