@@ -371,10 +371,13 @@ class TtLlamaModel_optimized:
         kv_cache=None,
     ) -> ttnn.Tensor:
         ### Run all layers
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             xs = layer(
                 xs, rot_mats, start_pos, cache_idxs=cache_idxs, page_table=page_table, kv_cache=kv_cache, mode="decode"
             )  # xs is sharded
+
+            for device in self.mesh_device.get_devices():
+                ttnn.DumpDeviceProfiler(device)
 
         xs = ttnn.all_gather(
             xs,

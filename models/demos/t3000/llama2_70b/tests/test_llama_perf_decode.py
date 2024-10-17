@@ -198,8 +198,16 @@ def run_test_LlamaModel_end_to_end(
     ttnn.end_trace_capture(mesh_device, trace_id, cq_id=0)
 
     ##### Execute Trace #####
+
+    from tracy import Profiler, signpost
+
+    # tracy_profiler = Profiler()
+    n_iters = 1
+
     logger.info("Executing trace")
     profiler.start(f"end_to_end_inference")
+    # tracy_profiler.enable()
+    signpost(header="START_DECODE_RUN")
     for i in range(n_iters):
         logits = model.decode_forward_trace(
             tokens,
@@ -212,6 +220,8 @@ def run_test_LlamaModel_end_to_end(
             page_table=page_table,
             tt_page_table=tt_page_table,
         )
+    signpost(header="END_DECODE_RUN")
+    # tracy_profiler.disable()
     profiler.end(f"end_to_end_inference")
     ttnn.release_trace(mesh_device, trace_id)
 
