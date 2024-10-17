@@ -19,8 +19,8 @@ from models.demos.t3000.llama2_70b.reference.llama.llama31_8b.tokenizer import T
 
 @torch.no_grad()
 @pytest.mark.timeout(900)
-@pytest.mark.parametrize("prefill_len", [512])
-@pytest.mark.parametrize("decode_len", [400])
+@pytest.mark.parametrize("prefill_len", [0])
+@pytest.mark.parametrize("decode_len", [1000])
 @pytest.mark.parametrize(
     "mesh_device",
     [
@@ -116,6 +116,8 @@ def test_tt_model_accuracy(mesh_device, prefill_len, decode_len, use_program_cac
 
     top1_correct = []
     top5_correct = []
+    errors = []  # New list to store error information
+
     for i in range(generation_length):
         # Input is reference token at each step
         ref_token = input_ids[0, prefill_len + i].item()
@@ -150,7 +152,7 @@ def test_tt_model_accuracy(mesh_device, prefill_len, decode_len, use_program_cac
         ttnn.plus_one(current_pos)
 
         # Reset rotation matrix every 100 iterations
-        if i % 100 == 0:
+        if i % 100 == 0:  # Doing this every 100 iterations as in demo takes top5 from 99% ->
             current_rot_mat, rot_matrix_reset = get_single_rot_mat(
                 model_args.head_dim,
                 mesh_device,
@@ -161,7 +163,6 @@ def test_tt_model_accuracy(mesh_device, prefill_len, decode_len, use_program_cac
 
         # Get reference top5 tokens and probabilities for this position
         ref_top5_tokens = top5_tokens[prefill_len + i]
-        # ref_top5_probs = top5_probs[0, prefill_len + i]
 
         # Check top-1 and top-5 accuracy
         top1_match = tt_argmax_token.item() == ref_top5_tokens[0].item()
@@ -172,19 +173,36 @@ def test_tt_model_accuracy(mesh_device, prefill_len, decode_len, use_program_cac
             tt_argmax_token.item() == input_ids[0, prefill_len + i + 1].item() if i < generation_length - 1 else False
         )
 
+        # Store error information if top5 is incorrect
+        if not top5_match:
+            context_start = max(0, prefill_len + i - 9)
+            context_tokens = input_ids[0, context_start : prefill_len + i + 1]
+            context_text = tokenizer.decode(context_tokens.tolist())
+            incorrect_token = tokenizer.decode([tt_argmax_token])
+            expected_tokens = [tokenizer.decode([t]) for t in ref_top5_tokens]
+            errors.append(
+                {
+                    "position": prefill_len + i,
+                    "context": context_text,
+                    "incorrect": incorrect_token,
+                    "expected": expected_tokens,
+                    "predicted_id": tt_argmax_token.item(),
+                    "expected_ids": ref_top5_tokens.tolist(),
+                }
+            )
+
         # Decode tokens to text
         tt_argmax_text = tokenizer.decode([tt_argmax_token])
         true_text = tokenizer.decode([true_token]) if true_token is not None else "N/A"
         ref_top5_text = [tokenizer.decode([t]) for t in ref_top5_tokens]
 
         # Prepare table row
-        sanitize = lambda x: x.replace("\n", "").replace("\r", "").replace("\x0c", "")
+        sanitize = lambda x: repr(x)[1:-1]  # Use repr() and remove the outer quotes
         progress_str = f"{i+1}/{generation_length}"
         correct = "x" if top1_match else ("-" if top5_match else ("!" if true_match else " "))
         tt_argmax_text = sanitize(tt_argmax_text)
         true_text = sanitize(true_text)
-        ref_top5_str = " ".join(f"{t:<14}" for t in ref_top5_text)
-        ref_top5_str = sanitize(ref_top5_str)
+        ref_top5_str = " ".join(f"{sanitize(t):<14}" for t in ref_top5_text)
 
         # Print table row
         print(f"{progress_str:<15}{correct:<8}{true_text:<15}{tt_argmax_text:<15}{ref_top5_str}")
@@ -198,16 +216,29 @@ def test_tt_model_accuracy(mesh_device, prefill_len, decode_len, use_program_cac
         top1_acc = 100 * sum(top1_correct[start:end]) / (end - start)
         top5_acc = 100 * sum(top5_correct[start:end]) / (end - start)
         max_width = len(str(decode_len))
-        logger.info(
+        print(
             f"Tokens {start:{max_width}d}-{end:{max_width}d}: Top-1 accuracy: {top1_acc:3.0f} %, Top-5 accuracy: {top5_acc:3.0f} %"
         )
 
     # Report total accuracies
     total_top1_acc = 100 * sum(top1_correct) / num_tokens
     total_top5_acc = 100 * sum(top5_correct) / num_tokens
-    logger.info(
+    print(
         f"Total tokens {num_tokens}: Top-1 accuracy: {total_top1_acc:3.0f} %, Top-5 accuracy: {total_top5_acc:3.0f} %"
     )
+
+    # Print error summary
+    print("\nError Summary (only showing errors where reference top-1 matches true token):")
+    print("-" * 120)
+    for error in errors:
+        true_token = input_ids[0, error["position"] + 1].item()
+        if error["expected_ids"][0] == true_token:
+            sanitize = lambda x: repr(x)[1:-1]  # Use repr() and remove the outer quotes
+            context = sanitize(error["context"])
+            incorrect = sanitize(error["incorrect"])
+            expected = " | ".join(sanitize(t) for t in error["expected"])
+            true_word = sanitize(tokenizer.decode([true_token]))
+            print(f"{error['position']}: {context}[{incorrect}] != [{expected}], true: [{true_word}]")
 
     # Optionally, you can add assertions to check if the accuracies meet expectations
     assert total_top1_acc > 0.2, f"Top-1 accuracy {total_top1_acc:.4f} is too low"
