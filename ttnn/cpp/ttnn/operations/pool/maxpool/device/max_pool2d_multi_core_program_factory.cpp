@@ -33,8 +33,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     uint32_t pad_w,
     uint32_t dilation_h,
     uint32_t dilation_w,
-    const MemoryConfig& out_mem_config,
-    uint32_t nblocks) {
+    const MemoryConfig& out_mem_config) {
 
     // This should allocate a DRAM buffer on the device
     Device* device = input.device();
@@ -69,14 +68,11 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     const bool is_large_kernel = kernel_size_hw > MAX_SMALL_KERNEL_SIZE_HW;
     const bool is_wide_reduction = out_ntiles_c > MAX_TILES_PER_REDUCTION;
 
-    TT_ASSERT(nblocks == 1, "Multiple blocks not yet supported");
-
     uint32_t tile_w = tt::constants::TILE_WIDTH;
     if (input_shape[3] < tt::constants::TILE_WIDTH) {
         TT_FATAL(input_shape[3] == 16, "Input channels should be 16 when less than a tile");
         tile_w = tt::constants::FACE_WIDTH;
     }
-    uint32_t out_w_loop_count = std::ceil((float)out_w / nblocks);
 
     // distributing out_hw across the grid
     auto grid_size = device->compute_with_storage_grid_size();
@@ -90,17 +86,10 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
 
     uint32_t ncores_w = grid_size.x;
 
-    // TODO: support generic nblocks
-    TT_ASSERT(
-        out_nhw_per_core % nblocks == 0,
-        "number of sticks per core ({}) should be divisible by nblocks ({})",
-        out_nhw_per_core,
-        nblocks);
-
     // CBs
-    uint32_t multi_buffering_factor = 2;
+    uint32_t multi_buffering_factor = 1;
 
-    uint32_t split_reader = 1;
+    uint32_t split_reader = 0;
 
     // scalar CB as coefficient of reduce
     uint32_t in_scalar_cb_id = tt::CB::c_in4;
@@ -153,7 +142,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     } else {
         if (is_wide_reduction) {
             in_cb_sz = MAX_TILES_PER_REDUCTION * tt::constants::TILE_WIDTH * kernel_size_hw_padded;
-            out_full_nblocks_c = std::ceil((float) out_ntiles_c / MAX_TILES_PER_REDUCTION);
+            out_full_nblocks_c = std::floor((float) out_ntiles_c / MAX_TILES_PER_REDUCTION);
             // each block has MAX_TILES_PER_REDUCTION along width, except the last one when out_ntiles_c is not a multiple of MAX_TILES_PER_REDUCTION
             ntiles_c_per_block = MAX_TILES_PER_REDUCTION;
             ntiles_c_per_block_last = out_ntiles_c % MAX_TILES_PER_REDUCTION;
@@ -168,8 +157,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         in_cb_sz,
         tt::constants::TILE_HW);  // NOTE: ceil to tile size since triscs work with tilesize instead of pagesize
     uint32_t in_cb_pagesize = in_nbytes * in_cb_page_padded;
-    uint32_t in_cb_npages = multi_buffering_factor * nblocks;
-
+    uint32_t in_cb_npages = multi_buffering_factor;
     CircularBufferConfig in_cb_config_0 = CircularBufferConfig(in_cb_npages * in_cb_pagesize, {{in_cb_id_0, in_df}})
                                               .set_page_size(in_cb_id_0, in_cb_pagesize);
     auto in_cb_0 = tt::tt_metal::CreateCircularBuffer(program, all_cores, in_cb_config_0);
@@ -185,7 +173,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     // output of tilize == input to reduce
     uint32_t in_tiled_cb_id = tt::CB::c_intermed0;  // tiled input
     uint32_t in_tiled_cb_pagesize = tile_size(in_df);
-    uint32_t in_tiled_cb_npages = out_ntiles_c * in_ntiles_hw * nblocks;
+    uint32_t in_tiled_cb_npages = out_ntiles_c * in_ntiles_hw;
     CircularBufferConfig in_tiled_cb_config =
         CircularBufferConfig(in_tiled_cb_npages * in_tiled_cb_pagesize, {{in_tiled_cb_id, in_df}})
             .set_page_size(in_tiled_cb_id, in_tiled_cb_pagesize);
@@ -195,7 +183,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     if (is_large_kernel) {
         uint32_t max_pool_partials_cb_id = tt::CB::c_intermed1;  // max_pool partials
         uint32_t max_pool_partials_cb_pagesize = in_cb_sz;
-        uint32_t max_pool_partials_cb_npages = nblocks;
+        uint32_t max_pool_partials_cb_npages = 1;
         CircularBufferConfig max_pool_partials_cb_config =
             CircularBufferConfig(
                 max_pool_partials_cb_npages * max_pool_partials_cb_pagesize, {{max_pool_partials_cb_id, in_df}})
@@ -248,7 +236,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         log_debug(tt::LogOp, "pad_w: {}", pad_w);
         log_debug(tt::LogOp, "out_h: {}", out_h);
         log_debug(tt::LogOp, "out_w: {}", out_w);
-        log_debug(tt::LogOp, "out_w_loop_count: {}", out_w_loop_count);
         log_debug(tt::LogOp, "out_c: {}", output_shape[3]);
         log_debug(tt::LogOp, "out_nbytes_c: {}", out_nbytes_c);
         log_debug(tt::LogOp, "in_h: {}", in_h);
@@ -287,7 +274,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         in_w,
         in_cb_page_padded * in_cb_npages / tile_w,
         input_shape[3],
-        nblocks,
+        1,
         split_reader,  // enable split reader
         0,             // split reader id
         bf16_one_u32,
@@ -305,7 +292,7 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         in_w,
         in_cb_page_padded * in_cb_npages / tile_w,
         input_shape[3],
-        nblocks,
+        1,
         split_reader,  // enable split reader
         1,             // split reader id
         bf16_one_u32,
@@ -346,12 +333,12 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         out_w,
         tt::div_up(output_shape[2], tt::constants::TILE_HEIGHT),
         tt::div_up(output_shape[3], tt::constants::TILE_WIDTH),
-        nblocks,
-        out_w_loop_count,
+        1,
+        out_w,
         1,
         out_nhw_per_core,
         split_reader,                // enable split reader
-        out_nhw_per_core / nblocks,  // loop count with blocks
+        out_nhw_per_core,
         input_shape[3],
         out_full_nblocks_c,
         ntiles_c_per_block,
@@ -447,8 +434,7 @@ MaxPool2D::MultiCore::cached_program_t MaxPool2D::MultiCore::create(const operat
         pad_w,
         dilation_h,
         dilation_w,
-        out_mem_config,
-        1);
+        out_mem_config);
 }
 
 void MaxPool2D::MultiCore::override_runtime_arguments(cached_program_t& cached_program,
