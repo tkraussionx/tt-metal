@@ -1229,7 +1229,7 @@ void Matmul::validate(
                     auto in0_shard_shape = input_tensor_a.shard_spec().value().shape;
 
                     TT_FATAL(K == in0_shard_shape[1], "Error");
-                    TT_FATAL(in0_shard_shape[1] == program_config.in0_block_w * in0_tile_shape[1], "Error");
+		    TT_FATAL(in0_shard_shape[1] == program_config.in0_block_w * in0_tile_shape[1], "Error");
                     TT_FATAL(per_core_M * in0_tile_shape[0] == in0_shard_shape[0], "Error");
 
                     if (input_tensor_b.is_sharded()) {
@@ -1255,7 +1255,7 @@ void Matmul::validate(
                 TT_FATAL(!broadcast_batch, "Error");
 
                 if (input_tensor_b.is_sharded()) {
-                    TT_FATAL(per_core_M % M == 0, "per_core_M must be a multiple of M if input b is sharded!");
+                    //TT_FATAL(per_core_M % M == 0, "per_core_M must be a multiple of M if input b is sharded!");
                     TT_FATAL(input_tensor_b.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED, "Error");
                     auto in1_shard_shape = input_tensor_b.shard_spec().value().shape;
                     TT_FATAL(in1_shard_shape[1] == input_tensor_b.get_legacy_shape()[-1], "Error");

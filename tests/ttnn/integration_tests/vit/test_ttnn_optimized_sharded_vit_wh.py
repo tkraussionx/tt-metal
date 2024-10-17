@@ -12,6 +12,8 @@ from transformers import AutoImageProcessor
 
 import ttnn
 from ttnn.model_preprocessing import preprocess_model_parameters
+from models.demos.falcon7b_common.tests.test_utils import tt_from_torch
+
 
 from models.experimental.functional_vit.tt import ttnn_optimized_sharded_vit_wh as ttnn_optimized_sharded_vit
 from models.experimental.functional_vit.reference import torch_functional_vit
@@ -169,11 +171,11 @@ def test_vit_embeddings(device, model_name, batch_size, image_size, image_channe
     assert_with_pcc(torch_output, output[0][:197:], 0.9999)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+# @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @pytest.mark.skipif(is_blackhole(), reason="Unsupported on BH")
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
-@pytest.mark.parametrize("batch_size", [8])
-@pytest.mark.parametrize("sequence_size", [224])  # padded from 197 to 224
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_size", [4096])  # padded from 197 to 224
 def test_vit_attention(device, model_name, batch_size, sequence_size):
     torch.manual_seed(0)
 
@@ -193,7 +195,7 @@ def test_vit_attention(device, model_name, batch_size, sequence_size):
     )
 
     hidden_states = ttnn.from_torch(
-        torch_hidden_states,
+        torch.reshape(torch_hidden_states, (batch_size, 1, sequence_size, config.hidden_size)),
         dtype=ttnn.bfloat8_b,
         layout=ttnn.TILE_LAYOUT,
         device=device,
@@ -205,6 +207,18 @@ def test_vit_attention(device, model_name, batch_size, sequence_size):
         layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    # Define output buffer on device
+    num_heads = 12
+    head_dim = 64
+    attention_outputs_concatenated_torch = torch.zeros((1, num_heads, sequence_size, head_dim)).bfloat16().float()
+    attention_outputs_concatenated = tt_from_torch(
+        attention_outputs_concatenated_torch.detach(),
+        ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
 
     encoder_input = ttnn.to_memory_config(
@@ -223,19 +237,20 @@ def test_vit_attention(device, model_name, batch_size, sequence_size):
     output = ttnn_optimized_sharded_vit.vit_attention(
         config,
         encoder_input,
+        attention_outputs_concatenated,
         attention_mask=attention_mask,
         parameters=parameters,
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output, 0.9999)
+    assert_with_pcc(torch_output, output[0], 0.9999)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+# @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @pytest.mark.skipif(is_blackhole(), reason="Unsupported on BH")
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
-@pytest.mark.parametrize("batch_size", [8])
-@pytest.mark.parametrize("sequence_size", [224])  # padded from 197 to 224
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_size", [4096])  # padded from 197 to 224
 def test_vit_intermediate(device, model_name, batch_size, sequence_size):
     torch.manual_seed(0)
 
@@ -263,11 +278,11 @@ def test_vit_intermediate(device, model_name, batch_size, sequence_size):
     assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9999)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+# @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @pytest.mark.skipif(is_blackhole(), reason="Unsupported on BH")
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
-@pytest.mark.parametrize("batch_size", [8])
-@pytest.mark.parametrize("sequence_size", [224])  # padded from 197 to 224
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_size", [4096])  # padded from 197 to 224
 def test_vit_output(device, model_name, batch_size, sequence_size):
     torch.manual_seed(0)
 
@@ -311,11 +326,65 @@ def test_vit_output(device, model_name, batch_size, sequence_size):
     assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9999)
 
 
-@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+"""
+#@pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
 @pytest.mark.skipif(is_blackhole(), reason="Unsupported on BH")
 @pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
 @pytest.mark.parametrize("batch_size", [8])
 @pytest.mark.parametrize("sequence_size", [224])  # padded from 197 to 224
+def test_vit_feedforward(device, model_name, batch_size, sequence_size):
+    torch.manual_seed(0)
+
+    config = transformers.ViTConfig.from_pretrained(model_name)
+    config = ttnn_optimized_sharded_vit.update_model_config(config, batch_size)
+    model_1 = transformers.models.vit.modeling_vit.ViTIntermediate(config).eval()
+    model_2 = transformers.models.vit.modeling_vit.ViTOutput(config).eval()
+
+    torch_hidden_states = torch_random((batch_size, sequence_size, config.hidden_size), -1, 1, dtype=torch.float32)
+    #torch_intermediate = torch_random((batch_size, sequence_size, config.intermediate_size), -1, 1, dtype=torch.float32)
+    torch_residual = torch_random((batch_size, sequence_size, config.hidden_size), -1, 1, dtype=torch.float32)
+
+    torch_intermediate = model_1(torch_hidden_states)
+    torch_output = model_2(torch_intermediate, torch_residual)
+
+    parameters = preprocess_model_parameters(
+        initialize_model=lambda: model,
+        device=device,
+    )
+
+    intermediate = ttnn.from_torch(torch_intermediate, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=device)
+    residual = ttnn.from_torch(torch_residual, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=device)
+
+    residual_sh = ttnn.to_memory_config(
+        residual,
+        memory_config=ttnn.create_sharded_memory_config(
+            residual.shape,
+            core_grid=config.core_grid,
+            strategy=ttnn.ShardStrategy.BLOCK,
+            orientation=ttnn.ShardOrientation.ROW_MAJOR,
+            # orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+        ),
+        dtype=ttnn.bfloat8_b,
+    )
+    ttnn.deallocate(residual)
+
+    output = ttnn_optimized_sharded_vit.vit_output(
+        config,
+        intermediate,
+        residual_sh,
+        parameters=parameters,
+    )
+    output = ttnn.to_torch(output)
+
+    assert_with_pcc(torch_output, output.to(torch_output.dtype), 0.9999)
+"""
+
+
+# @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")
+@pytest.mark.skipif(is_blackhole(), reason="Unsupported on BH")
+@pytest.mark.parametrize("model_name", ["google/vit-base-patch16-224"])
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_size", [4096])  # padded from 197 to 224
 def test_vit_layer(device, model_name, batch_size, sequence_size):
     torch.manual_seed(0)
 
@@ -335,7 +404,7 @@ def test_vit_layer(device, model_name, batch_size, sequence_size):
     )
 
     hidden_states = ttnn.from_torch(
-        torch_hidden_states,
+        torch.reshape(torch_hidden_states, (batch_size, 1, sequence_size, config.hidden_size)),
         dtype=ttnn.bfloat8_b,
         layout=ttnn.TILE_LAYOUT,
         device=device,
@@ -347,6 +416,18 @@ def test_vit_layer(device, model_name, batch_size, sequence_size):
         layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    # Define output buffer on device
+    num_heads = 12
+    head_dim = 64
+    attention_outputs_concatenated_torch = torch.zeros((1, num_heads, sequence_size, head_dim)).bfloat16().float()
+    attention_outputs_concatenated = tt_from_torch(
+        attention_outputs_concatenated_torch.detach(),
+        ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
 
     encoder_input = ttnn.to_memory_config(
@@ -365,12 +446,13 @@ def test_vit_layer(device, model_name, batch_size, sequence_size):
     output = ttnn_optimized_sharded_vit.vit_layer(
         config,
         encoder_input,
+        attention_outputs_concatenated,
         attention_mask,
         parameters=parameters,
     )
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output, output, 0.9999)
+    assert_with_pcc(torch_output, output[0], 0.9999)
 
 
 @pytest.mark.skip(reason="#7527: Test and PCC threshold needs review")

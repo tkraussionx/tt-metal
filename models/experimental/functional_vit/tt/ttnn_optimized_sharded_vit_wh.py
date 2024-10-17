@@ -4,6 +4,7 @@
 
 import transformers
 import torch
+import math
 from ttnn.model_preprocessing import (
     preprocess_linear_weight,
     preprocess_linear_bias,
@@ -14,42 +15,59 @@ from ttnn.dot_access import DotAccessDict
 
 
 def update_model_config(config, batch_size):
-    core_grid = ttnn.CoreGrid(y=batch_size, x=6)
-    seqL_t = int(224 / 32)  # 7
-    dim_t = int(768 / 32)  # 24
-    dim_t__x = int(dim_t / core_grid.x)  # 4
+    core_grid = ttnn.CoreGrid(y=8, x=8)
+    seqL_t = 4096 // 32 // core_grid.y  # 7
+    dim_t = 768 // 32  # 24
+    dim_t__x = dim_t // core_grid.x  # 4
     head_num = 12
-    head_seqL_t = int(head_num * seqL_t / core_grid.x)  # 7
-    head_size_t__x = int(dim_t / head_num)  # 2
-    class__x = int(1152 / 32 / core_grid.x)  # 3
+    head_seqL_t = 4096 // 32  # 7
+    head_size_t__x = dim_t // head_num  # 2
+    class__x = (1152 // 32) // core_grid.x  # 3
+    slice_ratio = 1
 
     # sharding configs
     program_configs = {
-        "query_key_value_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
+        "query_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=(core_grid.x, core_grid.y),
-            in0_block_w=int(dim_t__x / 2),  # 2,
+            in0_block_w=dim_t__x,  # 2,
             out_subblock_h=1,
             out_subblock_w=int(2 * dim_t__x / 2),  # 6,
             per_core_M=seqL_t,  # 7,
-            per_core_N=int(3 * dim_t__x),  # 12,
+            per_core_N=dim_t__x,  # 12,
             transpose_mcast=False,
             fused_activation=None,
         ),
-        "query_by_key_matmul_program_config": ttnn.MatmulMultiCoreReuseProgramConfig(
+        "query_key_value_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=(core_grid.x, core_grid.y),
-            in0_block_w=int(dim_t__x / 2),  # 2,
+            in0_block_w=dim_t__x // 2,  # 2,
             out_subblock_h=1,
-            out_subblock_w=seqL_t,  # 7,
-            per_core_M=int(2 * seqL_t),  # 14,
-            per_core_N=int(head_seqL_t / 2),  # 7,
+            out_subblock_w=dim_t__x,  # 6,
+            per_core_M=seqL_t,  # 7,
+            per_core_N=3 * dim_t__x,  # 12,
+            transpose_mcast=False,
+            fused_activation=None,
         ),
-        "attention_probabilities_by_value_matmul_program_config": ttnn.MatmulMultiCoreReuseProgramConfig(
+        "query_by_key_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=(core_grid.x, core_grid.y),
-            in0_block_w=seqL_t,  # 7,
+            in0_block_w=(4096 // 32 // (core_grid.y * core_grid.x)),  # 2,
             out_subblock_h=1,
-            out_subblock_w=head_size_t__x,  # 2,
-            per_core_M=int(2 * seqL_t),  # 14,
-            per_core_N=head_size_t__x,  # 2,
+            out_subblock_w=(4096 // 32),  # 7,
+            per_core_M=int((4096 // 32 // (core_grid.y * core_grid.x)) * slice_ratio),  # 14,
+            per_core_N=(4096 // 32),  # 7,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        ),
+        "attention_probabilities_by_value_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(core_grid.x, core_grid.y),
+            in0_block_w=(4096 // 32),  # 2,
+            out_subblock_h=1,
+            out_subblock_w=2,  # 7,
+            per_core_M=(4096 // 32 // (core_grid.y * core_grid.x)),  # 14,
+            per_core_N=2,  # 7,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
         ),
         "self_output_matmul_program_config": ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=(core_grid.x, core_grid.y),
@@ -107,9 +125,9 @@ def update_model_config(config, batch_size):
         ),
         "softmax_program_config": ttnn.SoftmaxShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=(core_grid.x, core_grid.y),
-            subblock_w=int(head_seqL_t / 2),  # 7,
-            block_h=int(2 * seqL_t),  # 14,
-            block_w=int(head_seqL_t / 2),  # 7,
+            subblock_w=(4096 // 32),  # 7,
+            block_h=(4096 // 32 // (core_grid.y * core_grid.x)),  # 14,
+            block_w=(4096 // 32),  # 7,
         ),
     }
 
@@ -214,6 +232,7 @@ def vit_layernorm_after(
 def vit_attention(
     config,
     hidden_states,
+    attention_outputs_concatenated,
     attention_mask,
     parameters,
 ):
@@ -222,56 +241,174 @@ def vit_attention(
     *_, hidden_size = hidden_states.shape
     head_size = hidden_size // num_heads
 
+    # query = ttnn.linear(
+    #     hidden_states,
+    #     parameters.attention.query.weight,
+    #     bias=parameters.attention.query.bias,
+    #     memory_config=ttnn.L1_MEMORY_CONFIG, # L1_BLOCK_SHARDED_MEMORY_CONFIG
+    #     dtype=ttnn.bfloat8_b,
+    #     program_config=config.program_configs["query_matmul_program_config"],
+    # )
+
+    # key = ttnn.linear(
+    #     hidden_states,
+    #     parameters.attention.key.weight,
+    #     bias=parameters.attention.key.bias,
+    #     memory_config=ttnn.L1_MEMORY_CONFIG, # L1_BLOCK_SHARDED_MEMORY_CONFIG
+    #     dtype=ttnn.bfloat8_b,
+    #     program_config=config.program_configs["query_matmul_program_config"],
+    # )
+
+    # value = ttnn.linear(
+    #     hidden_states,
+    #     parameters.attention.value.weight,
+    #     bias=parameters.attention.value.bias,
+    #     memory_config=ttnn.L1_MEMORY_CONFIG, # L1_BLOCK_SHARDED_MEMORY_CONFIG
+    #     dtype=ttnn.bfloat8_b,
+    #     program_config=config.program_configs["query_matmul_program_config"],
+    # )
+
     query_key_value = ttnn.linear(
         hidden_states,
         parameters.attention.query_key_value.weight,
         bias=parameters.attention.query_key_value.bias,
-        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        memory_config=ttnn.L1_MEMORY_CONFIG,  # L1_BLOCK_SHARDED_MEMORY_CONFIG
         dtype=ttnn.bfloat8_b,
         program_config=config.program_configs["query_key_value_matmul_program_config"],
     )
+    # print("QKV_out", query_key_value.shape)
 
     (
         query,
         key,
         value,
-    ) = ttnn.transformer.split_query_key_value_and_split_heads(
-        query_key_value,
-        memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-        num_heads=num_heads,
-    )
+    ) = ttnn.experimental.nlp_create_qkv_heads_vit(query_key_value, memory_config=ttnn.L1_MEMORY_CONFIG)
     ttnn.deallocate(query_key_value)
 
-    attention_scores = ttnn.matmul(
-        query,
+    key_layer_transposed = ttnn.transpose(
         key,
-        memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-        dtype=ttnn.bfloat8_b,
-        program_config=config.program_configs["query_by_key_matmul_program_config"],
+        -2,
+        -1,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
-    ttnn.deallocate(query)
-    ttnn.deallocate(key)
+    key.deallocate()
 
-    attention_probs = ttnn.transformer.attention_softmax_(
-        attention_scores,
-        attention_mask=attention_mask,
-        head_size=head_size,
-        program_config=config.program_configs["softmax_program_config"],
-    )
+    ####################
+    grid_size = (8, 8)
+    allowed_num_cores = 64
+    num_slices = 12
+    seq_len = 4096
+    head_dim = 64
+    slice_ratio = num_heads / num_slices
 
-    context_layer = ttnn.matmul(
-        attention_probs,
-        value,
-        memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-        dtype=ttnn.bfloat8_b,
-        program_config=config.program_configs["attention_probabilities_by_value_matmul_program_config"],
-    )
-    ttnn.deallocate(attention_probs)
-    ttnn.deallocate(value)
+    tiles_per_shard = math.ceil((((num_heads * seq_len) / allowed_num_cores) / num_slices) / 32)
+    qv_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+    k_activations_height_shard_spec = [2 * 32, tiles_per_shard * 32]
+    mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
-    context_layer = ttnn.transformer.concatenate_heads(
-        context_layer,
-        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+    # print("QQQ", query.shape, key_layer_transposed.shape, tiles_per_shard, qv_activations_height_shard_spec, k_activations_height_shard_spec)
+
+    # Slice inputs and operate on each slice separately
+    for i in range(num_slices):
+        query_slices = ttnn.interleaved_to_sharded_partial(
+            query,
+            grid_size,
+            qv_activations_height_shard_spec,
+            num_slices,  # num_slices
+            i,  # slice_index
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttnn.ShardOrientation.ROW_MAJOR,
+        )
+
+        key_slices = ttnn.interleaved_to_sharded_partial(
+            key_layer_transposed,
+            # key,
+            grid_size,
+            k_activations_height_shard_spec,
+            num_slices,  # num_slices
+            i,  # slice_index
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttnn.ShardOrientation.ROW_MAJOR,
+        )
+        key_slices = ttnn.to_memory_config(key_slices, memory_config=ttnn.L1_MEMORY_CONFIG)
+        # slice_start = (0, int(i*slice_ratio), 0, 0)
+        # slice_end   = (1, int(i*slice_ratio + slice_ratio), key.shape[-2], key.shape[-1])
+        # key_slices = ttnn.slice(key, slice_start, slice_end)
+        # key_slices_transposed = ttnn.transpose( key_slices, -2, -1, memory_config=ttnn.L1_MEMORY_CONFIG, )
+
+        value_slices = ttnn.interleaved_to_sharded_partial(
+            value,
+            grid_size,
+            qv_activations_height_shard_spec,
+            num_slices,  # num_slices
+            i,  # slice_index
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttnn.ShardOrientation.ROW_MAJOR,
+        )
+        value_slices = ttnn.to_memory_config(value_slices, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+        # print("QK", query_slices.shape, key_slices.shape)
+        ### QKT MATMUL ###
+        mm_slices = ttnn.matmul(
+            query_slices,
+            key_slices,
+            # key_slices_transposed,
+            memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
+            dtype=ttnn.bfloat8_b,
+            program_config=config.program_configs["query_by_key_matmul_program_config"],
+            # compute_kernel_config=self.model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"],
+        )
+        # print(mm_slices.shape)
+
+        mm_slices = ttnn.transformer.attention_softmax_(
+            mm_slices,
+            attention_mask=attention_mask,
+            head_size=(num_heads // num_slices),
+            program_config=config.program_configs["softmax_program_config"],
+        )
+
+        # softmax_program_config = self.model_config["SOFTMAX_OPTIMIZED_PROGCFG"](
+        #     grid_size, subblock_w, mm_output_height_shard_spec[0] // 32, mm_output_height_shard_spec[1] // 32
+        # )
+        ### SOFTMAX ###
+        # mm_slices = ttnn.scale_causal_mask_hw_dims_softmax_in_place(
+        #     mm_slices,
+        #     self.scalar_for_optimized_prefill,
+        #     attention_mask[i],
+        #     program_config=softmax_program_config,
+        #     compute_kernel_config=self.model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"],
+        # )
+
+        ### QKTV MATMUL ###
+        # print("QK-V", mm_slices.shape, value_slices.shape)
+        attn_out_slices = ttnn.matmul(
+            mm_slices,
+            value_slices,
+            memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
+            dtype=ttnn.bfloat8_b,
+            program_config=config.program_configs["attention_probabilities_by_value_matmul_program_config"],
+        )
+
+        # print("S2I", attention_outputs_concatenated.shape, attn_out_slices.shape)
+        ttnn.sharded_to_interleaved_partial(
+            attn_out_slices,
+            attention_outputs_concatenated,
+            num_slices,
+            i,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+        )
+        attn_out_slices.deallocate(True)
+        mm_slices.deallocate(True)
+        query_slices.deallocate(True)
+        key_slices.deallocate(True)
+        value_slices.deallocate(True)
+
+    ####################
+
+    # print("CONC", attention_outputs_concatenated.shape)
+    context_layer = ttnn.experimental.nlp_concat_heads(
+        attention_outputs_concatenated,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
 
     self_output = ttnn.linear(
@@ -336,14 +473,39 @@ def vit_feedforward(
     *,
     parameters,
 ):
-    intermediate = vit_intermediate(config, hidden_states, parameters=parameters.intermediate)
-    hidden_states = vit_output(config, intermediate, attention_output, parameters=parameters.output)
-    return hidden_states
+    # intermediate = vit_intermediate(config, hidden_states, parameters=parameters.intermediate)
+    # output = vit_output(config, intermediate, attention_output, parameters=parameters.output)
+
+    output_1 = ttnn.linear(
+        hidden_states,
+        parameters.intermediate.dense.weight,
+        bias=parameters.intermediate.dense.bias,
+        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        dtype=ttnn.bfloat8_b,
+        program_config=config.program_configs["ff1_matmul_program_config"],
+    )
+    ttnn.deallocate(hidden_states)
+
+    output = ttnn.linear(
+        output_1,
+        parameters.output.dense.weight,
+        bias=parameters.output.dense.bias,
+        memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
+        dtype=ttnn.bfloat8_b,
+        program_config=config.program_configs["ff2_matmul_program_config"],
+    )
+    ttnn.deallocate(output_1)
+
+    output = ttnn.add(output, attention_output, memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG, dtype=ttnn.bfloat8_b)
+    ttnn.deallocate(attention_output)
+
+    return output
 
 
 def vit_layer(
     config,
     hidden_states,
+    attention_outputs_concatenated,
     attention_mask,
     parameters,
 ):
@@ -358,6 +520,7 @@ def vit_layer(
     multi_head_attention_output = vit_attention(
         config,
         layernorm_before_output,
+        attention_outputs_concatenated,
         attention_mask=attention_mask,
         parameters=parameters.attention,
     )
@@ -538,9 +701,18 @@ def custom_preprocessor(torch_model, name):
             dim=1,
         ).reshape([hidden_size])
 
-        parameters = {"query_key_value": {}}
+        parameters = {"query_key_value": {}, "query": {}, "key": {}, "value": {}}
         parameters["query_key_value"]["weight"] = preprocess_linear_weight(qkv_weight, dtype=ttnn.bfloat8_b)
         parameters["query_key_value"]["bias"] = preprocess_linear_bias(qkv_bias, dtype=ttnn.bfloat8_b)
+
+        parameters["query"]["weight"] = preprocess_linear_weight(torch_model.query.weight, dtype=ttnn.bfloat8_b)
+        parameters["query"]["bias"] = preprocess_linear_bias(torch_model.query.bias, dtype=ttnn.bfloat8_b)
+
+        parameters["key"]["weight"] = preprocess_linear_weight(torch_model.key.weight, dtype=ttnn.bfloat8_b)
+        parameters["key"]["bias"] = preprocess_linear_bias(torch_model.key.bias, dtype=ttnn.bfloat8_b)
+
+        parameters["value"]["weight"] = preprocess_linear_weight(torch_model.value.weight, dtype=ttnn.bfloat8_b)
+        parameters["value"]["bias"] = preprocess_linear_bias(torch_model.value.bias, dtype=ttnn.bfloat8_b)
 
     elif isinstance(torch_model, torch.nn.Linear):
         # TODO: better way of detection for the classify linear weights

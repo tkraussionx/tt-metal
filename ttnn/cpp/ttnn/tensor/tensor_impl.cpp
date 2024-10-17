@@ -171,7 +171,7 @@ void validate_sharded_buffer_allocation(
     }
     if (layout == Layout::TILE) {
         auto tile_shape = tile.value_or(Tile{{constants::TILE_HEIGHT, constants::TILE_WIDTH}}).get_tile_shape();
-        TT_FATAL(
+	 TT_FATAL(
             (shard_shape[0] % tile_shape[0] == 0 && shard_shape[1] % tile_shape[1] == 0),
             "Shard shape must be tile sized");
     } else if (layout == Layout::ROW_MAJOR) {
