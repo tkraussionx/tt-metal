@@ -25,7 +25,7 @@ from models.utility_functions import skip_for_grayskull
 @skip_for_grayskull("Requires wormhole_b0 to run")
 @pytest.mark.parametrize(
     "seq_len",
-    (2048,),
+    (16 * 1024,),
 )
 @pytest.mark.parametrize(
     "mesh_device",

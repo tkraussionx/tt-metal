@@ -26,6 +26,7 @@ from models.utility_functions import skip_for_grayskull
 @pytest.mark.parametrize(
     "seq_len",
     (
+        16384,
         4096,
         128,
     ),
