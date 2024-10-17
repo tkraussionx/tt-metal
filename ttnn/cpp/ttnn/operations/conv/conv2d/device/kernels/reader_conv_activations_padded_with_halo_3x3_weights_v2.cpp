@@ -6,6 +6,15 @@
 #include "dataflow_api.h"
 #include "firmware_common.h"
 
+#define ENABLE_DEBUG 1
+
+#if ENABLE_DEBUG
+#include "debug/dprint.h"
+
+#define dump(a) \
+    do { DPRINT << "Act:"<< #a "=" << a << ENDL(); } while(false);
+
+#endif
 #define DILATION_W get_compile_time_arg_val(4)
 void kernel_main() {
     constexpr bool act_in_dram                        = get_compile_time_arg_val(0)== 1;
@@ -27,6 +36,23 @@ void kernel_main() {
     constexpr uint32_t weight_size_h                  = get_compile_time_arg_val(15);
     constexpr uint32_t act_num_blocks_h               = get_compile_time_arg_val(16);
     constexpr uint32_t act_block_h_datums_last_block  = get_compile_time_arg_val(25);
+
+    /*dump(stride_h);*/
+    /*dump(stride_w);*/
+    /*dump(dilation_h);*/
+    /*dump(dilation_w);*/
+    /*dump(conv_act_size_w_);*/
+    /*dump(conv_output_w_last_index);*/
+    /*dump(window_outer);*/
+    /*dump(window_inner);*/
+    /*dump(act_block_h_datums);*/
+    /*dump(act_block_num_tiles);*/
+    /*dump(weight_size_w);*/
+    /*dump(conv_act_size_w_padded);*/
+    /*dump(act_block_w_extra_align_bytes);*/
+    /*dump(weight_size_h);*/
+    /*dump(act_num_blocks_h);*/
+    /*dump(act_block_h_datums_last_block);*/
 
     constexpr uint32_t act_block_h_datums_read_last_block =
         act_block_h_datums_last_block > act_block_h_datums ? act_block_h_datums / 2 : act_block_h_datums_last_block / 2;

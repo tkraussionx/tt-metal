@@ -5,6 +5,15 @@
 #include "dataflow_api.h"
 #include "firmware_common.h"
 
+#define ENABLE_DEBUG 1
+
+#if ENABLE_DEBUG
+#include "debug/dprint.h"
+
+#define dump(a) \
+    do { DPRINT << "s:"<< #a "=" << a << ENDL(); } while(false);
+
+#endif
 void kernel_main() {
     // This writer is for output tensor in tile format
 
@@ -52,6 +61,43 @@ void kernel_main() {
     constexpr uint32_t act_block_w_extra_align_bytes       = get_compile_time_arg_val(37);
     constexpr uint32_t act_block_h_datums_first_reader      = get_compile_time_arg_val(38);
     constexpr uint32_t act_block_h_datums_last_block = get_compile_time_arg_val(39);
+
+    /*dump(cb_id_out0);*/
+    /*dump(cb_id_weight);*/
+    /*dump(num_blocks_weight_h);*/
+    /*dump(weight_block_num_tiles);*/
+    /*dump(weight_block_height_num_outer);*/
+    /*dump(weight_block_height_ntiles);*/
+    /*dump(weight_block_width_ntiles);*/
+    /*dump(weight_stride_h);*/
+    /*dump(weight_next_block_stride_h);*/
+    /*dump(weight_next_block_stride_w);*/
+    /*dump(bias_ntiles);*/
+    /*dump(out_next_tile_stride_h);*/
+    /*dump(out_next_tile_stride_w);*/
+    /*dump(out_next_subblock_stride_h);*/
+    /*dump(out_next_subblock_stride_w);*/
+    /*dump(out_next_block_stride_h);*/
+    /*dump(out_next_block_stride_w);*/
+    /*dump(out_subblock_h);*/
+    /*dump(out_subblock_w);*/
+    /*dump(out_subblock_tile_count);*/
+    /*dump(out_num_subblocks_h);*/
+    /*dump(out_num_subblocks_w);*/
+    /*dump(out_num_blocks_h);*/
+    /*dump(out_num_blocks_w);*/
+    /*dump(out_block_height_num_tiles);*/
+    /*dump(out_height_num_tiles);*/
+    /*dump(out_width_num_tiles);*/
+    /*dump(out_addr);*/
+    /*dump(act_block_h_datums);*/
+    /*dump(act_block_num_tiles);*/
+    /*dump(conv_act_size_c_bytes);*/
+    /*dump(coalesced_read_bytes);*/
+    /*dump(window_outer_offset);*/
+    /*dump(act_block_w_extra_align_bytes);*/
+    /*dump(act_block_h_datums_first_reader);*/
+    /*dump(act_block_h_datums_last_block);*/
 
     constexpr uint32_t act_block_h_datums_read_last_block =
         act_block_h_datums_last_block > act_block_h_datums

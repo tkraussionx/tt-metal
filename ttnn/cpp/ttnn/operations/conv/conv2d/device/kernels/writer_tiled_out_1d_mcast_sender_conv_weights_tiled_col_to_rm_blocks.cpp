@@ -6,6 +6,15 @@
 
 // #include "debug/dprint.h"
 
+#define ENABLE_DEBUG 1
+
+#if ENABLE_DEBUG
+#include "debug/dprint.h"
+
+#define dump(a) \
+    do { DPRINT << "sender:"<< #a "=" << a << ENDL(); } while(false);
+
+#endif
 
 void kernel_main() {
     // This writer is for output tensor in tile format
@@ -44,6 +53,35 @@ void kernel_main() {
 
     constexpr uint32_t out_addr = get_compile_time_arg_val(29);
 
+    dump(out_in_dram);
+    dump(cb_id_out0);
+    dump(cb_id_weight);
+    dump(num_blocks_weight_h);
+    dump(weight_block_num_tiles);
+    dump(weight_block_height_num_outer);
+    dump(weight_block_height_ntiles);
+    dump(weight_block_width_ntiles);
+    dump(weight_stride_h);
+    dump(weight_next_block_stride_h);
+    dump(weight_next_block_stride_w);
+    dump(bias_ntiles);
+    dump(out_next_tile_stride_h);
+    dump(out_next_tile_stride_w);
+    dump(out_next_subblock_stride_h);
+    dump(out_next_subblock_stride_w);
+    dump(out_next_block_stride_h);
+    dump(out_next_block_stride_w);
+    dump(out_subblock_h);
+    dump(out_subblock_w);
+    dump(out_subblock_tile_count);
+    dump(out_num_subblocks_h);
+    dump(out_num_subblocks_w);
+    dump(out_num_blocks_h);
+    dump(out_num_blocks_w);
+    dump(out_block_height_num_tiles);
+    dump(out_height_num_tiles);
+    dump(out_width_num_tiles);
+    dump(out_addr);
     constexpr uint32_t total_weight_num_tiles = weight_block_height_num_outer * num_blocks_weight_h * weight_block_num_tiles;
 
     uint32_t i = 0;
