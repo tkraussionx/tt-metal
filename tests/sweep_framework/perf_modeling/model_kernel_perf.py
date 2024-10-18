@@ -1,13 +1,13 @@
 import csv
 import re
 import argparse
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier, plot_tree
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, accuracy_score
+from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 import pickle
-import pandas as pd
 import numpy as np
+from utility_functions import process_txt_file, convert_to_numeric_dict
 
 
 # Function to parse the second file as a dictionary with string values
@@ -56,133 +56,7 @@ def print_matches(matches, output_file_path):
             output_file.write("\n")
 
 
-def convert_to_numeric_dict(input_dict):
-    dtype_mapping = {
-        "<DataType.BFLOAT16: 0>": 0,
-        # Add other data types as needed
-    }
-
-    layout_mapping = {
-        "<Layout.ROW_MAJOR: 0>": 0,
-        "<Layout.TILE: 1>": 1,
-        # Add other layouts as needed
-    }
-
-    broadcast_mapping = {"None": 0, "h": 1, "w": 2, "hw": 3}
-
-    memory_config_mapping = {  # Currently, all block sharded memory configs are under num 3, but that needs to be changed to accomodate differend sharding patterns.
-        "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)": 0,
-        "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)": 1,
-    }
-
-    # New dictionary for the numeric values
-    numeric_dict = {}
-
-    for key, value in input_dict.items():
-        if key == "DEVICE KERNEL DURATION [ns]":
-            numeric_dict[key] = int(value)
-        elif value in dtype_mapping:
-            numeric_dict[key] = dtype_mapping[value]
-        elif value in layout_mapping:
-            numeric_dict[key] = layout_mapping[value]
-        elif value in broadcast_mapping:
-            numeric_dict[key] = broadcast_mapping[value]
-        elif value in memory_config_mapping:
-            numeric_dict[key] = memory_config_mapping[value]
-        elif "input_shape" in key:
-            shape_values = list(map(int, value.strip("()").split(", ")))
-            numeric_dict["height"] = shape_values[-2]
-            numeric_dict["width"] = shape_values[-1]
-        elif "memory_layout=TensorMemoryLayout::BLOCK_SHARDED" in value:
-            numeric_dict[key] = 3
-        # This is a hack needed because of bad splitting, needs to be fixed.
-        elif value[0] == ":":
-            continue
-        else:
-            numeric_dict[key] = int(value) if value.isdigit() else value
-
-    return numeric_dict
-
-
-# Function to clean and extract the configuration string into a dictionary of strings
-def parse_configuration_string(config_str):
-    cleaned_str = config_str.replace("Configuration: ", "").strip().replace("'", '"')
-
-    cleaned_str = cleaned_str[1:-1]
-
-    cleaned_str = cleaned_str.replace('""', '"')
-
-    pattern = r'"(.*?)":\s*("[^"]*"|\{.*?\}|\(.*?\)|[^\s,]+)'
-
-    config_dict = {}
-
-    # Find all key-value pairs in the configuration string
-    for match in re.finditer(pattern, cleaned_str):
-        key = match.group(1).strip()
-        value = match.group(2).strip()
-        value = value.strip("<>")  # Removing <...> from complex types
-
-        value = value.strip('"')
-
-        config_dict[key] = value
-
-    return config_dict
-
-
-def modify_dictionary(input_dict):
-    modified_dict = {}
-
-    for key, value in input_dict.items():
-        if "batch_sizes" in key or "height" in key or "width" in key or "DEVICE KERNEL DURATION [ns]" in key:
-            new_key = key.replace("'", "")
-            new_key = new_key.replace('"', "")
-            new_key = new_key.replace("{", "")
-            new_value = "".join([char for char in value if char.isdigit()])
-            modified_dict[new_key] = new_value
-        else:
-            new_key = key.replace("'", "")
-            new_key = new_key.replace('"', "")
-            new_value = value.replace("'", "")
-            new_value = new_value.replace('"', "")
-            if new_value[-1] == "}":
-                new_value = new_value[:-1]
-            modified_dict[new_key] = new_value
-
-    return modified_dict
-
-
-# Function to process the text file and create a single dictionary per line
-def process_txt_file(file_path):
-    results = []
-
-    with open(file_path, "r") as file:
-        for line in file:
-            line = line.strip()
-
-            # Match and extract CSV Row, Configuration, and Device Kernel Duration
-            match = re.search(r"CSV Row: (.*)Configuration: (.*)Device Kernel Duration: (\d+)", line)
-
-            if match:
-                # Extract CSV Row, Configuration, and Device Kernel Duration
-                csv_row_str = match.group(1)
-                config_str = match.group(2)
-                device_kernel_duration = match.group(3)
-
-                # Parse the configuration string into a dictionary
-                config_dict = parse_configuration_string(config_str)
-
-                # Add 'DEVICE KERNEL DURATION [ns]' to the dictionary
-                config_dict["DEVICE KERNEL DURATION [ns]"] = device_kernel_duration
-
-                config_dict = modify_dictionary(config_dict)
-
-                # Append the config_dict to results
-                results.append(config_dict)
-
-    return results
-
-
-def make_a_decision_tree(results, module_name, print_tree=False, output_tree_file=None):
+def make_a_decision_tree(results, module_name, tree_depth=6, print_tree=False, output_tree_file=None):
     X = []
     y = []
 
@@ -196,8 +70,8 @@ def make_a_decision_tree(results, module_name, print_tree=False, output_tree_fil
     # This needs to be done on a per-op basis, based on manual testing, this is for add
     bin_edges = [0, 5000, 10000, 50000, 100000]
     y_binned = np.digitize(y, bin_edges, right=False) - 1
-    for i in range(len(y)):
-        print(y[i], y_binned[i])
+    # for i in range(len(y)):
+    #     print(y[i], y_binned[i])
     # y_binned, bin_edges = pd.cut(y, bins=3, labels=False, retbins=True)  # Create bins
 
     print(f"Bin edges: {bin_edges}")  # Optional: Show bin ranges
@@ -205,7 +79,7 @@ def make_a_decision_tree(results, module_name, print_tree=False, output_tree_fil
     # print("y_binned=", y_binned)
     X_train, X_test, y_train, y_test = train_test_split(X, y_binned, test_size=0.2, random_state=42)
 
-    model = DecisionTreeClassifier(max_depth=6, random_state=42)
+    model = DecisionTreeClassifier(max_depth=tree_depth, random_state=42)
 
     model.fit(X_train, y_train)
 
@@ -250,6 +124,7 @@ def main():
     parser.add_argument("--print-tree", action="store_true", help="Print the decision tree in the output file")
     parser.add_argument("--output-tree-file", type=str, required=False, help="Output file for the decision tree")
     parser.add_argument("--module-name", type=str, required=False, help="Name of the module for the decision tree")
+    parser.add_argument("--tree-depth", type=int, default=6, help="Set the depth of the decision tree")
 
     args = parser.parse_args()
 
@@ -261,6 +136,8 @@ def main():
     print_tree = args.print_tree
     output_tree_file = args.output_tree_file
     module_name = args.module_name
+    tree_depth = args.tree_depth
+
     if merge_config_files:
         if not csv_file or not config_file:
             raise Exception("Please provide the config files.")
@@ -285,7 +162,7 @@ def main():
             numeric_result = convert_to_numeric_dict(result)
             numeric_results.append(numeric_result)
 
-        make_a_decision_tree(numeric_results, module_name, print_tree, output_tree_file)
+        make_a_decision_tree(numeric_results, module_name, tree_depth, print_tree, output_tree_file)
 
 
 if __name__ == "__main__":
