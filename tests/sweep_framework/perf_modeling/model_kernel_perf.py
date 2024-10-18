@@ -56,7 +56,7 @@ def print_matches(matches, output_file_path):
             output_file.write("\n")
 
 
-def make_a_decision_tree(results, module_name, tree_depth=6, print_tree=False, output_tree_file=None):
+def make_a_decision_tree(results, module_name, tree_depth=6, output_tree_file=None):
     X = []
     y = []
 
@@ -89,7 +89,7 @@ def make_a_decision_tree(results, module_name, tree_depth=6, print_tree=False, o
     print(f"accuracy score: {accuracy}")
 
     # Plot the decision tree
-    if print_tree:
+    if output_tree_file:
         plt.figure(figsize=(50, 50))  # Set figure size
         plot_tree(model, feature_names=list(results[0].keys()), filled=True, rounded=True)
         plt.title("Decision Tree for DEVICE KERNEL DURATION")
@@ -121,7 +121,6 @@ def main():
     parser.add_argument(
         "--make-tree", action="store_true", help="Does the script make the decision tree from the given configs."
     )
-    parser.add_argument("--print-tree", action="store_true", help="Print the decision tree in the output file")
     parser.add_argument("--output-tree-file", type=str, required=False, help="Output file for the decision tree")
     parser.add_argument("--module-name", type=str, required=False, help="Name of the module for the decision tree")
     parser.add_argument("--tree-depth", type=int, default=6, help="Set the depth of the decision tree")
@@ -133,7 +132,6 @@ def main():
     config_file = args.config
     output_file = args.output
     make_tree = args.make_tree
-    print_tree = args.print_tree
     output_tree_file = args.output_tree_file
     module_name = args.module_name
     tree_depth = args.tree_depth
@@ -143,9 +141,8 @@ def main():
             raise Exception("Please provide the config files.")
 
     if make_tree:
-        if print_tree:
-            if not output_tree_file or not module_name:
-                raise Exception("Please provide the file to output the decision tree diagram to.")
+        if not module_name:
+            raise Exception("Please provide the module name")
 
     if merge_config_files:
         # Match configurations with CSV rows
@@ -162,7 +159,7 @@ def main():
             numeric_result = convert_to_numeric_dict(result)
             numeric_results.append(numeric_result)
 
-        make_a_decision_tree(numeric_results, module_name, tree_depth, print_tree, output_tree_file)
+        make_a_decision_tree(numeric_results, module_name, tree_depth, output_tree_file)
 
 
 if __name__ == "__main__":
