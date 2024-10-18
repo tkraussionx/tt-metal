@@ -13,7 +13,6 @@ struct AvgPool2D {
     struct operation_attributes_t {
         sliding_window::SlidingWindowConfig sliding_window_config_;
         DataType output_dtype_;
-        MemoryConfig memory_config_;
     };
 
     struct tensor_args_t {
@@ -60,8 +59,7 @@ struct AvgPool2D {
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& input_tensor,
         const sliding_window::SlidingWindowConfig& sliding_window_config,
-        DataType output_dtype,
-        MemoryConfig memory_config);
+        DataType output_dtype);
 };
 
 }  // namespace ttnn::operations::experimental::pool
