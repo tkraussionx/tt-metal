@@ -105,6 +105,7 @@ jobs:
           options: |
             --rm
             --tmpfs /home/ubuntu/.ccache
+            --tmpfs /tmp
             -u ${{ env.RUNNER_UID }}:${{ env.RUNNER_GID }}
             -v ${{ github.workspace }}:${{ github.workspace }}
             -v /etc/passwd:/etc/passwd:ro
@@ -113,6 +114,23 @@ jobs:
             -e ARCH_NAME=${{ matrix.arch }}
             -w ${{ github.workspace }}
           run: |
+            # ccache doesn't support TLS; create a TLS tunnel
+            echo "Starting stunnel"
+            ls -al /var/run
+            ls -al /tmp
+            stunnel
+            echo "done starting stunnel"
+            ls -al /var/run
+            ls -al /tmp
+            # Verify that stunnel is running
+            cat /tmp/stunnel.log
+            which pgrep
+            if pgrep stunnel > /dev/null; then
+              echo "stunnel is running"
+            else
+              echo "stunnel failed to start"
+              exit 1
+            fi
             ccache --show-config
             ccache -s
             ccache -z

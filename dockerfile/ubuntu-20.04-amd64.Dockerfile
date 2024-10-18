@@ -88,8 +88,11 @@ RUN wget -O /tmp/ccache.tar.xz https://github.com/ccache/ccache/releases/downloa
     rm /tmp/ccache.tar.xz
 RUN ccache --version
 
-COPY /scripts/docker/stunnel.conf /etc/stunnel/stunnel.conf
 COPY /scripts/docker/ccache.conf /usr/local/etc/ccache.conf
+COPY /scripts/docker/stunnel.conf /etc/stunnel/stunnel.conf
+# # Ensure the non-root user has the necessary permissions
+# RUN mkdir -p /var/run/stunnel /var/log/stunnel && \
+#     chown -R ubuntu:ubuntu /etc/stunnel /var/run/stunnel /var/log/stunnel
 
 COPY /scripts/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
