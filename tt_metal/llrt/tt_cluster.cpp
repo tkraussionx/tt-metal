@@ -254,7 +254,6 @@ void Cluster::open_driver(const bool &skip_driver_allocs) {
         // Silicon driver will attempt to open this many hugepages as channels, and assert if workload uses more than
         // available. Metal currently uses assigns 1 channel per device
         uint32_t num_host_mem_ch_per_mmio_device = HOST_MEM_CHANNELS;
-        std::unordered_map<std::string, std::int32_t> dynamic_tlb_config = ll_api::get_dynamic_tlb_config(this->arch_);
         // This will remove harvested rows from the soc descriptor
         const bool perform_harvesting = true;
         const bool clean_system_resources = true;
@@ -265,7 +264,6 @@ void Cluster::open_driver(const bool &skip_driver_allocs) {
             this->cluster_desc_path_,
             all_chips_set,
             num_host_mem_ch_per_mmio_device,
-            dynamic_tlb_config,
             skip_driver_allocs,
             clean_system_resources,
             perform_harvesting);
