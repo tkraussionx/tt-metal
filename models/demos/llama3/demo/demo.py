@@ -113,7 +113,9 @@ def preprocess_inputs_prefill(
     )
 
 
-def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_ci_env, num_batches, print_to_file):
+def run_llama_demo(
+    user_input, batch_size, single_layer, mesh_device, instruct_mode, is_ci_env, num_batches, print_to_file
+):
     # Creat batch output file
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_directory = "models/demos/llama3/demo/output"
@@ -149,7 +151,8 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
     model_args = TtModelArgs(mesh_device, instruct=instruct_mode)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    # model_args.n_layers = 1
+    if single_layer:
+        model_args.n_layers = 1
 
     logger.info("Loading weights...")
     state_dict = model_args.load_state_dict()
@@ -307,6 +310,7 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
         ttnn.plus_one(current_pos)
 
         # Capture Trace
+        logger.trace(f"Capture trace")
         trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
 
         decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
@@ -346,7 +350,7 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
         total_tokens_generated = 0  # Track total tokens generated
 
         ttnn.record_event(1, write_event)
-
+        logger.trace(f"Starting decoding")
         while users_decoding:
             iteration_time_start = time()
 
@@ -455,21 +459,23 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
 
 
 @pytest.mark.parametrize(
-    "input_prompts, instruct_weights, num_batches",
+    "input_prompts, instruct_weights, num_batches, single_layer",
     [
-        ("models/demos/llama3/demo/input_data_prefill_128.json", False, 1),
-        ("models/demos/llama3/demo/input_data_prefill_128.json", False, 3),
-        ("models/demos/llama3/demo/input_data_questions_prefill_128.json", True, 1),
-        ("models/demos/llama3/demo/input_data_questions_prefill_128.json", True, 3),
+        ("models/demos/llama3/demo/input_data_prefill_128.json", False, 1, False),
+        ("models/demos/llama3/demo/input_data_prefill_128.json", False, 3, False),
+        ("models/demos/llama3/demo/input_data_questions_prefill_128.json", True, 1, False),
+        ("models/demos/llama3/demo/input_data_questions_prefill_128.json", True, 3, False),
+        ("models/demos/llama3/demo/input_data_questions_prefill_128.json", True, 1, True),
     ],
     ids=[
         "general_weights-1_batch",
         "general_weights-3_batch",
         "instruct_weights-1_batch",
         "instruct_weights-3_batch",
+        "debug",
     ],
 )
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 5560320, "num_command_queues": 2}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 10764288, "num_command_queues": 2}], indirect=True)
 @pytest.mark.parametrize(
     "mesh_device",
     [
@@ -479,15 +485,18 @@ def run_llama_demo_n300(user_input, batch_size, mesh_device, instruct_mode, is_c
     ],
     indirect=True,
 )
-def test_llama_demo(mesh_device, use_program_cache, input_prompts, instruct_weights, is_ci_env, num_batches):
+def test_llama_demo(
+    mesh_device, use_program_cache, input_prompts, instruct_weights, is_ci_env, num_batches, single_layer
+):
     if is_ci_env and instruct_weights == False:
         pytest.skip("CI demo test only runs instruct weights to reduce CI pipeline load (both are supported)")
 
     mesh_device.enable_async(True)
 
-    return run_llama_demo_n300(
+    return run_llama_demo(
         user_input=input_prompts,
         batch_size=1,
+        single_layer=single_layer,
         mesh_device=mesh_device,
         instruct_mode=instruct_weights,
         is_ci_env=is_ci_env,
