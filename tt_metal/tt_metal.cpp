@@ -681,6 +681,7 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done,
         if (!program.is_finalized()) {
             program.finalize(device);
         }
+        // program.dump_circular_buffer_info("/tmp"); TODO: where to put it
 
         detail::WriteRuntimeArgsToDevice(device, program, force_slow_dispatch);
         detail::ConfigureDeviceWithProgram(device, program, force_slow_dispatch);

@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 
+#include "tt_metal/third_party/json/json.hpp"
 #include "tt_metal/impl/kernels/kernel_types.hpp"
 #include "tt_metal/impl/buffers/circular_buffer_types.hpp"
 #include "tt_metal/impl/buffers/semaphore.hpp"
@@ -159,6 +160,8 @@ class Program {
     uint32_t get_cb_base_addr(Device *device, CoreCoord logical_core, CoreType core_type) const;
     uint32_t get_sem_size(Device *device, CoreCoord logical_core, CoreType core_type) const;
     uint32_t get_cb_size(Device *device, CoreCoord logical_core, CoreType core_type) const;
+
+    void dump_circular_buffer_info(std::string opath);
 
    private:
     void populate_dispatch_data(Device *device);
