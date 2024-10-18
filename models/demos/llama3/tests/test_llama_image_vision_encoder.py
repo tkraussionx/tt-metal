@@ -13,9 +13,7 @@ llama_reference_mod = importlib.import_module(
 )
 from models.demos.llama3.tt.llama_image_vision_encoder import TtLlamaVisionEncoder
 from models.demos.llama3.tt.model_config import TtModelArgs
-from models.demos.llama3.tt.llama_common import (
-    prepare_inputs_ttnn_prefill,
-)
+
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,

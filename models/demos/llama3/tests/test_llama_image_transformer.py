@@ -17,9 +17,7 @@ encoder_utils = importlib.import_module(
 from models.demos.llama3.tt.llama_image_transformer import TtLlamaImageTransformer
 from models.demos.llama3.tt.model_config import TtModelArgs
 from models.demos.llama3.tt.llama_image_vision_encoder import pad_seq_one_tile, mask_tile_padding
-from models.demos.llama3.tt.llama_common import (
-    prepare_inputs_ttnn_prefill,
-)
+
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -103,9 +101,8 @@ def test_llama_image_transformer_inference(
     # # mask = mask[..., :seq_len, :seq_len]
     # mask = torch.nn.functional.pad(mask, (0, seq_len - mask.shape[-1], 0, seq_len - mask.shape[-2]), value=-1e9)
     # tt_block_input = pt_block_input.clone()
-    # block_input = prepare_inputs_ttnn_prefill(
+    # block_input = model_args.prepare_inputs_ttnn_prefill(
     #     tt_block_input,
-    #     mesh_device,
     # )
 
     # # mask = torch.bernoulli(
@@ -142,9 +139,8 @@ def test_llama_image_transformer_inference(
     mask = encoder_utils.build_encoder_attention_mask(pt_block_input, ar, ntok, num_chunks, 1)
     pt_block_input = pt_block_input.reshape(batch, -1, dim)
 
-    attention_input = prepare_inputs_ttnn_prefill(
+    attention_input = model_args.prepare_inputs_ttnn_prefill(
         tt_attention_input.view(num_chunks, ntok, dim),
-        mesh_device,
     )
     # Pad TT input to multipple of 32
     attention_input, npadtt = pad_seq_one_tile(attention_input, mesh_device)

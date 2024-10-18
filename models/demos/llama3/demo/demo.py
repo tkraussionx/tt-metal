@@ -14,7 +14,6 @@ import pytest
 from models.demos.llama3.tt.llama_common import (
     get_single_rot_mat,
     get_prefill_rot_mat,
-    prepare_inputs_ttnn_prefill,
     get_rot_transformation_mat,
     HostEmbedding,
     encode_prompt_llama_instruct,
@@ -231,9 +230,8 @@ def run_llama_demo(
                     :, decoding_pos[batch_id] :, :
                 ] = 0  # Zero out the tokens after the prefill length
 
-            prefill_input = prepare_inputs_ttnn_prefill(
+            prefill_input = model_args.prepare_inputs_ttnn_prefill(
                 pt_prefill_input[batch_id],
-                mesh_device,
             )
 
             tt_out = tt_model(
@@ -294,6 +292,7 @@ def run_llama_demo(
         )
 
         # Compile
+        logger.info(f"Compile model")
         decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
         tt_out = tt_model(decode_input, current_pos, rot_mat=current_rot_mat)
         if tt_model.args.num_devices > 1:
@@ -310,7 +309,7 @@ def run_llama_demo(
         ttnn.plus_one(current_pos)
 
         # Capture Trace
-        logger.trace(f"Capture trace")
+        logger.info(f"Capture trace")
         trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
 
         decode_input = ttnn.unsqueeze_to_4D(tt_embd(tt_out_tok))
@@ -350,7 +349,7 @@ def run_llama_demo(
         total_tokens_generated = 0  # Track total tokens generated
 
         ttnn.record_event(1, write_event)
-        logger.trace(f"Starting decoding")
+        logger.info(f"Starting decoding")
         while users_decoding:
             iteration_time_start = time()
 
@@ -475,7 +474,7 @@ def run_llama_demo(
         "debug",
     ],
 )
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 10764288, "num_command_queues": 2}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"trace_region_size": 11037696, "num_command_queues": 2}], indirect=True)
 @pytest.mark.parametrize(
     "mesh_device",
     [

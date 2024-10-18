@@ -39,8 +39,9 @@ from models.utility_functions import skip_for_grayskull
 )
 def test_llama_mlp_inference(mesh_device, seq_len, use_program_cache, reset_seeds):
     dtype = ttnn.bfloat8_b
+    mode = "decode" if seq_len <= 32 else "prefill"
 
-    mesh_device.enable_async(True)
+    mesh_device.enable_async(False)
 
     model_args = TtModelArgs(mesh_device)
     state_dict = torch.load(model_args.consolidated_weights_path, map_location=torch.device("cpu"))
@@ -76,25 +77,19 @@ def test_llama_mlp_inference(mesh_device, seq_len, use_program_cache, reset_seed
         device=mesh_device,
         mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
         dtype=ttnn.bfloat8_b,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=model_args.model_config["SHARDED_MLP_INPUT_MEMCFG"]
+        if mode == "decode"
+        else ttnn.DRAM_MEMORY_CONFIG,
         layout=ttnn.TILE_LAYOUT,
     )
 
-    logger.info("Compilation pass for Llama_MLP")
-    mode = "decode" if seq_len <= 32 else "prefill"
+    logger.info("Run Llama_MLP")
     tt_output = tt_model(tt_input, mode)
 
-    tt_input = ttnn.from_torch(
-        torch_input,
-        device=mesh_device,
-        mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
-        dtype=ttnn.bfloat8_b,
-        memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        layout=ttnn.TILE_LAYOUT,
-    )
-    logger.info("Performance pass for Llama_MLP")
-    tt_output = tt_model(tt_input, mode)
-    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=1))[:, :1, :, :]
+    tt_output_torch = ttnn.to_torch(tt_output, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=-1))
+
+    print(f"{tt_output_torch.shape=}")
+    print(f"{reference_output.shape=}")
 
     pcc_required = 0.99
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc_required)

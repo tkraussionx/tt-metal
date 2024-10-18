@@ -9,7 +9,6 @@ import os
 import ttnn
 from models.demos.llama3.tt.llama_common import (
     get_prefill_rot_mat,
-    prepare_inputs_ttnn_prefill,
     get_rot_transformation_mat,
     sample,
     HostEmbedding,
@@ -136,9 +135,8 @@ def test_llama_model_inference(mesh_device, seq_len, use_program_cache, reset_se
 
     tt_decode_input = pt_decode_input
 
-    decode_input = prepare_inputs_ttnn_prefill(
+    decode_input = model_args.prepare_inputs_ttnn_prefill(
         tt_decode_input,
-        tt_model.mesh_device,
     )
     for i in range(1):
         start_pos = 0

@@ -145,10 +145,9 @@ def run_inference(tt_model, tt_embd, embd, encoded_prompts, generation_start_pos
         current_pos = generation_start_pos + i
         pt_decode_input = embd(encoded_prompts_tensor[:, 0]).view(batch, seqlen, -1)
         tt_decode_input = pt_decode_input
-        decode_input = prepare_inputs_ttnn(
+        decode_input = model_args.prepare_inputs_ttnn_decode(
             tt_decode_input,
-            tt_model.args.dim,
-            tt_model.mesh_device,
+            ttnn.L1_MEMORY_CONFIG,
         )
 
         current_pos_tensor = ttnn.from_torch(

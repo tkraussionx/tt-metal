@@ -8,7 +8,6 @@ import os
 import ttnn
 from models.demos.llama3.tt.llama_common import (
     get_prefill_rot_mat,
-    prepare_inputs_ttnn_prefill,
     get_rot_transformation_mat,
 )
 from models.demos.llama3.tt.llama_decoder import TtTransformerBlock
@@ -87,9 +86,8 @@ def test_llama_decoder_inference(mesh_device, seq_len, use_program_cache, reset_
         print(f"[Decoder] Generating token {i}")
         pt_decode_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_decode_input = pt_decode_input.clone()
-        decode_input = prepare_inputs_ttnn_prefill(
+        decode_input = model_args.prepare_inputs_ttnn_prefill(
             tt_decode_input,
-            tt_model.mesh_device,
         )
         positions = torch.LongTensor(range(seq_len))
         freqs_cis_i = precompute_freqs_cis(
@@ -102,8 +100,8 @@ def test_llama_decoder_inference(mesh_device, seq_len, use_program_cache, reset_
         ref_output = reference_model(pt_decode_input, positions[0], freqs_cis_i, mask=attn_mask_torch)
         # Run TT model
         tt_out = tt_model(decode_input, None, rot_mats, transformation_mats, user_id=0, mode="prefill")
-        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=1))[
-            :, 0, :, :
+        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=-1))[
+            0, :, :, : model_args.dim
         ].view(
             batch, seq_len, -1
         )  # [ batch, seq, hidden_dim]

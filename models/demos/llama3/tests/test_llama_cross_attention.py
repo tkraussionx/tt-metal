@@ -13,9 +13,6 @@ llama_reference_mod = importlib.import_module(
 )
 from models.demos.llama3.tt.llama_cross_attention import TtLlamaCrossAttention
 from models.demos.llama3.tt.model_config import TtModelArgs
-from models.demos.llama3.tt.llama_common import (
-    prepare_inputs_ttnn_prefill,
-)
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -86,9 +83,8 @@ def test_llama_cross_attention_inference(vision_seq_len, text_seq_len, mesh_devi
 
     pt_xattn_tokens = (torch.rand(batch, vision_seq_len, dim) * 2) - 1
     tt_xattn_tokens = pt_xattn_tokens.clone()
-    tt_xattn_tokens = prepare_inputs_ttnn_prefill(
+    tt_xattn_tokens = model_args.prepare_inputs_ttnn_prefill(
         tt_xattn_tokens,
-        mesh_device,
     )
 
     """
@@ -112,7 +108,7 @@ def test_llama_cross_attention_inference(vision_seq_len, text_seq_len, mesh_devi
         passing, pcc_message = comp_pcc(pt, tt, pcc)
 
         logger.info(comp_allclose(pt, tt))
-        logger.info(f'PCC: {pcc_message}')
+        logger.info(f"PCC: {pcc_message}")
         if passing:
             logger.info(f"compute_xattn_kv_cache Passed!")
         else:
@@ -127,9 +123,8 @@ def test_llama_cross_attention_inference(vision_seq_len, text_seq_len, mesh_devi
         mode = "prefill" if i == 0 else "decode"
         pt_x = (torch.rand(batch, seq_len, dim) * 2) - 1
         tt_x = pt_x.clone()
-        tt_x = prepare_inputs_ttnn_prefill(
+        tt_x = model_args.prepare_inputs_ttnn_prefill(
             tt_x,
-            mesh_device,
         )
 
         xattn_mask = torch.bernoulli(
@@ -194,7 +189,7 @@ def test_llama_cross_attention_inference(vision_seq_len, text_seq_len, mesh_devi
 
         passing, pcc_message = comp_pcc(pt_out, tt_output_torch, pcc)
         logger.info(comp_allclose(pt_out, tt_output_torch))
-        logger.info(f'PCC: {pcc_message}')
+        logger.info(f"PCC: {pcc_message}")
         all_tests_pass = all_tests_pass and passing
 
     if all_tests_pass:
