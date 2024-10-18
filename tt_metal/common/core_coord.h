@@ -10,6 +10,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_set>
 
 #include "third_party/json/json.hpp"
 #include "third_party/umd/device/tt_xy_pair.h"
@@ -428,6 +429,120 @@ const inline bool operator==(const CoreRangeSet &a, const CoreRangeSet &b) {
     }
     return false;
 }
+
+namespace distributed {
+using DeviceCoord = CoreCoord;
+using DeviceRange = CoreRange;
+using DeviceRangeSet = CoreRangeSet;
+
+constexpr std::size_t invalid_device_coord = std::numeric_limits<std::size_t>::max();
+
+// 4 Dimensional Structure. Fully specifies the location of a single core in a mesh of devices
+struct DistributedCoreCoord {
+    DeviceCoord device_coords = tt_xy_pair(invalid_device_coord, invalid_device_coord);
+    CoreCoord core_coords;
+
+    DistributedCoreCoord() {};
+    DistributedCoreCoord(std::size_t device_y, std::size_t device_x, std::size_t core_y, std::size_t core_x) {
+        this->device_coords = DeviceCoord(device_x, device_y);
+        this->core_coords = DeviceCoord(core_x, core_y);
+    }
+
+    DistributedCoreCoord(const CoreCoord& core_coord) {
+        this->core_coords = core_coord;
+    }
+
+    std::vector<std::size_t> cartesian() {
+        if (this->device_coords != tt_xy_pair(invalid_device_coord, invalid_device_coord)) {
+            return {this->core_coords.y, this->core_coords.x};
+        }
+        return {this->device_coords.y, this->device_coords.x, this->core_coords.y, this->core_coords.x};
+    }
+    bool tied_to_device_grid() { return this->device_coords != tt_xy_pair(invalid_device_coord, invalid_device_coord); }
+};
+
+constexpr inline bool operator==(const DistributedCoreCoord& left, const DistributedCoreCoord& right) {
+    return (left.device_coords.x == right.device_coords.x && left.device_coords.y == right.device_coords.y && left.core_coords.x == right.core_coords.x && left.core_coords.y == right.core_coords.y);
+}
+
+constexpr inline bool operator!=(const DistributedCoreCoord& left, const DistributedCoreCoord& right) { return !(left == right); }
+
+constexpr inline bool operator<(const DistributedCoreCoord& left, const DistributedCoreCoord& right) {
+    return (left.device_coords.x < right.device_coords.x) ||
+           (left.device_coords.x == right.device_coords.x && left.device_coords.y < right.device_coords.y) ||
+           (left.device_coords.x == right.device_coords.x && left.device_coords.y == right.device_coords.y && left.core_coords.x < right.core_coords.x) ||
+           (left.device_coords.x == right.device_coords.x && left.device_coords.y == right.device_coords.y && left.core_coords.x == right.core_coords.x && left.core_coords.y < right.core_coords.y);
+}
+
+struct DistributedCoreRange {
+    DistributedCoreCoord start;
+    DistributedCoreCoord end;
+
+    DistributedCoreRange(const DistributedCoreCoord& point) {
+        this->start = point;
+        this->end = point;
+    }
+
+    DistributedCoreRange(const DistributedCoreCoord& start_coord, const DistributedCoreCoord& end_coord) {
+        TT_FATAL(!(start_coord.tied_to_device_grid() ^ end_coord.tied_to_device_grid()));
+        this->start = start_coord;
+        this->end = end_coord;
+    }
+
+    DistributedCoreRange(const CoreCoord& point) {
+        this->start = DistributedCoreCoord(point);
+        this->end = DistributedCoreCoord(point);
+    }
+
+    DistributedCoreRange(const CoreCoord& start_coord, const CoreCoord& end_coord) {
+        this->start = DistributedCoreCoord(start_coord);
+        this->end = DistributedCoreCoord(end_coord);
+    }
+
+    DistributedCoreRange(const CoreRange& core_range) : DistributedCoreRange(core_range.start_coord, core_range.end_coord) {}
+
+    bool tied_to_device_grid() { return this->start.tied_to_device_grid(); }
+
+};
+
+constexpr inline bool operator==(const DistributedCoreRange& a, const DistributedCoreRange& b) {
+    return a.start == b.start and a.end == b.end;
+}
+
+constexpr inline bool operator!=(const DistributedCoreRange &a, const DistributedCoreRange &b) { return !(a == b); }
+
+constexpr inline bool operator<(const DistributedCoreRange &left, const DistributedCoreRange &right) {
+    return (left.start < right.start || (left.start == right.start && left.end < right.end));
+}
+
+
+struct DistributedCoreRangeSet {
+    std::set<DistributedCoreRange> ranges_;
+
+    DistributedCoreRangeSet(const CoreRangeSet& core_range_set) {
+        for (const auto& core_range : core_range_set.ranges()) {
+            this->ranges_.insert(core_range);
+        }
+    }
+
+    DistributedCoreRangeSet(const std::set<CoreRange>& core_range_set) {
+        for (const auto& core_range : core_range_set) {
+            this->ranges_.insert(core_range);
+        }
+    }
+
+    DistributedCoreRangeSet(const std::set<DistributedCoreRange>& distributed_core_range_set) {
+        this->ranges_ = distributed_core_range_set;
+    }
+
+    const std::set<DistributedCoreRange>& ranges() {
+        return this->ranges_;
+    }
+
+    bool tied_to_device_grid() { this->ranges_.size() and this->ranges_.begin()->tied_to_device_grid(); }
+};
+
+} // namespace distributed
 
 inline std::vector<CoreCoord> grid_to_cores(
     uint32_t num_cores, uint32_t grid_size_x, uint32_t grid_size_y, bool row_wise = false) {

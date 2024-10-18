@@ -1053,23 +1053,26 @@ void UpdateDynamicCircularBufferAddress(Program &program, CBHandle cb_handle, co
 
 uint32_t CreateSemaphore(
     Program &program,
-    const std::variant<CoreRange, CoreRangeSet> &core_spec,
+    const std::variant<CoreRange, CoreRangeSet, distributed::DistributedCoreRange, distributed::DistributedCoreRangeSet> &core_spec,
     uint32_t initial_value,
     CoreType core_type) {
     return std::visit(
         [&](auto &&c) -> uint32_t {
             using T = std::decay_t<decltype(c)>;
-            CoreRangeSet crs({});
+            DistributedCoreRangeSet crs;
             if constexpr (std::is_same_v<T, CoreRange>) {
-                crs = CoreRangeSet({c});
+                crs = DistributedCoreRangeSet({c});
+            } else if constexpr (std::is_same_v<T, CoreRangeSet>) {
+                crs = DistributedCoreRangeSet(c);
+            } else if constexpr (std::is_same_v<T, DistributeCoreRange>) {
+                crs = DistributedCoreRangeSet({c});
             } else {
                 crs = c;
             }
+
             std::optional<uint32_t> semaphore_id;
             TT_FATAL(crs.ranges().size() > 0, "Expecting a non-empty CoreRangeSet!");
             for (const auto &core_range : crs.ranges()) {
-                CoreCoord start_core = core_range.start_coord;
-                CoreCoord end_core = core_range.end_coord;
                 std::optional<uint32_t> semaphore_id_candidate = get_semaphore_id(program, core_range);
                 if (!semaphore_id.has_value()) {
                     semaphore_id = semaphore_id_candidate;
