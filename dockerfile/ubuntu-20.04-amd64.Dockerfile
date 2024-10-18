@@ -82,4 +82,15 @@ RUN apt-get -y update \
 
 RUN mkdir -p /usr/app
 
-CMD ["tail", "-f", "/dev/null"]
+# Install ccache from upstream; Apt's version for 20.04 predates Redis support
+RUN wget -O /tmp/ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz && \
+    tar -xf /tmp/ccache.tar.xz -C /usr/local/bin --strip-components=1 && \
+    rm /tmp/ccache.tar.xz
+RUN ccache --version
+
+COPY /scripts/docker/stunnel.conf /etc/stunnel/stunnel.conf
+COPY /scripts/docker/ccache.conf /usr/local/etc/ccache.conf
+
+COPY /scripts/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+CMD ["/usr/local/bin/entrypoint.sh"]

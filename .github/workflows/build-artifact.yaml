@@ -76,13 +76,6 @@ jobs:
       - build
       - in-service
     steps:
-      - name: Verify NFS mount
-        shell: bash
-        run: |
-          if [ ! -d "/mnt/MLPerf/ccache" ]; then
-            echo "::error::NFS drive is not mounted; build machine not perperly provisioned."
-            exit 1
-          fi
       - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
       - name: Set up dynamic env vars for build
         run: |
@@ -105,19 +98,24 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Pull docker image
         run: docker pull ${{ env.TT_METAL_DOCKER_IMAGE_TAG }}
+      - name: Reset ccache stats
+        shell: bash
+        run: |
+          ccache -s
+          ccache -z
+          ccache -s
       - name: Build tt-metal and libs
         uses: addnab/docker-run-action@v3
         with:
           image: ${{ env.TT_METAL_DOCKER_IMAGE_TAG }}
           options: |
             --rm
-            --tmpfs /tmp
+            --tmpfs /home/ubuntu/.ccache
             -u ${{ env.RUNNER_UID }}:${{ env.RUNNER_GID }}
             -v ${{ github.workspace }}:${{ github.workspace }}
             -v /etc/passwd:/etc/passwd:ro
             -v /etc/shadow:/etc/shadow:ro
             -v /etc/bashrc:/etc/bashrc:ro
-            -v /mnt/MLPerf/ccache:/home/ubuntu/.ccache
             -e ARCH_NAME=${{ matrix.arch }}
             -w ${{ github.workspace }}
           run: |
@@ -130,6 +128,11 @@ jobs:
               build_command="$build_command --enable-profiler"
             fi
             nice -n 19 $build_command
+
+      - name: Get ccache stats
+        shell: bash
+        run: |
+          ccache -s
       - name: 'Tar files'
         run: tar -cvf ttm_${{ matrix.arch }}.tar build/lib ttnn/ttnn/*.so build/programming_examples build/test build/tools runtime
       - name: 'Upload Artifact'
