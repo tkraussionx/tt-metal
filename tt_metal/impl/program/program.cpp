@@ -543,12 +543,22 @@ void Program::validate_circular_buffer_region(const Device *device) const {
     }
 }
 
-size_t Program::num_semaphores(const CoreCoord &core) const { return semaphores_on_core(core).size(); }
+size_t Program::num_semaphores(const std::variant<distributed::DistributedCoreCoord, CoreCoord> &core) const {
+    if constexpr (std::holds_alternative<CoreCoord>(core)) {
+        return semaphores_on_core(distributed::DistributedCoreCoord(core)).size();
+    } else {
+        return semaphores_on_core(core);
+    }
+}
 
 size_t Program::num_semaphores() const { return semaphores_.size(); }
 
 void Program::init_semaphores(const Device &device, const CoreCoord &logical_core, uint32_t programmable_core_type_index) const {
-    auto semaphores_on_core = this->semaphores_on_core(logical_core);
+    // Distributed API is respected for semaphore query.
+    // Slow dispatch of semaphores is currently not modified. Will write to a CoreCoord (dispatch does not work with Distributed Coords yet).
+    // When we use virtual coords, all fast dispatch state can be device agnostic (configure once). Fabric will allow set once.
+    // Slow dispatch needs loops but will not use physical coordinates.
+    auto semaphores_on_core = this->semaphores_on_core(distributed::DistributedCoreCoord(logical_core));
 
     uint64_t kernel_config_base = hal.get_dev_addr(programmable_core_type_index, HalL1MemAddrType::KERNEL_CONFIG);
     uint64_t addr = kernel_config_base + this->program_configs_[programmable_core_type_index].sem_offset;
@@ -562,9 +572,46 @@ void Program::init_semaphores(const Device &device, const CoreCoord &logical_cor
     }
 }
 
-void Program::add_semaphore(const distributed::DistributedCoreRangeSet &crs, uint32_t semaphore_id, uint32_t init_value, CoreType core_type) {
+uint32_t Program::compute_next_semaphore_id(const distributed::DistributedCoreRangeSet& core_range) {
+    std::vector<uint32_t> semaphore_histogram(NUM_SEMAPHORES, 0);
+    for (const auto& core_coords : core_range.get_cores_in_range()) {
+        auto semaphores = program.semaphores_on_core(core_coords);
+        if (semaphores.size() == NUM_SEMAPHORES) {
+            TT_THROW(
+                "Cannot add semaphore on core {}. Max number of semaphores ({}) reached!", logical_core.str(), NUM_SEMAPHORES);
+        }
+
+        for (const auto &semaphore : semaphores) {
+            semaphore_histogram[semaphore.get().id()]++;
+        }
+    }
+    std::optional<uint32_t> sem_id = std::nullopt;
+    for (int sem_id = 0; sem_id < semaphore_histogram.size(); sem_id++) {
+        if (semaphore_histogram.at(sem_id) == 0) {
+            sem_id = sem_id;
+            break;
+        }
+    }
+    TT_FATAL("Unable to initialize semaphores on core range {}", core_range.str());
+
+    return sem_id.value();
+}
+
+uint32_t Program::add_semaphore(const distributed::DistributedCoreRangeSet &crs, uint32_t init_value, CoreType core_type) {
     TT_FATAL(this->compiled_.empty(), "Cannot add semaphore to an already compiled program {}", this->id);
-    semaphores_.emplace_back(Semaphore(crs, semaphore_id, init_value, core_type));
+    std::optional<uint32_t> semaphore_id;
+    TT_FATAL(crs.ranges().size() > 0, "Expecting a non-empty CoreRangeSet!");
+    for (const auto &core_range : crs.ranges()) {
+        std::optional<uint32_t> semaphore_id_candidate = this->compute_next_semaphore_id(core_range);
+        if (!semaphore_id.has_value()) {
+            semaphore_id = semaphore_id_candidate;
+        } else {
+            semaphore_id = std::max(semaphore_id.value(), semaphore_id_candidate.value());
+        }
+    }
+    TT_FATAL(semaphore_id.has_value(), "Unable to initialize Semaphore!");
+    semaphores_.emplace_back(Semaphore(crs, semaphore_id.value(), init_value, core_type));
+    return semaphore_id.value();
 }
 
 void Program::add_config_buffer(std::shared_ptr<Buffer> config_buffer) { config_buffers_.emplace_back(config_buffer); }

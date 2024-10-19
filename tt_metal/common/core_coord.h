@@ -435,11 +435,11 @@ using DeviceCoord = CoreCoord;
 using DeviceRange = CoreRange;
 using DeviceRangeSet = CoreRangeSet;
 
-constexpr std::size_t invalid_device_coord = std::numeric_limits<std::size_t>::max();
+constexpr std::size_t inf_device_coord = std::numeric_limits<std::size_t>::max();
 
 // 4 Dimensional Structure. Fully specifies the location of a single core in a mesh of devices
 struct DistributedCoreCoord {
-    DeviceCoord device_coords = tt_xy_pair(invalid_device_coord, invalid_device_coord);
+    DeviceCoord device_coords = tt_xy_pair(inf_device_coord, inf_device_coord);
     CoreCoord core_coords;
 
     DistributedCoreCoord() {};
@@ -452,13 +452,12 @@ struct DistributedCoreCoord {
         this->core_coords = core_coord;
     }
 
-    std::vector<std::size_t> cartesian() {
-        if (this->device_coords != tt_xy_pair(invalid_device_coord, invalid_device_coord)) {
-            return {this->core_coords.y, this->core_coords.x};
-        }
-        return {this->device_coords.y, this->device_coords.x, this->core_coords.y, this->core_coords.x};
-    }
-    bool tied_to_device_grid() { return this->device_coords != tt_xy_pair(invalid_device_coord, invalid_device_coord); }
+    std::size_t device_x() const { return this->device_coords.x; }
+    std::size_t device_y() const { return this->device_coords.y; }
+    std::size_t core_x() const { return this->core_coords.x; }
+    std::size_t core_y() const { return this->core_coords.y; }
+
+    bool tied_to_device_grid() const { return this->device_coords != tt_xy_pair(inf_device_coord, inf_device_coord); }
 };
 
 constexpr inline bool operator==(const DistributedCoreCoord& left, const DistributedCoreCoord& right) {
@@ -484,7 +483,7 @@ struct DistributedCoreRange {
     }
 
     DistributedCoreRange(const DistributedCoreCoord& start_coord, const DistributedCoreCoord& end_coord) {
-        TT_FATAL(!(start_coord.tied_to_device_grid() ^ end_coord.tied_to_device_grid()));
+        TT_FATAL(!(start_coord.tied_to_device_grid() ^ end_coord.tied_to_device_grid()), "Invalid ranges");
         this->start = start_coord;
         this->end = end_coord;
     }
@@ -501,8 +500,46 @@ struct DistributedCoreRange {
 
     DistributedCoreRange(const CoreRange& core_range) : DistributedCoreRange(core_range.start_coord, core_range.end_coord) {}
 
-    bool tied_to_device_grid() { return this->start.tied_to_device_grid(); }
+    bool tied_to_device_grid() const { return this->start.tied_to_device_grid(); }
 
+    std::vector<DistributedCoreCoord> get_cores_in_range() {
+        std::vector<DistributedCoreCoord> cores_in_range = {};
+        std::size_t device_start_x = 0;
+        std::size_t device_end_x = 1;
+        std::size_t device_start_y = 0;
+        std::size_t device_end_y = 1;
+        if (this->tied_to_device_grid()) {
+            device_start_x = this->start.device_x();
+            device_end_x = this->end.device_x();
+            device_start_y = this->start.device_y();
+            device_end_y = this->end.device_y();
+        }
+        for (auto device_x = device_start_x; device_x < device_end_x; device_x++) {
+            for (auto device_y = device_start_y;  device_y < device_end_y; device_y++) {
+                for (auto core_x = this->start.core_x(); core_x < this->end.core_x(); core_x++) {
+                    for (auto core_y = this->start.core_y(); core_y < this->end.core_y(); core_y++) {
+                        if (this->tied_to_device_grid()) {
+                            cores_in_range.push_back(DistributedCoreCoord(device_y, device_x, core_y, core_x));
+                        } else {
+                            cores_in_range.push_back(DistributedCoreCoord(CoreCoord(core_x, core_y)));
+                        }
+                    }
+                }
+            }
+        }
+        return cores_in_range;
+    }
+
+    bool contains(const DistributedCoreCoord& core_coord) const {
+        bool range_spans_all_devices = !this->tied_to_device_grid();
+        bool coords_contained_in_device_dims = range_spans_all_devices ||
+                                            (core_coord.device_x() >= this->start.device_x() and core_coord.device_x() <= this->end.device_x()) &&
+                                            (core_coord.device_y() >= this->start.device_y() and core_coord.device_y() <= this->end.device_y());
+        bool coords_contained_in_core_dims = (core_coord.core_x() >= this->start.core_x() and core_coord.core_x() <= this->end.core_x()) &&
+                                             (core_coord.core_y() >= this->start.core_y() and core_coord.core_y() <= this->end.core_y());
+
+        return coords_contained_in_device_dims && coords_contained_in_core_dims;
+    }
 };
 
 constexpr inline bool operator==(const DistributedCoreRange& a, const DistributedCoreRange& b) {
@@ -539,7 +576,24 @@ struct DistributedCoreRangeSet {
         return this->ranges_;
     }
 
-    bool tied_to_device_grid() { this->ranges_.size() and this->ranges_.begin()->tied_to_device_grid(); }
+    bool tied_to_device_grid() { return this->ranges_.size() and this->ranges_.begin()->tied_to_device_grid(); }
+
+    bool core_coord_in_core_ranges(const DistributedCoreCoord& core_coord) const {
+        for (const auto &cr : this->ranges_) {
+            if (cr.contains(core_coord))
+                return true;
+        }
+        return false;
+    }
+
+    CoreRangeSet to_core_range_set() const {
+        std::set<CoreRange> core_range_set = {};
+        for (auto& crs : this->ranges_) {
+            TT_FATAL(not crs.tied_to_device_grid(), "Invalid ranges");
+            core_range_set.insert(CoreRange(CoreCoord(crs.start.core_x(), crs.start.core_y()), CoreCoord(crs.end.core_x(), crs.end.core_y())));
+        }
+        return CoreRangeSet(core_range_set);
+    }
 };
 
 } // namespace distributed

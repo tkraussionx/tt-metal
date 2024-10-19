@@ -33,13 +33,15 @@ class Semaphore {
 
     uint32_t offset() const;
 
-    CoreRangeSet core_range_set() const { return core_range_set_; }
+    CoreRangeSet core_range_set() const { return core_range_set_.to_core_range_set(); }
+
+    distributed::DistributedCoreRangeSet distributed_core_range_set() const { return core_range_set_; };
 
     CoreType core_type() const { return core_type_; }
 
     uint32_t initial_value() const { return initial_value_; }
 
-    bool initialized_on_logical_core(const CoreCoord &logical_core) const;
+    bool initialized_on_logical_core(const distributed::DistributedCoreCoord &logical_core) const;
 
    private:
     distributed::DistributedCoreRangeSet core_range_set_;             // Ranges of cores where this semaphore is initialized

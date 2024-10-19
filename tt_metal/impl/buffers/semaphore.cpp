@@ -46,7 +46,7 @@ Semaphore &Semaphore::operator=(Semaphore &&other) {
     return *this;
 }
 
-bool Semaphore::initialized_on_logical_core(const CoreCoord &logical_core) const {
+bool Semaphore::initialized_on_logical_core(const distributed::DistributedCoreCoord &logical_core) const {
     return this->core_range_set_.core_coord_in_core_ranges(logical_core);
 }
 

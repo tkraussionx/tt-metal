@@ -122,41 +122,6 @@ void ConfigureKernelGroup(
     }
 }
 
-std::optional<uint32_t> get_semaphore_id(const Program &program, const CoreRange &core_range) {
-    std::optional<uint32_t> semaphore_id = std::nullopt;
-    std::vector<uint32_t> semaphore_histogram(NUM_SEMAPHORES, 0);
-    for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
-        for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
-            CoreCoord logical_core(x, y);
-            auto semaphores = program.semaphores_on_core(logical_core);
-            if (semaphores.size() == NUM_SEMAPHORES) {
-                TT_THROW(
-                    "Cannot add semaphore on core {}. Max number of semaphores ({}) reached!", logical_core.str(), NUM_SEMAPHORES);
-            }
-
-            for (const auto &semaphore : semaphores) {
-                semaphore_histogram[semaphore.get().id()]++;
-            }
-        }
-    }
-
-    std::optional<uint32_t> uninitialized_sem_id = std::nullopt;
-    for (int sem_id = 0; sem_id < semaphore_histogram.size(); sem_id++) {
-        if (semaphore_histogram.at(sem_id) == 0) {
-            uninitialized_sem_id = sem_id;
-            break;
-        }
-    }
-
-    if (uninitialized_sem_id.has_value()) {
-        semaphore_id =  uninitialized_sem_id.value();
-    } else {
-        TT_THROW("Unable to initialize semaphores on core range {}", core_range.str());
-    }
-
-    return semaphore_id;
-}
-
 inline void SetRuntimeArgsImpl(
     const Program &program, KernelHandle kernel_id, const CoreCoord &c, const std::vector<uint32_t> &runtime_args) {
     if (runtime_args.size() != 0) {
@@ -1059,7 +1024,7 @@ uint32_t CreateSemaphore(
     return std::visit(
         [&](auto &&c) -> uint32_t {
             using T = std::decay_t<decltype(c)>;
-            DistributedCoreRangeSet crs;
+            distributed::DistributedCoreRangeSet crs;
             if constexpr (std::is_same_v<T, CoreRange>) {
                 crs = DistributedCoreRangeSet({c});
             } else if constexpr (std::is_same_v<T, CoreRangeSet>) {
@@ -1069,22 +1034,7 @@ uint32_t CreateSemaphore(
             } else {
                 crs = c;
             }
-
-            std::optional<uint32_t> semaphore_id;
-            TT_FATAL(crs.ranges().size() > 0, "Expecting a non-empty CoreRangeSet!");
-            for (const auto &core_range : crs.ranges()) {
-                std::optional<uint32_t> semaphore_id_candidate = get_semaphore_id(program, core_range);
-                if (!semaphore_id.has_value()) {
-                    semaphore_id = semaphore_id_candidate;
-                } else {
-                    semaphore_id = std::max(semaphore_id.value(), semaphore_id_candidate.value());
-                }
-            }
-            TT_FATAL(semaphore_id.has_value(), "Unable to initialize Semaphore!");
-
-            program.add_semaphore(crs, semaphore_id.value(), initial_value, core_type);
-
-            return semaphore_id.value();
+            return program.add_semaphore(crs, initial_value, core_type)
         },
         core_spec);
 }

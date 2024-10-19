@@ -123,7 +123,7 @@ class Program {
 
     const std::vector<CoreRange> circular_buffers_unique_coreranges() const;
 
-    auto semaphores_on_core(const CoreCoord &core) const {
+    auto semaphores_on_core(const distributed::DistributedCoreCoord &core) const {
         std::vector<std::reference_wrapper<const Semaphore>> semaphores;
         for ( const Semaphore & s : this->semaphores_) {
             if (s.initialized_on_logical_core(core)) {
@@ -133,7 +133,7 @@ class Program {
         return semaphores;
     }
 
-    size_t num_semaphores ( const CoreCoord & core ) const;
+    size_t num_semaphores ( const std::variant<distributed::DistributedCoreCoord, CoreCoord> &core ) const;
     size_t num_semaphores () const;
     void init_semaphores ( const Device & device, const CoreCoord &logical_core, uint32_t programmable_core_type_index) const;
     // XXXXX TODO: this should return a const reference
@@ -242,7 +242,7 @@ class Program {
     CBHandle add_circular_buffer(const CoreRangeSet &core_range_set, const CircularBufferConfig &config);
     std::shared_ptr<CircularBuffer> get_circular_buffer(CBHandle cb_id) const;
 
-    void add_semaphore(const CoreRangeSet & crs, uint32_t semaphore_id, uint32_t init_value, CoreType core_type);
+    void add_semaphore(const distributed::DistributedCoreRangeSet &crs, uint32_t init_value, CoreType core_type);
 
     friend void detail::AddConfigBuffer(Program &program, std::shared_ptr<Buffer> config_buffer);
     void add_config_buffer(std::shared_ptr<Buffer> config_buffer);
