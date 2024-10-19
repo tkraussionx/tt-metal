@@ -1,11 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 cmake_policy(VERSION 3.16)
 
-# Sanity check, forgetting to clone submodules is a common omission and results in a poor error message
-if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tt_metal/third_party/umd/CMakeLists.txt")
-    message(FATAL_ERROR "Missing submodules.  Run: git submodule update --init --recursive")
-endif()
-
 ############################################
 # Project setup
 ############################################
@@ -144,9 +139,6 @@ find_library(NUMA_LIBRARY NAMES numa)
 if (NOT NUMA_LIBRARY)
     message(FATAL_ERROR "NUMA library not found")
 endif()
-
-# Bring in UMD and all it's dependencies
-add_subdirectory(${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd)
 
 ############################################################################################################################
 # Constructing interface libs for common compiler flags, header directories, and libraries
