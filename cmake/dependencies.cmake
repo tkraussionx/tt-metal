@@ -80,3 +80,13 @@ CPMAddPackage(
   GITHUB_REPOSITORY fmtlib/fmt
   GIT_TAG 11.0.1
 )
+
+############################################################################################################################
+# fmt : https://github.com/tenstorrent/tt-umd
+############################################################################################################################
+CPMAddPackage(
+  NAME umd
+  GITHUB_REPOSITORY tenstorrent/tt-umd
+  GIT_TAG blozano/cmake_magic_0
+  VERSION 0.1.0
+)
