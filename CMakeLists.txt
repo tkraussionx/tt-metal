@@ -59,10 +59,11 @@ if(_build_type_index EQUAL -1)
 endif()
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -DDEBUG=DEBUG")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DDEBUG=DEBUG")
-set(CMAKE_CXX_FLAGS_CI "-O3 -DDEBUG=DEBUG")
+
+add_compile_definitions(
+    $<$<CONFIG:Debug>:DEBUG>
+    $<$<CONFIG:RelWithDebInfo>:DEBUG>
+)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -212,8 +213,8 @@ string(TOUPPER $ENV{ARCH_NAME} ARCH_NAME_DEF)
 target_compile_options(compiler_flags INTERFACE -DARCH_${ARCH_NAME_DEF})
 
 add_library(metal_header_directories INTERFACE)
+target_include_directories(metal_header_directories SYSTEM INTERFACE ${reflect_SOURCE_DIR})
 target_include_directories(metal_header_directories INTERFACE ${PROJECT_SOURCE_DIR}/tt_metal/hw/inc)
-target_include_directories(metal_header_directories SYSTEM INTERFACE ${reflect_SOURCE_DIR} ${flatbuffers_include_dir} ${nng_include_dir})
 foreach(lib ${BoostPackages})
     target_include_directories(metal_header_directories INTERFACE ${Boost${lib}_SOURCE_DIR}/include)
 endforeach()
