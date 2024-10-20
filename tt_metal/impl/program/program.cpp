@@ -1090,7 +1090,7 @@ void Program::finalize(Device *device) {
 
         auto max_size = hal.get_dev_size(programmable_core_type, HalL1MemAddrType::KERNEL_CONFIG);
         TT_FATAL(offset < max_size,
-                 "Program size {} too large for kernel config buffer {} on {}",
+                 "Program size ({}) too large for kernel config buffer ({}) on {}",
                  offset, max_size, hal.get_name(programmable_core_type));
     }
 
