@@ -5,10 +5,13 @@
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/reshuffle.h"
 #include "compute_kernel_api/tile_move_copy.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 namespace NAMESPACE {
 void MAIN {
-    const uint32_t tiles_per_core = get_arg_val<uint32_t>(0);
+    const uint32_t hidden_offset = get_arg_val<uint32_t>(0);
+    const uint32_t tiles_per_core = get_arg_val<uint32_t>(1);
+    const uint32_t subtile = hidden_offset % 2;
 
     constexpr uint32_t max_tiles_per_core = get_compile_time_arg_val(0);
     constexpr uint32_t input_height = get_compile_time_arg_val(1);
@@ -51,8 +54,11 @@ void MAIN {
 
                 copy_tile(cb_out_intermed, hidden_dim, 1);
 
-                reshuffle_rows_tile_init();
-                reshuffle_rows_tile(0, idx_addr);
+                {
+                    DeviceZoneScopedN("ComputeReshuffle");
+                    reshuffle_rows_tile_init();
+                    reshuffle_rows_tile(0, idx_addr, subtile);
+                }
 
                 pack_tile(1, cb_out, hidden_dim);  // reshuffle puts output into Tile 1 in DEST
 

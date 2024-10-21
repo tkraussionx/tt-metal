@@ -57,7 +57,7 @@ operation::ProgramWithCallbacks embedding_backward_multi_core(
     uint32_t output_single_tile_size = tt::tt_metal::detail::TileSize(output_cb_data_format);
 
     uint32_t embedding_dim = grad_tensor.get_legacy_shape()[-1];
-    uint32_t embedding_tiles = embedding_dim / TILE_WIDTH;
+    uint32_t embedding_tiles = embedding_dim / 16;
 
     uint32_t batch_size = index_tensor.get_legacy_shape()[0];
     uint32_t seq_len_tiles = index_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
@@ -71,9 +71,9 @@ operation::ProgramWithCallbacks embedding_backward_multi_core(
         tt::tt_metal::split_work_to_cores(grid_size, embedding_tiles);
     uint32_t max_tiles_per_core = std::max(num_tiles_per_core_group_1, num_tiles_per_core_group_2);
 
-    log_debug(LogType::LogOp, "Embedding hidden size tiles: {}", embedding_tiles);
-    log_debug(LogType::LogOp, "Num parallel cores: {}", num_cores);
-    log_debug(LogType::LogOp, "Max hidden size tiles per core: {}", max_tiles_per_core);
+    log_info(LogType::LogOp, "Embedding hidden size tiles: {}", embedding_tiles);
+    log_info(LogType::LogOp, "Num parallel cores: {}", num_cores);
+    log_info(LogType::LogOp, "Max hidden size tiles per core: {}", max_tiles_per_core);
 
     ////////////////////////////////////////////////////////////////////////////
     //                 Circular buffers
@@ -156,7 +156,7 @@ operation::ProgramWithCallbacks embedding_backward_multi_core(
             reader_runtime_args[5] = num_tiles_per_core_group_2;
         }
         SetRuntimeArgs(program, reader_kernel_id, core, reader_runtime_args);
-        SetRuntimeArgs(program, compute_kernel_id, core, {reader_runtime_args[5]});
+        SetRuntimeArgs(program, compute_kernel_id, core, {reader_runtime_args[4], reader_runtime_args[5]});
 
         offset += reader_runtime_args[5];
     }

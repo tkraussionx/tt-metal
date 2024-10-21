@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 constexpr uint32_t INPUT_SIZE = 32;
 
@@ -147,7 +148,10 @@ void kernel_main() {
     uint32_t out_tile_idx = hidden_offset;
     for (uint32_t i = 0; i < num_embeddings; ++i) {
         for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
-            noc_async_write_tile(out_tile_idx + hidden_dim, out_s, out_read_ptr);
+            uint32_t tile_idx = (out_tile_idx + hidden_dim) / 2;
+            uint32_t subtile_idx = (out_tile_idx + hidden_dim) % 2;
+            noc_async_write_tile(tile_idx, out_s, out_read_ptr);
+            // noc_async_write_tile(out_tile_idx + hidden_dim, out_s, out_read_ptr);
         }
         out_tile_idx += tiles_per_hidden;
     }
@@ -160,8 +164,11 @@ void kernel_main() {
     for (uint32_t b = 0; b < batch_size; ++b) {
         uint64_t index_seq_noc_addr = get_index_noc_address(b);
         for (uint32_t s = 0; s < seq_len_tiles; ++s) {
-            noc_async_read(index_seq_noc_addr, index_l1_addr, index_block_size);
-            noc_async_read_barrier();
+            {
+                DeviceZoneScopedN("ReadIndex");
+                noc_async_read(index_seq_noc_addr, index_l1_addr, index_block_size);
+                noc_async_read_barrier();
+            }
 
             index_seq_noc_addr += index_block_size;
 
@@ -172,12 +179,27 @@ void kernel_main() {
             chunk_count_ptr[0] = chunk_count;
 
             cb_reserve_back(cb_grad, max_tiles_per_core);
-            uint32_t grad_write_ptr = get_write_ptr(cb_grad);
-            for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
-                noc_async_read_tile(grad_tile_idx + hidden_dim, grad_s, grad_write_ptr);
-                grad_write_ptr += grad_page_size;
+            {
+                DeviceZoneScopedN("ReadOutputGrad");
+                uint32_t grad_write_ptr = get_write_ptr(cb_grad);
+                for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
+                    uint32_t tile_idx = (grad_tile_idx + hidden_dim) / 2;
+                    uint32_t subtile_idx = (grad_tile_idx + hidden_dim) % 2;
+                    uint64_t grad_noc_addr = get_noc_addr(tile_idx, grad_s, 0);
+                    grad_write_ptr += subtile_idx * 512;
+                    for (uint32_t idx = 0; idx < 2; ++idx) {
+                        uint32_t weigth_offset = idx * 1024 + subtile_idx * 512;
+                        // DPRINT << "weigth_offset = " << weigth_offset << ENDL();
+                        // DPRINT << "subtile_idx * 512 = " << subtile_idx * 512 << ENDL();
+                        noc_async_read(grad_noc_addr + weigth_offset, grad_write_ptr, 256 * 2);
+                        grad_write_ptr += 1024;
+                    }
+
+                    // noc_async_read_tile(grad_tile_idx + hidden_dim, grad_s, grad_write_ptr);
+                    // grad_write_ptr += grad_page_size;
+                }
+                noc_async_read_barrier();
             }
-            noc_async_read_barrier();
             cb_push_back(cb_grad, max_tiles_per_core);
             grad_tile_idx += tiles_per_hidden;
 
@@ -199,22 +221,48 @@ void kernel_main() {
                 cb_push_back(cb_mask, 1);
 
                 cb_reserve_back(cb_out_intermed, max_tiles_per_core);
-                uint32_t out_write_ptr = get_write_ptr(cb_out_intermed);
-                out_tile_idx = chunk_idx * tiles_per_hidden + hidden_offset;
-                for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
-                    noc_async_read_tile(out_tile_idx + hidden_dim, out_s, out_write_ptr);
-                    out_write_ptr += out_page_size;
+                {
+                    DeviceZoneScopedN("ReadWeightGrad");
+                    uint32_t out_write_ptr = get_write_ptr(cb_out_intermed);
+                    out_tile_idx = chunk_idx * tiles_per_hidden + hidden_offset;
+                    for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
+                        uint32_t tile_idx = (out_tile_idx + hidden_dim) / 2;
+                        uint32_t subtile_idx = (out_tile_idx + hidden_dim) % 2;
+                        uint64_t weight_grad_noc_addr = get_noc_addr(tile_idx, out_s, 0);
+                        out_write_ptr += subtile_idx * 512;
+                        for (uint32_t idx = 0; idx < 2; ++idx) {
+                            uint32_t weigth_offset = idx * 1024 + subtile_idx * 512;
+                            // DPRINT << "weigth_offset = " << weigth_offset << ENDL();
+                            // DPRINT << "subtile_idx * 512 = " << subtile_idx * 512 << ENDL();
+                            noc_async_read(weight_grad_noc_addr + weigth_offset, out_write_ptr, 256 * 2);
+                            out_write_ptr += 1024;
+                        }
+                        // noc_async_read_tile(out_tile_idx + hidden_dim, out_s, out_write_ptr);
+                        // out_write_ptr += out_page_size;
+                    }
+                    noc_async_read_barrier();
                 }
-                noc_async_read_barrier();
                 cb_push_back(cb_out_intermed, max_tiles_per_core);
 
                 cb_wait_front(cb_id_out0, max_tiles_per_core);
-                uint32_t out_read_ptr = get_read_ptr(cb_id_out0);
-                for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
-                    noc_async_write_tile(out_tile_idx + hidden_dim, out_s, out_read_ptr);
-                    out_read_ptr += out_page_size;
+                {
+                    DeviceZoneScopedN("WriteWeightGrad");
+                    uint32_t out_read_ptr = get_read_ptr(cb_id_out0);
+                    for (uint32_t hidden_dim = 0; hidden_dim < tiles_per_core; hidden_dim++) {
+                        uint32_t tile_idx = (out_tile_idx + hidden_dim) / 2;
+                        uint32_t subtile_idx = (out_tile_idx + hidden_dim) % 2;
+                        uint64_t weight_grad_noc_addr = get_noc_addr(tile_idx, out_s, 0);
+                        out_read_ptr += subtile_idx * 512;
+                        for (uint32_t idx = 0; idx < 2; ++idx) {
+                            uint32_t weigth_offset = idx * 1024 + subtile_idx * 512;
+                            noc_async_write(out_read_ptr, weight_grad_noc_addr + weigth_offset, 256 * 2);
+                            out_read_ptr += 1024;
+                        }
+                        // noc_async_write_tile(out_tile_idx + hidden_dim, out_s, out_read_ptr);
+                        // out_read_ptr += out_page_size;
+                    }
+                    noc_async_write_barrier();
                 }
-                noc_async_write_barrier();
                 cb_pop_front(cb_id_out0, max_tiles_per_core);
             }  // chunk_count
         }  // seq_len_tiles
