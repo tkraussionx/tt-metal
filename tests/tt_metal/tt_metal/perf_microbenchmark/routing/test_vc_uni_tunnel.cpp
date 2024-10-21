@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     uint32_t tx_data_sent_per_iter_low = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_low", default_tx_data_sent_per_iter_low);
     uint32_t tx_data_sent_per_iter_high = test_args::get_command_option_uint32(input_args, "--tx_data_sent_per_iter_high", default_tx_data_sent_per_iter_high);
 
-    assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check == 1 || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
+    assert((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE && rx_disable_header_check || (pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::RANDOM);
 
     uint32_t test_device_id = test_args::get_command_option_uint32(input_args, "--device_id", default_test_device_id);
 
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
         CoreCoord demux_core = {demux_x, demux_y};
         CoreCoord demux_phys_core = device_r->worker_core_from_logical_core(demux_core);
 
-        if (check_txrx_timeout == 1u) {
+        if (check_txrx_timeout) {
             defines["CHECK_TIMEOUT"] = "";
         }
 
@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
             );
         }
 
-        if (check_txrx_timeout == 1u) {
+        if (check_txrx_timeout) {
             defines.erase("CHECK_TIMEOUT");
         }
 
@@ -761,16 +761,52 @@ int main(int argc, char **argv) {
                 log_info(LogTest, "DEMUX words sent = {} == Total RX words checked = {} -> OK", demux_words_sent, total_rx_words_checked);
             }
 
-            if (pass && dump_stat_json == 1) {
-                summary["config"] = config;
-                summary["stat"] = stat;
-                std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}_pw{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, tx_skip_pkt_content_gen, check_txrx_timeout, tx_pkt_dest_size_choice, max_packet_size_words));
-                if (out.fail()) {
-                    throw std::runtime_error("output file open failure");
+            if (pass) {
+                if (dump_stat_json) {
+                    summary["config"] = config;
+                    summary["stat"] = stat;
+                    std::ofstream out(output_dir + fmt::format("/tx{}-{}_rx{}-{}_m{}-{}_dm{}-{}_n{}_rdc{}_rdhc{}_tsg{}_cto{}_tpdsc{}_pw{}.json", tx_x, tx_y, rx_x, rx_y, mux_x, mux_y, demux_x, demux_y, num_endpoints, rx_disable_data_check, rx_disable_header_check, tx_skip_pkt_content_gen, check_txrx_timeout, tx_pkt_dest_size_choice, max_packet_size_words));
+                    if (out.fail()) {
+                        throw std::runtime_error("output file open failure");
+                    }
+                    std::string summaries = summary.dump(2);
+                    out << summaries << std::endl;
+                    out.close();
                 }
-                std::string summaries = summary.dump(2);
-                out << summaries << std::endl;
-                out.close();
+                // Determine if it passes performance goal
+                if ((pkt_dest_size_choices_t)tx_pkt_dest_size_choice == pkt_dest_size_choices_t::SAME_START_RNDROBIN_FIX_SIZE
+                && tx_skip_pkt_content_gen
+                && !check_txrx_timeout
+                && rx_disable_data_check
+                && rx_disable_header_check
+                && (data_kb_per_tx >= 1024*1024)
+                && (tunneler_queue_size_bytes >= 0x8000)
+                && (tx_queue_size_bytes >= 0x10000)
+                && (rx_queue_size_bytes >= 0x20000)
+                && (mux_queue_size_bytes >= 0x10000)
+                && (demux_queue_size_bytes >= 0x10000)) {
+                    double target_bandwidth = 0;
+                    if (max_packet_size_words >= 2048) {
+                        target_bandwidth = 9;
+                        log_info(LogTest, "Perf check for pkt size >= 2048 words");
+                    } else if (max_packet_size_words >= 1024) {
+                        target_bandwidth = 10.8;
+                        log_info(LogTest, "Perf check for pkt size >= 1024 words");
+                    } else if (max_packet_size_words >= 256) {
+                        target_bandwidth = 2.8;
+                        log_info(LogTest, "Perf check for pkt size >= 256 words");
+                    }
+                    if (demux_bw < target_bandwidth) {
+                        pass = false;
+                        log_error(
+                            LogTest,
+                            "The bandwidth does not meet the criteria. "
+                            "Current: {:.3f}B/cc, goal: >={:.3f}B/cc",
+                            demux_bw,
+                            target_bandwidth
+                        );
+                    }
+                }
             }
         }
 
