@@ -29,6 +29,10 @@ static void test_sems_across_core_types(CommonFixture *fixture,
             device->get_active_ethernet_cores() :
             device->get_inactive_ethernet_cores();
         if (eth_cores.size() > 0) {
+            log_info(tt::LogTest, "ETH cores number {}",eth_cores.size());
+            for (auto core : eth_cores) {
+                log_info(tt::LogTest, "Core coord {}{}", core.x, core.y);
+            }
             Program program = CreateProgram();
 
             CoreCoord eth_core = *eth_cores.begin();
@@ -83,6 +87,8 @@ static void test_sems_across_core_types(CommonFixture *fixture,
             SetRuntimeArgs(program, tensix_kernel, tensix_core, tensix_rtas);
 
             fixture->RunProgram(device, program);
+        } else {
+            log_info(tt::LogTest, "No relevant ETH cores");
         }
     }
 }
