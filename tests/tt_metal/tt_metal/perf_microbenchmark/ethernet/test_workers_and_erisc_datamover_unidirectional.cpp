@@ -202,7 +202,7 @@ bool RunWriteBWTest(
     //                               Device 0
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Program sender_program = tt_metal::Program();
-    uint32_t chip0_worker_semaphore_id = tt::tt_metal::CreateSemaphore(sender_program, chip0_sender_worker_core, 0);
+    uint32_t chip0_worker_semaphore_id = tt::tt_metal::CreateSemaphore(sender_program, CoreRange(chip0_sender_worker_core), 0);
 
     chip0_edm_args.push_back(chip0_sender_channels_offset);
 
@@ -347,7 +347,7 @@ bool RunWriteBWTest(
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Program receiver_program = tt_metal::Program();
     auto chip1_receiver_worker_core = CoreCoord(0, 0);
-    uint32_t chip1_worker_semaphore_id = tt::tt_metal::CreateSemaphore(receiver_program, chip1_receiver_worker_core, 0);
+    uint32_t chip1_worker_semaphore_id = tt::tt_metal::CreateSemaphore(receiver_program, CoreRange(chip1_receiver_worker_core), 0);
 
     uint32_t chip1_receiver_num_channels = chip0_arg_sender_num_channels;
     auto eth_receiver_kernel = tt_metal::CreateKernel(

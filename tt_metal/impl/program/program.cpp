@@ -366,7 +366,7 @@ void Program::CircularBufferAllocator::mark_address(uint64_t address, uint64_t s
     }
 }
 
-CBHandle Program::add_circular_buffer(const CoreRangeSet &core_range_set, const CircularBufferConfig &config) {
+CBHandle Program::add_circular_buffer(const DistributedCoreRangeSet &core_range_set, const CircularBufferConfig &config) {
     TT_FATAL(this->compiled_.empty(), "Cannot add circular buffer to an already compiled program {}", this->id);
     std::shared_ptr<CircularBuffer> circular_buffer = std::make_shared<CircularBuffer>(core_range_set, config);
     // Globally allocated circular buffer do not invalidate allocation because their addresses are tracked by memory
@@ -544,10 +544,10 @@ void Program::validate_circular_buffer_region(const Device *device) const {
 }
 
 size_t Program::num_semaphores(const std::variant<distributed::DistributedCoreCoord, CoreCoord> &core) const {
-    if constexpr (std::holds_alternative<CoreCoord>(core)) {
-        return semaphores_on_core(distributed::DistributedCoreCoord(core)).size();
+    if (std::holds_alternative<CoreCoord>(core)) {
+        return semaphores_on_core(distributed::DistributedCoreCoord(std::get<CoreCoord>(core))).size();
     } else {
-        return semaphores_on_core(core);
+        return semaphores_on_core(std::get<distributed::DistributedCoreCoord>(core)).size();
     }
 }
 
@@ -572,14 +572,11 @@ void Program::init_semaphores(const Device &device, const CoreCoord &logical_cor
     }
 }
 
-uint32_t Program::compute_next_semaphore_id(const distributed::DistributedCoreRangeSet& core_range) {
+uint32_t Program::compute_next_sem_id_for_core_range(const distributed::DistributedCoreRange& core_range) {
     std::vector<uint32_t> semaphore_histogram(NUM_SEMAPHORES, 0);
     for (const auto& core_coords : core_range.get_cores_in_range()) {
-        auto semaphores = program.semaphores_on_core(core_coords);
-        if (semaphores.size() == NUM_SEMAPHORES) {
-            TT_THROW(
-                "Cannot add semaphore on core {}. Max number of semaphores ({}) reached!", logical_core.str(), NUM_SEMAPHORES);
-        }
+        auto semaphores = this->semaphores_on_core(core_coords);
+        TT_FATAL(semaphores.size() < NUM_SEMAPHORES, "Reached semaphore limit");
 
         for (const auto &semaphore : semaphores) {
             semaphore_histogram[semaphore.get().id()]++;
@@ -592,7 +589,8 @@ uint32_t Program::compute_next_semaphore_id(const distributed::DistributedCoreRa
             break;
         }
     }
-    TT_FATAL("Unable to initialize semaphores on core range {}", core_range.str());
+
+    TT_FATAL(sem_id.has_value(), "Unable to initialize semaphores on core range");
 
     return sem_id.value();
 }
@@ -602,7 +600,7 @@ uint32_t Program::add_semaphore(const distributed::DistributedCoreRangeSet &crs,
     std::optional<uint32_t> semaphore_id;
     TT_FATAL(crs.ranges().size() > 0, "Expecting a non-empty CoreRangeSet!");
     for (const auto &core_range : crs.ranges()) {
-        std::optional<uint32_t> semaphore_id_candidate = this->compute_next_semaphore_id(core_range);
+        std::optional<uint32_t> semaphore_id_candidate = this->compute_next_sem_id_for_core_range(core_range);
         if (!semaphore_id.has_value()) {
             semaphore_id = semaphore_id_candidate;
         } else {

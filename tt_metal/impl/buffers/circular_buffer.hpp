@@ -13,11 +13,11 @@ inline namespace v0 {
 
 class CircularBuffer {
    public:
-    CircularBuffer(const CoreRangeSet &core_range_set, const CircularBufferConfig &config);
+    CircularBuffer(const distributed::DistributedCoreRangeSet &core_range_set, const CircularBufferConfig &config);
 
     const CBHandle id() const { return id_; }
 
-    const CoreRangeSet &core_ranges() const { return core_ranges_; }
+    const distributed::DistributedCoreRangeSet &core_ranges() const { return core_ranges_; }
 
     const CircularBufferConfig &config() const { return config_; }
 
@@ -55,7 +55,7 @@ class CircularBuffer {
     void invalidate_locally_allocated_address();
 
     const uintptr_t id_;
-    const CoreRangeSet core_ranges_;
+    const distributed::DistributedCoreRangeSet core_ranges_;
     CircularBufferConfig config_;
     std::unordered_set<uint32_t> buffer_indices_;
     // Circular buffers associated with dynamically allocated buffers pull address from `config_`

@@ -133,8 +133,12 @@ void MatmulFusedOpSignaler::init_fused_op(
     }, core_range_to_signal);
 
     // Create the semaphores
-    this->fused_op_receiver_signal_semaphores.push_back(CreateSemaphore(program, core_range_to_signal, 0));
-    this->fused_op_receiver_signal_semaphores.push_back(CreateSemaphore(program, core_range_to_signal, 0));
+    std::variant<CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet>
+    distributed_core_range_to_signal = std::visit([](auto&& arg) -> std::variant<CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet> {
+        return arg;
+    }, core_range_to_signal);
+    this->fused_op_receiver_signal_semaphores.push_back(CreateSemaphore(program, distributed_core_range_to_signal, 0));
+    this->fused_op_receiver_signal_semaphores.push_back(CreateSemaphore(program, distributed_core_range_to_signal, 0));
 
     // Set the number of fused op cores to signal
     this->num_fused_op_cores_to_signal = this->fused_op_receiver_cores_noc.size();

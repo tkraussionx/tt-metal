@@ -125,10 +125,10 @@ TEST_F(DeviceFixture, CreateMultipleSemaphoresOnSameCore) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
     CoreCoord core0(0,0);
-    uint32_t sem0_id = tt_metal::CreateSemaphore(program, core0, 0);
+    uint32_t sem0_id = tt_metal::CreateSemaphore(program, CoreRange(core0), 0);
 
     CoreCoord core1(4,0);
-    uint32_t sem1_id = tt_metal::CreateSemaphore(program, core1, 1);
+    uint32_t sem1_id = tt_metal::CreateSemaphore(program, CoreRange(core1), 1);
 
     CoreRange core_range({1, 0}, {3, 0});
     CoreRangeSet core_range_set({core_range});

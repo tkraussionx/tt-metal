@@ -53,6 +53,30 @@ CoreRangeSet GetCoreRangeSet(const std::variant<CoreCoord, CoreRange, CoreRangeS
     );
 }
 
+DistributedCoreRangeSet GetDistributedCoreRangeSet(const std::variant<CoreCoord, CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet> &specified_core_spec) {
+    ZoneScoped;
+    return std::visit(
+        [](auto&& c) -> DistributedCoreRangeSet
+        {
+            using T = std::decay_t<decltype(c)>;
+            if constexpr (std::is_same_v<T, CoreCoord>) {
+                return DistributedCoreRangeSet(CoreRangeSet({CoreRange(c, c)}));
+            }
+            else if constexpr (std::is_same_v<T, CoreRange>) {
+                return DistributedCoreRangeSet(CoreRangeSet({c}));
+            }
+            else if constexpr (std::is_same_v<T, CoreRangeSet>) {
+                return DistributedCoreRangeSet(c);
+            } else if constexpr (std::is_same_v<T, DistributedCoreRange>) {
+                return DistributedCoreRangeSet(std::set<DistributedCoreRange>{c});
+            } else {
+                return c;
+            }
+        },
+        specified_core_spec
+    );
+}
+
 struct DataMovementConfigStatus {
     bool riscv0_in_use;
     bool riscv1_in_use;
@@ -988,9 +1012,9 @@ KernelHandle CreateKernelFromString(
 
 CBHandle CreateCircularBuffer(
     Program &program,
-    const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
+    const std::variant<CoreCoord, CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet> &core_spec,
     const CircularBufferConfig &config) {
-    CoreRangeSet core_ranges = GetCoreRangeSet(core_spec);
+    auto distributed_core_ranges = GetDistributedCoreRangeSet(core_spec);
     return program.add_circular_buffer(core_ranges, config);
 }
 
@@ -1018,23 +1042,23 @@ void UpdateDynamicCircularBufferAddress(Program &program, CBHandle cb_handle, co
 
 uint32_t CreateSemaphore(
     Program &program,
-    const std::variant<CoreRange, CoreRangeSet, distributed::DistributedCoreRange, distributed::DistributedCoreRangeSet> &core_spec,
+    const std::variant<CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet> &core_spec,
     uint32_t initial_value,
     CoreType core_type) {
     return std::visit(
         [&](auto &&c) -> uint32_t {
             using T = std::decay_t<decltype(c)>;
-            distributed::DistributedCoreRangeSet crs;
+            DistributedCoreRangeSet crs;
             if constexpr (std::is_same_v<T, CoreRange>) {
-                crs = DistributedCoreRangeSet({c});
+                crs = DistributedCoreRangeSet(CoreRangeSet({c}));
             } else if constexpr (std::is_same_v<T, CoreRangeSet>) {
                 crs = DistributedCoreRangeSet(c);
-            } else if constexpr (std::is_same_v<T, DistributeCoreRange>) {
-                crs = DistributedCoreRangeSet({c});
+            } else if constexpr (std::is_same_v<T, DistributedCoreRange>) {
+                crs = DistributedCoreRangeSet(std::set<DistributedCoreRange>{c});
             } else {
                 crs = c;
             }
-            return program.add_semaphore(crs, initial_value, core_type)
+            return program.add_semaphore(crs, initial_value, core_type);
         },
         core_spec);
 }

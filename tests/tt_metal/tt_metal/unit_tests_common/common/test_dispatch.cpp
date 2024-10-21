@@ -33,7 +33,7 @@ static void test_sems_across_core_types(CommonFixture *fixture,
 
             CoreCoord eth_core = *eth_cores.begin();
             CoreCoord phys_eth_core = device->physical_core_from_logical_core(eth_core, CoreType::ETH);
-            uint32_t eth_sem_id = CreateSemaphore(program, eth_core, eth_sem_init_val, CoreType::ETH);
+            uint32_t eth_sem_id = CreateSemaphore(program, CoreRange(eth_core), eth_sem_init_val, CoreType::ETH);
             auto eth_kernel = CreateKernel(
                 program,
                 "tests/tt_metal/tt_metal/test_kernels/dataflow/semaphore_across_core_types.cpp",
@@ -46,7 +46,7 @@ static void test_sems_across_core_types(CommonFixture *fixture,
 
             CoreCoord tensix_core(0, 0);
             CoreCoord phys_tensix_core = device->worker_core_from_logical_core(tensix_core);
-            uint32_t tensix_sem_id = CreateSemaphore(program, tensix_core, tensix_sem_init_val, CoreType::WORKER);
+            uint32_t tensix_sem_id = CreateSemaphore(program, CoreRange(tensix_core), tensix_sem_init_val, CoreType::WORKER);
             auto tensix_kernel = CreateKernel(
                 program,
                 "tests/tt_metal/tt_metal/test_kernels/dataflow/semaphore_across_core_types.cpp",

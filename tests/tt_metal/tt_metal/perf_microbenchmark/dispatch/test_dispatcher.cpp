@@ -442,12 +442,12 @@ int main(int argc, char **argv) {
         gen_cmds(device, cmds, all_workers_g, device_data, dispatch_buffer_page_size_g);
         llrt::write_hex_vec_to_core(device->id(), phys_spoof_prefetch_core, cmds, l1_buf_base);
 
-        const uint32_t spoof_prefetch_core_sem_0_id = tt_metal::CreateSemaphore(program, {spoof_prefetch_core}, dispatch_buffer_pages);
-        const uint32_t dispatch_core_sem_id = tt_metal::CreateSemaphore(program, {dispatch_core}, 0);
+        const uint32_t spoof_prefetch_core_sem_0_id = tt_metal::CreateSemaphore(program, CoreRange(spoof_prefetch_core), dispatch_buffer_pages);
+        const uint32_t dispatch_core_sem_id = tt_metal::CreateSemaphore(program, CoreRange(dispatch_core), 0);
         TT_ASSERT(spoof_prefetch_core_sem_0_id == dispatch_core_sem_id);
         const uint32_t dispatch_cb_sem = spoof_prefetch_core_sem_0_id;
 
-        const uint32_t spoof_prefetch_core_sem_1_id = tt_metal::CreateSemaphore(program, {spoof_prefetch_core}, 0);
+        const uint32_t spoof_prefetch_core_sem_1_id = tt_metal::CreateSemaphore(program, CoreRange(spoof_prefetch_core), 0);
         const uint32_t prefetch_sync_sem = spoof_prefetch_core_sem_1_id;
 
         const uint32_t host_completion_queue_wr_ptr = dispatch_constants::get(CoreType::WORKER).get_host_command_queue_addr(CommandQueueHostAddrType::COMPLETION_Q_WR);

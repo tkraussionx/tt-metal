@@ -2114,10 +2114,10 @@ void Device::compile_command_queue_programs() {
             uint32_t dev_completion_queue_rd_ptr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::COMPLETION_Q_RD);
             uint32_t dispatch_message_addr = dispatch_constants::get(dispatch_core_type).get_device_command_queue_addr(CommandQueueDeviceAddrType::DISPATCH_MESSAGE);
 
-            const uint32_t prefetch_sync_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type);
-            const uint32_t prefetch_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type);
-            const uint32_t prefetch_dispatch_s_sync_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_pages(), dispatch_core_type); // sync with dispatch_s
-            const uint32_t dispatch_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type);
+            const uint32_t prefetch_sync_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(prefetch_core), 0, dispatch_core_type);
+            const uint32_t prefetch_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(prefetch_core), dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type);
+            const uint32_t prefetch_dispatch_s_sync_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(prefetch_core), dispatch_constants::get(dispatch_core_type).dispatch_s_buffer_pages(), dispatch_core_type); // sync with dispatch_s
+            const uint32_t dispatch_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(dispatch_core), 0, dispatch_core_type);
 
             // dispatch_s location and flow control vars initialized as invalid. Will be set if dispatch_s is enabled for the given configuration.
             tt_cxy_pair dispatch_s_core = tt_cxy_pair(0xff, 0xff, 0xff);
@@ -2138,8 +2138,8 @@ void Device::compile_command_queue_programs() {
                     // dispatch_d and dispatch_s are on different cores. No shared resources: dispatch_s CB starts at base.
                     dispatch_s_buffer_base = dispatch_buffer_base;
                 }
-                dispatch_s_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
-                dispatch_s_sync_sem_id = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, 0, dispatch_core_type); // used by dispatch_d to signal that dispatch_s can send go signal
+                dispatch_s_sem = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(dispatch_s_core), 0, dispatch_core_type); // used by dispatch_s to sync with prefetch
+                dispatch_s_sync_sem_id = tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(dispatch_s_core), 0, dispatch_core_type); // used by dispatch_d to signal that dispatch_s can send go signal
             }
 
             log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
@@ -2332,7 +2332,7 @@ void Device::compile_command_queue_programs() {
                 for (auto sem : prefetch_settings.semaphores) {
                     //size of semaphores vector is number of needed semaphores on the core.
                     //Value of each vector entry is the initialization value for the semaphore.
-                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, prefetch_core, sem, prefetch_settings.dispatch_core_type);
+                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, CoreRange(prefetch_core), sem, prefetch_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *mmio_command_queue_program_ptr,
@@ -2360,7 +2360,7 @@ void Device::compile_command_queue_programs() {
                 for (auto sem : mux_settings.semaphores) {
                     //size of semaphores vector is number of needed semaphores on the core.
                     //Value of each vector entry is the initialization value for the semaphore.
-                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, mux_core, sem, mux_settings.dispatch_core_type);
+                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, CoreRange(mux_core), sem, mux_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *mmio_command_queue_program_ptr,
@@ -2401,7 +2401,7 @@ void Device::compile_command_queue_programs() {
                 for (auto sem : demux_settings.semaphores) {
                     //size of semaphores vector is number of needed semaphores on the core.
                     //Value of each vector entry is the initialization value for the semaphore.
-                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, demux_core, sem, demux_settings.dispatch_core_type);
+                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, CoreRange(demux_core), sem, demux_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *mmio_command_queue_program_ptr,
@@ -2424,7 +2424,7 @@ void Device::compile_command_queue_programs() {
                 for (auto sem : dispatch_settings.semaphores) {
                     //size of semaphores vector is number of needed semaphores on the core.
                     //Value of each vector entry is the initialization value for the semaphore.
-                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, dispatch_core, sem, dispatch_settings.dispatch_core_type);
+                    tt::tt_metal::CreateSemaphore(*mmio_command_queue_program_ptr, CoreRange(dispatch_core), sem, dispatch_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *mmio_command_queue_program_ptr,
@@ -2490,7 +2490,7 @@ void Device::compile_command_queue_programs() {
             for (auto sem : demux_d_settings.semaphores) {
                 //size of semaphores vector is number of needed semaphores on the core.
                 //Value of each vector entry is the initialization value for the semaphore.
-                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, demux_d_core, sem, demux_d_settings.dispatch_core_type);
+                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(demux_d_core), sem, demux_d_settings.dispatch_core_type);
             }
             configure_kernel_variant(
                 *command_queue_program_ptr,
@@ -2513,7 +2513,7 @@ void Device::compile_command_queue_programs() {
             for (auto sem : prefetch_d_settings.semaphores) {
                 //size of semaphores vector is number of needed semaphores on the core.
                 //Value of each vector entry is the initialization value for the semaphore.
-                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_d_core, sem, prefetch_d_settings.dispatch_core_type);
+                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(prefetch_d_core), sem, prefetch_d_settings.dispatch_core_type);
             }
             configure_kernel_variant(
                 *command_queue_program_ptr,
@@ -2541,7 +2541,7 @@ void Device::compile_command_queue_programs() {
             for (auto sem : dispatch_d_settings.semaphores) {
                 //size of semaphores vector is number of needed semaphores on the core.
                 //Value of each vector entry is the initialization value for the semaphore.
-                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_d_core, sem, dispatch_d_settings.dispatch_core_type);
+                tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(dispatch_d_core), sem, dispatch_d_settings.dispatch_core_type);
             }
             configure_kernel_variant(
                 *command_queue_program_ptr,
@@ -2564,7 +2564,7 @@ void Device::compile_command_queue_programs() {
         if (this->dispatch_s_enabled()) {
             for (auto [dispatch_s_core, dispatch_s_settings] : device_worker_variants[DispatchWorkerType::DISPATCH_S]) {
                 for (auto sem : dispatch_s_settings.semaphores) {
-                    tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_s_core, sem, dispatch_s_settings.dispatch_core_type);
+                    tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(dispatch_s_core), sem, dispatch_s_settings.dispatch_core_type);
                 }
                 configure_kernel_variant(
                     *command_queue_program_ptr,
@@ -2591,7 +2591,7 @@ void Device::compile_command_queue_programs() {
         for (auto sem : mux_d_settings.semaphores) {
             //size of semaphores vector is number of needed semaphores on the core.
             //Value of each vector entry is the initialization value for the semaphore.
-            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, mux_d_core, sem, mux_d_settings.dispatch_core_type);
+            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, CoreRange(mux_d_core), sem, mux_d_settings.dispatch_core_type);
         }
         configure_kernel_variant(
             *command_queue_program_ptr,

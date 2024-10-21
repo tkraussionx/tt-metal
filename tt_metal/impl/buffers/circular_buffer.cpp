@@ -24,7 +24,7 @@ namespace tt_metal {
 
 // Dynamic CBs will be created with address_ initialized to globally allocated address
 // Static CBs will not have address set until their owning Program allocates them
-CircularBuffer::CircularBuffer(const CoreRangeSet &core_ranges, const CircularBufferConfig &config) :
+CircularBuffer::CircularBuffer(const distributed::DistributedCoreRangeSet &core_ranges, const CircularBufferConfig &config) :
     id_(reinterpret_cast<uintptr_t>(this)),
     core_ranges_(core_ranges),
     config_(config),

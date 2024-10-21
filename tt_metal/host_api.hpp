@@ -243,7 +243,7 @@ void UpdateDynamicCircularBufferAddress(Program &program, CBHandle cb_handle, co
  */
 uint32_t CreateSemaphore(
     Program &program,
-    const std::variant<CoreRange, CoreRangeSet> &core_spec,
+    const std::variant<CoreRange, CoreRangeSet, DistributedCoreRange, DistributedCoreRangeSet> &core_spec,
     uint32_t initial_value,
     CoreType core_type = CoreType::WORKER);
 

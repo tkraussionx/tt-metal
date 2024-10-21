@@ -340,8 +340,8 @@ bool RunWriteBWTest(
     std::vector<uint32_t> local_worker_semaphore_addresses;
     std::vector<uint32_t> remote_worker_semaphore_addresses;
     for (auto const& worker_core : worker_cores) {
-        local_worker_semaphore_addresses.push_back(tt::tt_metal::CreateSemaphore(sender_program, worker_core, 0));
-        remote_worker_semaphore_addresses.push_back(tt::tt_metal::CreateSemaphore(receiver_program, worker_core, 0));
+        local_worker_semaphore_addresses.push_back(tt::tt_metal::CreateSemaphore(sender_program, CoreRange(worker_core), 0));
+        remote_worker_semaphore_addresses.push_back(tt::tt_metal::CreateSemaphore(receiver_program, CoreRange(worker_core), 0));
         log_info(tt::LogTest, "worker_core=(x={},y={}), local_worker_semaphore_address={}, remote_worker_semaphore_address={}",
                   worker_core.x, worker_core.y, local_worker_semaphore_addresses.back(), remote_worker_semaphore_addresses.back());
     }

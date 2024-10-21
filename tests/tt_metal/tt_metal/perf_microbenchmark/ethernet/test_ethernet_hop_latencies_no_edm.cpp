@@ -201,8 +201,8 @@ void build_and_run_roundtrip_latency_test(
 
         CoreCoord init_worker_core = CoreCoord{0, device_visits[device]++};
 
-        uint32_t worker_sem0 = CreateSemaphore(program, init_worker_core, 0, CoreType::WORKER);
-        uint32_t worker_sem1 = CreateSemaphore(program, init_worker_core, 0, CoreType::WORKER);
+        uint32_t worker_sem0 = CreateSemaphore(program, CoreRange(init_worker_core), 0, CoreType::WORKER);
+        uint32_t worker_sem1 = CreateSemaphore(program, CoreRange(init_worker_core), 0, CoreType::WORKER);
 
         std::vector<uint32_t> const& receiver_eth_ct_args = {};
         std::vector<uint32_t> const& sender_eth_ct_args = {};

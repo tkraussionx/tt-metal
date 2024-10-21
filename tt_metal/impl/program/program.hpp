@@ -236,13 +236,19 @@ class Program {
     friend KernelHandle detail::AddKernel(Program &program, std::shared_ptr<Kernel> kernel, const HalProgrammableCoreType core_type);
     friend std::shared_ptr<Kernel> detail::GetKernel(const Program &program, KernelHandle kernel_id);
 
-    friend uint32_t CreateSemaphore(Program &program, const std::variant<CoreRange,CoreRangeSet> &core_spec, uint32_t initial_value, CoreType core_type);
+    friend uint32_t CreateSemaphore(
+        Program &program,
+        const std::variant<CoreRange, CoreRangeSet, distributed::DistributedCoreRange, distributed::DistributedCoreRangeSet> &core_spec,
+        uint32_t initial_value,
+        CoreType core_type);
+
     KernelHandle add_kernel(std::shared_ptr<Kernel> kernel, const HalProgrammableCoreType &core_type);
 
-    CBHandle add_circular_buffer(const CoreRangeSet &core_range_set, const CircularBufferConfig &config);
+    CBHandle add_circular_buffer(const DistributedCoreRangeSet &core_range_set, const CircularBufferConfig &config);
     std::shared_ptr<CircularBuffer> get_circular_buffer(CBHandle cb_id) const;
 
-    void add_semaphore(const distributed::DistributedCoreRangeSet &crs, uint32_t init_value, CoreType core_type);
+    uint32_t compute_next_sem_id_for_core_range(const distributed::DistributedCoreRange& core_range);
+    uint32_t add_semaphore(const distributed::DistributedCoreRangeSet &crs, uint32_t init_value, CoreType core_type);
 
     friend void detail::AddConfigBuffer(Program &program, std::shared_ptr<Buffer> config_buffer);
     void add_config_buffer(std::shared_ptr<Buffer> config_buffer);

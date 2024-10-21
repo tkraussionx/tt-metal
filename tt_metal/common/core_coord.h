@@ -502,7 +502,7 @@ struct DistributedCoreRange {
 
     bool tied_to_device_grid() const { return this->start.tied_to_device_grid(); }
 
-    std::vector<DistributedCoreCoord> get_cores_in_range() {
+    std::vector<DistributedCoreCoord> get_cores_in_range() const {
         std::vector<DistributedCoreCoord> cores_in_range = {};
         std::size_t device_start_x = 0;
         std::size_t device_end_x = 1;
@@ -540,6 +540,21 @@ struct DistributedCoreRange {
 
         return coords_contained_in_device_dims && coords_contained_in_core_dims;
     }
+
+    bool intersects(const DistributedCoreCoord& core_coord) const {
+        std::size_t device_x1 = std::max(this->start.device_x(), other.start.device_x());
+        std::size_t device_y1 = std::max(this->start.device_y(), other.start.device_y());
+        std::size_t core_x1 = std::max(this->start.core_x(), other.start.core_x());
+        std::size_t core_y1 = std::max(this->start.core_y(), other.start.core_y());
+        std::size_t device_x2 = std::min(this->end.device_x(), other.end.device_x());
+        std::size_t device_y2 = std::min(this->end.device_y(), other.end.device_y());
+        std::size_t core_x2 = std::min(this->end.core_x(), other.end.core_x());
+        std::size_t core_y2 = std::min(this->end.core_y(), other.end.core_y());
+        return ((device_x1 <= device_x2) and
+                (device_y1 <= device_y2) and
+                (core_x1 <= core_x2) and
+                (core_y1 <= core_y2));
+    }
 };
 
 constexpr inline bool operator==(const DistributedCoreRange& a, const DistributedCoreRange& b) {
@@ -555,6 +570,8 @@ constexpr inline bool operator<(const DistributedCoreRange &left, const Distribu
 
 struct DistributedCoreRangeSet {
     std::set<DistributedCoreRange> ranges_;
+
+    DistributedCoreRangeSet() : ranges_({}) {};
 
     DistributedCoreRangeSet(const CoreRangeSet& core_range_set) {
         for (const auto& core_range : core_range_set.ranges()) {
@@ -572,11 +589,11 @@ struct DistributedCoreRangeSet {
         this->ranges_ = distributed_core_range_set;
     }
 
-    const std::set<DistributedCoreRange>& ranges() {
+    const std::set<DistributedCoreRange>& ranges() const {
         return this->ranges_;
     }
 
-    bool tied_to_device_grid() { return this->ranges_.size() and this->ranges_.begin()->tied_to_device_grid(); }
+    bool tied_to_device_grid() const { return this->ranges_.size() and this->ranges_.begin()->tied_to_device_grid(); }
 
     bool core_coord_in_core_ranges(const DistributedCoreCoord& core_coord) const {
         for (const auto &cr : this->ranges_) {
@@ -594,6 +611,10 @@ struct DistributedCoreRangeSet {
         }
         return CoreRangeSet(core_range_set);
     }
+
+    bool intersects(const CoreRange& other) const [
+
+    ]
 };
 
 } // namespace distributed
@@ -728,6 +749,8 @@ namespace tt::tt_metal {
    using ::CoreCoord;
    using ::CoreRange;
    using ::CoreRangeSet;
+   using distributed::DistributedCoreRange;
+   using distributed::DistributedCoreRangeSet;
 }
 
 namespace std {
