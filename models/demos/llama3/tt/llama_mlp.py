@@ -41,10 +41,10 @@ class TtLlamaMLP(LightweightModule):
 
         # Sharded weights
         self.w1 = as_sharded_tensor(
-            "w1_sharded", ttnn.bfloat4_b, dim=-1
+            "w1_sharded", ttnn.bfloat8_b, dim=-1
         )  # bfp4 normally ok here but sub .99 pcc for llama 3.1 weights
         self.w2 = as_sharded_tensor("w2_sharded", ttnn.bfloat8_b, dim=-2)
-        self.w3 = as_sharded_tensor("w3_sharded", ttnn.bfloat4_b, dim=-1)
+        self.w3 = as_sharded_tensor("w3_sharded", ttnn.bfloat8_b, dim=-1)
 
     def forward(self, x: ttnn.Tensor, mode) -> ttnn.Tensor:
         """
@@ -122,7 +122,9 @@ class TtLlamaMLP(LightweightModule):
         ttnn.deallocate(w2_in)
 
         if mode == "decode":
-            w2_out = ttnn.sharded_to_interleaved(w2_out, ttnn.L1_MEMORY_CONFIG)
+            w2_out = ttnn.sharded_to_interleaved(
+                w2_out, ttnn.L1_MEMORY_CONFIG
+            )  # FIXME: When h is L1 interleaved in decoder, this call corrupts it!
 
         if seq_len >= 2048:  # Reshape back to intended shape
             w2_out = ttnn.reshape(w2_out, [1, 1, seq_len, -1])

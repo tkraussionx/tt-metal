@@ -140,7 +140,7 @@ def test_llama_model_inference(mesh_device, seq_len, use_program_cache, reset_se
         # Run TT model
         tt_out = tt_model(decode_input, None, rot_mats, transformation_mats, user_id=i, mode="prefill")
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=1))[
+        tt_output_torch = ttnn.to_torch(tt_out, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=-1))[
             :, 0, :, :
         ].view(
             batch, seq_len, -1
