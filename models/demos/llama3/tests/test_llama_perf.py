@@ -51,15 +51,15 @@ def test_llama_model_perf(
     profiler.clear()
 
     profiler.start("weight_loading")
-    state_dict = torch.load(model_args.consolidated_weights_path, map_location=torch.device("cpu"))
-    state_dict = {
-        k: v
-        for k, v in state_dict.items()
-        if (
-            any([f"layers.{i}." in k for i in range(model_args.n_layers)])
-            or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
-        )
-    }
+    state_dict = model_args.load_state_dict()
+    # state_dict = {
+    #     k: v
+    #     for k, v in state_dict.items()
+    #     if (
+    #         any([f"layers.{i}." in k for i in range(model_args.n_layers)])
+    #         or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
+    #     )
+    # }
     profiler.end("weight_loading")
 
     prompts = ["This is a test"] * model_args.max_batch_size

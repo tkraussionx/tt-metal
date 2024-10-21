@@ -92,8 +92,14 @@ class TtTransformerBlock(LightweightModule):
         # FIXME: move to sharded residuals once support for this is added
         skip_mem_cfg = self.model_config["DEC_SKIP_OUTPUT_MEMCFG"] if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
 
+        first_five = lambda t: ttnn.to_torch(t, mesh_composer=ttnn.ConcatMeshToTensor(self.args.mesh_device, dim=-1))[
+            0, 0, 0, :5
+        ]
+
+        print(f"{first_five(x)=}")
         # Norms take fractured inputs and output replicated across devices
         attn_in = self.attention_norm(x, mode)
+        print(f"{first_five(attn_in)=}")
         # Attention takes replicated inputs and produces fractured outputs
         attn_out = self.attention.forward(
             attn_in,
@@ -104,17 +110,28 @@ class TtTransformerBlock(LightweightModule):
             mode,
             page_table,
         )
-
+        print(f"{first_five(attn_out)=}")
         # Here x and attn_out are both fractured across devices
         h = ttnn.add(x, attn_out, memory_config=skip_mem_cfg)
+        print(f"{first_five(h)=}")
         ttnn.deallocate(attn_out)
+        print(f"{first_five(h)=}")
 
         # Norms take fractured inputs and output replicated across devices
         ff_in = self.ff_norm(h, mode)
+        print(f"{first_five(h)=}")  # < VALID
+        print(f"{first_five(ff_in)=}")  # < valid and not the same as h
         # MLP takes replicated inputs and produces fractured outputs
         ff_out = self.feed_forward.forward(ff_in, mode)
+        print(f"{first_five(h)=}")  # < GARBAGE
 
+        print(f"{first_five(ff_out)=}")
+        print(f"{h.memory_config()=}")
+        print(f"{ff_out.memory_config()=}")
         # ff_out and h are both fractured across devices
         out = ttnn.add(h, ff_out, memory_config=skip_mem_cfg)
+        print(f"{first_five(out)=}")
+        print(f"{out.memory_config()=}")
+        print(f"{skip_mem_cfg=}")
 
         return out  # fractured across devices
