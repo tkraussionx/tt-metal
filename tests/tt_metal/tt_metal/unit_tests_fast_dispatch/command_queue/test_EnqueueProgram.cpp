@@ -1474,6 +1474,8 @@ TEST_F(RandomProgramFixture, TestProgramsOnEth) {
             false,
             MIN_NUM_SEMS,
             MAX_NUM_SEMS,
+            MIN_NUM_CBS,
+            MAX_NUM_CBS,
             MIN_NUM_RUNTIME_ARGS,
             MAX_NUM_RUNTIME_ARGS / 4,
             MIN_KERNEL_SIZE_BYTES,
@@ -1503,6 +1505,8 @@ TEST_F(RandomProgramFixture, TestProgramsOnTensixAndEth) {
                 false,
                 MIN_NUM_SEMS,
                 MAX_NUM_SEMS / 2,
+                MIN_NUM_CBS,
+                MAX_NUM_CBS,
                 MIN_NUM_RUNTIME_ARGS,
                 MAX_NUM_RUNTIME_ARGS / 4,
                 MIN_KERNEL_SIZE_BYTES,
@@ -1528,6 +1532,8 @@ TEST_F(RandomProgramFixture, TestAlternatingLargeAndSmallProgramsOnTensix) {
 
         uint32_t min_num_sems;
         uint32_t max_num_sems;
+        uint32_t min_num_cbs;
+        uint32_t max_num_cbs;
         uint32_t min_num_rt_args;
         uint32_t max_num_rt_args;
         uint32_t min_size_bytes;
@@ -1537,6 +1543,8 @@ TEST_F(RandomProgramFixture, TestAlternatingLargeAndSmallProgramsOnTensix) {
         if (i % 2 == 0) {
             min_num_sems = MAX_NUM_SEMS * (8.0 / 10);
             max_num_sems = MAX_NUM_SEMS;
+            min_num_cbs = MAX_NUM_CBS * (8.0 / 10);
+            max_num_cbs = MAX_NUM_CBS;
             min_num_rt_args = MAX_NUM_RUNTIME_ARGS * (9.0 / 10);
             max_num_rt_args = MAX_NUM_RUNTIME_ARGS;
             min_size_bytes = MAX_KERNEL_SIZE_BYTES * (9.0 / 10);
@@ -1546,8 +1554,10 @@ TEST_F(RandomProgramFixture, TestAlternatingLargeAndSmallProgramsOnTensix) {
         } else {
             min_num_sems = MIN_NUM_SEMS;
             max_num_sems = MAX_NUM_SEMS * (3.0 / 10);
-            min_num_rt_args = max_num_sems;
-            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (2.0 / 10);
+            min_num_cbs = MIN_NUM_CBS;
+            max_num_cbs = MAX_NUM_CBS * (3.0 / 10);
+            min_num_rt_args = max_num_sems + max_num_cbs;
+            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (3.0 / 10);
             min_size_bytes = MIN_KERNEL_SIZE_BYTES;
             max_size_bytes = MAX_KERNEL_SIZE_BYTES * (2.0 / 10);
             min_runtime_microseconds = MIN_KERNEL_RUNTIME_MICROSECONDS;
@@ -1560,6 +1570,8 @@ TEST_F(RandomProgramFixture, TestAlternatingLargeAndSmallProgramsOnTensix) {
             false,
             min_num_sems,
             max_num_sems,
+            min_num_cbs,
+            max_num_cbs,
             min_num_rt_args,
             max_num_rt_args,
             min_size_bytes,
@@ -1582,6 +1594,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramFollowedBySmallProgramsOnTensix) {
 
         uint32_t min_num_sems;
         uint32_t max_num_sems;
+        uint32_t min_num_cbs;
+        uint32_t max_num_cbs;
         uint32_t min_num_rt_args;
         uint32_t max_num_rt_args;
         uint32_t min_size_bytes;
@@ -1591,6 +1605,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramFollowedBySmallProgramsOnTensix) {
         if (i == 0) {
             min_num_sems = MAX_NUM_SEMS * (8.0 / 10);
             max_num_sems = MAX_NUM_SEMS;
+            min_num_cbs = MAX_NUM_CBS * (8.0 / 10);
+            max_num_cbs = MAX_NUM_CBS;
             min_num_rt_args = MAX_NUM_RUNTIME_ARGS * (9.0 / 10);
             max_num_rt_args = MAX_NUM_RUNTIME_ARGS;
             min_size_bytes = MAX_KERNEL_SIZE_BYTES * (9.0 / 10);
@@ -1600,8 +1616,10 @@ TEST_F(RandomProgramFixture, TestLargeProgramFollowedBySmallProgramsOnTensix) {
         } else {
             min_num_sems = MIN_NUM_SEMS;
             max_num_sems = MAX_NUM_SEMS * (3.0 / 10);
-            min_num_rt_args = max_num_sems;
-            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (2.0 / 10);
+            min_num_cbs = MIN_NUM_CBS;
+            max_num_cbs = MAX_NUM_CBS * (3.0 / 10);
+            min_num_rt_args = max_num_sems + max_num_cbs;
+            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (3.0 / 10);
             min_size_bytes = MIN_KERNEL_SIZE_BYTES;
             max_size_bytes = MAX_KERNEL_SIZE_BYTES * (2.0 / 10);
             min_runtime_microseconds = MIN_KERNEL_RUNTIME_MICROSECONDS;
@@ -1614,6 +1632,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramFollowedBySmallProgramsOnTensix) {
             false,
             min_num_sems,
             max_num_sems,
+            min_num_cbs,
+            max_num_cbs,
             min_num_rt_args,
             max_num_rt_args,
             min_size_bytes,
@@ -1636,6 +1656,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramInBetweenFiveSmallProgramsOnTensix)
 
         uint32_t min_num_sems;
         uint32_t max_num_sems;
+        uint32_t min_num_cbs;
+        uint32_t max_num_cbs;
         uint32_t min_num_rt_args;
         uint32_t max_num_rt_args;
         uint32_t min_size_bytes;
@@ -1645,6 +1667,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramInBetweenFiveSmallProgramsOnTensix)
         if (i % 6 == 0) {
             min_num_sems = MAX_NUM_SEMS * (8.0 / 10);
             max_num_sems = MAX_NUM_SEMS;
+            min_num_cbs = MAX_NUM_CBS * (8.0 / 10);
+            max_num_cbs = MAX_NUM_CBS;
             min_num_rt_args = MAX_NUM_RUNTIME_ARGS * (9.0 / 10);
             max_num_rt_args = MAX_NUM_RUNTIME_ARGS;
             min_size_bytes = MAX_KERNEL_SIZE_BYTES * (9.0 / 10);
@@ -1654,8 +1678,10 @@ TEST_F(RandomProgramFixture, TestLargeProgramInBetweenFiveSmallProgramsOnTensix)
         } else {
             min_num_sems = MIN_NUM_SEMS;
             max_num_sems = MAX_NUM_SEMS * (3.0 / 10);
-            min_num_rt_args = max_num_sems;
-            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (2.0 / 10);
+            min_num_cbs = MIN_NUM_CBS;
+            max_num_cbs = MAX_NUM_CBS * (3.0 / 10);
+            min_num_rt_args = max_num_sems + max_num_cbs;
+            max_num_rt_args = MAX_NUM_RUNTIME_ARGS * (3.0 / 10);
             min_size_bytes = MIN_KERNEL_SIZE_BYTES;
             max_size_bytes = MAX_KERNEL_SIZE_BYTES * (2.0 / 10);
             min_runtime_microseconds = MIN_KERNEL_RUNTIME_MICROSECONDS;
@@ -1668,6 +1694,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramInBetweenFiveSmallProgramsOnTensix)
             false,
             min_num_sems,
             max_num_sems,
+            min_num_cbs,
+            max_num_cbs,
             min_num_rt_args,
             max_num_rt_args,
             min_size_bytes,
