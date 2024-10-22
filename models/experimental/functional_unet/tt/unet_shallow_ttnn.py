@@ -561,13 +561,14 @@ class UNet:
         output = []
         for batch_idx in range(0, B, slice_length):
             start, end = batch_idx, batch_idx + slice_length
+            print(start, end)
             slice = ttnn.slice(
                 x,
                 [start, 0, 0, 0],
                 [end, H, W, C],
-                memory_config=self.input_sharded_memory_config,
             )
-            slice = ttnn.reshape(slice, [1, 1, slice_length * H * W, C])
+            print("after slice: ", slice.shape)
+            # slice = ttnn.reshape(slice, [1, 1, slice_length * H * W, C])
             slice = self.__call__(slice, move_input_tensor_to_device=False)
             output.append(ttnn.to_memory_config(slice, ttnn.DRAM_MEMORY_CONFIG))
         return output
