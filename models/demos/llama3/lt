@@ -247,7 +247,7 @@ def main(stdscr):
             else:
                 # Ignore enter key when exiting
                 continue
-        elif c == curses.KEY_BACKSPACE or c == 127 or c == ord("x"):
+        elif c == curses.KEY_BACKSPACE or c == 127 or (c == ord("x") and current_line >= len(input_fields)):
             if current_line < len(input_fields):
                 current_field = current_line
                 # Remove last character from current field
