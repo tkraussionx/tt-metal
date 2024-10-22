@@ -5,6 +5,7 @@
 import math
 import torch
 import ttnn
+from models.common.device_allocation import as_tensor, from_torch
 
 
 class HostEmbedding(torch.nn.Module):
@@ -151,7 +152,7 @@ def prepare_inputs_ttnn(x, hidden_size, mesh_device):
         pass  # already in [seq_len, 1, batch, hidden_dim]
 
     if torch.is_tensor(x):
-        x = ttnn.from_torch(
+        x = from_torch(
             x,
             device=mesh_device,
             dtype=ttnn.bfloat16,
@@ -202,14 +203,14 @@ def get_prefill_rot_mat(head_dim, max_seq_len, mesh_device, seq_len):
     assert cos_gathered.size() == (1, 1, seq_len, head_dim)
     assert sin_gathered.size() == (1, 1, seq_len, head_dim)
 
-    cos_gathereds = ttnn.from_torch(
+    cos_gathereds = from_torch(
         cos_gathered,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         device=mesh_device,
         mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
     )
-    sin_gathereds = ttnn.from_torch(
+    sin_gathereds = from_torch(
         sin_gathered,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
@@ -243,7 +244,7 @@ def prepare_inputs_ttnn_prefill(x_bsh, mesh_device):
     x_1BSH = x_bsh.unsqueeze(0)
 
     # input goes to DRAM
-    xs_1BSH = ttnn.from_torch(
+    xs_1BSH = from_torch(
         x_1BSH,
         device=mesh_device,
         dtype=ttnn.bfloat16,
@@ -279,13 +280,13 @@ def get_single_rot_mat(
     current_rot_mat[torch.arange(0, dhead, 2), torch.arange(1, dhead, 2)] = -sin_freqs.clone()
     current_rot_mat[torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
 
-    return ttnn.from_torch(
+    return from_torch(
         current_rot_mat.T.unsqueeze(0).unsqueeze(0),  # 1,1,head_dim,head_dim
         device=mesh_device if not on_host else None,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device) if num_devices > 1 or not on_host else None,
-    ), ttnn.from_torch(
+    ), from_torch(
         rot_matrix.unsqueeze(0).unsqueeze(0),  # 1,1,head_dim,head_dim
         device=mesh_device if not on_host else None,
         dtype=ttnn.bfloat16,

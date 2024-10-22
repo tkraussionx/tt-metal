@@ -2,9 +2,8 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import List, Optional
 import torch
-
+from models.common.device_allocation import as_tensor, from_torch
 import ttnn
 from models.utility_functions import (
     nearest_32,
@@ -73,7 +72,7 @@ class TtLlamaAttention(LightweightModule):
         wqkv_mem_config = configuration.create_dram_sharded_mem_config(
             configuration.dim, configuration.qkv_size // configuration.num_devices
         )
-        self.wqkv = ttnn.as_tensor(
+        self.wqkv = as_tensor(
             torch.concat(
                 [
                     torch.concat(
@@ -112,7 +111,7 @@ class TtLlamaAttention(LightweightModule):
         wo_mem_config = configuration.create_dram_sharded_mem_config(
             configuration.dim // configuration.num_devices, configuration.dim
         )
-        self.wo = ttnn.as_tensor(
+        self.wo = as_tensor(
             torch.transpose(
                 self.state_dict[wo_str],
                 -2,
@@ -162,7 +161,7 @@ class TtLlamaAttention(LightweightModule):
             )
 
         self.layer_past = [
-            ttnn.as_tensor(
+            as_tensor(
                 k_or_v,
                 device=self.mesh_device,
                 mesh_mapper=ttnn.ShardTensorToMesh(self.mesh_device, dim=1),

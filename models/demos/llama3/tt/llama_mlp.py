@@ -5,6 +5,7 @@
 import torch
 import ttnn
 from models.common.lightweightmodule import LightweightModule
+from models.common.device_allocation import as_tensor, from_torch
 
 
 class TtLlamaMLP(LightweightModule):
@@ -29,7 +30,7 @@ class TtLlamaMLP(LightweightModule):
         w2_mem_config = args.create_dram_sharded_mem_config(args.hidden_dim // args.num_devices, args.dim)
 
         # TODO Clean up this code. With sharding, we load the normal weights and then shard them
-        as_sharded_tensor = lambda name, type, dim: ttnn.as_tensor(
+        as_sharded_tensor = lambda name, type, dim: as_tensor(
             torch_weight(name[:2]),  # Grab only the wX part of the name
             dtype=type,
             device=self.mesh_device,
@@ -41,10 +42,10 @@ class TtLlamaMLP(LightweightModule):
 
         # Sharded weights
         self.w1 = as_sharded_tensor(
-            "w1_sharded", ttnn.bfloat4_b, dim=-1
+            "w1_sharded", ttnn.bfloat8_b, dim=-1
         )  # bfp4 normally ok here but sub .99 pcc for llama 3.1 weights
         self.w2 = as_sharded_tensor("w2_sharded", ttnn.bfloat8_b, dim=-2)
-        self.w3 = as_sharded_tensor("w3_sharded", ttnn.bfloat4_b, dim=-1)
+        self.w3 = as_sharded_tensor("w3_sharded", ttnn.bfloat8_b, dim=-1)
 
     def forward(self, x: ttnn.Tensor, mode) -> ttnn.Tensor:
         """

@@ -14,6 +14,7 @@ import pytest
 import requests
 from pathlib import Path
 import hashlib
+from models.common.device_allocation import as_tensor, from_torch
 
 from models.demos.llama3.tt.llama_common import (
     get_single_rot_mat,
@@ -248,7 +249,7 @@ def run_llama3_demo(
         # head_dim = model_args.dim // model_args.n_heads
         transformation_mat_torch = get_rot_transformation_mat(model_args.head_dim)
 
-        transformation_mats = ttnn.from_torch(
+        transformation_mats = from_torch(
             transformation_mat_torch,
             dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
@@ -297,7 +298,7 @@ def run_llama3_demo(
         # Preparing first decode token
         pt_out_batched = torch.stack(pt_out, dim=-2)
         pt_out_batched = torch.argmax(pt_out_batched, dim=-1)
-        tt_out_tok = ttnn.from_torch(
+        tt_out_tok = from_torch(
             torch.nn.functional.pad(pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0), (0, 31), "constant", 0),
             # pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0),
             device=mesh_device,
@@ -326,7 +327,7 @@ def run_llama3_demo(
         op_event = ttnn.create_event(mesh_device)
         write_event = ttnn.create_event(mesh_device)
 
-        current_pos = ttnn.from_torch(
+        current_pos = from_torch(
             torch.tensor(decoding_pos, dtype=torch.int32),
             device=mesh_device,
             mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
@@ -369,12 +370,12 @@ def run_llama3_demo(
         ttnn.plus_one(current_pos)
 
         ttnn.end_trace_capture(mesh_device, trace_id, cq_id=0)
-        current_pos_reset = ttnn.from_torch(
+        current_pos_reset = from_torch(
             torch.tensor(decoding_pos, dtype=torch.int32),
             dtype=ttnn.int32,
             mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device) if tt_model.args.num_devices > 1 else None,
         )
-        tt_out_tok_reset = ttnn.from_torch(
+        tt_out_tok_reset = from_torch(
             torch.nn.functional.pad(pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0), (0, 31), "constant", 0),
             dtype=ttnn.uint32,
             mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device) if tt_model.args.num_devices > 1 else None,

@@ -2,6 +2,7 @@ import math
 import ttnn
 import torch
 import torch.nn as nn
+from models.common.device_allocation import as_tensor, from_torch
 
 
 class LMHead(nn.Module):
@@ -52,7 +53,7 @@ class LMHead(nn.Module):
                 k=args.dim, n=combined_split.shape[-1] // self.num_devices
             )
             self.output_weights.append(
-                ttnn.as_tensor(
+                as_tensor(
                     combined_split,
                     device=mesh_device,
                     mesh_mapper=ttnn.ShardTensorToMesh(mesh_device, dim=-1),

@@ -39,9 +39,9 @@ class TtModelArgs:
     # TODO Update these params. In init we update the max_seq_len to 32k if it's a single device
     max_batch_size = 1
     # Context length for Llama models (if single device, reduce to 32k in init)
-    max_seq_len = 8192 * 16  # 128k
-    kv_seq_len = 8192 * 16  # 128k
-    sliding_window = 8192 * 16  # 128k
+    max_seq_len = 8192 * 8  # 16  # 128kq
+    kv_seq_len = 8192 * 8  # 16  # 128k
+    sliding_window = 8192 * 8  # 16  # 128k
 
     tile_size = 32
 
