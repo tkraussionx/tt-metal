@@ -502,6 +502,8 @@ def worker_thread_func(output_entries, stop_event, screen_lock, screen_needs_upd
         running_entry = None
         for entry in output_entries:
             with entry["lock"]:
+                # Check if the process is still running (poll() returns None for running processes)
+                # or if the entry is in a transitional state
                 if (entry["process"] and entry["process"].poll() is None) or entry["status"] in [
                     "Resetting",
                     "Terminating",
@@ -514,6 +516,11 @@ def worker_thread_func(output_entries, stop_event, screen_lock, screen_needs_upd
             for entry in output_entries:
                 with entry["lock"]:
                     if entry["status"] == "Waiting":
+                        with open("running.txt", "a") as f:
+                            # Write a list of all the entry statuses in output_entries
+                            for e in output_entries:
+                                f.write(f"{e['command_name']} {e['model']} {e['device']} {e['status']}\n")
+                            f.write("\n")
                         run_entry_command(entry, screen_lock, output_entries, screen_needs_update)
                         break
         # Set screen_needs_update whenever there's a change in output entries
@@ -584,10 +591,6 @@ def process_output(entry, screen_lock, output_entries, screen_needs_update):
 
             # Update status and output based on output
             status, output, speed, pcc = parse_output_line(line, previous_line, entry["status"])
-            # # Append input and output of parse_output_line to a log file
-            # with open("parse_output_log.txt", "a") as parse_log:
-            #     parse_log.write(f"Input: {line.strip()}, Previous status: {entry['status']}\n")
-            #     parse_log.write(f"Output: Status: {status}, Output: {output}, Speed: {speed}, PCC: {pcc}\n\n")
             previous_line = line.strip()
             with entry["lock"]:
                 if status != entry["status"] or output or speed is not None or pcc is not None:
@@ -614,6 +617,9 @@ def process_output(entry, screen_lock, output_entries, screen_needs_update):
 
         with entry["lock"]:
             if process.returncode != 0:
+                exception_name = find_exception_in_log(entry["log_file"].name)
+                entry["status"] = "Error"
+                entry["output"] = exception_name
                 reset_device_async(entry, screen_lock, screen_needs_update)
                 screen_needs_update.set()
             else:
@@ -622,16 +628,6 @@ def process_output(entry, screen_lock, output_entries, screen_needs_update):
         log_file.close()
 
         screen_needs_update.set()  # Ensure screen is updated after process termination
-
-    # Start the next waiting entry
-    for next_entry in output_entries:
-        if next_entry["index"] > entry["index"]:
-            with next_entry["lock"]:
-                if next_entry["status"] == "Waiting" and not any(
-                    e["process"] and e["process"].poll() is None for e in output_entries
-                ):
-                    run_entry_command(next_entry, screen_lock, output_entries, screen_needs_update)
-                    break
 
 
 def parse_output_line(line, previous_line, current_status):
