@@ -94,16 +94,6 @@ class TtModelArgs:
         device = mesh_device.get_devices()[0]
         device_name = {1: "N150", 2: "N300", 8: "T3K", 32: "TG"}[self.num_devices]
 
-        # Reduce full 128k context length for combinations with memory constraints
-        # Currently: n150 8b and t3k 70b with 8b/8b/8b MLPs
-        is_8b = self.dim == 4096 and self.n_layers == 32
-        is_70b = self.dim == 8192 and self.n_layers == 80
-        if self.num_devices == 1 and is_8b or is_70b:
-            self.max_seq_len = 8192 * 4  # 32k
-            self.kv_seq_len = 8192 * 4  # 32k
-            self.sliding_window = 8192 * 4  # 32k
-
-        # Default folder location for weights and cached files
         LLAMA_DIR = os.getenv("LLAMA_DIR")
         if LLAMA_DIR:
             if any([os.getenv("LLAMA_CKPT_DIR"), os.getenv("LLAMA_TOKENIZER_PATH"), os.getenv("LLAMA_CACHE_PATH")]):
@@ -152,6 +142,16 @@ class TtModelArgs:
             self._set_llama_params(self.DEFAULT_CKPT_DIR)
 
         self.n_local_heads = self.n_heads // self.num_devices
+
+        # Reduce full 128k context length for combinations with memory constraints
+        # Currently: n150 8b and t3k 70b with 8b/8b/8b MLPs
+        # Default folder location for weights and cached files
+        is_8b = self.dim == 4096 and self.n_layers == 32
+        is_70b = self.dim == 8192 and self.n_layers == 80
+        if self.num_devices == 1 and is_8b or is_70b:
+            self.max_seq_len = 8192 * 4  # 32k
+            self.kv_seq_len = 8192 * 4  # 32k
+            self.sliding_window = 8192 * 4  # 32k
 
         # Some consumers like SentencePiece only accept str not Path for files
         self.model_base_path = Path(self.DEFAULT_CKPT_DIR)
