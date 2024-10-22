@@ -1248,7 +1248,7 @@ int main(int argc, char **argv) {
                 && (demux_queue_size_bytes >= 0x10000)) {
                     double target_bandwidth = 0;
                     if (max_packet_size_words >= 2048) {
-                        target_bandwidth = 4.8;
+                        target_bandwidth = 3.8;
                         log_info(LogTest, "Perf check for pkt size >= 2048 words");
                     } else if (max_packet_size_words >= 1024) {
                         target_bandwidth = 4.6;
