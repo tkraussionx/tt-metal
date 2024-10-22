@@ -94,8 +94,11 @@ class TtModelArgs:
         device = mesh_device.get_devices()[0]
         device_name = {1: "N150", 2: "N300", 8: "T3K", 32: "TG"}[self.num_devices]
 
-        # A single device cannot fit the full 128k context length
-        if self.num_devices == 1:
+        # Reduce full 128k context length for combinations with memory constraints
+        # Currently: n150 8b and t3k 70b with 8b/8b/8b MLPs
+        is_8b = self.dim == 4096 and self.n_layers == 32
+        is_70b = self.dim == 8192 and self.n_layers == 80
+        if self.num_devices == 1 and is_8b or is_70b:
             self.max_seq_len = 8192 * 4  # 32k
             self.kv_seq_len = 8192 * 4  # 32k
             self.sliding_window = 8192 * 4  # 32k
