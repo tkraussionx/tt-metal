@@ -505,6 +505,7 @@ def worker_thread_func(output_entries, stop_event, screen_lock, screen_needs_upd
                 if (entry["process"] and entry["process"].poll() is None) or entry["status"] in [
                     "Resetting",
                     "Terminating",
+                    "Initializing device",
                 ]:
                     running_entry = entry
                     break
@@ -612,10 +613,7 @@ def process_output(entry, screen_lock, output_entries, screen_needs_update):
         process.wait()
 
         with entry["lock"]:
-            if entry["status"] == "Terminating":
-                reset_device_async(entry, screen_lock, screen_needs_update)
-                screen_needs_update.set()
-            elif process.returncode != 0:
+            if process.returncode != 0:
                 reset_device_async(entry, screen_lock, screen_needs_update)
                 screen_needs_update.set()
             else:
