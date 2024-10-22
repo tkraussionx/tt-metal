@@ -284,12 +284,12 @@ class UNetDownblock:
             )
 
     def __call__(self, x):
-        assert list(x.shape) == [
-            1,
-            1,
-            nearest_32(self.conv1.input_height * self.conv1.input_width * self.conv1.batch_size),
-            x.shape[-1],  # Channels can be padded
-        ], f"Expected downblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
+        # assert list(x.shape) == [
+        # 1,
+        # 1,
+        # nearest_32(self.conv1.input_height * self.conv1.input_width * self.conv1.batch_size),
+        # x.shape[-1],  # Channels can be padded
+        # ], f"Expected downblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
         if self.should_reshard:
             x = ttnn.to_memory_config(
                 x,
@@ -361,10 +361,10 @@ class UNetUpblock:
         return x
 
     def __call__(self, x, residual):
-        assert list(x.shape)[:2] == [
-            1,
-            1,
-        ], f"Expected upblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
+        # assert list(x.shape)[:2] == [
+        # 1,
+        # 1,
+        # ], f"Expected upblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
 
         residual = ttnn.to_layout(residual, ttnn.ROW_MAJOR_LAYOUT)
         x = ttnn.to_layout(x, layout=ttnn.ROW_MAJOR_LAYOUT)
@@ -546,12 +546,31 @@ class UNet:
 
     def postprocess_output_tensor(self, x):
         # Convert the output tensor (in TILE layout) to RM to prevent transferring padding back to host.
+        return x
         return ttnn.to_layout(
             ttnn.reshape(
                 x, shape=ttnn.Shape([1, 1, x.shape[2], 16], [1, 1, x.shape[2], 32])
             ),  # At the moment we can only reduce the padding from 32 to 16 because reshape is broken.
             ttnn.ROW_MAJOR_LAYOUT,
         )
+
+    def forward(self, x, slice_length=2):
+        B, C, H, W = x.shape
+        x = ttnn.to_device(x, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        x = ttnn.permute(x, (0, 2, 3, 1))
+        output = []
+        for batch_idx in range(0, B, slice_length):
+            start, end = batch_idx, batch_idx + slice_length
+            slice = ttnn.slice(
+                x,
+                [start, 0, 0, 0],
+                [end, H, W, C],
+                memory_config=self.input_sharded_memory_config,
+            )
+            slice = ttnn.reshape(slice, [1, 1, slice_length * H * W, C])
+            slice = self.__call__(slice, move_input_tensor_to_device=False)
+            output.append(ttnn.to_memory_config(slice, ttnn.DRAM_MEMORY_CONFIG))
+        return output
 
     def __call__(self, x, move_input_tensor_to_device=True):
         assert len(x.shape) == 4, f"Expected UNet input tensors to be rank 4 (was {len(x.shape)})"

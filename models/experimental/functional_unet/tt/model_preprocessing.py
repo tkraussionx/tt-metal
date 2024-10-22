@@ -28,13 +28,8 @@ def create_unet_input_tensors(
                 ttnn_input_tensor,
                 (0, max(0, pad - ttnn_input_tensor.shape[-1]), 0, max(0, hpad - ttnn_input_tensor.shape[-2])),
             )
+    ttnn_input_tensor = ttnn_input_tensor.permute(0, 3, 1, 2).reshape(batch, 16, 1056, 160)
     ttnn_input_tensor = ttnn.from_torch(ttnn_input_tensor, dtype=ttnn.bfloat16, mesh_mapper=mesh_mapper)
-    ttnn_input_tensor = ttnn_input_tensor.reshape(
-        1,
-        1,
-        ttnn_input_tensor.shape[0] * ttnn_input_tensor.shape[1] * ttnn_input_tensor.shape[2],
-        ttnn_input_tensor.shape[3],
-    )
     return torch_input_tensor, ttnn_input_tensor
 
 
