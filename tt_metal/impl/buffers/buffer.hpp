@@ -344,4 +344,15 @@ struct from_json_t<tt::tt_metal::ShardSpec> {
             from_json<bool>(json_object.at("halo"))};
     }
 };
+template <>
+struct to_json_t<tt::tt_metal::ShardSpec> {
+    nlohmann::json operator()(const tt::tt_metal::ShardSpec& shard_spec) noexcept {
+        nlohmann::json ojson;
+        ojson["grid"] = to_json(shard_spec.grid);
+        ojson["shape"] = shard_spec.shape;
+        ojson["orientation"] = shard_spec.orientation;
+        ojson["halo"] = shard_spec.halo;
+        return ojson;
+    }
+};
 }  // namespace tt::stl::json
