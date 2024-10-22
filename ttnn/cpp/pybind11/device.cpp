@@ -139,9 +139,41 @@ void device_module(py::module& m_device) {
         Returns NaN value for current device.
         )doc");
 
-    pyDevice.def("sfpu_inf", &Device::sfpu_inf, R"doc(
-        Returns Infinity value for current device.
-        )doc");
+    // pyDevice.def("sfpu_pos_inf", &Device::sfpu_pos_inf, R"doc(
+    //     Returns Infinity value for given data type.
+    //     )doc");
+    pyDevice.def(
+        "sfpu_pos_inf",
+        [](tt::tt_metal::Datatype dtype) { return Device::sfpu_pos_inf(dtype);
+    },
+        R"doc(
+        Creates an instance of TT device.
+
+        +------------------+------------------------+------------------------+------------------------------+----------+
+        | Argument         | Description            | Data type              | Valid range                  | Required |
+        +==================+========================+========================+==============================+==========+
+        | dtype            | Data type of the device| tt::tt_metal::Datatype |                              | Yes      |
+        +------------------+------------------------+------------------------+------------------------------+----------+
+    )doc",
+    py::arg("dtype"));
+
+    // pyDevice.def("sfpu_neg_inf", &Device::sfpu_neg_inf, R"doc(
+    //     Returns Infinity value for given data type.
+    //     )doc");
+    pyDevice.def(
+        "sfpu_neg_inf",
+        [](tt::tt_metal::Datatype dtype) { return Device::sfpu_neg_inf(dtype);
+    },
+        R"doc(
+        Creates an instance of TT device.
+
+        +------------------+------------------------+------------------------+------------------------------+----------+
+        | Argument         | Description            | Data type              | Valid range                  | Required |
+        +==================+========================+========================+==============================+==========+
+        | dtype            | Data type of the device| tt::tt_metal::Datatype |                              | Yes      |
+        +------------------+------------------------+------------------------+------------------------------+----------+
+    )doc",
+    py::arg("dtype"));
 
     m_device.def(
         "CreateDevice",

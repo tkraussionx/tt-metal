@@ -3201,19 +3201,30 @@ float Device::sfpu_nan() const {
 }
 
 // machine inf
-float Device::sfpu_inf() const{
+float sfpu_pos_inf(DataType dtype) {
 
-    switch (arch()) {
-        case tt::ARCH::GRAYSKULL:
-            return tt::tt_metal::INF_GS;
-        case tt::ARCH::WORMHOLE_B0:
-            return tt::tt_metal::INF_WHB0;
-        case tt::ARCH::BLACKHOLE:
-            return tt::tt_metal::INF_BH;
+    switch (dtype) {
+        case tt::tt_metal::DataType::BFLOAT16:
+            return tt::tt_metal::POS_INF_BFLOAT16;
+        case tt::tt_metal::DataType::FLOAT32:
+            return tt::tt_metal::POS_INF_FLOAT32;
         default:
             return std::numeric_limits<float>::infinity();
     }
     return std::numeric_limits<float>::infinity();
+}
+
+float sfpu_neg_inf(tt::tt_metal::DataType dtype) {
+
+    switch (dtype) {
+        case tt::tt_metal::DataType::BFLOAT16:
+            return tt::tt_metal::NEG_INF_BFLOAT16;
+        case tt::tt_metal::DataType::FLOAT32:
+            return tt::tt_metal::NEG_INF_FLOAT32;
+        default:
+            return -std::numeric_limits<float>::infinity();
+    }
+    return -std::numeric_limits<float>::infinity();
 }
 
 std::pair<int, int> Device::build_processor_type_to_index(uint32_t programmable_core, uint32_t processor_class) const {

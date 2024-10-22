@@ -8,6 +8,7 @@
 #include <mutex>
 #include <utility>
 
+#include <string>
 #include "hostdevcommon/common_values.hpp"
 #include "impl/dispatch/work_executor.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
@@ -20,6 +21,7 @@
 #include "dev_msgs.h"
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
 #include "program_cache.hpp"
+// #include "ttnn/cpp/ttnn/tensor/types.hpp"
 
 namespace tt {
 
@@ -56,9 +58,11 @@ static constexpr float  NAN_GS = 6.9752e19;
 static constexpr float  NAN_WHB0 = 7.0040e+19;
 static constexpr float  NAN_BH = NAN_WHB0;
 
-static constexpr float  INF_GS = 1.6948e38;
-static constexpr float  INF_WHB0 = 1.7014e+38;
-static constexpr float  INF_BH = INF_WHB0;
+static constexpr float  POS_INF_BFLOAT16 = 0x7F80;
+static constexpr float  POS_INF_FLOAT32 = 0x7F800000;
+
+static constexpr float  NEG_INF_BFLOAT16 = 0xFF80;
+static constexpr float  NEG_INF_FLOAT32 = 0xFF800000;
 
 inline namespace v0 {
 
@@ -206,7 +210,8 @@ class Device {
     float sfpu_nan() const;
 
     // machine inf
-    float sfpu_inf() const;
+    float sfpu_pos_inf(DataType dtype) ;
+    float sfpu_neg_inf(DataType dtype) ;
 
     void generate_device_headers(const std::string &path) const;
     const JitBuildEnv& build_env() const { return this->build_env_; }
