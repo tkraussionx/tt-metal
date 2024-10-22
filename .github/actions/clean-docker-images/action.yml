@@ -1,0 +1,13 @@
+name: "Clean Docker Images"
+description: "Remove docker images stored locally and delete stale dev docker images"
+inputs:
+  token:
+    description: token to clean repo
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Clean local docker images
+      shell: bash
+      run: |
+        docker system prune -f -a
