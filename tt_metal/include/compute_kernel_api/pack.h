@@ -41,7 +41,7 @@ namespace ckernel {
  * | icb_tile       | The index of the tile in the output CB to copy to | uint32_t | Must be less than the size of the CB                | True     |
  */
 template <bool out_of_order_output = false>
-ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb, std::uint32_t output_tile_index = 0)
+void __attribute__ ((noinline)) pack_tile(uint32_t ifrom_dst, uint32_t icb, std::uint32_t output_tile_index = 0)
 {
     PACK((  llk_pack<out_of_order_output, false, DST_ACCUM_MODE>(ifrom_dst, icb, output_tile_index)  ));
 }

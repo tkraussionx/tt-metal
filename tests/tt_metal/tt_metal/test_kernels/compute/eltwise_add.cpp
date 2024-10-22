@@ -28,13 +28,25 @@ void MAIN {
     cb_reserve_back(cb_output, onetile);
 
     for (uint32_t i = 0; i < num_tiles; i++) {
+        // NO PACK instruction
         tile_regs_acquire();
+        
+        // NO PACK instruction
         binary_op_specific_init<false, EltwiseBinaryType::ELWADD>();
+
+        // NO PACK instruction
         add_tiles(cb_input, cb_other, 0, 0, 0);
+
+        // NO PACK instruction
         tile_regs_commit();
 
+        // Only PACK
         tile_regs_wait();
+
+        // Only PACK
         pack_tile(0, cb_output);
+
+        // Only PACK
         tile_regs_release();
     }
 

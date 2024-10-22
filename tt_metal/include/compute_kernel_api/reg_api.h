@@ -25,7 +25,7 @@ namespace ckernel {
  * |----------|------------------------------------------------------------|----------|---------------------|----------|
  * | dst_mode | Specifies how the destination register is going to be used | DstMode  | Full, Half, Tile    | True     |
  */
-ALWI void acquire_dst(tt::DstMode mode) {
+void __attribute__ ((noinline)) acquire_dst(tt::DstMode mode) {
     MATH(( llk_math_wait_for_dest_available()  ));
 
     PACK(( llk_packer_wait_for_math_done()  ));
@@ -38,7 +38,7 @@ ALWI void acquire_dst(tt::DstMode mode) {
  * This register is an array of 16 tiles of 32x32 elements each.
  * This is a blocking function, i.e. this function will wait until the lock is acquired.
  */
-ALWI void tile_regs_acquire() {
+void __attribute__ ((noinline)) tile_regs_acquire() {
     MATH(( llk_math_wait_for_dest_available()  ));
 }
 
@@ -47,7 +47,7 @@ ALWI void tile_regs_acquire() {
  * It waits for the MATH thread to commit the DST register.
  * This is a blocking function, i.e. this function will wait until the lock is acquired.
  */
-ALWI void tile_regs_wait() {
+void __attribute__ ((noinline)) tile_regs_wait() {
     PACK(( llk_packer_wait_for_math_done()  ));
 }
 
@@ -64,7 +64,7 @@ ALWI void tile_regs_wait() {
  * |----------|------------------------------------------------------------|----------|---------------------------------------------|----------|
  * | dst_mode | Specifies how the destination register is going to be used | uint32_t | DstMode::Full, DstMode::Half, DstMode::Tile | True     |
  */
-ALWI void release_dst(tt::DstMode mode) {
+void __attribute__ ((noinline)) release_dst(tt::DstMode mode) {
     MATH(( llk_math_dest_section_done()  ));
 
     PACK(( llk_pack_dest_section_done()  ));
@@ -75,14 +75,14 @@ ALWI void release_dst(tt::DstMode mode) {
 /**
  * Release lock on DST register by MATH thread. The lock had to be previously acquired with tile_regs_acquire.
  */
-ALWI void tile_regs_commit() {
+void __attribute__ ((noinline)) tile_regs_commit() {
     MATH(( llk_math_dest_section_done()  ));
 }
 
 /**
  * Release lock on DST register by PACK thread. The lock had to be previously acquired with tile_regs_wait.
  */
-ALWI void tile_regs_release() {
+void __attribute__ ((noinline)) tile_regs_release() {
     PACK(( llk_pack_dest_section_done()  ));
 }
 

@@ -27,7 +27,7 @@ namespace ckernel {
  * | icb1           | The identifier of the circular buffer (CB) containing B       | uint32_t | 0 to 31                                        | True     |
  * | ocb            | The identifier of the circular buffer (CB) containing output  | uint32_t | 0 to 31, defaults to CB 16                     | True     |
  */
-ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1, uint32_t ocb=16)
+void __attribute__ ((noinline)) binary_op_init_common(uint32_t icb0, uint32_t icb1, uint32_t ocb=16)
 {
     UNPACK(( llk_unpack_AB_hw_configure_disaggregated<DST_ACCUM_MODE>(icb0, icb1) ));
     UNPACK(( llk_unpack_AB_init<BroadcastType::NONE>(icb0, icb1) ));
@@ -146,7 +146,7 @@ ALWI void mul_tiles( uint32_t icb0, uint32_t icb1, uint32_t itile0, uint32_t iti
  * | in1_tile_index | The index of tile B within the second CB                 | uint32_t | Must be less than the size of the CB           | True     |
  * | dst_tile_index | The index of the tile in DST REG for the result C        | uint32_t | Must be less than the acquired size of DST REG | True     |
  */
-ALWI void add_tiles( uint32_t icb0, uint32_t icb1, uint32_t itile0, uint32_t itile1, uint32_t idst)
+void __attribute__ ((noinline)) add_tiles( uint32_t icb0, uint32_t icb1, uint32_t itile0, uint32_t itile1, uint32_t idst)
 {
     UNPACK(( llk_unpack_AB(icb0, icb1, itile0, itile1)  ));
     MATH(( llk_math_eltwise_binary<ELWADD, NONE, MATH_FIDELITY, EltwiseBinaryReuseDestType::NONE, DST_ACCUM_MODE>(icb0, icb1, idst) ));
@@ -181,7 +181,7 @@ ALWI void sub_tiles( uint32_t icb0, uint32_t icb1, uint32_t itile0, uint32_t iti
  * eltwise_binary_op_type: the binary operation type
  */
 template<bool full_init = false, EltwiseBinaryType eltwise_binary_op_type = ELWADD>
-ALWI void binary_op_specific_init() // TODO(AP): better naming
+void __attribute__ ((noinline)) binary_op_specific_init() // TODO(AP): better naming
 {
     if constexpr (full_init) {
         if constexpr (eltwise_binary_op_type == ELWADD) {
