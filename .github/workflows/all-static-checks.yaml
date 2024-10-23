@@ -8,6 +8,52 @@ on:
       - "main"
 
 jobs:
+  pre-commit:
+    name: Run Pre-commit Hooks and Propose Fixes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 2
+          fetch-tags: false
+          refspec: |
+            +refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}
+            +refs/heads/main:refs/remotes/origin/main
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Run Pre-commit and Fix Issues
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: "--from-ref origin/main --to-ref HEAD"
+        continue-on-error: true
+
+      - name: Check for Modified Files and Set Flag
+        id: git_diff
+        run: |
+          git diff --exit-code || echo "::set-output name=changes-detected::true"
+
+      - name: Create Pull Request with Fixes
+        if: steps.git_diff.outputs.changes-detected == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "Fix pre-commit issues"
+          title: "Proposed pre-commit fixes"
+          body: "This PR contains proposed fixes from pre-commit hooks."
+          branch: "pre-commit-fixes-${{ github.event.pull_request.number }}"
+          asignees: "${{ github.actor }}"
+
+      - name: Fail the Job if Changes Were Made
+        if: steps.git_diff.outputs.changes-detected == 'true'
+        run: |
+          echo "Pre-commit made changes. Marking job as failed."
+          exit 1  # Fail the job explicitly if changes were made
+
   check-spdx-licenses:
     runs-on: ubuntu-latest
     steps:
@@ -27,11 +73,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check kernel count in base metal is less than maximum
         run: if (( $(find tt_metal/kernels/ -type f | wc -l) > 7 )); then exit 1; fi
-  check-black:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: psf/black@23.10.1
   check-doc:
     runs-on: ubuntu-latest
     steps:
