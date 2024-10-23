@@ -1709,6 +1709,8 @@ TEST_F(RandomProgramFixture, TestLargeProgramInBetweenFiveSmallProgramsOnTensix)
 
         EnqueueProgram(device_->command_queue(), program, false);
     }
+
+    Finish(device_->command_queue());
 }
 
 }  // namespace stress_tests
