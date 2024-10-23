@@ -15,12 +15,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0  # Fetch all history so 'origin/main' is available
           ref: ${{ github.head_ref }}
-          fetch-depth: 2
-          fetch-tags: false
-          refspec: |
-            +refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}
-            +refs/heads/main:refs/remotes/origin/main
+        # with:
+        #   ref: ${{ github.head_ref }}
+        #   fetch-depth: 2
+        #   fetch-tags: false
+        #   refspec: |
+        #     +refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}
+        #     +refs/heads/main:refs/remotes/origin/main
 
       - name: Set up Python
         uses: actions/setup-python@v4
