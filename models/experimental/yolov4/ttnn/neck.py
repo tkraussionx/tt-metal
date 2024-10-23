@@ -174,6 +174,8 @@ class TtNeck:
             stride=[1, 1],
             padding=[2, 2],
             dilation=[1, 1],
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            # applied_shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
         )
         pool_2 = ttnn.max_pool2d(
             input_tensor=output_tensor,
@@ -185,6 +187,8 @@ class TtNeck:
             stride=[1, 1],
             padding=[4, 4],
             dilation=[1, 1],
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            # applied_shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
         )
         pool_3 = ttnn.max_pool2d(
             input_tensor=output_tensor,
@@ -196,17 +200,20 @@ class TtNeck:
             stride=[1, 1],
             padding=[6, 6],
             dilation=[1, 1],
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            # applied_shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
         )
 
-        pool_1 = ttnn.sharded_to_interleaved(pool_1, ttnn.L1_MEMORY_CONFIG)
-        pool_2 = ttnn.sharded_to_interleaved(pool_2, ttnn.L1_MEMORY_CONFIG)
-        pool_3 = ttnn.sharded_to_interleaved(pool_3, ttnn.L1_MEMORY_CONFIG)
-        pool_1 = ttnn.to_layout(pool_1, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
-        pool_2 = ttnn.to_layout(pool_2, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
-        pool_3 = ttnn.to_layout(pool_3, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
-        output_tensor = ttnn.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
+        # pool_1 = ttnn.sharded_to_interleaved(pool_1, ttnn.L1_MEMORY_CONFIG)
+        # pool_2 = ttnn.sharded_to_interleaved(pool_2, ttnn.L1_MEMORY_CONFIG)
+        # pool_3 = ttnn.sharded_to_interleaved(pool_3, ttnn.L1_MEMORY_CONFIG)
+        # pool_1 = ttnn.to_layout(pool_1, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
+        # pool_2 = ttnn.to_layout(pool_2, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
+        # pool_3 = ttnn.to_layout(pool_3, layout=ttnn.TILE_LAYOUT)  # This is becauase output_tensor is in TILE_LAYOUT
+        # output_tensor = ttnn.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
 
         output_tensor = ttnn.concat([pool_3, pool_2, pool_1, output_tensor], dim=3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        # output_tensor = ttnn.concat([pool_3, pool_2, pool_1, output_tensor], dim=3) #, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(pool_3)
         ttnn.deallocate(pool_2)
         ttnn.deallocate(pool_1)
