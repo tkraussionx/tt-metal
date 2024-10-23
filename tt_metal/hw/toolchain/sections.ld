@@ -63,18 +63,24 @@ SECTIONS
     ASSERT(SIZEOF(.init.fini) == 0, ".init/.fini sections have contents");
   } > REGION_CODE
 
-  . = ALIGN(. + MEM_PAD, MEM_ALIGN);
-
+  .text.end :
+  {
+    /* Place in a text-segment section so that these symbols are recognized
+       as text-based, which is important for XIP.  */
+    . = ALIGN(. + MEM_PAD, MEM_ALIGN);
 #if defined(TYPE_FIRMWARE)
-  __fw_export_end_text = .;
+    /* Kernels will start their text at this point. */
+    __fw_export_end_text = .;
 #if defined(TARGET_NCRISC)
-  PROVIDE (KERNEL_ENTRY_SYMBOL = __fw_export_end_text);
+    PROVIDE (KERNEL_ENTRY_SYMBOL = __fw_export_end_text);
 #endif
 #endif
 
 #if defined(TYPE_KERNEL)
-  __kernel_init_local_l1_base = .;
+    /* Kernel's initalized data image will start at this point -- abutting the kernel's text. */
+    __kernel_data_lma = .;
 #endif
+  } > REGION_CODE
 
   PROVIDE(__global_pointer$ = ORIGIN(REGION_DATA) + 0x7f0);
   .data DATA_START :
