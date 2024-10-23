@@ -1468,6 +1468,8 @@ TEST_F(RandomProgramFixture, TestProgramsOnEth) {
             log_info(tt::LogTest, "Creating Program {}", i);
         }
         Program program = CreateProgram();
+        // Large eth kernels currently don't fit in the ring buffer, so we're reducing the max number of RTAs
+        // and the max kernel size to ensure that the kernel can fit in the ring buffer
         this->create_kernel(
             program,
             CoreType::ETH,
@@ -1499,6 +1501,8 @@ TEST_F(RandomProgramFixture, TestProgramsOnTensixAndEth) {
 
         bool eth_kernel_added_to_program = false;
         if (rand() % 2 == 0) {
+            // Large eth kernels currently don't fit in the ring buffer, so we're reducing the max number of RTAs
+            // and the max kernel size to ensure that the kernel can fit in the ring buffer
             this->create_kernel(
                 program,
                 CoreType::ETH,
