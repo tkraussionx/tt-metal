@@ -263,11 +263,35 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
              (std::size_t)start_core_y + num_cores_with_work_r - 1}};
     }
 
+    const bool sync_after_in1_dram = bmm_op_utils::should_sync_after_in1_dram(device->arch());
+
     // Mcast args
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+
+    auto in1_sync_sender_semaphore_id = 0;
+    auto in1_sync_receiver_semaphore_id = 0;
+    int in1_sync_num_dests = 0;
+    int in1_sync_num_cores = 0;
+    if (sync_after_in1_dram) {
+        in1_sync_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+        in1_sync_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+        in1_sync_num_dests = 63;
+        in1_sync_num_cores = 63;
+    }
+
+    auto in0_sync_sender_semaphore_id = 0;
+    auto in0_sync_receiver_semaphore_id = 0;
+    int in0_sync_num_dests = 0;
+    int in0_sync_num_cores = 0;
+    if (sync_after_in1_dram) {
+        in0_sync_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+        in0_sync_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+        in0_sync_num_dests = 63;
+        in0_sync_num_cores = 63;
+    }
 
     bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool in1_is_dram = in1_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -315,6 +339,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)in0_shard_width_in_tiles,
             (std::uint32_t)in0_shard_height_in_tiles,
             (std::uint32_t)in0_block_w,
+            // in0 sync args
+            (std::uint32_t)in0_sync_sender_semaphore_id,
+            (std::uint32_t)in0_sync_receiver_semaphore_id,
+            (std::uint32_t)in0_sync_num_dests,
+            (std::uint32_t)in0_sync_num_cores,
             // batch args
             (std::uint32_t)B  // batch
         };
@@ -370,10 +399,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         (std::uint32_t)(num_blocks_y - 1),  // in1_mcast_num_dests
         (std::uint32_t)(num_blocks_y - 1),  // in1_mcast_num_cores
         // in1 sync args
-        (std::uint32_t)0,
-        (std::uint32_t)0,
-        (std::uint32_t)0,
-        (std::uint32_t)0,
+        (std::uint32_t)in1_sync_sender_semaphore_id,
+        (std::uint32_t)in1_sync_receiver_semaphore_id,
+        (std::uint32_t)in1_sync_num_dests,
+        (std::uint32_t)in1_sync_num_cores,
         // batch args
         (std::uint32_t)K * N,        // KtNt
         (std::uint32_t)B,            // batch
@@ -429,6 +458,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         // in1 mcast args
         (std::uint32_t)in1_mcast_sender_semaphore_id,
         (std::uint32_t)in1_mcast_receiver_semaphore_id,
+        // in1 sync args
+        (std::uint32_t)in1_sync_sender_semaphore_id,
+        (std::uint32_t)in1_sync_receiver_semaphore_id,
         // batch args
         (std::uint32_t)B,  // batch
 
@@ -503,6 +535,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
         mm_kernel_in1_receiver_writer_defines["OUT_SHARDED"] = "1";
         mm_kernel_in1_receiver_writer_other_noc_setup_defines["OUT_SHARDED"] = "1";
+    }
+
+    if (sync_after_in1_dram) {
+        mm_kernel_in1_sender_writer_defines["SYNC_AFTER_IN1_DRAM"] = "1";
+        mm_kernel_in1_receiver_writer_defines["SYNC_AFTER_IN1_DRAM"] = "1";
+        mm_kernel_in0_sender_sharded_defines["SYNC_AFTER_IN0_DRAM"] = "1";
     }
 
     // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
@@ -829,6 +867,18 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             true);
     }
 
+    CoreCoord top_left_core = all_cores.start_coord;
+    CoreCoord bottom_right_core = all_cores.end_coord;
+
+    auto top_left_core_physical = device->worker_core_from_logical_core(top_left_core);
+    auto bottom_right_core_physical = device->worker_core_from_logical_core(bottom_right_core);
+
+    CoreCoord in1_sync_start = bottom_right_core_physical;
+    CoreCoord in1_sync_end = top_left_core_physical;
+    if (in1_noc == NOC::NOC_0) {
+        std::swap(in1_sync_start, in1_sync_end);
+    }
+
     for (const auto& core : cores) {
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
@@ -893,6 +943,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
                 mm_in0_sender_args.push_back(in0_mcast_receiver_grid_same_coord);
             }
+            // in0 sync args
+            mm_in0_sender_args.push_back(in1_sync_end.x);
+            mm_in0_sender_args.push_back(in1_sync_end.y);
+            mm_in0_sender_args.push_back(in1_sync_start.x);
+            mm_in0_sender_args.push_back(in1_sync_start.y);
+            mm_in0_sender_args.push_back(in0_idx+in1_idx); // core id
+            mm_in0_sender_args.push_back(0);
+
             if (in1_idx < num_blocks_x) {
                 tt_metal::SetRuntimeArgs(
                     program, mm_kernel_in0_sender_id, core, mm_in0_sender_args);  // RISCV_0_default
@@ -948,6 +1006,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         if (in0_idx < num_blocks_y and in1_idx < num_blocks_x) {
             // in1 sender
             if (in0_idx == 0) {
+                // empirically determined delays between cores due to semaphore multicast
+                // constexpr int first_core_delay = 240;
+                // constexpr int total_mcast_delay = 140;
+                // constexpr int per_core_mcast_delay = 10;
+                // uint32_t in1_sync_wait_time = total_mcast_delay - (core.x + core.y) * per_core_mcast_delay;
+                // if (in1_idx == 0) {
+                //     in1_sync_wait_time += first_core_delay;
+                // }
                 std::vector<uint32_t> mm_in1_sender_writer_args = {
                     // READER
                     // in1 tensor args
@@ -959,9 +1025,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                     (std::uint32_t)in1_mcast_end.x,    // in1_mcast_dest_noc_end_x
                     (std::uint32_t)in1_mcast_end.y,    // in1_mcast_dest_noc_end_y
                     // in1 sync args
-                    (std::uint32_t)0,
-                    (std::uint32_t)0,
-                    (std::uint32_t)0,
+                    (std::uint32_t)in1_sync_start.x,
+                    (std::uint32_t)in1_sync_start.y,
+                    (std::uint32_t)in1_sync_end.x,
+                    (std::uint32_t)in1_sync_end.y,
+                    (std::uint32_t)in1_idx, // core id
                     (std::uint32_t)0,
 
                     // WRITER

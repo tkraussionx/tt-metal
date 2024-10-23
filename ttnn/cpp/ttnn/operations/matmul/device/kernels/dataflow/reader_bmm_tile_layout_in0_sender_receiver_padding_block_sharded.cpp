@@ -7,6 +7,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 #include "ttnn/cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
+#include "debug/dprint.h"
 
 #include "tools/profiler/kernel_profiler.hpp"
 
@@ -30,8 +31,14 @@ void kernel_main() {
     constexpr uint32_t shard_height_in_tiles = get_compile_time_arg_val(13);
     constexpr uint32_t in0_block_w = get_compile_time_arg_val(14);
 
-    constexpr uint32_t batch = get_compile_time_arg_val(15);
-    constexpr bool fuse_op = (bool)get_compile_time_arg_val(16);
+    // in0 sync args
+    uint32_t in0_sync_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(15));
+    uint32_t in0_sync_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(16));
+    constexpr uint32_t in0_sync_num_dests = get_compile_time_arg_val(17);
+    constexpr uint32_t in0_sync_num_cores = get_compile_time_arg_val(18);
+
+    constexpr uint32_t batch = get_compile_time_arg_val(19);
+    constexpr bool fuse_op = (bool)get_compile_time_arg_val(20);
 
     uint32_t rt_args_idx = 0;
     const uint32_t sender_id = get_arg_val<uint32_t>(rt_args_idx++);
@@ -42,6 +49,13 @@ void kernel_main() {
     tt_l1_ptr uint32_t* in0_mcast_noc_x = (tt_l1_ptr uint32_t*)(get_arg_addr(increment_arg_idx(rt_args_idx, num_x)));
     tt_l1_ptr uint32_t* in0_mcast_noc_y = (tt_l1_ptr uint32_t*)(get_arg_addr(increment_arg_idx(rt_args_idx, num_y)));
 
+    // in0 sync args
+    const uint32_t in0_sync_dest_noc_start_x = get_arg_val<uint32_t>(rt_args_idx++);
+    const uint32_t in0_sync_dest_noc_start_y = get_arg_val<uint32_t>(rt_args_idx++);
+    const uint32_t in0_sync_dest_noc_end_x = get_arg_val<uint32_t>(rt_args_idx++);
+    const uint32_t in0_sync_dest_noc_end_y = get_arg_val<uint32_t>(rt_args_idx++);
+    const uint32_t in0_sync_core_id = get_arg_val<uint32_t>(rt_args_idx++);
+    const uint32_t in0_sync_wait_time = get_arg_val<uint32_t>(rt_args_idx++);
 
     MatmulOpReceiver fused_op_receiver;
     if constexpr (fuse_op) {
@@ -82,6 +96,24 @@ void kernel_main() {
     // Set up local VALID value, to be mcasted to destinations flag address after the data has been mcasted
     in0_mcast_sender_semaphore_valid_addr_ptr[0] =
         VALID;  // Load const 1 to be used as semaphore valid value sent from sender to receivers
+
+#ifdef SYNC_AFTER_IN0_DRAM
+    volatile tt_l1_ptr uint32_t* in0_sync_receiver_semaphore_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sync_receiver_semaphore_addr);
+    *(in0_sync_receiver_semaphore_addr_ptr) = VALID;
+    volatile tt_l1_ptr uint32_t* in0_sync_sender_semaphore_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sync_sender_semaphore_addr);
+
+    const uint64_t in0_sync_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+        in0_sync_dest_noc_start_x,
+        in0_sync_dest_noc_start_y,
+        in0_sync_dest_noc_end_x,
+        in0_sync_dest_noc_end_y,
+        in0_sync_receiver_semaphore_addr);
+
+    const uint64_t in0_sync_sender_semaphore_addr_counter =
+        get_noc_addr(1, 1, in0_sync_sender_semaphore_addr);
+#endif
 
     constexpr uint32_t num_remote_senders = (num_blocks + num_blocks_per_shard - 1) / num_blocks_per_shard;
     uint64_t remote_sender_noc_addrs[num_remote_senders];
@@ -254,6 +286,25 @@ void kernel_main() {
                 // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
                 noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
             }
+
+#ifdef SYNC_AFTER_IN0_DRAM
+            // Sync cores after all of them receive current in1 block
+            if (in0_sync_core_id == 0) {
+                noc_semaphore_wait(in0_sync_sender_semaphore_addr_ptr, in0_sync_num_dests);
+                noc_semaphore_set(in0_sync_sender_semaphore_addr_ptr, 0);
+
+                noc_semaphore_set_multicast(
+                    in0_sync_receiver_semaphore_addr,
+                    in0_sync_receiver_semaphore_noc_addr,
+                    in0_sync_num_cores);
+            } else {
+                noc_semaphore_set(in0_sync_receiver_semaphore_addr_ptr, INVALID);
+                noc_semaphore_inc(in0_sync_sender_semaphore_addr_counter, 1);
+                noc_semaphore_wait(in0_sync_receiver_semaphore_addr_ptr, VALID);
+            }
+
+            // Compensate for mcast delay and core 0,0 not waiting on the semaphore
+#endif
 
             cb_push_back(cb_id_in0, in0_block_num_tiles);
 
