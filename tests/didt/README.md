@@ -2,13 +2,28 @@
 
 ## Basic examples
 
-FF1 without gelu: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_ff1_matmul.py::test_ff1_matmul -k "without_gelu and 2chips"`
+FF1 without gelu: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_ff1_matmul.py::test_specific_chip_ff1_matmul -k "without_gelu and 2chips and logical_chip_1_"`
 
 FF1 with gelu: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_ff1_matmul.py::test_ff1_matmul -k "with_gelu and 2chips"`
 
 LM head: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_lm_head_matmul.py::test_lm_head_matmul -k "2chips"`
 
 Resnet Convolution: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_resnet_conv.py::test_resnet_conv -k "2chips"`
+
+LLama dram sharded matmul: `WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/didt/test_llama_dram_sharded_matmul.py::test_llama_dram_sharded_matmul -k "2chips"`
+
+python -m tracy -r -m "pytest tests/didt/test_llama_dram_sharded_matmul.py::test_llama_dram_sharded_matmul -k \"1chips\" --iterations 1"
+
+RO_SEL=27
+PMON_SEL=18
+a = 0.04071667981475915
+b = -13.768595621555406
+c = 1853.3649387154055
+
+export TT_METAL_ARC_DEBUG_BUFFER_SIZE=16000000
+
+
+ttp arc_logger --args start=1,pmon_id=18,ro_id=27
 
 ## Variations
 
