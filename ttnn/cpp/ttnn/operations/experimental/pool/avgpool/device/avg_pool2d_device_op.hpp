@@ -24,12 +24,12 @@ struct AvgPool2D {
 
     struct MultiCore {
         struct shared_variables_t {
-            // KernelHandle reader0_kernel;
-            // KernelHandle reader1_kernel;
-            // CBHandle raw_in_cb;
-            // CBHandle cb_out;
-            // uint32_t ncores;
-            // uint32_t ncores_w;
+            KernelHandle reader0_kernel;
+            KernelHandle reader1_kernel;
+            CBHandle raw_in_cb;
+            CBHandle cb_out;
+            uint32_t ncores;
+            uint32_t ncores_w;
         };
 
         using cached_program_t = ttnn::device_operation::CachedProgram<shared_variables_t>;

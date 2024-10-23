@@ -57,6 +57,7 @@ Tensor AveragePool2DOp::invoke(
     auto input_tensor_sharded = ttnn::to_memory_config(input_tensor, sharded_mem_config, std::nullopt);
 
     const uint32_t num_cores_nhw = conv::conv2d::get_num_cores_nhw_from_parallel_config(parallel_config);
+    tt::log_info("num_cores_nhw {}", num_cores_nhw);
     sliding_window_config.num_cores_nhw = num_cores_nhw;
     sliding_window_config.core_range_set = parallel_config.grid;
 

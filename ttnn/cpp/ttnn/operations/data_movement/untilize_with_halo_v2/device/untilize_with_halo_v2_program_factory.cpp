@@ -53,6 +53,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     uint32_t ntiles_per_block = tt::div_up(input_shard_shape[1], TILE_WIDTH);
     uint32_t input_nblocks_per_core = tt::div_up(remapped_input_shard_shape_for_output_grid, TILE_HEIGHT);
     uint32_t input_npages = ntiles_per_block * input_nblocks_per_core;
+    tt::log_info("input_nhw_height {} ncores_nhw {} input_nblocks_per_core {}", input_nhw_height, ncores_nhw, input_nblocks_per_core);
 
     uint32_t out_stick_nbytes = output_shard_shape[1] * out_nbytes;
 

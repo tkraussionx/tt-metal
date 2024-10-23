@@ -85,7 +85,7 @@ ParallelConfig determine_parallel_config(
 
     uint32_t conv_out_2d_matrix_height = batch_size * output_height * output_width;
     // pad height to 32
-    conv_out_2d_matrix_height = tt::round_up(conv_out_2d_matrix_height, 32);
+    // conv_out_2d_matrix_height = tt::round_up(conv_out_2d_matrix_height, 32);
     uint32_t conv_out_2d_matrix_height_ntiles = 0;
     uint32_t conv_out_2d_matrix_width_ntiles = 0;
     if (is_out_tiled) {
