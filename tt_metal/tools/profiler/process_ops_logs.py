@@ -284,6 +284,7 @@ def get_device_data_generate_report(
         deviceData = import_log_run_stats(setup)
         logger.info(f"Generating device op report ...")
         freq = deviceData["deviceInfo"]["freq"]
+        allHeaders = set()
         for device in deviceData["devices"]:
             deviceOps[device] = []
             deviceOpsTime = deviceData["devices"][device]["cores"]["DEVICE"]["riscs"]["TENSIX"]["ops"]
@@ -325,13 +326,12 @@ def get_device_data_generate_report(
                             rowDict["OP TO OP LATENCY [ns]"] = 0
                         devicePreOpTime[device] = analysisData[0]["end_cycle"]
                 rowDicts.append(rowDict)
+                for header in rowDict.keys():
+                    allHeaders.add(header)
 
         if export_csv:
             with open(allOpsCSVPath, "w") as allOpsCSV:
-                allHeaders = []
-                for header in OPS_CSV_HEADER:
-                    if header in rowDicts[-1].keys():
-                        allHeaders.append(header)
+                allHeaders = list(allHeaders)
                 writer = csv.DictWriter(allOpsCSV, fieldnames=allHeaders)
                 writer.writeheader()
                 for rowDict in rowDicts:
