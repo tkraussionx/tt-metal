@@ -86,14 +86,14 @@ void kernel_main() {
 
     uint32_t in_w_padded = in_w + 2 * pad_w;
 
-    if (reader_id == 0) {
+    /* if (reader_id == 0) {
         print_pages(in_l1_read_base_addr, 40, 16);
     }
 
     if (reader_id == 0) {
         DPRINT << "reader_nindices: " << reader_nindices << ENDL();
         DPRINT << "in_nbytes_c: " << in_nbytes_c << ENDL();
-    }
+    } */
 
     uint32_t npages_to_reserve = 1;
     uint32_t counter = reader_id;

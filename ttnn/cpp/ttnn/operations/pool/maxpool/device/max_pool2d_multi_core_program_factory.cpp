@@ -109,10 +109,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     uint32_t in_scalar_cb_id = tt::CB::c_in4;
     uint32_t in_scalar_cb_pagesize = tile_size(in_df);
     uint32_t in_scalar_cb_npages = 1;
-    printf("--\n");
-    printf("in_scalar_cb_pagesize: %d\n", in_scalar_cb_pagesize);
-    printf("in_scalar_cb_npages: %d\n", in_scalar_cb_npages);
-    printf("total scalar cb size: %d\n", in_scalar_cb_npages * in_scalar_cb_pagesize);
     CircularBufferConfig in_scalar_cb_config =
         CircularBufferConfig(in_scalar_cb_npages * in_scalar_cb_pagesize, {{in_scalar_cb_id, in_df}})
             .set_page_size(in_scalar_cb_id, in_scalar_cb_pagesize);
@@ -124,10 +120,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     auto raw_in_cb_id = tt::CB::c_in2;
     uint32_t raw_in_cb_npages = input.shard_spec().value().shape[0];
     uint32_t raw_in_cb_pagesize = in_nbytes_c;
-    printf("--\n");
-    printf("raw_in_cb_pagesize: %d\n", raw_in_cb_pagesize);
-    printf("raw_in_cb_npages: %d\n", raw_in_cb_npages);
-    printf("total raw in cb size: %d\n", raw_in_cb_npages * raw_in_cb_pagesize);
     CircularBufferConfig raw_in_cb_config =
         CircularBufferConfig(raw_in_cb_npages * raw_in_cb_pagesize, {{raw_in_cb_id, in_df}})
             .set_page_size(raw_in_cb_id, raw_in_cb_pagesize)
@@ -140,10 +132,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     uint32_t in_reader_indices_cb_pagesize =
         tt::round_up(out_nhw_per_core * indices_nbytes, 4);  // pagesize needs to be multiple of 4
     uint32_t in_reader_indices_cb_npages = 1;
-    printf("--\n");
-    printf("in_reader_indices_cb_pagesize: %d\n", in_reader_indices_cb_pagesize);
-    printf("in_reader_indices_cb_npages: %d\n", in_reader_indices_cb_npages);
-    printf("total reader indices cb size: %d\n", in_reader_indices_cb_npages * in_reader_indices_cb_pagesize);
     log_debug(
         tt::LogOp,
         "CB {} :: PS = {}, NP = {}",
@@ -180,10 +168,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
         tt::constants::TILE_HW);  // NOTE: ceil to tile size since triscs work with tilesize instead of pagesize
     uint32_t in_cb_pagesize = in_nbytes * in_cb_page_padded;
     uint32_t in_cb_npages = multi_buffering_factor * nblocks;
-    printf("--\n");
-    printf("in_cb_pagesize: %d\n", in_cb_pagesize);
-    printf("in_cb_npages: %d\n", in_cb_npages);
-    printf("total in cb size: %d\n", in_cb_npages * in_cb_pagesize);
     CircularBufferConfig in_cb_config_0 = CircularBufferConfig(in_cb_npages * in_cb_pagesize, {{in_cb_id_0, in_df}})
                                               .set_page_size(in_cb_id_0, in_cb_pagesize);
     auto in_cb_0 = tt::tt_metal::CreateCircularBuffer(program, all_cores, in_cb_config_0);
@@ -200,10 +184,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     uint32_t in_tiled_cb_id = tt::CB::c_intermed0;  // tiled input
     uint32_t in_tiled_cb_pagesize = tile_size(in_df);
     uint32_t in_tiled_cb_npages = in_ntiles_c * in_ntiles_hw * nblocks;
-    printf("--\n");
-    printf("in_tiled_cb_pagesize: %d\n", in_tiled_cb_pagesize);
-    printf("in_tiled_cb_npages: %d\n", in_tiled_cb_npages);
-    printf("total in tiled cb size: %d\n", in_tiled_cb_npages * in_tiled_cb_pagesize);
     CircularBufferConfig in_tiled_cb_config =
         CircularBufferConfig(in_tiled_cb_npages * in_tiled_cb_pagesize, {{in_tiled_cb_id, in_df}})
             .set_page_size(in_tiled_cb_id, in_tiled_cb_pagesize);
