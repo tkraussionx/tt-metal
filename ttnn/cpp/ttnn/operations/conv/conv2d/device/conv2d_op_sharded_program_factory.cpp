@@ -175,15 +175,9 @@ std::tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
         log_debug(LogOp, "Matmul Partials CB: {}, npages: {}, pagesize: {}", matmul_partials_cb, num_output_tiles, interm0_single_tile_size);
 
-        // Supposed to be a small CB only responsible for reorganizing
-        // the output blocks to fill the whole "per core output block width"
-        CircularBufferConfig cb_reblock_config =
-            CircularBufferConfig(num_reblock_cb_tiles * out_tile_size, {{untilize_mode_reblock_cb, out_df}})
-                .set_page_size(untilize_mode_reblock_cb, out_tile_size);
-        auto cb_reblock = tt_metal::CreateCircularBuffer(program, core, cb_reblock_config);
-        log_debug(LogOp, "Reblock CB: {}, npages: {}, pagesize: {}", untilize_mode_reblock_cb, num_reblock_cb_tiles, out_tile_size);
         bool need_unpad_after_untilize = output_shard_shape[1] * output_shard_shape[0] < num_writer_output_tiles * TILE_HW;
-        if (need_unpad_after_untilize) {
+        // If only width is non-tile multiple
+        if (need_unpad_after_untilize && !use_non_tile_height && weight_width_sliced) {
             CircularBufferConfig compute_cb_output_config =
             CircularBufferConfig(num_writer_output_tiles * out_tile_size, {{untilized_padded_out_cb, out_df}})
                 .set_page_size(untilized_padded_out_cb, out_tile_size);
@@ -194,13 +188,17 @@ std::tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
                 .set_page_size(out0_cb, output_shard_shape[1] * num_bytes_for_df);
             cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
             cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
-            log_debug(LogOp, "output CB: {}, npages: {}, pagesize: {}", out0_cb, output_shard_shape[0] * output_shard_shape[1], output_shard_shape[1] * num_bytes_for_df);
+            log_debug(LogOp, "output CB(shard widht non-tile multiple): {}, npages: {}, pagesize: {}", out0_cb, output_shard_shape[0] * output_shard_shape[1], output_shard_shape[1] * num_bytes_for_df);
         } else {
-            CircularBufferConfig cb_output_config =
-                CircularBufferConfig(num_writer_output_tiles * out_tile_size, {{out0_cb, out_df}})
-                    .set_page_size(out0_cb, out_tile_size);
+            auto shard_shape = output.shard_spec().value().shape;
+            uint32_t aligned_output_stick_nbytes = use_non_tile_height ? shard_shape[1] * output.element_size() : out_tile_size;
+            uint32_t aligned_output_num_pages = use_non_tile_height ? shard_shape[0] : num_writer_output_tiles;
+            CircularBufferConfig cb_output_config = CircularBufferConfig(aligned_output_num_pages * aligned_output_stick_nbytes, {{out0_cb, out_df}})
+                .set_page_size(out0_cb, aligned_output_stick_nbytes);
+
             cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
             cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+            log_debug(LogOp, "output CB: {}, npages: {}, pagesize: {}", out0_cb, aligned_output_num_pages, aligned_output_stick_nbytes);
         }
     } else {
         // Share buffer if same data format
@@ -1344,7 +1342,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         untilize_out,
 
         bias_ntiles_per_core,
-        compute_output_cb};
+        compute_output_cb,
+        aligned_output_num_pages,
+        use_non_tile_height};
 
     auto writer_mcast_noc = NOC::NOC_0;
     auto reader_noc = writer_mcast_noc == NOC::NOC_0 ? NOC::NOC_1 : NOC::NOC_0;

@@ -206,8 +206,6 @@ OptimizedConvParallelizationConfig determine_conv_op_parallel_config_from_conv_o
     TT_ASSERT(conv_output_mem_config.shard_spec.has_value());
     const auto& shard_spec = conv_output_mem_config.shard_spec.value();
     const auto& shard_shape = shard_spec.shape;
-    TT_ASSERT(conv_output_mem_config.memory_layout == TensorMemoryLayout::WIDTH_SHARDED || shard_shape[0] % 32 == 0);
-    /*TT_ASSERT(shard_shape[1] % 32 == 0);*/
     return {
         .grid_size = shard_spec.grid.bounding_box().grid_size(),
         .num_cores_nhw = num_cores_nhw,
@@ -481,8 +479,7 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool, bool> get_conv_padded_input_sh
         auto block_shard_orientation =
             conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
         const ParallelConfig& optimal_parallel_config = determine_parallel_config(
-            shard_layout, batch_size, in_channels, height, width, out_channels, device, block_shard_orientation, conv_config.output_layout == Layout::TILE);
-
+            shard_layout, batch_size, in_channels, height, width, out_channels, device, block_shard_orientation, (!use_non_tile_height || conv_config.output_layout == Layout::TILE));
         if (conv_config.override_sharding_config) {
             TT_FATAL(conv_config.core_grid.has_value(), "Error");
             // override parallel config

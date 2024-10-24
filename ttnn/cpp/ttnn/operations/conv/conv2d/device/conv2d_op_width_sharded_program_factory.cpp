@@ -604,6 +604,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
         bias_ntiles_per_core,
 
         out0_cb,
+        num_output_tiles,
+        use_non_tile_height,
+
         total_num_cores,              //in0_nblocks_w_tilize. Repeat tilize after all cores have done one round of MCAST.
     };
 

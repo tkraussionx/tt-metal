@@ -105,9 +105,11 @@ void MAIN {
     constexpr bool untilize_out               = get_compile_time_arg_val(15);
     constexpr uint32_t out_cb_id               = get_compile_time_arg_val(17);
 
+    uint32_t output_rows_h                    = get_compile_time_arg_val(18);
+    constexpr bool is_non_tile_height         = get_compile_time_arg_val(19);
 
     #ifdef WIDTH_SHARDED
-    constexpr uint32_t in0_nblocks_w_tilize   = get_compile_time_arg_val(18);
+    constexpr uint32_t in0_nblocks_w_tilize   = get_compile_time_arg_val(20);
     #endif
 
     constexpr uint32_t out_block_num_tiles    = in0_num_subblocks * in1_num_subblocks * out_subblock_num_tiles;
