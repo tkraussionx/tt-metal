@@ -522,12 +522,10 @@ class UNet:
 
         self.input_sharded_memory_config = ttnn.create_sharded_memory_config(
             [
-                1,
-                1,
-                self.downblock1.conv1.batch_size
-                * self.downblock1.conv1.input_height
-                * self.downblock1.conv1.input_width,
+                self.downblock1.conv1.batch_size,
                 nearest_16(self.downblock1.conv1.in_channels),
+                self.downblock1.conv1.input_height,
+                self.downblock1.conv1.input_width,
             ],
             ttnn.CoreGrid(x=8, y=8),
             ttnn.ShardStrategy.HEIGHT,
@@ -545,30 +543,29 @@ class UNet:
         return self.bnc2(x)
 
     def postprocess_output_tensor(self, x):
-        # Convert the output tensor (in TILE layout) to RM to prevent transferring padding back to host.
-        return x
-        return ttnn.to_layout(
-            ttnn.reshape(
-                x, shape=ttnn.Shape([1, 1, x.shape[2], 16], [1, 1, x.shape[2], 32])
-            ),  # At the moment we can only reduce the padding from 32 to 16 because reshape is broken.
-            ttnn.ROW_MAJOR_LAYOUT,
-        )
+        y = ttnn.reshape(x, [2, 1056, 160, 1])
+        ttnn.deallocate(x)
+
+        z = ttnn.transpose(y, 2, 3)  # 2, 1056, 1, 160
+        ttnn.deallocate(y)
+
+        return z
+        # return ttnn.transpose(z, 1, 2)
+
+    # return ttnn.to_layout(
+    # ttnn.reshape(
+    # x, shape=ttnn.Shape([1, 1, x.shape[2], 16], [1, 1, x.shape[2], 32])
+    # ),  # At the moment we can only reduce the padding from 32 to 16 because reshape is broken.
+    # ttnn.ROW_MAJOR_LAYOUT,
+    # )
 
     def forward(self, x, slice_length=2):
         B, C, H, W = x.shape
-        x = ttnn.to_device(x, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        x = ttnn.permute(x, (0, 2, 3, 1))
+        x = ttnn.to_device(x, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)  # B, C, H, W
         output = []
         for batch_idx in range(0, B, slice_length):
             start, end = batch_idx, batch_idx + slice_length
-            print(start, end)
-            slice = ttnn.slice(
-                x,
-                [start, 0, 0, 0],
-                [end, H, W, C],
-            )
-            print("after slice: ", slice.shape)
-            # slice = ttnn.reshape(slice, [1, 1, slice_length * H * W, C])
+            slice = ttnn.slice(x, [start, 0, 0, 0], [end, C, H, W], memory_config=self.input_sharded_memory_config)
             slice = self.__call__(slice, move_input_tensor_to_device=False)
             output.append(ttnn.to_memory_config(slice, ttnn.DRAM_MEMORY_CONFIG))
         return output
@@ -578,6 +575,9 @@ class UNet:
 
         if move_input_tensor_to_device:
             x = ttnn.to_device(x, device=self.device, memory_config=self.input_sharded_memory_config)
+
+        x = ttnn.permute(x, (0, 2, 3, 1))
+        x = ttnn.reshape(x, [1, 1, x.shape[0] * x.shape[1] * x.shape[2], x.shape[-1]])
 
         x, c1_residual = self.downblock1(x)
         x, c2_residual = self.downblock2(x)
