@@ -35,6 +35,15 @@
 #define MEM_ALIGN 4
 #endif
 
+PHDRS {
+  text PT_LOAD;
+  data PT_LOAD;
+#if defined(TYPE_FIRMWARE)
+  stack PT_GNU_STACK;
+#endif
+  attributes 0x70000003;
+}
+
 OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv",
 	      "elf32-littleriscv")
 OUTPUT_ARCH(riscv)
@@ -55,15 +64,15 @@ SECTIONS
     *(.text .stub .text.* .gnu.linkonce.t.*)
     /* .gnu.warning sections are handled specially by elf32.em.  */
     *(.gnu.warning)
-  } > REGION_CODE
+  } > REGION_CODE :text
   .init.fini :
   {
     /* We don't use .init/.fini (this isn't the '90s), make sure there aren't any.  */
     KEEP (*(.init .fini))
     ASSERT(SIZEOF(.init.fini) == 0, ".init/.fini sections have contents");
-  } > REGION_CODE
+  } > REGION_CODE :text
 
-  .text.end :
+  .text.end (READONLY (TYPE = SHT_PROGBITS)) :
   {
     /* Place in a text-segment section so that these symbols are recognized
        as text-based, which is important for XIP.  */
@@ -71,7 +80,7 @@ SECTIONS
 #if defined(TYPE_FIRMWARE)
     /* Kernels will start their text at this point. */
     __fw_export_end_text = .;
-#if defined(TARGET_NCRISC)
+#if defined(KERNEL_ENTRY_SYMBOL)
     PROVIDE (KERNEL_ENTRY_SYMBOL = __fw_export_end_text);
 #endif
 #endif
@@ -80,10 +89,13 @@ SECTIONS
     /* Kernel's initalized data image will start at this point -- abutting the kernel's text. */
     __kernel_data_lma = .;
 #endif
-  } > REGION_CODE
+  } > REGION_CODE :text
 
   PROVIDE(__global_pointer$ = ORIGIN(REGION_DATA) + 0x7f0);
   .data DATA_START :
+#if defined (TYPE_KERNEL)
+  AT(__kernel_data_lma)
+#endif
   {
      . = .; /* Force section emission.  */
      __ldm_data_start = .;
@@ -116,14 +128,14 @@ SECTIONS
     *(.got.plt) *(.igot.plt) *(.got) *(.igot)
     . = ALIGN(4);
     __ldm_data_end = .;
-  } > REGION_DATA
+  } > REGION_DATA :data
   .ctors.dtors :
   {
     /* We don't use .ctors/.dtors either (this still isn't the '90s), make sure there aren't any.  */
     KEEP (*(.ctors .ctors.* .dtors .dtors.*))
     ASSERT(SIZEOF(.ctors.dtors) == 0, ".ctors/.dtors sections have contents");
-  } > REGION_DATA
-  .bss ALIGN(4):
+  } > REGION_DATA :data
+  .bss : ALIGN(4)
   {
     __ldm_bss_start = .;
     *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)
@@ -135,7 +147,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN(4);
     __ldm_bss_end = .;
-  } > REGION_DATA
+  } > REGION_DATA :data
 
 #ifdef TYPE_FIRMWARE
   . = ALIGN(MEM_ALIGN);
@@ -148,8 +160,10 @@ SECTIONS
     __stack_bottom = .;
    . += FIRMWARE_STACK_SIZE;
     __stack_top = .;
-  } > REGION_STACK
+  } > REGION_STACK :stack
 #endif
+
+  .riscv.attributes 0 : { *(.riscv.attributes) } :attributes
 
   /* Stabs debugging sections.  */
   .stab          0 : { *(.stab) }
