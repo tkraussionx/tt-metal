@@ -552,17 +552,6 @@ class UNet:
         x = ttnn.sharded_to_interleaved(x)  # TODO: Remove when sharded HC tranpose supports TILE
         return ttnn.transpose(x, 1, 2)  # 2, 1, 1056, 160
 
-    def forward(self, x, slice_length=2):
-        B, C, H, W = x.shape
-        x = ttnn.to_device(x, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)  # B, C, H, W
-        output = []
-        for batch_idx in range(0, B, slice_length):
-            start, end = batch_idx, batch_idx + slice_length
-            slice = ttnn.slice(x, [start, 0, 0, 0], [end, C, H, W], memory_config=self.input_sharded_memory_config)
-            slice = self.__call__(slice, move_input_tensor_to_device=False)
-            output.append(ttnn.to_memory_config(slice, ttnn.DRAM_MEMORY_CONFIG))
-        return output
-
     def __call__(self, x, move_input_tensor_to_device=True):
         assert len(x.shape) == 4, f"Expected UNet input tensors to be rank 4 (was {len(x.shape)})"
 
