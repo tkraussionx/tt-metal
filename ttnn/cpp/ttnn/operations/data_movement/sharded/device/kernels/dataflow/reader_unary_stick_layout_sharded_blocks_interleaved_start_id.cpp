@@ -79,11 +79,11 @@ void kernel_main() {
 
     DPRINT << "I2S READER OUTPUT" << ENDL();
     DPRINT << "aligned_block_width_bytes: " << aligned_block_width_bytes << ENDL();
-    DPRINT << block_width_bytes << ENDL();
-    DPRINT << block_height << ENDL();
+    DPRINT << "block_height: " << block_height << ENDL();
+    DPRINT << "block_height: " << block_height << ENDL();
     DPRINT << "stick_size: " << stick_size << ENDL();
-    print_pages(get_noc_addr(start_id, s0), aligned_block_width_bytes / sizeof(uint16_t), 1);
-    //print_pages(get_read_ptr(cb_id_in0), block_width_bytes / sizeof(uint16_t), block_height);
+    //print_pages(get_noc_addr(start_id, s0), aligned_block_width_bytes / sizeof(uint16_t), 1);
+    print_pages(get_read_ptr(cb_id_in0), block_width_bytes / sizeof(uint16_t), block_height);
 
     cb_push_back(cb_id_in0, block_height);
 }
