@@ -542,22 +542,15 @@ class UNet:
         x = self.bnc(x)
         return self.bnc2(x)
 
+    def preprocess_input_tensor(self, x):
+        x = ttnn.permute(x, (0, 2, 3, 1))
+        return ttnn.reshape(x, [1, 1, x.shape[0] * x.shape[1] * x.shape[2], x.shape[-1]])
+
     def postprocess_output_tensor(self, x):
-        y = ttnn.reshape(x, [2, 1056, 160, 1])
-        ttnn.deallocate(x)
-
-        z = ttnn.transpose(y, 2, 3)  # 2, 1056, 1, 160
-        ttnn.deallocate(y)
-
-        return z
-        # return ttnn.transpose(z, 1, 2)
-
-    # return ttnn.to_layout(
-    # ttnn.reshape(
-    # x, shape=ttnn.Shape([1, 1, x.shape[2], 16], [1, 1, x.shape[2], 32])
-    # ),  # At the moment we can only reduce the padding from 32 to 16 because reshape is broken.
-    # ttnn.ROW_MAJOR_LAYOUT,
-    # )
+        x = ttnn.reshape(x, [2, 1056, 160, 1])
+        x = ttnn.transpose(x, 2, 3)  # 2, 1056, 1, 160
+        x = ttnn.sharded_to_interleaved(x)  # TODO: Remove when sharded HC tranpose supports TILE
+        return ttnn.transpose(x, 1, 2)  # 2, 1, 1056, 160
 
     def forward(self, x, slice_length=2):
         B, C, H, W = x.shape
@@ -576,8 +569,7 @@ class UNet:
         if move_input_tensor_to_device:
             x = ttnn.to_device(x, device=self.device, memory_config=self.input_sharded_memory_config)
 
-        x = ttnn.permute(x, (0, 2, 3, 1))
-        x = ttnn.reshape(x, [1, 1, x.shape[0] * x.shape[1] * x.shape[2], x.shape[-1]])
+        x = self.preprocess_input_tensor(x)
 
         x, c1_residual = self.downblock1(x)
         x, c2_residual = self.downblock2(x)
