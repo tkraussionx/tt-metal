@@ -18,7 +18,7 @@ from models.experimental.functional_unet.tests.common import verify_with_pcc
         (16, 4, 1024, 512, 1),
     ],
 )
-def test_unet_model(B, C, H, W, slice_length, device, use_program_cache, reset_seeds):
+def test_unet_slice(B, C, H, W, slice_length, device, use_program_cache, reset_seeds):
     torch_input_tensor = torch.rand(B, C, H, W)
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
