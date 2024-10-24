@@ -11,7 +11,7 @@
  *************************************************************************/
 
 template <bool is_fp32_dest_acc_en = false, StochRndType stoch_rnd_mode = StochRndType::None>
-inline void llk_unpack_AB_hw_configure(
+void __attribute__ ((noinline)) llk_unpack_AB_hw_configure(
     const llk_unpack_AB_params_t *unpack_AB_params, const int within_face_16x16_transpose = 0) {
     // In0 -> unpA
     // In1 -> unpB
@@ -34,7 +34,7 @@ inline void llk_unpack_AB_hw_configure(
 }
 
 template <bool is_fp32_dest_acc_en = false, StochRndType stoch_rnd_mode = StochRndType::None>
-inline void llk_unpack_AB_hw_configure_disaggregated(
+void __attribute__ ((noinline)) llk_unpack_AB_hw_configure_disaggregated(
     const std::uint32_t unpA_operand, const std::uint32_t unpB_operand, const int within_face_16x16_transpose = 0) {
     const llk_unpack_AB_params_t unpack_AB_params = {.unpA_operand = unpA_operand, .unpB_operand = unpB_operand};
 
@@ -42,7 +42,7 @@ inline void llk_unpack_AB_hw_configure_disaggregated(
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB_mop_config(const bool transpose_of_faces = false, const std::uint32_t operand_id = 0) {
+void __attribute__ ((noinline)) llk_unpack_AB_mop_config(const bool transpose_of_faces = false, const std::uint32_t operand_id = 0) {
     const std::uint32_t num_faces = get_operand_num_faces(operand_id);
     const bool narrow_tile = get_operand_narrow_tile(operand_id);  // if narrow tile read face 0 twice for row broadcast
                                                                    // or read face 0 and 1 for col broadcast
@@ -50,7 +50,7 @@ inline void llk_unpack_AB_mop_config(const bool transpose_of_faces = false, cons
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB_init(
+void __attribute__ ((noinline)) llk_unpack_AB_init(
     const std::uint32_t operandA,
     const std::uint32_t operandB,
     const std::uint32_t transpose = 0,
@@ -65,7 +65,7 @@ inline void llk_unpack_AB_init(
 }
 
 template <BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB(
+void __attribute__ ((noinline)) llk_unpack_AB(
     const std::uint32_t operandA,
     const std::uint32_t operandB,
     const std::uint32_t tile_index_a,
@@ -86,7 +86,7 @@ inline void llk_unpack_AB(
 }
 
 template <ReduceDim dim, BroadcastType BType = BroadcastType::NONE>
-inline void llk_unpack_AB_reduce_init(
+void __attribute__ ((noinline)) llk_unpack_AB_reduce_init(
     const std::uint32_t operandA,
     const std::uint32_t operandB,
     const std::uint32_t transpose = 0,

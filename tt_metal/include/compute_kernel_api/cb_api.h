@@ -38,7 +38,7 @@ namespace ckernel {
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | ntiles    | The number of tiles to wait for      | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  * */
-ALWI void cb_wait_front(uint32_t cbid, uint32_t ntiles) {
+void __attribute__ ((noinline)) cb_wait_front(uint32_t cbid, uint32_t ntiles) {
     UNPACK(( llk_wait_tiles(cbid, ntiles)  ));
 }
 
@@ -70,7 +70,7 @@ ALWI void cb_wait_front(uint32_t cbid, uint32_t ntiles) {
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | ntiles    | The number of tiles to be popped     | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
-ALWI void cb_pop_front(uint32_t cbid, uint32_t ntiles) {
+void __attribute__ ((noinline)) cb_pop_front(uint32_t cbid, uint32_t ntiles) {
     UNPACK(( llk_pop_tiles(cbid, ntiles)  ));
 }
 
@@ -87,7 +87,7 @@ ALWI void cb_pop_front(uint32_t cbid, uint32_t ntiles) {
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | ntiles    | The number of free tiles to wait for | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
-ALWI void cb_reserve_back(uint32_t cbid, uint32_t ntiles)
+void __attribute__ ((noinline)) cb_reserve_back(uint32_t cbid, uint32_t ntiles)
 {
     PACK(( llk_wait_for_free_tiles<false,false,false>(cbid,ntiles)  ));
 }
@@ -120,7 +120,7 @@ ALWI void cb_reserve_back(uint32_t cbid, uint32_t ntiles)
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | ntiles    | The number of tiles to be pushed     | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
-ALWI void cb_push_back(uint32_t cbid, uint32_t ntiles)
+void __attribute__ ((noinline)) cb_push_back(uint32_t cbid, uint32_t ntiles)
 {
     PACK(( llk_push_tiles<false,false>(cbid, ntiles)  ));
 }
@@ -138,7 +138,7 @@ ALWI void cb_push_back(uint32_t cbid, uint32_t ntiles)
  * | index     | The tile index within the CB         | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  * | p_tile    | The pointer that will be populated   | void*    | N/A                                                                                               | True     |
  */
-ALWI void cb_get_tile(uint32_t cb_id, uint32_t index, volatile void* p_tile) {
+void __attribute__ ((noinline)) cb_get_tile(uint32_t cb_id, uint32_t index, volatile void* p_tile) {
     UNPACK(llk_unpack_get_tile(cb_id, index, (uint32_t*)p_tile));
 
     MATH(llk_math_get_tile(cb_id, index, (uint32_t*)p_tile));
@@ -156,7 +156,7 @@ ALWI void cb_get_tile(uint32_t cb_id, uint32_t index, volatile void* p_tile) {
  * |-----------|--------------------------------------|----------|---------------------------------------------------------------------------------------------------|----------|
  * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  */
-ALWI void cb_release_tile(uint32_t cb_id) {
+void __attribute__ ((noinline)) cb_release_tile(uint32_t cb_id) {
     UNPACK(llk_unpack_release_tile(cb_id));
 
     MATH(llk_math_release_tile(cb_id));

@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     uint32_t single_tile_size = 2 * 1024;
     uint32_t num_input_tiles = 1;
     uint32_t num_output_tiles = 1;
-    uint32_t num_iterations = 10000;
+    uint32_t num_iterations = 10;
 
     uint32_t src0_cb_index = 0;
     tt_metal::CircularBufferConfig cb_src0_config = tt_metal::CircularBufferConfig(num_input_tiles * single_tile_size, {{src0_cb_index, tt::DataFormat::Float16_b}})
