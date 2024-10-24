@@ -549,7 +549,9 @@ class UNet:
     def postprocess_output_tensor(self, x):
         x = ttnn.reshape(x, [2, 1056, 160, 1])
         x = ttnn.transpose(x, 2, 3)  # 2, 1056, 1, 160
-        x = ttnn.sharded_to_interleaved(x)  # TODO: Remove when sharded HC tranpose supports TILE
+        x = ttnn.untilize(x)
+        x = ttnn.slice(x, [0, 0, 0, 0], [x.shape[0], x.shape[1], 1, x.shape[3]])
+        breakpoint()
         return ttnn.transpose(x, 1, 2)  # 2, 1, 1056, 160
 
     def __call__(self, x, move_input_tensor_to_device=True):

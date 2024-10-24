@@ -21,7 +21,7 @@ from models.experimental.functional_unet.tests.common import check_pcc_conv, UNE
 def test_unet_model(batch, groups, device, use_program_cache, reset_seeds):
     torch_input, ttnn_input = create_unet_input_tensors(batch, groups, channel_order="first", pad=True)
 
-    model = unet_shallow_torch.UNet.from_random_weights(groups=1)
+    model = unet_shallow_torch.UNet.from_random_weights(groups=groups)
 
     parameters = create_unet_model_parameters(model, torch_input, groups=groups)
     ttnn_model = unet_shallow_ttnn.UNet(parameters, device)
