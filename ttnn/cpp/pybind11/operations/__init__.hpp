@@ -42,6 +42,7 @@
 #include "ttnn/operations/sliding_window/sliding_window_pybind.hpp"
 #include "ttnn/operations/transformer/transformer_pybind.hpp"
 #include "ttnn/operations/uniform/uniform_pybind.hpp"
+#include "ttnn/operations/sfpshft2_test/sfpshft2_test_pybind.hpp"
 
 namespace py = pybind11;
 
@@ -148,6 +149,9 @@ void py_module(py::module& module) {
 
     auto m_uniform = module.def_submodule("uniform", "uniform operations");
     uniform::bind_uniform_operation(m_uniform);
+
+    auto m_sfpshft2_test = module.def_submodule("sfpshft2_test", "operation for SFPSHFT2 test");
+    sfpshft2_test::bind_sfpshft2_test_operation(m_sfpshft2_test);
 }
 }  // namespace operations
 
