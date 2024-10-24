@@ -302,6 +302,13 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
             UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
         };
 
+    log_debug(tt::LogOp, "alignment: {}", output.buffer()->alignment());
+    log_debug(tt::LogOp, "num_units_per_shard_width_last: {}", num_units_per_shard_width_last);
+    log_debug(tt::LogOp, "padded_offset_bytes: {}", padded_offset_bytes);
+    log_debug(tt::LogOp, "input_unit_size: {}", input_unit_size);
+    log_debug(tt::LogOp, "output_unit_size: {}", output_unit_size);
+
+
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
 

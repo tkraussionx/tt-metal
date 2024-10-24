@@ -111,11 +111,6 @@ void kernel_main() {
     const uint32_t in_base_l1_addr = get_read_ptr(in_cb_id);
     const uint32_t out_base_l1_addr = get_write_ptr(out_cb_id);
 
-    if (local_config_cb_id == 0) {
-        DPRINT << "HALO INPUT:" << ENDL();
-        print_pages(in_base_l1_addr, 40, 16);
-    }
-
     if constexpr (padding_config_cb_id) {
         // construct the pad stick in its buffer
         cb_reserve_back(pad_cb_id, 1);
@@ -165,9 +160,4 @@ void kernel_main() {
 
     noc_async_read_barrier();
     noc_async_write_barrier();
-
-    // if (local_config_cb_id == 0) {
-    //     DPRINT << "HALO OUTPUT:" << ENDL();
-    //     print_pages(out_base_l1_addr, 40, 16);
-    // }
 }

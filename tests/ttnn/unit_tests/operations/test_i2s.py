@@ -64,10 +64,6 @@ def run_interleaved_to_sharded(
     tt_sharded_host = tt_sharded_device.cpu()
     sharded_host = torch.Tensor(ttnn.to_torch(tt_sharded_host))
 
-    print(parallel_config)
-    print(sharded_memory_config)
-    print(sharded_host)
-
 
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize(

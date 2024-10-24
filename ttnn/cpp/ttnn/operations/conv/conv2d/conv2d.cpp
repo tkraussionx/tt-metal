@@ -187,11 +187,6 @@ MemoryConfig create_sharded_memory_config_from_parallel_config(
     // tensor_shape is [N, H, W, C]
     TT_ASSERT(tensor_shape[0] == 1 && tensor_shape[1] == 1);  // todo: add support for generic non-2d shapes
     // uint32_t channels = tensor_shape[3];
-    printf("CREATE SHARDED MEMORY CONFIG\n");
-    printf("tensor_shape: %d %d %d %d\n", tensor_shape[0], tensor_shape[1], tensor_shape[2], tensor_shape[3]);
-    printf("tensor_shape_padded: %d %d %d %d\n", tensor_shape.with_tile_padding()[0], tensor_shape.with_tile_padding()[1], tensor_shape.with_tile_padding()[2], tensor_shape.with_tile_padding()[3]);
-    printf("tensor_shape_padded 2: %d %d %d %d\n", tensor_shape.padded_shape()[0], tensor_shape.padded_shape()[1], tensor_shape.padded_shape()[2], tensor_shape.padded_shape()[3]);
-    printf("has_tile_padding: %d\n", tensor_shape.has_tile_padding());
     uint32_t padded_channels =  tensor_shape.with_tile_padding()[3];
     uint32_t num_cores_nhw = get_num_cores_nhw_from_parallel_config(parallel_config);
     uint32_t num_cores_channels = get_num_cores_channels_from_parallel_config(parallel_config);
@@ -206,7 +201,6 @@ MemoryConfig create_sharded_memory_config_from_parallel_config(
     uint32_t nhw_shard = nhw_padded / num_cores_nhw;
     TT_ASSERT(padded_channels % num_cores_channels == 0, "padded channels: {}, num core channels: {}", padded_channels, num_cores_channels);
     uint32_t channel_shard = padded_channels / num_cores_channels;
-    printf("padded channels: %d, num_cores_channels: %d, channel_shard: %d\n", padded_channels, num_cores_channels, channel_shard);
     auto shard_spec = ShardSpec{parallel_config.grid, {nhw_shard, channel_shard}, shard_orientation};
     return MemoryConfig{shard_scheme, BufferType::L1, shard_spec};
 }

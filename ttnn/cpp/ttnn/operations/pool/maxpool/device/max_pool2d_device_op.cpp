@@ -95,11 +95,6 @@ MaxPool2D::tensor_return_value_t MaxPool2D::create_output_tensors(const operatio
         mem_config.shard_spec = ShardSpec{shard_grid, shard_shape, ShardOrientation::ROW_MAJOR, false};
     }
 
-    printf("CREATE OUTPUT TENSOR\n");
-    printf("shard shape: %d %d\n", mem_config.shard_spec->shape[0], mem_config.shard_spec->shape[1]);
-    printf("tensor shape: %d %d %d %d\n", output_shape[0], output_shape[1], output_shape[2], output_shape[3]);
-    printf("has tile padding: %d\n", output_shape.has_tile_padding());
-
     // return create_device_tensor(output_shape, input.get_dtype(), input.get_layout(), input.device(), mem_config);
     return create_device_tensor(output_shape, output_dtype, input.get_layout(), input.device(), mem_config);
 }
