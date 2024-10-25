@@ -371,7 +371,6 @@ set(ALL_TTNN_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/uniform/uniform_pybind.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/uniform/device/uniform_device_operation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/uniform/device/uniform_program_factory.cpp
-
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh/moreh_adam/device/moreh_adam_device_operation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh/moreh_adam/device/moreh_adam_program_factory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/moreh/moreh_adam/moreh_adam_pybind.cpp
@@ -618,6 +617,12 @@ target_compile_options(
         -Wno-int-to-pointer-cast
         -fno-var-tracking
 )
+
+if(WITH_PYTHON_BINDINGS)
+    target_compile_definitions(ttnn PUBLIC TTNN_WITH_PYTHON_BINDINGS=1)
+else()
+    target_compile_definitions(ttnn PUBLIC TTNN_WITH_PYTHON_BINDINGS=0)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_definitions(ttnn PUBLIC DISABLE_NAMESPACE_STATIC_ASSERT)
