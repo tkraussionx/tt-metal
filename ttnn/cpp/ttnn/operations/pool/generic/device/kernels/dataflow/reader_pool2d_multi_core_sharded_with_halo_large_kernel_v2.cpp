@@ -40,7 +40,7 @@ ALWI bool fill_with_val(uint32_t begin_addr, uint32_t n, uint16_t val) {
 }
 
 /**
- * Max-pool 2D.
+ * Pool 2D.
  */
 void kernel_main() {
     const uint32_t reader_nindices = get_compile_time_arg_val(0);
@@ -64,8 +64,9 @@ void kernel_main() {
     const uint32_t reader_id = get_compile_time_arg_val(11);
 
     // compile time args
-    // value of 1 in bf16 in a uin32_t
-    constexpr uint32_t bf16_one_u32 = get_compile_time_arg_val(12);
+    // scalar value in bf16 in a uin32_t
+    constexpr uint32_t bf16_scalar_u32 = get_compile_time_arg_val(12);
+    constexpr uint32_t bf16_init_value_u32 = get_compile_time_arg_val(14);
 
     // static_assert(0 == reader_nindices%2, "reader_nindices must be multiple of 2");
 
@@ -82,17 +83,16 @@ void kernel_main() {
 
     constexpr uint32_t ROW_HW = 64;
 
-    // minus infinity for bfp16
-    uint16_t minus_inf = 63487;
-    // Reduce scalar = 1
+    constexpr uint16_t bf16_scalar_u16 = bf16_scalar_u32 >> 16;
+    constexpr uint16_t bf16_init_value_u16 = bf16_init_value_u32 >> 16;
     if (reader_id == 0) {
         cb_reserve_back(in_scalar_cb_id, 1);
 
-        uint32_t bf16_one_u16 = bf16_one_u32 >> 16;
-        // fill 1 row w/ scalar
-        fill_with_val(get_write_ptr(in_scalar_cb_id), ROW_HW, bf16_one_u16);
-        // fill interm buffer with minus_inf
-        fill_with_val(get_write_ptr(interm_reduction_cb_id), TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
+        // fill 1 row with scalar
+        fill_with_val(get_write_ptr(in_scalar_cb_id), ROW_HW, bf16_scalar_u16);
+        // fill interm buffer with init value
+        fill_with_val(get_write_ptr(interm_reduction_cb_id), TILE_SIZE * MAX_TILES_PER_REDUCTION, bf16_init_value_u16);
+
         cb_push_back(in_scalar_cb_id, 1);
     }
 
@@ -139,7 +139,8 @@ void kernel_main() {
                             cb_reserve_back(in_cb_id, npages_to_reserve);
                             // If next is last chunk, fill whole buffer with -inf.
                             if ((total_elems_to_reduce - processed_rows) < MAX_ROWS_FOR_REDUCTION)
-                                fill_with_val(out_l1_write_addr, TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
+                                fill_with_val(
+                                    out_l1_write_addr, TILE_SIZE * MAX_TILES_PER_REDUCTION, bf16_init_value_u16);
                         }
                     }
                 }
