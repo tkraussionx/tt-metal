@@ -137,15 +137,15 @@ void MAIN {
 
     uint32_t interm_reduction_chunks = window_size_hw / MAX_ROWS_FOR_REDUCTION;
     cb_wait_front(in_scalar_cb_id, 1);
-    //cb_wait_front(interm_reduction_cb_id, 1);
+    cb_wait_front(interm_reduction_cb_id, 1);
     cb_reserve_back(out_cb_id, 1);
-    // DPRINT << "n_sticks_per_core_by_nblocks: " << nsticks_per_core_by_nblocks << ENDL();
-    // DPRINT << "num_8_tiles_blocks: " << num_8_tiles_blocks << ENDL();
-    // DPRINT << "num_tiles_for_reduction: " << num_tiles_for_reduction << ENDL();
-    // DPRINT << "interm_reduction_chunks: " << interm_reduction_chunks << ENDL();
-    // DPRINT << "num_output_tiles: " << num_output_tiles << ENDL();
-    // DPRINT << "num_faces_in_tile: " << num_faces_in_tile << ENDL();
-    // DPRINT << "num_out_rows: " << num_out_rows << ENDL();
+    DPRINT << "n_sticks_per_core_by_nblocks: " << nsticks_per_core_by_nblocks << ENDL();
+    DPRINT << "num_8_tiles_blocks: " << num_8_tiles_blocks << ENDL();
+    DPRINT << "num_tiles_for_reduction: " << num_tiles_for_reduction << ENDL();
+    DPRINT << "interm_reduction_chunks: " << interm_reduction_chunks << ENDL();
+    DPRINT << "num_output_tiles: " << num_output_tiles << ENDL();
+    DPRINT << "num_faces_in_tile: " << num_faces_in_tile << ENDL();
+    DPRINT << "num_out_rows: " << num_out_rows << ENDL();
     for (uint32_t i = 0; i < nsticks_per_core_by_nblocks; ++i) {
         for (uint32_t j = 0; j < num_8_tiles_blocks; j++) {
             // NOTE: Assuming in_ntiles_hw < 8 for now.

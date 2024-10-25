@@ -87,15 +87,15 @@ void kernel_main() {
     // Reduce scalar = 1
     if (reader_id == 0) {
         cb_reserve_back(in_scalar_cb_id, 1);
-        //cb_reserve_back(interm_reduction_cb_id, 1);
+        cb_reserve_back(interm_reduction_cb_id, 1);
 
         uint32_t bf16_one_u16 = bf16_one_u32 >> 16;
         // fill 1 row w/ scalar
         fill_with_val(get_write_ptr(in_scalar_cb_id), ROW_HW, bf16_one_u16);
         // fill interm buffer with minus_inf
-        //fill_with_val(get_write_ptr(interm_reduction_cb_id), TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
+        fill_with_val(get_write_ptr(interm_reduction_cb_id), TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
         cb_push_back(in_scalar_cb_id, 1);
-        //cb_push_back(interm_reduction_cb_id, 1);
+        cb_push_back(interm_reduction_cb_id, 1);
     }
 
     uint32_t in_l1_read_base_addr = get_read_ptr(in_shard_cb_id);
