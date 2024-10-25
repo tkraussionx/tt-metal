@@ -124,7 +124,6 @@ void MAIN {
     constexpr uint32_t matmul_partials_cb                       = tt::CB::c_intermed0;
     constexpr uint32_t tilized_in0_cb_id                        = tt::CB::c_intermed1;
     //constexpr uint32_t untilize_mode_reblock_cb                 = tt::CB::c_intermed2;
-    /*constexpr uint32_t out_cb_id                                = tt::CB::c_out0;*/
 
     constexpr uint32_t untilize_mode_out_cb_id = untilize_out ? matmul_partials_cb : out_cb_id;
 

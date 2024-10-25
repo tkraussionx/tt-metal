@@ -479,7 +479,15 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool, bool> get_conv_padded_input_sh
         auto block_shard_orientation =
             conv_config.transpose_shards ? ShardOrientation::COL_MAJOR : ShardOrientation::ROW_MAJOR;
         const ParallelConfig& optimal_parallel_config = determine_parallel_config(
-            shard_layout, batch_size, in_channels, height, width, out_channels, device, block_shard_orientation, (!use_non_tile_height || conv_config.output_layout == Layout::TILE));
+            shard_layout,
+            batch_size,
+            in_channels,
+            height,
+            width,
+            out_channels,
+            device,
+            block_shard_orientation,
+            !use_non_tile_height);
         if (conv_config.override_sharding_config) {
             TT_FATAL(conv_config.core_grid.has_value(), "Error");
             // override parallel config

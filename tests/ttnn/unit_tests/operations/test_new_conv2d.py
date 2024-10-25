@@ -2417,3 +2417,101 @@ def test_non_tile_multiple_height_conv_wh(
         has_bias=has_bias,
         output_layout=ttnn.ROW_MAJOR_LAYOUT,
     )
+
+
+@skip_for_grayskull()
+@pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="Unsupported on WH and BH")
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
+    (
+        (2, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 64}),
+        (2, 320, 320, 64, 64, 3, 3, 2, 2, 1, 1, False, None),  # fits with bfloat8_b
+        (2, 640, 640, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        (2, 640, 640, 32, 32, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit
+        (2, 1280, 1280, 16, 16, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 doesnt fit
+        (2, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+        (2, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),
+        (2, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, {"act_block_h": 32}),  # bfloat16 doesnt fit
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "fp32_accum",
+    [
+        True,
+    ],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("enable_auto_formatting", [False])
+def test_non_tile_multiple_width_conv_wh(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    fp32_accum,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    enable_auto_formatting,
+):
+    if device.core_grid.y == 7:
+        pytest.skip("This test is not supported for N300")
+
+    # Skip test cases raising OOM, but do not affect the SD e2e test
+    if (
+        (input_channels == 320 and config_override == None and activations_dtype == ttnn.bfloat16)
+        or (input_channels == 960 and config_override == None and fp32_accum == True)
+        or (
+            output_channels == 1280
+            and input_height == 32
+            and activations_dtype == ttnn.bfloat16
+            and weights_dtype == ttnn.bfloat16
+            and enable_auto_formatting == False
+        )
+    ):
+        pytest.skip("Skip the test cases raising OOM but not affecting e2e test")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=(input_channels == 16),
+        transpose_mcast=use_1d_systolic_array,  ## use RM (transpose_mcast=False) with 2D on WH
+        enable_auto_formatting=enable_auto_formatting,
+        padded_input_channels=16 if input_channels == 16 else None,
+        fp32_accum=fp32_accum,
+        packer_l1_acc=True,
+    )

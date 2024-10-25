@@ -19,7 +19,6 @@
 #include "ttnn/operations/experimental/auto_format/auto_format.hpp"
 
 #include "ttnn/operations/sliding_window/sliding_window.hpp"
-#include "ttnn/tensor/tensor.hpp"
 #include "ttnn/tensor/tensor_utils.hpp"
 using namespace tt::constants;
 namespace optimized_conv_op_utils {
