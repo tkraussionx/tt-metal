@@ -137,7 +137,7 @@ void MAIN {
 
     uint32_t interm_reduction_chunks = window_size_hw / MAX_ROWS_FOR_REDUCTION;
     cb_wait_front(in_scalar_cb_id, 1);
-    cb_wait_front(interm_reduction_cb_id, 1);
+    //cb_wait_front(interm_reduction_cb_id, 1);
     cb_reserve_back(out_cb_id, 1);
     DPRINT << "n_sticks_per_core_by_nblocks: " << nsticks_per_core_by_nblocks << ENDL();
     DPRINT << "num_8_tiles_blocks: " << num_8_tiles_blocks << ENDL();
