@@ -63,14 +63,20 @@ std::vector<T> slice_vec(std::vector<T> const &v, int m, int n) {
     return vec;
 }
 
-void get_max_page_size_and_num_pages(uint32_t num_tiles, uint32_t tile_size, uint32_t& page_size, uint32_t& num_pages) {
-    uint64_t total_size = static_cast<uint64_t>(num_tiles) * tile_size;
+void get_max_page_size_and_num_pages(uint32_t num_tiles_w, uint32_t num_tiles_h, uint32_t tile_size, uint32_t& page_size, uint32_t& num_pages, uint32_t& num_pages_w_per_receiver) {
+    uint64_t half_row_bytes = static_cast<uint64_t>(num_tiles_w / 2) * tile_size; // TODO: what if num_tiles_w is odd? Need padding?  // 2
+    TT_ASSERT(num_tiles_w % 2 == 0, "num_tiles_w {} should be divisible by 2", num_tiles_w);
+    log_info("half_row_bytes: {}", half_row_bytes);
 
     page_size = (8192 / tile_size) * tile_size;
-    while (total_size % page_size != 0 && page_size >= tile_size) {
+    // Each receiver core receives half the data, so each receiver cores's block size is half of the total block size
+    while (half_row_bytes % page_size != 0 && page_size > tile_size) {
         page_size -= tile_size;
     }
-    num_pages = total_size / page_size;
+    TT_ASSERT(half_row_bytes % page_size == 0, "half_row_bytes has to be divisible by page_size");
+    log_info("tile_size: {}, page_size: {}", tile_size, page_size);
+    num_pages = num_tiles_w * num_tiles_h * tile_size / page_size;
+    num_pages_w_per_receiver = half_row_bytes / page_size;
 }
 
 std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
@@ -101,8 +107,11 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
     // DRAM reader CB
     uint32_t reader_cb_index = 0;
     uint32_t reader_cb_size = block_h * block_w * single_tile_size * 3;
-    uint32_t page_size, num_pages;
-    get_max_page_size_and_num_pages(block_num_tiles, single_tile_size, page_size, num_pages);
+    uint32_t page_size, num_pages, num_pages_w_per_receiver;
+    get_max_page_size_and_num_pages(block_w, block_h, single_tile_size, page_size, num_pages, num_pages_w_per_receiver);
+
+    log_info("Input block size: {}x{}, num_blocks: {}", block_h, block_w, num_blocks);
+    log_info("Pages set up as page_size: {}, num_pages: {}, num_pages_w_per_receiver: {}", page_size, num_pages, num_pages_w_per_receiver);
 
     uint32_t reader_cb_addr = device->get_base_allocator_addr(HalMemType::L1);
     tt_metal::CircularBufferConfig reader_cb_config =
@@ -132,7 +141,8 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
 
     std::vector<uint32_t> writer_compile_time_args = {
         (std::uint32_t) num_blocks,
-        (std::uint32_t) num_pages,
+        (std::uint32_t) num_pages_w_per_receiver,
+        (std::uint32_t) block_h,
         (std::uint32_t) block_num_tiles,
         (std::uint32_t) page_size,
         (std::uint32_t) tt_metal::NOC::RISCV_0_default
@@ -174,13 +184,19 @@ std::tuple<tt_metal::Program, tt_metal::KernelHandle, uint32_t> create_program(
 
         tt_metal::SetRuntimeArgs(program, reader_kernel, core, reader_rt_args);
 
-        auto writer_core = all_l1_writer_cores_ordered[i];
-        auto writer_core_phy = device->worker_core_from_logical_core(writer_core);
+        auto writer_core1 = all_l1_writer_cores_ordered[i*2];
+        auto writer_core_phy1 = device->worker_core_from_logical_core(writer_core1);
+        auto writer_core2 = all_l1_writer_cores_ordered[(i*2)+1];
+        auto writer_core_phy2 = device->worker_core_from_logical_core(writer_core2);
 
         std::vector<uint32_t> writer_rt_args = {
             (std::uint32_t) (vc + 2) & 0x3,
-            (std::uint32_t) writer_core_phy.x,
-            (std::uint32_t) writer_core_phy.y
+            // First L1 writer core coordinates
+            (std::uint32_t) writer_core_phy1.x,
+            (std::uint32_t) writer_core_phy1.y,
+            // Second L1 writer core coordinates
+            (std::uint32_t) writer_core_phy2.x,
+            (std::uint32_t) writer_core_phy2.y
         };
 
         tt_metal::SetRuntimeArgs(program, writer_kernel, core, writer_rt_args);
@@ -193,37 +209,44 @@ bool validation(
     tt_metal::Device *device,
     tt_metal::Buffer &input_buffer,
     std::vector<uint32_t> &input_vec,
-    const uint32_t &num_cores,
+    uint32_t num_cores,
     std::vector<CoreCoord> &all_cores,
-    const uint32_t &num_tiles_per_core,
-    const uint32_t &cb_addr,
-    const uint32_t &single_tile_size,
+    uint32_t num_tiles_per_core,
+    uint32_t cb_addr,
+    uint32_t single_tile_size,
     uint32_t num_tiles_cb,
     uint32_t df,
     uint32_t num_banks,
     uint32_t num_blocks,
-    uint32_t block_h,
-    uint32_t block_w,
-    uint32_t num_datum_per_slice) {
+    uint32_t block_h, // block_h per core
+    uint32_t block_w, // block_w per core
+    uint32_t block_w_per_receiver,
+    uint32_t num_datum_per_slice) { // 32x32 = tile_size
+
+    log_info("start validation");
 
     uint32_t core_id = 0;
     for (auto core: all_cores) {
         std::vector<uint32_t> result_vec;
         tt_metal::detail::ReadFromDeviceL1(
-            device, core, cb_addr, num_tiles_cb * single_tile_size, result_vec);
+            device, core, cb_addr, num_tiles_cb / 2 * single_tile_size, result_vec);
 
-        uint32_t num_datum_per_block = block_h * block_w * num_datum_per_slice;
-        uint32_t tensor_slice_stride = core_id * num_datum_per_slice;
-        uint32_t last_block_offset = (num_blocks - 1) * num_datum_per_block * num_banks;
-        uint32_t start_index = tensor_slice_stride + last_block_offset;
-        uint32_t num_slices = block_h * block_w;
+        uint32_t num_datum_per_block = block_h * block_w * num_cores * num_datum_per_slice;
+        uint32_t last_block_offset = (num_blocks - 1) * num_datum_per_block;
+        // uint32_t tensor_slice_stride = core_id * num_datum_per_slice;
+        uint32_t num_slices = block_h * block_w_per_receiver; // Num slices=tiles per core to verify
+
+        uint32_t core_offset = core_id * block_w_per_receiver * num_datum_per_slice;
+        uint32_t input_start_index_for_core = last_block_offset + core_offset;
+
+        log_info("core: {}, input_start_index_for_core: {}, num_slices: {}", core, input_start_index_for_core, num_slices);
 
         if (df == 0) {
             auto result_bfp8 = unpack_bfp8_tiles_into_float_vec(result_vec, true, true);
             auto input_bfp8 = unpack_bfp8_tiles_into_float_vec(input_vec, true, true);
 
             for (uint32_t i=0; i < num_slices; ++i) {
-                uint32_t input_step = start_index + i * num_datum_per_slice * num_banks;
+                uint32_t input_step = input_start_index_for_core + i * num_datum_per_slice * num_banks;
                 std::vector<float> input_slice(input_bfp8.begin() + input_step, input_bfp8.begin() + input_step + num_datum_per_slice);
                 uint32_t result_step = i * num_datum_per_slice;
                 std::vector<float> result_slice(result_bfp8.begin() + result_step, result_bfp8.begin() + result_step + num_datum_per_slice);
@@ -237,16 +260,48 @@ bool validation(
             auto result_bf16 = unpack_uint32_vec_into_bfloat16_vec(result_vec);
             auto input_bf16 = unpack_uint32_vec_into_bfloat16_vec(input_vec);
 
-            for (uint32_t i=0; i < num_slices; ++i) {
-                uint32_t input_step = start_index + i * num_datum_per_slice * num_banks;
-                std::vector<bfloat16> input_slice(input_bf16.begin() + input_step, input_bf16.begin() + input_step + num_datum_per_slice);
-                uint32_t result_step = i * num_datum_per_slice;
-                std::vector<bfloat16> result_slice(result_bf16.begin() + result_step, result_bf16.begin() + result_step + num_datum_per_slice);
+            for (uint32_t r=0; r < block_h; ++r) {
+                for (uint32_t c=0; c < block_w_per_receiver; ++c) {
+                    uint32_t one_row_bytes = block_w * num_datum_per_slice;
+                    uint32_t input_step = input_start_index_for_core + (r * one_row_bytes) + c * num_datum_per_slice;
+                    std::vector<bfloat16> input_slice(input_bf16.begin() + input_step, input_bf16.begin() + input_step + num_datum_per_slice);
+                    uint32_t result_step = r * (num_datum_per_slice*block_w_per_receiver) + c * num_datum_per_slice;
+                    std::vector<bfloat16> result_slice(result_bf16.begin() + result_step, result_bf16.begin() + result_step + num_datum_per_slice);
 
-                if (input_slice != result_slice) {
-                    return false;
+                    log_info("input_step: {}, result_step: {}", input_step, result_step);
+
+                    if (input_slice != result_slice) {
+                        log_info("Mismatch");
+                        return false;
+                    }
+                    log_info("Match");
                 }
             }
+
+            // block_w and block_h: tiles
+            // block_w_per_receiver: tiles
+            // input_start_index_for_core: datums
+            // for (uint32_t r=0; r < block_h; ++r) {
+            //     // Find start offsets in datums
+            //     // r and c: tiles
+            //     uint32_t one_row_datums = block_w * num_datum_per_slice; // length of one input row in datums (e.g. 2 bytes for bf16)
+            //     uint32_t half_row_datums = block_w_per_receiver * num_datum_per_slice; // length for one receiver core
+            //     uint32_t input_start = input_start_index_for_core + (r * one_row_datums);
+            //     uint32_t input_end = input_start + half_row_datums;
+            //     std::vector<bfloat16> input_slice(input_bf16.begin() + input_start, input_bf16.begin() + input_end);
+            //     uint32_t result_start = r * half_row_datums;
+            //     uint32_t result_end = result_start + half_row_datums;
+            //     std::vector<bfloat16> result_slice(result_bf16.begin() + result_start, result_bf16.begin() + result_end);
+
+            //     log_info("input read from {} to {}", input_start, input_end);
+            //     log_info("result read from {} to {}", result_start, result_end);
+
+            //     if (input_slice != result_slice) {
+            //         log_info("Mismatch");
+            //         return false;
+            //     }
+            //     log_info("Match");
+            // }
         }
         core_id ++;
     }
@@ -673,9 +728,12 @@ void get_l1_writer_core_coords_wormhole_b0(
     for (int i = 0; i < all_dram_reader_cores.size(); ++i) {
         auto dram_reader_core = all_dram_reader_cores[i];
         auto dram_reader_core_phy = device->worker_core_from_logical_core(dram_reader_core);
-        uint32_t adj_core_x = dram_reader_core_phy.x + 1;
-        uint32_t adj_core_y = dram_reader_core_phy.y;
-        adj_core_physical.push_back(CoreCoord(adj_core_x, adj_core_y));
+        uint32_t adj_core_x1 = dram_reader_core_phy.x + 1;
+        uint32_t adj_core_y1 = dram_reader_core_phy.y;
+        adj_core_physical.push_back(CoreCoord(adj_core_x1, adj_core_y1));
+        uint32_t adj_core_x2 = dram_reader_core_phy.x + 2;
+        uint32_t adj_core_y2 = dram_reader_core_phy.y;
+        adj_core_physical.push_back(CoreCoord(adj_core_x2, adj_core_y2));
     }
 
     // find the logical coord from physical coord
@@ -789,6 +847,7 @@ int main(int argc, char **argv) {
         uint32_t nt = n / 32;
         uint32_t block_h = kt / num_blocks;
         uint32_t block_w = nt / num_banks;
+        uint32_t block_w_per_receiver = block_w / 2;
         uint32_t num_datum_per_slice = 32 * 32;
 
         uint32_t single_tile_size = tt_metal::detail::TileSize(tile_format);
@@ -922,7 +981,12 @@ int main(int argc, char **argv) {
             num_blocks,
             block_h,
             block_w,
+            block_w_per_receiver,
             num_datum_per_slice);
+
+        if (!pass) {
+            log_info(LogTest, "Validation failed");
+        }
 
         pass &= tt_metal::CloseDevice(device);
     } catch (const std::exception &e) {
