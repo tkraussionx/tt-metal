@@ -54,7 +54,6 @@ SECTIONS
 
   .data.rel.ro : { *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*) } > REGION_APP_KERNEL_DATA
   .dynamic        : { *(.dynamic) } > REGION_APP_KERNEL_DATA
-  . = DATA_SEGMENT_RELRO_END (0, .);
   .data           :
   {
     . = ALIGN(16);
