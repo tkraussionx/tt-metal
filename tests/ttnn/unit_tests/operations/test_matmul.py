@@ -160,14 +160,14 @@ def test_tiny_tiles(device, n, c, h, w, tile_h, tile_w):
 # @pytest.mark.parametrize("out_sharded", [True, False])
 @pytest.mark.parametrize("b", [1])
 @pytest.mark.parametrize("h", [1])
-@pytest.mark.parametrize("m", [32])
+@pytest.mark.parametrize("m", [16])
 @pytest.mark.parametrize("k", [32])
-@pytest.mark.parametrize("n", [32])
+@pytest.mark.parametrize("n", [16])
 @pytest.mark.parametrize("in0_sharded", [True])
 @pytest.mark.parametrize("in1_sharded", [True])
 @pytest.mark.parametrize("out_sharded", [True])
 @pytest.mark.parametrize("tile_h", [16])
-@pytest.mark.parametrize("tile_w", [32])
+@pytest.mark.parametrize("tile_w", [16])
 @pytest.mark.parametrize("transpose_tile", [False])
 def test_matmul_reuse_config_sharded_tiny_tile(
     device, b, h, m, k, n, tile_h, tile_w, in0_sharded, in1_sharded, out_sharded, transpose_tile
@@ -177,7 +177,9 @@ def test_matmul_reuse_config_sharded_tiny_tile(
     grid_size = (b, h)
 
     in0 = torch.ones([b, h, m, k]).bfloat16().float()
-    in1 = torch.randn([b, h, k, n]).bfloat16().float()
+    in1 = torch.rand([b, h, k, n]).bfloat16().float()
+
+    # print(in1)
 
     if in0_sharded:
         in0_memory_config = ttnn.create_sharded_memory_config(
@@ -192,6 +194,7 @@ def test_matmul_reuse_config_sharded_tiny_tile(
         in0,
         tile=ttnn.Tile((tile_h, 32)),
         dtype=ttnn.bfloat8_b,
+        # dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=in0_memory_config,
@@ -209,7 +212,8 @@ def test_matmul_reuse_config_sharded_tiny_tile(
     in1_t = ttnn.from_torch(
         in1,
         tile=ttnn.Tile((32, tile_w), transpose_tile=transpose_tile),
-        dtype=ttnn.bfloat16,
+        dtype=ttnn.bfloat8_b,
+        # dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=in1_memory_config,
@@ -244,11 +248,16 @@ def test_matmul_reuse_config_sharded_tiny_tile(
         # in0_t, in1_t, program_config=program_config, memory_config=out_mem_config, output_tile=output_tile
         in0_t,
         in1_t,
+        dtype=ttnn.bfloat8_b,
+        # dtype=ttnn.bfloat16,
         program_config=program_config,
         memory_config=out_mem_config,
     )
     output_tensor = ttnn.to_torch(output_t)
     pt_out = in0 @ in1
+
+    print(pt_out)
+    print(output_tensor)
 
     assert_with_pcc(pt_out, output_tensor, 0.999)
 

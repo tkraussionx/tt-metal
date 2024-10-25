@@ -16,7 +16,7 @@
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
 #include "debug/dprint.h"
-
+#include "debug/dprint_tensix.h"
 
 // Please update
 // tests/tt_metal/tt_metal/perf_microbenchmark/1_compute_mm/kernels/bmm_large_block_zm_fused_bias_activation_copy.cpp
@@ -166,7 +166,10 @@ void MAIN {
             cb_wait_front(in0_cb_id, in0_block_num_tiles);
             cb_wait_front(in1_cb_id, in1_block_num_tiles);
 
-            UNPACK (( DPRINT << TSLICE(mm_out_cb_id, 0, SliceRange::h0_w0_32()) << ENDL() ));
+            // for (uint8_t i=0; i<32; ++i) {
+            //     UNPACK (( DPRINT << TSLICE(in1_cb_id, 0, SliceRange{ .h0 = i, .h1 = uint8_t(i+1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 }) << ENDL() ));
+            // }
+
 
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
@@ -209,6 +212,8 @@ void MAIN {
                                                       // called in1_block_w)
                     }
 
+                    // dprint_tensix_dest_reg(0);
+
 #endif  // SKIP_COMPUTE
 
                     if (last_out) {
@@ -245,6 +250,12 @@ void MAIN {
 
                         tile_regs_release();
                         cb_push_back(mm_out_cb_id, out_subblock_num_tiles);
+
+
+                        // cb_wait_front(mm_out_cb_id, 1);
+                        // for (uint8_t i=0; i<1; ++i) {
+                        //     UNPACK (( DPRINT << TSLICE(mm_out_cb_id, 0, SliceRange{ .h0 = i, .h1 = uint8_t(i+1), .hs = 1, .w0 = 0, .w1 = 16, .ws = 1 }) << ENDL() ));
+                        // }
 
                     } else {
                         tile_regs_commit();
