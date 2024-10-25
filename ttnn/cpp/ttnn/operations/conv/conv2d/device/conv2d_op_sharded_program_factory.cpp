@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ttnn/operations/conv/conv2d/device/conv2d_op.hpp"
-#include "common/math.hpp"
-#include "fmt/base.h"
 #include "ttnn/operations/sliding_window/sliding_window.hpp"
 #include "tt_metal/common/work_split.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -525,7 +523,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     assert(act_matrix_shape[0] == 1);
     uint32_t act_matrix_height = (uint32_t)act_matrix_shape[1];
     uint32_t act_matrix_width = (uint32_t)act_matrix_shape[2];
-    // TODO: Align for height sharding
     if(block_sharded)
         act_matrix_width = round_up((input_channels_padded / conv_act_c_blocks) * filter_w * filter_h, TILE_WIDTH) * conv_act_c_blocks;
     uint32_t act_matrix_height_unpadded = (uint32_t)act_matrix_shape_unpadded[1];
@@ -582,7 +579,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
 
     uint32_t num_blocks_act_h = act_matrix_height_ntiles / act_block_h_ntiles;
     uint32_t num_blocks_out_h = act_matrix_height_ntiles / out_block_h_ntiles;
-    /*uint32_t num_blocks_act_w = act_matrix_width_ntiles / act_block_w_ntiles;*/
     uint32_t num_blocks_act_w = a.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED ? 1 : filter_h;
     uint32_t num_blocks_weight_w = weight_matrix_width_ntiles / weight_block_w_ntiles;
 
@@ -610,10 +606,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     log_debug(LogOp, "act_block_num_tiles_split: {}", act_block_num_tiles_split);
     log_debug(LogOp, "act_block_num_tiles_split_last: {}", act_block_num_tiles_split_last);
 
-    /*TT_FATAL(*/
-    /*    (act_block_w_datums == round_up(conv_act_size_c * filter_w, TILE_WIDTH)) ||*/
-    /*    ((act_block_w_datums <= conv_act_size_c) && (conv_act_size_c % act_block_w_datums == 0)), "Error");*/
-
     // weight block info
     uint32_t weight_block_w_datums = weight_matrix_width / num_blocks_weight_w;
     assert(weight_block_w_ntiles % out_subblock_w_ntiles == 0);
@@ -633,9 +625,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
                                            ? weight_block_w_datums
                                            : (output_channels_padded_to_tile_width % weight_block_w_datums);
     assert(last_block_width_datums % TILE_WIDTH == 0);
-
-    // sanity check
-    /*assert(num_blocks_output_w == num_blocks_weight_w);*/
 
     uint32_t out_block_h_datums = out_block_h_ntiles * TILE_HEIGHT;
 
@@ -850,7 +839,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     }
 
     if (has_bias) {
-        /*TT_FATAL(bias_ntiles % num_weight_slices_width == 0, "Error");*/
         TT_FATAL(bias_ntiles == weight_matrix_width_ntiles, "Error");
     }
     uint32_t bias_ntiles_per_core = bias_ntiles / num_weight_slices_width;
@@ -1175,14 +1163,11 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
     uint32_t reader_arg_act_block_h_datums = (split_reader ? act_block_h_datums_split : act_block_h_datums);
     TT_FATAL(reader_arg_act_block_h_datums % 2 == 0, "2 Indices are packed in one uint32_t word.");
 
-    // TODO: Generalize
     if(block_sharded) {
         in0_block_num_tiles = act_block_num_tiles;
         in1_block_num_tiles = weight_block_num_tiles;
         in0_block_w = act_block_w_ntiles;
-        /*in0_num_blocks_w = num_blocks_act_w * conv_act_c_blocks;*/
         in0_num_blocks_w = 1 * conv_act_c_blocks;
-        /*in0_subblock_num_tiles =;*/
     }
     reader_compile_time_args = {
         (uint32_t)(src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0),
@@ -1247,8 +1232,6 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_impl(
         compute_defines["PACKER_L1_ACC"] = "1";
     }
 
-    if(block_sharded)
-        num_blocks_act_w = 1;
     writer_compile_time_args = {
         (uint32_t)(dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0),
         out0_cb,
