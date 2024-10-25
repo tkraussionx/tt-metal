@@ -11,7 +11,7 @@ To build and execute, you may use the following commands. Note that we include t
 ```bash
     export ARCH_NAME=<arch name>
     export TT_METAL_HOME=<this repo dir>
-    ./build_metal.sh --build-tests
+    ./build_metal.sh --build-programming-examples
     ./build/programming_examples/hello_world_datamovement_kernel
 ```
 Printing from device kernels is disabled by default, it can be enabled with
