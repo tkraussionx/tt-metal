@@ -87,7 +87,7 @@ static void test_sems_across_core_types(CommonFixture *fixture,
     }
 }
 
-TEST_F(CommonFixture, TestEthBlank) {
+TEST_F(CommonFixture, EthTestBlank) {
 
     Device *device = devices_[0];
     Program program = CreateProgram();
@@ -111,7 +111,7 @@ TEST_F(CommonFixture, TestEthBlank) {
     }
 }
 
-TEST_F(CommonFixture, TestTensixInitLocalMemory) {
+TEST_F(CommonFixture, TensixTestInitLocalMemory) {
 
     // This test will hang/assert if there is a failure
 
@@ -134,7 +134,7 @@ TEST_F(CommonFixture, TestTensixInitLocalMemory) {
     this->RunProgram(device, program);
 }
 
-TEST_F(CommonFixture, TestEthInitLocalMemory) {
+TEST_F(CommonFixture, EthTestInitLocalMemory) {
 
     // This test will hang/assert if there is a failure
 
@@ -165,11 +165,11 @@ TEST_F(CommonFixture, TestEthInitLocalMemory) {
     }
 }
 
-TEST_F(CommonFixture, TestSemaphoresTensixActiveEth) {
+TEST_F(CommonFixture, TensixActiveEthTestSemaphores) {
     test_sems_across_core_types(this, this->devices_, true);
 }
 
-TEST_F(CommonFixture, TestSemaphoresTensixIdleEth) {
+TEST_F(CommonFixture, TensixIdleEthTestSemaphores) {
     if (not this->slow_dispatch_) {
         GTEST_SKIP();
     }
@@ -179,7 +179,7 @@ TEST_F(CommonFixture, TestSemaphoresTensixIdleEth) {
 
 // This test was written to cover issue #12738 (CBs for workers showing up on
 // active eth cores)
-TEST_F(CommonFixture, TestCBsAcrossWorkerEth) {
+TEST_F(CommonFixture, TensixActiveEthTestCBsAcrossDifferentCoreTypes) {
 
     uint32_t intermediate_cb = 24;
     uint32_t out_cb = 16;

@@ -226,7 +226,7 @@ bool run_sfpu_all_same_buffer(tt_metal::Device* device, const SfpuConfig& test_c
 class SingleCoreSingleDeviceSfpuParameterizedFixture : public DeviceFixture,
                                                        public testing::WithParamInterface<std::tuple<size_t, string>> {
 };
-TEST_P(SingleCoreSingleDeviceSfpuParameterizedFixture, SfpuCompute) {
+TEST_P(SingleCoreSingleDeviceSfpuParameterizedFixture, TensixSfpuCompute) {
     size_t num_tiles = std::get<0>(GetParam());
     string sfpu_op = std::get<1>(GetParam());
 
@@ -270,7 +270,7 @@ class SingleCoreSingleDeviceSfpuParameterizedApproxFixture
     : public DeviceFixture,
       public testing::WithParamInterface<std::tuple<size_t, string>> {};
 
-TEST_P(SingleCoreSingleDeviceSfpuParameterizedApproxFixture, SfpuCompute) {
+TEST_P(SingleCoreSingleDeviceSfpuParameterizedApproxFixture, TensixSfpuCompute) {
     size_t num_tiles = std::get<0>(GetParam());
     string sfpu_op = std::get<1>(GetParam());
 
@@ -316,7 +316,7 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(4, "log"),
         std::make_tuple(4, "tanh")));
 
-TEST_F(DeviceFixture, DISABLED_MultiContinguousCoreSingleTileSfpuApproxCompute) {
+TEST_F(DeviceFixture, DISABLED_TensixMultiContinguousCoreSingleTileSfpuApproxCompute) {
     CoreRange core_range({0, 0}, {1, 0});
     CoreRangeSet core_range_set({core_range});
     unit_tests::compute::sfpu::SfpuConfig test_config = {
@@ -354,7 +354,7 @@ TEST_F(DeviceFixture, DISABLED_MultiContinguousCoreSingleTileSfpuApproxCompute) 
     EXPECT_TRUE(run_sfpu_all_same_buffer(devices_.at(0), test_config));
 }
 
-TEST_F(DeviceFixture, DISABLED_MultiContinguousCoreMultiTileSfpuApproxCompute) {
+TEST_F(DeviceFixture, DISABLED_TensixMultiContinguousCoreMultiTileSfpuApproxCompute) {
     CoreRange core_range({0, 0}, {1, 0});
     CoreRangeSet core_range_set({core_range});
     unit_tests::compute::sfpu::SfpuConfig test_config = {
@@ -392,7 +392,7 @@ TEST_F(DeviceFixture, DISABLED_MultiContinguousCoreMultiTileSfpuApproxCompute) {
     test_config.sfpu_op = "tanh";
     EXPECT_TRUE(run_sfpu_all_same_buffer(devices_.at(0), test_config));
 }
-TEST_F(DeviceFixture, DISABLED_AllCoreSingleTileSfpuApproxCompute) {
+TEST_F(DeviceFixture, DISABLED_TensixAllCoreSingleTileSfpuApproxCompute) {
     unit_tests::compute::sfpu::SfpuConfig test_config = {
         .tile_byte_size = 2 * 32 * 32,
         .l1_input_data_format = tt::DataFormat::Float16_b,
@@ -431,7 +431,7 @@ TEST_F(DeviceFixture, DISABLED_AllCoreSingleTileSfpuApproxCompute) {
     test_config.sfpu_op = "tanh";
     EXPECT_TRUE(run_sfpu_all_same_buffer(devices_.at(0), test_config));
 }
-TEST_F(DeviceFixture, DISABLED_AllCoreMultiTileSfpuApproxCompute) {
+TEST_F(DeviceFixture, DISABLED_TensixAllCoreMultiTileSfpuApproxCompute) {
     unit_tests::compute::sfpu::SfpuConfig test_config = {
         .tile_byte_size = 2 * 32 * 32,
         .l1_input_data_format = tt::DataFormat::Float16_b,

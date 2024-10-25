@@ -65,7 +65,7 @@ TEST_F(DeviceFixture, TestCircularBuffersSequentiallyPlaced) {
 }
 }
 
-TEST_F(DeviceFixture, TestCircularBufferSequentialAcrossAllCores) {
+TEST_F(DeviceFixture, TensixTestCircularBufferSequentialAcrossAllCores) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CBConfig cb_config;
@@ -107,7 +107,7 @@ TEST_F(DeviceFixture, TestCircularBufferSequentialAcrossAllCores) {
 }
 }
 
-TEST_F(DeviceFixture, TestValidCircularBufferAddress) {
+TEST_F(DeviceFixture, TensixTestValidCircularBufferAddress) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CBConfig cb_config;
@@ -148,7 +148,7 @@ TEST_F(DeviceFixture, TestValidCircularBufferAddress) {
 }
 }
 
-TEST_F(DeviceFixture, TestCircularBuffersAndL1BuffersCollision) {
+TEST_F(DeviceFixture, TensixTestCircularBuffersAndL1BuffersCollision) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     uint32_t page_size = TileSize(tt::DataFormat::Float16_b);
@@ -180,7 +180,7 @@ TEST_F(DeviceFixture, TestCircularBuffersAndL1BuffersCollision) {
 }
 }
 
-TEST_F(DeviceFixture, TestValidUpdateCircularBufferSize) {
+TEST_F(DeviceFixture, TensixTestValidUpdateCircularBufferSize) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CBConfig cb_config;
@@ -214,7 +214,7 @@ TEST_F(DeviceFixture, TestValidUpdateCircularBufferSize) {
 }
 }
 
-TEST_F(DeviceFixture, TestInvalidUpdateCircularBufferSize) {
+TEST_F(DeviceFixture, TensixTestInvalidUpdateCircularBufferSize) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CBConfig cb_config;
@@ -244,7 +244,7 @@ TEST_F(DeviceFixture, TestInvalidUpdateCircularBufferSize) {
 }
 }
 
-TEST_F(DeviceFixture, TestUpdateCircularBufferAddress) {
+TEST_F(DeviceFixture, TensixTestUpdateCircularBufferAddress) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CBConfig cb_config;
@@ -283,7 +283,7 @@ TEST_F(DeviceFixture, TestUpdateCircularBufferAddress) {
 }
 }
 
-TEST_F(DeviceFixture, TestUpdateCircularBufferPageSize) {
+TEST_F(DeviceFixture, TensixTestUpdateCircularBufferPageSize) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Device *device = this->devices_.at(id);
     Program program;
@@ -359,7 +359,7 @@ TEST_F(DeviceFixture, TestUpdateCircularBufferPageSize) {
 }
 }
 
-TEST_F(DeviceFixture, TestDataCopyWithUpdatedCircularBufferConfig) {
+TEST_F(DeviceFixture, TensixTestDataCopyWithUpdatedCircularBufferConfig) {
   for (unsigned int id = 0; id < num_devices_; id++) {
     Program program;
     CoreCoord core(0, 0);
