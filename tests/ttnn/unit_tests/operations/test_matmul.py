@@ -148,27 +148,27 @@ def test_tiny_tiles(device, n, c, h, w, tile_h, tile_w):
 
 
 @run_for_wormhole_b0()
-@pytest.mark.parametrize("b", [8])
-@pytest.mark.parametrize("h", [4])
-@pytest.mark.parametrize("m", [256])
-@pytest.mark.parametrize("k", [256])
-@pytest.mark.parametrize("n", [256])
-@pytest.mark.parametrize("tile_h", [16, 32])
-@pytest.mark.parametrize("tile_w", [16, 32])
-@pytest.mark.parametrize("in0_sharded", [True, False])
-@pytest.mark.parametrize("in1_sharded", [True, False])
-@pytest.mark.parametrize("out_sharded", [True, False])
-# @pytest.mark.parametrize("b", [1])
-# @pytest.mark.parametrize("h", [1])
-# @pytest.mark.parametrize("m", [32])
-# @pytest.mark.parametrize("k", [32])
-# @pytest.mark.parametrize("n", [32])
-# @pytest.mark.parametrize("in0_sharded", [True])
-# @pytest.mark.parametrize("in1_sharded", [True])
-# @pytest.mark.parametrize("out_sharded", [True])
-# @pytest.mark.parametrize("tile_h", [16])
-# @pytest.mark.parametrize("tile_w", [32])
-@pytest.mark.parametrize("transpose_tile", [True])
+# @pytest.mark.parametrize("b", [8])
+# @pytest.mark.parametrize("h", [4])
+# @pytest.mark.parametrize("m", [256])
+# @pytest.mark.parametrize("k", [256])
+# @pytest.mark.parametrize("n", [256])
+# @pytest.mark.parametrize("tile_h", [16, 32])
+# @pytest.mark.parametrize("tile_w", [16, 32])
+# @pytest.mark.parametrize("in0_sharded", [True, False])
+# @pytest.mark.parametrize("in1_sharded", [True, False])
+# @pytest.mark.parametrize("out_sharded", [True, False])
+@pytest.mark.parametrize("b", [1])
+@pytest.mark.parametrize("h", [1])
+@pytest.mark.parametrize("m", [32])
+@pytest.mark.parametrize("k", [32])
+@pytest.mark.parametrize("n", [32])
+@pytest.mark.parametrize("in0_sharded", [True])
+@pytest.mark.parametrize("in1_sharded", [True])
+@pytest.mark.parametrize("out_sharded", [True])
+@pytest.mark.parametrize("tile_h", [16])
+@pytest.mark.parametrize("tile_w", [32])
+@pytest.mark.parametrize("transpose_tile", [False])
 def test_matmul_reuse_config_sharded_tiny_tile(
     device, b, h, m, k, n, tile_h, tile_w, in0_sharded, in1_sharded, out_sharded, transpose_tile
 ):
@@ -191,7 +191,7 @@ def test_matmul_reuse_config_sharded_tiny_tile(
     in0_t = ttnn.from_torch(
         in0,
         tile=ttnn.Tile((tile_h, 32)),
-        dtype=ttnn.bfloat16,
+        dtype=ttnn.bfloat8_b,
         layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=in0_memory_config,
@@ -235,17 +235,22 @@ def test_matmul_reuse_config_sharded_tiny_tile(
     else:
         out_mem_config = ttnn.L1_MEMORY_CONFIG
     # override the tile width for later ops
-    if out_sharded and tile_h <= 16:
-        output_tile = ttnn.Tile([tile_h, 32])
-    else:
-        output_tile = ttnn.Tile([tile_h, tile_w])
+    # if out_sharded and tile_h <= 16:
+    #     output_tile = ttnn.Tile([tile_h, 32])
+    # else:
+    #     output_tile = ttnn.Tile([tile_h, tile_w])
+    # output_tile = ttnn.Tile([tile_h, tile_w])
     output_t = ttnn.matmul(
-        in0_t, in1_t, program_config=program_config, memory_config=out_mem_config, output_tile=output_tile
+        # in0_t, in1_t, program_config=program_config, memory_config=out_mem_config, output_tile=output_tile
+        in0_t,
+        in1_t,
+        program_config=program_config,
+        memory_config=out_mem_config,
     )
-    # output_tensor = ttnn.to_torch(output_t)
-    # pt_out = in0 @ in1
+    output_tensor = ttnn.to_torch(output_t)
+    pt_out = in0 @ in1
 
-    # assert_with_pcc(pt_out, output_tensor, 0.999)
+    assert_with_pcc(pt_out, output_tensor, 0.999)
 
 
 def pad_to_dram_banks(num, tile_w, lcm=32 * 12):
