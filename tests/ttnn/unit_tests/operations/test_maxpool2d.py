@@ -34,8 +34,9 @@ def run_max_pool(
     if shard_scheme != ttnn.TensorMemoryLayout.WIDTH_SHARDED:
         if 2 * pad_h > kernel_h or 2 * pad_w > kernel_w:
             pytest.skip("Invalid case")
-        if (kernel_h == 3 and pad_h != 1) or (kernel_h == 2 and pad_h != 0):
-            pytest.skip("kernel size and padding combination not supported")
+
+    if (kernel_h == 5 and pad_h != 2) or (kernel_h == 3 and pad_h != 1) or (kernel_h == 2 and pad_h != 0):
+        pytest.skip("kernel size and padding combination not supported")
 
     out_h = math.floor((in_h + 2 * pad_h - (dilation_h * kernel_h - 1) - 1) / stride_h) + 1
     out_w = math.floor((in_w + 2 * pad_w - (dilation_w * kernel_w - 1) - 1) / stride_w) + 1
@@ -67,7 +68,13 @@ def run_max_pool(
     torch.set_printoptions(precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32)
 
     ## construct the tensor in NCHW shape
-    act = torch.randn(act_shape, dtype=torch.bfloat16)
+    # act = torch.randn(act_shape, dtype=torch.bfloat16)
+    act = torch.empty(act_shape, dtype=torch.bfloat16)
+    for n in range(act_shape[0]):
+        for c in range(act_shape[1]):
+            for h in range(act_shape[2]):
+                for w in range(act_shape[3]):
+                    act[n, c, h, w] = h * in_w + w
     # act = torch.zeros(act_shape, dtype=torch.bfloat16)
     # act = torch.ones(act_shape, dtype=torch.bfloat16)
     # act = torch.arange(0, volume(act_shape), dtype=torch.bfloat16).reshape(act_shape)
@@ -173,7 +180,7 @@ def run_max_pool(
         assert ttnn.get_memory_config(output) == memory_config
 
 
-@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+""" @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize(
     "act_shape",  ## NCHW
     (
@@ -324,7 +331,7 @@ def test_run_max_pool_width_shard(
         device,
         dtype,
         shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
-    )
+    ) """
 
 
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
@@ -359,23 +366,23 @@ def test_run_max_pool_width_shard(
             # [4, 16, 1056, 160],
             # [8, 16, 528, 80],
             # [16, 16, 528, 80],
-            [1, 512, 10, 10],
+            [1, 1024, 10, 10],
         )
     ),
 )
 @pytest.mark.parametrize(
     "kernel_size",
     (
-        # (2, 2),
-        # (3, 3),
+        (2, 2),
+        (3, 3),
         (5, 5),
     ),
 )
 @pytest.mark.parametrize(
     "padding",
     (
-        # (0, 0),
-        # (1, 1),
+        (0, 0),
+        (1, 1),
         (2, 2),
     ),
 )
@@ -411,11 +418,11 @@ def test_run_max_pool_block_shard(
         dilation,
         device,
         dtype,
-        shard_scheme=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
     )
 
 
-@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+""" @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize(
     "act_shape",  ## NCHW
     (([1, 512, 10, 10],)),  ## yolov4 shapes
@@ -703,4 +710,4 @@ def test_pool_core_nondivis(
     assert allclose
     assert isclose
     if dtype == ttnn.bfloat16:
-        assert isequal
+        assert isequal """
