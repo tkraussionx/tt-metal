@@ -122,8 +122,8 @@ Tensor _atan2(const Tensor& input_a, const Tensor& input_b, const std::optional<
     Tensor result(input_a);
     {
         Tensor atan_input = ttnn::multiply(
-            ttnn::abs(input_b, output_mem_config),
-            ttnn::reciprocal(ttnn::abs(input_a, output_mem_config), output_mem_config),
+            ttnn::abs(input_a, output_mem_config),
+            ttnn::reciprocal(ttnn::abs(input_b, output_mem_config), output_mem_config),
             std::nullopt,
             output_mem_config);
         result = ttnn::atan(atan_input, output_mem_config);
