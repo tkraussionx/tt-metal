@@ -10,7 +10,7 @@
 #include "compute_kernel_api/tilize.h"
 // #include "tools/profiler/kernel_profiler.hpp"
 
-#define DEBUG_PRINT 0
+#define DEBUG_PRINT 1
 
 #if DEBUG_PRINT == 1
 #include "debug/dprint.h"
@@ -139,6 +139,13 @@ void MAIN {
     cb_wait_front(in_scalar_cb_id, 1);
     cb_wait_front(interm_reduction_cb_id, 1);
     cb_reserve_back(out_cb_id, 1);
+    DPRINT << "n_sticks_per_core_by_nblocks: " << nsticks_per_core_by_nblocks << ENDL();
+    DPRINT << "num_8_tiles_blocks: " << num_8_tiles_blocks << ENDL();
+    DPRINT << "num_tiles_for_reduction: " << num_tiles_for_reduction << ENDL();
+    DPRINT << "interm_reduction_chunks: " << interm_reduction_chunks << ENDL();
+    DPRINT << "num_output_tiles: " << num_output_tiles << ENDL();
+    DPRINT << "num_faces_in_tile: " << num_faces_in_tile << ENDL();
+    DPRINT << "num_out_rows: " << num_out_rows << ENDL();
     for (uint32_t i = 0; i < nsticks_per_core_by_nblocks; ++i) {
         for (uint32_t j = 0; j < num_8_tiles_blocks; j++) {
             // NOTE: Assuming in_ntiles_hw < 8 for now.
@@ -188,6 +195,9 @@ void MAIN {
 
             tile_regs_commit();
             tile_regs_wait();
+
+            //print_tile_rows(out_cb_id, 1);
+
             pack_untilize_dst<num_tiles_for_reduction, num_output_tiles>(
                 out_cb_id,
                 1 /*out_subblock_h*/,
