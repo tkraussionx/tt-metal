@@ -53,7 +53,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-stdlib=libc++)
     add_link_options(-stdlib=libc++ -lc++abi)
 else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsized-deallocation")
+    add_compile_options(-fsized-deallocation)
 endif()
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
