@@ -41,7 +41,7 @@ project(
 )
 
 # Adjust compiler and linker flags needed by this project
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND ENABLE_LIBCXX)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     find_library(LIBC++ c++)
     find_library(LIBC++ABI c++abi)
     if(NOT LIBC++ OR NOT LIBC++ABI)
@@ -114,7 +114,6 @@ set(UMD_HOME "${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd")
 option(WITH_PYTHON_BINDINGS "Enables build of python bindings" ON)
 option(ENABLE_CODE_TIMERS "Enable code timers" OFF)
 option(ENABLE_TRACY "Enable Tracy Profiling" OFF)
-option(ENABLE_LIBCXX "Enable using libc++" ON)
 option(ENABLE_BUILD_TIME_TRACE "Enable build time trace (Clang only -ftime-trace)" OFF)
 option(BUILD_SHARED_LIBS "Create shared libraries" ON)
 option(ENABLE_ASAN "Enable build with AddressSanitizer" OFF)
