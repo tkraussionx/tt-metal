@@ -92,8 +92,6 @@ SECTIONS
   . = SEGMENT_START("ldata-segment", .);
   . = ALIGN(32 / 8);
   _end = .; PROVIDE (end = .);
-  . = DATA_SEGMENT_END (.);
-
 
   .stack :
   {
