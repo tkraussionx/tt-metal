@@ -35,7 +35,13 @@ def run_max_pool(
         if 2 * pad_h > kernel_h or 2 * pad_w > kernel_w:
             pytest.skip("Invalid case")
 
-    if (kernel_h == 5 and pad_h != 2) or (kernel_h == 3 and pad_h != 1) or (kernel_h == 2 and pad_h != 0):
+    if (
+        (kernel_h == 13 and pad_h != 6)
+        or (kernel_h == 9 and pad_h != 4)
+        or (kernel_h == 5 and pad_h != 2)
+        or (kernel_h == 3 and pad_h != 1)
+        or (kernel_h == 2 and pad_h != 0)
+    ):
         pytest.skip("kernel size and padding combination not supported")
 
     out_h = math.floor((in_h + 2 * pad_h - (dilation_h * kernel_h - 1) - 1) / stride_h) + 1
@@ -367,6 +373,7 @@ def test_run_max_pool_width_shard(
             # [8, 16, 528, 80],
             # [16, 16, 528, 80],
             [1, 512, 10, 10],
+            [1, 1024, 10, 10],
         )
     ),
 )
@@ -376,6 +383,8 @@ def test_run_max_pool_width_shard(
         # (2, 2),
         # (3, 3),
         (5, 5),
+        (9, 9),
+        (13, 13),
     ),
 )
 @pytest.mark.parametrize(
@@ -384,13 +393,17 @@ def test_run_max_pool_width_shard(
         # (0, 0),
         # (1, 1),
         (2, 2),
+        (4, 4),
+        (6, 6),
     ),
 )
 @pytest.mark.parametrize(
     "stride",
     (
+        (1, 1),
         (2, 2),
-        # (1, 1),
+        (4, 4),
+        (6, 6),
     ),
 )
 @pytest.mark.parametrize("dilation", ((1, 1),))  ## default
@@ -418,7 +431,7 @@ def test_run_max_pool_block_shard(
         dilation,
         device,
         dtype,
-        shard_scheme=ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        shard_scheme=ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
     )
 
 
