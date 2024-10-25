@@ -96,10 +96,14 @@ class ElfFile::Impl {
     }
 
     [[nodiscard]] static bool IsInSegment(Segment const &segment, Elf32_Shdr const &shdr) {
-        // Remember, Segments use word_t sizes
+        // Remember, Segments use word_t sizes. If a zero-sized
+        // section is at the end of a segment, it is considered in
+        // that segment. Fortunately, we do not have abutting
+        // segments, so do not have to consider the case of a zero
+        // length section sitting at that boundary.
         return shdr.sh_flags & SHF_ALLOC && shdr.sh_addr >= segment.address &&
 	    shdr.sh_addr + shdr.sh_size <=
-	    segment.address + (segment.contents.size() + segment.bss) * sizeof (word_t);
+	    segment.address + (segment.contents.size() + segment.bss) * sizeof (word_t) + !shdr.sh_size;
     }
     [[nodiscard]] bool IsInSegment(unsigned _ix, Elf32_Shdr const &shdr) const {
         return IsInSegment(GetSegments()[_ix], shdr);
