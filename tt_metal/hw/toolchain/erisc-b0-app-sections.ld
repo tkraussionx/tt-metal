@@ -38,7 +38,7 @@ SECTIONS
   .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) } > REGION_APP_CODE
   .rodata1        : { *(.rodata1) } > REGION_APP_CODE
 
-  .data :
+  .data : ALIGN(4)
   {
     *(.dynamic)
     *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*)
@@ -50,30 +50,16 @@ SECTIONS
     *(.got.plt) *(.igot.plt) *(.got) *(.igot)
     . = ALIGN(4);
   } > REGION_APP_DATA
-
-  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } > REGION_APP_DATA
-
-  . = ALIGN(4); /* startup code will use word writes to zero bss */
-  .sbss           :
+  .bss : ALIGN(4)
   {
+   __ldm_bss_start = .;
+   *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
-  } > REGION_APP_DATA
-  . = ALIGN(4);
-
-  .bss            :
-  {
-   __ldm_bss_start = .;
    *(.dynbss)
    *(.bss .bss.* .gnu.linkonce.b.*)
    *(COMMON)
-
-   /* Align here to ensure that the .bss section occupies space up to
-      _end.  Align after .bss to ensure correct alignment even if the
-      .bss section disappears because there are no input sections.
-      FIXME: Why do we need it? When there is no .bss section, we don't
-      pad the .data section.  */
    . = ALIGN(4);
    __ldm_bss_end = .;
   } > REGION_APP_DATA
