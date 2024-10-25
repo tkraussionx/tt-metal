@@ -292,7 +292,7 @@ void ElfFile::Impl::LoadImage() {
                 section.sh_size,
                 section.sh_offset);
         // If it's allocatable, make sure it's in a segment.
-        if (section.sh_flags & SHF_ALLOC && GetSegmentIx(section) < 0)
+        if (section.sh_flags & SHF_ALLOC && section.sh_size && GetSegmentIx(section) < 0)
             TT_THROW(
                 "{}: allocatable section {} [{x},+{x})@{x} is not in known segment",
                 path_,
