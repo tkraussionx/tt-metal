@@ -209,7 +209,8 @@ void ElfFile::Impl::LoadImage() {
         TT_THROW("{}: string table is missing or malformed", path_);
 
     GetSegments().reserve(hdr.e_phnum);
-    // TODO: Have linker scripts emit segments in known good order.
+    // TODO: Have linker scripts emit segments in known good order:
+    // text, data, stack?
     int textIx = -1;
     int stackIx = -1;
     for (auto const &phdr : GetPhdrs()) {
@@ -233,7 +234,7 @@ void ElfFile::Impl::LoadImage() {
             // Have observed zero-sized segments, ignore them
             continue;
 
-        if (phdr.p_type = PT_GNU_STACK)
+        if (phdr.p_type == PT_GNU_STACK)
             stackIx = GetSegments().size();
 
         // Require loadable segments to be nicely aligned
