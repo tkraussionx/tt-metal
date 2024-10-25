@@ -105,7 +105,7 @@ class ElfFile::Impl {
         // segment boundaries -- they're either wholey inside or
         // wholey outside, and (b) unsigned arithmetic.
         if (shdr.sh_flags & SHF_ALLOC &&
-            sh.sh_addr + shdr.sh_size - segment.address <= (segment.contents.size() + segment.bss) * sizeof (word_t);
+            shdr.sh_addr + shdr.sh_size - segment.address <= (segment.contents.size() + segment.bss) * sizeof (word_t);
     }
     [[nodiscard]] bool IsInSegment(unsigned _ix, Elf32_Shdr const &shdr) const {
         return IsInSegment(GetSegments()[_ix], shdr);
