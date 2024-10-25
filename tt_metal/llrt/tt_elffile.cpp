@@ -209,12 +209,14 @@ void ElfFile::Impl::LoadImage() {
         TT_THROW("{}: string table is missing or malformed", path_);
 
     GetSegments().reserve(hdr.e_phnum);
+    // TODO: Have linker scripts emit segments in known good order.
     int textIx = -1;
+    int stackIx = -1;
     for (auto const &phdr : GetPhdrs()) {
         if (phdr.p_type == PT_RISCV_ATTRIBUTES)
             // TODO: verify Arch is ok?
             continue;
-        if (phdr.p_type != PT_LOAD)
+        if (phdr.p_type != PT_LOAD && phdr.p_type != PT_GNU_STACK)
             continue;
 
         log_debug(
@@ -230,6 +232,9 @@ void ElfFile::Impl::LoadImage() {
         if (!phdr.p_memsz)
             // Have observed zero-sized segments, ignore them
             continue;
+
+        if (phdr.p_type = PT_GNU_STACK)
+            stackIx = GetSegments().size();
 
         // Require loadable segments to be nicely aligned
         if ((phdr.p_offset | phdr.p_vaddr) & (sizeof(word_t) - 1))
@@ -264,6 +269,8 @@ void ElfFile::Impl::LoadImage() {
         auto &segments = GetSegments();
 	auto text = std::next(segments.begin(), textIx);
         std::rotate(segments.begin(), text, std::next(text, 1));
+        if (stackIx >= 0 && textIx > stackIx)
+            stackIx++;
     }
 
     // Check sections
@@ -282,14 +289,16 @@ void ElfFile::Impl::LoadImage() {
         // If it's allocatable, make sure it's in a segment.
         if (section.sh_flags & SHF_ALLOC && GetSegmentIx(section) < 0)
             TT_THROW(
-                "{}: allocatable section {} [{x},+{x})@{x} is not in a loadable segment",
+                "{}: allocatable section {} [{x},+{x})@{x} is not in known segment",
                 path_,
                 GetName(section),
                 section.sh_addr,
                 section.sh_size,
                 section.sh_offset);
     }
-
+    if (stackIx >= 0)
+        // Remove the stack segment, now we used it for checking the sections.
+        GetSegments().erase(std::next(GetSegments().begin(), stackIx));
 }
 
 class ElfFile::Impl::Weakener {
