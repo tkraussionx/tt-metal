@@ -86,7 +86,11 @@ uint32_t get_bank_offset_index(uint32_t id) {
     if constexpr (DRAM) {   // DRAM
         return udivsi3_const_divisor<NUM_DRAM_BANKS>(id);
     } else {                // L1
+#ifdef IS_NOT_POW2_NUM_L1_BANKS
         return udivsi3_const_divisor<NUM_L1_BANKS>(id);
+#else
+        return id >> LOG_BASE_2_OF_NUM_L1_BANKS;
+#endif
     }
 }
 
