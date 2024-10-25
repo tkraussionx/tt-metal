@@ -9,7 +9,7 @@
 
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG_PRINT 0
+#define ENABLE_DEBUG_PRINT 1
 
 #if ENABLE_DEBUG_PRINT == 1
 #include "debug/dprint.h"
@@ -94,12 +94,19 @@ void kernel_main() {
         // fill interm buffer with minus_inf
         fill_with_val(get_write_ptr(interm_reduction_cb_id), TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
         cb_push_back(in_scalar_cb_id, 1);
+        cb_push_back(interm_reduction_cb_id, 1);
     }
 
     uint32_t in_l1_read_base_addr = get_read_ptr(in_shard_cb_id);
     uint32_t reader_indices_l1_addr = get_read_ptr(in_reader_indices_cb_id);
     volatile tt_l1_ptr uint16_t* reader_indices_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint16_t*>(reader_indices_l1_addr);
+
+    /* if (reader_id == 0) {
+        DPRINT << "in_nbtes_c: " << in_nbytes_c << ENDL();
+        DPRINT << "in_cb_nsticks: " << in_cb_nsticks << ENDL();
+        print_pages(in_l1_read_base_addr, in_nbytes_c / 2, (10 + 2 * pad_w) * (10 + 2 * pad_w));
+    } */
 
     uint32_t in_w_padded = in_w + 2 * pad_w;
 
@@ -117,6 +124,9 @@ void kernel_main() {
         for (uint32_t j = 0; j < num_8_tile_blocks; j++) {
             for (uint32_t i = 0; i < nblocks; ++i) {
                 uint16_t top_left_local_index = reader_indices_ptr[counter];
+                if (reader_id == 0) {
+                    DPRINT << "top_left_local_index: " << top_left_local_index << ENDL();
+                }
                 uint32_t h_multiples = 0;
                 uint32_t processed_rows = 0;
                 uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
@@ -127,12 +137,20 @@ void kernel_main() {
                     uint32_t read_offset =
                         j * MAX_ELE_PER_REDUCTION + in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
                     for (uint32_t w = 0; w < window_w; w++) {
+                        if (reader_id == 0) {
+                            DPRINT << "    h: " << h << " w: " << w << " stick_offset: " << stick_offset
+                                   << " read_offset: " << read_offset - in_l1_read_base_addr << ENDL();
+                        }
                         noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, read_bytes);
                         out_l1_write_addr += read_bytes;
                         read_offset += in_nbytes_c;
                         processed_rows++;
                         if ((processed_rows % MAX_ROWS_FOR_REDUCTION) == 0) {
                             noc_async_read_barrier();
+                            if (reader_id == 0) {
+                                DPRINT << "out_l1: " << ENDL();
+                                print_pages(out_l1_write_addr_base, in_nbytes_c / 2, MAX_ROWS_FOR_REDUCTION);
+                            }
                             cb_push_back(in_cb_id, npages_to_reserve);
                             out_l1_write_addr_base = get_write_ptr(in_cb_id);
                             out_l1_write_addr = out_l1_write_addr_base;
@@ -145,6 +163,10 @@ void kernel_main() {
                 }
                 if (remaining_elems) {
                     noc_async_read_barrier();
+                    if (reader_id == 0) {
+                        DPRINT << "out_l1: " << ENDL();
+                        print_pages(out_l1_write_addr_base, in_nbytes_c / 2, (window_h * window_w) % MAX_ROWS_FOR_REDUCTION);
+                    }
                     cb_push_back(in_cb_id, npages_to_reserve);
                 }
             }
