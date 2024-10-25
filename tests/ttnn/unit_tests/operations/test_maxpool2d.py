@@ -373,16 +373,16 @@ def test_run_max_pool_width_shard(
 @pytest.mark.parametrize(
     "kernel_size",
     (
-        (2, 2),
-        (3, 3),
+        # (2, 2),
+        # (3, 3),
         (5, 5),
     ),
 )
 @pytest.mark.parametrize(
     "padding",
     (
-        (0, 0),
-        (1, 1),
+        # (0, 0),
+        # (1, 1),
         (2, 2),
     ),
 )

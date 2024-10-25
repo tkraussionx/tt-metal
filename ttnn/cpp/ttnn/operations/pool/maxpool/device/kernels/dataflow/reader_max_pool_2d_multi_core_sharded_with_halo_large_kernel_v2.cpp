@@ -9,7 +9,7 @@
 
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG_PRINT 1
+#define ENABLE_DEBUG_PRINT 0
 
 #if ENABLE_DEBUG_PRINT == 1
 #include "debug/dprint.h"
@@ -124,37 +124,37 @@ void kernel_main() {
         for (uint32_t j = 0; j < num_8_tile_blocks; j++) {
             for (uint32_t i = 0; i < nblocks; ++i) {
                 uint16_t top_left_local_index = reader_indices_ptr[counter];
-                if (reader_id == 0) {
+                /* if (reader_id == 0) {
                     DPRINT << "top_left_local_index: " << top_left_local_index << ENDL();
-                }
+                } */
                 uint32_t h_multiples = 0;
                 uint32_t processed_rows = 0;
+                cb_reserve_back(in_cb_id, npages_to_reserve);
                 uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
                 uint32_t out_l1_write_addr = out_l1_write_addr_base;
-                cb_reserve_back(in_cb_id, npages_to_reserve);
                 for (uint32_t h = 0; h < window_h; ++h, h_multiples += in_w_padded) {
                     uint32_t stick_offset = top_left_local_index + h_multiples;
                     uint32_t read_offset =
                         j * MAX_ELE_PER_REDUCTION + in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
                     for (uint32_t w = 0; w < window_w; w++) {
-                        if (reader_id == 0) {
+                        /* if (reader_id == 0) {
                             DPRINT << "    h: " << h << " w: " << w << " stick_offset: " << stick_offset
                                    << " read_offset: " << read_offset - in_l1_read_base_addr << ENDL();
-                        }
+                        } */
                         noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, read_bytes);
                         out_l1_write_addr += read_bytes;
                         read_offset += in_nbytes_c;
                         processed_rows++;
                         if ((processed_rows % MAX_ROWS_FOR_REDUCTION) == 0) {
                             noc_async_read_barrier();
-                            if (reader_id == 0) {
+                            /* if (reader_id == 0) {
                                 DPRINT << "out_l1: " << ENDL();
                                 print_pages(out_l1_write_addr_base, in_nbytes_c / 2, MAX_ROWS_FOR_REDUCTION);
-                            }
+                            } */
                             cb_push_back(in_cb_id, npages_to_reserve);
+                            cb_reserve_back(in_cb_id, npages_to_reserve);
                             out_l1_write_addr_base = get_write_ptr(in_cb_id);
                             out_l1_write_addr = out_l1_write_addr_base;
-                            cb_reserve_back(in_cb_id, npages_to_reserve);
                             // If next is last chunk, fill whole buffer with -inf.
                             if ((total_elems_to_reduce - processed_rows) < MAX_ROWS_FOR_REDUCTION)
                                 fill_with_val(out_l1_write_addr, TILE_SIZE * MAX_TILES_PER_REDUCTION, minus_inf);
@@ -163,10 +163,10 @@ void kernel_main() {
                 }
                 if (remaining_elems) {
                     noc_async_read_barrier();
-                    if (reader_id == 0) {
+                    /* if (reader_id == 0) {
                         DPRINT << "out_l1: " << ENDL();
                         print_pages(out_l1_write_addr_base, in_nbytes_c / 2, (window_h * window_w) % MAX_ROWS_FOR_REDUCTION);
-                    }
+                    } */
                     cb_push_back(in_cb_id, npages_to_reserve);
                 }
             }
