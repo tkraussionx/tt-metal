@@ -38,28 +38,7 @@ on:
 
 run-name: ${{ inputs.description }}
 jobs:
-  # setup:
-  #   name: Setup runner labels for deploy
-  #   runs-on: ubuntu-latest
-  #   environment: ${{ inputs.environment }}
-  #   outputs:
-  #     deployrunner: ${{ steps.step1.outputs.deployrunner }}
-  #   steps:
-  #     - name: Set runs-on for deploy
-  #       id: step1
-  #       run: |
-  #         # local_var="\'[\"${{ inputs.hw-config }}\", \"${{ inputs.runner-label }}\"]\'"
-  #         echo "deployrunner=${{ inputs.runner-label }}" >> $GITHUB_OUTPUT
-  build-artifact:
-    uses: ./.github/workflows/build-artifact.yaml
-    with:
-      arch: '[ "${{ inputs.arch }}" ]'
-      build-type: ${{ inputs.build-type }}
-      tracy: ${{ inputs.tracy }}
-    secrets: inherit
   test-dispatch:
-    # needs: setup
-    needs: build-artifact
     timeout-minutes: 1440
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
