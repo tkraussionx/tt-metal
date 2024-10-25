@@ -208,18 +208,6 @@ void ElfFile::Impl::LoadImage() {
     if (!hdr.e_shstrndx || hdr.e_shstrndx >= GetShdrs().size())
         TT_THROW("{}: string table is missing or malformed", path_);
 
-    // We care about the location of some sections.
-    for (auto const &section : GetShdrs())
-        if ((section.sh_flags & SHF_ALLOC || section.sh_type == SHT_RELA || section.sh_type == SHT_SYMTAB) &&
-                (section.sh_offset | section.sh_addr) & (sizeof(word_t) - 1))
-            TT_THROW(
-                "{}: section {} is misaligned [{x},+{x})@{x}",
-                path_,
-                GetName(section),
-                section.sh_addr,
-                section.sh_size,
-                section.sh_offset);
-
     GetSegments().reserve(hdr.e_phnum);
     int textIx = -1;
     for (auto const &phdr : GetPhdrs()) {
@@ -277,6 +265,31 @@ void ElfFile::Impl::LoadImage() {
 	auto text = std::next(segments.begin(), textIx);
         std::rotate(segments.begin(), text, std::next(text, 1));
     }
+
+    // Check sections
+    for (auto const &section : GetShdrs()) {
+        // We care about alignment of allocatable sections,
+        // relocations and symbols.
+        if ((section.sh_flags & SHF_ALLOC || section.sh_type == SHT_RELA || section.sh_type == SHT_SYMTAB) &&
+                (section.sh_offset | section.sh_addr) & (sizeof(word_t) - 1))
+            TT_THROW(
+                "{}: section {} is misaligned [{x},+{x})@{x}",
+                path_,
+                GetName(section),
+                section.sh_addr,
+                section.sh_size,
+                section.sh_offset);
+        // If it's allocatable, make sure it's in a segment.
+        if (section.sh_flags & SHF_ALLOC && GetSegmentIx(section) < 0)
+            TT_THROW(
+                "{}: allocatable section {} [{x},+{x})@{x} is not in a loadable segment",
+                path_,
+                GetName(section),
+                section.sh_addr,
+                section.sh_size,
+                section.sh_offset);
+    }
+
 }
 
 class ElfFile::Impl::Weakener {
