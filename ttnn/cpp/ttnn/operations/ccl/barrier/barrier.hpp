@@ -22,5 +22,5 @@ struct BarrierOperation {
         ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring);
 };
 }  // namespace operations::ccl
-constexpr auto barrier = ttnn::register_operation<"ttnn::barrier", ttnn::operations::ccl::BarrierOperation>();
+constexpr auto barrier = ttnn::register_operation_with_auto_launch_op<"ttnn::barrier", ttnn::operations::ccl::BarrierOperation>();
 }  // namespace ttnn

@@ -75,22 +75,6 @@ Tensor barrier(
     const ttnn::Barrier& barrier_struct)
 {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
-    operation::launch_op
-    (
-        [barrier_struct](
-            const std::vector<Tensor>& input_tensors,
-            const std::vector<std::optional<const Tensor>>& optional_input_tensors,
-            const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor>
-            {
-                const Tensor& input_tensor = input_tensors.at(0);
-                // need to copy and update barrier struct for this particular tensor
-                ttnn::Barrier new_barrier_struct = barrier_struct;
-                new_barrier_struct.update_structure(input_tensor);
-                return operation::run(new_barrier_struct,{input_tensor});
-            },
-        {input_tensor},
-        output_tensors
-    );
     return output_tensors.at(0);
 }
 
