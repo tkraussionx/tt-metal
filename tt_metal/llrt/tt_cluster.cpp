@@ -81,7 +81,7 @@ void Cluster::detect_arch_and_target() {
 #endif
 #ifdef ARCH_WORMHOLE
     TT_FATAL(
-        (this->arch_ == tt::ARCH::WORMHOLE_B0) || (this->arch_ == tt::ARCH::WORMHOLE),
+        this->arch_ == tt::ARCH::WORMHOLE_B0,
         "Arch={} doesn't match compile-time build for WORMHOLE",
         get_string(this->arch_));
 #endif
