@@ -366,7 +366,7 @@ def test_run_max_pool_width_shard(
             # [4, 16, 1056, 160],
             # [8, 16, 528, 80],
             # [16, 16, 528, 80],
-            [1, 1024, 10, 10],
+            [1, 512, 10, 10],
         )
     ),
 )
@@ -389,8 +389,8 @@ def test_run_max_pool_width_shard(
 @pytest.mark.parametrize(
     "stride",
     (
-        # (2, 2),
-        (1, 1),
+        (2, 2),
+        # (1, 1),
     ),
 )
 @pytest.mark.parametrize("dilation", ((1, 1),))  ## default
