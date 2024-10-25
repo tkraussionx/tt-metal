@@ -418,11 +418,7 @@ def do_detect(model, img, conf_thresh, nms_thresh, n_classes, device=None, class
         if not is_torch_model:
             input_shape = img.shape
             input_tensor = torch.permute(img, (0, 2, 3, 1))
-
-            input_tensor = input_tensor.reshape(
-                input_tensor.shape[0], 1, input_tensor.shape[1] * input_tensor.shape[2], input_tensor.shape[3]
-            )
-            input_tensor = ttnn.from_torch(input_tensor, device=device)
+            input_tensor = ttnn.from_torch(input_tensor, ttnn.bfloat16)
             img = input_tensor
             t1 = time.time()
 
