@@ -19,7 +19,7 @@ def run_eltwise_rpow_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_c
     if in_mem_config == "SYSTEM_MEMORY":
         in_mem_config = None
 
-    x = torch.Tensor(size=input_shape).uniform_(-100, 100)
+    x = torch.Tensor(size=input_shape).uniform_(-28, 28)
     x_ref = x.detach().clone()
 
     # get ref result

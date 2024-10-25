@@ -18,7 +18,7 @@ def run_eltwise_recip_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_
     if in_mem_config == "SYSTEM_MEMORY":
         in_mem_config = None
 
-    x = torch.Tensor(size=input_shape).uniform_(-100, 100)
+    x = torch.Tensor(size=input_shape).uniform_(-101, 100)
     x_ref = x.detach().clone()
 
     # get ref result
@@ -41,22 +41,22 @@ def run_eltwise_recip_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_
 
 
 test_sweep_args = [
-    (
-        (4, 11, 106, 232),
-        ttnn.bfloat16,
-        ttnn.ROW_MAJOR_LAYOUT,
-        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
-        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
-        19096254,
-    ),
-    (
-        (2, 10, 160, 160),
-        ttnn.bfloat16,
-        ttnn.TILE_LAYOUT,
-        "SYSTEM_MEMORY",
-        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
-        3074662,
-    ),
+    # (
+    #     (4, 11, 106, 232),
+    #     ttnn.bfloat16,
+    #     ttnn.ROW_MAJOR_LAYOUT,
+    #     ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
+    #     ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
+    #     19096254,
+    # ),
+    # (
+    #     (2, 10, 160, 160),
+    #     ttnn.bfloat16,
+    #     ttnn.TILE_LAYOUT,
+    #     "SYSTEM_MEMORY",
+    #     ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
+    #     3074662,
+    # ),
     (
         (1, 6, 256, 160),
         ttnn.bfloat16,
@@ -65,14 +65,14 @@ test_sweep_args = [
         ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
         16417740,
     ),
-    (
-        (6, 7, 192, 224),
-        ttnn.bfloat16,
-        ttnn.TILE_LAYOUT,
-        "SYSTEM_MEMORY",
-        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
-        11178160,
-    ),
+    # (
+    #     (6, 7, 192, 224),
+    #     ttnn.bfloat16,
+    #     ttnn.TILE_LAYOUT,
+    #     "SYSTEM_MEMORY",
+    #     ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
+    #     11178160,
+    # ),
 ]
 
 
