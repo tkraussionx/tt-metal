@@ -62,7 +62,7 @@ SECTIONS
     . = ALIGN(4);
   } > REGION_APP_KERNEL_DATA
 
-  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } > REGION_APP_DATA
+  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } > REGION_APP_KERNEL_DATA
 
   . = ALIGN(4); /* startup code will use word writes to zero bss */
   .sbss           :
